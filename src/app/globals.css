@@ -1,0 +1,123 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: 'Pragmatica';
+  src: url('/fonts/PragmaticaBold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ── Universal type rule ─────────────────────────────────────── */
+* {
+  font-family: 'Pragmatica', 'Arial Black', sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Base resets ─────────────────────────────────────────────── */
+html,
+body {
+  background-color: #ffffff;
+  color: #0A0A0A;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Selection colour ─────────────────────────────────────────── */
+::selection {
+  background-color: #0A0A0A;
+  color: #FAFAF8;
+}
+
+/* ── Smooth scroll ───────────────────────────────────────────── */
+html {
+  scroll-behavior: smooth;
+}
+
+/* ── Utility: hide scrollbar visually but keep scroll ─────────── */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* ── Transitions ─────────────────────────────────────────────── */
+.transition-editorial {
+  transition: all 400ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Source panel slide animation ───────────────────────────── */
+@keyframes slideInFromLeft {
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutToLeft {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+}
+
+.panel-enter {
+  animation: slideInFromLeft 350ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.panel-exit {
+  animation: slideOutToLeft 350ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* ── Hotspot pulse ───────────────────────────────────────────── */
+@keyframes hotspotPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.15); opacity: 0.8; }
+}
+
+.hotspot-pulse {
+  animation: hotspotPulse 2.5s ease-in-out infinite;
+}
+
+/* ── Image hover dim ─────────────────────────────────────────── */
+.image-hover-dim {
+  transition: opacity 400ms ease;
+}
+.image-hover-dim:hover {
+  opacity: 0.85;
+}
+
+/* ── Fade in ─────────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.fade-in {
+  animation: fadeIn 400ms ease forwards;
+}
+
+/* ── Lookbook label hover ────────────────────────────────────── */
+.lookbook-label {
+  opacity: 0;
+  transition: opacity 300ms ease;
+}
+
+.lookbook-item:hover .lookbook-label {
+  opacity: 1;
+}
