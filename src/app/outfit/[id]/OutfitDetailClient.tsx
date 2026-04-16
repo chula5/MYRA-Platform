@@ -347,7 +347,7 @@ function getDetailHotspotPosition(slot: string): { x: number; y: number } {
     bottom: { x: 50, y: 60 },
     dress: { x: 50, y: 48 },
     shoe: { x: 45, y: 87 },
-    bag: { x: 68, y: 58 },
+    bag: { x: 28, y: 63 },
     jewellery: { x: 50, y: 20 },
     accessory: { x: 55, y: 18 },
   }
