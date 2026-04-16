@@ -85,6 +85,21 @@ function seasonToTagWalkSlug(season: string): string {
   return 'fall-winter-2026'
 }
 
+export async function searchRunwayLooksWithImages(query: string): Promise<{ data?: RunwaySearchResult; error?: string }> {
+  const res = await searchRunwayLooks(query)
+  if (res.error || !res.data) return res
+
+  // Fetch images for all looks in parallel server-side
+  const looksWithImages = await Promise.all(
+    res.data.looks.map(async (look) => {
+      const imageUrls = await fetchLookImages(look.brand, look.season)
+      return { ...look, imageUrls }
+    })
+  )
+
+  return { data: { ...res.data, looks: looksWithImages } }
+}
+
 export async function searchRunwayLooks(query: string): Promise<{ data?: RunwaySearchResult; error?: string }> {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return { error: 'ANTHROPIC_API_KEY not configured' }

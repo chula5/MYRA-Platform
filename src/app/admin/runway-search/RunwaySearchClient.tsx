@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { searchRunwayLooks, fetchLookImages, type RunwayLook } from '@/app/admin/ai/runway-search'
+import { searchRunwayLooksWithImages, type RunwayLook } from '@/app/admin/ai/runway-search'
 
 type LookWithImages = RunwayLook & { scrapedImages: string[] }
 
@@ -31,26 +31,17 @@ export default function RunwaySearchClient() {
     setError(null)
     setResult(null)
 
-    // Step 1: fast AI response (~2-3s with Haiku)
-    const res = await searchRunwayLooks(searchQuery)
+    // Single server action: AI picks looks + fetches images server-side
+    const res = await searchRunwayLooksWithImages(searchQuery)
     setLoading(false)
     if (res.error) { setError(res.error); return }
     if (!res.data) return
 
-    const initialLooks: LookWithImages[] = res.data.looks.map(look => ({ ...look, scrapedImages: [] }))
-    setResult({ summary: res.data.summary, looks: initialLooks })
-
-    // Step 2: fetch all images in parallel, update once all done
-    const allImages = await Promise.all(
-      res.data.looks.map(look => fetchLookImages(look.brand, look.season))
-    )
-    setResult(prev => {
-      if (!prev) return prev
-      return {
-        ...prev,
-        looks: prev.looks.map((look, i) => ({ ...look, scrapedImages: allImages[i] ?? [] }))
-      }
-    })
+    const looks: LookWithImages[] = res.data.looks.map(look => ({
+      ...look,
+      scrapedImages: look.imageUrls ?? [],
+    }))
+    setResult({ summary: res.data.summary, looks })
   }
 
   return (
