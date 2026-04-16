@@ -20,7 +20,7 @@ export default async function AdminLayout({
     <div className="min-h-screen bg-[#FAFAF8]">
       {/* Admin navigation bar */}
       <nav className="bg-[#0A0A0A] text-white px-10 h-14 flex items-center justify-between">
-        <span className="text-[11px] tracking-[0.25em]">MYRA ADMIN STUDIO</span>
+        <a href="/" className="text-[11px] tracking-[0.25em] hover:text-white/70 transition-colors duration-300">MYRA ADMIN STUDIO</a>
         <div className="flex items-center gap-6">
           <a
             href="/admin"
