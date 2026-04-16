@@ -30,19 +30,26 @@ export default function RunwaySearchClient() {
     setLoading(true)
     setError(null)
     setResult(null)
+
+    // Step 1: Get AI look recommendations and show immediately
     const res = await searchRunwayLooks(searchQuery)
-    if (res.error) { setError(res.error); setLoading(false); return }
-    if (res.data) {
-      // Fetch images for all looks in parallel
-      const looksWithImages = await Promise.all(
-        res.data.looks.map(async (look) => {
-          const scrapedImages = await fetchLookImages(look.brand, look.season)
-          return { ...look, scrapedImages }
-        })
-      )
-      setResult({ summary: res.data.summary, looks: looksWithImages })
-    }
     setLoading(false)
+    if (res.error) { setError(res.error); return }
+    if (!res.data) return
+
+    const initialLooks: LookWithImages[] = res.data.looks.map(look => ({ ...look, scrapedImages: [] }))
+    setResult({ summary: res.data.summary, looks: initialLooks })
+
+    // Step 2: Fetch images per look and update as each one arrives
+    res.data.looks.forEach(async (look, i) => {
+      const scrapedImages = await fetchLookImages(look.brand, look.season)
+      setResult(prev => {
+        if (!prev) return prev
+        const updated = [...prev.looks]
+        updated[i] = { ...updated[i], scrapedImages }
+        return { ...prev, looks: updated }
+      })
+    })
   }
 
   return (
@@ -60,7 +67,7 @@ export default function RunwaySearchClient() {
           />
           <button
             onClick={() => handleSearch()}
-            disabled={loading || !query.trim()}
+            disabled={loading}
             className="bg-[#0A0A0A] text-white px-8 py-3 text-[11px] tracking-[0.20em] hover:bg-[#333] disabled:opacity-40 transition-colors whitespace-nowrap"
           >
             {loading ? 'SEARCHING...' : 'SEARCH →'}
@@ -89,7 +96,7 @@ export default function RunwaySearchClient() {
       {loading && (
         <div className="py-20 text-center">
           <p className="text-[11px] tracking-[0.20em] text-[#A8A8A4] animate-pulse">
-            SEARCHING RUNWAY COLLECTIONS...
+            ASKING AI FOR THE BEST LOOKS...
           </p>
         </div>
       )}
