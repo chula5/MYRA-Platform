@@ -52,37 +52,52 @@ export async function searchRunwayLooks(query: string): Promise<{ data?: RunwayS
 
   const client = new Anthropic({ apiKey })
 
-  try {
-    const response = await client.messages.create({
-      model: 'claude-opus-4-6',
-      max_tokens: 4096,
-      tools: [{ type: 'web_search_20250305', name: 'web_search' } as any],
-      messages: [
-        {
-          role: 'user',
-          content: `Search for runway looks: "${query}"
+  const userMessage = `Search for runway looks: "${query}"
 
 Today is ${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}.
 Current season: AW26 (Autumn/Winter 2026) — shows were February/March 2026. When user says "latest" or "current", use AW26.
 
-Use web_search to find:
-1. Editorial coverage of this collection (Vogue, WWD)
-2. Real image URLs for 4–6 strong looks
+Use web_search to find editorial coverage and real image URLs for 4–6 strong looks, then return ONLY the JSON shortlist.`
 
-Then return the JSON shortlist with real imageUrls.`,
-        },
-      ],
+  try {
+    const messages: any[] = [{ role: 'user', content: userMessage }]
+    const tools: any[] = [{ type: 'web_search_20250305', name: 'web_search' }]
+
+    let response: any = await client.messages.create({
+      model: 'claude-opus-4-6',
+      max_tokens: 4096,
+      tools,
+      messages,
       system: SYSTEM_PROMPT,
     })
 
-    // Find the final text block (after any tool use)
-    const textBlock = response.content.filter((b) => b.type === 'text').pop()
-    if (!textBlock || textBlock.type !== 'text') return { error: 'No response from AI' }
+    // Loop until Claude stops using tools and gives us the final text
+    while (response.stop_reason === 'tool_use') {
+      messages.push({ role: 'assistant', content: response.content })
+      // web_search_20250305 is server-executed — results are in the tool_result blocks automatically
+      const toolResults = response.content
+        .filter((b: any) => b.type === 'tool_use')
+        .map((b: any) => ({ type: 'tool_result', tool_use_id: b.id, content: b.content ?? '' }))
+      messages.push({ role: 'user', content: toolResults })
+
+      response = await client.messages.create({
+        model: 'claude-opus-4-6',
+        max_tokens: 4096,
+        tools,
+        messages,
+        system: SYSTEM_PROMPT,
+      })
+    }
+
+    const textBlock = response.content.filter((b: any) => b.type === 'text').pop() as any
+    if (!textBlock) return { error: 'No response from AI' }
 
     let raw = textBlock.text.trim()
-    if (raw.startsWith('```')) raw = raw.replace(/^```[a-z]*\n?/, '').replace(/```$/, '').trim()
+    raw = raw.replace(/```[a-z]*\n?/g, '').trim()
+    const jsonMatch = raw.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) return { error: 'AI returned invalid JSON — try again' }
 
-    const data = JSON.parse(raw) as RunwaySearchResult
+    const data = JSON.parse(jsonMatch[0]) as RunwaySearchResult
     return { data }
   } catch (err) {
     console.error('[searchRunwayLooks]', err)
