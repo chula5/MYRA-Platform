@@ -40,15 +40,16 @@ export default function RunwaySearchClient() {
     const initialLooks: LookWithImages[] = res.data.looks.map(look => ({ ...look, scrapedImages: [] }))
     setResult({ summary: res.data.summary, looks: initialLooks })
 
-    // Step 2: scrape images in background, pop in as they arrive
-    res.data.looks.forEach(async (look, i) => {
-      const scrapedImages = await fetchLookImages(look.brand, look.season)
-      setResult(prev => {
-        if (!prev) return prev
-        const updated = [...prev.looks]
-        updated[i] = { ...updated[i], scrapedImages }
-        return { ...prev, looks: updated }
-      })
+    // Step 2: fetch all images in parallel, update once all done
+    const allImages = await Promise.all(
+      res.data.looks.map(look => fetchLookImages(look.brand, look.season))
+    )
+    setResult(prev => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        looks: prev.looks.map((look, i) => ({ ...look, scrapedImages: allImages[i] ?? [] }))
+      }
     })
   }
 
@@ -120,7 +121,6 @@ export default function RunwaySearchClient() {
 
 function LookCard({ look }: { look: LookWithImages }) {
   const images = look.scrapedImages ?? []
-  const queries = look.imageQueries ?? []
 
   return (
     <div className="border border-[#E2E0DB] bg-white">
@@ -128,7 +128,6 @@ function LookCard({ look }: { look: LookWithImages }) {
       <div className="grid grid-cols-2 gap-[2px] bg-[#E2E0DB]">
         {[0, 1, 2, 3].map((i) => {
           const rawUrl = images[i]
-          const query = queries[i]
           const imgUrl = rawUrl ? `/api/img?url=${encodeURIComponent(rawUrl)}` : null
           return imgUrl ? (
             <a
@@ -145,24 +144,9 @@ function LookCard({ look }: { look: LookWithImages }) {
               />
             </a>
           ) : (
-            <a
-              key={i}
-              href={query ? `https://www.google.com/search?q=${encodeURIComponent(query)}&tbm=isch` : look.sourceUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="relative flex items-center justify-center bg-[#F2F2F0] hover:bg-[#E8E8E5] transition-colors aspect-square group"
-            >
-              <div className="text-center px-3">
-                <p className="text-[8px] tracking-[0.15em] text-[#A8A8A4] group-hover:text-[#0A0A0A] transition-colors mb-1">
-                  SEARCH {i + 1} →
-                </p>
-                {query && (
-                  <p className="text-[9px] tracking-[0.05em] text-[#6B6B6B] leading-snug line-clamp-3">
-                    {query}
-                  </p>
-                )}
-              </div>
-            </a>
+            <div key={i} className="aspect-square bg-[#F2F2F0] flex items-center justify-center">
+              <p className="text-[9px] tracking-[0.15em] text-[#D0D0CB]">LOADING</p>
+            </div>
           )
         })}
       </div>
