@@ -94,7 +94,7 @@ function ThreePanelRow({ items }: { items: Outfit[] }) {
             </div>
           </div>
           {/* Below-image label */}
-          <p className="mt-3 text-[22px] tracking-[0.18em] text-[#0A0A0A] px-1">
+          <p className="mt-3 text-[13px] tracking-[0.18em] text-[#0A0A0A] px-1">
             {(outfit as any).celebrity_name || outfit.occasion_tags?.[0] || 'THE EDIT'}
           </p>
         </Link>
