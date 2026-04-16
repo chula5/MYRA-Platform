@@ -227,41 +227,12 @@ export default function OutfitDetailClient({
       {/* ── Main outfit detail ────────────────────────────── */}
       <div className="max-w-[560px] mx-auto mb-12">
         {/* Outfit image with hotspots */}
-        <div className="relative aspect-[3/4] w-full overflow-hidden mb-4 bg-white">
-          <Image
-            src={outfit.image_url || '/placeholder-outfit.jpg'}
-            alt={outfit.aesthetic_label}
-            fill
-            priority
-            className="object-contain"
-            sizes="(max-width: 768px) 100vw, 560px"
-          />
+        <ImageWithHotspots
+          outfit={outfit}
+          activeItemLabel={activeItemLabel}
+          onStyleItem={handleStyleItem}
+        />
 
-          {/* Active style item pill — stays visible if style item mode active */}
-          {activeItemLabel && (
-            <div className="absolute top-4 left-4 bg-white border border-[#0A0A0A] rounded-full px-3 py-1.5">
-              <span className="text-[10px] tracking-[0.15em] text-[#0A0A0A]">
-                STYLE {activeItemLabel} ↗
-              </span>
-            </div>
-          )}
-
-          {/* Detail view hotspots — larger white ring */}
-          {(outfit.outfit_item ?? []).filter((oi) => oi.item != null).map((oi) => {
-            const pos = getDetailHotspotPosition(oi.slot)
-            return (
-              <Hotspot
-                key={oi.outfit_item_id}
-                itemId={oi.item_id}
-                itemType={oi.item?.item_type ?? 'coat'}
-                x={pos.x}
-                y={pos.y}
-                variant="detail"
-                onStyleItem={handleStyleItem}
-              />
-            )
-          })}
-        </div>
 
         {/* Aesthetic label */}
         <p className="text-[15px] tracking-[0.18em] text-[#0A0A0A] mb-2">
@@ -335,6 +306,60 @@ export default function OutfitDetailClient({
         isOpen={sourcePanelOpen}
         onClose={() => setSourcePanelOpen(false)}
       />
+    </div>
+  )
+}
+
+// ── Image with hover-reveal hotspots ─────────────────────────
+function ImageWithHotspots({
+  outfit,
+  activeItemLabel,
+  onStyleItem,
+}: {
+  outfit: OutfitWithItems
+  activeItemLabel: string | null
+  onStyleItem: (itemId: string, itemType: ItemType) => void
+}) {
+  const [imageHovered, setImageHovered] = useState(false)
+
+  return (
+    <div
+      className="relative aspect-[3/4] w-full overflow-hidden mb-4 bg-white"
+      onMouseEnter={() => setImageHovered(true)}
+      onMouseLeave={() => setImageHovered(false)}
+    >
+      <Image
+        src={outfit.image_url || '/placeholder-outfit.jpg'}
+        alt={outfit.aesthetic_label}
+        fill
+        priority
+        className="object-contain"
+        sizes="(max-width: 768px) 100vw, 560px"
+      />
+
+      {activeItemLabel && (
+        <div className="absolute top-4 left-4 bg-white border border-[#0A0A0A] rounded-full px-3 py-1.5">
+          <span className="text-[10px] tracking-[0.15em] text-[#0A0A0A]">
+            STYLE {activeItemLabel} ↗
+          </span>
+        </div>
+      )}
+
+      {(outfit.outfit_item ?? []).filter((oi) => oi.item != null).map((oi) => {
+        const pos = getDetailHotspotPosition(oi.slot)
+        return (
+          <Hotspot
+            key={oi.outfit_item_id}
+            itemId={oi.item_id}
+            itemType={oi.item?.item_type ?? 'coat'}
+            x={pos.x}
+            y={pos.y}
+            variant="detail"
+            imageHovered={imageHovered}
+            onStyleItem={onStyleItem}
+          />
+        )
+      })}
     </div>
   )
 }

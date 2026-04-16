@@ -6,10 +6,10 @@ import type { ItemType } from '@/types/database'
 interface HotspotProps {
   itemId: string
   itemType: ItemType
-  // Position as percentage of image dimensions
   x: number // 0–100
   y: number // 0–100
   variant?: 'feed' | 'detail'
+  imageHovered?: boolean
   onStyleItem?: (itemId: string, itemType: ItemType) => void
 }
 
@@ -56,6 +56,7 @@ export default function Hotspot({
   x,
   y,
   variant = 'feed',
+  imageHovered = false,
   onStyleItem,
 }: HotspotProps) {
   const [active, setActive] = useState(false)
@@ -65,12 +66,7 @@ export default function Hotspot({
   const pillRight = x > 60 // show pill to the left if hotspot is on the right side
 
   const handleClick = () => {
-    if (variant === 'feed') {
-      setActive((v) => !v)
-    } else {
-      // Detail view: clicking triggers style item directly
-      onStyleItem?.(itemId, itemType)
-    }
+    setActive((v) => !v)
   }
 
   return (
@@ -106,30 +102,39 @@ export default function Hotspot({
           )}
         </div>
       ) : (
-        // ── Detail — invisible hit area, label appears on hover ──
+        // ── Detail — dot appears when image is hovered, pill on click ──
         <div className="relative group">
           <button
             aria-label={`Style ${label}`}
             onClick={handleClick}
-            className="relative z-10 block w-10 h-10 rounded-full opacity-0 group-hover:opacity-100 bg-white/20 transition-opacity duration-300"
-          />
-          {/* Hover pill */}
-          <div
             className={`
-              absolute top-1/2 -translate-y-1/2 z-20
-              ${pillRight ? 'right-full mr-2' : 'left-full ml-2'}
-              opacity-0 group-hover:opacity-100
-              transition-opacity duration-300
-              flex items-center gap-1
-              bg-white border border-[#0A0A0A]
-              px-3 py-1.5 rounded-full
-              whitespace-nowrap pointer-events-none group-hover:pointer-events-auto
+              relative z-10 block w-7 h-7 rounded-full
+              bg-white/40 backdrop-blur-sm border border-white/60
+              transition-all duration-300 cursor-pointer
+              ${imageHovered ? 'opacity-100 scale-100' : 'opacity-0 scale-75 pointer-events-none'}
+              hover:bg-white/70
             `}
-          >
-            <span className="text-[10px] tracking-[0.15em] text-[#0A0A0A] flex items-center gap-1">
-              STYLE {label} <span className="text-sm">↗</span>
-            </span>
-          </div>
+          />
+          {/* Pill — appears on click */}
+          {active && (
+            <div
+              className={`
+                absolute top-1/2 -translate-y-1/2 z-20
+                ${pillRight ? 'right-full mr-3' : 'left-full ml-3'}
+                flex items-center gap-1
+                bg-white border border-[#0A0A0A]
+                px-3 py-1.5 rounded-full
+                whitespace-nowrap
+              `}
+            >
+              <button
+                onClick={() => onStyleItem?.(itemId, itemType)}
+                className="text-[10px] tracking-[0.15em] text-[#0A0A0A] flex items-center gap-1"
+              >
+                STYLE {label} <span className="text-sm">↗</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
