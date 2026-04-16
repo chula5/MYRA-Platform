@@ -79,20 +79,13 @@ export default function Hotspot({
       style={{ left: `${x}%`, top: `${y}%`, transform: 'translate(-50%, -50%)' }}
     >
       {variant === 'feed' ? (
-        // ── Feed dot — small solid circle ──────────────────────
-        <div className="relative">
+        // ── Feed — invisible, show pill on hover ───────────────
+        <div className="relative group">
           <button
             aria-label={`Style ${label}`}
             onClick={handleClick}
-            className="
-              relative z-10 block
-              w-2 h-2 rounded-full bg-[#0A0A0A]
-              hotspot-pulse
-              transition-all duration-300
-              hover:scale-125
-            "
+            className="relative z-10 block w-10 h-10 rounded-full opacity-0"
           />
-          {/* Active pill — shows on click */}
           {active && (
             <div
               className={`
@@ -100,11 +93,8 @@ export default function Hotspot({
                 ${pillRight ? 'right-full mr-2' : 'left-full ml-2'}
                 flex items-center gap-1
                 bg-white border border-[#0A0A0A] rounded-full
-                px-2.5 py-1
-                whitespace-nowrap
-                animate-[fadeIn_200ms_ease_forwards]
+                px-2.5 py-1 whitespace-nowrap
               `}
-              style={{ animation: 'fadeIn 200ms ease forwards' }}
             >
               <button
                 onClick={() => onStyleItem?.(itemId, itemType)}
