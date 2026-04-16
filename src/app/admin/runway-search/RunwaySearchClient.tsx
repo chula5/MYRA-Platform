@@ -127,8 +127,9 @@ function LookCard({ look }: { look: LookWithImages }) {
       {/* 2×2 image grid */}
       <div className="grid grid-cols-2 gap-[2px] bg-[#E2E0DB]">
         {[0, 1, 2, 3].map((i) => {
-          const imgUrl = images[i]
+          const rawUrl = images[i]
           const query = queries[i]
+          const imgUrl = rawUrl ? `/api/img?url=${encodeURIComponent(rawUrl)}` : null
           return imgUrl ? (
             <a
               key={i}
