@@ -10,8 +10,7 @@ export interface RunwayLook {
   description: string
   whyInteresting: string
   sourceUrl: string
-  imageQueries: string[]
-  imageUrl?: string
+  imageUrls: string[]
 }
 
 export interface RunwaySearchResult {
@@ -19,102 +18,33 @@ export interface RunwaySearchResult {
   summary: string
 }
 
-const SYSTEM_PROMPT = `You are a fashion editor and runway curator for MYRA, a fashion discovery platform. Your job is to research and surface the strongest runway looks from current collections.
+const SYSTEM_PROMPT = `You are a fashion editor and runway curator for MYRA, a fashion discovery platform.
 
-When given a search query (brand, season, or open), you will:
-1. Think carefully about which 4-6 looks from that brand/season would make the strongest editorial content
-2. Return a JSON object with a shortlist of looks
+When given a search query, use web_search to find real runway imagery and editorial coverage, then return a curated shortlist of 4–6 looks.
 
-Each look must include:
-- letter: "A", "B", "C", etc.
-- brand: brand name
-- season: e.g. "AW26", "SS26"
-- mood: 2-3 word editorial descriptor (e.g. "quiet authority", "louche glamour")
-- description: specific garment description — NOT vague. E.g. "oversized single-breasted blazer in Almodóvar red with stiff enlarged proportions worn open over minimal tailored shorts" NOT "a red blazer"
-- whyInteresting: one sentence on the content/cultural hook
-- sourceUrl: the Vogue, WWD, or tag-walk gallery URL for this collection (e.g. https://www.vogue.com/fashion-shows/fall-2026-ready-to-wear/loewe)
-- imageQueries: array of exactly 4 specific Google Image search strings to find this look, each slightly different angle:
-  1. Exact look number e.g. "Loewe fall 2026 look 14 runway"
-  2. Key garment focus e.g. "Loewe AW26 oxblood leather trench coat runway Paris"
-  3. Vogue gallery search e.g. "Loewe fall 2026 ready to wear vogue runway"
-  4. Editorial/wider search e.g. "Loewe AW26 collection highlights leather outerwear"
+For each look you must:
+1. Search for the collection on Vogue, WWD, or tag-walk to get real image URLs
+2. Find direct image URLs (preferably from assets.vogue.com, cdn.tag-walk.com, or wwd.com CDN)
+3. Include the source gallery URL
 
-Prioritise: strong visual identity, wearable translation potential, content narrative, editorial aesthetic (quiet luxury, minimalist, considered).
-
-Return ONLY valid JSON in this exact format:
+Return ONLY valid JSON in this exact format (no markdown, no code fences):
 {
   "summary": "One sentence overview of what you found",
-  "looks": [array of look objects]
-}
-
-No markdown, no explanation, no code fences.`
-
-const SCRAPE_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Accept': 'text/html,application/xhtml+xml',
-  'Accept-Language': 'en-GB,en;q=0.9',
-}
-
-/** Scrape up to 4 images for a look from tag-walk and Vogue */
-export async function fetchLookImages(
-  brand: string,
-  season: string,  // e.g. "AW26"
-): Promise<string[]> {
-  const images: string[] = []
-
-  // 1. Tag-walk — most complete, all looks in static HTML
-  try {
-    const seasonSlug = seasonToTagWalkSlug(season)
-    const brandSlug = brand.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
-    const tagwalkUrl = `https://www.tag-walk.com/en/collection/woman/${brandSlug}/${seasonSlug}`
-
-    const res = await fetch(tagwalkUrl, { headers: SCRAPE_HEADERS })
-    if (res.ok) {
-      const html = await res.text()
-      // Tag-walk stores images as data-src="https://cdn.tag-walk.com/list/..."
-      const matches = Array.from(html.matchAll(/data-src="(https:\/\/cdn\.tag-walk\.com\/list\/[^"]+)"/g))
-      const urls = matches.map(m => m[1]).filter(Boolean)
-      // Take looks 1, 5, 10, 15 for variety
-      const picks = [urls[0], urls[4], urls[9], urls[14]].filter(Boolean) as string[]
-      images.push(...picks)
+  "looks": [
+    {
+      "letter": "A",
+      "brand": "Brand Name",
+      "season": "AW26",
+      "mood": "2-3 word editorial descriptor",
+      "description": "Specific garment description — not vague. E.g. 'oversized single-breasted blazer in Almodóvar red with stiff enlarged proportions worn open over minimal tailored shorts'",
+      "whyInteresting": "One sentence on the content/cultural hook",
+      "sourceUrl": "https://www.vogue.com/fashion-shows/fall-2026-ready-to-wear/brand",
+      "imageUrls": ["direct image url 1", "direct image url 2", "direct image url 3", "direct image url 4"]
     }
-  } catch { /* continue */ }
-
-  // 2. Vogue — high quality, named look files
-  if (images.length < 4) {
-    try {
-      const vogueUrl = sourceUrlFromBrandSeason(brand, season)
-      const res = await fetch(vogueUrl, { headers: SCRAPE_HEADERS })
-      if (res.ok) {
-        const html = await res.text()
-        // Vogue includes full CDN URLs in initial HTML for first ~6 looks
-        const matches = Array.from(html.matchAll(/https:\/\/assets\.vogue\.com\/photos\/[a-zA-Z0-9]+\/master\/[^"'\s,]+\.jpg/g))
-        const unique = Array.from(new Set(matches.map(m => m[0]))).filter(u => u.includes('ready-to-wear') || u.includes('fall') || u.includes('spring'))
-        images.push(...unique.slice(0, 4 - images.length))
-      }
-    } catch { /* continue */ }
-  }
-
-  return images.slice(0, 4)
+  ]
 }
 
-function seasonToTagWalkSlug(season: string): string {
-  const s = season.toUpperCase()
-  if (s.includes('AW26') || s.includes('FW26') || (s.includes('FALL') && s.includes('26'))) return 'fall-winter-2026'
-  if (s.includes('SS26') || s.includes('SP26') || (s.includes('SPRING') && s.includes('26'))) return 'spring-summer-2026'
-  if (s.includes('AW25') || s.includes('FW25')) return 'fall-winter-2025'
-  if (s.includes('SS25')) return 'spring-summer-2025'
-  return 'fall-winter-2026'
-}
-
-function sourceUrlFromBrandSeason(brand: string, season: string): string {
-  const brandSlug = brand.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
-  const s = season.toUpperCase()
-  if (s.includes('AW26') || s.includes('FW26')) return `https://www.vogue.com/fashion-shows/fall-2026-ready-to-wear/${brandSlug}`
-  if (s.includes('SS26')) return `https://www.vogue.com/fashion-shows/spring-2026-ready-to-wear/${brandSlug}`
-  if (s.includes('AW25') || s.includes('FW25')) return `https://www.vogue.com/fashion-shows/fall-2025-ready-to-wear/${brandSlug}`
-  return `https://www.vogue.com/fashion-shows/fall-2026-ready-to-wear/${brandSlug}`
-}
+imageUrls must be real, direct image URLs you found via search — not placeholders. Prefer assets.vogue.com, cdn.tag-walk.com, or wwd.com image CDN URLs. If you can only find 1-2 real image URLs, that is fine — do not fabricate URLs.`
 
 export async function searchRunwayLooks(query: string): Promise<{ data?: RunwaySearchResult; error?: string }> {
   const apiKey = process.env.ANTHROPIC_API_KEY
@@ -125,22 +55,28 @@ export async function searchRunwayLooks(query: string): Promise<{ data?: RunwayS
   try {
     const response = await client.messages.create({
       model: 'claude-opus-4-6',
-      max_tokens: 2048,
+      max_tokens: 4096,
+      tools: [{ type: 'web_search_20250305', name: 'web_search' } as any],
       messages: [
         {
           role: 'user',
-          content: `Search for runway looks based on this request: "${query}"
+          content: `Search for runway looks: "${query}"
 
 Today is ${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}.
-Current season focus: AW26 (Autumn/Winter 2026) — the AW26 shows took place in February/March 2026 and are the most current collections. SS26 is the previous season. When the user says "latest" or "new" or "current", default to AW26.
+Current season: AW26 (Autumn/Winter 2026) — shows were February/March 2026. When user says "latest" or "current", use AW26.
 
-Return 4-6 of the strongest looks as JSON.`,
+Use web_search to find:
+1. Editorial coverage of this collection (Vogue, WWD)
+2. Real image URLs for 4–6 strong looks
+
+Then return the JSON shortlist with real imageUrls.`,
         },
       ],
       system: SYSTEM_PROMPT,
     })
 
-    const textBlock = response.content.find((b) => b.type === 'text')
+    // Find the final text block (after any tool use)
+    const textBlock = response.content.filter((b) => b.type === 'text').pop()
     if (!textBlock || textBlock.type !== 'text') return { error: 'No response from AI' }
 
     let raw = textBlock.text.trim()

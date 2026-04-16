@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { searchRunwayLooks, fetchLookImages, type RunwayLook } from '@/app/admin/ai/runway-search'
+import { searchRunwayLooks, type RunwayLook } from '@/app/admin/ai/runway-search'
 
 type LookWithImages = RunwayLook & { scrapedImages: string[] }
 
@@ -31,25 +31,17 @@ export default function RunwaySearchClient() {
     setError(null)
     setResult(null)
 
-    // Step 1: Get AI look recommendations and show immediately
+    // Claude searches and returns image URLs directly
     const res = await searchRunwayLooks(searchQuery)
     setLoading(false)
     if (res.error) { setError(res.error); return }
     if (!res.data) return
 
-    const initialLooks: LookWithImages[] = res.data.looks.map(look => ({ ...look, scrapedImages: [] }))
-    setResult({ summary: res.data.summary, looks: initialLooks })
-
-    // Step 2: Fetch images per look and update as each one arrives
-    res.data.looks.forEach(async (look, i) => {
-      const scrapedImages = await fetchLookImages(look.brand, look.season)
-      setResult(prev => {
-        if (!prev) return prev
-        const updated = [...prev.looks]
-        updated[i] = { ...updated[i], scrapedImages }
-        return { ...prev, looks: updated }
-      })
-    })
+    const looks: LookWithImages[] = res.data.looks.map(look => ({
+      ...look,
+      scrapedImages: look.imageUrls ?? [],
+    }))
+    setResult({ summary: res.data.summary, looks })
   }
 
   return (
