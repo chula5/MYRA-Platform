@@ -22,42 +22,30 @@ export default function Navigation({ transparent = false }: { transparent?: bool
         bg-white border-b border-[#E2E0DB]
       `}
     >
-      <div className="w-full px-6 md:px-12 h-16 md:h-20 grid grid-cols-3 items-center">
+      <div className="w-full px-6 md:px-10 h-14 flex items-center justify-between">
 
         {/* Left — nav links */}
-        <div className="flex items-center gap-4 md:gap-8">
-          <Link
-            href="/feed"
-            className="text-[11px] md:text-[13px] tracking-[0.18em] transition-opacity duration-300 hover:opacity-60 text-[#0A0A0A] whitespace-nowrap"
-          >
+        <div className="flex items-center gap-6 w-[40%]">
+          <Link href="/feed" className="text-[10px] tracking-[0.15em] hover:opacity-60 transition-opacity text-[#0A0A0A] whitespace-nowrap">
             THE EDIT
           </Link>
-          <Link
-            href="/"
-            className="text-[11px] md:text-[13px] tracking-[0.18em] transition-opacity duration-300 hover:opacity-60 text-[#0A0A0A] whitespace-nowrap"
-          >
+          <Link href="/" className="text-[10px] tracking-[0.15em] hover:opacity-60 transition-opacity text-[#0A0A0A] whitespace-nowrap">
             LOOKBOOK
           </Link>
-          <Link
-            href="/feed"
-            className="hidden sm:block text-[11px] md:text-[13px] tracking-[0.18em] transition-opacity duration-300 hover:opacity-60 text-[#0A0A0A] whitespace-nowrap"
-          >
+          <Link href="/feed" className="hidden md:block text-[10px] tracking-[0.15em] hover:opacity-60 transition-opacity text-[#0A0A0A] whitespace-nowrap">
             OCCASIONS
           </Link>
         </div>
 
         {/* Centre — wordmark */}
         <div className="flex justify-center">
-          <Link
-            href="/"
-            className="text-[28px] md:text-[36px] tracking-[0.25em] leading-none transition-opacity duration-300 hover:opacity-70 text-[#0A0A0A]"
-          >
+          <Link href="/" className="text-[22px] tracking-[0.25em] leading-none hover:opacity-70 transition-opacity text-[#0A0A0A]">
             MYRA
           </Link>
         </div>
 
         {/* Right — placeholder to keep wordmark centred */}
-        <div />
+        <div className="w-[40%]" />
       </div>
     </nav>
   )
