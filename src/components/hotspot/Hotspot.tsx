@@ -116,24 +116,18 @@ export default function Hotspot({
           )}
         </div>
       ) : (
-        // ── Detail dot — larger white ring ──────────────────────
+        // ── Detail — invisible hit area, label appears on hover ──
         <div className="relative group">
           <button
             aria-label={`Style ${label}`}
             onClick={handleClick}
-            className="
-              relative z-10 block
-              w-5 h-5 rounded-full
-              bg-white border-2 border-[#0A0A0A]
-              transition-all duration-300
-              hover:scale-110 hover:bg-[#0A0A0A]
-            "
+            className="relative z-10 block w-10 h-10 rounded-full opacity-0 group-hover:opacity-100 bg-white/20 transition-opacity duration-300"
           />
-          {/* Hover pill — appears on hover in detail view */}
+          {/* Hover pill */}
           <div
             className={`
               absolute top-1/2 -translate-y-1/2 z-20
-              ${pillRight ? 'right-full mr-3' : 'left-full ml-3'}
+              ${pillRight ? 'right-full mr-2' : 'left-full ml-2'}
               opacity-0 group-hover:opacity-100
               transition-opacity duration-300
               flex items-center gap-1
