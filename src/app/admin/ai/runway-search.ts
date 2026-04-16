@@ -72,7 +72,7 @@ export async function fetchLookImages(
     if (res.ok) {
       const html = await res.text()
       // Tag-walk stores images as data-src="https://cdn.tag-walk.com/list/..."
-      const matches = [...html.matchAll(/data-src="(https:\/\/cdn\.tag-walk\.com\/list\/[^"]+)"/g)]
+      const matches = Array.from(html.matchAll(/data-src="(https:\/\/cdn\.tag-walk\.com\/list\/[^"]+)"/g))
       const urls = matches.map(m => m[1]).filter(Boolean)
       // Take looks 1, 5, 10, 15 for variety
       const picks = [urls[0], urls[4], urls[9], urls[14]].filter(Boolean) as string[]
@@ -88,8 +88,8 @@ export async function fetchLookImages(
       if (res.ok) {
         const html = await res.text()
         // Vogue includes full CDN URLs in initial HTML for first ~6 looks
-        const matches = [...html.matchAll(/https:\/\/assets\.vogue\.com\/photos\/[a-zA-Z0-9]+\/master\/[^"'\s,]+\.jpg/g)]
-        const unique = [...new Set(matches.map(m => m[0]))].filter(u => u.includes('ready-to-wear') || u.includes('fall') || u.includes('spring'))
+        const matches = Array.from(html.matchAll(/https:\/\/assets\.vogue\.com\/photos\/[a-zA-Z0-9]+\/master\/[^"'\s,]+\.jpg/g))
+        const unique = Array.from(new Set(matches.map(m => m[0]))).filter(u => u.includes('ready-to-wear') || u.includes('fall') || u.includes('spring'))
         images.push(...unique.slice(0, 4 - images.length))
       }
     } catch { /* continue */ }
