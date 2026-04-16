@@ -44,43 +44,36 @@ const SCRAPE_HEADERS = {
   'Accept-Language': 'en-GB,en;q=0.9',
 }
 
-/** Scrape up to 4 images for a brand/season from tag-walk then Vogue */
+/** Scrape up to 4 images for a brand/season from tag-walk */
 export async function fetchLookImages(brand: string, season: string): Promise<string[]> {
-  const images: string[] = []
-
   try {
     const seasonSlug = seasonToTagWalkSlug(season)
     const brandSlug = brand.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
     const url = `https://www.tag-walk.com/en/collection/woman/${brandSlug}/${seasonSlug}`
-    const res = await fetch(url, { headers: SCRAPE_HEADERS, signal: AbortSignal.timeout(6000) })
-    if (res.ok) {
-      const html = await res.text()
-      const matches = Array.from(html.matchAll(/data-src="(https:\/\/cdn\.tag-walk\.com\/list\/[^"]+)"/g))
-      const urls = matches.map(m => m[1]).filter(Boolean)
-      const picks = [urls[0], urls[4], urls[9], urls[14]].filter(Boolean) as string[]
-      images.push(...picks)
-    }
-  } catch { /* continue */ }
 
-  if (images.length < 2) {
-    try {
-      const brandSlug = brand.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
-      const s = season.toUpperCase()
-      const seasonPath = s.includes('AW26') || s.includes('FW26') ? 'fall-2026-ready-to-wear'
-        : s.includes('SS26') ? 'spring-2026-ready-to-wear'
-        : 'fall-2026-ready-to-wear'
-      const url = `https://www.vogue.com/fashion-shows/${seasonPath}/${brandSlug}`
-      const res = await fetch(url, { headers: SCRAPE_HEADERS, signal: AbortSignal.timeout(6000) })
-      if (res.ok) {
-        const html = await res.text()
-        const matches = Array.from(html.matchAll(/https:\/\/assets\.vogue\.com\/photos\/[a-zA-Z0-9]+\/master\/[^"'\s,]+\.jpg/g))
-        const unique = Array.from(new Set(matches.map(m => m[0])))
-        images.push(...unique.slice(0, 4 - images.length))
-      }
-    } catch { /* continue */ }
+    console.log('[fetchLookImages] fetching', url)
+
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 8000)
+
+    const res = await fetch(url, { headers: SCRAPE_HEADERS, signal: controller.signal })
+    clearTimeout(timer)
+
+    console.log('[fetchLookImages] status', res.status, 'for', brand)
+
+    if (!res.ok) return []
+
+    const html = await res.text()
+    const matches = Array.from(html.matchAll(/data-src="(https:\/\/cdn\.tag-walk\.com\/list\/[^"]+)"/g))
+    const urls = matches.map(m => m[1]).filter(Boolean)
+
+    console.log('[fetchLookImages] found', urls.length, 'images for', brand)
+
+    return [urls[0], urls[4], urls[9], urls[14]].filter(Boolean) as string[]
+  } catch (err) {
+    console.error('[fetchLookImages] failed for', brand, err)
+    return []
   }
-
-  return images.slice(0, 4)
 }
 
 function seasonToTagWalkSlug(season: string): string {
