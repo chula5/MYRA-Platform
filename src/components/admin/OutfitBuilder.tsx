@@ -606,13 +606,27 @@ STEPS:
             </div>
           </div>
 
-          {/* ── EXTRA PHOTOS ──────────────────────────────────── */}
+          {/* ── PHOTOS ────────────────────────────────────────── */}
           <div className="mb-4">
-            <label className={labelClass}>EXTRA PHOTOS</label>
-            {additionalImages.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-2">
-                {additionalImages.map((url, idx) => (
-                  <div key={idx} className="relative w-20 h-24 border border-[#E2E0DB] bg-white overflow-hidden group">
+            <label className={labelClass}>PHOTOS — CLICK TO SET AS DISPLAY</label>
+            <div className="flex flex-wrap gap-3 mb-2">
+              {/* Display photo (current image_url) */}
+              {imageUrl && (
+                <div className="flex flex-col gap-1">
+                  <div className="relative w-24 h-28 border-2 border-[#0A0A0A] bg-white overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={imageUrl} alt="Display" className="w-full h-full object-cover" />
+                    <span className="absolute inset-x-0 bottom-0 bg-[#0A0A0A] text-white text-[8px] tracking-[0.15em] py-1 text-center">
+                      DISPLAY
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Extra photos — click to promote to display */}
+              {additionalImages.map((url, idx) => (
+                <div key={idx} className="flex flex-col gap-1">
+                  <div className="relative w-24 h-28 border border-[#E2E0DB] bg-white overflow-hidden group">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={url} alt={`Extra ${idx + 1}`} className="w-full h-full object-cover" />
                     <button
@@ -624,7 +638,7 @@ STEPS:
                           prev.map((u, i) => (i === idx ? previousMain : u)).filter((u) => u),
                         )
                       }}
-                      className="absolute inset-x-0 bottom-0 bg-black/80 text-white text-[8px] tracking-[0.15em] py-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="absolute inset-x-0 bottom-0 bg-black/80 hover:bg-black text-white text-[8px] tracking-[0.15em] py-1 transition-colors"
                       aria-label="Set as display photo"
                     >
                       SET AS DISPLAY
@@ -632,15 +646,15 @@ STEPS:
                     <button
                       type="button"
                       onClick={() => setAdditionalImages((prev) => prev.filter((_, i) => i !== idx))}
-                      className="absolute top-0.5 right-0.5 bg-black/70 text-white text-[9px] w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="absolute top-0.5 right-0.5 bg-black/70 hover:bg-black text-white text-[10px] w-5 h-5 flex items-center justify-center"
                       aria-label="Remove"
                     >
                       ×
                     </button>
                   </div>
-                ))}
-              </div>
-            )}
+                </div>
+              ))}
+            </div>
             <div className="flex gap-2">
               <input
                 type="text"
