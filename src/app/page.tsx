@@ -44,7 +44,7 @@ export default async function LandingPage() {
       <Navigation transparent />
 
       {/* ── Hero ─────────────────────────────────────────────── */}
-      <section className="relative w-full h-screen min-h-[600px] overflow-hidden">
+      <section className="relative w-full h-[72vh] min-h-[500px] overflow-hidden">
         {/* Full-bleed rotating hero (Chanel · Saint Laurent · Dior) */}
         <HeroCarousel />
 

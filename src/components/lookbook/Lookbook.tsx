@@ -20,7 +20,7 @@ export default function Lookbook({ lookbooks }: LookbookProps) {
   if (!visible.length) return null
 
   return (
-    <section className="bg-white pt-20 pb-0">
+    <section className="bg-white pt-8 pb-0">
       {visible.map((lb, sectionIndex) => (
         <div key={lb.lookbook_id} className={sectionIndex > 0 ? 'mt-20' : ''}>
           {/* Section heading */}
