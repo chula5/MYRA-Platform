@@ -49,16 +49,15 @@ export default function Lookbook({ lookbooks }: LookbookProps) {
 function buildRows(outfits: Outfit[]): { mode: 'A' | 'B'; items: Outfit[] }[] {
   const rows: { mode: 'A' | 'B'; items: Outfit[] }[] = []
   let i = 0
-  let modeToggle = true // true = Mode A (3), false = Mode B (2)
+  let modeToggle = true // true = prefer Mode A (3), false = Mode B (2)
 
   while (i < outfits.length) {
-    if (modeToggle) {
-      const chunk = outfits.slice(i, i + 3)
-      if (chunk.length > 0) rows.push({ mode: 'A', items: chunk })
+    const remaining = outfits.length - i
+    if (modeToggle && remaining >= 3) {
+      rows.push({ mode: 'A', items: outfits.slice(i, i + 3) })
       i += 3
     } else {
-      const chunk = outfits.slice(i, i + 2)
-      if (chunk.length > 0) rows.push({ mode: 'B', items: chunk })
+      rows.push({ mode: 'B', items: outfits.slice(i, i + 2) })
       i += 2
     }
     modeToggle = !modeToggle
@@ -107,46 +106,28 @@ function ThreePanelRow({ items }: { items: Outfit[] }) {
 
 function DualPanelRow({ items }: { items: Outfit[] }) {
   return (
-    <div className="grid grid-cols-2 gap-[6px] overflow-x-auto scrollbar-hide">
+    <div className="grid grid-cols-2 gap-[6px]">
       {items.map((outfit) => (
         <Link
           key={outfit.outfit_id}
           href={`/outfit/${outfit.outfit_id}`}
-          className="relative block overflow-hidden group aspect-[3/4]"
+          className="block group"
         >
-          <Image
-            src={outfit.image_url || '/placeholder-outfit.jpg'}
-            alt={outfit.aesthetic_label}
-            fill
-            className="object-cover object-top transition-transform duration-500 group-hover:scale-[1.02]"
-            sizes="(max-width: 768px) 100vw, 50vw"
-          />
-          {/* Overlay gradient for text legibility */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
-
-          {/* Label bottom-left */}
-          <span className="absolute bottom-3 left-3 text-white text-[13px] tracking-[0.18em]">
-            {outfit.aesthetic_label}
-          </span>
-
-          {/* Save icon bottom-right */}
-          <button
-            aria-label="Save outfit"
-            onClick={(e) => e.preventDefault()}
-            className="absolute bottom-3 right-3 text-white opacity-70 hover:opacity-100 transition-opacity duration-300"
-          >
-            <WishlistIcon />
-          </button>
+          <div className="relative w-full aspect-[3/4] overflow-hidden">
+            <Image
+              src={outfit.image_url || '/placeholder-outfit.jpg'}
+              alt={outfit.aesthetic_label}
+              fill
+              className="object-cover object-top transition-transform duration-500 group-hover:scale-[1.02]"
+              sizes="(max-width: 768px) 50vw, 50vw"
+            />
+          </div>
+          <p className="mt-3 text-[13px] tracking-[0.18em] text-[#0A0A0A] px-1">
+            {(outfit as any).celebrity_name || outfit.occasion_tags?.[0] || outfit.aesthetic_label}
+          </p>
         </Link>
       ))}
     </div>
   )
 }
 
-function WishlistIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M8 13.5C8 13.5 2 9.5 2 5.5a3.5 3.5 0 0 1 6-2.45A3.5 3.5 0 0 1 14 5.5c0 4-6 8-6 8z" />
-    </svg>
-  )
-}

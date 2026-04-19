@@ -617,6 +617,20 @@ STEPS:
                     <img src={url} alt={`Extra ${idx + 1}`} className="w-full h-full object-cover" />
                     <button
                       type="button"
+                      onClick={() => {
+                        const previousMain = imageUrl
+                        setImageUrl(url)
+                        setAdditionalImages((prev) =>
+                          prev.map((u, i) => (i === idx ? previousMain : u)).filter((u) => u),
+                        )
+                      }}
+                      className="absolute inset-x-0 bottom-0 bg-black/80 text-white text-[8px] tracking-[0.15em] py-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                      aria-label="Set as display photo"
+                    >
+                      SET AS DISPLAY
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setAdditionalImages((prev) => prev.filter((_, i) => i !== idx))}
                       className="absolute top-0.5 right-0.5 bg-black/70 text-white text-[9px] w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                       aria-label="Remove"
