@@ -33,6 +33,7 @@ export default function OutfitDetailClient({
   const [activeStyleItemId, setActiveStyleItemId] = useState<string | null>(styleItemId ?? null)
   const [activeItemType, setActiveItemType] = useState<ItemType | null>(itemType as ItemType ?? null)
   const [loading, setLoading] = useState(true)
+  const [currentImageIndex, setCurrentImageIndex] = useState(0)
 
   // ── Fetch main outfit ─────────────────────────────────────
   useEffect(() => {
@@ -198,6 +199,14 @@ export default function OutfitDetailClient({
     ? activeItemType.toUpperCase().replace('_', ' ')
     : null
 
+  // Build the full image list: main image + any additional images
+  const allImages: string[] = [
+    outfit.image_url,
+    ...(((outfit as unknown as { additional_images?: string[] }).additional_images) ?? []),
+  ].filter(Boolean)
+  const safeIndex = Math.min(currentImageIndex, allImages.length - 1)
+  const currentImageUrl = allImages[safeIndex] ?? outfit.image_url
+
   return (
     <div className="max-w-[1440px] mx-auto px-10 py-8">
 
@@ -226,12 +235,66 @@ export default function OutfitDetailClient({
 
       {/* ── Main outfit detail ────────────────────────────── */}
       <div className="max-w-[560px] mx-auto mb-12">
-        {/* Outfit image with hotspots */}
-        <ImageWithHotspots
-          outfit={outfit}
-          activeItemLabel={activeItemLabel}
-          onStyleItem={handleStyleItem}
-        />
+        {/* Outfit image with hotspots + carousel arrows */}
+        <div className="relative">
+          <ImageWithHotspots
+            key={currentImageUrl}
+            outfit={outfit}
+            imageUrl={currentImageUrl}
+            activeItemLabel={activeItemLabel}
+            onStyleItem={handleStyleItem}
+          />
+
+          {allImages.length > 1 && (
+            <>
+              {/* Prev arrow */}
+              <button
+                type="button"
+                onClick={() => setCurrentImageIndex((i) => (i - 1 + allImages.length) % allImages.length)}
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center bg-white/85 hover:bg-white text-[#0A0A0A] text-[22px] leading-none rounded-full shadow-sm transition-colors duration-200 z-10"
+                aria-label="Previous photo"
+              >
+                ‹
+              </button>
+              {/* Next arrow */}
+              <button
+                type="button"
+                onClick={() => setCurrentImageIndex((i) => (i + 1) % allImages.length)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center bg-white/85 hover:bg-white text-[#0A0A0A] text-[22px] leading-none rounded-full shadow-sm transition-colors duration-200 z-10"
+                aria-label="Next photo"
+              >
+                ›
+              </button>
+
+              {/* Counter */}
+              <div className="absolute top-3 right-3 bg-black/60 text-white text-[10px] tracking-[0.15em] px-2.5 py-1 rounded-full">
+                {safeIndex + 1} / {allImages.length}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Thumbnail strip */}
+        {allImages.length > 1 && (
+          <div className="flex gap-2 justify-center mb-4 mt-3">
+            {allImages.map((url, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => setCurrentImageIndex(idx)}
+                className={`relative w-14 h-16 border overflow-hidden transition-all duration-200 ${
+                  idx === safeIndex
+                    ? 'border-[#0A0A0A] opacity-100'
+                    : 'border-[#E2E0DB] opacity-60 hover:opacity-100'
+                }`}
+                aria-label={`View photo ${idx + 1}`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={url} alt={`Photo ${idx + 1}`} className="w-full h-full object-cover" />
+              </button>
+            ))}
+          </div>
+        )}
 
 
         {/* Aesthetic label */}
@@ -313,14 +376,17 @@ export default function OutfitDetailClient({
 // ── Image with hover-reveal hotspots ─────────────────────────
 function ImageWithHotspots({
   outfit,
+  imageUrl,
   activeItemLabel,
   onStyleItem,
 }: {
   outfit: OutfitWithItems
+  imageUrl?: string
   activeItemLabel: string | null
   onStyleItem: (itemId: string, itemType: ItemType) => void
 }) {
   const [imageHovered, setImageHovered] = useState(false)
+  const src = imageUrl || outfit.image_url || '/placeholder-outfit.jpg'
 
   return (
     <div
@@ -329,7 +395,7 @@ function ImageWithHotspots({
       onMouseLeave={() => setImageHovered(false)}
     >
       <Image
-        src={outfit.image_url || '/placeholder-outfit.jpg'}
+        src={src}
         alt={outfit.aesthetic_label}
         fill
         priority
