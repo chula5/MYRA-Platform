@@ -1,8 +1,8 @@
-import Image from 'next/image'
 import Link from 'next/link'
 import Navigation from '@/components/navigation/Navigation'
 import Lookbook from '@/components/lookbook/Lookbook'
 import WaitlistModal from '@/components/WaitlistModal'
+import HeroCarousel from '@/components/hero/HeroCarousel'
 import { createServerClient } from '@/lib/supabase-server'
 import type { Outfit } from '@/types/database'
 
@@ -45,19 +45,8 @@ export default async function LandingPage() {
 
       {/* ── Hero ─────────────────────────────────────────────── */}
       <section className="relative w-full h-screen min-h-[600px] overflow-hidden">
-        {/* Full-bleed hero image */}
-        <div className="absolute inset-0">
-          <Image
-            src="/hero-placeholder2.jpg"
-            alt="MYRA — outfit-first fashion discovery"
-            fill
-            priority
-            className="object-cover"
-            sizes="100vw"
-          />
-          {/* Subtle dark overlay for text legibility */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
-        </div>
+        {/* Full-bleed rotating hero (Chanel · Saint Laurent · Dior) */}
+        <HeroCarousel />
 
         {/* Text overlay — bottom */}
         <div className="absolute bottom-0 left-0 right-0 pb-12 sm:pb-16 flex flex-col items-center text-center px-6 sm:px-10">
