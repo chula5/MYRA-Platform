@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { getAllProjects } from '@/lib/admin-queries'
 import StatusBadge from '@/components/admin/StatusBadge'
+import UploadOutfitSection from './UploadOutfitSection'
 
 const FILTER_TABS = ['all', 'draft', 'in_review', 'live', 'archived'] as const
 
@@ -45,6 +46,9 @@ export default async function ProjectsPage({ searchParams }: PageProps) {
           </Link>
         ))}
       </div>
+
+      {/* Upload outfit image to Cloudinary */}
+      <UploadOutfitSection projects={projects.map(p => ({ project_id: p.project_id, title: p.title }))} />
 
       {/* Search for new outfits */}
       <Link
@@ -98,7 +102,7 @@ export default async function ProjectsPage({ searchParams }: PageProps) {
                 </div>
                 <div className="flex items-center gap-4 mb-6">
                   <p className="text-[9px] tracking-[0.15em] text-[#A8A8A4]">
-                    {project.outfit_ids.length} OUTFIT{project.outfit_ids.length !== 1 ? 'S' : ''}
+                    {(project.outfit_ids ?? []).length} OUTFIT{(project.outfit_ids ?? []).length !== 1 ? 'S' : ''}
                   </p>
                   <p className="text-[9px] tracking-[0.15em] text-[#A8A8A4]">
                     {new Date(project.created_at).toLocaleDateString('en-GB', {

@@ -236,6 +236,21 @@ export async function getOutfitLookbookIds(outfitId: string): Promise<string[]> 
 
 // ── Outfits ───────────────────────────────────────────────────────────────────
 
+export async function getOutfitsForItem(itemId: string): Promise<Outfit[]> {
+  const supabase = createAdminClient()
+  try {
+    const { data, error } = await supabase
+      .from('outfit_item')
+      .select('outfit(*)')
+      .eq('item_id', itemId)
+    if (error) throw error
+    return ((data ?? []).map((r: { outfit: unknown }) => r.outfit).filter(Boolean)) as Outfit[]
+  } catch (err) {
+    console.error('[getOutfitsForItem]', err)
+    return []
+  }
+}
+
 export async function getOutfit(id: string): Promise<OutfitWithItems | null> {
   const supabase = createAdminClient()
   try {

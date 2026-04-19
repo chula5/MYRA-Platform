@@ -35,6 +35,8 @@ export interface Database {
           product_name: string
           retailer_url: string
           image_url: string
+          price: string | null
+          currency: string | null
           in_inventory: boolean
           source: 'manual' | 'retailer_api' | 'web_discovery'
           status: 'draft' | 'ready' | 'live' | 'archived'
@@ -71,6 +73,7 @@ export interface Database {
         Row: {
           outfit_id: string
           image_url: string
+          additional_images: string[] | null
           aesthetic_label: string
           occasion_tags: string[]
           source_brand_ids: string[]

@@ -21,8 +21,18 @@ function extractOutfitFields(formData: FormData) {
     ? tagsRaw.split(',').map((t) => t.trim()).filter(Boolean)
     : []
 
+  const additionalImagesRaw = formData.get('additional_images') as string | null
+  let additional_images: string[] = []
+  if (additionalImagesRaw) {
+    try {
+      const parsed = JSON.parse(additionalImagesRaw)
+      if (Array.isArray(parsed)) additional_images = parsed.filter((x) => typeof x === 'string')
+    } catch { /* ignore */ }
+  }
+
   return {
     image_url: (formData.get('image_url') as string) || '',
+    additional_images,
     aesthetic_label: (formData.get('aesthetic_label') as string) || '',
     celebrity_name: (formData.get('celebrity_name') as string) || null,
     occasion_tags,
@@ -256,6 +266,51 @@ export async function updateOutfit(
   } catch (err: unknown) {
     console.error('[updateOutfit]', err)
     return { error: err instanceof Error ? err.message : 'Failed to update outfit' }
+  }
+}
+
+export async function searchItemInventory(query: string): Promise<{
+  data?: Array<{
+    item_id: string
+    product_name: string
+    image_url: string | null
+    item_type: string
+    brand_name: string | null
+    price: string | null
+    currency: string | null
+  }>
+  error?: string
+}> {
+  const supabase = createAdminClient()
+  try {
+    let req = supabase
+      .from('item')
+      .select('item_id, product_name, image_url, item_type, price, currency, brand:brand_id(name)')
+      .order('product_name', { ascending: true })
+      .limit(50)
+
+    const q = query.trim()
+    if (q) {
+      req = req.ilike('product_name', `%${q}%`)
+    }
+
+    const { data, error } = await req
+    if (error) throw error
+
+    return {
+      data: (data ?? []).map((r: any) => ({
+        item_id: r.item_id,
+        product_name: r.product_name,
+        image_url: r.image_url,
+        item_type: r.item_type,
+        brand_name: r.brand?.name ?? null,
+        price: r.price ?? null,
+        currency: r.currency ?? null,
+      })),
+    }
+  } catch (err: unknown) {
+    console.error('[searchItemInventory]', err)
+    return { error: err instanceof Error ? err.message : 'Search failed' }
   }
 }
 

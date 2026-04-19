@@ -1,13 +1,15 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import type { OutfitWithItems } from '@/types/database'
 import ScoreInput from '@/components/admin/ScoreInput'
 import StatusBadge from '@/components/admin/StatusBadge'
 import { analyseOutfit, type OutfitAnalysis, type DetectedItem } from '@/app/admin/ai/analyse-outfit'
 import { scrapeProductInfo } from '@/app/admin/ai/scrape-product'
-import { quickAddItemToOutfit, updateQuickItem, reorderOutfitItems } from '@/app/admin/projects/actions'
+import { scrapeAndUploadToCloudinary } from '@/app/admin/items/cloudinary-upload'
+import { quickAddItemToOutfit, updateQuickItem, reorderOutfitItems, addItemToOutfit, searchItemInventory } from '@/app/admin/projects/actions'
+import { generateCanvaDeck } from '@/app/admin/projects/canva-actions'
 import { addOutfitToLookbook, removeOutfitFromLookbook } from '@/app/admin/lookbooks/actions'
 import type { Lookbook } from '@/types/database'
 
@@ -56,6 +58,11 @@ export default function OutfitBuilder({
   const [tagInput, setTagInput] = useState('')
   const [tags, setTags] = useState<string[]>(outfit?.occasion_tags ?? [])
   const [imageUrl, setImageUrl] = useState(outfit?.image_url ?? '')
+  const imageUrlRef = useRef<HTMLInputElement>(null)
+  const [additionalImages, setAdditionalImages] = useState<string[]>(
+    ((outfit as any)?.additional_images ?? []) as string[]
+  )
+  const [extraImageInput, setExtraImageInput] = useState('')
   const [aestheticLabel, setAestheticLabel] = useState(outfit?.aesthetic_label ?? '')
   const [celebrityName, setCelebrityName] = useState((outfit as any)?.celebrity_name ?? '')
 
@@ -217,10 +224,13 @@ export default function OutfitBuilder({
   }
 
   async function handleAnalyse() {
-    if (!imageUrl) return
+    // Fall back to the real DOM value in case React state is stale (e.g. after paste/autofill)
+    const urlToAnalyse = imageUrlRef.current?.value || imageUrl
+    if (!urlToAnalyse) return
+    if (urlToAnalyse !== imageUrl) setImageUrl(urlToAnalyse)
     setAnalysing(true)
     setAiError(null)
-    const result = await analyseOutfit(imageUrl)
+    const result = await analyseOutfit(urlToAnalyse)
     setAnalysing(false)
     if (result.error) {
       setAiError(result.error)
@@ -249,10 +259,16 @@ export default function OutfitBuilder({
   async function handleRetailerUrlBlur(index: number, url: string) {
     if (!url || !url.startsWith('http')) return
     const inp = itemInputs[index]
-    // Only auto-fill if fields are still empty
-    if (inp?.productName && inp?.brandName) return
+    // Skip only if everything is already filled
+    if (inp?.productName && inp?.brandName && inp?.imageUrl) return
     setItemInputs((prev) => ({ ...prev, [index]: { ...prev[index], scraping: true } }))
-    const result = await scrapeProductInfo(url)
+
+    // Run product-info scrape and image-upload in parallel
+    const [infoResult, imageResult] = await Promise.all([
+      (inp?.productName && inp?.brandName) ? Promise.resolve({ data: undefined }) : scrapeProductInfo(url),
+      inp?.imageUrl ? Promise.resolve({ cloudinaryUrl: undefined }) : scrapeAndUploadToCloudinary(url),
+    ])
+
     setItemInputs((prev) => {
       const cur = prev[index]
       return {
@@ -260,11 +276,198 @@ export default function OutfitBuilder({
         [index]: {
           ...cur,
           scraping: false,
-          productName: cur?.productName || result.data?.productName || cur?.productName || '',
-          brandName: cur?.brandName || result.data?.brandName || cur?.brandName || '',
+          productName: cur?.productName || infoResult.data?.productName || '',
+          brandName: cur?.brandName || infoResult.data?.brandName || '',
+          imageUrl: cur?.imageUrl || imageResult.cloudinaryUrl || '',
         },
       }
     })
+  }
+
+  // Canva export state
+  const [canvaCopied, setCanvaCopied] = useState(false)
+  const [canvaPromptOpen, setCanvaPromptOpen] = useState(false)
+  const [canvaPromptText, setCanvaPromptText] = useState('')
+  const [canvaJobStatus, setCanvaJobStatus] = useState<
+    'idle' | 'pending' | 'running' | 'complete' | 'failed'
+  >('idle')
+  const [canvaJobError, setCanvaJobError] = useState<string | null>(null)
+  const [canvaEditUrl, setCanvaEditUrl] = useState<string | null>(null)
+  const [canvaPreviewUrl, setCanvaPreviewUrl] = useState<string | null>(null)
+
+  function buildCanvaPrompt(): string {
+    if (!outfit) return ''
+    const items = orderedItems
+      .filter((oi) => oi.item)
+      .map((oi, idx) => {
+        const it: any = oi.item
+        const br: any = it?.brand
+        return `${idx + 1}. ${(it?.product_name ?? 'Unknown product').toUpperCase()} — ${br?.name ?? 'Unknown brand'}
+   SLOT: ${oi.slot}
+   IMAGE: ${it?.image_url ?? '(none)'}
+   RETAILER: ${it?.retailer_url ?? '(none)'}
+   PRICE: ${it?.price ? `${it.price}${it?.currency ? ' ' + it.currency : ''}` : '(scrape from retailer URL)'}`
+      })
+      .join('\n\n')
+
+    const allImgs = [outfit.image_url, ...(((outfit as any).additional_images) ?? [])].filter(Boolean)
+    const modelImages = allImgs.map((u: string, i: number) => `   ${i === 0 ? 'MAIN' : 'EXTRA ' + i}: ${u}`).join('\n')
+
+    return `Please use the Canva skill to create a new design based on the template called "Template Design" with the following content.
+
+DESIGN TITLE: ${aestheticLabel || 'Untitled outfit'}${celebrityName ? ' — ' + celebrityName : ''}
+
+OCCASION TAGS: ${tags.join(', ') || '(none)'}
+
+MODEL IMAGES (replace the hero photo with the MAIN image; additional images can be placed in supporting slots):
+${modelImages}
+
+PRODUCTS (${orderedItems.length} items — populate the product grid in order):
+
+${items || '(no items yet)'}
+
+STEPS:
+1. Duplicate the "Template Design" Canva template into a new design.
+2. Rename the new design to the DESIGN TITLE above.
+3. Replace the hero/model image slot with the MAIN model image.
+4. For each product in order, populate the next product slot with the product image, brand name, product name, and price. If price is "(scrape from retailer URL)", fetch the retailer URL and extract the price before inserting.
+5. Export a PNG preview and give me the Canva edit link + the preview URL when done.`
+  }
+
+  async function handleCanvaExport() {
+    if (!outfit) return
+    setCanvaJobError(null)
+    setCanvaEditUrl(null)
+    setCanvaPreviewUrl(null)
+    setCanvaJobStatus('pending')
+
+    const res = await generateCanvaDeck(outfit.outfit_id)
+    if (res.error || !res.job_id) {
+      setCanvaJobStatus('failed')
+      setCanvaJobError(res.error ?? 'Failed to start job')
+      return
+    }
+
+    setCanvaJobStatus('running')
+    const jobId = res.job_id
+
+    // Poll every 2.5s for up to ~3 minutes
+    const start = Date.now()
+    const poll = async () => {
+      if (Date.now() - start > 180_000) {
+        setCanvaJobStatus('failed')
+        setCanvaJobError('Timed out waiting for Canva')
+        return
+      }
+      try {
+        const r = await fetch(`/api/canva/job-status?job_id=${jobId}`)
+        const j = await r.json()
+        const job = j.job
+        if (!job) throw new Error(j.error ?? 'No job data')
+
+        if (job.status === 'complete') {
+          setCanvaEditUrl(job.edit_url ?? null)
+          setCanvaPreviewUrl(job.preview_url ?? null)
+          setCanvaJobStatus('complete')
+          return
+        }
+        if (job.status === 'failed') {
+          setCanvaJobError(job.error ?? 'Canva job failed')
+          setCanvaJobStatus('failed')
+          return
+        }
+        setTimeout(poll, 2500)
+      } catch (err) {
+        setCanvaJobError(err instanceof Error ? err.message : 'Polling failed')
+        setCanvaJobStatus('failed')
+      }
+    }
+    setTimeout(poll, 2500)
+  }
+
+  // Fallback: copy prompt for manual/Claude workflow (kept in case OAuth not set up)
+  async function handleCanvaPromptFallback() {
+    const prompt = buildCanvaPrompt()
+    setCanvaPromptText(prompt)
+    try {
+      await navigator.clipboard.writeText(prompt)
+      setCanvaCopied(true)
+      setTimeout(() => setCanvaCopied(false), 2500)
+    } catch { /* ignore */ }
+    setCanvaPromptOpen(true)
+  }
+
+  // Manual add retailer URL blur handler — same flow: scrape info + upload image to Cloudinary
+  const [manualScraping, setManualScraping] = useState(false)
+
+  // ── Inventory search state ──────────────────────────────────
+  type InvItem = {
+    item_id: string
+    product_name: string
+    image_url: string | null
+    item_type: string
+    brand_name: string | null
+    price: string | null
+    currency: string | null
+  }
+  const [invOpen, setInvOpen] = useState(false)
+  const [invQuery, setInvQuery] = useState('')
+  const [invResults, setInvResults] = useState<InvItem[]>([])
+  const [invLoading, setInvLoading] = useState(false)
+  const [invSelectedSlot, setInvSelectedSlot] = useState<string>('top')
+  const [invAddingIds, setInvAddingIds] = useState<Set<string>>(new Set())
+  const [invError, setInvError] = useState<string | null>(null)
+
+  async function runInventorySearch(q: string) {
+    setInvLoading(true)
+    const res = await searchItemInventory(q)
+    setInvLoading(false)
+    if (res.error) { setInvError(res.error); return }
+    setInvResults(res.data ?? [])
+  }
+
+  // Load all items on open + re-search as user types (debounced)
+  useEffect(() => {
+    if (!invOpen) return
+    const t = setTimeout(() => { runInventorySearch(invQuery) }, 200)
+    return () => clearTimeout(t)
+  }, [invOpen, invQuery])
+
+  // Map DB item_type to outfit slot so imported items dock into the right spot
+  function slotForItemType(itemType: string): string {
+    const t = itemType.toLowerCase()
+    if (['coat','trench','jacket','blazer','gilet','cape'].includes(t)) return 'outerwear'
+    if (['shirt','blouse','t-shirt','knitwear','corset','bodysuit'].includes(t)) return 'top'
+    if (['trousers','jeans','shorts','skirt'].includes(t)) return 'bottom'
+    if (['mini_dress','midi_dress','maxi_dress','shirt_dress','slip_dress'].includes(t)) return 'dress'
+    if (['boot','heel','flat','sneaker','mule','sandal'].includes(t)) return 'shoe'
+    if (['tote','shoulder_bag','clutch','crossbody','structured_bag'].includes(t)) return 'bag'
+    if (['necklace','earrings','bracelet','ring','brooch'].includes(t)) return 'jewellery'
+    return 'accessory'
+  }
+
+  async function handleAddFromInventory(item: InvItem) {
+    if (!outfit) return
+    setInvError(null)
+    setInvAddingIds((prev) => new Set(prev).add(item.item_id))
+    const slot = slotForItemType(item.item_type)
+    const res = await addItemToOutfit(outfit.outfit_id, item.item_id, slot)
+    setInvAddingIds((prev) => { const n = new Set(prev); n.delete(item.item_id); return n })
+    if (res.error) { setInvError(res.error); return }
+    router.refresh()
+  }
+  async function handleManualRetailerBlur(url: string) {
+    if (!url || !url.startsWith('http')) return
+    if (manualProductName && manualBrandName && manualImageUrl) return
+    setManualScraping(true)
+    const [infoResult, imageResult] = await Promise.all([
+      (manualProductName && manualBrandName) ? Promise.resolve({ data: undefined }) : scrapeProductInfo(url),
+      manualImageUrl ? Promise.resolve({ cloudinaryUrl: undefined }) : scrapeAndUploadToCloudinary(url),
+    ])
+    if (!manualProductName && infoResult.data?.productName) setManualProductName(infoResult.data.productName)
+    if (!manualBrandName && infoResult.data?.brandName) setManualBrandName(infoResult.data.brandName)
+    if (!manualImageUrl && imageResult.cloudinaryUrl) setManualImageUrl(imageResult.cloudinaryUrl)
+    setManualScraping(false)
   }
 
   async function handleQuickAdd(index: number) {
@@ -299,6 +502,7 @@ export default function OutfitBuilder({
     formData.set('occasion_tags', tags.join(','))
     formData.set('aesthetic_label', aestheticLabel)
     formData.set('celebrity_name', celebrityName)
+    formData.set('additional_images', JSON.stringify(additionalImages))
 
     let result: { error?: string; outfitId?: string }
     if (outfit) {
@@ -379,28 +583,83 @@ export default function OutfitBuilder({
             <div className="flex gap-3 items-start">
               <div className="flex-1">
                 <input
+                  ref={imageUrlRef}
                   name="image_url"
-                  type="url"
+                  type="text"
                   value={imageUrl}
                   onChange={(e) => setImageUrl(e.target.value)}
+                  onInput={(e) => setImageUrl((e.target as HTMLInputElement).value)}
                   className={inputClass}
                 />
-                {imageUrl && (
-                  <button
-                    type="button"
-                    onClick={handleAnalyse}
-                    disabled={analysing}
-                    className="mt-2 bg-[#0A0A0A] text-white px-5 py-2 text-[10px] tracking-[0.20em] transition-colors duration-300 hover:bg-[#333] disabled:opacity-50"
-                  >
-                    {analysing ? 'ANALYSING...' : 'ANALYSE WITH AI →'}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={handleAnalyse}
+                  disabled={analysing}
+                  className="mt-2 bg-[#0A0A0A] text-white px-5 py-2 text-[10px] tracking-[0.20em] transition-colors duration-300 hover:bg-[#333] disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {analysing ? 'ANALYSING...' : 'ANALYSE WITH AI →'}
+                </button>
                 {aiError && (
                   <p className="mt-2 text-[9px] tracking-[0.12em] text-red-500">{aiError}</p>
                 )}
               </div>
             </div>
           </div>
+
+          {/* ── EXTRA PHOTOS ──────────────────────────────────── */}
+          <div className="mb-4">
+            <label className={labelClass}>EXTRA PHOTOS</label>
+            {additionalImages.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {additionalImages.map((url, idx) => (
+                  <div key={idx} className="relative w-20 h-24 border border-[#E2E0DB] bg-white overflow-hidden group">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={url} alt={`Extra ${idx + 1}`} className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setAdditionalImages((prev) => prev.filter((_, i) => i !== idx))}
+                      className="absolute top-0.5 right-0.5 bg-black/70 text-white text-[9px] w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      aria-label="Remove"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="PASTE IMAGE URL…"
+                value={extraImageInput}
+                onChange={(e) => setExtraImageInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    const v = extraImageInput.trim()
+                    if (v) {
+                      setAdditionalImages((prev) => [...prev, v])
+                      setExtraImageInput('')
+                    }
+                  }
+                }}
+                className={inputClass}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const v = extraImageInput.trim()
+                  if (!v) return
+                  setAdditionalImages((prev) => [...prev, v])
+                  setExtraImageInput('')
+                }}
+                className="shrink-0 bg-[#0A0A0A] text-white px-5 py-2 text-[10px] tracking-[0.20em] transition-colors duration-300 hover:bg-[#333]"
+              >
+                + ADD PHOTO
+              </button>
+            </div>
+          </div>
+
           <div className="mb-4">
             <label className={labelClass}>AESTHETIC LABEL</label>
             <input
@@ -680,7 +939,18 @@ export default function OutfitBuilder({
             </div>
           )}
 
-          <p className={sectionHeadingClass}>ITEMS IN THIS OUTFIT</p>
+          <div className="flex items-center justify-between mb-6 pb-3 border-b border-[#E2E0DB]">
+            <p className="text-[10px] tracking-[0.25em] text-[#6B6B6B]">ITEMS IN THIS OUTFIT</p>
+            {outfit && (
+              <button
+                type="button"
+                onClick={() => { setInvOpen(true); setInvQuery(''); setInvError(null) }}
+                className="text-[9px] tracking-[0.20em] border border-[#0A0A0A] px-3 py-1.5 text-[#0A0A0A] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-200"
+              >
+                + FROM INVENTORY
+              </button>
+            )}
+          </div>
             {!outfit ? (
               <p className="text-[10px] tracking-[0.15em] text-[#A8A8A4]">
                 SAVE THE OUTFIT FIRST TO ADD ITEMS.
@@ -829,13 +1099,21 @@ export default function OutfitBuilder({
                       onChange={(e) => setManualImageUrl(e.target.value)}
                       className={inputClass}
                     />
-                    <input
-                      type="url"
-                      placeholder="RETAILER / SHOP URL"
-                      value={manualRetailerUrl}
-                      onChange={(e) => setManualRetailerUrl(e.target.value)}
-                      className={inputClass}
-                    />
+                    <div className="relative">
+                      <input
+                        type="url"
+                        placeholder="RETAILER / SHOP URL"
+                        value={manualRetailerUrl}
+                        onChange={(e) => setManualRetailerUrl(e.target.value)}
+                        onBlur={(e) => handleManualRetailerBlur(e.target.value)}
+                        className={inputClass}
+                      />
+                      {manualScraping && (
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] tracking-[0.12em] text-[#A8A8A4]">
+                          FETCHING...
+                        </span>
+                      )}
+                    </div>
                   </div>
                   {manualError && (
                     <p className="text-[9px] tracking-[0.12em] text-red-500 mb-2">{manualError}</p>
@@ -893,9 +1171,237 @@ export default function OutfitBuilder({
                 )}
               </div>
             )}
+
+            {/* ── CANVA EXPORT ──────────────────────────────────── */}
+            <div className="mt-10">
+              <p className={sectionHeadingClass}>CANVA TEMPLATE</p>
+              {!outfit ? (
+                <p className="text-[10px] tracking-[0.15em] text-[#A8A8A4]">
+                  SAVE THE OUTFIT FIRST TO GENERATE.
+                </p>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleCanvaExport}
+                    disabled={canvaJobStatus === 'pending' || canvaJobStatus === 'running'}
+                    className="w-full bg-[#0A0A0A] text-white py-3 text-[10px] tracking-[0.20em] transition-colors duration-300 hover:bg-[#333] disabled:opacity-60"
+                  >
+                    {canvaJobStatus === 'pending' && 'STARTING…'}
+                    {canvaJobStatus === 'running' && 'GENERATING ON CANVA… ⟳'}
+                    {canvaJobStatus === 'complete' && '✓ DECK READY — REGENERATE'}
+                    {canvaJobStatus === 'failed' && 'RETRY →'}
+                    {canvaJobStatus === 'idle' && 'GENERATE CANVA DECK →'}
+                  </button>
+
+                  {canvaJobStatus === 'running' && (
+                    <p className="mt-2 text-[9px] tracking-[0.12em] text-[#A8A8A4] leading-relaxed">
+                      Working in the background. You&rsquo;ll be notified here when done — safe to keep editing.
+                    </p>
+                  )}
+
+                  {canvaJobStatus === 'complete' && canvaEditUrl && (
+                    <div className="mt-3 border border-green-300 bg-green-50 p-3">
+                      <p className="text-[10px] tracking-[0.18em] text-green-800 mb-2">
+                        ✓ YOUR DECK IS READY
+                      </p>
+                      {canvaPreviewUrl && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={canvaPreviewUrl}
+                          alt="Canva deck preview"
+                          className="w-full h-auto border border-green-200 mb-2"
+                        />
+                      )}
+                      <a
+                        href={canvaEditUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block w-full bg-[#0A0A0A] text-white text-center py-2 text-[10px] tracking-[0.20em] hover:bg-[#333] transition-colors"
+                      >
+                        OPEN IN CANVA →
+                      </a>
+                    </div>
+                  )}
+
+                  {canvaJobStatus === 'failed' && canvaJobError && (
+                    <p className="mt-2 text-[9px] tracking-[0.12em] text-red-500 leading-relaxed">
+                      {canvaJobError}
+                    </p>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleCanvaPromptFallback}
+                    className="mt-3 w-full text-[9px] tracking-[0.15em] text-[#6B6B6B] hover:text-[#0A0A0A] underline"
+                  >
+                    or copy Claude prompt instead
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Canva prompt modal */}
+      {canvaPromptOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6"
+          onClick={() => setCanvaPromptOpen(false)}
+        >
+          <div
+            className="bg-white max-w-[720px] w-full max-h-[80vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#E2E0DB]">
+              <p className="text-[11px] tracking-[0.25em] text-[#0A0A0A]">CANVA SKILL PROMPT</p>
+              <button
+                type="button"
+                onClick={() => setCanvaPromptOpen(false)}
+                className="text-[#6B6B6B] hover:text-[#0A0A0A] text-[18px] leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-6">
+              <p className="text-[10px] tracking-[0.15em] text-[#6B6B6B] mb-3">
+                {canvaCopied ? 'COPIED — PASTE INTO CLAUDE' : 'COPY THIS AND PASTE INTO CLAUDE'}
+              </p>
+              <pre className="text-[11px] leading-relaxed text-[#0A0A0A] whitespace-pre-wrap break-words font-mono bg-[#F8F8F6] p-4 border border-[#E2E0DB]">
+                {canvaPromptText}
+              </pre>
+            </div>
+            <div className="flex gap-2 px-6 py-4 border-t border-[#E2E0DB]">
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(canvaPromptText)
+                    setCanvaCopied(true)
+                    setTimeout(() => setCanvaCopied(false), 2500)
+                  } catch { /* ignore */ }
+                }}
+                className="flex-1 bg-[#0A0A0A] text-white py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#333] transition-colors"
+              >
+                {canvaCopied ? '✓ COPIED' : 'COPY TO CLIPBOARD'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setCanvaPromptOpen(false)}
+                className="flex-1 border border-[#0A0A0A] text-[#0A0A0A] py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors"
+              >
+                CLOSE
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Inventory search modal */}
+      {invOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6"
+          onClick={() => setInvOpen(false)}
+        >
+          <div
+            className="bg-white max-w-[800px] w-full max-h-[85vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#E2E0DB]">
+              <p className="text-[11px] tracking-[0.25em] text-[#0A0A0A]">ITEM INVENTORY</p>
+              <button
+                type="button"
+                onClick={() => setInvOpen(false)}
+                className="text-[#6B6B6B] hover:text-[#0A0A0A] text-[18px] leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="px-6 pt-4 pb-2">
+              <input
+                type="text"
+                autoFocus
+                placeholder="SEARCH BY PRODUCT NAME…"
+                value={invQuery}
+                onChange={(e) => setInvQuery(e.target.value)}
+                className={inputClass}
+              />
+              {invError && (
+                <p className="mt-2 text-[9px] tracking-[0.12em] text-red-500">{invError}</p>
+              )}
+            </div>
+
+            <div className="flex-1 overflow-auto px-6 pb-6">
+              {invLoading ? (
+                <p className="text-[10px] tracking-[0.15em] text-[#A8A8A4] py-6 text-center">LOADING…</p>
+              ) : invResults.length === 0 ? (
+                <p className="text-[10px] tracking-[0.15em] text-[#A8A8A4] py-6 text-center">
+                  {invQuery.trim() ? 'NO ITEMS FOUND.' : 'NO ITEMS IN INVENTORY YET.'}
+                </p>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {invResults.map((it) => {
+                    const adding = invAddingIds.has(it.item_id)
+                    const alreadyAdded = orderedItems.some((oi) => oi.item_id === it.item_id)
+                    return (
+                      <button
+                        key={it.item_id}
+                        type="button"
+                        onClick={() => !alreadyAdded && handleAddFromInventory(it)}
+                        disabled={adding || alreadyAdded}
+                        className={`group text-left border transition-colors duration-200 overflow-hidden ${
+                          alreadyAdded
+                            ? 'border-[#E2E0DB] opacity-50 cursor-not-allowed'
+                            : 'border-[#E2E0DB] hover:border-[#0A0A0A] bg-white'
+                        }`}
+                      >
+                        <div className="aspect-square bg-[#F8F8F6] overflow-hidden">
+                          {it.image_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={it.image_url} alt={it.product_name} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-[9px] tracking-[0.15em] text-[#A8A8A4]">NO IMAGE</div>
+                          )}
+                        </div>
+                        <div className="p-2.5">
+                          <p className="text-[10px] tracking-[0.10em] text-[#0A0A0A] truncate">
+                            {it.product_name.toUpperCase()}
+                          </p>
+                          {it.brand_name && (
+                            <p className="text-[9px] tracking-[0.10em] text-[#6B6B6B] truncate mt-0.5">
+                              {it.brand_name}
+                            </p>
+                          )}
+                          <div className="flex items-center justify-between mt-1.5">
+                            <span className="text-[8px] tracking-[0.15em] text-[#A8A8A4]">
+                              {it.item_type.replace(/_/g, ' ').toUpperCase()}
+                            </span>
+                            {it.price && (
+                              <span className="text-[9px] tracking-[0.10em] text-[#0A0A0A]">
+                                {it.currency ?? ''} {it.price}
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-2 text-[9px] tracking-[0.15em] text-center">
+                            {alreadyAdded
+                              ? 'ADDED ✓'
+                              : adding
+                                ? 'ADDING…'
+                                : <span className="text-[#0A0A0A] group-hover:underline">+ ADD TO OUTFIT</span>
+                            }
+                          </p>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

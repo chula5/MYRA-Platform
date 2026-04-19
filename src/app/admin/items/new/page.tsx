@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import { redirect } from 'next/navigation'
 import { getAllBrands } from '@/lib/admin-queries'
 import ItemForm from '@/components/admin/ItemForm'
 import { createItem } from '@/app/admin/items/actions'
@@ -9,11 +8,7 @@ export default async function NewItemPage() {
 
   async function handleCreate(formData: FormData) {
     'use server'
-    const result = await createItem(formData)
-    if (!result.error) {
-      redirect('/admin/items')
-    }
-    return result
+    return createItem(formData)
   }
 
   return (

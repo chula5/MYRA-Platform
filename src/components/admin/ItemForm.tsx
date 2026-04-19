@@ -1,9 +1,12 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import type { Item, Brand, ItemType, ColourFamily, MaterialCategory, JewelleryFinish, JewelleryStyle } from '@/types/database'
 import ScoreInput from '@/components/admin/ScoreInput'
 import { createBrand } from '@/app/admin/items/actions'
+import { analyseProductUrl } from '@/app/admin/items/analyse-url'
+import { scrapeAndUploadToCloudinary, uploadBase64ToCloudinary } from '@/app/admin/items/cloudinary-upload'
 
 const ITEM_TYPES: ItemType[] = [
   'coat', 'trench', 'jacket', 'blazer', 'gilet', 'cape',
@@ -55,6 +58,7 @@ interface ItemFormProps {
 }
 
 export default function ItemForm({ item, brands: initialBrands, action }: ItemFormProps) {
+  const router = useRouter()
   const [brands, setBrands] = useState<Brand[]>(initialBrands)
   const [itemType, setItemType] = useState<ItemType>((item?.item_type as ItemType) || 'shirt')
   const [error, setError] = useState<string | null>(null)
@@ -62,6 +66,22 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
   const [showBrandForm, setShowBrandForm] = useState(false)
   const [brandError, setBrandError] = useState<string | null>(null)
   const [brandSubmitting, setBrandSubmitting] = useState(false)
+
+  // Auto-fill controlled state
+  const [analysing, setAnalysing] = useState(false)
+  const [analyseError, setAnalyseError] = useState<string | null>(null)
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const [uploadImageError, setUploadImageError] = useState<string | null>(null)
+  const [imageUrl, setImageUrl] = useState(item?.image_url || '')
+  const [productName, setProductName] = useState(item?.product_name || '')
+  const [retailerUrl, setRetailerUrl] = useState(item?.retailer_url || '')
+  const [price, setPrice] = useState((item as any)?.price || '')
+  const [currency, setCurrency] = useState((item as any)?.currency || 'GBP')
+  const [brandId, setBrandId] = useState(item?.brand_id || '')
+  const [colourHex, setColourHex] = useState(item?.colour_hex || '')
+  const [colourFamily, setColourFamily] = useState(item?.colour_family || '')
+  const [materialPrimary, setMaterialPrimary] = useState(item?.material_primary || '')
+  const [materialCategory, setMaterialCategory] = useState(item?.material_category || '')
 
   // Score states
   const [scores, setScores] = useState({
@@ -83,40 +103,135 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
   })
 
   const formRef = useRef<HTMLFormElement>(null)
-
   const isJewellery = JEWELLERY_TYPES.includes(itemType)
+
+  // ── URL analysis ──────────────────────────────────────────────
+  async function handleUrlAnalyse(url: string) {
+    if (!url || !url.startsWith('http')) return
+    setAnalysing(true)
+    setAnalyseError(null)
+    const result = await analyseProductUrl(url)
+    setAnalysing(false)
+    if (result.error) { setAnalyseError(result.error); return }
+    const d = result.data!
+
+    if (d.product_name) setProductName(d.product_name)
+    if ((d as any).price) setPrice((d as any).price)
+    if ((d as any).currency) setCurrency((d as any).currency)
+    if (d.item_type && ITEM_TYPES.includes(d.item_type as ItemType)) {
+      setItemType(d.item_type as ItemType)
+    }
+    if (d.colour_hex) setColourHex(d.colour_hex)
+    if (d.colour_family) setColourFamily(d.colour_family)
+    if (d.material_primary) setMaterialPrimary(d.material_primary)
+    if (d.material_category) setMaterialCategory(d.material_category)
+
+    // Match brand by name (case-insensitive)
+    if (d.brand_name) {
+      const matched = brands.find(
+        (b) => b.name.toLowerCase() === d.brand_name!.toLowerCase()
+      )
+      if (matched) setBrandId(matched.brand_id)
+    }
+
+    // Update scores
+    setScores((prev) => ({
+      fit: d.fit ?? prev.fit,
+      length: d.length ?? prev.length,
+      rise: d.rise ?? prev.rise,
+      structure: d.structure ?? prev.structure,
+      shoulder: d.shoulder ?? prev.shoulder,
+      waist_definition: d.waist_definition ?? prev.waist_definition,
+      leg_opening: d.leg_opening ?? prev.leg_opening,
+      surface: d.surface ?? prev.surface,
+      colour_depth: d.colour_depth ?? prev.colour_depth,
+      pattern: d.pattern ?? prev.pattern,
+      sheen: d.sheen ?? prev.sheen,
+      material_weight: d.material_weight ?? prev.material_weight,
+      material_formality: d.material_formality ?? prev.material_formality,
+      jewellery_scale: d.jewellery_scale ?? prev.jewellery_scale,
+      jewellery_formality: d.jewellery_formality ?? prev.jewellery_formality,
+    }))
+  }
+
+  async function handleCloudinaryUpload() {
+    if (!retailerUrl) return
+    setUploadingImage(true)
+    setUploadImageError(null)
+
+    // If a direct image URL is already in the image field, try to fetch it in
+    // the browser first (bypasses CDN bot protection that blocks server fetches)
+    const directUrl = imageUrl.trim()
+    const isDirectImageUrl = /^https?:\/\/.+\.(jpg|jpeg|png|webp|avif)/i.test(directUrl)
+
+    if (isDirectImageUrl) {
+      try {
+        const res = await fetch(directUrl)
+        if (res.ok) {
+          const contentType = res.headers.get('content-type') ?? 'image/jpeg'
+          if (contentType.startsWith('image/')) {
+            const buffer = await res.arrayBuffer()
+            const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)))
+            const dataUri = `data:${contentType};base64,${base64}`
+            const result = await uploadBase64ToCloudinary(dataUri, directUrl)
+            setUploadingImage(false)
+            if (result.error) { setUploadImageError(result.error); return }
+            if (result.cloudinaryUrl) setImageUrl(result.cloudinaryUrl)
+            return
+          }
+        }
+      } catch { /* fall through to server-side scrape */ }
+    }
+
+    // Server-side scrape from retailer URL
+    const result = await scrapeAndUploadToCloudinary(retailerUrl)
+    setUploadingImage(false)
+    if (result.error) { setUploadImageError(result.error); return }
+    if (result.cloudinaryUrl) setImageUrl(result.cloudinaryUrl)
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    // Manual validation since e.preventDefault() skips browser required checks
+    if (!productName.trim()) { setError('Product name is required'); return }
+    if (!brandId) { setError('Please select a brand'); return }
     setSubmitting(true)
     setError(null)
     const formData = new FormData(e.currentTarget)
-    // Inject score values into formData (they're hidden inputs already, but let's be explicit)
-    const result = await action(formData)
-    setSubmitting(false)
-    if (result?.error) {
-      setError(result.error)
+    try {
+      const result = await action(formData)
+      setSubmitting(false)
+      if (result?.error) {
+        setError(result.error)
+      } else if (!item) {
+        // New item saved successfully — navigate client-side to avoid redirect issues
+        router.push('/admin/items')
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred')
+      setSubmitting(false)
     }
   }
 
-  async function handleCreateBrand(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
+  const brandNameRef = useRef<HTMLInputElement>(null)
+  const brandPriceTierRef = useRef<HTMLInputElement>(null)
+
+  async function handleCreateBrand() {
+    const name = brandNameRef.current?.value?.trim()
+    if (!name) { setBrandError('Brand name is required'); return }
     setBrandSubmitting(true)
     setBrandError(null)
-    const formData = new FormData(e.currentTarget)
+    const formData = new FormData()
+    formData.append('name', name)
+    formData.append('price_tier', brandPriceTierRef.current?.value ?? '3')
     const result = await createBrand(formData)
     setBrandSubmitting(false)
-    if (result?.error) {
-      setBrandError(result.error)
-      return
-    }
+    if (result?.error) { setBrandError(result.error); return }
     if (result?.brandId) {
-      // Fetch updated brand name from form
-      const newBrandName = formData.get('name') as string
       const newBrand: Brand = {
         brand_id: result.brandId,
-        name: newBrandName,
-        price_tier: parseInt(formData.get('price_tier') as string, 10) || 3,
+        name,
+        price_tier: parseInt(brandPriceTierRef.current?.value ?? '3', 10) || 3,
         era_orientation: 3,
         aesthetic_output: 3,
         cultural_legibility: 3,
@@ -124,7 +239,9 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
         notes: null,
       }
       setBrands((prev) => [...prev, newBrand].sort((a, b) => a.name.localeCompare(b.name)))
+      setBrandId(result.brandId)
       setShowBrandForm(false)
+      if (brandNameRef.current) brandNameRef.current.value = ''
     }
   }
 
@@ -133,6 +250,69 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
       {/* IDENTITY */}
       <div className={sectionClass}>
         <p className={sectionHeadingClass}>IDENTITY</p>
+
+        {/* Retailer URL with AI trigger */}
+        <div className="mb-4">
+          <label className={labelClass}>RETAILER URL</label>
+          <div className="flex gap-2">
+            <input
+              name="retailer_url"
+              type="text"
+              value={retailerUrl}
+              onChange={(e) => setRetailerUrl(e.target.value)}
+              onBlur={(e) => handleUrlAnalyse(e.target.value)}
+              placeholder="https://..."
+              className={inputClass}
+            />
+            <button
+              type="button"
+              onClick={() => handleUrlAnalyse(retailerUrl)}
+              disabled={analysing || !retailerUrl}
+              className="shrink-0 border border-[#E2E0DB] bg-white px-4 text-[10px] tracking-[0.15em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] disabled:opacity-40 transition-colors whitespace-nowrap"
+            >
+              {analysing ? 'ANALYSING...' : 'AUTO-FILL ✦'}
+            </button>
+          </div>
+          {analysing && (
+            <p className="mt-1.5 text-[10px] tracking-[0.15em] text-[#A8A8A4] animate-pulse">
+              Analysing product page with AI...
+            </p>
+          )}
+          {analyseError && (
+            <p className="mt-1.5 text-[10px] tracking-[0.15em] text-red-400">{analyseError}</p>
+          )}
+        </div>
+
+        <div className="grid grid-cols-[1fr_120px] gap-4 mb-4">
+          <div>
+            <label className={labelClass}>PRICE</label>
+            <input
+              name="price"
+              type="text"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              placeholder="e.g. 495"
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className={labelClass}>CURRENCY</label>
+            <select
+              name="currency"
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+              className={inputClass}
+            >
+              <option value="GBP">GBP £</option>
+              <option value="USD">USD $</option>
+              <option value="EUR">EUR €</option>
+              <option value="AUD">AUD $</option>
+              <option value="CAD">CAD $</option>
+              <option value="JPY">JPY ¥</option>
+            </select>
+          </div>
+        </div>
+
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
             <label className={labelClass}>ITEM TYPE</label>
@@ -153,7 +333,13 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
           <div>
             <label className={labelClass}>BRAND</label>
             <div className="flex gap-2">
-              <select name="brand_id" className={inputClass} defaultValue={item?.brand_id || ''} required>
+              <select
+                name="brand_id"
+                className={inputClass}
+                value={brandId}
+                onChange={(e) => setBrandId(e.target.value)}
+                required
+              >
                 <option value="">SELECT BRAND</option>
                 {brands.map((b) => (
                   <option key={b.brand_id} value={b.brand_id}>
@@ -172,50 +358,30 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
           </div>
         </div>
 
-        {/* Quick Brand Form */}
+        {/* Quick Brand Form — must be a div, not a form (nested forms are invalid HTML) */}
         {showBrandForm && (
-          <form
-            onSubmit={handleCreateBrand}
-            className="mb-4 p-4 bg-[#F8F8F6] border border-[#E2E0DB] rounded-[2px]"
-          >
+          <div className="mb-4 p-4 bg-[#F8F8F6] border border-[#E2E0DB] rounded-[2px]">
             <p className="text-[9px] tracking-[0.20em] text-[#6B6B6B] mb-3">NEW BRAND</p>
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
                 <label className={labelClass}>BRAND NAME</label>
-                <input name="name" type="text" required className={inputClass} />
+                <input ref={brandNameRef} type="text" placeholder="Brand name" className={inputClass} />
               </div>
               <div>
                 <label className={labelClass}>PRICE TIER (1-5)</label>
-                <input
-                  name="price_tier"
-                  type="number"
-                  min={1}
-                  max={5}
-                  defaultValue={3}
-                  className={inputClass}
-                />
+                <input ref={brandPriceTierRef} type="number" min={1} max={5} defaultValue={3} className={inputClass} />
               </div>
             </div>
-            {brandError && (
-              <p className="text-[10px] tracking-[0.15em] text-red-500 mb-3">{brandError}</p>
-            )}
+            {brandError && <p className="text-[10px] tracking-[0.15em] text-red-500 mb-3">{brandError}</p>}
             <div className="flex gap-3">
-              <button
-                type="submit"
-                disabled={brandSubmitting}
-                className="bg-[#0A0A0A] text-white px-6 py-2 text-[10px] tracking-[0.20em] disabled:opacity-50"
-              >
+              <button type="button" onClick={handleCreateBrand} disabled={brandSubmitting} className="bg-[#0A0A0A] text-white px-6 py-2 text-[10px] tracking-[0.20em] disabled:opacity-50">
                 {brandSubmitting ? 'SAVING...' : 'SAVE BRAND'}
               </button>
-              <button
-                type="button"
-                onClick={() => setShowBrandForm(false)}
-                className="border border-[#E2E0DB] bg-transparent text-[#0A0A0A] px-6 py-2 text-[10px] tracking-[0.20em]"
-              >
+              <button type="button" onClick={() => setShowBrandForm(false)} className="border border-[#E2E0DB] bg-transparent text-[#0A0A0A] px-6 py-2 text-[10px] tracking-[0.20em]">
                 CANCEL
               </button>
             </div>
-          </form>
+          </div>
         )}
 
         <div className="mb-4">
@@ -223,38 +389,49 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
           <input
             name="product_name"
             type="text"
-            defaultValue={item?.product_name || ''}
+            value={productName}
+            onChange={(e) => setProductName(e.target.value)}
             className={inputClass}
             required
           />
         </div>
-        <div className="mb-4">
-          <label className={labelClass}>RETAILER URL</label>
-          <input
-            name="retailer_url"
-            type="url"
-            defaultValue={item?.retailer_url || ''}
-            className={inputClass}
-          />
-        </div>
+
         <div className="mb-4">
           <label className={labelClass}>IMAGE URL</label>
           <div className="flex gap-3 items-start">
-            <input
-              name="image_url"
-              type="url"
-              defaultValue={item?.image_url || ''}
-              className={inputClass}
-            />
-            {item?.image_url && (
-              <img
-                src={item.image_url}
-                alt="preview"
-                className="w-16 h-16 object-cover border border-[#E2E0DB] shrink-0"
-              />
+            <div className="flex-1 min-w-0">
+              <div className="flex gap-2 mb-1.5">
+                <input
+                  name="image_url"
+                  type="text"
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  placeholder="https://res.cloudinary.com/..."
+                  className={inputClass}
+                />
+                <button
+                  type="button"
+                  onClick={handleCloudinaryUpload}
+                  disabled={uploadingImage || !retailerUrl}
+                  title="Scrape product image from retailer URL and upload to Cloudinary. For protected sites: paste the direct image URL above first, then click this button."
+                  className="shrink-0 border border-[#E2E0DB] bg-white px-3 text-[10px] tracking-[0.12em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] disabled:opacity-40 transition-colors whitespace-nowrap"
+                >
+                  {uploadingImage ? 'UPLOADING...' : '☁ SAVE TO CLOUDINARY'}
+                </button>
+              </div>
+              {uploadingImage && (
+                <p className="text-[10px] tracking-[0.12em] text-[#A8A8A4] animate-pulse">Scraping image and uploading to Cloudinary...</p>
+              )}
+              {uploadImageError && (
+                <p className="text-[10px] tracking-[0.12em] text-red-400">{uploadImageError}</p>
+              )}
+            </div>
+            {imageUrl && (
+              <img src={imageUrl} alt="preview" className="w-16 h-16 object-cover border border-[#E2E0DB] shrink-0" />
             )}
           </div>
         </div>
+
         <div className="grid grid-cols-3 gap-4 mb-4">
           <div>
             <label className={labelClass}>STATUS</label>
@@ -275,12 +452,7 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
           </div>
           <div className="flex items-end pb-2.5">
             <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                name="in_inventory"
-                defaultChecked={item?.in_inventory || false}
-                className="w-4 h-4 accent-[#0A0A0A]"
-              />
+              <input type="checkbox" name="in_inventory" defaultChecked={item?.in_inventory || false} className="w-4 h-4 accent-[#0A0A0A]" />
               <span className="text-[10px] tracking-[0.20em] text-[#6B6B6B]">IN INVENTORY</span>
             </label>
           </div>
@@ -291,55 +463,13 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
       <div className={sectionClass}>
         <p className={sectionHeadingClass}>FIT & SHAPE</p>
         <div className="grid grid-cols-2 gap-x-8">
-          <ScoreInput
-            label="FIT"
-            description="1=SKIN TIGHT → 5=OVERSIZED"
-            name="fit"
-            value={scores.fit}
-            onChange={(v) => setScores((s) => ({ ...s, fit: v }))}
-          />
-          <ScoreInput
-            label="LENGTH"
-            description="1=CROPPED → 5=MAXI/FLOOR"
-            name="length"
-            value={scores.length}
-            onChange={(v) => setScores((s) => ({ ...s, length: v }))}
-          />
-          <ScoreInput
-            label="RISE"
-            description="1=ULTRA LOW → 5=ULTRA HIGH"
-            name="rise"
-            value={scores.rise}
-            onChange={(v) => setScores((s) => ({ ...s, rise: v }))}
-          />
-          <ScoreInput
-            label="STRUCTURE"
-            description="1=FULLY BONED → 5=UNSTRUCTURED"
-            name="structure"
-            value={scores.structure}
-            onChange={(v) => setScores((s) => ({ ...s, structure: v }))}
-          />
-          <ScoreInput
-            label="SHOULDER"
-            description="1=HEAVILY PADDED → 5=OFF-SHOULDER"
-            name="shoulder"
-            value={scores.shoulder}
-            onChange={(v) => setScores((s) => ({ ...s, shoulder: v }))}
-          />
-          <ScoreInput
-            label="WAIST DEFINITION"
-            description="1=CORSETED → 5=BOXY"
-            name="waist_definition"
-            value={scores.waist_definition}
-            onChange={(v) => setScores((s) => ({ ...s, waist_definition: v }))}
-          />
-          <ScoreInput
-            label="LEG OPENING"
-            description="1=NARROW → 5=FLARED"
-            name="leg_opening"
-            value={scores.leg_opening}
-            onChange={(v) => setScores((s) => ({ ...s, leg_opening: v }))}
-          />
+          <ScoreInput label="FIT" description="1=SKIN TIGHT → 5=OVERSIZED" name="fit" value={scores.fit} onChange={(v) => setScores((s) => ({ ...s, fit: v }))} />
+          <ScoreInput label="LENGTH" description="1=CROPPED → 5=MAXI/FLOOR" name="length" value={scores.length} onChange={(v) => setScores((s) => ({ ...s, length: v }))} />
+          <ScoreInput label="RISE" description="1=ULTRA LOW → 5=ULTRA HIGH" name="rise" value={scores.rise} onChange={(v) => setScores((s) => ({ ...s, rise: v }))} />
+          <ScoreInput label="STRUCTURE" description="1=FULLY BONED → 5=UNSTRUCTURED" name="structure" value={scores.structure} onChange={(v) => setScores((s) => ({ ...s, structure: v }))} />
+          <ScoreInput label="SHOULDER" description="1=HEAVILY PADDED → 5=OFF-SHOULDER" name="shoulder" value={scores.shoulder} onChange={(v) => setScores((s) => ({ ...s, shoulder: v }))} />
+          <ScoreInput label="WAIST DEFINITION" description="1=CORSETED → 5=BOXY" name="waist_definition" value={scores.waist_definition} onChange={(v) => setScores((s) => ({ ...s, waist_definition: v }))} />
+          <ScoreInput label="LEG OPENING" description="1=NARROW → 5=FLARED" name="leg_opening" value={scores.leg_opening} onChange={(v) => setScores((s) => ({ ...s, leg_opening: v }))} />
         </div>
       </div>
 
@@ -347,34 +477,10 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
       <div className={sectionClass}>
         <p className={sectionHeadingClass}>SURFACE & COLOUR</p>
         <div className="grid grid-cols-2 gap-x-8">
-          <ScoreInput
-            label="SURFACE"
-            description="1=CLEAN/FLAT → 5=HIGHLY PATTERNED"
-            name="surface"
-            value={scores.surface}
-            onChange={(v) => setScores((s) => ({ ...s, surface: v }))}
-          />
-          <ScoreInput
-            label="COLOUR DEPTH"
-            description="1=PURE NEUTRAL → 5=BOLD/BRIGHT"
-            name="colour_depth"
-            value={scores.colour_depth}
-            onChange={(v) => setScores((s) => ({ ...s, colour_depth: v }))}
-          />
-          <ScoreInput
-            label="PATTERN"
-            description="1=NONE → 5=STATEMENT PATTERN"
-            name="pattern"
-            value={scores.pattern}
-            onChange={(v) => setScores((s) => ({ ...s, pattern: v }))}
-          />
-          <ScoreInput
-            label="SHEEN"
-            description="1=MATTE → 5=HIGH SHINE"
-            name="sheen"
-            value={scores.sheen}
-            onChange={(v) => setScores((s) => ({ ...s, sheen: v }))}
-          />
+          <ScoreInput label="SURFACE" description="1=CLEAN/FLAT → 5=HIGHLY PATTERNED" name="surface" value={scores.surface} onChange={(v) => setScores((s) => ({ ...s, surface: v }))} />
+          <ScoreInput label="COLOUR DEPTH" description="1=PURE NEUTRAL → 5=BOLD/BRIGHT" name="colour_depth" value={scores.colour_depth} onChange={(v) => setScores((s) => ({ ...s, colour_depth: v }))} />
+          <ScoreInput label="PATTERN" description="1=NONE → 5=STATEMENT PATTERN" name="pattern" value={scores.pattern} onChange={(v) => setScores((s) => ({ ...s, pattern: v }))} />
+          <ScoreInput label="SHEEN" description="1=MATTE → 5=HIGH SHINE" name="sheen" value={scores.sheen} onChange={(v) => setScores((s) => ({ ...s, sheen: v }))} />
         </div>
         <div className="grid grid-cols-2 gap-4 mt-2">
           <div>
@@ -384,15 +490,13 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
                 name="colour_hex"
                 type="text"
                 placeholder="#000000"
-                defaultValue={item?.colour_hex || ''}
+                value={colourHex}
+                onChange={(e) => setColourHex(e.target.value)}
                 className={inputClass}
                 maxLength={7}
               />
-              {item?.colour_hex && (
-                <div
-                  className="w-8 h-8 border border-[#E2E0DB] shrink-0 rounded-[2px]"
-                  style={{ backgroundColor: item.colour_hex }}
-                />
+              {colourHex && (
+                <div className="w-8 h-8 border border-[#E2E0DB] shrink-0 rounded-[2px]" style={{ backgroundColor: colourHex }} />
               )}
             </div>
           </div>
@@ -400,14 +504,13 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
             <label className={labelClass}>COLOUR FAMILY</label>
             <select
               name="colour_family"
-              defaultValue={item?.colour_family || ''}
+              value={colourFamily}
+              onChange={(e) => setColourFamily(e.target.value)}
               className={inputClass}
             >
               <option value="">SELECT FAMILY</option>
               {COLOUR_FAMILIES.map((f) => (
-                <option key={f} value={f}>
-                  {f.replace(/_/g, ' ').toUpperCase()}
-                </option>
+                <option key={f} value={f}>{f.replace(/_/g, ' ').toUpperCase()}</option>
               ))}
             </select>
           </div>
@@ -422,14 +525,13 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
             <label className={labelClass}>MATERIAL CATEGORY</label>
             <select
               name="material_category"
-              defaultValue={item?.material_category || ''}
+              value={materialCategory}
+              onChange={(e) => setMaterialCategory(e.target.value)}
               className={inputClass}
             >
               <option value="">SELECT CATEGORY</option>
               {MATERIAL_CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {c.replace(/_/g, ' ').toUpperCase()}
-                </option>
+                <option key={c} value={c}>{c.replace(/_/g, ' ').toUpperCase()}</option>
               ))}
             </select>
           </div>
@@ -438,98 +540,49 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
             <input
               name="material_primary"
               type="text"
-              defaultValue={item?.material_primary || ''}
+              value={materialPrimary}
+              onChange={(e) => setMaterialPrimary(e.target.value)}
               placeholder="E.G. 100% SILK"
               className={inputClass}
             />
           </div>
         </div>
         <div className="grid grid-cols-2 gap-x-8">
-          <ScoreInput
-            label="MATERIAL WEIGHT"
-            description="1=SHEER → 5=STRUCTURAL"
-            name="material_weight"
-            value={scores.material_weight}
-            onChange={(v) => setScores((s) => ({ ...s, material_weight: v }))}
-          />
-          <ScoreInput
-            label="MATERIAL FORMALITY"
-            description="1=CASUAL → 5=OCCASION"
-            name="material_formality"
-            value={scores.material_formality}
-            onChange={(v) => setScores((s) => ({ ...s, material_formality: v }))}
-          />
+          <ScoreInput label="MATERIAL WEIGHT" description="1=SHEER → 5=STRUCTURAL" name="material_weight" value={scores.material_weight} onChange={(v) => setScores((s) => ({ ...s, material_weight: v }))} />
+          <ScoreInput label="MATERIAL FORMALITY" description="1=CASUAL → 5=OCCASION" name="material_formality" value={scores.material_formality} onChange={(v) => setScores((s) => ({ ...s, material_formality: v }))} />
         </div>
       </div>
 
-      {/* JEWELLERY — only if jewellery item type */}
+      {/* JEWELLERY */}
       {isJewellery && (
         <div className={sectionClass}>
           <p className={sectionHeadingClass}>JEWELLERY</p>
           <div className="grid grid-cols-2 gap-x-8">
-            <ScoreInput
-              label="JEWELLERY SCALE"
-              description="1=MICRO → 5=SCULPTURAL"
-              name="jewellery_scale"
-              value={scores.jewellery_scale}
-              onChange={(v) => setScores((s) => ({ ...s, jewellery_scale: v }))}
-            />
-            <ScoreInput
-              label="JEWELLERY FORMALITY"
-              description="1=EVERYDAY → 5=HAUTE JOAILLERIE"
-              name="jewellery_formality"
-              value={scores.jewellery_formality}
-              onChange={(v) => setScores((s) => ({ ...s, jewellery_formality: v }))}
-            />
+            <ScoreInput label="JEWELLERY SCALE" description="1=MICRO → 5=SCULPTURAL" name="jewellery_scale" value={scores.jewellery_scale} onChange={(v) => setScores((s) => ({ ...s, jewellery_scale: v }))} />
+            <ScoreInput label="JEWELLERY FORMALITY" description="1=EVERYDAY → 5=HAUTE JOAILLERIE" name="jewellery_formality" value={scores.jewellery_formality} onChange={(v) => setScores((s) => ({ ...s, jewellery_formality: v }))} />
           </div>
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
               <label className={labelClass}>JEWELLERY FINISH</label>
-              <select
-                name="jewellery_finish"
-                defaultValue={item?.jewellery_finish || ''}
-                className={inputClass}
-              >
+              <select name="jewellery_finish" defaultValue={item?.jewellery_finish || ''} className={inputClass}>
                 <option value="">SELECT FINISH</option>
-                {JEWELLERY_FINISHES.map((f) => (
-                  <option key={f} value={f}>
-                    {f.replace(/_/g, ' ').toUpperCase()}
-                  </option>
-                ))}
+                {JEWELLERY_FINISHES.map((f) => <option key={f} value={f}>{f.replace(/_/g, ' ').toUpperCase()}</option>)}
               </select>
             </div>
             <div>
               <label className={labelClass}>JEWELLERY STYLE</label>
-              <select
-                name="jewellery_style"
-                defaultValue={item?.jewellery_style || ''}
-                className={inputClass}
-              >
+              <select name="jewellery_style" defaultValue={item?.jewellery_style || ''} className={inputClass}>
                 <option value="">SELECT STYLE</option>
-                {JEWELLERY_STYLES.map((s) => (
-                  <option key={s} value={s}>
-                    {s.replace(/_/g, ' ').toUpperCase()}
-                  </option>
-                ))}
+                {JEWELLERY_STYLES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ').toUpperCase()}</option>)}
               </select>
             </div>
           </div>
           <div className="mb-4">
             <label className={labelClass}>JEWELLERY MATERIAL PRIMARY</label>
-            <input
-              name="jewellery_material_primary"
-              type="text"
-              defaultValue={item?.jewellery_material_primary || ''}
-              className={inputClass}
-            />
+            <input name="jewellery_material_primary" type="text" defaultValue={item?.jewellery_material_primary || ''} className={inputClass} />
           </div>
           <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              name="jewellery_layering"
-              defaultChecked={item?.jewellery_layering || false}
-              className="w-4 h-4 accent-[#0A0A0A]"
-            />
+            <input type="checkbox" name="jewellery_layering" defaultChecked={item?.jewellery_layering || false} className="w-4 h-4 accent-[#0A0A0A]" />
             <span className="text-[10px] tracking-[0.20em] text-[#6B6B6B]">LAYERING PIECE</span>
           </div>
         </div>
@@ -540,21 +593,11 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
         <p className={sectionHeadingClass}>NOTES</p>
         <div className="mb-4">
           <label className={labelClass}>ADMIN NOTES</label>
-          <textarea
-            name="admin_notes"
-            rows={3}
-            defaultValue={item?.admin_notes || ''}
-            className={`${inputClass} resize-none`}
-          />
+          <textarea name="admin_notes" rows={3} defaultValue={item?.admin_notes || ''} className={`${inputClass} resize-none`} />
         </div>
         <div>
           <label className={labelClass}>NOTES</label>
-          <textarea
-            name="notes"
-            rows={3}
-            defaultValue={item?.notes || ''}
-            className={`${inputClass} resize-none`}
-          />
+          <textarea name="notes" rows={3} defaultValue={item?.notes || ''} className={`${inputClass} resize-none`} />
         </div>
       </div>
 

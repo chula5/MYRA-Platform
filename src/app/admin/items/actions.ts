@@ -11,11 +11,13 @@ function parseNullableInt(val: FormDataEntryValue | null): number | null {
 
 function extractItemFields(formData: FormData) {
   return {
-    brand_id: formData.get('brand_id') as string,
+    brand_id: (formData.get('brand_id') as string) || null,
     item_type: formData.get('item_type') as string,
     product_name: formData.get('product_name') as string,
     retailer_url: formData.get('retailer_url') as string,
     image_url: formData.get('image_url') as string,
+    price: (formData.get('price') as string) || null,
+    currency: (formData.get('currency') as string) || null,
     status: (formData.get('status') as string) || 'draft',
     admin_notes: (formData.get('admin_notes') as string) || null,
     notes: (formData.get('notes') as string) || null,

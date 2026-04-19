@@ -47,10 +47,47 @@ export default function Navigation({ transparent = false }: { transparent?: bool
           </Link>
         </div>
 
-        {/* Right — placeholder to keep wordmark centred */}
-        <div className="flex-1" />
+        {/* Right — social links */}
+        <div className="flex-1 flex items-center justify-end gap-4">
+          <a
+            href="https://www.instagram.com/myra.assistant?igsh=MWdhaWxsNTY4ZnF5ZA%3D%3D&utm_source=qr"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Instagram"
+            className={`hover:opacity-60 transition-colors duration-500 ${textColor}`}
+          >
+            <InstagramIcon />
+          </a>
+          <a
+            href="https://www.tiktok.com/@myra.assistant?_r=1&_t=ZN-95flx59mEbu"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="TikTok"
+            className={`hover:opacity-60 transition-colors duration-500 ${textColor}`}
+          >
+            <TikTokIcon />
+          </a>
+        </div>
       </div>
     </nav>
+  )
+}
+
+function InstagramIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="3" y="3" width="18" height="18" rx="4.5" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="17.5" cy="6.5" r="0.9" fill="currentColor" stroke="none" />
+    </svg>
+  )
+}
+
+function TikTokIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M19.6 6.8a5.7 5.7 0 01-3.3-1.1 5.7 5.7 0 01-2-3.2h-3.1v12.1a2.7 2.7 0 11-2-2.6V8.9a5.8 5.8 0 104.9 5.7V9.3a8.7 8.7 0 005.5 1.9z" />
+    </svg>
   )
 }
 

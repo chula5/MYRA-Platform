@@ -81,6 +81,19 @@ SLOT SCORING (nullable integers 1-5 — only score garment slots visible in the 
 
 Return ONLY a valid JSON object. No markdown, no explanation, no code fences.`
 
+/**
+ * Inject size-capping transforms into a Cloudinary URL so the image stays under
+ * Claude's 5MB vision limit. Leaves non-Cloudinary URLs untouched.
+ *
+ *   .../upload/v123/foo.jpg  →  .../upload/w_2000,q_auto,f_jpg/v123/foo.jpg
+ */
+function capCloudinaryImage(url: string): string {
+  if (!url.includes('res.cloudinary.com')) return url
+  // Avoid double-applying if a transform is already present
+  if (/\/upload\/[^/]*[wqf]_/.test(url)) return url
+  return url.replace('/upload/', '/upload/w_2000,q_auto,f_jpg/')
+}
+
 export async function analyseOutfit(
   imageUrl: string
 ): Promise<{ data?: OutfitAnalysis; error?: string }> {
@@ -90,8 +103,10 @@ export async function analyseOutfit(
   if (!apiKey) return { error: 'ANTHROPIC_API_KEY not configured' }
 
   try {
+    const safeUrl = capCloudinaryImage(imageUrl)
+
     // Fetch image server-side and convert to base64 so any URL works
-    const imgRes = await fetch(imageUrl)
+    const imgRes = await fetch(safeUrl)
     if (!imgRes.ok) return { error: `Could not fetch image (${imgRes.status})` }
 
     const contentType = imgRes.headers.get('content-type') || 'image/jpeg'
@@ -99,6 +114,13 @@ export async function analyseOutfit(
     const mediaType = allowedTypes.find((t) => contentType.includes(t)) ?? 'image/jpeg'
 
     const arrayBuffer = await imgRes.arrayBuffer()
+    // Hard cap — Claude vision rejects base64 images over 5MB.
+    const MAX_BYTES = 5 * 1024 * 1024 - 256 * 1024 // leave ~250KB of safety margin
+    if (arrayBuffer.byteLength > MAX_BYTES) {
+      return {
+        error: `Image is too large (${(arrayBuffer.byteLength / 1024 / 1024).toFixed(1)} MB). Re-upload it to Cloudinary — the server will auto-resize it.`,
+      }
+    }
     const base64 = Buffer.from(arrayBuffer).toString('base64')
 
     const client = new Anthropic({ apiKey })
