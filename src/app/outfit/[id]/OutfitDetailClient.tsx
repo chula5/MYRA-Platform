@@ -10,6 +10,12 @@ import CardButton from '@/components/ui/CardButton'
 import { createClient } from '@/lib/supabase'
 import type { OutfitWithItems, Item, Brand, ItemType } from '@/types/database'
 
+// Feature flag — hide the SIMILAR LOOKS / EXPLORE STYLES buttons on the
+// outfit detail page until THE EDIT / OCCASIONS sections are launched.
+// Flip to `true` to re-expose both buttons (all handlers + result grids
+// stay in place, so nothing else needs to change).
+const SHOW_BROWSE_BUTTONS = false
+
 type SourceItemData = Item & { brand: Brand }
 
 interface OutfitDetailClientProps {
@@ -309,17 +315,25 @@ export default function OutfitDetailClient({
           </p>
         )}
 
-        {/* Action buttons — centred */}
+        {/* Action buttons — centred.
+            SIMILAR LOOKS and EXPLORE STYLES are hidden via SHOW_BROWSE_BUTTONS
+            while the corresponding edit/occasions sections aren't live yet.
+            Flip the flag back to `true` to re-expose them — all downstream
+            code (handlers, fetch logic, result grids) is untouched. */}
         <div className="flex items-center justify-center gap-2">
           <CardButton variant="filled" onClick={() => setSourcePanelOpen(true)}>
             SOURCE ITEMS
           </CardButton>
-          <CardButton variant="outlined" onClick={handleSimilarLooks}>
-            SIMILAR LOOKS
-          </CardButton>
-          <CardButton variant="outlined" onClick={handleExploreStyles}>
-            EXPLORE STYLES
-          </CardButton>
+          {SHOW_BROWSE_BUTTONS && (
+            <>
+              <CardButton variant="outlined" onClick={handleSimilarLooks}>
+                SIMILAR LOOKS
+              </CardButton>
+              <CardButton variant="outlined" onClick={handleExploreStyles}>
+                EXPLORE STYLES
+              </CardButton>
+            </>
+          )}
         </div>
       </div>
 
