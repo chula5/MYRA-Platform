@@ -60,9 +60,10 @@ export default async function LandingPage() {
         </div>
 
         {/* Text overlay — bottom */}
-        <div className="absolute bottom-0 left-0 right-0 pb-16 flex flex-col items-center text-center px-10">
-          <h1 className="text-[clamp(24px,3.5vw,56px)] leading-[1.1] tracking-[0.10em] text-white mb-10 whitespace-nowrap">
-            YOUR OUTFIT, ONE MESSAGE AWAY
+        <div className="absolute bottom-0 left-0 right-0 pb-12 sm:pb-16 flex flex-col items-center text-center px-6 sm:px-10">
+          <h1 className="text-[clamp(22px,5vw,56px)] leading-[1.15] tracking-[0.08em] sm:tracking-[0.10em] text-white mb-8 sm:mb-10 max-w-[90%] sm:whitespace-nowrap">
+            YOUR OUTFIT,<br className="sm:hidden" />
+            <span className="hidden sm:inline"> </span>ONE MESSAGE AWAY
           </h1>
           <WaitlistModal />
         </div>

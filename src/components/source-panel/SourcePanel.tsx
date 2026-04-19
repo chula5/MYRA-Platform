@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import type { Item, Brand } from '@/types/database'
 
@@ -61,12 +61,12 @@ export default function SourcePanel({ items, onClose, isOpen }: SourcePanelProps
         `}
       />
 
-      {/* Panel — slides in from LEFT */}
+      {/* Panel — slides in from LEFT. On mobile it's a narrow side drawer so the outfit stays visible. */}
       <div
         ref={panelRef}
         className={`
           fixed top-0 left-0 h-full z-50
-          w-[280px] max-[768px]:w-full
+          w-[58%] max-w-[280px] sm:w-[280px] sm:max-w-none
           bg-white
           flex flex-col
           transition-transform duration-[350ms] ease-out
@@ -76,8 +76,8 @@ export default function SourcePanel({ items, onClose, isOpen }: SourcePanelProps
         aria-hidden={!isOpen}
       >
         {/* Panel header */}
-        <div className="flex items-center justify-between px-5 pt-6 pb-4 border-b border-[#E2E0DB]">
-          <span className="text-[11px] tracking-[0.25em] text-[#0A0A0A]">
+        <div className="flex items-center justify-between px-3 sm:px-5 pt-5 sm:pt-6 pb-3 sm:pb-4 border-b border-[#E2E0DB]">
+          <span className="text-[10px] sm:text-[11px] tracking-[0.2em] sm:tracking-[0.25em] text-[#0A0A0A]">
             SOURCED PIECES
           </span>
           <button
@@ -107,10 +107,9 @@ export default function SourcePanel({ items, onClose, isOpen }: SourcePanelProps
         </div>
 
         {/* Panel CTA */}
-        <div className="p-5 border-t border-[#E2E0DB]">
+        <div className="p-3 sm:p-5 border-t border-[#E2E0DB]">
           <button
             onClick={() => {
-              // Open the first item's retailer URL as primary action
               const firstItem = items[0]
               if (firstItem?.retailer_url) {
                 window.open(firstItem.retailer_url, '_blank', 'noopener,noreferrer')
@@ -119,8 +118,8 @@ export default function SourcePanel({ items, onClose, isOpen }: SourcePanelProps
             className="
               w-full flex items-center justify-center gap-2
               bg-[#0A0A0A] text-white
-              text-[11px] tracking-[0.20em]
-              py-3.5 rounded-full
+              text-[9px] sm:text-[11px] tracking-[0.15em] sm:tracking-[0.20em]
+              py-3 sm:py-3.5 rounded-full
               transition-opacity duration-400 hover:opacity-85
             "
           >
@@ -135,16 +134,20 @@ export default function SourcePanel({ items, onClose, isOpen }: SourcePanelProps
 // ── Individual item row ───────────────────────────────────────
 
 function SourceItemRow({ item }: { item: SourceItem }) {
+  const [imgFailed, setImgFailed] = useState(false)
+
   const handleClick = () => {
     if (item.retailer_url) {
       window.open(item.retailer_url, '_blank', 'noopener,noreferrer')
     }
   }
 
+  const brandInitial = (item.brand?.name ?? 'M').trim().charAt(0).toUpperCase()
+
   return (
     <div
       className="
-        flex items-center gap-3 px-5 py-4
+        flex items-center gap-2 sm:gap-3 px-3 sm:px-5 py-3 sm:py-4
         cursor-pointer
         hover:bg-[#FAFAF8] transition-colors duration-300
         group
@@ -156,38 +159,40 @@ function SourceItemRow({ item }: { item: SourceItem }) {
       aria-label={`View ${item.product_name} by ${item.brand?.name}`}
     >
       {/* Thumbnail */}
-      <div className="relative w-[60px] h-[60px] flex-shrink-0 rounded-sm overflow-hidden bg-[#F2F2F2]">
-        {item.image_url ? (
+      <div className="relative w-[50px] h-[50px] sm:w-[60px] sm:h-[60px] flex-shrink-0 rounded-sm overflow-hidden bg-[#F2F2F2]">
+        {item.image_url && !imgFailed ? (
           <Image
             src={item.image_url}
             alt={item.product_name}
             fill
             className="object-cover"
             sizes="60px"
+            onError={() => setImgFailed(true)}
           />
         ) : (
-          <div className="w-full h-full bg-[#E2E0DB]" />
+          <div className="w-full h-full bg-[#E2E0DB] flex items-center justify-center">
+            <span className="text-[12px] tracking-[0.15em] text-[#6B6B6B]">{brandInitial}</span>
+          </div>
         )}
       </div>
 
       {/* Item info */}
       <div className="flex-1 min-w-0">
-        <p className="text-[12px] tracking-[0.12em] text-[#0A0A0A] truncate">
+        <p className="text-[10px] sm:text-[12px] tracking-[0.10em] sm:tracking-[0.12em] text-[#0A0A0A] truncate">
           {item.brand?.name ?? 'BRAND'}
         </p>
-        <p className="text-[12px] tracking-[0.08em] text-[#0A0A0A] truncate">
+        <p className="text-[10px] sm:text-[12px] tracking-[0.06em] sm:tracking-[0.08em] text-[#0A0A0A] truncate">
           {item.product_name}
         </p>
         {item.retailer_url && (
-          <p className="text-[12px] tracking-[0.10em] text-[#0A0A0A] mt-0.5">
-            {/* Price would come from item data — placeholder */}
+          <p className="text-[9px] sm:text-[11px] tracking-[0.10em] text-[#6B6B6B] mt-0.5">
             VIEW ITEM
           </p>
         )}
       </div>
 
       {/* Link arrow */}
-      <span className="text-[#0A0A0A] text-base opacity-40 group-hover:opacity-100 transition-opacity duration-300 flex-shrink-0">
+      <span className="text-[#0A0A0A] text-sm sm:text-base opacity-40 group-hover:opacity-100 transition-opacity duration-300 flex-shrink-0">
         ↗
       </span>
     </div>

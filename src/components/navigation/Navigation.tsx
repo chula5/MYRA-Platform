@@ -22,14 +22,14 @@ export default function Navigation({ transparent = false }: { transparent?: bool
         bg-white border-b border-[#E2E0DB]
       `}
     >
-      <div className="w-full px-6 md:px-10 h-14 flex items-center justify-between">
+      <div className="w-full px-4 md:px-10 h-14 flex items-center justify-between gap-3">
 
         {/* Left — nav links */}
-        <div className="flex items-center gap-6 w-[40%]">
-          <Link href="/feed" className="text-[10px] tracking-[0.15em] hover:opacity-60 transition-opacity text-[#0A0A0A] whitespace-nowrap">
+        <div className="flex items-center gap-3 sm:gap-5 md:gap-6 flex-1 min-w-0">
+          <Link href="/feed" className="text-[9px] sm:text-[10px] tracking-[0.12em] sm:tracking-[0.15em] hover:opacity-60 transition-opacity text-[#0A0A0A] whitespace-nowrap">
             THE EDIT
           </Link>
-          <Link href="/" className="text-[10px] tracking-[0.15em] hover:opacity-60 transition-opacity text-[#0A0A0A] whitespace-nowrap">
+          <Link href="/" className="text-[9px] sm:text-[10px] tracking-[0.12em] sm:tracking-[0.15em] hover:opacity-60 transition-opacity text-[#0A0A0A] whitespace-nowrap">
             LOOKBOOK
           </Link>
           <Link href="/feed" className="hidden md:block text-[10px] tracking-[0.15em] hover:opacity-60 transition-opacity text-[#0A0A0A] whitespace-nowrap">
@@ -38,14 +38,14 @@ export default function Navigation({ transparent = false }: { transparent?: bool
         </div>
 
         {/* Centre — wordmark */}
-        <div className="flex justify-center">
-          <Link href="/" className="text-[22px] tracking-[0.25em] leading-none hover:opacity-70 transition-opacity text-[#0A0A0A]">
+        <div className="flex justify-center shrink-0">
+          <Link href="/" className="text-[18px] sm:text-[22px] tracking-[0.22em] sm:tracking-[0.25em] leading-none hover:opacity-70 transition-opacity text-[#0A0A0A]">
             MYRA
           </Link>
         </div>
 
         {/* Right — placeholder to keep wordmark centred */}
-        <div className="w-[40%]" />
+        <div className="flex-1" />
       </div>
     </nav>
   )
