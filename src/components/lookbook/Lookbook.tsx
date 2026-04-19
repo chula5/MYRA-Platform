@@ -24,7 +24,7 @@ export default function Lookbook({ lookbooks }: LookbookProps) {
       {visible.map((lb, sectionIndex) => (
         <div key={lb.lookbook_id} className={sectionIndex > 0 ? 'mt-20' : ''}>
           {/* Section heading */}
-          <p className="text-left text-[22px] tracking-[0.22em] text-[#0A0A0A] mb-8 px-1">
+          <p className="text-left text-[14px] tracking-[0.22em] text-[#0A0A0A] mb-6 px-1">
             {lb.title.toUpperCase()}
           </p>
 
@@ -93,7 +93,7 @@ function ThreePanelRow({ items }: { items: Outfit[] }) {
             </div>
           </div>
           {/* Below-image label */}
-          <p className="mt-3 text-[13px] tracking-[0.18em] text-[#0A0A0A] px-1">
+          <p className="mt-3 text-[10px] tracking-[0.15em] text-[#0A0A0A] px-1">
             {(outfit as any).celebrity_name || outfit.occasion_tags?.[0] || 'THE EDIT'}
           </p>
         </Link>
@@ -122,7 +122,7 @@ function DualPanelRow({ items }: { items: Outfit[] }) {
               sizes="(max-width: 768px) 50vw, 50vw"
             />
           </div>
-          <p className="mt-3 text-[13px] tracking-[0.18em] text-[#0A0A0A] px-1">
+          <p className="mt-3 text-[10px] tracking-[0.15em] text-[#0A0A0A] px-1">
             {(outfit as any).celebrity_name || outfit.occasion_tags?.[0] || outfit.aesthetic_label}
           </p>
         </Link>
