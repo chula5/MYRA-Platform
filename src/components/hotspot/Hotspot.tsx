@@ -3,6 +3,9 @@
 import { useState } from 'react'
 import type { ItemType } from '@/types/database'
 
+// Temporarily hide the Style-Item hotspots site-wide. Flip to `true` to restore.
+const HOTSPOTS_ENABLED = false
+
 interface HotspotProps {
   itemId: string
   itemType: ItemType
@@ -61,6 +64,8 @@ export default function Hotspot({
 }: HotspotProps) {
   const [active, setActive] = useState(false)
   const label = ITEM_TYPE_LABELS[itemType] ?? itemType.toUpperCase().replace('_', ' ')
+
+  if (!HOTSPOTS_ENABLED) return null
 
   // Determine pill direction based on position
   const pillRight = x > 60 // show pill to the left if hotspot is on the right side
