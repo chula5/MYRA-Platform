@@ -117,6 +117,28 @@ function findAvailability(node: unknown): string | null {
   return null
 }
 
+export async function listItemsForStockSweep(): Promise<
+  { itemId: string; productName: string }[]
+> {
+  const supabase = createAdminClient()
+  try {
+    const { data, error } = await supabase
+      .from('item')
+      .select('item_id, product_name, retailer_url')
+      .not('retailer_url', 'is', null)
+      .neq('retailer_url', '')
+      .order('stock_checked_at', { ascending: true, nullsFirst: true })
+    if (error) throw error
+    return ((data ?? []) as { item_id: string; product_name: string }[]).map((r) => ({
+      itemId: r.item_id,
+      productName: r.product_name,
+    }))
+  } catch (err) {
+    console.error('[listItemsForStockSweep]', err)
+    return []
+  }
+}
+
 export async function checkItemStock(
   itemId: string,
 ): Promise<{ status?: StockStatus; signal?: string; error?: string }> {

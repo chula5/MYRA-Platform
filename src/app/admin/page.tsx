@@ -1,5 +1,6 @@
 import { getAdminStats } from '@/lib/admin-queries'
 import { createServerClient } from '@/lib/supabase-server'
+import StockSweepButton from '@/components/admin/StockSweepButton'
 
 export default async function AdminDashboard() {
   const stats = await getAdminStats()
@@ -64,6 +65,11 @@ export default async function AdminDashboard() {
           breakdown="SIGNUPS"
           href="/admin/signups"
         />
+      </div>
+
+      {/* Stock sweep */}
+      <div className="mb-12">
+        <StockSweepButton />
       </div>
 
       {/* Studio areas */}
