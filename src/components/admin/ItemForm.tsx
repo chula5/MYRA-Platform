@@ -4,7 +4,7 @@ import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Item, Brand, ItemType, ColourFamily, MaterialCategory, JewelleryFinish, JewelleryStyle } from '@/types/database'
 import ScoreInput from '@/components/admin/ScoreInput'
-import { createBrand } from '@/app/admin/items/actions'
+import { createBrand, updateBrand } from '@/app/admin/items/actions'
 import { analyseProductUrl } from '@/app/admin/items/analyse-url'
 import { scrapeAndUploadToCloudinary, uploadBase64ToCloudinary } from '@/app/admin/items/cloudinary-upload'
 
@@ -44,6 +44,14 @@ const JEWELLERY_STYLES: JewelleryStyle[] = [
   'organic', 'minimal', 'maximalist',
 ]
 
+const PRICE_TIER_LABELS: Record<number, string> = {
+  1: 'HIGH STREET',
+  2: 'CONTEMPORARY',
+  3: 'PREMIUM',
+  4: 'LUXURY',
+  5: 'ULTRA-LUXURY',
+}
+
 const inputClass =
   'w-full border border-[#E2E0DB] bg-white px-4 py-2.5 text-[12px] tracking-[0.10em] text-[#0A0A0A] focus:outline-none focus:border-[#0A0A0A] transition-colors duration-300'
 const labelClass = 'text-[10px] tracking-[0.20em] text-[#6B6B6B] mb-1.5 block'
@@ -64,6 +72,7 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [showBrandForm, setShowBrandForm] = useState(false)
+  const [brandFormMode, setBrandFormMode] = useState<'create' | 'edit'>('create')
   const [brandError, setBrandError] = useState<string | null>(null)
   const [brandSubmitting, setBrandSubmitting] = useState(false)
 
@@ -214,7 +223,7 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
   }
 
   const brandNameRef = useRef<HTMLInputElement>(null)
-  const brandPriceTierRef = useRef<HTMLInputElement>(null)
+  const brandPriceTierRef = useRef<HTMLSelectElement>(null)
 
   async function handleCreateBrand() {
     const name = brandNameRef.current?.value?.trim()
@@ -243,6 +252,47 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
       setShowBrandForm(false)
       if (brandNameRef.current) brandNameRef.current.value = ''
     }
+  }
+
+  async function handleUpdateBrand() {
+    if (!brandId) { setBrandError('Select a brand to edit'); return }
+    const name = brandNameRef.current?.value?.trim()
+    if (!name) { setBrandError('Brand name is required'); return }
+    setBrandSubmitting(true)
+    setBrandError(null)
+    const formData = new FormData()
+    formData.append('name', name)
+    formData.append('price_tier', brandPriceTierRef.current?.value ?? '3')
+    const result = await updateBrand(brandId, formData)
+    setBrandSubmitting(false)
+    if (result?.error) { setBrandError(result.error); return }
+    setBrands((prev) =>
+      prev
+        .map((b) =>
+          b.brand_id === brandId
+            ? { ...b, name, price_tier: parseInt(brandPriceTierRef.current?.value ?? '3', 10) || 3 }
+            : b,
+        )
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    )
+    setShowBrandForm(false)
+  }
+
+  function openBrandForm(mode: 'create' | 'edit') {
+    setBrandFormMode(mode)
+    setBrandError(null)
+    setShowBrandForm(true)
+    // Pre-fill refs after render
+    setTimeout(() => {
+      if (mode === 'edit') {
+        const current = brands.find((b) => b.brand_id === brandId)
+        if (brandNameRef.current) brandNameRef.current.value = current?.name ?? ''
+        if (brandPriceTierRef.current) brandPriceTierRef.current.value = String(current?.price_tier ?? 3)
+      } else {
+        if (brandNameRef.current) brandNameRef.current.value = ''
+        if (brandPriceTierRef.current) brandPriceTierRef.current.value = '3'
+      }
+    }, 0)
   }
 
   return (
@@ -349,7 +399,17 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
               </select>
               <button
                 type="button"
-                onClick={() => setShowBrandForm((v) => !v)}
+                onClick={() => openBrandForm('edit')}
+                disabled={!brandId}
+                title={brandId ? 'Edit selected brand' : 'Select a brand first'}
+                className="shrink-0 border border-[#E2E0DB] bg-white px-3 text-[10px] tracking-[0.15em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-300"
+              >
+                EDIT
+              </button>
+              <button
+                type="button"
+                onClick={() => openBrandForm('create')}
+                title="Add new brand"
                 className="shrink-0 border border-[#E2E0DB] bg-white px-3 text-[10px] tracking-[0.15em] text-[#6B6B6B] hover:border-[#0A0A0A] transition-colors duration-300"
               >
                 +
@@ -358,24 +418,39 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
           </div>
         </div>
 
-        {/* Quick Brand Form — must be a div, not a form (nested forms are invalid HTML) */}
+        {/* Brand Form — create or edit (must be a div, not a form) */}
         {showBrandForm && (
           <div className="mb-4 p-4 bg-[#F8F8F6] border border-[#E2E0DB] rounded-[2px]">
-            <p className="text-[9px] tracking-[0.20em] text-[#6B6B6B] mb-3">NEW BRAND</p>
+            <p className="text-[9px] tracking-[0.20em] text-[#6B6B6B] mb-3">
+              {brandFormMode === 'edit' ? 'EDIT BRAND' : 'NEW BRAND'}
+            </p>
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
                 <label className={labelClass}>BRAND NAME</label>
                 <input ref={brandNameRef} type="text" placeholder="Brand name" className={inputClass} />
               </div>
               <div>
-                <label className={labelClass}>PRICE TIER (1-5)</label>
-                <input ref={brandPriceTierRef} type="number" min={1} max={5} defaultValue={3} className={inputClass} />
+                <label className={labelClass}>PRICE TIER</label>
+                <select
+                  ref={brandPriceTierRef}
+                  defaultValue="3"
+                  className={inputClass}
+                >
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <option key={n} value={n}>{n} — {PRICE_TIER_LABELS[n]}</option>
+                  ))}
+                </select>
               </div>
             </div>
             {brandError && <p className="text-[10px] tracking-[0.15em] text-red-500 mb-3">{brandError}</p>}
             <div className="flex gap-3">
-              <button type="button" onClick={handleCreateBrand} disabled={brandSubmitting} className="bg-[#0A0A0A] text-white px-6 py-2 text-[10px] tracking-[0.20em] disabled:opacity-50">
-                {brandSubmitting ? 'SAVING...' : 'SAVE BRAND'}
+              <button
+                type="button"
+                onClick={brandFormMode === 'edit' ? handleUpdateBrand : handleCreateBrand}
+                disabled={brandSubmitting}
+                className="bg-[#0A0A0A] text-white px-6 py-2 text-[10px] tracking-[0.20em] disabled:opacity-50"
+              >
+                {brandSubmitting ? 'SAVING...' : brandFormMode === 'edit' ? 'UPDATE BRAND' : 'SAVE BRAND'}
               </button>
               <button type="button" onClick={() => setShowBrandForm(false)} className="border border-[#E2E0DB] bg-transparent text-[#0A0A0A] px-6 py-2 text-[10px] tracking-[0.20em]">
                 CANCEL

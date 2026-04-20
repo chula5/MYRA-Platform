@@ -127,3 +127,25 @@ export async function createBrand(
     return { error: err instanceof Error ? err.message : 'Failed to create brand' }
   }
 }
+
+export async function updateBrand(
+  brandId: string,
+  formData: FormData
+): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  try {
+    const { error } = await supabase
+      .from('brand')
+      .update({
+        name: formData.get('name') as string,
+        price_tier: parseInt(formData.get('price_tier') as string, 10) || 3,
+      })
+      .eq('brand_id', brandId)
+    if (error) throw error
+    revalidatePath('/admin/items')
+    return {}
+  } catch (err: unknown) {
+    console.error('[updateBrand]', err)
+    return { error: err instanceof Error ? err.message : 'Failed to update brand' }
+  }
+}
