@@ -53,12 +53,68 @@ function extractItemFields(formData: FormData) {
   }
 }
 
+async function logTasteEvent(
+  itemId: string,
+  event: 'created' | 'updated',
+  fields: ReturnType<typeof extractItemFields>,
+) {
+  // Fire-and-forget — never block the main save on logging.
+  try {
+    const supabase = createAdminClient()
+    let brand_name: string | null = null
+    let brand_price_tier: number | null = null
+    if (fields.brand_id) {
+      const { data: brand } = await supabase
+        .from('brand')
+        .select('name, price_tier')
+        .eq('brand_id', fields.brand_id)
+        .single()
+      if (brand) {
+        brand_name = (brand as { name: string }).name
+        brand_price_tier = (brand as { price_tier: number }).price_tier
+      }
+    }
+    await supabase.from('taste_log').insert([
+      {
+        item_id: itemId,
+        event_type: event,
+        brand_id: fields.brand_id,
+        brand_name,
+        brand_price_tier,
+        item_type: fields.item_type,
+        colour_family: fields.colour_family,
+        material_category: fields.material_category,
+        fit: fields.fit,
+        length: fields.length,
+        structure: fields.structure,
+        shoulder: fields.shoulder,
+        waist_definition: fields.waist_definition,
+        leg_opening: fields.leg_opening,
+        surface: fields.surface,
+        colour_depth: fields.colour_depth,
+        pattern: fields.pattern,
+        sheen: fields.sheen,
+        material_weight: fields.material_weight,
+        material_formality: fields.material_formality,
+        admin_notes: fields.admin_notes,
+      },
+    ])
+  } catch (err) {
+    console.error('[logTasteEvent]', err)
+  }
+}
+
 export async function createItem(formData: FormData): Promise<{ error?: string }> {
   const supabase = createAdminClient()
   try {
     const fields = extractItemFields(formData)
-    const { error } = await supabase.from('item').insert([fields])
+    const { data, error } = await supabase
+      .from('item')
+      .insert([fields])
+      .select('item_id')
+      .single()
     if (error) throw error
+    if (data) await logTasteEvent((data as { item_id: string }).item_id, 'created', fields)
     revalidatePath('/admin/items')
     return {}
   } catch (err: unknown) {
@@ -73,6 +129,7 @@ export async function updateItem(itemId: string, formData: FormData): Promise<{ 
     const fields = extractItemFields(formData)
     const { error } = await supabase.from('item').update(fields).eq('item_id', itemId)
     if (error) throw error
+    await logTasteEvent(itemId, 'updated', fields)
     revalidatePath('/admin/items')
     revalidatePath(`/admin/items/${itemId}/edit`)
     return {}

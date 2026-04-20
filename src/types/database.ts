@@ -125,6 +125,35 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['outfit_item']['Row'], 'outfit_item_id'> & { outfit_item_id?: string }
         Update: Partial<Database['public']['Tables']['outfit_item']['Row']>
       }
+      taste_log: {
+        Row: {
+          log_id: string
+          item_id: string
+          event_type: 'created' | 'updated'
+          brand_id: string | null
+          brand_name: string | null
+          brand_price_tier: number | null
+          item_type: string | null
+          colour_family: string | null
+          material_category: string | null
+          fit: number | null
+          length: number | null
+          structure: number | null
+          shoulder: number | null
+          waist_definition: number | null
+          leg_opening: number | null
+          surface: number | null
+          colour_depth: number | null
+          pattern: number | null
+          sheen: number | null
+          material_weight: number | null
+          material_formality: number | null
+          admin_notes: string | null
+          logged_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['taste_log']['Row'], 'log_id' | 'logged_at'> & { log_id?: string; logged_at?: string }
+        Update: Partial<Database['public']['Tables']['taste_log']['Row']>
+      }
       taste_event: {
         Row: {
           event_id: string
