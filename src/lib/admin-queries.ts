@@ -81,6 +81,160 @@ export async function getAdminStats(): Promise<{
   }
 }
 
+// ── Taste insights ───────────────────────────────────────────────────────────
+
+export interface TasteInsights {
+  totalLogs: number
+  uniqueBrands: number
+  topBrands: { name: string; count: number; priceTier: number | null }[]
+  topItemTypes: { type: string; count: number }[]
+  topColourFamilies: { family: string; count: number }[]
+  topMaterialCategories: { category: string; count: number }[]
+  priceTierDistribution: { tier: number; count: number }[]
+  avgScores: {
+    fit: number | null
+    length: number | null
+    structure: number | null
+    surface: number | null
+    colour_depth: number | null
+    pattern: number | null
+    sheen: number | null
+    material_weight: number | null
+    material_formality: number | null
+  }
+  recent: {
+    log_id: string
+    item_id: string
+    event_type: string
+    brand_name: string | null
+    item_type: string | null
+    colour_family: string | null
+    logged_at: string
+  }[]
+}
+
+export async function getTasteInsights(): Promise<TasteInsights> {
+  const supabase = createAdminClient()
+  try {
+    const { data, error } = await supabase
+      .from('taste_log')
+      .select('*')
+      .order('logged_at', { ascending: false })
+    if (error) throw error
+    const rows = (data ?? []) as Array<{
+      log_id: string
+      item_id: string
+      event_type: string
+      brand_id: string | null
+      brand_name: string | null
+      brand_price_tier: number | null
+      item_type: string | null
+      colour_family: string | null
+      material_category: string | null
+      fit: number | null
+      length: number | null
+      structure: number | null
+      surface: number | null
+      colour_depth: number | null
+      pattern: number | null
+      sheen: number | null
+      material_weight: number | null
+      material_formality: number | null
+      logged_at: string
+    }>
+
+    const brandCounts = new Map<string, { count: number; priceTier: number | null }>()
+    const itemTypeCounts = new Map<string, number>()
+    const colourCounts = new Map<string, number>()
+    const materialCounts = new Map<string, number>()
+    const tierCounts = new Map<number, number>()
+    const sums = {
+      fit: 0, length: 0, structure: 0, surface: 0, colour_depth: 0,
+      pattern: 0, sheen: 0, material_weight: 0, material_formality: 0,
+    }
+    const counts = { ...sums }
+
+    for (const r of rows) {
+      if (r.brand_name) {
+        const existing = brandCounts.get(r.brand_name)
+        brandCounts.set(r.brand_name, {
+          count: (existing?.count ?? 0) + 1,
+          priceTier: existing?.priceTier ?? r.brand_price_tier,
+        })
+      }
+      if (r.item_type) itemTypeCounts.set(r.item_type, (itemTypeCounts.get(r.item_type) ?? 0) + 1)
+      if (r.colour_family) colourCounts.set(r.colour_family, (colourCounts.get(r.colour_family) ?? 0) + 1)
+      if (r.material_category) materialCounts.set(r.material_category, (materialCounts.get(r.material_category) ?? 0) + 1)
+      if (r.brand_price_tier != null) tierCounts.set(r.brand_price_tier, (tierCounts.get(r.brand_price_tier) ?? 0) + 1)
+
+      for (const key of Object.keys(sums) as (keyof typeof sums)[]) {
+        const v = r[key]
+        if (typeof v === 'number') {
+          sums[key] += v
+          counts[key]++
+        }
+      }
+    }
+
+    const avg = (key: keyof typeof sums) =>
+      counts[key] > 0 ? Number((sums[key] / counts[key]).toFixed(2)) : null
+
+    const topBrands = Array.from(brandCounts.entries())
+      .map(([name, v]) => ({ name, count: v.count, priceTier: v.priceTier }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10)
+
+    const topEntries = (m: Map<string, number>, limit = 10) =>
+      Array.from(m.entries()).map(([k, v]) => ({ k, v })).sort((a, b) => b.v - a.v).slice(0, limit)
+
+    const recent = rows.slice(0, 15).map((r) => ({
+      log_id: r.log_id,
+      item_id: r.item_id,
+      event_type: r.event_type,
+      brand_name: r.brand_name,
+      item_type: r.item_type,
+      colour_family: r.colour_family,
+      logged_at: r.logged_at,
+    }))
+
+    return {
+      totalLogs: rows.length,
+      uniqueBrands: brandCounts.size,
+      topBrands,
+      topItemTypes: topEntries(itemTypeCounts).map((e) => ({ type: e.k, count: e.v })),
+      topColourFamilies: topEntries(colourCounts).map((e) => ({ family: e.k, count: e.v })),
+      topMaterialCategories: topEntries(materialCounts).map((e) => ({ category: e.k, count: e.v })),
+      priceTierDistribution: Array.from(tierCounts.entries())
+        .map(([tier, count]) => ({ tier, count }))
+        .sort((a, b) => a.tier - b.tier),
+      avgScores: {
+        fit: avg('fit'),
+        length: avg('length'),
+        structure: avg('structure'),
+        surface: avg('surface'),
+        colour_depth: avg('colour_depth'),
+        pattern: avg('pattern'),
+        sheen: avg('sheen'),
+        material_weight: avg('material_weight'),
+        material_formality: avg('material_formality'),
+      },
+      recent,
+    }
+  } catch (err) {
+    console.error('[getTasteInsights]', err)
+    return {
+      totalLogs: 0, uniqueBrands: 0,
+      topBrands: [], topItemTypes: [], topColourFamilies: [], topMaterialCategories: [],
+      priceTierDistribution: [],
+      avgScores: {
+        fit: null, length: null, structure: null, surface: null, colour_depth: null,
+        pattern: null, sheen: null, material_weight: null, material_formality: null,
+      },
+      recent: [],
+    }
+  }
+}
+
 // ── Brands ────────────────────────────────────────────────────────────────────
 
 export async function getAllBrands(): Promise<Brand[]> {

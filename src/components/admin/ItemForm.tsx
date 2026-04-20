@@ -9,6 +9,7 @@ import { createBrand, updateBrand } from '@/app/admin/items/actions'
 import { analyseProductUrl } from '@/app/admin/items/analyse-url'
 import { scrapeAndUploadToCloudinary, uploadBase64ToCloudinary } from '@/app/admin/items/cloudinary-upload'
 import { checkItemStock } from '@/app/admin/items/stock-check'
+import { discoverSimilarForItem } from '@/app/admin/items/discover-similar'
 
 const ITEM_TYPES: ItemType[] = [
   'coat', 'trench', 'jacket', 'blazer', 'gilet', 'cape',
@@ -87,6 +88,8 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
   const [stockError, setStockError] = useState<string | null>(null)
   const [stockStatus, setStockStatus] = useState(item?.stock_status ?? null)
   const [stockCheckedAt, setStockCheckedAt] = useState(item?.stock_checked_at ?? null)
+  const [discovering, setDiscovering] = useState(false)
+  const [discoverMessage, setDiscoverMessage] = useState<string | null>(null)
   const [imageUrl, setImageUrl] = useState(item?.image_url || '')
   const [productName, setProductName] = useState(item?.product_name || '')
   const [retailerUrl, setRetailerUrl] = useState(item?.retailer_url || '')
@@ -167,6 +170,16 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
       jewellery_scale: d.jewellery_scale ?? prev.jewellery_scale,
       jewellery_formality: d.jewellery_formality ?? prev.jewellery_formality,
     }))
+  }
+
+  async function handleDiscoverSimilar() {
+    if (!item?.item_id) { setDiscoverMessage('Save the item first'); return }
+    setDiscovering(true)
+    setDiscoverMessage(null)
+    const result = await discoverSimilarForItem(item.item_id)
+    setDiscovering(false)
+    if (result.error) { setDiscoverMessage(result.error); return }
+    setDiscoverMessage(`Found ${result.discovered ?? 0} similar pieces — open DISCOVERIES to review`)
   }
 
   async function handleCheckStock() {
@@ -370,6 +383,22 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
             )}
             {stockError && (
               <span className="text-[9px] tracking-[0.15em] text-red-500">{stockError}</span>
+            )}
+          </div>
+
+          {/* Discover similar pieces */}
+          <div className="mt-3 flex items-center gap-3 flex-wrap">
+            <button
+              type="button"
+              onClick={handleDiscoverSimilar}
+              disabled={discovering || !item?.item_id}
+              title={item?.item_id ? 'Ask AI to search the web for similar pieces' : 'Save the item first'}
+              className="border border-[#E2E0DB] bg-white px-3 py-1.5 text-[10px] tracking-[0.15em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {discovering ? 'SEARCHING THE WEB...' : '✦ DISCOVER SIMILAR'}
+            </button>
+            {discoverMessage && (
+              <span className="text-[9px] tracking-[0.15em] text-[#6B6B6B]">{discoverMessage}</span>
             )}
           </div>
         </div>

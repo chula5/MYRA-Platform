@@ -85,6 +85,16 @@ export default async function AdminDashboard() {
           href="/admin/projects"
         />
         <StudioCard
+          title="TASTE BRAIN"
+          description="Aggregated signal from every item you've logged. Top brands, recurring colours, price tiers, recent activity."
+          href="/admin/taste"
+        />
+        <StudioCard
+          title="DISCOVERIES"
+          description="Similar pieces surfaced by AI based on items you've added. Review and save the ones you like."
+          href="/admin/discoveries"
+        />
+        <StudioCard
           title="WAITLIST SIGNUPS"
           description="View everyone who has joined the waitlist from the public site."
           href="/admin/signups"

@@ -129,6 +129,23 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['outfit_item']['Row'], 'outfit_item_id'> & { outfit_item_id?: string }
         Update: Partial<Database['public']['Tables']['outfit_item']['Row']>
       }
+      discovered_item: {
+        Row: {
+          discovered_id: string
+          source_item_id: string | null
+          title: string
+          brand_name: string | null
+          retailer_url: string | null
+          image_url: string | null
+          price: string | null
+          currency: string | null
+          why_interesting: string | null
+          status: 'new' | 'saved' | 'dismissed'
+          created_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['discovered_item']['Row'], 'discovered_id' | 'created_at'> & { discovered_id?: string; created_at?: string }
+        Update: Partial<Database['public']['Tables']['discovered_item']['Row']>
+      }
       taste_log: {
         Row: {
           log_id: string
