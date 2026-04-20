@@ -17,8 +17,21 @@ export default async function AdminDashboard() {
         <h1 className="text-[28px] tracking-[0.10em] text-[#0A0A0A]">DASHBOARD</h1>
       </div>
 
+      {/* Stock alert — only shown when there's something to fix */}
+      {stats.outOfStockItems + stats.lowStockItems > 0 && (
+        <a
+          href="/admin/items?stock=flagged"
+          className="block mb-6 p-4 border border-[#E8B4B4] bg-[#FDECEC] rounded-[3px] hover:border-[#B83A3A] transition-colors duration-300"
+        >
+          <p className="text-[10px] tracking-[0.20em] text-[#B83A3A]">
+            {stats.outOfStockItems} OUT OF STOCK
+            {stats.lowStockItems > 0 ? ` · ${stats.lowStockItems} LOW STOCK` : ''} · REVIEW →
+          </p>
+        </a>
+      )}
+
       {/* Stats row */}
-      <div className="grid grid-cols-5 gap-4 mb-12">
+      <div className="grid grid-cols-6 gap-4 mb-12">
         <StatCard
           label="ITEMS"
           value={stats.totalItems}
@@ -33,6 +46,12 @@ export default async function AdminDashboard() {
           label="PROJECTS"
           value={stats.totalProjects}
           breakdown={`${stats.draftProjects} DRAFT / ${stats.liveProjects} LIVE`}
+        />
+        <StatCard
+          label="STOCK FLAGS"
+          value={stats.outOfStockItems + stats.lowStockItems}
+          breakdown={`${stats.outOfStockItems} OUT / ${stats.lowStockItems} LOW`}
+          href="/admin/items?stock=flagged"
         />
         <StatCard
           label="PUBLISHED TODAY"

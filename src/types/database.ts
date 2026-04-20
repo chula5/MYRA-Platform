@@ -65,6 +65,10 @@ export interface Database {
           jewellery_material_primary: string | null
           jewellery_layering: boolean | null
           notes: string | null
+          stock_status: 'in_stock' | 'low_stock' | 'out_of_stock' | 'unknown' | null
+          stock_checked_at: string | null
+          stock_signal: string | null
+          stock_notes: string | null
         }
         Insert: Omit<Database['public']['Tables']['item']['Row'], 'item_id'> & { item_id?: string }
         Update: Partial<Database['public']['Tables']['item']['Row']>

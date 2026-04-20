@@ -1,17 +1,20 @@
 import Link from 'next/link'
 import { getAllItems } from '@/lib/admin-queries'
 import StatusBadge from '@/components/admin/StatusBadge'
+import StockBadge from '@/components/admin/StockBadge'
 
 const STATUS_TABS = ['all', 'draft', 'ready', 'live', 'archived'] as const
 
 interface PageProps {
-  searchParams: Promise<{ status?: string }>
+  searchParams: Promise<{ status?: string; stock?: string }>
 }
 
 export default async function ItemsPage({ searchParams }: PageProps) {
-  const { status } = await searchParams
+  const { status, stock } = await searchParams
   const activeTab = status || 'all'
-  const items = await getAllItems(activeTab === 'all' ? undefined : activeTab)
+  const stockFilter =
+    stock === 'flagged' || stock === 'out_of_stock' || stock === 'low_stock' ? stock : undefined
+  const items = await getAllItems(activeTab === 'all' ? undefined : activeTab, stockFilter)
 
   return (
     <div>
@@ -28,6 +31,18 @@ export default async function ItemsPage({ searchParams }: PageProps) {
           NEW ITEM →
         </Link>
       </div>
+
+      {/* Active stock filter chip */}
+      {stockFilter && (
+        <div className="mb-4">
+          <Link
+            href="/admin/items"
+            className="inline-flex items-center gap-2 px-3 py-1.5 text-[10px] tracking-[0.20em] bg-[#FDECEC] text-[#B83A3A] rounded-[2px] hover:bg-[#FBDCDC] transition-colors"
+          >
+            STOCK: {stockFilter.toUpperCase().replace('_', ' ')} · CLEAR ×
+          </Link>
+        </div>
+      )}
 
       {/* Filter tabs */}
       <div className="flex items-center gap-2 mb-8 border-b border-[#E2E0DB] pb-4">
@@ -56,11 +71,12 @@ export default async function ItemsPage({ searchParams }: PageProps) {
       ) : (
         <div className="border border-[#E2E0DB] bg-white rounded-[3px] overflow-hidden">
           {/* Table header */}
-          <div className="grid grid-cols-[56px_1fr_2fr_1.5fr_100px_100px] gap-4 px-6 py-3 border-b border-[#E2E0DB] bg-[#F8F8F6]">
+          <div className="grid grid-cols-[56px_1fr_2fr_1.3fr_110px_100px_100px] gap-4 px-6 py-3 border-b border-[#E2E0DB] bg-[#F8F8F6]">
             <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4]">IMAGE</p>
             <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4]">ITEM TYPE</p>
             <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4]">PRODUCT NAME</p>
             <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4]">BRAND</p>
+            <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4]">STOCK</p>
             <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4]">STATUS</p>
             <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4]">ACTIONS</p>
           </div>
@@ -69,7 +85,7 @@ export default async function ItemsPage({ searchParams }: PageProps) {
           {items.map((item) => (
             <div
               key={item.item_id}
-              className="grid grid-cols-[56px_1fr_2fr_1.5fr_100px_100px] gap-4 px-6 py-4 border-b border-[#E2E0DB] last:border-b-0 items-center hover:bg-[#F8F8F6] transition-colors duration-300"
+              className="grid grid-cols-[56px_1fr_2fr_1.3fr_110px_100px_100px] gap-4 px-6 py-4 border-b border-[#E2E0DB] last:border-b-0 items-center hover:bg-[#F8F8F6] transition-colors duration-300"
             >
               {/* Image */}
               <div className="w-10 h-10 border border-[#E2E0DB] overflow-hidden bg-[#F2F2F0] shrink-0">
@@ -102,6 +118,11 @@ export default async function ItemsPage({ searchParams }: PageProps) {
               <p className="text-[10px] tracking-[0.12em] text-[#6B6B6B]">
                 {item.brand?.name?.toUpperCase() ?? '—'}
               </p>
+
+              {/* Stock */}
+              <div>
+                <StockBadge status={item.stock_status} />
+              </div>
 
               {/* Status */}
               <div>

@@ -8,6 +8,8 @@ export async function getAdminStats(): Promise<{
   draftItems: number
   readyItems: number
   liveItems: number
+  outOfStockItems: number
+  lowStockItems: number
   totalOutfits: number
   draftOutfits: number
   liveOutfits: number
@@ -24,6 +26,8 @@ export async function getAdminStats(): Promise<{
       { count: draftItems },
       { count: readyItems },
       { count: liveItems },
+      { count: outOfStockItems },
+      { count: lowStockItems },
       { count: totalOutfits },
       { count: draftOutfits },
       { count: liveOutfits },
@@ -36,6 +40,8 @@ export async function getAdminStats(): Promise<{
       supabase.from('item').select('*', { count: 'exact', head: true }).eq('status', 'draft'),
       supabase.from('item').select('*', { count: 'exact', head: true }).eq('status', 'ready'),
       supabase.from('item').select('*', { count: 'exact', head: true }).eq('status', 'live'),
+      supabase.from('item').select('*', { count: 'exact', head: true }).eq('stock_status', 'out_of_stock'),
+      supabase.from('item').select('*', { count: 'exact', head: true }).eq('stock_status', 'low_stock'),
       supabase.from('outfit').select('*', { count: 'exact', head: true }),
       supabase.from('outfit').select('*', { count: 'exact', head: true }).eq('status', 'draft'),
       supabase.from('outfit').select('*', { count: 'exact', head: true }).eq('status', 'live'),
@@ -53,6 +59,8 @@ export async function getAdminStats(): Promise<{
       draftItems: draftItems ?? 0,
       readyItems: readyItems ?? 0,
       liveItems: liveItems ?? 0,
+      outOfStockItems: outOfStockItems ?? 0,
+      lowStockItems: lowStockItems ?? 0,
       totalOutfits: totalOutfits ?? 0,
       draftOutfits: draftOutfits ?? 0,
       liveOutfits: liveOutfits ?? 0,
@@ -65,6 +73,7 @@ export async function getAdminStats(): Promise<{
     console.error('[getAdminStats]', err)
     return {
       totalItems: 0, draftItems: 0, readyItems: 0, liveItems: 0,
+      outOfStockItems: 0, lowStockItems: 0,
       totalOutfits: 0, draftOutfits: 0, liveOutfits: 0,
       totalProjects: 0, draftProjects: 0, liveProjects: 0,
       publishedToday: 0,
@@ -93,7 +102,10 @@ export async function getAllBrands(): Promise<Brand[]> {
 
 export type ItemWithBrand = Item & { brand: Brand }
 
-export async function getAllItems(status?: string): Promise<ItemWithBrand[]> {
+export async function getAllItems(
+  status?: string,
+  stockFilter?: 'flagged' | 'out_of_stock' | 'low_stock',
+): Promise<ItemWithBrand[]> {
   const supabase = createAdminClient()
   try {
     let query = supabase
@@ -103,6 +115,12 @@ export async function getAllItems(status?: string): Promise<ItemWithBrand[]> {
 
     if (status && status !== 'all') {
       query = query.eq('status', status)
+    }
+
+    if (stockFilter === 'flagged') {
+      query = query.in('stock_status', ['out_of_stock', 'low_stock'])
+    } else if (stockFilter === 'out_of_stock' || stockFilter === 'low_stock') {
+      query = query.eq('stock_status', stockFilter)
     }
 
     const { data, error } = await query

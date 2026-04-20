@@ -4,9 +4,11 @@ import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Item, Brand, ItemType, ColourFamily, MaterialCategory, JewelleryFinish, JewelleryStyle } from '@/types/database'
 import ScoreInput from '@/components/admin/ScoreInput'
+import StockBadge from '@/components/admin/StockBadge'
 import { createBrand, updateBrand } from '@/app/admin/items/actions'
 import { analyseProductUrl } from '@/app/admin/items/analyse-url'
 import { scrapeAndUploadToCloudinary, uploadBase64ToCloudinary } from '@/app/admin/items/cloudinary-upload'
+import { checkItemStock } from '@/app/admin/items/stock-check'
 
 const ITEM_TYPES: ItemType[] = [
   'coat', 'trench', 'jacket', 'blazer', 'gilet', 'cape',
@@ -81,6 +83,10 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
   const [analyseError, setAnalyseError] = useState<string | null>(null)
   const [uploadingImage, setUploadingImage] = useState(false)
   const [uploadImageError, setUploadImageError] = useState<string | null>(null)
+  const [checkingStock, setCheckingStock] = useState(false)
+  const [stockError, setStockError] = useState<string | null>(null)
+  const [stockStatus, setStockStatus] = useState(item?.stock_status ?? null)
+  const [stockCheckedAt, setStockCheckedAt] = useState(item?.stock_checked_at ?? null)
   const [imageUrl, setImageUrl] = useState(item?.image_url || '')
   const [productName, setProductName] = useState(item?.product_name || '')
   const [retailerUrl, setRetailerUrl] = useState(item?.retailer_url || '')
@@ -161,6 +167,19 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
       jewellery_scale: d.jewellery_scale ?? prev.jewellery_scale,
       jewellery_formality: d.jewellery_formality ?? prev.jewellery_formality,
     }))
+  }
+
+  async function handleCheckStock() {
+    if (!item?.item_id) { setStockError('Save the item first before checking stock'); return }
+    setCheckingStock(true)
+    setStockError(null)
+    const result = await checkItemStock(item.item_id)
+    setCheckingStock(false)
+    if (result.error) { setStockError(result.error); return }
+    if (result.status) {
+      setStockStatus(result.status)
+      setStockCheckedAt(new Date().toISOString())
+    }
   }
 
   async function handleCloudinaryUpload() {
@@ -331,6 +350,28 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
           {analyseError && (
             <p className="mt-1.5 text-[10px] tracking-[0.15em] text-red-400">{analyseError}</p>
           )}
+
+          {/* Stock status row */}
+          <div className="mt-3 flex items-center gap-3 flex-wrap">
+            <StockBadge status={stockStatus} />
+            <button
+              type="button"
+              onClick={handleCheckStock}
+              disabled={checkingStock || !item?.item_id || !retailerUrl}
+              title={item?.item_id ? 'Fetch the retailer page and detect stock' : 'Save the item first'}
+              className="border border-[#E2E0DB] bg-white px-3 py-1.5 text-[10px] tracking-[0.15em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {checkingStock ? 'CHECKING...' : 'CHECK STOCK'}
+            </button>
+            {stockCheckedAt && (
+              <span className="text-[9px] tracking-[0.15em] text-[#A8A8A4]">
+                CHECKED {new Date(stockCheckedAt).toLocaleString()}
+              </span>
+            )}
+            {stockError && (
+              <span className="text-[9px] tracking-[0.15em] text-red-500">{stockError}</span>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-[1fr_120px] gap-4 mb-4">

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import type { OutfitWithItems } from '@/types/database'
 import ScoreInput from '@/components/admin/ScoreInput'
 import StatusBadge from '@/components/admin/StatusBadge'
+import StockBadge from '@/components/admin/StockBadge'
 import { analyseOutfit, type OutfitAnalysis, type DetectedItem } from '@/app/admin/ai/analyse-outfit'
 import { scrapeProductInfo } from '@/app/admin/ai/scrape-product'
 import { scrapeAndUploadToCloudinary } from '@/app/admin/items/cloudinary-upload'
@@ -1048,7 +1049,12 @@ STEPS:
                               <div className="flex-1 min-w-0">
                                 <p className="text-[9px] tracking-[0.15em] text-[#A8A8A4] mb-0.5">{oi.item?.brand?.name?.toUpperCase()}</p>
                                 <p className="text-[10px] tracking-[0.12em] text-[#0A0A0A] truncate">{oi.item?.product_name?.toUpperCase()}</p>
-                                <StatusBadge status={oi.slot} />
+                                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                  <StatusBadge status={oi.slot} />
+                                  {oi.item?.stock_status && oi.item.stock_status !== 'in_stock' && (
+                                    <StockBadge status={oi.item.stock_status} size="sm" />
+                                  )}
+                                </div>
                               </div>
                               <div className="flex flex-col items-end gap-1.5 shrink-0">
                                 <button type="button" onClick={() => startEdit(oi)} className="text-[9px] tracking-[0.15em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors">EDIT</button>
