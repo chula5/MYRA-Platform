@@ -70,29 +70,22 @@ function buildRows(outfits: Outfit[]): { mode: 'A' | 'B'; items: Outfit[] }[] {
 
 function ThreePanelRow({ items }: { items: Outfit[] }) {
   return (
-    <div className="grid grid-cols-3 gap-[6px] overflow-x-auto scrollbar-hide">
+    <div className="grid grid-cols-3 gap-[6px]">
       {items.map((outfit) => (
         <Link
           key={outfit.outfit_id}
           href={`/outfit/${outfit.outfit_id}`}
-          className="lookbook-item relative block overflow-hidden group"
+          className="block group"
         >
-          <div className="relative aspect-square w-full overflow-hidden image-hover-dim">
+          <div className="relative w-full aspect-[3/4] overflow-hidden">
             <Image
               src={outfit.image_url || '/placeholder-outfit.jpg'}
               alt={outfit.aesthetic_label}
               fill
               className="object-cover object-top transition-transform duration-500 group-hover:scale-[1.02]"
-              sizes="(max-width: 768px) 100vw, 33vw"
+              sizes="(max-width: 768px) 33vw, 33vw"
             />
-            {/* Hover label — fades in */}
-            <div className="lookbook-label absolute bottom-0 left-0 right-0 p-3 text-center">
-              <span className="text-white text-[12px] tracking-[0.15em]">
-                {outfit.aesthetic_label}
-              </span>
-            </div>
           </div>
-          {/* Below-image label */}
           <p className="mt-3 text-[10px] tracking-[0.15em] text-[#0A0A0A] px-1">
             {(outfit as any).celebrity_name || outfit.occasion_tags?.[0] || 'THE EDIT'}
           </p>
