@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase-server'
 import DiscoveryActions from './DiscoveryActions'
+import BulkDiscoverButton from './BulkDiscoverButton'
 
 const TABS = ['new', 'saved', 'dismissed'] as const
 
@@ -46,6 +47,9 @@ export default async function DiscoveriesPage({ searchParams }: PageProps) {
           AI-SURFACED PIECES SIMILAR TO ITEMS IN YOUR LIBRARY.
         </p>
       </div>
+
+      {/* Bulk discovery */}
+      <BulkDiscoverButton />
 
       {/* Filter tabs */}
       <div className="flex items-center gap-2 mb-8 border-b border-[#E2E0DB] pb-4">
@@ -107,11 +111,11 @@ export default async function DiscoveriesPage({ searchParams }: PageProps) {
                     &ldquo;{d.why_interesting}&rdquo;
                   </p>
                 )}
-                {d.item && (
-                  <p className="text-[9px] tracking-[0.15em] text-[#A8A8A4] mb-3">
-                    INSPIRED BY: {d.item.product_name.toUpperCase()}
-                  </p>
-                )}
+                <p className="text-[9px] tracking-[0.15em] text-[#A8A8A4] mb-3">
+                  {d.item
+                    ? `INSPIRED BY: ${d.item.product_name.toUpperCase()}`
+                    : 'INSPIRED BY YOUR TASTE PROFILE'}
+                </p>
 
                 <div className="mt-auto space-y-2">
                   {d.retailer_url && (
