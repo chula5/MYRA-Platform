@@ -6,7 +6,6 @@ import type { OutfitWithItems } from '@/types/database'
 import ScoreInput from '@/components/admin/ScoreInput'
 import StatusBadge from '@/components/admin/StatusBadge'
 import StockBadge from '@/components/admin/StockBadge'
-import InventoryPicker, { type InventoryPickerItem } from '@/components/admin/InventoryPicker'
 import { analyseOutfit, type OutfitAnalysis, type DetectedItem } from '@/app/admin/ai/analyse-outfit'
 import { scrapeProductInfo } from '@/app/admin/ai/scrape-product'
 import { scrapeAndUploadToCloudinary } from '@/app/admin/items/cloudinary-upload'
@@ -413,6 +412,7 @@ STEPS:
     currency: string | null
   }
   const [invOpen, setInvOpen] = useState(false)
+  const [invTargetSlot, setInvTargetSlot] = useState<string | null>(null)
   const [invQuery, setInvQuery] = useState('')
   const [invResults, setInvResults] = useState<InvItem[]>([])
   const [invLoading, setInvLoading] = useState(false)
@@ -452,11 +452,18 @@ STEPS:
     if (!outfit) return
     setInvError(null)
     setInvAddingIds((prev) => new Set(prev).add(item.item_id))
-    const slot = slotForItemType(item.item_type)
+    const slot = invTargetSlot ?? slotForItemType(item.item_type)
     const res = await addItemToOutfit(outfit.outfit_id, item.item_id, slot)
     setInvAddingIds((prev) => { const n = new Set(prev); n.delete(item.item_id); return n })
     if (res.error) { setInvError(res.error); return }
     router.refresh()
+  }
+
+  function openInventoryFor(slot: string | null) {
+    setInvTargetSlot(slot)
+    setInvQuery('')
+    setInvError(null)
+    setInvOpen(true)
   }
   async function handleManualRetailerBlur(url: string) {
     if (!url || !url.startsWith('http')) return
@@ -961,18 +968,15 @@ STEPS:
                             </button>
                           )}
 
-                          <InventoryPicker
-                            itemTypes={SLOT_TYPES[item.slot]}
-                            disabledReason={!outfit ? 'Save the outfit first to pick from inventory.' : null}
-                            onSelect={async (inv: InventoryPickerItem) => {
-                              if (!outfit) return
-                              const res = await addItemToOutfit(outfit.outfit_id, inv.item_id, item.slot)
-                              if (res.error) throw new Error(res.error)
-                              // Mark this detected-item row as added so the form collapses
-                              setItemInputs((prev) => ({ ...prev, [i]: { ...prev[i], added: true } }))
-                              router.refresh()
-                            }}
-                          />
+                          {outfit && (
+                            <button
+                              type="button"
+                              onClick={() => openInventoryFor(item.slot)}
+                              className="w-full mt-2 border border-[#0A0A0A] text-[#0A0A0A] py-2 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-200"
+                            >
+                              PICK FROM INVENTORY →
+                            </button>
+                          )}
                         </>
                       )}
                     </div>
@@ -987,7 +991,7 @@ STEPS:
             {outfit && (
               <button
                 type="button"
-                onClick={() => { setInvOpen(true); setInvQuery(''); setInvError(null) }}
+                onClick={() => openInventoryFor(null)}
                 className="text-[9px] tracking-[0.20em] border border-[#0A0A0A] px-3 py-1.5 text-[#0A0A0A] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-200"
               >
                 + FROM INVENTORY
@@ -1175,16 +1179,15 @@ STEPS:
                     {manualAdding ? 'ADDING...' : 'ADD TO OUTFIT'}
                   </button>
 
-                  <InventoryPicker
-                    itemTypes={SLOT_TYPES[manualSlot]}
-                    disabledReason={!outfit ? 'Save the outfit first to pick from inventory.' : null}
-                    onSelect={async (inv: InventoryPickerItem) => {
-                      if (!outfit) return
-                      const res = await addItemToOutfit(outfit.outfit_id, inv.item_id, manualSlot)
-                      if (res.error) throw new Error(res.error)
-                      router.refresh()
-                    }}
-                  />
+                  {outfit && (
+                    <button
+                      type="button"
+                      onClick={() => openInventoryFor(manualSlot)}
+                      className="w-full mt-2 border border-[#0A0A0A] text-[#0A0A0A] py-2 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-200"
+                    >
+                      PICK FROM INVENTORY →
+                    </button>
+                  )}
                 </div>
               </>
             )}
@@ -1368,7 +1371,14 @@ STEPS:
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#E2E0DB]">
-              <p className="text-[11px] tracking-[0.25em] text-[#0A0A0A]">ITEM INVENTORY</p>
+              <div>
+                <p className="text-[11px] tracking-[0.25em] text-[#0A0A0A]">ITEM INVENTORY</p>
+                {invTargetSlot && (
+                  <p className="mt-1 text-[9px] tracking-[0.20em] text-[#6B6B6B]">
+                    ADDING TO SLOT · {invTargetSlot.toUpperCase()}
+                  </p>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => setInvOpen(false)}
