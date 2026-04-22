@@ -61,7 +61,7 @@ export default async function ItemsPage({ searchParams }: PageProps) {
         ))}
       </div>
 
-      {/* Table */}
+      {/* Grid */}
       {items.length === 0 ? (
         <div className="py-20 text-center">
           <p className="text-[11px] tracking-[0.20em] text-[#A8A8A4]">
@@ -69,76 +69,54 @@ export default async function ItemsPage({ searchParams }: PageProps) {
           </p>
         </div>
       ) : (
-        <div className="border border-[#E2E0DB] bg-white rounded-[3px] overflow-hidden">
-          {/* Table header */}
-          <div className="grid grid-cols-[56px_1fr_2fr_1.3fr_110px_100px_100px] gap-4 px-6 py-3 border-b border-[#E2E0DB] bg-[#F8F8F6]">
-            <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4]">IMAGE</p>
-            <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4]">ITEM TYPE</p>
-            <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4]">PRODUCT NAME</p>
-            <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4]">BRAND</p>
-            <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4]">STOCK</p>
-            <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4]">STATUS</p>
-            <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4]">ACTIONS</p>
-          </div>
-
-          {/* Rows */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
           {items.map((item) => (
-            <div
+            <Link
               key={item.item_id}
-              className="grid grid-cols-[56px_1fr_2fr_1.3fr_110px_100px_100px] gap-4 px-6 py-4 border-b border-[#E2E0DB] last:border-b-0 items-center hover:bg-[#F8F8F6] transition-colors duration-300"
+              href={`/admin/items/${item.item_id}/edit`}
+              className="group block bg-white border border-[#E2E0DB] hover:border-[#0A0A0A] transition-colors duration-300 overflow-hidden"
             >
               {/* Image */}
-              <div className="w-10 h-10 border border-[#E2E0DB] overflow-hidden bg-[#F2F2F0] shrink-0">
+              <div className="aspect-[3/4] bg-[#F8F8F6] overflow-hidden relative">
                 {item.image_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={item.image_url}
                     alt={item.product_name}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
-                    <span className="text-[7px] text-[#A8A8A4]">—</span>
+                    <span className="text-[9px] tracking-[0.15em] text-[#A8A8A4]">NO IMAGE</span>
                   </div>
                 )}
+                {/* Badges overlaid top-left */}
+                <div className="absolute top-2 left-2 flex flex-col gap-1">
+                  <StatusBadge status={item.status} />
+                  {item.stock_status && item.stock_status !== 'in_stock' && (
+                    <StockBadge status={item.stock_status} size="sm" />
+                  )}
+                </div>
               </div>
 
-              {/* Item type */}
-              <div>
-                <span className="inline-block bg-[#F2F2F0] px-2 py-1 text-[9px] tracking-[0.15em] text-[#6B6B6B] rounded-[2px]">
-                  {item.item_type.replace(/_/g, ' ').toUpperCase()}
-                </span>
+              {/* Body */}
+              <div className="p-3">
+                <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4] mb-1 truncate">
+                  {item.brand?.name?.toUpperCase() ?? '—'}
+                </p>
+                <p className="text-[11px] tracking-[0.10em] text-[#0A0A0A] mb-2 line-clamp-2 leading-snug min-h-[28px]">
+                  {item.product_name.toUpperCase()}
+                </p>
+                <div className="flex items-center justify-between">
+                  <span className="inline-block bg-[#F2F2F0] px-2 py-0.5 text-[8px] tracking-[0.15em] text-[#6B6B6B] rounded-[2px]">
+                    {item.item_type.replace(/_/g, ' ').toUpperCase()}
+                  </span>
+                  <span className="text-[9px] tracking-[0.15em] text-[#A8A8A4] group-hover:text-[#0A0A0A] transition-colors">
+                    EDIT →
+                  </span>
+                </div>
               </div>
-
-              {/* Product name */}
-              <p className="text-[11px] tracking-[0.12em] text-[#0A0A0A] truncate">
-                {item.product_name.toUpperCase()}
-              </p>
-
-              {/* Brand */}
-              <p className="text-[10px] tracking-[0.12em] text-[#6B6B6B]">
-                {item.brand?.name?.toUpperCase() ?? '—'}
-              </p>
-
-              {/* Stock */}
-              <div>
-                <StockBadge status={item.stock_status} />
-              </div>
-
-              {/* Status */}
-              <div>
-                <StatusBadge status={item.status} />
-              </div>
-
-              {/* Actions */}
-              <div>
-                <Link
-                  href={`/admin/items/${item.item_id}/edit`}
-                  className="text-[10px] tracking-[0.15em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors duration-300"
-                >
-                  EDIT →
-                </Link>
-              </div>
-            </div>
+            </Link>
           ))}
         </div>
       )}
