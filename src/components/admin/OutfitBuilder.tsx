@@ -6,6 +6,7 @@ import type { OutfitWithItems } from '@/types/database'
 import ScoreInput from '@/components/admin/ScoreInput'
 import StatusBadge from '@/components/admin/StatusBadge'
 import StockBadge from '@/components/admin/StockBadge'
+import InventoryPicker, { type InventoryPickerItem } from '@/components/admin/InventoryPicker'
 import { analyseOutfit, type OutfitAnalysis, type DetectedItem } from '@/app/admin/ai/analyse-outfit'
 import { scrapeProductInfo } from '@/app/admin/ai/scrape-product'
 import { scrapeAndUploadToCloudinary } from '@/app/admin/items/cloudinary-upload'
@@ -959,6 +960,19 @@ STEPS:
                               {inp.adding ? 'ADDING...' : 'ADD ITEM →'}
                             </button>
                           )}
+
+                          <InventoryPicker
+                            itemTypes={SLOT_TYPES[item.slot]}
+                            disabledReason={!outfit ? 'Save the outfit first to pick from inventory.' : null}
+                            onSelect={async (inv: InventoryPickerItem) => {
+                              if (!outfit) return
+                              const res = await addItemToOutfit(outfit.outfit_id, inv.item_id, item.slot)
+                              if (res.error) throw new Error(res.error)
+                              // Mark this detected-item row as added so the form collapses
+                              setItemInputs((prev) => ({ ...prev, [i]: { ...prev[i], added: true } }))
+                              router.refresh()
+                            }}
+                          />
                         </>
                       )}
                     </div>
@@ -1160,6 +1174,17 @@ STEPS:
                   >
                     {manualAdding ? 'ADDING...' : 'ADD TO OUTFIT'}
                   </button>
+
+                  <InventoryPicker
+                    itemTypes={SLOT_TYPES[manualSlot]}
+                    disabledReason={!outfit ? 'Save the outfit first to pick from inventory.' : null}
+                    onSelect={async (inv: InventoryPickerItem) => {
+                      if (!outfit) return
+                      const res = await addItemToOutfit(outfit.outfit_id, inv.item_id, manualSlot)
+                      if (res.error) throw new Error(res.error)
+                      router.refresh()
+                    }}
+                  />
                 </div>
               </>
             )}
