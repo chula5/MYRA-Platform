@@ -413,6 +413,7 @@ STEPS:
   }
   const [invOpen, setInvOpen] = useState(false)
   const [invTargetSlot, setInvTargetSlot] = useState<string | null>(null)
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
   const [invQuery, setInvQuery] = useState('')
   const [invResults, setInvResults] = useState<InvItem[]>([])
   const [invLoading, setInvLoading] = useState(false)
@@ -464,6 +465,35 @@ STEPS:
     setInvQuery('')
     setInvError(null)
     setInvOpen(true)
+  }
+
+  async function handleCopyItemsTable() {
+    if (orderedItems.length === 0) return
+    const headers = ['ITEM TYPE', 'PRODUCT NAME', 'BRAND', 'COST', 'RETAILER URL', 'IMAGE URL']
+    const rows = orderedItems.map((oi) => {
+      const it = oi.item
+      const cost = it?.price ? `${it.currency ?? ''} ${it.price}`.trim() : ''
+      return [
+        it?.item_type?.replace(/_/g, ' ') ?? '',
+        it?.product_name ?? '',
+        it?.brand?.name ?? '',
+        cost,
+        it?.retailer_url ?? '',
+        it?.image_url ?? '',
+      ]
+        .map((v) => String(v).replace(/\t/g, ' ').replace(/\r?\n/g, ' '))
+        .join('\t')
+    })
+    const tsv = [headers.join('\t'), ...rows].join('\n')
+    try {
+      await navigator.clipboard.writeText(tsv)
+      setCopyState('copied')
+      setTimeout(() => setCopyState('idle'), 2000)
+    } catch (err) {
+      console.error('[handleCopyItemsTable]', err)
+      setCopyState('error')
+      setTimeout(() => setCopyState('idle'), 2500)
+    }
   }
   async function handleManualRetailerBlur(url: string) {
     if (!url || !url.startsWith('http')) return
@@ -986,16 +1016,31 @@ STEPS:
             </div>
           )}
 
-          <div className="flex items-center justify-between mb-6 pb-3 border-b border-[#E2E0DB]">
+          <div className="flex items-center justify-between mb-6 pb-3 border-b border-[#E2E0DB] gap-2">
             <p className="text-[10px] tracking-[0.25em] text-[#6B6B6B]">ITEMS IN THIS OUTFIT</p>
             {outfit && (
-              <button
-                type="button"
-                onClick={() => openInventoryFor(null)}
-                className="text-[9px] tracking-[0.20em] border border-[#0A0A0A] px-3 py-1.5 text-[#0A0A0A] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-200"
-              >
-                + FROM INVENTORY
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopyItemsTable}
+                  disabled={orderedItems.length === 0}
+                  title="Copy as a tab-separated table for Sheets / Excel / Numbers"
+                  className="text-[9px] tracking-[0.20em] border border-[#E2E0DB] px-3 py-1.5 text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-200"
+                >
+                  {copyState === 'copied'
+                    ? 'COPIED ✓'
+                    : copyState === 'error'
+                    ? 'COPY FAILED'
+                    : '⎘ COPY ITEMS'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openInventoryFor(null)}
+                  className="text-[9px] tracking-[0.20em] border border-[#0A0A0A] px-3 py-1.5 text-[#0A0A0A] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-200"
+                >
+                  + FROM INVENTORY
+                </button>
+              </div>
             )}
           </div>
             {!outfit ? (
