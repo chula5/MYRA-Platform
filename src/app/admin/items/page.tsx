@@ -1,7 +1,6 @@
 import Link from 'next/link'
 import { getAllItems } from '@/lib/admin-queries'
-import StatusBadge from '@/components/admin/StatusBadge'
-import StockBadge from '@/components/admin/StockBadge'
+import ItemsGrid from './ItemsGrid'
 
 const STATUS_TABS = ['all', 'draft', 'ready', 'live', 'archived'] as const
 
@@ -69,56 +68,7 @@ export default async function ItemsPage({ searchParams }: PageProps) {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-          {items.map((item) => (
-            <Link
-              key={item.item_id}
-              href={`/admin/items/${item.item_id}/edit`}
-              className="group block bg-white border border-[#E2E0DB] hover:border-[#0A0A0A] transition-colors duration-300 overflow-hidden"
-            >
-              {/* Image */}
-              <div className="aspect-[3/4] bg-[#F8F8F6] overflow-hidden relative">
-                {item.image_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={item.image_url}
-                    alt={item.product_name}
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <span className="text-[9px] tracking-[0.15em] text-[#A8A8A4]">NO IMAGE</span>
-                  </div>
-                )}
-                {/* Badges overlaid top-left */}
-                <div className="absolute top-2 left-2 flex flex-col gap-1">
-                  <StatusBadge status={item.status} />
-                  {item.stock_status && item.stock_status !== 'in_stock' && (
-                    <StockBadge status={item.stock_status} size="sm" />
-                  )}
-                </div>
-              </div>
-
-              {/* Body */}
-              <div className="p-3">
-                <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4] mb-1 truncate">
-                  {item.brand?.name?.toUpperCase() ?? '—'}
-                </p>
-                <p className="text-[11px] tracking-[0.10em] text-[#0A0A0A] mb-2 line-clamp-2 leading-snug min-h-[28px]">
-                  {item.product_name.toUpperCase()}
-                </p>
-                <div className="flex items-center justify-between">
-                  <span className="inline-block bg-[#F2F2F0] px-2 py-0.5 text-[8px] tracking-[0.15em] text-[#6B6B6B] rounded-[2px]">
-                    {item.item_type.replace(/_/g, ' ').toUpperCase()}
-                  </span>
-                  <span className="text-[9px] tracking-[0.15em] text-[#A8A8A4] group-hover:text-[#0A0A0A] transition-colors">
-                    EDIT →
-                  </span>
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
+        <ItemsGrid items={items} />
       )}
     </div>
   )
