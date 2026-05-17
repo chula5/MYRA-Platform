@@ -53,7 +53,7 @@ export default function LandingPage() {
           </p>
           <div className="text-[#0A0A0A] tracking-[0.08em] sm:tracking-[0.10em] leading-[1.85] text-[clamp(12px,1.4vw,15px)] space-y-7 sm:space-y-8">
             <p>
-              EVERY SHOPPING APP FEELS THE SAME. NUMEROUS TABS, ENDLESS
+              SHOPPING HAS BECOME EXHAUSTING. NUMEROUS TABS, ENDLESS
               SCROLLING AND ALGORITHMS THAT FEED YOU MORE OF THE SAME. WE
               ARE SOLD MORE CLOTHES THAN EVER AND SOMEHOW FEEL FURTHER THAN
               EVER FROM KNOWING WHAT TO WEAR.
