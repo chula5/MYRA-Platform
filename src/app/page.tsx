@@ -37,10 +37,10 @@ export default function LandingPage() {
 
       {/* ── Manifesto — sits directly under the hero photo ──── */}
       <section className="bg-[#FAFAF8] py-20 sm:py-28 px-6 sm:px-10">
-        <div className="max-w-3xl mx-auto text-center">
-          <p className="text-[#0A0A0A] tracking-[0.12em] sm:tracking-[0.15em] leading-[1.65] text-[clamp(13px,1.7vw,18px)]">
+        <div className="max-w-5xl mx-auto text-center">
+          <p className="text-[#0A0A0A] tracking-[0.10em] sm:tracking-[0.13em] leading-[1.65] text-[clamp(13px,1.7vw,18px)]">
             THE FIRST OUTFIT-LED SHOPPING PLATFORM. WE CURATE THE BRANDS AND
-            BUILD THE OUTFITS, SO YOU DON&apos;T HAVE TO.
+            BUILD THE OUTFITS, SO YOU DON&apos;T HAVE&nbsp;TO.
           </p>
         </div>
       </section>
