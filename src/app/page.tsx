@@ -7,16 +7,28 @@ export default function LandingPage() {
     <>
       <Navigation transparent />
 
-      {/* ── Hero — single full-screen image ─────────────────── */}
-      <section className="relative w-screen h-screen overflow-hidden bg-[#FAFAF8]">
+      {/* ── Hero ──────────────────────────────────────────────
+          Mobile: image fills the viewport (h-screen + object-cover).
+          Desktop: image fills the full width at its natural aspect ratio
+                   — the section grows taller than the viewport, so the
+                   user scrolls down to reveal the rest of the outfit. */}
+      <section className="relative w-screen overflow-hidden bg-[#FAFAF8] h-screen sm:h-auto">
+        {/* Mobile image — absolutely positioned to fill the viewport */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/Mesh%20Cape.png"
           alt=""
-          className="absolute inset-0 w-full h-full object-cover sm:object-contain object-top"
+          className="sm:hidden absolute inset-0 w-full h-full object-cover object-top"
+        />
+        {/* Desktop image — fills width, height adapts naturally */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/Mesh%20Cape.png"
+          alt=""
+          className="hidden sm:block w-full h-auto"
         />
         {/* Headline overlaid on the trouser area */}
-        <div className="absolute inset-x-0 bottom-[28%] sm:bottom-[30%] flex justify-center px-2 sm:px-6 z-10 pointer-events-none">
+        <div className="absolute inset-x-0 bottom-[28%] sm:bottom-[28%] flex justify-center px-2 sm:px-6 z-10 pointer-events-none">
           <h1 className="text-white text-center whitespace-nowrap leading-[1.05] tracking-[0.04em] sm:tracking-[0.08em] text-[clamp(14px,4.2vw,56px)] drop-shadow-[0_2px_12px_rgba(0,0,0,0.25)]">
             A DIFFERENT WAY TO GET DRESSED.
           </h1>
