@@ -13,7 +13,7 @@ export default function LandingPage() {
         <img
           src="/Mesh%20Cape.png"
           alt=""
-          className="absolute inset-0 w-full h-full object-contain"
+          className="absolute inset-0 w-full h-full object-cover sm:object-contain object-top"
         />
         {/* Headline overlaid on the trouser area */}
         <div className="absolute inset-x-0 bottom-[28%] sm:bottom-[30%] flex justify-center px-2 sm:px-6 z-10 pointer-events-none">
