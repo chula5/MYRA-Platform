@@ -1,0 +1,332 @@
+'use client'
+
+import { useState, useTransition } from 'react'
+import {
+  batchAnalyseUrls,
+  bulkApproveCandidates,
+  scrapeProductImage,
+  type ParsedCandidate,
+} from './actions'
+
+type Mode = 'list' | 'collection'
+
+interface QueueItem extends ParsedCandidate {
+  id: string
+  selected: boolean
+  image_url: string | null
+  imageLoading: boolean
+}
+
+export default function IngestClient() {
+  const [mode, setMode] = useState<Mode>('list')
+  const [input, setInput] = useState('')
+  const [analysing, startAnalyse] = useTransition()
+  const [approving, startApprove] = useTransition()
+  const [queue, setQueue] = useState<QueueItem[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [result, setResult] = useState<{ created: number; failed: number } | null>(null)
+  const [tasteFilterApplied, setTasteFilterApplied] = useState(false)
+
+  async function runAnalyse() {
+    setError(null)
+    setResult(null)
+    setTasteFilterApplied(false)
+    startAnalyse(async () => {
+      const res = await batchAnalyseUrls(input, mode)
+      if (res.error) {
+        setError(res.error)
+        setQueue([])
+        return
+      }
+      setTasteFilterApplied(!!res.usedTasteFilter)
+      const initialQueue: QueueItem[] = (res.candidates ?? []).map((c, i) => ({
+        ...c,
+        id: `${i}-${c.source_url}`,
+        selected: c.ok, // auto-select successful parses
+        image_url: null,
+        imageLoading: c.ok,
+      }))
+      setQueue(initialQueue)
+
+      // Fetch og:images in parallel (best-effort, non-blocking)
+      initialQueue.forEach(async (item) => {
+        if (!item.ok) return
+        const res = await scrapeProductImage(item.source_url)
+        setQueue((prev) =>
+          prev.map((q) =>
+            q.id === item.id ? { ...q, image_url: res.image_url ?? null, imageLoading: false } : q,
+          ),
+        )
+      })
+    })
+  }
+
+  function toggleSelect(id: string) {
+    setQueue((prev) => prev.map((q) => (q.id === id ? { ...q, selected: !q.selected } : q)))
+  }
+
+  function selectAll(value: boolean) {
+    setQueue((prev) => prev.map((q) => ({ ...q, selected: value && q.ok })))
+  }
+
+  function discard(id: string) {
+    setQueue((prev) => prev.filter((q) => q.id !== id))
+  }
+
+  function approve() {
+    const payload = queue
+      .filter((q) => q.selected && q.ok && q.parsed)
+      .map((q) => ({
+        source_url: q.source_url,
+        parsed: q.parsed!,
+        image_url: q.image_url,
+      }))
+    if (payload.length === 0) {
+      setError('Select at least one candidate to approve.')
+      return
+    }
+    setError(null)
+    startApprove(async () => {
+      const res = await bulkApproveCandidates(payload)
+      if (res.error) {
+        setError(res.error)
+        return
+      }
+      setResult({ created: res.created ?? 0, failed: res.failed ?? 0 })
+      // Remove approved items from the queue
+      setQueue((prev) => prev.filter((q) => !payload.some((p) => p.source_url === q.source_url)))
+    })
+  }
+
+  const selectedCount = queue.filter((q) => q.selected).length
+  const okCount = queue.filter((q) => q.ok).length
+  const failCount = queue.filter((q) => !q.ok).length
+
+  return (
+    <div>
+      {/* Mode + input */}
+      <div className="bg-white border border-[#E2E0DB] p-6 mb-8">
+        <div className="flex items-center gap-2 mb-5">
+          <button
+            type="button"
+            onClick={() => setMode('list')}
+            className={`px-4 py-2 text-[10px] tracking-[0.20em] transition-all duration-300 ${
+              mode === 'list'
+                ? 'bg-[#0A0A0A] text-white'
+                : 'border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A]'
+            }`}
+          >
+            URL LIST
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('collection')}
+            className={`px-4 py-2 text-[10px] tracking-[0.20em] transition-all duration-300 ${
+              mode === 'collection'
+                ? 'bg-[#0A0A0A] text-white'
+                : 'border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A]'
+            }`}
+          >
+            COLLECTION PAGE
+          </button>
+          <span className="ml-2 text-[9px] tracking-[0.20em] text-[#A8A8A4]">
+            {mode === 'list'
+              ? 'PASTE 1–30 PRODUCT URLS, ONE PER LINE'
+              : 'PASTE ONE COLLECTION URL — CLAUDE CURATES 12–20 PRODUCTS, FILTERED BY YOUR TASTE PROFILE'}
+          </span>
+        </div>
+
+        <textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          rows={mode === 'list' ? 6 : 2}
+          placeholder={
+            mode === 'list'
+              ? 'https://www.net-a-porter.com/.../1683828\nhttps://www.mytheresa.com/.../P00789012\n...'
+              : 'https://www.net-a-porter.com/en-gb/shop/designer/toteme/new-in'
+          }
+          className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.05em] text-[#0A0A0A] focus:outline-none focus:border-[#0A0A0A] transition-colors duration-300 font-mono leading-relaxed"
+        />
+
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={runAnalyse}
+            disabled={analysing || !input.trim()}
+            className="bg-[#0A0A0A] text-white px-6 py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#333] transition-colors duration-300 disabled:opacity-50"
+          >
+            {analysing ? 'ANALYSING…' : 'ANALYSE'}
+          </button>
+          {queue.length > 0 && (
+            <span className="text-[10px] tracking-[0.20em] text-[#6B6B6B]">
+              QUEUE: {queue.length} · OK {okCount}
+              {failCount > 0 && ` · FAILED ${failCount}`}
+              {tasteFilterApplied && ' · TASTE-FILTERED'}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div className="mb-6 p-4 border border-[#E8B4B4] bg-[#FDECEC]">
+          <p className="text-[10px] tracking-[0.20em] text-[#B83A3A]">{error.toUpperCase()}</p>
+        </div>
+      )}
+
+      {/* Result */}
+      {result && (
+        <div className="mb-6 p-4 border border-[#C4A882] bg-[#FAF6EE]">
+          <p className="text-[10px] tracking-[0.20em] text-[#0A0A0A]">
+            {result.created} ITEM{result.created === 1 ? '' : 'S'} CREATED AS DRAFTS
+            {result.failed > 0 && ` · ${result.failed} FAILED`}
+            {' · '}
+            <a href="/admin/items?status=draft" className="underline">
+              REVIEW DRAFTS →
+            </a>
+          </p>
+        </div>
+      )}
+
+      {/* Queue */}
+      {queue.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#E2E0DB]">
+            <p className="text-[10px] tracking-[0.25em] text-[#6B6B6B]">REVIEW QUEUE</p>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => selectAll(true)}
+                className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors"
+              >
+                SELECT ALL OK
+              </button>
+              <span className="text-[10px] text-[#E2E0DB]">·</span>
+              <button
+                type="button"
+                onClick={() => selectAll(false)}
+                className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors"
+              >
+                CLEAR
+              </button>
+              <button
+                type="button"
+                disabled={approving || selectedCount === 0}
+                onClick={approve}
+                className="ml-4 bg-[#0A0A0A] text-white px-6 py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#333] transition-colors duration-300 disabled:opacity-50"
+              >
+                {approving
+                  ? 'CREATING…'
+                  : `APPROVE ${selectedCount} → DRAFTS`}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            {queue.map((q) => (
+              <div
+                key={q.id}
+                className={`bg-white border p-4 flex items-start gap-4 transition-colors ${
+                  q.ok
+                    ? q.selected
+                      ? 'border-[#0A0A0A]'
+                      : 'border-[#E2E0DB]'
+                    : 'border-[#E8B4B4] bg-[#FDECEC]'
+                }`}
+              >
+                {/* Checkbox */}
+                <div className="pt-1">
+                  <input
+                    type="checkbox"
+                    checked={q.selected}
+                    disabled={!q.ok}
+                    onChange={() => toggleSelect(q.id)}
+                    className="accent-[#0A0A0A]"
+                  />
+                </div>
+
+                {/* Image */}
+                <div className="w-20 h-24 flex-shrink-0 bg-[#F2F2F0] overflow-hidden">
+                  {q.imageLoading ? (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <span className="text-[8px] tracking-[0.15em] text-[#A8A8A4]">…</span>
+                    </div>
+                  ) : q.image_url ? (
+                    <img src={q.image_url} alt={q.parsed?.product_name ?? ''} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <span className="text-[8px] tracking-[0.15em] text-[#A8A8A4]">NO IMG</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  {q.ok && q.parsed ? (
+                    <>
+                      <p className="text-[10px] tracking-[0.20em] text-[#A8A8A4] mb-1 truncate">
+                        {(q.parsed.brand_name ?? 'UNKNOWN BRAND').toUpperCase()}
+                      </p>
+                      <p className="text-[13px] tracking-[0.05em] text-[#0A0A0A] mb-2 truncate">
+                        {(q.parsed.product_name ?? 'UNTITLED').toUpperCase()}
+                      </p>
+                      <div className="flex items-center gap-3 flex-wrap text-[10px] tracking-[0.15em] text-[#6B6B6B]">
+                        {q.parsed.item_type && <span>{q.parsed.item_type.replace(/_/g, ' ').toUpperCase()}</span>}
+                        {q.parsed.colour_family && <span>· {q.parsed.colour_family.toUpperCase()}</span>}
+                        {q.parsed.material_primary && <span>· {q.parsed.material_primary.toUpperCase()}</span>}
+                        {q.parsed.price && (
+                          <span>· {q.parsed.currency ?? ''} {q.parsed.price}</span>
+                        )}
+                      </div>
+                      <ScoreStrip parsed={q.parsed} />
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-[11px] tracking-[0.20em] text-[#B83A3A] mb-1">FAILED TO ANALYSE</p>
+                      <p className="text-[10px] tracking-[0.10em] text-[#6B6B6B]">{q.error}</p>
+                    </>
+                  )}
+                  <p className="text-[9px] tracking-[0.10em] text-[#A8A8A4] mt-2 truncate font-mono">
+                    {q.source_url}
+                  </p>
+                </div>
+
+                {/* Discard */}
+                <button
+                  type="button"
+                  onClick={() => discard(q.id)}
+                  className="text-[10px] tracking-[0.20em] text-[#A8A8A4] hover:text-[#0A0A0A] transition-colors mt-1"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ScoreStrip({ parsed }: { parsed: NonNullable<ParsedCandidate['parsed']> }) {
+  const scored: Array<[string, number | null]> = [
+    ['FIT', parsed.fit],
+    ['STR', parsed.structure],
+    ['MAT.WT', parsed.material_weight],
+    ['MAT.FORM', parsed.material_formality],
+    ['SURFACE', parsed.surface],
+    ['SHEEN', parsed.sheen],
+    ['PATTERN', parsed.pattern],
+  ]
+  const present = scored.filter(([, v]) => v != null)
+  if (present.length === 0) return null
+  return (
+    <div className="flex items-center gap-3 mt-2 flex-wrap">
+      {present.map(([label, val]) => (
+        <span key={label} className="text-[9px] tracking-[0.18em] text-[#A8A8A4]">
+          {label} <span className="text-[#0A0A0A]">{val}</span>
+        </span>
+      ))}
+    </div>
+  )
+}

@@ -1,68 +1,49 @@
 import Link from 'next/link'
 import Navigation from '@/components/navigation/Navigation'
-import Lookbook from '@/components/lookbook/Lookbook'
 import WaitlistModal from '@/components/WaitlistModal'
-import HeroCarousel from '@/components/hero/HeroCarousel'
-import { createServerClient } from '@/lib/supabase-server'
-import type { Outfit } from '@/types/database'
 
-export default async function LandingPage() {
-  const supabase = await createServerClient()
-
-  // Fetch lookbooks with their outfits (ordered by lookbook sort_order, outfits by sort_order)
-  const { data: lookbookData } = await supabase
-    .from('lookbook')
-    .select(`
-      lookbook_id,
-      title,
-      slug,
-      lookbook_outfit(
-        sort_order,
-        outfit(*)
-      )
-    `)
-    .eq('status', 'active')
-    .order('sort_order', { ascending: true })
-
-  const lookbooks = ((lookbookData ?? []) as {
-    lookbook_id: string
-    title: string
-    slug: string
-    lookbook_outfit: { sort_order: number; outfit: Outfit | null }[]
-  }[]).map((lb) => ({
-    lookbook_id: lb.lookbook_id,
-    title: lb.title,
-    slug: lb.slug,
-    outfits: (lb.lookbook_outfit ?? [])
-      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-      .map((lo) => lo.outfit)
-      .filter((o): o is Outfit => o !== null && o.status === 'live'),
-  })).filter((lb) => lb.outfits.length > 0)
-
+export default function LandingPage() {
   return (
     <>
       <Navigation transparent />
 
-      {/* ── Hero ─────────────────────────────────────────────── */}
-      <section className="relative w-full h-[72vh] min-h-[500px] overflow-hidden">
-        {/* Full-bleed rotating hero (Chanel · Saint Laurent · Dior) */}
-        <HeroCarousel />
-
-        {/* Text overlay — bottom */}
-        <div className="absolute bottom-0 left-0 right-0 pb-12 sm:pb-16 flex flex-col items-center text-center px-6 sm:px-10">
-          <h1 className="text-[clamp(22px,5vw,56px)] leading-[1.15] tracking-[0.08em] sm:tracking-[0.10em] text-white mb-8 sm:mb-10 max-w-[90%] sm:whitespace-nowrap">
-            YOUR OUTFIT,<br className="sm:hidden" />
-            <span className="hidden sm:inline"> </span>ONE MESSAGE AWAY
+      {/* ── Hero — single full-screen image ─────────────────── */}
+      <section className="relative w-screen h-screen overflow-hidden bg-[#FAFAF8]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/Mesh%20Cape.png"
+          alt=""
+          className="absolute inset-0 w-full h-full object-contain"
+        />
+        {/* Headline overlaid on the trouser area */}
+        <div className="absolute inset-x-0 bottom-[28%] sm:bottom-[30%] flex justify-center px-2 sm:px-6 z-10 pointer-events-none">
+          <h1 className="text-white text-center whitespace-nowrap leading-[1.05] tracking-[0.04em] sm:tracking-[0.08em] text-[clamp(14px,4.2vw,56px)] drop-shadow-[0_2px_12px_rgba(0,0,0,0.25)]">
+            A DIFFERENT WAY TO GET DRESSED.
           </h1>
-          <WaitlistModal />
         </div>
       </section>
 
-      {/* ── Lookbooks ────────────────────────────────────────── */}
-      <Lookbook lookbooks={lookbooks} />
+      {/* ── Manifesto — sits directly under the hero photo ──── */}
+      <section className="bg-[#FAFAF8] py-20 sm:py-28 px-6 sm:px-10">
+        <div className="max-w-3xl mx-auto text-center">
+          <p className="text-[#0A0A0A] tracking-[0.12em] sm:tracking-[0.15em] leading-[1.65] text-[clamp(13px,1.7vw,18px)]">
+            THE FIRST OUTFIT-LED SHOPPING PLATFORM. WE CURATE THE BRANDS AND
+            BUILD THE OUTFITS, SO YOU DON&apos;T HAVE TO.
+          </p>
+        </div>
+      </section>
 
-      {/* ── Footer ───────────────────────────────────────────── */}
-      <footer className="bg-white pt-16 pb-8 px-10">
+      {/* ── Sticky waitlist CTA — fixed to bottom of viewport ── */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 pointer-events-none flex justify-center pb-5 sm:pb-7">
+        <div className="pointer-events-auto">
+          <WaitlistModal
+            triggerClassName="inline-flex items-center gap-3 bg-[#0A0A0A] text-white text-[11px] sm:text-[12px] tracking-[0.22em] px-10 sm:px-14 py-3.5 sm:py-4 shadow-[0_8px_24px_rgba(0,0,0,0.18)] hover:opacity-90 transition-opacity duration-300"
+          />
+        </div>
+      </div>
+
+      {/* ── Footer — extra bottom padding so sticky CTA never covers copyright */}
+      <footer className="bg-white pt-16 pb-28 sm:pb-24 px-10">
         <div className="max-w-[1440px] mx-auto">
           {/* Wordmark */}
           <div className="text-center mb-10">

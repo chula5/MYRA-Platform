@@ -1,9 +1,14 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { getItem, getAllBrands, getOutfitsForItem } from '@/lib/admin-queries'
+import { getItem, getAllBrands, getOutfitsForItem, getReadyAndLiveItems } from '@/lib/admin-queries'
 import ItemForm from '@/components/admin/ItemForm'
 import { updateItem, updateItemStatus } from '@/app/admin/items/actions'
 import StatusBadge from '@/components/admin/StatusBadge'
+import { countYield } from '@/lib/composer'
+
+// Brand list and yield count must always be fresh — both depend on rows added
+// in other admin flows (Batch Ingest, createBrand, marking items ready).
+export const dynamic = 'force-dynamic'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -11,15 +16,21 @@ interface PageProps {
 
 export default async function EditItemPage({ params }: PageProps) {
   const { id } = await params
-  const [item, brands, linkedOutfits] = await Promise.all([
+  const [item, brands, linkedOutfits, library] = await Promise.all([
     getItem(id),
     getAllBrands(),
     getOutfitsForItem(id),
+    getReadyAndLiveItems(),
   ])
 
   if (!item) {
     notFound()
   }
+
+  // Yield = how many compositionally coherent outfits this item could anchor
+  // against the current composable library. Drafts now compose too, so we only
+  // skip the calculation for archived items.
+  const yieldCount = item.status === 'archived' ? null : countYield(item, library)
 
   async function handleUpdate(formData: FormData) {
     'use server'
@@ -83,12 +94,41 @@ export default async function EditItemPage({ params }: PageProps) {
           <ItemForm item={item} brands={brands} action={handleUpdate} />
         </div>
 
-        {/* Linked outfits sidebar */}
-        {linkedOutfits.length > 0 && (
-          <div className="w-64 shrink-0 pt-1">
-            <p className="text-[10px] tracking-[0.25em] text-[#6B6B6B] mb-4 pb-3 border-b border-[#E2E0DB]">
-              LINKED OUTFITS ({linkedOutfits.length})
-            </p>
+        {/* Right sidebar: Yield + Linked outfits */}
+        <div className="w-64 shrink-0 pt-1 flex flex-col gap-8">
+          {/* Yield surface */}
+          {yieldCount !== null && (
+            <div>
+              <p className="text-[10px] tracking-[0.25em] text-[#6B6B6B] mb-4 pb-3 border-b border-[#E2E0DB]">
+                COMPOSITIONAL YIELD
+              </p>
+              <div className="bg-white border border-[#E2E0DB] p-4">
+                <p className="text-[36px] tracking-[0.05em] text-[#0A0A0A] leading-none mb-2">
+                  {yieldCount}
+                </p>
+                <p className="text-[10px] tracking-[0.18em] text-[#6B6B6B] mb-4 leading-relaxed">
+                  {yieldCount === 0
+                    ? 'NO COHERENT COMPOSITIONS IN THE CURRENT LIBRARY. ADD MORE READY ITEMS.'
+                    : `OUTFIT${yieldCount === 1 ? '' : 'S'} THIS PIECE COULD ANCHOR AGAINST YOUR READY/LIVE LIBRARY.`}
+                </p>
+                {yieldCount > 0 && (
+                  <Link
+                    href={`/admin/composer?anchor=${item.item_id}`}
+                    className="block bg-[#0A0A0A] text-white px-4 py-2.5 text-[10px] tracking-[0.20em] text-center hover:bg-[#333] transition-colors duration-300"
+                  >
+                    OPEN COMPOSER →
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Linked outfits */}
+          {linkedOutfits.length > 0 && (
+            <div>
+              <p className="text-[10px] tracking-[0.25em] text-[#6B6B6B] mb-4 pb-3 border-b border-[#E2E0DB]">
+                LINKED OUTFITS ({linkedOutfits.length})
+              </p>
             <div className="flex flex-col gap-3">
               {linkedOutfits.map((outfit) => (
                 <Link
@@ -125,7 +165,8 @@ export default async function EditItemPage({ params }: PageProps) {
               ))}
             </div>
           </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )

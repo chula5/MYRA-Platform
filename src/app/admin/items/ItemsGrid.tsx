@@ -1,15 +1,20 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import StatusBadge from '@/components/admin/StatusBadge'
 import StockBadge from '@/components/admin/StockBadge'
 import type { ItemWithBrand } from '@/lib/admin-queries'
+import { createOutfitFromSelectedItems } from '@/app/admin/items/actions'
 
 export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
+  const router = useRouter()
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
   const [selectMode, setSelectMode] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
 
   function toggle(itemId: string) {
     setSelected((prev) => {
@@ -26,6 +31,21 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
 
   function clearAll() {
     setSelected(new Set())
+  }
+
+  async function handleCreateOutfit() {
+    const chosen = Array.from(selected)
+    if (chosen.length === 0) return
+    setCreating(true)
+    setCreateError(null)
+    const res = await createOutfitFromSelectedItems(chosen)
+    setCreating(false)
+    if (res.error || !res.outfitId || !res.projectId) {
+      setCreateError(res.error ?? 'Could not create outfit')
+      return
+    }
+    // Jump straight into the outfit editor with the items already linked
+    router.push(`/admin/projects/${res.projectId}/outfits/${res.outfitId}/edit`)
   }
 
   async function handleCopySelected() {
@@ -63,8 +83,44 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
 
   return (
     <>
-      {/* Select-mode toggle */}
-      <div className="flex items-center justify-end gap-2 mb-4">
+      {/* Select-mode toolbar */}
+      <div className="flex items-center justify-end gap-2 mb-2 flex-wrap">
+        {selectMode && hasSelection && (
+          <>
+            <span className="text-[10px] tracking-[0.20em] text-[#0A0A0A] mr-1">
+              {selected.size} SELECTED
+            </span>
+            <button
+              type="button"
+              onClick={clearAll}
+              disabled={creating}
+              className="text-[10px] tracking-[0.20em] px-3 py-1.5 border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors duration-200 disabled:opacity-50"
+            >
+              CLEAR
+            </button>
+            <button
+              type="button"
+              onClick={handleCopySelected}
+              disabled={creating}
+              className="text-[10px] tracking-[0.20em] px-3 py-1.5 border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors duration-200 disabled:opacity-50"
+            >
+              {copyState === 'copied'
+                ? 'COPIED ✓'
+                : copyState === 'error'
+                ? 'COPY FAILED'
+                : '⎘ COPY'}
+            </button>
+            <button
+              type="button"
+              onClick={handleCreateOutfit}
+              disabled={creating}
+              className="text-[10px] tracking-[0.20em] px-4 py-1.5 bg-[#0A0A0A] text-white hover:bg-[#333] transition-colors duration-200 disabled:opacity-50"
+            >
+              {creating ? 'CREATING…' : `CREATE OUTFIT → (${selected.size})`}
+            </button>
+            <span className="mx-1 text-[#E2E0DB]">|</span>
+          </>
+        )}
         <button
           type="button"
           onClick={() => {
@@ -89,9 +145,14 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
           </button>
         )}
       </div>
+      {createError && (
+        <p className="text-[10px] tracking-[0.20em] text-[#B83A3A] mb-3 text-right">
+          {createError.toUpperCase()}
+        </p>
+      )}
 
       {/* Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 pb-24">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
         {items.map((item) => {
           const isSelected = selected.has(item.item_id)
           const tile = (
@@ -179,34 +240,6 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
         })}
       </div>
 
-      {/* Sticky selection bar */}
-      {selectMode && hasSelection && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-[#E2E0DB] px-6 py-3 flex items-center justify-between gap-4 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
-          <p className="text-[10px] tracking-[0.20em] text-[#0A0A0A]">
-            {selected.size} SELECTED
-          </p>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={clearAll}
-              className="text-[10px] tracking-[0.20em] px-4 py-2 border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors"
-            >
-              CLEAR
-            </button>
-            <button
-              type="button"
-              onClick={handleCopySelected}
-              className="text-[10px] tracking-[0.20em] px-5 py-2 bg-[#0A0A0A] text-white hover:bg-[#333] transition-colors"
-            >
-              {copyState === 'copied'
-                ? 'COPIED ✓'
-                : copyState === 'error'
-                ? 'COPY FAILED'
-                : '⎘ COPY SELECTED'}
-            </button>
-          </div>
-        </div>
-      )}
     </>
   )
 }

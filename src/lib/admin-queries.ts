@@ -302,13 +302,17 @@ export async function getItem(id: string): Promise<ItemWithBrand | null> {
   }
 }
 
+// Returns every item that can be used in the composer — drafts, ready, and
+// live. Archived items are excluded. The composer treats drafts as composable
+// so newly-ingested pieces can be assembled into outfits immediately, without
+// the user having to mark each one ready first.
 export async function getReadyAndLiveItems(): Promise<ItemWithBrand[]> {
   const supabase = createAdminClient()
   try {
     const { data, error } = await supabase
       .from('item')
       .select('*, brand(*)')
-      .in('status', ['ready', 'live'])
+      .in('status', ['draft', 'ready', 'live'])
       .order('created_at', { ascending: false })
     if (error) throw error
     return (data ?? []) as unknown as ItemWithBrand[]

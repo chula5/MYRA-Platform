@@ -3,6 +3,10 @@ import { getAllBrands } from '@/lib/admin-queries'
 import ItemForm from '@/components/admin/ItemForm'
 import { createItem } from '@/app/admin/items/actions'
 
+// Brand list must reflect any brands just added via Batch Ingest or createBrand.
+// Without this, the dropdown serves a stale snapshot of brands.
+export const dynamic = 'force-dynamic'
+
 export default async function NewItemPage() {
   const brands = await getAllBrands()
 

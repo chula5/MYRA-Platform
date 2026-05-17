@@ -72,7 +72,23 @@ export default async function AdminDashboard() {
         <StockSweepButton />
       </div>
 
+      {/* Closed-loop studio — composition + ingest, the scale layer */}
+      <p className="text-[10px] tracking-[0.25em] text-[#6B6B6B] mb-4">CLOSED LOOP</p>
+      <div className="grid grid-cols-2 gap-6 mb-10">
+        <StudioCard
+          title="OUTFIT COMPOSER"
+          description="Pick any item as anchor. The composer assembles coherent outfit candidates from your existing library, ranked by compositional fit. Approve to drop straight into a draft project."
+          href="/admin/composer"
+        />
+        <StudioCard
+          title="BATCH INGEST"
+          description="Paste a list of product URLs or a single collection page. Each item is scraped, pre-scored against the MYRA taxonomy, and queued for one-click bulk approval into the library."
+          href="/admin/ingest"
+        />
+      </div>
+
       {/* Studio areas */}
+      <p className="text-[10px] tracking-[0.25em] text-[#6B6B6B] mb-4">STUDIO</p>
       <div className="grid grid-cols-4 gap-6">
         <StudioCard
           title="ITEM LIBRARY"

@@ -2,6 +2,34 @@
 
 import { createAdminClient } from '@/lib/supabase-server'
 import { revalidatePath } from 'next/cache'
+import {
+  slotForItemType,
+  deriveSlotScores,
+  deriveOutfitLevelScores,
+  type Slot,
+} from '@/lib/composer'
+import type { ItemWithBrand } from '@/lib/admin-queries'
+
+// Supabase PostgrestError objects aren't Error instances, so the default
+// `err instanceof Error ? err.message : ...` pattern silently buries them as
+// "Failed to ...". This pulls the real message + code/details/hint out of
+// whatever shape we got handed.
+function formatError(err: unknown, fallback: string): string {
+  if (!err) return fallback
+  if (typeof err === 'string') return err
+  if (err instanceof Error) return err.message
+  if (typeof err === 'object') {
+    const e = err as { message?: string; details?: string; hint?: string; code?: string }
+    const parts = [
+      e.message,
+      e.details && e.details !== e.message ? e.details : null,
+      e.hint ? `hint: ${e.hint}` : null,
+      e.code ? `(${e.code})` : null,
+    ].filter(Boolean)
+    if (parts.length > 0) return parts.join(' · ')
+  }
+  return fallback
+}
 
 function parseNullableInt(val: FormDataEntryValue | null): number | null {
   if (!val || val === '') return null
@@ -119,7 +147,7 @@ export async function createItem(formData: FormData): Promise<{ error?: string }
     return {}
   } catch (err: unknown) {
     console.error('[createItem]', err)
-    return { error: err instanceof Error ? err.message : 'Failed to create item' }
+    return { error: formatError(err, 'Failed to create item') }
   }
 }
 
@@ -135,7 +163,7 @@ export async function updateItem(itemId: string, formData: FormData): Promise<{ 
     return {}
   } catch (err: unknown) {
     console.error('[updateItem]', err)
-    return { error: err instanceof Error ? err.message : 'Failed to update item' }
+    return { error: formatError(err, 'Failed to update item') }
   }
 }
 
@@ -152,7 +180,7 @@ export async function updateItemStatus(
     return {}
   } catch (err: unknown) {
     console.error('[updateItemStatus]', err)
-    return { error: err instanceof Error ? err.message : 'Failed to update status' }
+    return { error: formatError(err, 'Failed to update status') }
   }
 }
 
@@ -178,10 +206,11 @@ export async function createBrand(
       .single()
     if (error) throw error
     revalidatePath('/admin/items')
+    revalidatePath('/admin/items/new')
     return { brandId: data.brand_id }
   } catch (err: unknown) {
     console.error('[createBrand]', err)
-    return { error: err instanceof Error ? err.message : 'Failed to create brand' }
+    return { error: formatError(err, 'Failed to create brand') }
   }
 }
 
@@ -203,6 +232,146 @@ export async function updateBrand(
     return {}
   } catch (err: unknown) {
     console.error('[updateBrand]', err)
-    return { error: err instanceof Error ? err.message : 'Failed to update brand' }
+    return { error: formatError(err, 'Failed to update brand') }
+  }
+}
+
+// ── Quick-build: turn selected library items into a draft outfit ───────────
+// Triggered from the items grid SELECT ITEMS sticky bar. Bundles the chosen
+// items into a new draft Outfit inside the auto-managed "Library drafts" bucket
+// project, with slot scores pre-filled from each item's per-field scores. The
+// cover image is picked by slot priority (dress > outerwear > top > rest).
+
+const QUICKBUILD_PROJECT_TITLE = 'Library drafts'
+
+export async function createOutfitFromSelectedItems(
+  itemIds: string[],
+): Promise<{ outfitId?: string; projectId?: string; error?: string }> {
+  if (!itemIds || itemIds.length === 0) return { error: 'Select at least one item' }
+
+  const supabase = createAdminClient()
+  try {
+    // Load each selected item with its brand
+    const itemRows = await Promise.all(
+      itemIds.map(async (id) => {
+        const { data, error } = await supabase
+          .from('item')
+          .select('*, brand(*)')
+          .eq('item_id', id)
+          .single()
+        if (error) return null
+        return data as unknown as ItemWithBrand | null
+      }),
+    )
+
+    if (itemRows.some((i) => !i)) return { error: 'One or more items not found' }
+    const items = itemRows as ItemWithBrand[]
+
+    // Derive slot per item from item_type
+    const entries = items.map((item) => ({ item, slot: slotForItemType(item.item_type) }))
+
+    // Cover image picked by slot priority — the most outfit-defining piece first
+    const slotPriority: Slot[] = [
+      'dress', 'outerwear', 'top', 'bottom', 'shoe', 'bag', 'jewellery', 'accessory',
+    ]
+    const sortedForCover = [...entries].sort(
+      (a, b) => slotPriority.indexOf(a.slot) - slotPriority.indexOf(b.slot),
+    )
+    const cover = sortedForCover[0]
+
+    // Ensure the "Library drafts" bucket project exists
+    let projectId: string
+    {
+      const { data: existing } = await supabase
+        .from('admin_project')
+        .select('project_id')
+        .eq('title', QUICKBUILD_PROJECT_TITLE)
+        .eq('status', 'draft')
+        .limit(1)
+      const row = (existing ?? [])[0] as { project_id: string } | undefined
+      if (row) {
+        projectId = row.project_id
+      } else {
+        const { data: created, error: projErr } = await supabase
+          .from('admin_project')
+          .insert([{
+            title: QUICKBUILD_PROJECT_TITLE,
+            status: 'draft',
+            outfit_ids: [],
+            notes:
+              'Auto-created bucket for outfits assembled by selecting items in the library. Move outfits into a named project before publishing.',
+          }])
+          .select('project_id')
+          .single()
+        if (projErr) throw projErr
+        projectId = (created as { project_id: string }).project_id
+      }
+    }
+
+    // Slot scores derived from the items themselves
+    const slotScores = deriveSlotScores(entries)
+    // Outfit-level averages — cover acts as the implicit anchor for averaging
+    const additions = entries.filter((e) => e.item.item_id !== cover.item.item_id)
+    const outfitLevel = deriveOutfitLevelScores(cover.item, additions)
+
+    const allBrandIds = Array.from(
+      new Set(entries.map((e) => e.item.brand_id).filter((id): id is string => !!id)),
+    )
+
+    const aestheticLabel = `LIBRARY BUILD · ${cover.item.product_name.toUpperCase()}`
+
+    // Create the outfit
+    const { data: outfit, error: outfitErr } = await supabase
+      .from('outfit')
+      .insert([{
+        image_url: cover.item.image_url,
+        aesthetic_label: aestheticLabel,
+        occasion_tags: [],
+        source_brand_ids: allBrandIds,
+        status: 'draft',
+        project_id: projectId,
+        admin_notes:
+          'Created from selected items in the library. Review and refine before publishing.',
+        formality: 3, planning: 3, wearer_priority: 3, time_of_day: 3,
+        ...outfitLevel,
+        ...slotScores,
+      }])
+      .select('outfit_id')
+      .single()
+    if (outfitErr) throw outfitErr
+
+    const outfitId = (outfit as { outfit_id: string }).outfit_id
+
+    // Link items into outfit_item rows
+    const outfitItemRows = entries.map((entry, idx) => ({
+      outfit_id: outfitId,
+      item_id: entry.item.item_id,
+      slot: entry.slot,
+      sort_order: idx,
+    }))
+    const { error: linkErr } = await supabase.from('outfit_item').insert(outfitItemRows)
+    if (linkErr) throw linkErr
+
+    // Append outfit_id to project.outfit_ids so the project view lists it
+    const { data: project } = await supabase
+      .from('admin_project')
+      .select('outfit_ids')
+      .eq('project_id', projectId)
+      .single()
+    const newIds = [
+      ...((project as { outfit_ids: string[] } | null)?.outfit_ids ?? []),
+      outfitId,
+    ]
+    await supabase
+      .from('admin_project')
+      .update({ outfit_ids: newIds })
+      .eq('project_id', projectId)
+
+    revalidatePath(`/admin/projects/${projectId}`)
+    revalidatePath('/admin/items')
+    return { outfitId, projectId }
+  } catch (err: unknown) {
+    console.error('[createOutfitFromSelectedItems]', err)
+    return { error: formatError(err, 'Failed to create outfit') }
   }
 }

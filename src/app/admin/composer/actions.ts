@@ -1,0 +1,323 @@
+'use server'
+
+import { createAdminClient } from '@/lib/supabase-server'
+import { getItem, getReadyAndLiveItems, type ItemWithBrand } from '@/lib/admin-queries'
+import {
+  generateCandidates,
+  deriveSlotScores,
+  deriveOutfitLevelScores,
+  slotForItemType,
+  slotPlanForAnchor,
+  pairCompat,
+  type Slot,
+} from '@/lib/composer'
+import { revalidatePath } from 'next/cache'
+
+// ── Compose ──────────────────────────────────────────────────────────────────
+
+export interface ComposedCandidatePayload {
+  candidateIndex: number
+  score: number
+  items: Array<{
+    slot: Slot
+    item_id: string
+    product_name: string
+    brand_name: string | null
+    image_url: string
+    compat: number
+  }>
+}
+
+export interface SlotPlanPayload {
+  anchorSlot: Slot
+  required: Slot[]
+  optional: Slot[]
+}
+
+export async function composeForAnchor(
+  anchorItemId: string,
+): Promise<{
+  anchor?: ItemWithBrand
+  candidates?: ComposedCandidatePayload[]
+  slotPlan?: SlotPlanPayload
+  error?: string
+}> {
+  try {
+    const anchor = await getItem(anchorItemId)
+    if (!anchor) return { error: 'Anchor item not found' }
+
+    const library = await getReadyAndLiveItems()
+    if (library.length < 3) {
+      return { error: 'Library needs at least three ready/live items to compose against' }
+    }
+
+    const raw = generateCandidates({ anchor, library })
+
+    const candidates: ComposedCandidatePayload[] = raw.map((c, idx) => ({
+      candidateIndex: idx,
+      score: Number(c.score.toFixed(3)),
+      items: c.items.map(({ item, slot }) => ({
+        slot,
+        item_id: item.item_id,
+        product_name: item.product_name,
+        brand_name: item.brand?.name ?? null,
+        image_url: item.image_url,
+        compat: Number((c.breakdown.find(b => b.itemId === item.item_id)?.compatWithAnchor ?? 0).toFixed(3)),
+      })),
+    }))
+
+    const anchorSlot = slotForItemType(anchor.item_type)
+    const plan = slotPlanForAnchor(anchorSlot)
+    const slotPlan: SlotPlanPayload = {
+      anchorSlot,
+      required: plan.required,
+      optional: plan.optional,
+    }
+
+    return { anchor, candidates, slotPlan }
+  } catch (err: unknown) {
+    console.error('[composeForAnchor]', err)
+    return { error: err instanceof Error ? err.message : 'Compose failed' }
+  }
+}
+
+// ── Swap options ─────────────────────────────────────────────────────────────
+// Given an anchor and a slot, return the best-ranked library items in that slot
+// (excluding anything already used in the current candidate). Used by the
+// per-item SWAP picker on candidate cards.
+
+export interface SwapOption {
+  item_id: string
+  product_name: string
+  brand_name: string | null
+  image_url: string
+  item_type: string
+  compat: number
+}
+
+export async function getSwapOptions(
+  anchorItemId: string,
+  slot: Slot,
+  excludeItemIds: string[],
+  limit = 16,
+): Promise<{ options?: SwapOption[]; error?: string }> {
+  try {
+    const anchor = await getItem(anchorItemId)
+    if (!anchor) return { error: 'Anchor not found' }
+
+    const library = await getReadyAndLiveItems()
+    const excluded = new Set([anchor.item_id, ...excludeItemIds])
+
+    const options: SwapOption[] = library
+      .filter((i) => !excluded.has(i.item_id) && slotForItemType(i.item_type) === slot)
+      .map((item) => ({
+        item_id: item.item_id,
+        product_name: item.product_name,
+        brand_name: item.brand?.name ?? null,
+        image_url: item.image_url,
+        item_type: item.item_type,
+        compat: Number(pairCompat(anchor, item).total.toFixed(3)),
+      }))
+      .sort((a, b) => b.compat - a.compat)
+      .slice(0, limit)
+
+    return { options }
+  } catch (err: unknown) {
+    console.error('[getSwapOptions]', err)
+    return { error: err instanceof Error ? err.message : 'Swap lookup failed' }
+  }
+}
+
+// ── Rescore ──────────────────────────────────────────────────────────────────
+// Recompute a candidate's coherence + per-item compat after the user edits its
+// items via swap/remove. Mirrors the aggregation in generateCandidates so the
+// displayed score stays accurate.
+
+export async function rescoreCandidate(
+  anchorItemId: string,
+  additions: Array<{ itemId: string; slot: Slot }>,
+): Promise<{ score?: number; itemCompat?: Record<string, number>; error?: string }> {
+  try {
+    const anchor = await getItem(anchorItemId)
+    if (!anchor) return { error: 'Anchor not found' }
+
+    if (additions.length === 0) return { score: 0, itemCompat: {} }
+
+    const items = await Promise.all(additions.map((a) => getItem(a.itemId)))
+    if (items.some((i) => !i)) return { error: 'One or more items missing' }
+    const entries = (items as ItemWithBrand[]).map((item, i) => ({ item, slot: additions[i].slot }))
+
+    const itemCompat: Record<string, number> = {}
+    let sum = 0
+    let weight = 0
+    for (const { item } of entries) {
+      const c = pairCompat(anchor, item).total
+      itemCompat[item.item_id] = Number(c.toFixed(3))
+      sum += c * 2
+      weight += 2
+    }
+    for (let i = 0; i < entries.length; i++) {
+      for (let j = i + 1; j < entries.length; j++) {
+        sum += pairCompat(entries[i].item, entries[j].item).total
+        weight += 1
+      }
+    }
+    const score = weight > 0 ? sum / weight : 0
+    return { score: Number(score.toFixed(3)), itemCompat }
+  } catch (err: unknown) {
+    console.error('[rescoreCandidate]', err)
+    return { error: err instanceof Error ? err.message : 'Rescore failed' }
+  }
+}
+
+// ── Anchor search ────────────────────────────────────────────────────────────
+
+export async function searchAnchorItems(query: string): Promise<{
+  data?: Array<{ item_id: string; product_name: string; image_url: string; brand_name: string | null; item_type: string }>
+  error?: string
+}> {
+  const supabase = createAdminClient()
+  try {
+    let req = supabase
+      .from('item')
+      .select('item_id, product_name, image_url, item_type, brand:brand_id(name)')
+      .in('status', ['draft', 'ready', 'live'])
+      .order('created_at', { ascending: false })
+      .limit(60)
+
+    const q = query.trim()
+    if (q) req = req.ilike('product_name', `%${q}%`)
+
+    const { data, error } = await req
+    if (error) throw error
+
+    return {
+      data: (data ?? []).map((r: any) => ({
+        item_id: r.item_id,
+        product_name: r.product_name,
+        image_url: r.image_url,
+        item_type: r.item_type,
+        brand_name: r.brand?.name ?? null,
+      })),
+    }
+  } catch (err: unknown) {
+    console.error('[searchAnchorItems]', err)
+    return { error: err instanceof Error ? err.message : 'Search failed' }
+  }
+}
+
+// ── Approve candidate → draft Outfit ─────────────────────────────────────────
+
+const COMPOSER_PROJECT_TITLE = 'Composer drafts'
+
+async function ensureComposerProject(): Promise<{ projectId?: string; error?: string }> {
+  const supabase = createAdminClient()
+  try {
+    const { data: existing } = await supabase
+      .from('admin_project')
+      .select('project_id')
+      .eq('title', COMPOSER_PROJECT_TITLE)
+      .eq('status', 'draft')
+      .limit(1)
+
+    const row = (existing ?? [])[0] as { project_id: string } | undefined
+    if (row) return { projectId: row.project_id }
+
+    const { data: created, error } = await supabase
+      .from('admin_project')
+      .insert([{
+        title: COMPOSER_PROJECT_TITLE,
+        status: 'draft',
+        outfit_ids: [],
+        notes: 'Auto-created bucket for outfits approved from the Composer. Move outfits into a named project before publishing.',
+      }])
+      .select('project_id')
+      .single()
+    if (error) throw error
+    return { projectId: (created as { project_id: string }).project_id }
+  } catch (err: unknown) {
+    console.error('[ensureComposerProject]', err)
+    return { error: err instanceof Error ? err.message : 'Could not create composer project' }
+  }
+}
+
+export async function approveCandidate(
+  anchorItemId: string,
+  itemIds: string[],
+  slots: Slot[],
+): Promise<{ outfitId?: string; projectId?: string; error?: string }> {
+  if (itemIds.length !== slots.length) return { error: 'itemIds and slots length mismatch' }
+
+  const supabase = createAdminClient()
+  try {
+    const anchor = await getItem(anchorItemId)
+    if (!anchor) return { error: 'Anchor item not found' }
+
+    const additionItems = await Promise.all(itemIds.map(id => getItem(id)))
+    if (additionItems.some(i => !i)) return { error: 'One or more candidate items not found' }
+
+    const additions = (additionItems as ItemWithBrand[]).map((item, i) => ({ item, slot: slots[i] }))
+
+    const projRes = await ensureComposerProject()
+    if (projRes.error || !projRes.projectId) return { error: projRes.error ?? 'No project' }
+    const projectId = projRes.projectId
+
+    const anchorSlot = slotForItemType(anchor.item_type)
+    const allEntries = [{ item: anchor, slot: anchorSlot }, ...additions]
+
+    const slotScores = deriveSlotScores(allEntries)
+    const outfitLevel = deriveOutfitLevelScores(anchor, additions)
+
+    const allBrandIds = Array.from(new Set(
+      allEntries.map(e => e.item.brand_id).filter((id): id is string => !!id),
+    ))
+
+    const aestheticLabel = `COMPOSED · ${anchor.product_name.toUpperCase()}`
+
+    const { data: outfit, error: outfitErr } = await supabase
+      .from('outfit')
+      .insert([{
+        image_url: anchor.image_url,
+        aesthetic_label: aestheticLabel,
+        occasion_tags: [],
+        source_brand_ids: allBrandIds,
+        status: 'draft',
+        project_id: projectId,
+        admin_notes: 'Generated by Outfit Composer. Review and refine before publishing.',
+        formality: 3, planning: 3, wearer_priority: 3, time_of_day: 3,
+        ...outfitLevel,
+        ...slotScores,
+      }])
+      .select('outfit_id')
+      .single()
+
+    if (outfitErr) throw outfitErr
+    const outfitId = (outfit as { outfit_id: string }).outfit_id
+
+    // Link outfit_item rows for anchor + every addition
+    const outfitItemRows = allEntries.map((entry, idx) => ({
+      outfit_id: outfitId,
+      item_id: entry.item.item_id,
+      slot: entry.slot,
+      sort_order: idx,
+    }))
+    const { error: linkErr } = await supabase.from('outfit_item').insert(outfitItemRows)
+    if (linkErr) throw linkErr
+
+    // Append outfit_id to project.outfit_ids
+    const { data: project } = await supabase
+      .from('admin_project')
+      .select('outfit_ids')
+      .eq('project_id', projectId)
+      .single()
+    const newIds = [...((project as { outfit_ids: string[] } | null)?.outfit_ids ?? []), outfitId]
+    await supabase.from('admin_project').update({ outfit_ids: newIds }).eq('project_id', projectId)
+
+    revalidatePath('/admin/composer')
+    revalidatePath(`/admin/projects/${projectId}`)
+    return { outfitId, projectId }
+  } catch (err: unknown) {
+    console.error('[approveCandidate]', err)
+    return { error: err instanceof Error ? err.message : 'Approve failed' }
+  }
+}

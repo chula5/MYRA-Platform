@@ -32,9 +32,6 @@ export default function Navigation({ transparent = false }: { transparent?: bool
           <Link href="/feed" className={`text-[9px] sm:text-[10px] tracking-[0.12em] sm:tracking-[0.15em] hover:opacity-60 transition-colors duration-500 whitespace-nowrap ${textColor}`}>
             THE EDIT
           </Link>
-          <Link href="/" className={`text-[9px] sm:text-[10px] tracking-[0.12em] sm:tracking-[0.15em] hover:opacity-60 transition-colors duration-500 whitespace-nowrap ${textColor}`}>
-            LOOKBOOK
-          </Link>
           <Link href="/feed" className={`hidden md:block text-[10px] tracking-[0.15em] hover:opacity-60 transition-colors duration-500 whitespace-nowrap ${textColor}`}>
             OCCASIONS
           </Link>
