@@ -130,26 +130,14 @@ export default function LandingPage() {
           <div className="border-t border-[#E2E0DB] mb-8" />
 
           {/* Footer links */}
-          <div className="flex justify-between items-center flex-wrap gap-4">
-            <div className="flex gap-8">
-              <Link href="/" className="text-[11px] tracking-[0.22em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors duration-300">
-                LOOKBOOK
-              </Link>
-            </div>
-            <div className="flex gap-8">
-              <a href="#" className="text-[11px] tracking-[0.22em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors duration-300">
-                PRIVACY
-              </a>
-              <a href="#" className="text-[11px] tracking-[0.22em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors duration-300">
-                TERMS
-              </a>
-            </div>
+          <div className="flex justify-end items-center flex-wrap gap-8">
+            <a href="#" className="text-[11px] tracking-[0.22em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors duration-300">
+              PRIVACY
+            </a>
+            <a href="#" className="text-[11px] tracking-[0.22em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors duration-300">
+              TERMS
+            </a>
           </div>
-
-          {/* Copyright */}
-          <p className="text-center text-[10px] tracking-[0.15em] text-[#A8A8A4] mt-8">
-            © 2024 MYRA
-          </p>
         </div>
       </footer>
     </>
