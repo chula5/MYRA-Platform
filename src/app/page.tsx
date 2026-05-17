@@ -69,6 +69,41 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ── Staggered outfit photos ──────────────────────────── */}
+      <section className="bg-[#FAFAF8] pb-32 sm:pb-40 px-4 sm:px-10">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-6">
+            {/* Left — top aligned */}
+            <div className="sm:mt-0">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/VB.png"
+                alt=""
+                className="w-full h-auto block hover:opacity-90 transition-opacity duration-500"
+              />
+            </div>
+            {/* Middle — offset down */}
+            <div className="sm:mt-32">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/Blue%20Ruffle.png"
+                alt=""
+                className="w-full h-auto block hover:opacity-90 transition-opacity duration-500"
+              />
+            </div>
+            {/* Right — partial offset */}
+            <div className="sm:mt-16">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/DRIES%20Skirt.png"
+                alt=""
+                className="w-full h-auto block hover:opacity-90 transition-opacity duration-500"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ── Sticky waitlist CTA — fixed to bottom of viewport ── */}
       <div className="fixed bottom-0 left-0 right-0 z-40 pointer-events-none flex justify-center pb-5 sm:pb-7">
         <div className="pointer-events-auto">
