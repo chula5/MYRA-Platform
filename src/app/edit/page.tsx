@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation'
-import { createServerClient } from '@/lib/supabase-server'
+import { createServerClient, createAdminClient } from '@/lib/supabase-server'
 import FeedClient from '@/app/feed/FeedClient'
 import { earlyAccessSignOut } from '@/app/earlyaccess/actions'
+import type { OutfitWithItems } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,6 +12,16 @@ export default async function EditPage() {
 
   // Early-access (or admin) sign-in required.
   if (!user) redirect('/earlyaccess')
+
+  // Fetch LIVE outfits WITH their items via the admin (service-role) client so
+  // source items / hotspots show even when the items would be hidden by RLS.
+  const admin = createAdminClient()
+  const { data: liveRaw } = await admin
+    .from('outfit')
+    .select('*, outfit_item(*, item(*, brand(*)))')
+    .eq('status', 'live')
+    .order('published_at', { ascending: false })
+  const liveOutfits = (liveRaw ?? []) as unknown as OutfitWithItems[]
 
   return (
     <div className="min-h-screen bg-white">
@@ -30,8 +41,9 @@ export default async function EditPage() {
         </div>
       </header>
 
-      {/* The Edit — occasion search + browse (read-only). Reads live outfits. */}
-      <FeedClient showAllOption />
+      {/* The Edit — occasion search + browse (read-only). Items come with the
+          server-fetched outfits, so Source Items / hotspots work. */}
+      <FeedClient showAllOption injectedOutfits={liveOutfits} detailHrefBase="/edit" />
     </div>
   )
 }

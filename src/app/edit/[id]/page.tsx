@@ -1,0 +1,58 @@
+import Link from 'next/link'
+import { redirect } from 'next/navigation'
+import { createServerClient } from '@/lib/supabase-server'
+import { getOutfit } from '@/lib/admin-queries'
+import OutfitDetailClient from '@/app/outfit/[id]/OutfitDetailClient'
+import { earlyAccessSignOut } from '@/app/earlyaccess/actions'
+
+export const dynamic = 'force-dynamic'
+
+interface PageProps {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ styleItem?: string; itemType?: string; mode?: string }>
+}
+
+export default async function EditDetailPage({ params, searchParams }: PageProps) {
+  const supabase = await createServerClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/earlyaccess')
+
+  const { id } = await params
+  const { styleItem, itemType, mode } = await searchParams
+
+  // Service-role read so the outfit's items are visible (RLS hides draft items).
+  const outfit = await getOutfit(id)
+
+  return (
+    <div className="min-h-screen bg-white">
+      <header className="flex items-center justify-between px-8 h-14 border-b border-[#E2E0DB]">
+        <Link href="/edit" className="text-[13px] tracking-[0.30em] text-[#0A0A0A]">MYRA</Link>
+        <div className="flex items-center gap-5">
+          <Link href="/edit" className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors">← THE EDIT</Link>
+          <form action={earlyAccessSignOut}>
+            <button
+              type="submit"
+              className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#0A0A0A] border border-[#E2E0DB] hover:border-[#0A0A0A] px-4 py-2 transition-colors duration-300"
+            >
+              SIGN OUT
+            </button>
+          </form>
+        </div>
+      </header>
+
+      {!outfit ? (
+        <p className="text-[11px] tracking-[0.25em] text-[#A8A8A4] py-24 text-center">OUTFIT NOT FOUND</p>
+      ) : (
+        <OutfitDetailClient
+          outfitId={id}
+          initialOutfit={outfit}
+          showBrowseButtons
+          linkBase="/edit"
+          styleItemId={styleItem}
+          itemType={itemType}
+          mode={mode as 'similar' | 'explore' | undefined}
+        />
+      )}
+    </div>
+  )
+}
