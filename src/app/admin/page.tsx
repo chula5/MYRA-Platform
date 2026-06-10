@@ -91,6 +91,16 @@ export default async function AdminDashboard() {
       <p className="text-[10px] tracking-[0.25em] text-[#6B6B6B] mb-4">STUDIO</p>
       <div className="grid grid-cols-4 gap-6">
         <StudioCard
+          title="THE EDIT — PREVIEW"
+          description="See your LIVE outfits exactly as users will in The Edit, and click through to test the experience — privately, before it goes public. Includes a (locked) Go Live button."
+          href="/admin/the-edit"
+        />
+        <StudioCard
+          title="EARLY ACCESS"
+          description="Create email + password logins for people to preview The Edit at /earlyaccess. They can search occasions and browse outfits only — no admin access."
+          href="/admin/early-access"
+        />
+        <StudioCard
           title="ITEM LIBRARY"
           description="Upload, score, and manage individual items before adding them to outfits."
           href="/admin/items"

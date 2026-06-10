@@ -4,6 +4,7 @@ import { getProject, getProjectOutfits } from '@/lib/admin-queries'
 import StatusBadge from '@/components/admin/StatusBadge'
 import { updateProjectStatus, publishProject } from '@/app/admin/projects/actions'
 import EditableProjectTitle from './EditableProjectTitle'
+import ProjectOutfitsGrid from './ProjectOutfitsGrid'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -112,62 +113,8 @@ export default async function ProjectPage({ params }: PageProps) {
         )}
       </div>
 
-      {/* Outfits grid */}
-      <div className="grid grid-cols-3 gap-6">
-        {outfits.map((outfit) => (
-          <div
-            key={outfit.outfit_id}
-            className="border border-[#E2E0DB] bg-white rounded-[3px] overflow-hidden group hover:border-[#C4A882] transition-colors duration-400"
-          >
-            {/* Image */}
-            <div
-              className="bg-[#F2F2F0] overflow-hidden"
-              style={{ aspectRatio: '3/4' }}
-            >
-              {outfit.image_url ? (
-                <img
-                  src={outfit.image_url}
-                  alt={outfit.aesthetic_label}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <span className="text-[9px] tracking-[0.15em] text-[#A8A8A4]">NO IMAGE</span>
-                </div>
-              )}
-            </div>
-
-            {/* Card body */}
-            <div className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-[11px] tracking-[0.15em] text-[#0A0A0A] truncate">
-                  {((outfit as any).celebrity_name || outfit.aesthetic_label).toUpperCase()}
-                </p>
-                <StatusBadge status={outfit.status} />
-              </div>
-              <Link
-                href={`/admin/projects/${id}/outfits/${outfit.outfit_id}/edit`}
-                className="text-[9px] tracking-[0.20em] text-[#6B6B6B] group-hover:text-[#0A0A0A] transition-colors duration-300"
-              >
-                EDIT →
-              </Link>
-            </div>
-          </div>
-        ))}
-
-        {/* Add outfit card */}
-        <Link
-          href={`/admin/projects/${id}/outfits/new`}
-          className="border border-dashed border-[#E2E0DB] bg-transparent rounded-[3px] flex items-center justify-center min-h-[280px] hover:border-[#0A0A0A] transition-colors duration-400 group"
-        >
-          <div className="text-center">
-            <p className="text-[24px] text-[#E2E0DB] group-hover:text-[#A8A8A4] transition-colors duration-300 mb-2">+</p>
-            <p className="text-[10px] tracking-[0.20em] text-[#A8A8A4] group-hover:text-[#0A0A0A] transition-colors duration-300">
-              ADD OUTFIT
-            </p>
-          </div>
-        </Link>
-      </div>
+      {/* Outfits grid — with bulk "select outfits → go live" */}
+      <ProjectOutfitsGrid projectId={id} outfits={outfits as any} />
 
       {/* Project meta */}
       <div className="mt-12 pt-8 border-t border-[#E2E0DB]">

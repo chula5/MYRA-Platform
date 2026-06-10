@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useEffect } from 'react'
+import { useState, useTransition, useEffect, useRef } from 'react'
 import {
   composeForAnchor,
   searchAnchorItems,
@@ -107,6 +107,8 @@ export default function ComposerClient({
   const [swap, setSwap] = useState<{ candidateIdx: number; itemIdx: number | null; slot: Slot } | null>(null)
   const [swapOptions, setSwapOptions] = useState<SwapOption[]>([])
   const [swapLoading, setSwapLoading] = useState(false)
+  const [swapQuery, setSwapQuery] = useState('')
+  const swapDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Auto-compose if landed with an anchor in the URL
   useEffect(() => {
@@ -160,34 +162,45 @@ export default function ComposerClient({
     return plan.optional.filter((s) => !filled.has(s))
   }
 
-  async function openSwap(candidateIdx: number, itemIdx: number, slot: Slot) {
-    setSwap({ candidateIdx, itemIdx, slot })
+  // Shared fetch for the swap/add picker. `query` empty → relevant same-slot
+  // suggestions; non-empty → search the whole library across every slot.
+  async function fetchSwapOptions(slot: Slot, excludeIds: string[], query: string) {
+    if (!anchor) { setSwapLoading(false); return }
     setSwapLoading(true)
-    setSwapOptions([])
-    const candidate = candidates[candidateIdx]
-    const current = itemsFor(candidateIdx, candidate)
-    if (!anchor) {
-      setSwapLoading(false)
-      return
-    }
-    const res = await getSwapOptions(anchor.item_id, slot, current.map((i) => i.item_id))
+    const res = await getSwapOptions(anchor.item_id, slot, excludeIds, query)
     setSwapOptions(res.options ?? [])
     setSwapLoading(false)
   }
 
-  async function openAddSlot(candidateIdx: number, slot: Slot) {
-    setSwap({ candidateIdx, itemIdx: null, slot })
-    setSwapLoading(true)
+  async function openSwap(candidateIdx: number, itemIdx: number, slot: Slot) {
+    setSwap({ candidateIdx, itemIdx, slot })
+    setSwapQuery('')
     setSwapOptions([])
     const candidate = candidates[candidateIdx]
     const current = itemsFor(candidateIdx, candidate)
-    if (!anchor) {
-      setSwapLoading(false)
-      return
-    }
-    const res = await getSwapOptions(anchor.item_id, slot, current.map((i) => i.item_id))
-    setSwapOptions(res.options ?? [])
-    setSwapLoading(false)
+    await fetchSwapOptions(slot, current.map((i) => i.item_id), '')
+  }
+
+  async function openAddSlot(candidateIdx: number, slot: Slot) {
+    setSwap({ candidateIdx, itemIdx: null, slot })
+    setSwapQuery('')
+    setSwapOptions([])
+    const candidate = candidates[candidateIdx]
+    const current = itemsFor(candidateIdx, candidate)
+    await fetchSwapOptions(slot, current.map((i) => i.item_id), '')
+  }
+
+  // Debounced search inside the swap picker — searches the full library.
+  function onSwapQueryChange(q: string) {
+    setSwapQuery(q)
+    if (!swap) return
+    const candidate = candidates[swap.candidateIdx]
+    const current = itemsFor(swap.candidateIdx, candidate)
+    const excludeIds = current.map((i) => i.item_id)
+    if (swapDebounce.current) clearTimeout(swapDebounce.current)
+    swapDebounce.current = setTimeout(() => {
+      fetchSwapOptions(swap.slot, excludeIds, q)
+    }, 220)
   }
 
   async function performSwap(option: SwapOption) {
@@ -195,7 +208,8 @@ export default function ComposerClient({
     const candidate = candidates[swap.candidateIdx]
     const current = itemsFor(swap.candidateIdx, candidate)
     const replacement: CandidateItem = {
-      slot: swap.slot,
+      // Use the picked item's OWN slot so a cross-slot pick lands correctly.
+      slot: option.slot,
       item_id: option.item_id,
       product_name: option.product_name,
       brand_name: option.brand_name,
@@ -566,6 +580,12 @@ export default function ComposerClient({
                       DISCARD
                     </button>
                   </div>
+
+                  {state?.approved && (
+                    <p className="mt-3 text-[9px] tracking-[0.18em] text-[#C4A882] leading-relaxed">
+                      ✦ REFINED HIGGSFIELD SHOOT GENERATING IN THE BACKGROUND (~30–60S) — IT&rsquo;LL BE SAVED TO CLOUDINARY AND SET AS THE DRAFT&rsquo;S DISPLAY IMAGE.
+                    </p>
+                  )}
                 </div>
               )
             })}
@@ -583,13 +603,15 @@ export default function ComposerClient({
             className="bg-white border border-[#E2E0DB] w-full max-w-3xl mx-6 p-6 max-h-[80vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-baseline justify-between mb-5 pb-3 border-b border-[#E2E0DB]">
+            <div className="flex items-baseline justify-between mb-4 pb-3 border-b border-[#E2E0DB]">
               <div>
                 <p className="text-[10px] tracking-[0.25em] text-[#6B6B6B]">
                   {swap.itemIdx === null ? 'ADD' : 'SWAP'} · {SLOT_LABEL[swap.slot] ?? swap.slot.toUpperCase()}
                 </p>
                 <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4] mt-1">
-                  RANKED BY COMPATIBILITY WITH ANCHOR
+                  {swapQuery.trim()
+                    ? 'SEARCHING ALL ITEMS · MOST RELEVANT FIRST'
+                    : 'SUGGESTED FOR THIS SLOT · SEARCH TO PICK ANY ITEM'}
                 </p>
               </div>
               <button
@@ -601,11 +623,21 @@ export default function ComposerClient({
               </button>
             </div>
 
+            {/* Search the entire library — pick any item, any slot */}
+            <input
+              type="text"
+              autoFocus
+              placeholder="SEARCH ANY ITEM BY NAME, BRAND OR TYPE…"
+              value={swapQuery}
+              onChange={(e) => onSwapQueryChange(e.target.value)}
+              className="w-full border border-[#E2E0DB] bg-white px-4 py-2.5 text-[12px] tracking-[0.10em] text-[#0A0A0A] focus:outline-none focus:border-[#0A0A0A] mb-5"
+            />
+
             {swapLoading ? (
               <p className="text-[10px] tracking-[0.20em] text-[#A8A8A4] py-10 text-center">LOADING…</p>
             ) : swapOptions.length === 0 ? (
               <p className="text-[10px] tracking-[0.20em] text-[#A8A8A4] py-10 text-center">
-                NO OTHER ITEMS IN THIS SLOT IN YOUR LIBRARY.
+                {swapQuery.trim() ? 'NO ITEMS MATCH THAT SEARCH.' : 'NO ITEMS IN THIS SLOT — SEARCH TO PICK ANY ITEM.'}
               </p>
             ) : (
               <div className="grid grid-cols-4 gap-3">
@@ -629,9 +661,16 @@ export default function ComposerClient({
                     <p className="text-[10px] tracking-[0.10em] text-[#0A0A0A] truncate">
                       {opt.product_name.toUpperCase()}
                     </p>
-                    <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4] mt-0.5">
-                      COMPAT {(opt.compat * 100).toFixed(0)}
-                    </p>
+                    <div className="flex items-center justify-between mt-0.5">
+                      <span className="text-[9px] tracking-[0.20em] text-[#A8A8A4]">
+                        COMPAT {(opt.compat * 100).toFixed(0)}
+                      </span>
+                      {!opt.sameSlot && (
+                        <span className="text-[8px] tracking-[0.15em] text-[#C4A882]">
+                          → {SLOT_LABEL[opt.slot] ?? opt.slot.toUpperCase()}
+                        </span>
+                      )}
+                    </div>
                   </button>
                 ))}
               </div>

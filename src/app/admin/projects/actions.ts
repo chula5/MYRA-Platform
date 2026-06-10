@@ -185,6 +185,35 @@ export async function publishProject(projectId: string): Promise<{ error?: strin
   }
 }
 
+// Bulk-set the status of specific outfits (e.g. select several in a project and
+// send them live together). Mirrors publishProject's outfit update.
+export async function setOutfitsStatus(
+  projectId: string,
+  outfitIds: string[],
+  status: 'live' | 'draft' | 'archived',
+): Promise<{ error?: string; count?: number }> {
+  if (!outfitIds || outfitIds.length === 0) return { error: 'No outfits selected' }
+  const supabase = createAdminClient()
+  try {
+    const patch: Record<string, unknown> = { status }
+    if (status === 'live') patch.published_at = new Date().toISOString()
+
+    const { error } = await (supabase.from('outfit') as any)
+      .update(patch)
+      .in('outfit_id', outfitIds)
+    if (error) throw error
+
+    revalidatePath(`/admin/projects/${projectId}`)
+    revalidatePath('/admin/projects')
+    revalidatePath('/admin/the-edit')
+    revalidatePath('/')
+    return { count: outfitIds.length }
+  } catch (err: unknown) {
+    console.error('[setOutfitsStatus]', err)
+    return { error: err instanceof Error ? err.message : 'Failed to update outfits' }
+  }
+}
+
 export async function createOutfit(
   projectId: string,
   formData: FormData

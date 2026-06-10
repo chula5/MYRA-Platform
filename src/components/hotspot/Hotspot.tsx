@@ -3,8 +3,8 @@
 import { useState } from 'react'
 import type { ItemType } from '@/types/database'
 
-// Temporarily hide the Style-Item hotspots site-wide. Flip to `true` to restore.
-const HOTSPOTS_ENABLED = false
+// Style-Item hotspots site-wide. Flip to `false` to hide.
+const HOTSPOTS_ENABLED = true
 
 interface HotspotProps {
   itemId: string
@@ -80,38 +80,44 @@ export default function Hotspot({
       style={{ left: `${x}%`, top: `${y}%`, transform: 'translate(-50%, -50%)' }}
     >
       {variant === 'feed' ? (
-        // ── Feed — invisible, show pill on hover ───────────────
-        <div className="relative group">
+        // ── Feed — see-through circle that fades in on card hover; reveals a
+        //    "STYLE [item]" label on its own hover; click styles that item.
+        //    stopPropagation/preventDefault so it doesn't trigger the card link.
+        <div className="relative group/hot">
           <button
+            type="button"
             aria-label={`Style ${label}`}
-            onClick={handleClick}
-            className="relative z-10 block w-10 h-10 rounded-full opacity-0"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onStyleItem?.(itemId, itemType) }}
+            className="
+              relative z-10 block w-7 h-7 rounded-full
+              bg-white/40 backdrop-blur-sm border border-white/70
+              shadow-[0_1px_4px_rgba(0,0,0,0.15)]
+              opacity-0 group-hover:opacity-100
+              hover:bg-white/80 hover:scale-110
+              transition-all duration-300 cursor-pointer
+            "
           />
-          {active && (
-            <div
-              className={`
-                absolute top-1/2 -translate-y-1/2 z-20
-                ${pillRight ? 'right-full mr-2' : 'left-full ml-2'}
-                flex items-center gap-1
-                bg-white border border-[#0A0A0A] rounded-full
-                px-2.5 py-1 whitespace-nowrap
-              `}
-            >
-              <button
-                onClick={() => onStyleItem?.(itemId, itemType)}
-                className="text-[10px] tracking-[0.15em] text-[#0A0A0A] flex items-center gap-1"
-              >
-                STYLE {label} <span className="text-sm">↗</span>
-              </button>
-            </div>
-          )}
+          <div
+            className={`
+              absolute top-1/2 -translate-y-1/2 z-20
+              ${pillRight ? 'right-full mr-2' : 'left-full ml-2'}
+              hidden group-hover/hot:flex items-center
+              bg-white border border-[#0A0A0A] rounded-full
+              px-2.5 py-1 whitespace-nowrap pointer-events-none
+            `}
+          >
+            <span className="text-[10px] tracking-[0.15em] text-[#0A0A0A]">
+              STYLE {label} <span className="text-sm">↗</span>
+            </span>
+          </div>
         </div>
       ) : (
         // ── Detail — dot appears when image is hovered, pill on click ──
         <div className="relative group">
           <button
+            type="button"
             aria-label={`Style ${label}`}
-            onClick={handleClick}
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleClick() }}
             className={`
               relative z-10 block w-7 h-7 rounded-full
               bg-white/40 backdrop-blur-sm border border-white/60
@@ -133,7 +139,7 @@ export default function Hotspot({
               `}
             >
               <button
-                onClick={() => onStyleItem?.(itemId, itemType)}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); onStyleItem?.(itemId, itemType) }}
                 className="text-[10px] tracking-[0.15em] text-[#0A0A0A] flex items-center gap-1"
               >
                 STYLE {label} <span className="text-sm">↗</span>

@@ -47,6 +47,18 @@ export default async function AdminLayout({
             COMPOSER
           </a>
           <a
+            href="/admin/the-edit"
+            className="text-[11px] tracking-[0.20em] text-white/70 hover:text-white transition-colors duration-300"
+          >
+            THE EDIT
+          </a>
+          <a
+            href="/admin/early-access"
+            className="text-[11px] tracking-[0.20em] text-white/70 hover:text-white transition-colors duration-300"
+          >
+            EARLY ACCESS
+          </a>
+          <a
             href="/admin/ingest"
             className="text-[11px] tracking-[0.20em] text-white/70 hover:text-white transition-colors duration-300"
           >

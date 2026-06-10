@@ -18,7 +18,23 @@ const PRESET_OCCASIONS = [
   { label: 'BLACK TIE', tag: 'black tie' },
 ]
 
-export default function FeedClient() {
+// Optional props are only used by the admin preview; the public feed renders
+// <FeedClient /> with none, so its behaviour is unchanged.
+//   showAllOption   — adds a "view everything live" shortcut
+//   injectedOutfits — render these server-fetched outfits (with full items, via
+//                     the admin client) instead of fetching with the browser
+//                     client, so source items / hotspots appear even when the
+//                     linked items would be hidden by row-level security
+//   detailHrefBase  — where cards link on click (default public detail route)
+export default function FeedClient({
+  showAllOption = false,
+  injectedOutfits,
+  detailHrefBase = '/outfit',
+}: {
+  showAllOption?: boolean
+  injectedOutfits?: OutfitWithItems[]
+  detailHrefBase?: string
+}) {
   const [occasion, setOccasion] = useState<string | null>(null)
   const [customOccasion, setCustomOccasion] = useState('')
   const [outfits, setOutfits] = useState<OutfitWithItems[]>([])
@@ -36,6 +52,19 @@ export default function FeedClient() {
     currentOffset: number,
     append: boolean
   ) => {
+    // Admin preview: filter the server-injected outfits client-side instead of
+    // querying the browser client (which can't read items hidden by RLS).
+    if (injectedOutfits) {
+      const filtered = tag && tag !== 'all'
+        ? injectedOutfits.filter((o) => (o.occasion_tags ?? []).includes(tag))
+        : injectedOutfits
+      setOutfits(filtered)
+      setHasMore(false)
+      setLoading(false)
+      setLoadingMore(false)
+      return
+    }
+
     const supabase = createClient()
 
     if (currentOffset === 0) setLoading(true)
@@ -71,7 +100,7 @@ export default function FeedClient() {
 
     setLoading(false)
     setLoadingMore(false)
-  }, [])
+  }, [injectedOutfits])
 
   // ── Load when occasion set ─────────────────────────────────
   useEffect(() => {
@@ -104,15 +133,15 @@ export default function FeedClient() {
   const router = useRouter()
 
   const handleStyleItem = (itemId: string, itemType: ItemType, outfit: OutfitWithItems) => {
-    router.push(`/outfit/${outfit.outfit_id}?styleItem=${itemId}&itemType=${itemType}`)
+    router.push(`${detailHrefBase}/${outfit.outfit_id}?styleItem=${itemId}&itemType=${itemType}`)
   }
 
   const handleSimilarLooks = (outfit: OutfitWithItems) => {
-    router.push(`/outfit/${outfit.outfit_id}?mode=similar`)
+    router.push(`${detailHrefBase}/${outfit.outfit_id}?mode=similar`)
   }
 
   const handleExploreStyles = (outfit: OutfitWithItems) => {
-    router.push(`/outfit/${outfit.outfit_id}?mode=explore`)
+    router.push(`${detailHrefBase}/${outfit.outfit_id}?mode=explore`)
   }
 
   // ── Select occasion ────────────────────────────────────────
@@ -140,6 +169,18 @@ export default function FeedClient() {
             WHAT ARE YOU DRESSING FOR?
           </h1>
         </div>
+
+        {/* Admin preview shortcut — show every live outfit regardless of tags */}
+        {showAllOption && (
+          <div className="max-w-[900px] mx-auto mb-6">
+            <button
+              onClick={() => selectOccasion('all')}
+              className="w-full border border-[#0A0A0A] bg-[#0A0A0A] text-white px-4 py-4 text-[11px] tracking-[0.20em] rounded-[3px] hover:bg-[#333] transition-colors duration-300"
+            >
+              ↓ VIEW EVERYTHING LIVE
+            </button>
+          </div>
+        )}
 
         {/* Preset grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 max-w-[900px] mx-auto mb-10">
@@ -216,7 +257,7 @@ export default function FeedClient() {
             YOUR OCCASION
           </p>
           <h2 className="text-[22px] tracking-[0.10em] text-[#0A0A0A]">
-            {occasion.toUpperCase()}
+            {occasion === 'all' ? 'EVERYTHING LIVE' : occasion.toUpperCase()}
           </h2>
         </div>
         <button
@@ -270,6 +311,7 @@ export default function FeedClient() {
               <OutfitCard
                 key={outfit.outfit_id}
                 outfit={outfit}
+                detailHref={`${detailHrefBase}/${outfit.outfit_id}`}
                 onSimilarLooks={handleSimilarLooks}
                 onExploreStyles={handleExploreStyles}
                 onStyleItem={handleStyleItem}

@@ -15,6 +15,9 @@ interface OutfitCardProps {
   onSimilarLooks?: (outfit: OutfitWithItems) => void
   onExploreStyles?: (outfit: OutfitWithItems) => void
   onStyleItem?: (itemId: string, itemType: ItemType, outfit: OutfitWithItems) => void
+  // Where the card image links to. Defaults to the public detail route; the admin
+  // preview overrides this to its own admin detail route.
+  detailHref?: string
 }
 
 export default function OutfitCard({
@@ -22,18 +25,24 @@ export default function OutfitCard({
   onSimilarLooks,
   onExploreStyles,
   onStyleItem,
+  detailHref,
 }: OutfitCardProps) {
   const [sourcePanelOpen, setSourcePanelOpen] = useState(false)
 
-  const items: SourceItemData[] = (outfit.outfit_item ?? []).map((oi) => ({
-    ...oi.item,
-    brand: oi.item.brand,
-  }))
+  // Some outfit_item rows can come back with a null `item` — e.g. the linked
+  // item isn't readable (row-level security hides non-live items) or was removed.
+  // Skip those so the card still renders the items it can show.
+  const items: SourceItemData[] = (outfit.outfit_item ?? [])
+    .filter((oi) => oi.item)
+    .map((oi) => ({
+      ...oi.item,
+      brand: oi.item.brand,
+    }))
 
   return (
     <article className="relative bg-white flex flex-col">
       {/* Image container — 3:4 portrait */}
-      <Link href={`/outfit/${outfit.outfit_id}`} className="block relative aspect-[3/4] w-full overflow-hidden">
+      <Link href={detailHref ?? `/outfit/${outfit.outfit_id}`} className="group block relative aspect-[3/4] w-full overflow-hidden">
         <Image
           src={outfit.image_url || '/placeholder-outfit.jpg'}
           alt={outfit.aesthetic_label}
@@ -42,8 +51,8 @@ export default function OutfitCard({
           sizes="(max-width: 768px) 100vw, 33vw"
         />
 
-        {/* Hotspot dots — positioned on items */}
-        {(outfit.outfit_item ?? []).map((oi) => {
+        {/* Hotspot dots — positioned on items (skip rows whose item didn't load) */}
+        {(outfit.outfit_item ?? []).filter((oi) => oi.item).map((oi) => {
           // Hotspot positions would ideally come from DB
           // Using placeholder positions for now
           const pos = getPlaceholderPosition(oi.slot)

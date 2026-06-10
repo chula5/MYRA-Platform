@@ -23,6 +23,10 @@ interface OutfitDetailClientProps {
   styleItemId?: string
   itemType?: string
   mode?: 'similar' | 'explore'
+  // Admin preview overrides — public route passes none, behaviour unchanged:
+  initialOutfit?: OutfitWithItems   // server-fetched (admin client) so items show despite RLS
+  showBrowseButtons?: boolean       // force-enable SIMILAR / EXPLORE
+  linkBase?: string                 // base path for related/result links (default public detail)
 }
 
 export default function OutfitDetailClient({
@@ -30,19 +34,26 @@ export default function OutfitDetailClient({
   styleItemId,
   itemType,
   mode,
+  initialOutfit,
+  showBrowseButtons,
+  linkBase = '/outfit',
 }: OutfitDetailClientProps) {
   const router = useRouter()
-  const [outfit, setOutfit] = useState<OutfitWithItems | null>(null)
+  const showBrowse = showBrowseButtons ?? SHOW_BROWSE_BUTTONS
+  const [outfit, setOutfit] = useState<OutfitWithItems | null>(initialOutfit ?? null)
   const [styleItemOutfits, setStyleItemOutfits] = useState<OutfitWithItems[]>([])
   const [relatedOutfits, setRelatedOutfits] = useState<OutfitWithItems[]>([])
   const [sourcePanelOpen, setSourcePanelOpen] = useState(false)
   const [activeStyleItemId, setActiveStyleItemId] = useState<string | null>(styleItemId ?? null)
   const [activeItemType, setActiveItemType] = useState<ItemType | null>(itemType as ItemType ?? null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!initialOutfit)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
 
   // ── Fetch main outfit ─────────────────────────────────────
   useEffect(() => {
+    // Admin preview supplies the outfit (with items) directly — skip the browser
+    // fetch, which can't read items hidden by row-level security.
+    if (initialOutfit) return
     async function load() {
       setLoading(true)
       const supabase = createClient()
@@ -69,7 +80,7 @@ export default function OutfitDetailClient({
     }
 
     load()
-  }, [outfitId])
+  }, [outfitId, initialOutfit])
 
   // ── Fetch style item outfits ──────────────────────────────
   const fetchStyleItemOutfits = useCallback(async (itemId: string) => {
@@ -324,7 +335,7 @@ export default function OutfitDetailClient({
           <CardButton variant="filled" onClick={() => setSourcePanelOpen(true)}>
             SOURCE ITEMS
           </CardButton>
-          {SHOW_BROWSE_BUTTONS && (
+          {showBrowse && (
             <>
               <CardButton variant="outlined" onClick={handleSimilarLooks}>
                 SIMILAR LOOKS
@@ -347,8 +358,9 @@ export default function OutfitDetailClient({
               <OutfitCard
                 key={o.outfit_id}
                 outfit={o}
-                onSimilarLooks={() => router.push(`/outfit/${o.outfit_id}?mode=similar`)}
-                onExploreStyles={() => router.push(`/outfit/${o.outfit_id}?mode=explore`)}
+                detailHref={`${linkBase}/${o.outfit_id}`}
+                onSimilarLooks={() => router.push(`${linkBase}/${o.outfit_id}?mode=similar`)}
+                onExploreStyles={() => router.push(`${linkBase}/${o.outfit_id}?mode=explore`)}
                 onStyleItem={(itemId, iType) => handleStyleItem(itemId, iType)}
               />
             ))}
@@ -368,8 +380,9 @@ export default function OutfitDetailClient({
               <OutfitCard
                 key={o.outfit_id}
                 outfit={o}
-                onSimilarLooks={() => router.push(`/outfit/${o.outfit_id}?mode=similar`)}
-                onExploreStyles={() => router.push(`/outfit/${o.outfit_id}?mode=explore`)}
+                detailHref={`${linkBase}/${o.outfit_id}`}
+                onSimilarLooks={() => router.push(`${linkBase}/${o.outfit_id}?mode=similar`)}
+                onExploreStyles={() => router.push(`${linkBase}/${o.outfit_id}?mode=explore`)}
                 onStyleItem={(itemId, iType) => handleStyleItem(itemId, iType)}
               />
             ))}

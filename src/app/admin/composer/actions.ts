@@ -12,6 +12,8 @@ import {
   type Slot,
 } from '@/lib/composer'
 import { revalidatePath } from 'next/cache'
+import { generateHiggsfieldShootForOutfit } from '@/app/admin/projects/higgsfield-actions'
+import { generateOccasionTags } from '@/app/admin/ai/occasion-tags'
 
 // ── Compose ──────────────────────────────────────────────────────────────────
 
@@ -82,9 +84,16 @@ export async function composeForAnchor(
 }
 
 // ── Swap options ─────────────────────────────────────────────────────────────
-// Given an anchor and a slot, return the best-ranked library items in that slot
-// (excluding anything already used in the current candidate). Used by the
-// per-item SWAP picker on candidate cards.
+// Powers the per-item SWAP / ADD picker on candidate cards.
+//
+//  - No query  → "most relevant": items in the requested slot, ranked by
+//                 compatibility with the anchor (the default suggestions).
+//  - A query   → searches the WHOLE library (every slot) by product name or
+//                 brand, so you can pick literally any item. Same-slot matches
+//                 still float to the top, but nothing is filtered out by slot.
+//
+// Either way the anchor and items already in the candidate are excluded, and the
+// item's true slot is returned so a cross-slot pick lands in the right place.
 
 export interface SwapOption {
   item_id: string
@@ -92,6 +101,8 @@ export interface SwapOption {
   brand_name: string | null
   image_url: string
   item_type: string
+  slot: Slot
+  sameSlot: boolean
   compat: number
 }
 
@@ -99,7 +110,8 @@ export async function getSwapOptions(
   anchorItemId: string,
   slot: Slot,
   excludeItemIds: string[],
-  limit = 16,
+  query = '',
+  limit = 60,
 ): Promise<{ options?: SwapOption[]; error?: string }> {
   try {
     const anchor = await getItem(anchorItemId)
@@ -107,18 +119,39 @@ export async function getSwapOptions(
 
     const library = await getReadyAndLiveItems()
     const excluded = new Set([anchor.item_id, ...excludeItemIds])
+    const q = query.trim().toLowerCase()
 
-    const options: SwapOption[] = library
-      .filter((i) => !excluded.has(i.item_id) && slotForItemType(i.item_type) === slot)
-      .map((item) => ({
-        item_id: item.item_id,
-        product_name: item.product_name,
-        brand_name: item.brand?.name ?? null,
-        image_url: item.image_url,
-        item_type: item.item_type,
-        compat: Number(pairCompat(anchor, item).total.toFixed(3)),
-      }))
-      .sort((a, b) => b.compat - a.compat)
+    let pool = library.filter((i) => !excluded.has(i.item_id))
+
+    if (q) {
+      // Search the entire library across every slot.
+      pool = pool.filter(
+        (i) =>
+          i.product_name?.toLowerCase().includes(q) ||
+          (i.brand?.name?.toLowerCase().includes(q) ?? false) ||
+          i.item_type?.toLowerCase().includes(q),
+      )
+    } else {
+      // Default suggestions: only items in the requested slot.
+      pool = pool.filter((i) => slotForItemType(i.item_type) === slot)
+    }
+
+    const options: SwapOption[] = pool
+      .map((item) => {
+        const itemSlot = slotForItemType(item.item_type)
+        return {
+          item_id: item.item_id,
+          product_name: item.product_name,
+          brand_name: item.brand?.name ?? null,
+          image_url: item.image_url,
+          item_type: item.item_type,
+          slot: itemSlot,
+          sameSlot: itemSlot === slot,
+          compat: Number(pairCompat(anchor, item).total.toFixed(3)),
+        }
+      })
+      // Most relevant first: matching slot before others, then by compatibility.
+      .sort((a, b) => Number(b.sameSlot) - Number(a.sameSlot) || b.compat - a.compat)
       .slice(0, limit)
 
     return { options }
@@ -315,6 +348,20 @@ export async function approveCandidate(
 
     revalidatePath('/admin/composer')
     revalidatePath(`/admin/projects/${projectId}`)
+
+    // Auto-generate a Refined Higgsfield shoot in the background. Fire-and-forget
+    // so Approve to Draft returns instantly; the image attaches to the outfit's
+    // additional_images (~30–60s, ~1 credit) and shows when the draft is opened.
+    // Never let a shoot failure break approval.
+    void generateHiggsfieldShootForOutfit(outfitId, 'E5').catch((err) =>
+      console.error('[approveCandidate→higgsfield]', err),
+    )
+
+    // Auto-generate occasion tags from the outfit's items (fast; fire-and-forget).
+    void generateOccasionTags(outfitId, { skipIfTagged: true }).catch((err) =>
+      console.error('[approveCandidate→occasionTags]', err),
+    )
+
     return { outfitId, projectId }
   } catch (err: unknown) {
     console.error('[approveCandidate]', err)

@@ -11,6 +11,15 @@ import { scrapeProductInfo } from '@/app/admin/ai/scrape-product'
 import { scrapeAndUploadToCloudinary } from '@/app/admin/items/cloudinary-upload'
 import { quickAddItemToOutfit, updateQuickItem, reorderOutfitItems, addItemToOutfit, searchItemInventory } from '@/app/admin/projects/actions'
 import { generateCanvaDeck } from '@/app/admin/projects/canva-actions'
+import { generateHiggsfieldShoot } from '@/app/admin/projects/higgsfield-actions'
+import { generateOccasionTags } from '@/app/admin/ai/occasion-tags'
+import {
+  HIGGSFIELD_POSE_OPTIONS,
+  buildGenerationPrompt,
+  buildReferenceUrls,
+  type HiggsfieldCombo,
+  type ShootItem,
+} from '@/lib/higgsfield-shoot'
 import { addOutfitToLookbook, removeOutfitFromLookbook } from '@/app/admin/lookbooks/actions'
 import type { Lookbook } from '@/types/database'
 
@@ -209,6 +218,20 @@ export default function OutfitBuilder({
   const [lookbookLoading, setLookbookLoading] = useState<Set<string>>(new Set())
   const [lookbookError, setLookbookError] = useState<string | null>(null)
 
+  // ── Occasion tag suggestion (AI, from the outfit's items) ──────
+  const [tagsBusy, setTagsBusy] = useState(false)
+  const [tagsError, setTagsError] = useState<string | null>(null)
+
+  async function handleSuggestTags() {
+    if (!outfit || tagsBusy) return
+    setTagsBusy(true)
+    setTagsError(null)
+    const res = await generateOccasionTags(outfit.outfit_id)
+    setTagsBusy(false)
+    if (res.error) { setTagsError(res.error); return }
+    if (res.tags) setTags(res.tags)
+  }
+
   function handleTagKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Enter' || e.key === ',') {
       e.preventDefault()
@@ -295,6 +318,13 @@ export default function OutfitBuilder({
   const [canvaJobError, setCanvaJobError] = useState<string | null>(null)
   const [canvaEditUrl, setCanvaEditUrl] = useState<string | null>(null)
   const [canvaPreviewUrl, setCanvaPreviewUrl] = useState<string | null>(null)
+
+  // Higgsfield shoot state — busyKey is the pose currently generating (null = idle)
+  const [higgsfieldBusyKey, setHiggsfieldBusyKey] = useState<string | null>(null)
+  const higgsfieldBusy = higgsfieldBusyKey !== null
+  const [higgsfieldError, setHiggsfieldError] = useState<string | null>(null)
+  const [higgsfieldResult, setHiggsfieldResult] = useState<string | null>(null)
+  const [higgsfieldCombo, setHiggsfieldCombo] = useState('')
 
   function buildCanvaPrompt(): string {
     if (!outfit) return ''
@@ -396,6 +426,46 @@ STEPS:
       setTimeout(() => setCanvaCopied(false), 2500)
     } catch { /* ignore */ }
     setCanvaPromptOpen(true)
+  }
+
+  // ── Higgsfield editorial shoot ─────────────────────────────────
+  // Normalise this outfit's items into the shared lib's ShootItem shape, so the
+  // pose buttons and the composer auto-trigger build identical prompts/refs.
+  function higgsfieldShootItems(): ShootItem[] {
+    return orderedItems
+      .filter((oi) => oi.item)
+      .map((oi) => {
+        const it: any = oi.item
+        return {
+          product_name: it?.product_name,
+          item_type: it?.item_type,
+          material_primary: it?.material_primary,
+          slot: oi.slot,
+          image_url: it?.image_url,
+          brand_name: it?.brand?.name ?? null,
+        }
+      })
+  }
+
+  async function handleHiggsfieldShoot(combo: HiggsfieldCombo) {
+    if (!outfit || higgsfieldBusy) return
+    const shootItems = higgsfieldShootItems()
+    const prompt = buildGenerationPrompt(combo, shootItems)
+    const refs = buildReferenceUrls(combo, shootItems)
+
+    setHiggsfieldCombo(combo.combo)
+    setHiggsfieldError(null)
+    setHiggsfieldResult(null)
+    setHiggsfieldBusyKey(combo.key)
+
+    const res = await generateHiggsfieldShoot(outfit.outfit_id, prompt, refs)
+    setHiggsfieldBusyKey(null)
+    if (res.error) { setHiggsfieldError(res.error); return }
+    if (res.imageUrl) {
+      setHiggsfieldResult(res.imageUrl)
+      // Surface it immediately in the PHOTOS strip (server already saved it too).
+      setAdditionalImages((prev) => (prev.includes(res.imageUrl!) ? prev : [...prev, res.imageUrl!]))
+    }
   }
 
   // Manual add retailer URL blur handler — same flow: scrape info + upload image to Cloudinary
@@ -750,7 +820,20 @@ STEPS:
             />
           </div>
           <div className="mb-4">
-            <label className={labelClass}>OCCASION TAGS</label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className={`${labelClass} mb-0`}>OCCASION TAGS</label>
+              {outfit && (
+                <button
+                  type="button"
+                  onClick={handleSuggestTags}
+                  disabled={tagsBusy}
+                  title="Generate occasion/season tags from this outfit's items with AI"
+                  className="text-[9px] tracking-[0.18em] text-[#6B6B6B] hover:text-[#0A0A0A] border border-[#E2E0DB] hover:border-[#0A0A0A] px-2.5 py-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {tagsBusy ? 'SUGGESTING…' : '✦ SUGGEST TAGS'}
+                </button>
+              )}
+            </div>
             <input
               type="text"
               value={tagInput}
@@ -759,6 +842,9 @@ STEPS:
               placeholder="TYPE TAG AND PRESS ENTER OR COMMA"
               className={inputClass}
             />
+            {tagsError && (
+              <p className="mt-1.5 text-[9px] tracking-[0.12em] text-red-500">{tagsError}</p>
+            )}
             {tags.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-2">
                 {tags.map((tag) => (
@@ -1344,6 +1430,76 @@ STEPS:
                   >
                     or copy Claude prompt instead
                   </button>
+                </>
+              )}
+            </div>
+
+            {/* ── HIGGSFIELD SHOOT ──────────────────────────────── */}
+            <div className="mt-10">
+              <p className={sectionHeadingClass}>HIGGSFIELD SHOOT</p>
+              {!outfit ? (
+                <p className="text-[10px] tracking-[0.15em] text-[#A8A8A4]">
+                  SAVE THE OUTFIT FIRST TO GENERATE.
+                </p>
+              ) : (
+                <>
+                  <p className="text-[9px] tracking-[0.18em] text-[#A8A8A4] mb-2 leading-relaxed">
+                    CHOOSE A POSE — EACH GENERATES A SHOOT FROM THIS OUTFIT&rsquo;S ITEM PHOTOS (~1 CREDIT)
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {HIGGSFIELD_POSE_OPTIONS.map((opt) => {
+                      const isThis = higgsfieldBusyKey === opt.key
+                      return (
+                        <button
+                          key={opt.key}
+                          type="button"
+                          onClick={() => handleHiggsfieldShoot(opt)}
+                          disabled={higgsfieldBusy || orderedItems.length === 0}
+                          title={opt.combo}
+                          className={`flex flex-col items-start text-left border px-3 py-2 transition-colors duration-200 disabled:cursor-not-allowed ${
+                            isThis
+                              ? 'border-[#0A0A0A] bg-[#0A0A0A] text-white'
+                              : 'border-[#E2E0DB] bg-white text-[#0A0A0A] hover:border-[#0A0A0A] disabled:opacity-40'
+                          }`}
+                        >
+                          <span className="text-[10px] tracking-[0.15em]">
+                            {isThis ? 'GENERATING… ⟳' : opt.label}
+                          </span>
+                          <span className={`text-[8px] tracking-[0.12em] mt-0.5 ${isThis ? 'text-white/70' : 'text-[#A8A8A4]'}`}>
+                            {opt.sublabel}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {orderedItems.length === 0 && (
+                    <p className="mt-2 text-[9px] tracking-[0.12em] text-[#A8A8A4]">ADD ITEM PHOTOS TO THE OUTFIT FIRST.</p>
+                  )}
+
+                  {higgsfieldBusy && (
+                    <p className="mt-2 text-[9px] tracking-[0.12em] text-[#A8A8A4] leading-relaxed animate-pulse">
+                      {higgsfieldCombo ? higgsfieldCombo + ' — ' : ''}generating on your Higgsfield account… (~30–60s)
+                    </p>
+                  )}
+
+                  {higgsfieldResult && !higgsfieldBusy && (
+                    <div className="mt-3 border border-green-300 bg-green-50 p-3">
+                      <p className="text-[10px] tracking-[0.18em] text-green-800 mb-1">✓ ADDED TO THIS OUTFIT&rsquo;S PHOTOS</p>
+                      {higgsfieldCombo && (
+                        <p className="text-[8px] tracking-[0.12em] text-green-700 mb-2">{higgsfieldCombo}</p>
+                      )}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={higgsfieldResult} alt="Higgsfield shoot" className="w-full h-auto border border-green-200 mb-2" />
+                      <p className="text-[9px] tracking-[0.12em] text-[#6B6B6B]">
+                        It&rsquo;s in the PHOTOS strip above — click SET AS DISPLAY to make it the hero image, or pick another pose to generate again.
+                      </p>
+                    </div>
+                  )}
+
+                  {higgsfieldError && !higgsfieldBusy && (
+                    <p className="mt-2 text-[9px] tracking-[0.12em] text-red-500 leading-relaxed">{higgsfieldError}</p>
+                  )}
                 </>
               )}
             </div>

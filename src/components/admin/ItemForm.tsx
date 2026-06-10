@@ -6,7 +6,8 @@ import type { Item, Brand, ItemType, ColourFamily, MaterialCategory, JewelleryFi
 import ScoreInput from '@/components/admin/ScoreInput'
 import StockBadge from '@/components/admin/StockBadge'
 import { createBrand, updateBrand } from '@/app/admin/items/actions'
-import { analyseProductUrl } from '@/app/admin/items/analyse-url'
+import { analyseProductUrl, type AnalysedProduct } from '@/app/admin/items/analyse-url'
+import { analyseProductImage } from '@/app/admin/items/analyse-image'
 import { scrapeAndUploadToCloudinary, uploadBase64ToCloudinary } from '@/app/admin/items/cloudinary-upload'
 import { checkItemStock } from '@/app/admin/items/stock-check'
 import { discoverSimilarForItem } from '@/app/admin/items/discover-similar'
@@ -82,6 +83,9 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
   // Auto-fill controlled state
   const [analysing, setAnalysing] = useState(false)
   const [analyseError, setAnalyseError] = useState<string | null>(null)
+  const [analysingImage, setAnalysingImage] = useState(false)
+  const [analyseImageError, setAnalyseImageError] = useState<string | null>(null)
+  const [analyseImageDone, setAnalyseImageDone] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
   const [uploadImageError, setUploadImageError] = useState<string | null>(null)
   const [checkingStock, setCheckingStock] = useState(false)
@@ -123,16 +127,10 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
   const formRef = useRef<HTMLFormElement>(null)
   const isJewellery = JEWELLERY_TYPES.includes(itemType)
 
-  // ── URL analysis ──────────────────────────────────────────────
-  async function handleUrlAnalyse(url: string) {
-    if (!url || !url.startsWith('http')) return
-    setAnalysing(true)
-    setAnalyseError(null)
-    const result = await analyseProductUrl(url)
-    setAnalysing(false)
-    if (result.error) { setAnalyseError(result.error); return }
-    const d = result.data!
-
+  // ── Apply an AI analysis result to the form (shared by URL + image) ──
+  // Only non-null fields overwrite — so the image pass can fill gaps the URL
+  // scrape left empty, and vice versa, without wiping existing values.
+  function applyAnalysis(d: AnalysedProduct) {
     if (d.product_name) setProductName(d.product_name)
     if ((d as any).price) setPrice((d as any).price)
     if ((d as any).currency) setCurrency((d as any).currency)
@@ -152,7 +150,7 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
       if (matched) setBrandId(matched.brand_id)
     }
 
-    // Update scores
+    // Update scores — null leaves the previous value untouched
     setScores((prev) => ({
       fit: d.fit ?? prev.fit,
       length: d.length ?? prev.length,
@@ -170,6 +168,35 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
       jewellery_scale: d.jewellery_scale ?? prev.jewellery_scale,
       jewellery_formality: d.jewellery_formality ?? prev.jewellery_formality,
     }))
+  }
+
+  // ── URL analysis ──────────────────────────────────────────────
+  async function handleUrlAnalyse(url: string) {
+    if (!url || !url.startsWith('http')) return
+    setAnalysing(true)
+    setAnalyseError(null)
+    const result = await analyseProductUrl(url)
+    setAnalysing(false)
+    if (result.error) { setAnalyseError(result.error); return }
+    applyAnalysis(result.data!)
+  }
+
+  // ── Image analysis (fallback when the URL can't be scraped) ────
+  // Reads the 1-5 features straight off the product photo via Claude vision.
+  async function handleImageAnalyse() {
+    const url = imageUrl.trim()
+    if (!url || !url.startsWith('http')) {
+      setAnalyseImageError('Paste an image URL above first (e.g. a Cloudinary URL)')
+      return
+    }
+    setAnalysingImage(true)
+    setAnalyseImageError(null)
+    setAnalyseImageDone(false)
+    const result = await analyseProductImage(url)
+    setAnalysingImage(false)
+    if (result.error) { setAnalyseImageError(result.error); return }
+    applyAnalysis(result.data!)
+    setAnalyseImageDone(true)
   }
 
   async function handleDiscoverSimilar() {
@@ -361,7 +388,13 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
             </p>
           )}
           {analyseError && (
-            <p className="mt-1.5 text-[10px] tracking-[0.15em] text-red-400">{analyseError}</p>
+            <div className="mt-1.5">
+              <p className="text-[10px] tracking-[0.15em] text-red-400">{analyseError}</p>
+              <p className="mt-1 text-[10px] tracking-[0.15em] text-[#A8A8A4]">
+                Can&apos;t scrape this URL? Save the product image to Cloudinary below,
+                then use ANALYSE IMAGE to fill the scores from the photo.
+              </p>
+            </div>
           )}
 
           {/* Stock status row */}
@@ -570,6 +603,32 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
               {uploadImageError && (
                 <p className="text-[10px] tracking-[0.12em] text-red-400">{uploadImageError}</p>
               )}
+
+              {/* Analyse image — vision fallback when the retailer URL can't be scraped */}
+              <div className="mt-2 flex items-center gap-3 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handleImageAnalyse}
+                  disabled={analysingImage || !imageUrl}
+                  title="Read the item's features straight off this image with AI and fill the 1-5 scores below"
+                  className="border border-[#E2E0DB] bg-white px-3 py-1.5 text-[10px] tracking-[0.12em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] disabled:opacity-40 transition-colors whitespace-nowrap"
+                >
+                  {analysingImage ? 'ANALYSING IMAGE...' : '✦ ANALYSE IMAGE'}
+                </button>
+                {analysingImage && (
+                  <span className="text-[10px] tracking-[0.12em] text-[#A8A8A4] animate-pulse">
+                    Reading features from the photo with AI...
+                  </span>
+                )}
+                {analyseImageDone && !analysingImage && (
+                  <span className="text-[10px] tracking-[0.12em] text-[#6B6B6B]">
+                    ✓ Scores filled from image — review below
+                  </span>
+                )}
+                {analyseImageError && (
+                  <span className="text-[10px] tracking-[0.12em] text-red-400">{analyseImageError}</span>
+                )}
+              </div>
             </div>
             {imageUrl && (
               <img src={imageUrl} alt="preview" className="w-16 h-16 object-cover border border-[#E2E0DB] shrink-0" />
