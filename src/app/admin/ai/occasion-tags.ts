@@ -55,15 +55,26 @@ OUTFIT SCORES (1-5):
 ITEMS:
 ${items.join('\n')}
 
-Return ONLY a JSON array of 3 to 6 short, lowercase occasion/season tags that genuinely suit THESE specific pieces. Use real things people dress for — occasions, settings, events or seasons. Examples of the vocabulary (pick what fits, you are not limited to these): "summer", "spring", "autumn", "winter", "weekend away", "beach day", "boat day", "wimbledon", "garden party", "city break", "holiday", "dinner", "date night", "lunch", "wedding guest", "gallery opening", "work", "creative event".
+Return ONLY a JSON array of 3 to 6 short, lowercase occasion/season tags that genuinely suit THESE specific pieces.
+
+PRIMARY OCCASIONS — these are the filters in the app. Use the EXACT phrase for every one the outfit genuinely suits (include as many as fit):
+- "weekend away"
+- "work meeting"
+- "wedding guest"
+- "date night"
+- "city summer evening"  (a polished but not black-tie summer evening look for the city — dinner / drinks / gallery)
+- "casual summer weekend"  (relaxed, light, daytime summer pieces — easy weekend dressing)
+
+You MAY also add a few extra season/setting tags from: "summer", "spring", "autumn", "winter", "holiday", "beach day", "garden party", "dinner", "lunch", "city break".
 
 Rules:
 - Infer SEASON from the materials: linen / cotton / lightweight / open sandals → spring/summer; wool / knitwear / heavy / boots / coats → autumn/winter.
-- Infer the EVENT/SETTING from formality, time of day and the pieces.
+- Infer the EVENT/SETTING from formality and time of day: higher formality + evening → "city summer evening" / "date night" / "wedding guest"; relaxed + daytime + light fabrics → "casual summer weekend" / "weekend away".
+- A summer-fabric daytime look should almost always include "casual summer weekend"; a smarter summer-fabric evening look should include "city summer evening".
 - Be specific and useful. Do NOT use vague tags like "casual", "everyday", "versatile" or "stylish".
 - Only include occasions the outfit genuinely suits — do not over-reach.
 
-Return just the array, e.g. ["summer","weekend away","beach day","garden party"]`
+Return just the array, e.g. ["casual summer weekend","summer","weekend away","lunch"]`
 
   try {
     const client = new Anthropic({ apiKey })

@@ -12,8 +12,8 @@ const PRESET_OCCASIONS = [
   { label: 'WORK MEETING', tag: 'work meeting' },
   { label: 'WEDDING GUEST', tag: 'wedding guest' },
   { label: 'DATE NIGHT', tag: 'date night' },
-  { label: 'CREATIVE EVENT', tag: 'creative event' },
-  { label: 'BLACK TIE', tag: 'black tie' },
+  { label: 'CITY SUMMER EVENING', tag: 'city summer evening' },
+  { label: 'CASUAL SUMMER WEEKEND', tag: 'casual summer weekend' },
 ]
 
 // Optional props are only used by the admin preview; the public feed renders
