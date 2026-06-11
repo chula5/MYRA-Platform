@@ -96,14 +96,14 @@ export default function OutfitCard({
             SOURCE ITEMS
           </CardButton>
           <CardButton
-            variant="outlined"
+            variant="filled"
             onClick={() => onSimilarLooks?.(outfit)}
             className="flex-1"
           >
             SIMILAR LOOKS
           </CardButton>
           <CardButton
-            variant="outlined"
+            variant="filled"
             onClick={() => onExploreStyles?.(outfit)}
             className="flex-1"
           >

@@ -326,10 +326,10 @@ export default function OutfitDetailClient({
           </CardButton>
           {showBrowse && (
             <>
-              <CardButton variant="outlined" onClick={handleSimilarLooks}>
+              <CardButton variant="filled" onClick={handleSimilarLooks}>
                 SIMILAR LOOKS
               </CardButton>
-              <CardButton variant="outlined" onClick={handleExploreStyles}>
+              <CardButton variant="filled" onClick={handleExploreStyles}>
                 EXPLORE STYLES
               </CardButton>
             </>
