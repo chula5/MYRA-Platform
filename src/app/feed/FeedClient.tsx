@@ -16,6 +16,53 @@ const PRESET_OCCASIONS = [
   { label: 'CASUAL SUMMER WEEKEND', tag: 'casual summer weekend' },
 ]
 
+// ── Anti-repetition ordering ──────────────────────────────────
+// Classify an outfit by its dominant garment (dress / skirt / trousers / top)
+// so the feed can avoid showing two of the same kind back-to-back while scrolling.
+function outfitCategory(o: OutfitWithItems): string {
+  const types = (o.outfit_item ?? [])
+    .filter((oi) => oi.item)
+    .map((oi) => String(oi.item.item_type))
+  if (types.some((t) => ['mini_dress', 'midi_dress', 'maxi_dress', 'shirt_dress', 'slip_dress'].includes(t))) return 'dress'
+  if (types.includes('skirt')) return 'skirt'
+  if (types.some((t) => ['trousers', 'jeans', 'shorts'].includes(t))) return 'trousers'
+  if (types.some((t) => ['shirt', 'blouse', 't-shirt', 'knitwear', 'corset', 'bodysuit'].includes(t))) return 'top'
+  return 'other'
+}
+
+// Greedily reorder so consecutive outfits have different garment categories
+// (deterministic — same input always yields the same order, so pagination is stable).
+function antiRepeatOrder(list: OutfitWithItems[]): OutfitWithItems[] {
+  const buckets: Record<string, OutfitWithItems[]> = {}
+  for (const o of list) {
+    const c = outfitCategory(o)
+    ;(buckets[c] ||= []).push(o)
+  }
+  const cats = Object.keys(buckets)
+  if (cats.length <= 1) return list // nothing to interleave
+
+  const result: OutfitWithItems[] = []
+  let lastCat: string | null = null
+  while (result.length < list.length) {
+    // Pick the largest remaining bucket whose category isn't the previous one.
+    let bestCat: string | null = null
+    let bestLen = -1
+    for (const cat of cats) {
+      const arr = buckets[cat]
+      if (arr.length === 0 || cat === lastCat) continue
+      if (arr.length > bestLen) { bestLen = arr.length; bestCat = cat }
+    }
+    if (bestCat === null) {
+      // Only the previous category remains — append whatever's left (unavoidable run).
+      for (const cat of cats) { const arr = buckets[cat]; while (arr.length) result.push(arr.shift()!) }
+      break
+    }
+    result.push(buckets[bestCat].shift()!)
+    lastCat = bestCat
+  }
+  return result
+}
+
 // Optional props are only used by the admin preview; the public feed renders
 // <FeedClient /> with none, so its behaviour is unchanged.
 //   showAllOption   — adds a "view everything live" shortcut
@@ -58,9 +105,12 @@ export default function FeedClient({
       const filtered = tag && tag !== 'all'
         ? injectedOutfits.filter((o) => (o.occasion_tags ?? []).includes(tag))
         : injectedOutfits
+      // Reorder so two of the same garment type don't sit next to each other,
+      // then paginate the interleaved sequence (stable across load-more).
+      const ordered = antiRepeatOrder(filtered)
       const end = currentOffset + LIMIT
-      setOutfits(filtered.slice(0, end))
-      setHasMore(filtered.length > end)
+      setOutfits(ordered.slice(0, end))
+      setHasMore(ordered.length > end)
       setLoading(false)
       setLoadingMore(false)
       return
