@@ -8,8 +8,6 @@ import type { OutfitWithItems, ItemType } from '@/types/database'
 
 // ── Preset occasions ──────────────────────────────────────────
 const PRESET_OCCASIONS = [
-  { label: "FRIEND'S POP-UP", tag: "friends pop-up" },
-  { label: 'RESTAURANT OPENING', tag: 'restaurant opening' },
   { label: 'WEEKEND AWAY', tag: 'weekend away' },
   { label: 'WORK MEETING', tag: 'work meeting' },
   { label: 'WEDDING GUEST', tag: 'wedding guest' },
@@ -183,7 +181,7 @@ export default function FeedClient({
         )}
 
         {/* Preset grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 max-w-[900px] mx-auto mb-10">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-w-[900px] mx-auto mb-10">
           {PRESET_OCCASIONS.map((occ) => (
             <button
               key={occ.tag}
