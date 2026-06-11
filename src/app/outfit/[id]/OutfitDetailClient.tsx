@@ -8,6 +8,7 @@ import SourcePanel from '@/components/source-panel/SourcePanel'
 import OutfitCard from '@/components/outfit-card/OutfitCard'
 import CardButton from '@/components/ui/CardButton'
 import { createClient } from '@/lib/supabase'
+import { getRelatedOutfits } from './related-actions'
 import type { OutfitWithItems, Item, Brand, ItemType } from '@/types/database'
 
 // Feature flag — hide the SIMILAR LOOKS / EXPLORE STYLES buttons on the
@@ -43,6 +44,9 @@ export default function OutfitDetailClient({
   const [outfit, setOutfit] = useState<OutfitWithItems | null>(initialOutfit ?? null)
   const [styleItemOutfits, setStyleItemOutfits] = useState<OutfitWithItems[]>([])
   const [relatedOutfits, setRelatedOutfits] = useState<OutfitWithItems[]>([])
+  // Which related view is showing — drives the results heading (the URL `mode`
+  // is only the initial value; clicking the buttons updates this).
+  const [activeMode, setActiveMode] = useState<'similar' | 'explore' | null>(mode ?? null)
   const [sourcePanelOpen, setSourcePanelOpen] = useState(false)
   const [activeStyleItemId, setActiveStyleItemId] = useState<string | null>(styleItemId ?? null)
   const [activeItemType, setActiveItemType] = useState<ItemType | null>(itemType as ItemType ?? null)
@@ -117,41 +121,16 @@ export default function OutfitDetailClient({
   }, [outfitId])
 
   // ── Fetch similar / explore outfits ───────────────────────
+  // Server action: SIMILAR = same silhouette as this outfit (long dress → long
+  // dresses); EXPLORE = same occasion but a different silhouette. The two sets
+  // are disjoint, so the buttons never return overlapping outfits.
   const fetchRelatedOutfits = useCallback(async (
     currentOutfit: OutfitWithItems,
     fetchMode: 'similar' | 'explore'
   ) => {
-    const supabase = createClient()
-
-    let query = supabase
-      .from('outfit')
-      .select(`
-        *,
-        outfit_item (
-          *,
-          item (
-            *,
-            brand (*)
-          )
-        )
-      `)
-      .eq('status', 'live')
-      .neq('outfit_id', currentOutfit.outfit_id)
-      .limit(6)
-
-    if (fetchMode === 'similar') {
-      query = query
-        .eq('formality', currentOutfit.formality)
-        .overlaps('occasion_tags', currentOutfit.occasion_tags)
-    } else {
-      // Explore — same occasion, different construction/aesthetic
-      query = query
-        .overlaps('occasion_tags', currentOutfit.occasion_tags)
-        .neq('construction', currentOutfit.construction)
-    }
-
-    const { data } = await query
-    setRelatedOutfits((data ?? []) as OutfitWithItems[])
+    setActiveMode(fetchMode)
+    const res = await getRelatedOutfits(currentOutfit.outfit_id, fetchMode)
+    setRelatedOutfits(res.outfits ?? [])
   }, [])
 
   // ── Effects ───────────────────────────────────────────────
@@ -373,7 +352,7 @@ export default function OutfitDetailClient({
         <div className="mt-16">
           <div className="border-t border-[#E2E0DB] mb-8" />
           <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-8 text-center">
-            {mode === 'similar' ? 'SIMILAR LOOKS' : 'EXPLORE STYLES'}
+            {activeMode === 'explore' ? 'EXPLORE STYLES' : 'SIMILAR LOOKS'}
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {relatedOutfits.map((o) => (
