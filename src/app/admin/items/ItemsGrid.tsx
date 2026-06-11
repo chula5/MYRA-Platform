@@ -6,7 +6,7 @@ import Link from 'next/link'
 import StatusBadge from '@/components/admin/StatusBadge'
 import StockBadge from '@/components/admin/StockBadge'
 import type { ItemWithBrand } from '@/lib/admin-queries'
-import { createOutfitFromSelectedItems } from '@/app/admin/items/actions'
+import { createOutfitFromSelectedItems, deleteItems } from '@/app/admin/items/actions'
 
 export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
   const router = useRouter()
@@ -15,6 +15,8 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
   const [selectMode, setSelectMode] = useState(false)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState(false)
 
   function toggle(itemId: string) {
     setSelected((prev) => {
@@ -31,6 +33,20 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
 
   function clearAll() {
     setSelected(new Set())
+    setDeleteConfirm(false)
+  }
+
+  async function handleDeleteSelected() {
+    const chosen = Array.from(selected)
+    if (chosen.length === 0) return
+    setDeleting(true)
+    setCreateError(null)
+    const res = await deleteItems(chosen)
+    setDeleting(false)
+    setDeleteConfirm(false)
+    if (res.error) { setCreateError(res.error); return }
+    setSelected(new Set())
+    router.refresh()
   }
 
   async function handleCreateOutfit() {
@@ -83,67 +99,105 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
 
   return (
     <>
-      {/* Select-mode toolbar */}
-      <div className="flex items-center justify-end gap-2 mb-2 flex-wrap">
-        {selectMode && hasSelection && (
-          <>
-            <span className="text-[10px] tracking-[0.20em] text-[#0A0A0A] mr-1">
-              {selected.size} SELECTED
-            </span>
-            <button
-              type="button"
-              onClick={clearAll}
-              disabled={creating}
-              className="text-[10px] tracking-[0.20em] px-3 py-1.5 border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors duration-200 disabled:opacity-50"
-            >
-              CLEAR
-            </button>
-            <button
-              type="button"
-              onClick={handleCopySelected}
-              disabled={creating}
-              className="text-[10px] tracking-[0.20em] px-3 py-1.5 border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors duration-200 disabled:opacity-50"
-            >
-              {copyState === 'copied'
-                ? 'COPIED ✓'
-                : copyState === 'error'
-                ? 'COPY FAILED'
-                : '⎘ COPY'}
-            </button>
-            <button
-              type="button"
-              onClick={handleCreateOutfit}
-              disabled={creating}
-              className="text-[10px] tracking-[0.20em] px-4 py-1.5 bg-[#0A0A0A] text-white hover:bg-[#333] transition-colors duration-200 disabled:opacity-50"
-            >
-              {creating ? 'CREATING…' : `CREATE OUTFIT → (${selected.size})`}
-            </button>
-            <span className="mx-1 text-[#E2E0DB]">|</span>
-          </>
-        )}
-        <button
-          type="button"
-          onClick={() => {
-            setSelectMode((v) => !v)
-            if (selectMode) clearAll()
-          }}
-          className={`text-[10px] tracking-[0.20em] px-3 py-1.5 transition-colors duration-200 ${
-            selectMode
-              ? 'bg-[#0A0A0A] text-white'
-              : 'border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A]'
-          }`}
-        >
-          {selectMode ? 'EXIT SELECT' : 'SELECT ITEMS'}
-        </button>
-        {selectMode && (
+      {/* Select-mode toolbar — DELETE lives on the far LEFT, deliberately away
+          from Copy / Create on the right so it can't be hit by accident. */}
+      <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+        {/* Left: delete (two-step confirm) */}
+        <div className="flex items-center gap-2">
+          {selectMode && hasSelection && (
+            deleteConfirm ? (
+              <>
+                <button
+                  type="button"
+                  onClick={handleDeleteSelected}
+                  disabled={deleting}
+                  className="text-[10px] tracking-[0.20em] px-4 py-1.5 bg-[#B83A3A] text-white hover:bg-[#9c2f2f] transition-colors duration-200 disabled:opacity-50"
+                >
+                  {deleting ? 'DELETING…' : `CONFIRM DELETE (${selected.size})`}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeleteConfirm(false)}
+                  disabled={deleting}
+                  className="text-[10px] tracking-[0.20em] px-3 py-1.5 border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors duration-200 disabled:opacity-50"
+                >
+                  CANCEL
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setDeleteConfirm(true)}
+                className="text-[10px] tracking-[0.20em] px-3 py-1.5 border border-[#E8B4B4] text-[#B83A3A] hover:bg-[#B83A3A] hover:text-white hover:border-[#B83A3A] transition-colors duration-200"
+              >
+                🗑 DELETE
+              </button>
+            )
+          )}
+        </div>
+
+        {/* Right: clear / copy / create / select controls */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {selectMode && hasSelection && (
+            <>
+              <span className="text-[10px] tracking-[0.20em] text-[#0A0A0A] mr-1">
+                {selected.size} SELECTED
+              </span>
+              <button
+                type="button"
+                onClick={clearAll}
+                disabled={creating || deleting}
+                className="text-[10px] tracking-[0.20em] px-3 py-1.5 border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors duration-200 disabled:opacity-50"
+              >
+                CLEAR
+              </button>
+              <button
+                type="button"
+                onClick={handleCopySelected}
+                disabled={creating || deleting}
+                className="text-[10px] tracking-[0.20em] px-3 py-1.5 border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors duration-200 disabled:opacity-50"
+              >
+                {copyState === 'copied'
+                  ? 'COPIED ✓'
+                  : copyState === 'error'
+                  ? 'COPY FAILED'
+                  : '⎘ COPY'}
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateOutfit}
+                disabled={creating || deleting}
+                className="text-[10px] tracking-[0.20em] px-4 py-1.5 bg-[#0A0A0A] text-white hover:bg-[#333] transition-colors duration-200 disabled:opacity-50"
+              >
+                {creating ? 'CREATING…' : `CREATE OUTFIT → (${selected.size})`}
+              </button>
+              <span className="mx-1 text-[#E2E0DB]">|</span>
+            </>
+          )}
           <button
             type="button"
-            onClick={selected.size === items.length ? clearAll : selectAll}
-            className="text-[10px] tracking-[0.20em] px-3 py-1.5 border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors duration-200"
+            onClick={() => {
+              setSelectMode((v) => !v)
+              if (selectMode) clearAll()
+            }}
+            className={`text-[10px] tracking-[0.20em] px-3 py-1.5 transition-colors duration-200 ${
+              selectMode
+                ? 'bg-[#0A0A0A] text-white'
+                : 'border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A]'
+            }`}
           >
-            {selected.size === items.length ? 'CLEAR ALL' : 'SELECT ALL'}
+            {selectMode ? 'EXIT SELECT' : 'SELECT ITEMS'}
           </button>
-        )}
+          {selectMode && (
+            <button
+              type="button"
+              onClick={selected.size === items.length ? clearAll : selectAll}
+              className="text-[10px] tracking-[0.20em] px-3 py-1.5 border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors duration-200"
+            >
+              {selected.size === items.length ? 'CLEAR ALL' : 'SELECT ALL'}
+            </button>
+          )}
+        </div>
       </div>
       {createError && (
         <p className="text-[10px] tracking-[0.20em] text-[#B83A3A] mb-3 text-right">

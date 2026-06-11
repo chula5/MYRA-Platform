@@ -5,6 +5,7 @@ import ItemForm from '@/components/admin/ItemForm'
 import { updateItem, updateItemStatus } from '@/app/admin/items/actions'
 import StatusBadge from '@/components/admin/StatusBadge'
 import { countYield } from '@/lib/composer'
+import DeleteItemButton from './DeleteItemButton'
 
 // Brand list and yield count must always be fresh — both depend on rows added
 // in other admin flows (Batch Ingest, createBrand, marking items ready).
@@ -166,6 +167,9 @@ export default async function EditItemPage({ params }: PageProps) {
             </div>
           </div>
           )}
+
+          {/* Danger zone — delete this item (two-step confirm) */}
+          <DeleteItemButton itemId={item.item_id} productName={item.product_name} />
         </div>
       </div>
     </div>

@@ -375,3 +375,34 @@ export async function createOutfitFromSelectedItems(
     return { error: formatError(err, 'Failed to create outfit') }
   }
 }
+
+// ── Delete items ──────────────────────────────────────────────────────────────
+// Permanently delete one or more items. First removes any outfit_item links so
+// there's no foreign-key violation / orphaned rows (this also removes the item
+// from any outfits it was part of), then deletes the item rows.
+
+export async function deleteItems(itemIds: string[]): Promise<{ ok?: boolean; count?: number; error?: string }> {
+  const ids = (itemIds ?? []).filter(Boolean)
+  if (ids.length === 0) return { error: 'No items selected' }
+
+  const supabase = createAdminClient()
+  try {
+    // Unlink from any outfits first.
+    const { error: linkErr } = await (supabase.from('outfit_item') as any).delete().in('item_id', ids)
+    if (linkErr) throw linkErr
+
+    const { error: itemErr } = await (supabase.from('item') as any).delete().in('item_id', ids)
+    if (itemErr) throw itemErr
+
+    revalidatePath('/admin/items')
+    return { ok: true, count: ids.length }
+  } catch (err: unknown) {
+    console.error('[deleteItems]', err)
+    return { error: formatError(err, 'Failed to delete items') }
+  }
+}
+
+export async function deleteItem(itemId: string): Promise<{ ok?: boolean; error?: string }> {
+  if (!itemId) return { error: 'No item id' }
+  return deleteItems([itemId])
+}
