@@ -868,13 +868,14 @@ STEPS:
                 {tags.map((tag) => (
                   <span
                     key={tag}
-                    className="inline-flex items-center gap-1.5 bg-[#F2F2F0] border border-[#E2E0DB] px-2.5 py-1 text-[9px] tracking-[0.15em] text-[#6B6B6B]"
+                    className="inline-flex items-center bg-[#F2F2F0] border border-[#E2E0DB] pl-2.5 text-[9px] tracking-[0.15em] text-[#6B6B6B]"
                   >
                     {tag.toUpperCase()}
                     <button
                       type="button"
-                      onClick={() => removeTag(tag)}
-                      className="text-[#A8A8A4] hover:text-[#0A0A0A] transition-colors"
+                      aria-label={`Remove ${tag}`}
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); removeTag(tag) }}
+                      className="ml-1 px-2 py-1.5 text-[14px] leading-none text-[#A8A8A4] hover:text-[#B83A3A] cursor-pointer transition-colors"
                     >
                       ×
                     </button>
