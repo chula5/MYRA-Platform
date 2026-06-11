@@ -31,13 +31,11 @@ function outfitSilhouette(outfit: any): string {
 }
 
 /**
- * SIMILAR  → live outfits with the SAME silhouette as the anchor (e.g. long
- *            dress → long dresses), occasion-overlap preferred.
- * EXPLORE  → live outfits with a DIFFERENT silhouette but a shared occasion
- *            (e.g. long dress → short dresses, skirts, trousers).
- *
- * The two are guaranteed disjoint (one matches sig === anchorSig, the other
- * sig !== anchorSig), which fixes the overlapping-results bug.
+ * Both views stay WITHIN THE SAME OCCASION (shared occasion tag with the anchor):
+ *   SIMILAR  → same occasion + SAME silhouette   (long dress → long dresses)
+ *   EXPLORE  → same occasion + DIFFERENT silhouette (long dress → short dresses,
+ *              skirts, trousers — completely different looks for that occasion)
+ * Guaranteed disjoint (same vs different silhouette).
  */
 export async function getRelatedOutfits(
   outfitId: string,
@@ -50,6 +48,7 @@ export async function getRelatedOutfits(
 
   const anchorSig = outfitSilhouette(cur)
   const anchorTags: string[] = ((cur as any).occasion_tags ?? []) as string[]
+  const hasOccasion = anchorTags.length > 0
 
   const { data: pool } = await admin
     .from('outfit')
@@ -58,27 +57,19 @@ export async function getRelatedOutfits(
     .neq('outfit_id', outfitId)
     .limit(200)
 
-  const overlapsOccasion = (tags?: string[]) =>
-    Array.isArray(tags) && tags.some((t) => anchorTags.includes(t))
+  // Same occasion = shares at least one tag. If the anchor has no tags, there's
+  // nothing to constrain on, so treat every outfit as same-occasion.
+  const sameOccasion = (tags?: string[]) =>
+    !hasOccasion || (Array.isArray(tags) && tags.some((t) => anchorTags.includes(t)))
 
-  const scored = ((pool ?? []) as any[]).map((o) => ({
-    o,
-    sig: outfitSilhouette(o),
-    ov: overlapsOccasion(o.occasion_tags),
-  }))
+  const scored = ((pool ?? []) as any[])
+    .map((o) => ({ o, sig: outfitSilhouette(o) }))
+    .filter((c) => sameOccasion(c.o.occasion_tags)) // both views: same occasion only
 
-  let chosen: typeof scored
-  if (mode === 'similar') {
-    // Same silhouette. Prefer shared occasion, then keep the rest.
-    chosen = scored.filter((c) => c.sig === anchorSig)
-  } else {
-    // Different silhouette, same occasion (so it's a real "explore for this
-    // occasion"). Fall back to any different silhouette if none share an occasion.
-    const diff = scored.filter((c) => c.sig !== anchorSig)
-    const sameOccasion = diff.filter((c) => c.ov)
-    chosen = sameOccasion.length > 0 ? sameOccasion : diff
-  }
+  const chosen =
+    mode === 'similar'
+      ? scored.filter((c) => c.sig === anchorSig)
+      : scored.filter((c) => c.sig !== anchorSig)
 
-  chosen.sort((a, b) => Number(b.ov) - Number(a.ov))
   return { outfits: chosen.slice(0, 6).map((c) => c.o as OutfitWithItems) }
 }
