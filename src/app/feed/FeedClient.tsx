@@ -50,14 +50,17 @@ export default function FeedClient({
     currentOffset: number,
     append: boolean
   ) => {
-    // Admin preview: filter the server-injected outfits client-side instead of
-    // querying the browser client (which can't read items hidden by RLS).
+    // Server-injected outfits (admin preview + early-access /edit): filter
+    // client-side instead of querying the browser client (which can't read items
+    // hidden by RLS). Paginate the render — showing every outfit at once renders
+    // a Next/Image per card and crashes mobile Safari on memory.
     if (injectedOutfits) {
       const filtered = tag && tag !== 'all'
         ? injectedOutfits.filter((o) => (o.occasion_tags ?? []).includes(tag))
         : injectedOutfits
-      setOutfits(filtered)
-      setHasMore(false)
+      const end = currentOffset + LIMIT
+      setOutfits(filtered.slice(0, end))
+      setHasMore(filtered.length > end)
       setLoading(false)
       setLoadingMore(false)
       return
