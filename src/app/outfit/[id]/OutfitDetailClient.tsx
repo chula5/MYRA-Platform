@@ -155,11 +155,21 @@ export default function OutfitDetailClient({
   }
 
   const handleSimilarLooks = () => {
-    if (outfit) fetchRelatedOutfits(outfit, 'similar')
+    if (!outfit) return
+    // Clear any active style-item view so the Similar results aren't suppressed
+    // (the results section only renders when no style-item is active).
+    setActiveStyleItemId(null)
+    setActiveItemType(null)
+    setStyleItemOutfits([])
+    fetchRelatedOutfits(outfit, 'similar')
   }
 
   const handleExploreStyles = () => {
-    if (outfit) fetchRelatedOutfits(outfit, 'explore')
+    if (!outfit) return
+    setActiveStyleItemId(null)
+    setActiveItemType(null)
+    setStyleItemOutfits([])
+    fetchRelatedOutfits(outfit, 'explore')
   }
 
   if (loading) {
