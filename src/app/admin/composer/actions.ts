@@ -205,7 +205,7 @@ export async function rescoreCandidate(
 
 // ── Anchor search ────────────────────────────────────────────────────────────
 
-export async function searchAnchorItems(query: string): Promise<{
+export async function searchAnchorItems(query: string, brandId?: string): Promise<{
   data?: Array<{ item_id: string; product_name: string; image_url: string; brand_name: string | null; item_type: string }>
   error?: string
 }> {
@@ -220,6 +220,7 @@ export async function searchAnchorItems(query: string): Promise<{
 
     const q = query.trim()
     if (q) req = req.ilike('product_name', `%${q}%`)
+    if (brandId) req = req.eq('brand_id', brandId)
 
     const { data, error } = await req
     if (error) throw error

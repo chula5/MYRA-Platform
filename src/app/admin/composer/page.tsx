@@ -1,4 +1,4 @@
-import { getItem, getReadyAndLiveItems } from '@/lib/admin-queries'
+import { getItem, getReadyAndLiveItems, getAllBrands } from '@/lib/admin-queries'
 import ComposerClient from './ComposerClient'
 
 interface PageProps {
@@ -8,10 +8,17 @@ interface PageProps {
 export default async function ComposerPage({ searchParams }: PageProps) {
   const { anchor: anchorId } = await searchParams
 
-  const [initialAnchor, library] = await Promise.all([
+  const [initialAnchor, library, allBrands] = await Promise.all([
     anchorId ? getItem(anchorId) : Promise.resolve(null),
     getReadyAndLiveItems(),
+    getAllBrands(),
   ])
+
+  // Only brands that actually have a composable item, so the filter has no dead options.
+  const brandIdsWithItems = new Set(library.map((i) => i.brand_id).filter(Boolean))
+  const brands = allBrands
+    .filter((b) => brandIdsWithItems.has(b.brand_id))
+    .map((b) => ({ brand_id: b.brand_id, name: b.name }))
 
   const initialItems = library.map((i) => ({
     item_id: i.item_id,
@@ -49,6 +56,7 @@ export default async function ComposerPage({ searchParams }: PageProps) {
         }
         initialItems={initialItems}
         libraryCount={library.length}
+        brands={brands}
       />
     </div>
   )

@@ -24,11 +24,17 @@ interface AnchorItem {
   brand_name: string | null
 }
 
+interface BrandOption {
+  brand_id: string
+  name: string
+}
+
 interface ComposerClientProps {
   initialAnchorId: string | null
   initialAnchor: AnchorItem | null
   initialItems: AnchorItem[]
   libraryCount: number
+  brands?: BrandOption[]
 }
 
 const SLOT_LABEL: Record<string, string> = {
@@ -87,10 +93,12 @@ export default function ComposerClient({
   initialAnchor,
   initialItems,
   libraryCount,
+  brands = [],
 }: ComposerClientProps) {
   const [anchor, setAnchor] = useState<AnchorItem | null>(initialAnchor)
   const [searchOpen, setSearchOpen] = useState(initialAnchor === null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [brandFilter, setBrandFilter] = useState('')
   const [searchResults, setSearchResults] = useState<AnchorItem[]>(initialItems)
   const [searching, startSearch] = useTransition()
   const [composing, startCompose] = useTransition()
@@ -266,10 +274,11 @@ export default function ComposerClient({
     compose(item.item_id)
   }
 
-  function runSearch(q: string) {
+  function runSearch(q: string, brand: string) {
     setSearchQuery(q)
+    setBrandFilter(brand)
     startSearch(async () => {
-      const res = await searchAnchorItems(q)
+      const res = await searchAnchorItems(q, brand || undefined)
       if (res.data) setSearchResults(res.data)
     })
   }
@@ -365,13 +374,26 @@ export default function ComposerClient({
       {searchOpen && (
         <div className="bg-white border border-[#E2E0DB] mb-8 p-6">
           <p className="text-[10px] tracking-[0.25em] text-[#6B6B6B] mb-4">SELECT ANCHOR</p>
-          <input
-            type="text"
-            placeholder="SEARCH BY PRODUCT NAME"
-            value={searchQuery}
-            onChange={(e) => runSearch(e.target.value)}
-            className="w-full border border-[#E2E0DB] bg-white px-4 py-2.5 text-[12px] tracking-[0.10em] text-[#0A0A0A] focus:outline-none focus:border-[#0A0A0A] mb-4"
-          />
+          <div className="flex gap-3 mb-4">
+            <input
+              type="text"
+              placeholder="SEARCH BY PRODUCT NAME"
+              value={searchQuery}
+              onChange={(e) => runSearch(e.target.value, brandFilter)}
+              className="flex-1 border border-[#E2E0DB] bg-white px-4 py-2.5 text-[12px] tracking-[0.10em] text-[#0A0A0A] focus:outline-none focus:border-[#0A0A0A]"
+            />
+            <select
+              value={brandFilter}
+              onChange={(e) => runSearch(searchQuery, e.target.value)}
+              title="Filter anchor items by brand"
+              className="w-[200px] border border-[#E2E0DB] bg-white px-3 py-2.5 text-[11px] tracking-[0.12em] text-[#0A0A0A] focus:outline-none focus:border-[#0A0A0A]"
+            >
+              <option value="">ALL BRANDS</option>
+              {brands.map((b) => (
+                <option key={b.brand_id} value={b.brand_id}>{b.name.toUpperCase()}</option>
+              ))}
+            </select>
+          </div>
           <div className="grid grid-cols-6 gap-3 max-h-[480px] overflow-y-auto">
             {searching && searchResults.length === 0 && (
               <p className="col-span-6 text-[10px] tracking-[0.20em] text-[#A8A8A4]">SEARCHING…</p>
