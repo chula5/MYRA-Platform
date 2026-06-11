@@ -298,6 +298,42 @@ export async function updateOutfit(
   }
 }
 
+// Save ONLY an outfit's occasion tags (used by the inline add/remove chips so
+// tag edits persist immediately, without needing the full Save Outfit button).
+export async function updateOutfitTags(
+  outfitId: string,
+  tags: string[],
+): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  try {
+    const clean = Array.from(
+      new Set((tags ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean)),
+    )
+    const { data: existing } = await supabase
+      .from('outfit')
+      .select('project_id')
+      .eq('outfit_id', outfitId)
+      .single()
+
+    const { error } = await (supabase.from('outfit') as any)
+      .update({ occasion_tags: clean })
+      .eq('outfit_id', outfitId)
+    if (error) throw error
+
+    if ((existing as any)?.project_id) {
+      revalidatePath(`/admin/projects/${(existing as any).project_id}`)
+      revalidatePath(`/admin/projects/${(existing as any).project_id}/outfits/${outfitId}/edit`)
+    }
+    revalidatePath('/admin/the-edit')
+    revalidatePath('/edit')
+    revalidatePath('/feed')
+    return {}
+  } catch (err: unknown) {
+    console.error('[updateOutfitTags]', err)
+    return { error: err instanceof Error ? err.message : 'Failed to save tags' }
+  }
+}
+
 export async function searchItemInventory(query: string): Promise<{
   data?: Array<{
     item_id: string

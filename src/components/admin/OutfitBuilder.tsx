@@ -9,7 +9,7 @@ import StockBadge from '@/components/admin/StockBadge'
 import { analyseOutfit, type OutfitAnalysis, type DetectedItem } from '@/app/admin/ai/analyse-outfit'
 import { scrapeProductInfo } from '@/app/admin/ai/scrape-product'
 import { scrapeAndUploadToCloudinary } from '@/app/admin/items/cloudinary-upload'
-import { quickAddItemToOutfit, updateQuickItem, reorderOutfitItems, addItemToOutfit, searchItemInventory } from '@/app/admin/projects/actions'
+import { quickAddItemToOutfit, updateQuickItem, reorderOutfitItems, addItemToOutfit, searchItemInventory, updateOutfitTags } from '@/app/admin/projects/actions'
 import { generateCanvaDeck } from '@/app/admin/projects/canva-actions'
 import { generateHiggsfieldShoot } from '@/app/admin/projects/higgsfield-actions'
 import { generateOccasionTags } from '@/app/admin/ai/occasion-tags'
@@ -218,9 +218,22 @@ export default function OutfitBuilder({
   const [lookbookLoading, setLookbookLoading] = useState<Set<string>>(new Set())
   const [lookbookError, setLookbookError] = useState<string | null>(null)
 
-  // ── Occasion tag suggestion (AI, from the outfit's items) ──────
+  // ── Occasion tags (add / remove / AI suggest) ──────────────────
   const [tagsBusy, setTagsBusy] = useState(false)
   const [tagsError, setTagsError] = useState<string | null>(null)
+  const [tagsSaved, setTagsSaved] = useState(false)
+
+  // Set the tags and, for a saved outfit, persist immediately (so a delete/add
+  // sticks without needing the full Save Outfit button).
+  async function persistTags(next: string[]) {
+    setTags(next)
+    setTagsError(null)
+    if (!outfit) return // unsaved outfit — Save Outfit will persist them
+    const res = await updateOutfitTags(outfit.outfit_id, next)
+    if (res.error) { setTagsError(res.error); return }
+    setTagsSaved(true)
+    setTimeout(() => setTagsSaved(false), 1500)
+  }
 
   async function handleSuggestTags() {
     if (!outfit || tagsBusy) return
@@ -229,22 +242,22 @@ export default function OutfitBuilder({
     const res = await generateOccasionTags(outfit.outfit_id)
     setTagsBusy(false)
     if (res.error) { setTagsError(res.error); return }
-    if (res.tags) setTags(res.tags)
+    if (res.tags) { setTags(res.tags); setTagsSaved(true); setTimeout(() => setTagsSaved(false), 1500) }
   }
 
   function handleTagKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Enter' || e.key === ',') {
       e.preventDefault()
-      const val = tagInput.trim()
+      const val = tagInput.trim().toLowerCase()
       if (val && !tags.includes(val)) {
-        setTags((prev) => [...prev, val])
+        void persistTags([...tags, val])
       }
       setTagInput('')
     }
   }
 
   function removeTag(tag: string) {
-    setTags((prev) => prev.filter((t) => t !== tag))
+    void persistTags(tags.filter((t) => t !== tag))
   }
 
   async function handleAnalyse() {
@@ -821,7 +834,12 @@ STEPS:
           </div>
           <div className="mb-4">
             <div className="flex items-center justify-between mb-1.5">
-              <label className={`${labelClass} mb-0`}>OCCASION TAGS</label>
+              <div className="flex items-center gap-2">
+                <label className={`${labelClass} mb-0`}>OCCASION TAGS</label>
+                {tagsSaved && (
+                  <span className="text-[9px] tracking-[0.18em] text-[#3A6B3A]">SAVED ✓</span>
+                )}
+              </div>
               {outfit && (
                 <button
                   type="button"
