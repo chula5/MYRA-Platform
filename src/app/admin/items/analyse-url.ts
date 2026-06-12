@@ -2,8 +2,6 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 
-const client = new Anthropic()
-
 export interface AnalysedProduct {
   product_name: string | null
   brand_name: string | null
@@ -35,6 +33,10 @@ export async function analyseProductUrl(
   url: string
 ): Promise<{ data?: AnalysedProduct; error?: string }> {
   if (!url) return { error: 'No URL provided' }
+
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) return { error: 'ANTHROPIC_API_KEY not configured' }
+  const client = new Anthropic({ apiKey })
 
   try {
     // Fetch the product page
