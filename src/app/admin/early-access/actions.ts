@@ -8,6 +8,9 @@ export interface EarlyAccessUser {
   email: string | null
   created_at: string
   last_sign_in_at: string | null
+  login_count: number
+  visit_count: number
+  last_seen_at: string | null
 }
 
 const ROLE = 'early_access'
@@ -19,12 +22,18 @@ export async function listEarlyAccessUsers(): Promise<{ users: EarlyAccessUser[]
     if (error) throw error
     const users = data.users
       .filter((u) => (u.user_metadata as any)?.role === ROLE)
-      .map((u) => ({
-        id: u.id,
-        email: u.email ?? null,
-        created_at: u.created_at,
-        last_sign_in_at: u.last_sign_in_at ?? null,
-      }))
+      .map((u) => {
+        const meta = (u.user_metadata as any) || {}
+        return {
+          id: u.id,
+          email: u.email ?? null,
+          created_at: u.created_at,
+          last_sign_in_at: u.last_sign_in_at ?? null,
+          login_count: Number(meta.login_count) || 0,
+          visit_count: Number(meta.visit_count) || 0,
+          last_seen_at: meta.last_seen_at ?? null,
+        }
+      })
       .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
     return { users }
   } catch (err: unknown) {

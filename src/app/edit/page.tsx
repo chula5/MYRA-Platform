@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createServerClient, createAdminClient } from '@/lib/supabase-server'
 import FeedClient from '@/app/feed/FeedClient'
 import { earlyAccessSignOut } from '@/app/earlyaccess/actions'
+import { recordEarlyAccessVisit } from '@/app/earlyaccess/activity'
 import type { OutfitWithItems } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -12,6 +13,9 @@ export default async function EditPage() {
 
   // Early-access (or admin) sign-in required.
   if (!user) redirect('/earlyaccess')
+
+  // Track that this early-access person opened the site (throttled to ~sessions).
+  await recordEarlyAccessVisit(user.id)
 
   // Fetch LIVE outfits WITH their items via the admin (service-role) client so
   // source items / hotspots show even when the items would be hidden by RLS.

@@ -17,7 +17,13 @@ function randomPassword(): string {
   return out
 }
 
-export default function EarlyAccessManager({ initialUsers }: { initialUsers: EarlyAccessUser[] }) {
+export default function EarlyAccessManager({
+  initialUsers,
+  inviteCode,
+}: {
+  initialUsers: EarlyAccessUser[]
+  inviteCode: string
+}) {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -26,6 +32,22 @@ export default function EarlyAccessManager({ initialUsers }: { initialUsers: Ear
   const [created, setCreated] = useState<{ email: string; password: string } | null>(null)
   const [copied, setCopied] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  // Build the shareable sign-up link against the LIVE domain (not whatever
+  // origin you happen to be viewing the admin on — e.g. localhost), so the
+  // link is always safe to send to people. Override with NEXT_PUBLIC_SITE_URL.
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://myraassistant.co.uk').replace(/\/+$/, '')
+  const signupLink = `${siteUrl}/earlyaccess/join?key=${encodeURIComponent(inviteCode)}`
+  const [linkCopied, setLinkCopied] = useState(false)
+
+  async function copyLink() {
+    if (!signupLink) return
+    try {
+      await navigator.clipboard.writeText(signupLink)
+      setLinkCopied(true)
+      setTimeout(() => setLinkCopied(false), 2500)
+    } catch { /* ignore */ }
+  }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
@@ -64,9 +86,34 @@ export default function EarlyAccessManager({ initialUsers }: { initialUsers: Ear
 
   return (
     <div>
+      {/* Shareable self-sign-up link */}
+      <div className="border border-[#E2E0DB] bg-white rounded-[3px] p-6 mb-8 max-w-[560px]">
+        <p className="text-[10px] tracking-[0.25em] text-[#6B6B6B] mb-2">SHAREABLE SIGN-UP LINK</p>
+        <p className="text-[10px] tracking-[0.12em] text-[#6B6B6B] leading-relaxed mb-4">
+          Send this link to anyone you want to give early access. They open it, enter their own email and
+          choose a password, and they&rsquo;re straight into The Edit — no need for you to create a login.
+        </p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            readOnly
+            value={signupLink}
+            onFocus={(e) => e.currentTarget.select()}
+            className={`${inputClass} text-[#6B6B6B]`}
+          />
+          <button
+            type="button"
+            onClick={copyLink}
+            className="shrink-0 bg-[#0A0A0A] text-white px-5 text-[10px] tracking-[0.18em] hover:bg-[#333] transition-colors"
+          >
+            {linkCopied ? '✓ COPIED' : 'COPY LINK'}
+          </button>
+        </div>
+      </div>
+
       {/* Create form */}
       <div className="border border-[#E2E0DB] bg-white rounded-[3px] p-6 mb-8 max-w-[560px]">
-        <p className="text-[10px] tracking-[0.25em] text-[#6B6B6B] mb-4">CREATE A LOGIN</p>
+        <p className="text-[10px] tracking-[0.25em] text-[#6B6B6B] mb-4">OR CREATE A LOGIN MANUALLY</p>
         <form onSubmit={handleCreate} className="space-y-3">
           <input
             type="email"
@@ -145,6 +192,14 @@ export default function EarlyAccessManager({ initialUsers }: { initialUsers: Ear
                   {u.last_sign_in_at
                     ? `LAST IN ${new Date(u.last_sign_in_at).toLocaleDateString('en-GB')}`
                     : 'NEVER SIGNED IN'}
+                </p>
+                <p className="text-[9px] tracking-[0.15em] text-[#6B6B6B] mt-1">
+                  <span className="text-[#0A0A0A]">{u.login_count}</span> LOGIN{u.login_count === 1 ? '' : 'S'}
+                  {' · '}
+                  <span className="text-[#0A0A0A]">{u.visit_count}</span> VISIT{u.visit_count === 1 ? '' : 'S'}
+                  {u.last_seen_at && (
+                    <> {' · '} LAST SEEN {new Date(u.last_seen_at).toLocaleDateString('en-GB')}</>
+                  )}
                 </p>
               </div>
               <button
