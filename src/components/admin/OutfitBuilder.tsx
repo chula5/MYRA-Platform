@@ -325,6 +325,11 @@ export default function OutfitBuilder({
   const [canvaCopied, setCanvaCopied] = useState(false)
   const [canvaPromptOpen, setCanvaPromptOpen] = useState(false)
   const [canvaPromptText, setCanvaPromptText] = useState('')
+
+  // Look Shopper (Claude design) prompt state — same paste-into-Claude flow as Canva
+  const [lookShopperOpen, setLookShopperOpen] = useState(false)
+  const [lookShopperText, setLookShopperText] = useState('')
+  const [lookShopperCopied, setLookShopperCopied] = useState(false)
   const [canvaJobStatus, setCanvaJobStatus] = useState<
     'idle' | 'pending' | 'running' | 'complete' | 'failed'
   >('idle')
@@ -439,6 +444,56 @@ STEPS:
       setTimeout(() => setCanvaCopied(false), 2500)
     } catch { /* ignore */ }
     setCanvaPromptOpen(true)
+  }
+
+  // ── Look Shopper (Claude design) ───────────────────────────────
+  // Builds a ready-to-paste prompt that tells Claude to populate the
+  // "Look Shopper" design with this outfit's hero image + each item's
+  // brand, product name, price, image and website link (for the + ADD link).
+  function buildLookShopperPrompt(): string {
+    if (!outfit) return ''
+    const products = orderedItems
+      .filter((oi) => oi.item)
+      .map((oi, idx) => {
+        const it: any = oi.item
+        const br: any = it?.brand
+        return `${idx + 1}. ${(it?.product_name ?? 'Unknown product').toUpperCase()}
+   BRAND: ${br?.name ?? 'Unknown brand'}
+   PRICE: ${it?.price ? `${it?.currency ? it.currency + ' ' : ''}${it.price}` : '(scrape from website link)'}
+   PRODUCT IMAGE: ${it?.image_url ?? '(none)'}
+   WEBSITE LINK (for + ADD): ${it?.retailer_url ?? '(none)'}`
+      })
+      .join('\n\n')
+
+    const heroImage = outfit.image_url || '(no display image set)'
+
+    return `Please use the "Look Shopper" design and create a new version populated with this outfit.
+
+HERO IMAGE (the full-height model/outfit photo behind the cards):
+${heroImage}
+
+SHOP THE LOOK — ${orderedItems.length} PRODUCT${orderedItems.length === 1 ? '' : 'S'} (one card each, in this order):
+
+${products || '(no items added yet)'}
+
+INSTRUCTIONS:
+1. Use the existing "Look Shopper" design as the template.
+2. Set the background hero image to the HERO IMAGE above.
+3. Set the "SHOP THE LOOK" count to ${orderedItems.length}.
+4. For each product, create/populate a card with: the product image thumbnail, the BRAND (small caps), the product NAME (bold), the PRICE, and a "+ ADD" button that links to the WEBSITE LINK. If a price says "(scrape from website link)", fetch the website link and extract the current price first.
+5. Keep the "ADD LOOK TO CART" button at the bottom.
+6. Present the finished design.`
+  }
+
+  async function handleLookShopperPrompt() {
+    const prompt = buildLookShopperPrompt()
+    setLookShopperText(prompt)
+    try {
+      await navigator.clipboard.writeText(prompt)
+      setLookShopperCopied(true)
+      setTimeout(() => setLookShopperCopied(false), 2500)
+    } catch { /* ignore */ }
+    setLookShopperOpen(true)
   }
 
   // ── Higgsfield editorial shoot ─────────────────────────────────
@@ -1522,6 +1577,37 @@ STEPS:
                 </>
               )}
             </div>
+
+            {/* ── SOCIAL MEDIA POST (Look Shopper) ───────────────── */}
+            <div className="mt-10">
+              <p className={sectionHeadingClass}>SOCIAL MEDIA POST</p>
+              {!outfit ? (
+                <p className="text-[10px] tracking-[0.15em] text-[#A8A8A4]">
+                  SAVE THE OUTFIT FIRST TO GENERATE.
+                </p>
+              ) : (
+                <>
+                  <p className="text-[9px] tracking-[0.18em] text-[#A8A8A4] mb-2 leading-relaxed">
+                    OPEN THIS OUTFIT AS A 3:4 SHOP-THE-LOOK POST — BUILT AUTOMATICALLY FROM THE DISPLAY IMAGE
+                    + EACH ITEM&rsquo;S BRAND, NAME, PRICE &amp; PHOTO. SCREEN-RECORD IT FOR A REEL.
+                  </p>
+                  <a
+                    href={`/admin/social/${outfit.outfit_id}`}
+                    className="block w-full text-center bg-[#0A0A0A] text-white py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#333] transition-colors"
+                  >
+                    OPEN AS SOCIAL POST →
+                  </a>
+                  <button
+                    type="button"
+                    onClick={handleLookShopperPrompt}
+                    disabled={orderedItems.length === 0}
+                    className="mt-2 w-full text-[9px] tracking-[0.15em] text-[#6B6B6B] hover:text-[#0A0A0A] underline disabled:opacity-40 disabled:cursor-not-allowed disabled:no-underline"
+                  >
+                    {lookShopperCopied ? '✓ COPIED — PASTE INTO CLAUDE' : 'or copy prompt for the Claude design instead'}
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1571,6 +1657,60 @@ STEPS:
               <button
                 type="button"
                 onClick={() => setCanvaPromptOpen(false)}
+                className="flex-1 border border-[#0A0A0A] text-[#0A0A0A] py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors"
+              >
+                CLOSE
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Look Shopper prompt modal */}
+      {lookShopperOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6"
+          onClick={() => setLookShopperOpen(false)}
+        >
+          <div
+            className="bg-white max-w-[720px] w-full max-h-[80vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#E2E0DB]">
+              <p className="text-[11px] tracking-[0.25em] text-[#0A0A0A]">LOOK SHOPPER PROMPT</p>
+              <button
+                type="button"
+                onClick={() => setLookShopperOpen(false)}
+                className="text-[#6B6B6B] hover:text-[#0A0A0A] text-[18px] leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-6">
+              <p className="text-[10px] tracking-[0.15em] text-[#6B6B6B] mb-3">
+                {lookShopperCopied ? 'COPIED — PASTE INTO YOUR LOOK SHOPPER CLAUDE DESIGN' : 'COPY THIS AND PASTE INTO YOUR LOOK SHOPPER CLAUDE DESIGN'}
+              </p>
+              <pre className="text-[11px] leading-relaxed text-[#0A0A0A] whitespace-pre-wrap break-words font-mono bg-[#F8F8F6] p-4 border border-[#E2E0DB]">
+                {lookShopperText}
+              </pre>
+            </div>
+            <div className="flex gap-2 px-6 py-4 border-t border-[#E2E0DB]">
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(lookShopperText)
+                    setLookShopperCopied(true)
+                    setTimeout(() => setLookShopperCopied(false), 2500)
+                  } catch { /* ignore */ }
+                }}
+                className="flex-1 bg-[#0A0A0A] text-white py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#333] transition-colors"
+              >
+                {lookShopperCopied ? '✓ COPIED' : 'COPY TO CLIPBOARD'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setLookShopperOpen(false)}
                 className="flex-1 border border-[#0A0A0A] text-[#0A0A0A] py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors"
               >
                 CLOSE

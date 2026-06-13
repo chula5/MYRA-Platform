@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { getOutfit } from '@/lib/admin-queries'
 import OutfitDetailClient from '@/app/outfit/[id]/OutfitDetailClient'
+import TheEditTagEditor from './TheEditTagEditor'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,6 +37,10 @@ export default async function TheEditPreviewDetailPage({ params, searchParams }:
               STYLE · SIMILAR · EXPLORE ALL ENABLED
             </span>
           </div>
+
+          {/* Amend which occasions this outfit shows under in The Edit */}
+          <TheEditTagEditor outfitId={id} initialTags={outfit.occasion_tags ?? []} />
+
           <OutfitDetailClient
             outfitId={id}
             initialOutfit={outfit}

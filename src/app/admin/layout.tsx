@@ -53,6 +53,12 @@ export default async function AdminLayout({
             THE EDIT
           </a>
           <a
+            href="/admin/social"
+            className="text-[11px] tracking-[0.20em] text-white/70 hover:text-white transition-colors duration-300"
+          >
+            SOCIAL
+          </a>
+          <a
             href="/admin/early-access"
             className="text-[11px] tracking-[0.20em] text-white/70 hover:text-white transition-colors duration-300"
           >
