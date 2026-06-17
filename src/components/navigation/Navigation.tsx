@@ -44,7 +44,7 @@ export default function Navigation({ transparent = false }: { transparent?: bool
         {/* Right — social links */}
         <div className="flex-1 flex items-center justify-end gap-4">
           <a
-            href="https://www.instagram.com/myra.assistant?igsh=MWdhaWxsNTY4ZnF5ZA%3D%3D&utm_source=qr"
+            href="https://www.instagram.com/myraassistant/"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Instagram"

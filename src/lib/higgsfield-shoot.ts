@@ -61,10 +61,19 @@ export const HIGGSFIELD_COMBOS: Record<string, HiggsfieldCombo> = {
     lighting: 'warm grey studio background, even frontal lighting, subtle vignette, tonal and refined, accessories-forward editorial',
     hair: 'severely slicked back',
   },
+  F6: {
+    key: 'F6', label: 'REFINED · LIGHT', sublabel: 'Bright white',
+    combo: 'Bright White Studio (LIGHT 06) + Refined (POSE E)',
+    poseRef: null,
+    // Same pose as REFINED (E5) — only the lighting/background changes.
+    pose: 'straight on facing camera, feet together, arms at sides hands relaxed, statement accessory, composed and architectural',
+    lighting: 'bright high-key pure white seamless studio background, soft even diffused daylight, clean and airy, luminous and minimal, only a faint soft floor shadow, fresh true-to-life colours, elevated e-commerce editorial',
+    hair: 'severely slicked back',
+  },
 }
 
 export const HIGGSFIELD_POSE_OPTIONS: HiggsfieldCombo[] = [
-  HIGGSFIELD_COMBOS.A1, HIGGSFIELD_COMBOS.B2, HIGGSFIELD_COMBOS.C3, HIGGSFIELD_COMBOS.D4, HIGGSFIELD_COMBOS.E5,
+  HIGGSFIELD_COMBOS.A1, HIGGSFIELD_COMBOS.B2, HIGGSFIELD_COMBOS.C3, HIGGSFIELD_COMBOS.D4, HIGGSFIELD_COMBOS.E5, HIGGSFIELD_COMBOS.F6,
 ]
 
 // Normalised item shape the builders work with (decoupled from DB row types).

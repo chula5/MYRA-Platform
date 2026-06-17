@@ -20,15 +20,106 @@ const STAGE_STAGGER = 600 // ms between each card appearing
 export default function LookShopperReel({
   heroImage,
   products,
+  logoUrl,
 }: {
   heroImage: string | null
   products: ReelProduct[]
+  logoUrl?: string | null
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(1)
   const [open, setOpen] = useState(false)
   const [added, setAdded] = useState<Record<string, boolean>>({})
   const [playKey, setPlayKey] = useState(0) // bump to replay
+  const [recording, setRecording] = useState(false)
+  const [recError, setRecError] = useState<string | null>(null)
+
+  const cascadeMs = products.length * STAGE_STAGGER + 200
+  const recordMs = 250 + 600 + cascadeMs + 2200 // settle + closed intro + cascade + tail
+
+  // Record the post (one animation cycle) straight from the browser and download
+  // it as a video. Uses tab capture cropped to just the 3:4 frame — works on the
+  // live site with no server. Chrome recommended.
+  async function handleDownloadVideo() {
+    if (recording) return
+    setRecError(null)
+    const wrap = wrapRef.current
+    const md = navigator.mediaDevices as MediaDevices | undefined
+    if (!wrap || !md?.getDisplayMedia || typeof MediaRecorder === 'undefined') {
+      setRecError('Recording needs a recent Chrome browser.')
+      return
+    }
+
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+    // Reset to the CLOSED state before anything else, so the capture begins at the
+    // very start of the animation (not mid-cascade or on the finished frame).
+    setOpen(false)
+    setAdded({})
+
+    let stream: MediaStream
+    try {
+      stream = await md.getDisplayMedia({
+        // hint Chrome to offer THIS tab so it's basically one click
+        preferCurrentTab: true,
+        video: { frameRate: 30 },
+        audio: false,
+      } as MediaStreamConstraints & { preferCurrentTab?: boolean })
+    } catch {
+      return // user cancelled the share dialog
+    }
+
+    setRecording(true)
+    try {
+      const track = stream.getVideoTracks()[0]
+      // Crop the capture to just the post frame (Chrome Region Capture).
+      const CropTargetCtor = (window as unknown as { CropTarget?: { fromElement: (el: Element) => Promise<unknown> } }).CropTarget
+      const cropTo = (track as unknown as { cropTo?: (t: unknown) => Promise<void> }).cropTo
+      if (CropTargetCtor && cropTo) {
+        try {
+          const target = await CropTargetCtor.fromElement(wrap)
+          await cropTo.call(track, target)
+        } catch { /* fall back to full-tab capture */ }
+      }
+
+      const mime =
+        ['video/mp4;codecs=h264', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm']
+          .find((m) => MediaRecorder.isTypeSupported(m)) || ''
+      const rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 8_000_000 } : undefined)
+      const chunks: BlobPart[] = []
+      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data) }
+      const stopped = new Promise<void>((res) => { rec.onstop = () => res() })
+
+      // Guarantee the closed frame is painted, THEN start the recorder, hold on
+      // that closed frame, and only then trigger the cascade — so the video always
+      // captures the animation from the beginning.
+      setOpen(false)
+      await sleep(250)
+      rec.start(100)
+      await sleep(600)
+      setOpen(true)
+      await sleep(cascadeMs + 2200)
+      rec.stop()
+      await stopped
+      stream.getTracks().forEach((t) => t.stop())
+
+      const ext = mime.startsWith('video/mp4') ? 'mp4' : 'webm'
+      const blob = new Blob(chunks, { type: mime || 'video/webm' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `shop-the-look.${ext}`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 15000)
+    } catch (err) {
+      stream.getTracks().forEach((t) => t.stop())
+      setRecError(err instanceof Error ? err.message : 'Recording failed')
+    } finally {
+      setRecording(false)
+    }
+  }
 
   // Scale the fixed stage to fill the responsive wrapper width.
   useEffect(() => {
@@ -56,13 +147,8 @@ export default function LookShopperReel({
       <div ref={wrapRef} className="looksh-wrap">
         <div className="looksh" style={{ transform: `scale(${scale})` }}>
           <div className={`screen ${open ? 'is-open' : ''}`}>
-            {/* Hero outfit image — model shifted right; blurred copy fills the
-                left so the cards sit over a colour-matched backdrop, not the model. */}
+            {/* Hero outfit image */}
             <div className="look-stage">
-              {heroImage && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img className="look-blur" src={heroImage} alt="" aria-hidden draggable={false} />
-              )}
               <div className="look-figure">
                 {heroImage ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -74,8 +160,16 @@ export default function LookShopperReel({
               </div>
             </div>
 
+            {/* MYRA logo — sits in the .screen layer so screen-blend can drop its
+                white background out against the photo. */}
+            {logoUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img className="panel-logo-img" src={logoUrl} alt="MYRA" draggable={false} />
+            )}
+
             {/* Shop-the-look panel */}
-            <aside className={`product-panel ${open ? 'is-open' : ''}`}>
+            <aside className={`product-panel ${open ? 'is-open' : ''} ${logoUrl ? 'has-logo' : ''}`}>
+              {!logoUrl && <div className="panel-logo">MYRA</div>}
               <div className="panel-header">
                 <span className="panel-title">Shop the look</span>
                 <span className="panel-count">{products.length}</span>
@@ -134,18 +228,30 @@ export default function LookShopperReel({
         </div>
       </div>
 
-      {/* Replay control (outside the 3:4 frame so it's not in the recording) */}
-      <div className="mt-4 flex items-center gap-3">
+      {/* Controls (outside the 3:4 frame so they're not in the recording) */}
+      <div className="mt-4 flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={() => setPlayKey((k) => k + 1)}
-          className="bg-[#0A0A0A] text-white px-5 py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#333] transition-colors"
+          disabled={recording}
+          className="bg-[#0A0A0A] text-white px-5 py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#333] transition-colors disabled:opacity-40"
         >
           ↻ REPLAY ANIMATION
         </button>
-        <span className="text-[9px] tracking-[0.15em] text-[#A8A8A4]">
-          SCREEN-RECORD THE FRAME ABOVE FOR YOUR REEL
-        </span>
+        <button
+          type="button"
+          onClick={handleDownloadVideo}
+          disabled={recording}
+          className="border border-[#0A0A0A] text-[#0A0A0A] px-5 py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors disabled:opacity-50"
+        >
+          {recording ? `● RECORDING… ${Math.ceil(recordMs / 1000)}s` : '⬇ DOWNLOAD VIDEO'}
+        </button>
+        {recError && <span className="text-[9px] tracking-[0.15em] text-[#B83A3A]">{recError.toUpperCase()}</span>}
+        {!recError && (
+          <span className="text-[9px] tracking-[0.15em] text-[#A8A8A4]">
+            CHOOSE “THIS TAB” WHEN PROMPTED — IT RECORDS JUST THE POST
+          </span>
+        )}
       </div>
     </div>
   )
@@ -199,6 +305,22 @@ const SCOPED_CSS = `
   display: flex; flex-direction: column; gap: 7px;
   z-index: 5; pointer-events: none;
 }
+.looksh .panel-logo {
+  font-weight: 800; font-size: 20px; letter-spacing: 0.24em;
+  color: #fff; text-shadow: 0 1px 8px rgba(0,0,0,0.45);
+  margin: 0 0 9px 2px; line-height: 1;
+}
+/* White-on-transparent MYRA logo with a soft shadow so it reads on any backdrop. */
+.looksh .panel-logo-img {
+  position: absolute;
+  top: 30px; left: 22px;
+  width: 110px; height: auto;
+  z-index: 5;
+  filter: drop-shadow(0 1px 5px rgba(0,0,0,0.45));
+  pointer-events: none;
+}
+/* When the logo is present, drop the cards so they clear it. */
+.looksh .product-panel.has-logo { top: 96px; }
 .looksh .panel-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 4px 2px;

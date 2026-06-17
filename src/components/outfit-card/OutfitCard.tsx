@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import Image from 'next/image'
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import CardButton from '@/components/ui/CardButton'
 import Hotspot from '@/components/hotspot/Hotspot'
 import SourcePanel from '@/components/source-panel/SourcePanel'
@@ -10,15 +10,20 @@ import type { OutfitWithItems, Item, Brand, ItemType } from '@/types/database'
 
 type SourceItemData = Item & { brand: Brand }
 
+interface Slide {
+  src: string
+  alt: string
+}
+
 interface OutfitCardProps {
   outfit: OutfitWithItems
   onSimilarLooks?: (outfit: OutfitWithItems) => void
   onExploreStyles?: (outfit: OutfitWithItems) => void
   onStyleItem?: (itemId: string, itemType: ItemType, outfit: OutfitWithItems) => void
-  // Where the card image links to. Defaults to the public detail route; the admin
-  // preview overrides this to its own admin detail route.
   detailHref?: string
 }
+
+const MAX_DOTS = 7
 
 export default function OutfitCard({
   outfit,
@@ -27,11 +32,12 @@ export default function OutfitCard({
   onStyleItem,
   detailHref,
 }: OutfitCardProps) {
+  const router = useRouter()
   const [sourcePanelOpen, setSourcePanelOpen] = useState(false)
+  const [slideIdx, setSlideIdx] = useState(0)
+  const touchStartX = useRef<number | null>(null)
+  const didSwipe = useRef(false)
 
-  // Some outfit_item rows can come back with a null `item` — e.g. the linked
-  // item isn't readable (row-level security hides non-live items) or was removed.
-  // Skip those so the card still renders the items it can show.
   const items: SourceItemData[] = (outfit.outfit_item ?? [])
     .filter((oi) => oi.item)
     .map((oi) => ({
@@ -39,22 +45,97 @@ export default function OutfitCard({
       brand: oi.item.brand,
     }))
 
+  // Build slide list: outfit hero first, then item product images
+  const slides: Slide[] = [
+    ...(outfit.image_url ? [{ src: outfit.image_url, alt: outfit.aesthetic_label ?? 'Outfit' }] : []),
+    ...items
+      .filter((it) => it.image_url)
+      .map((it) => ({ src: it.image_url!, alt: it.product_name ?? 'Item' })),
+  ]
+
+  const total = slides.length
+  const current = total > 0 ? slideIdx % total : 0
+
+  function prev() {
+    setSlideIdx((i) => (i - 1 + total) % total)
+  }
+  function next() {
+    setSlideIdx((i) => (i + 1) % total)
+  }
+
+  function onTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0].clientX
+    didSwipe.current = false
+  }
+
+  function onTouchEnd(e: React.TouchEvent) {
+    if (touchStartX.current === null) return
+    const delta = e.changedTouches[0].clientX - touchStartX.current
+    touchStartX.current = null
+    if (Math.abs(delta) > 38) {
+      didSwipe.current = true
+      delta < 0 ? next() : prev()
+    }
+  }
+
+  function handleTap() {
+    if (didSwipe.current) return
+    router.push(detailHref ?? `/outfit/${outfit.outfit_id}`)
+  }
+
+  // Dots — cap display at MAX_DOTS
+  const dotsCount = Math.min(total, MAX_DOTS)
+  const dotOffset = total > MAX_DOTS ? Math.max(0, Math.min(current - Math.floor(MAX_DOTS / 2), total - MAX_DOTS)) : 0
+
   return (
     <article className="relative bg-white flex flex-col">
-      {/* Image container — 3:4 portrait */}
-      <Link href={detailHref ?? `/outfit/${outfit.outfit_id}`} className="group block relative aspect-[3/4] w-full overflow-hidden">
-        <Image
-          src={outfit.image_url || '/placeholder-outfit.jpg'}
-          alt={outfit.aesthetic_label}
-          fill
-          className="object-cover transition-transform duration-500 hover:scale-[1.01]"
-          sizes="(max-width: 768px) 100vw, 33vw"
-        />
+      {/* Image carousel — 3:4 portrait */}
+      <div
+        className="relative aspect-[3/4] w-full overflow-hidden cursor-pointer"
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+        onClick={handleTap}
+      >
+        {slides.length === 0 ? (
+          <Image
+            src="/placeholder-outfit.jpg"
+            alt="Outfit"
+            fill
+            className="object-cover"
+            sizes="(max-width: 768px) 100vw, 33vw"
+          />
+        ) : (
+          slides.map((slide, i) => (
+            <Image
+              key={i}
+              src={slide.src}
+              alt={slide.alt}
+              fill
+              className={`object-cover transition-opacity duration-300 ${i === current ? 'opacity-100' : 'opacity-0'}`}
+              sizes="(max-width: 768px) 100vw, 33vw"
+              priority={i === 0}
+            />
+          ))
+        )}
 
-        {/* Hotspot dots — positioned on items (skip rows whose item didn't load) */}
-        {(outfit.outfit_item ?? []).filter((oi) => oi.item).map((oi) => {
-          // Hotspot positions would ideally come from DB
-          // Using placeholder positions for now
+        {/* Desktop prev/next tap zones */}
+        {total > 1 && (
+          <>
+            <button
+              aria-label="Previous"
+              className="absolute left-0 top-0 h-full w-1/3 z-10"
+              onClick={(e) => { e.stopPropagation(); prev() }}
+            />
+            <button
+              aria-label="Next"
+              className="absolute right-0 top-0 h-full w-1/3 z-10"
+              onClick={(e) => { e.stopPropagation(); next() }}
+            />
+          </>
+        )}
+
+        {/* Hotspots — only on slide 0 (the outfit hero) */}
+        {current === 0 && (outfit.outfit_item ?? []).filter((oi) => oi.item).map((oi) => {
           const pos = getPlaceholderPosition(oi.slot)
           return (
             <Hotspot
@@ -70,21 +151,35 @@ export default function OutfitCard({
             />
           )
         })}
-      </Link>
+      </div>
 
       {/* Card footer */}
       <div className="pt-3 pb-4 px-1">
-        {/* Aesthetic label */}
-        <p className="text-[13px] tracking-[0.15em] text-[#0A0A0A] mb-2">
-          {outfit.aesthetic_label}
-        </p>
-
-        {/* Dot carousel indicator (static — shows 1 active) */}
-        <div className="flex items-center gap-1.5 mb-3">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#0A0A0A]" />
-          <span className="w-1.5 h-1.5 rounded-full border border-[#A8A8A4]" />
-          <span className="w-1.5 h-1.5 rounded-full border border-[#A8A8A4]" />
-        </div>
+        {/* Carousel dots */}
+        {total > 1 && (
+          <div className="flex items-center gap-1.5 mb-3">
+            {Array.from({ length: dotsCount }).map((_, di) => {
+              const slideI = dotOffset + di
+              return (
+                <button
+                  key={di}
+                  aria-label={`Go to slide ${slideI + 1}`}
+                  onClick={() => setSlideIdx(slideI)}
+                  className={`w-1.5 h-1.5 rounded-full transition-colors ${
+                    slideI === current
+                      ? 'bg-[#0A0A0A]'
+                      : 'border border-[#A8A8A4]'
+                  }`}
+                />
+              )
+            })}
+          </div>
+        )}
+        {total <= 1 && (
+          <div className="flex items-center gap-1.5 mb-3">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#0A0A0A]" />
+          </div>
+        )}
 
         {/* Action buttons */}
         <div className="flex items-center gap-2">

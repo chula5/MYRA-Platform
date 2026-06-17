@@ -64,7 +64,7 @@ export default async function SocialPostPage({ params }: PageProps) {
           {/* The 3:4 post */}
           <div>
             <p className="text-[10px] tracking-[0.22em] text-[#6B6B6B] mb-3">SHOP THE LOOK · 3:4 POST</p>
-            <LookShopperReel heroImage={outfit.image_url} products={products} />
+            <LookShopperReel heroImage={outfit.image_url} products={products} logoUrl="/myra-logo-white.png" />
           </div>
 
           {/* Info / how-to */}
