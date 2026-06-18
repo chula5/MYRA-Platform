@@ -14,6 +14,11 @@ export default async function EditPage() {
   // Early-access (or admin) sign-in required.
   if (!user) redirect('/earlyaccess')
 
+  // First-time users complete the taste onboarding before browsing.
+  // The admin account is exempt (it previews the live edit directly).
+  const isAdmin = user.id === process.env.ADMIN_USER_ID
+  if (!isAdmin && !user.user_metadata?.onboarded) redirect('/onboarding')
+
   // Track that this early-access person opened the site (throttled to ~sessions).
   await recordEarlyAccessVisit(user.id)
 

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { getOutfit } from '@/lib/admin-queries'
 import OutfitDetailClient from '@/app/outfit/[id]/OutfitDetailClient'
 import TheEditTagEditor from './TheEditTagEditor'
+import AgeRangeEditor from './AgeRangeEditor'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,6 +41,9 @@ export default async function TheEditPreviewDetailPage({ params, searchParams }:
 
           {/* Amend which occasions this outfit shows under in The Edit */}
           <TheEditTagEditor outfitId={id} initialTags={outfit.occasion_tags ?? []} />
+
+          {/* Admin-only age tagging (drives onboarding outfit selection) */}
+          <AgeRangeEditor outfitId={id} initialAgeRanges={(outfit as any).age_ranges ?? []} />
 
           <OutfitDetailClient
             outfitId={id}

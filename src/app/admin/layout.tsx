@@ -89,6 +89,12 @@ export default async function AdminLayout({
             ANALYTICS
           </a>
           <a
+            href="/admin/signup-preferences"
+            className="text-[11px] tracking-[0.20em] text-white/70 hover:text-white transition-colors duration-300"
+          >
+            PREFERENCES
+          </a>
+          <a
             href="/"
             className="text-[11px] tracking-[0.20em] text-white/50 hover:text-white transition-colors duration-300"
           >

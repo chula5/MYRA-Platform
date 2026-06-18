@@ -334,6 +334,37 @@ export async function updateOutfitTags(
   }
 }
 
+// Age ranges are admin-only metadata — used to show age-appropriate outfits
+// during new-user onboarding. They are NEVER surfaced in The Edit / feed.
+export async function updateOutfitAgeRanges(
+  outfitId: string,
+  ageRanges: string[],
+): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  try {
+    const clean = Array.from(new Set((ageRanges ?? []).map((t) => t.trim()).filter(Boolean)))
+    const { data: existing } = await supabase
+      .from('outfit')
+      .select('project_id')
+      .eq('outfit_id', outfitId)
+      .single()
+
+    const { error } = await (supabase.from('outfit') as any)
+      .update({ age_ranges: clean })
+      .eq('outfit_id', outfitId)
+    if (error) throw error
+
+    if ((existing as any)?.project_id) {
+      revalidatePath(`/admin/projects/${(existing as any).project_id}/outfits/${outfitId}/edit`)
+    }
+    revalidatePath('/admin/the-edit')
+    return {}
+  } catch (err: unknown) {
+    console.error('[updateOutfitAgeRanges]', err)
+    return { error: err instanceof Error ? err.message : 'Failed to save age ranges' }
+  }
+}
+
 export async function searchItemInventory(query: string): Promise<{
   data?: Array<{
     item_id: string
