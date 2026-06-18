@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
+import { trackLandingClick } from '@/components/analytics/LandingTracker'
 
 export default function Navigation({ transparent = false }: { transparent?: boolean }) {
   const [scrolled, setScrolled] = useState(false)
@@ -48,6 +49,7 @@ export default function Navigation({ transparent = false }: { transparent?: bool
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Instagram"
+            onClick={() => trackLandingClick('instagram_click')}
             className={`hover:opacity-60 transition-colors duration-500 ${textColor}`}
           >
             <InstagramIcon />

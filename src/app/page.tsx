@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import Navigation from '@/components/navigation/Navigation'
-import WaitlistModal from '@/components/WaitlistModal'
+import LandingPageClient from './LandingPageClient'
 
 export default function LandingPage() {
   return (
@@ -107,7 +107,7 @@ export default function LandingPage() {
       {/* ── Sticky waitlist CTA — fixed to bottom of viewport ── */}
       <div className="fixed bottom-0 left-0 right-0 z-40 pointer-events-none flex justify-center pb-5 sm:pb-7">
         <div className="pointer-events-auto">
-          <WaitlistModal
+          <LandingPageClient
             triggerClassName="inline-flex items-center gap-3 bg-[#0A0A0A] text-white text-[11px] sm:text-[12px] tracking-[0.22em] px-10 sm:px-14 py-3.5 sm:py-4 shadow-[0_8px_24px_rgba(0,0,0,0.18)] hover:opacity-90 transition-opacity duration-300"
           />
         </div>

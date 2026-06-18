@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { joinWaitlist } from '@/app/admin/ai/waitlist-actions'
 
-export default function WaitlistModal({ triggerClassName }: { triggerClassName?: string }) {
+export default function WaitlistModal({ triggerClassName, onOpen }: { triggerClassName?: string; onOpen?: () => void }) {
   const [open, setOpen] = useState(false)
   const [email, setEmail] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -24,7 +24,7 @@ export default function WaitlistModal({ triggerClassName }: { triggerClassName?:
     <>
       {/* Trigger button */}
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => { setOpen(true); onOpen?.() }}
         className={triggerClassName ?? "inline-flex items-center gap-3 bg-white border border-white text-[#0A0A0A] text-[13px] tracking-[0.20em] px-12 py-4 hover:bg-white/90 transition-all duration-300"}
       >
         JOIN THE WAITLIST
