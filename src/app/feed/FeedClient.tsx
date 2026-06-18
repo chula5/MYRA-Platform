@@ -92,6 +92,13 @@ function antiRepeatOrder(list: OutfitWithItems[]): OutfitWithItems[] {
 }
 
 // ── Outfit matching logic ─────────────────────────────────────
+
+// Match token as a whole word so "red" doesn't match "flared", "tailored", "structured" etc.
+function wordMatch(text: string | null | undefined, token: string): boolean {
+  if (!text) return false
+  return new RegExp(`\\b${token}\\b`, 'i').test(text)
+}
+
 function matchesSearch(
   outfit: OutfitWithItems,
   query: string,
@@ -101,14 +108,9 @@ function matchesSearch(
 ): boolean {
   const items = (outfit.outfit_item ?? []).filter(oi => oi.item).map(oi => oi.item)
 
-  // Colour filter
+  // Colour filter — exact match on colour_family enum value
   if (colour) {
-    const colourWord = colour === 'multicolour' ? 'multi' : colour
-    const hit = items.some(it =>
-      it.colour_family === colour ||
-      it.product_name?.toLowerCase().includes(colourWord)
-    )
-    if (!hit) return false
+    if (!items.some(it => it.colour_family === colour)) return false
   }
 
   // Item type filter
@@ -116,26 +118,27 @@ function matchesSearch(
     if (!items.some(it => itemTypes.includes(String(it.item_type)))) return false
   }
 
-  // Brand filter
+  // Brand filter — substring OK here (partial brand name is useful)
   if (brand.trim()) {
     const b = brand.toLowerCase()
     if (!items.some(it => (it as any).brand?.name?.toLowerCase().includes(b))) return false
   }
 
-  // Free text: each whitespace-separated token must match at least one field
+  // Free text: each token must match a whole word in at least one field
   if (query.trim()) {
     const tokens = query.toLowerCase().trim().split(/\s+/)
     for (const token of tokens) {
       const hit = items.some(it => {
-        if (it.product_name?.toLowerCase().includes(token)) return true
-        if ((it as any).brand?.name?.toLowerCase().includes(token)) return true
-        if (it.material_primary?.toLowerCase().includes(token)) return true
-        if (String(it.item_type).toLowerCase().replace(/_/g, ' ').includes(token)) return true
-        if (it.colour_family?.toLowerCase().includes(token)) return true
+        if (wordMatch(it.product_name, token)) return true
+        if (wordMatch((it as any).brand?.name, token)) return true
+        if (wordMatch(it.material_primary, token)) return true
+        if (wordMatch(String(it.item_type).replace(/_/g, ' '), token)) return true
+        // colour_family: exact match only
+        if (it.colour_family === token) return true
         return false
       }) ||
-        outfit.aesthetic_label?.toLowerCase().includes(token) ||
-        (outfit.occasion_tags ?? []).some(t => t.includes(token))
+        wordMatch(outfit.aesthetic_label, token) ||
+        (outfit.occasion_tags ?? []).some(t => wordMatch(t, token))
       if (!hit) return false
     }
   }
