@@ -42,7 +42,13 @@ function pickOutfits(all: OnboardingOutfit[], ageRange: string): OnboardingOutfi
   return picked
 }
 
-export default function OnboardingFlow({ outfits }: { outfits: OnboardingOutfit[] }) {
+export default function OnboardingFlow({
+  outfits,
+  preview = false,
+}: {
+  outfits: OnboardingOutfit[]
+  preview?: boolean
+}) {
   const router = useRouter()
   const [step, setStep] = useState<1 | 2 | 3>(1)
 
@@ -71,6 +77,11 @@ export default function OnboardingFlow({ outfits }: { outfits: OnboardingOutfit[
 
   async function finish(likedFinal: string[], dislikedFinal: string[]) {
     setSubmitting(true)
+    // Preview mode (admin): don't persist anything, just return to the admin area.
+    if (preview) {
+      router.push('/admin/the-edit')
+      return
+    }
     await saveOnboarding({
       ageRange,
       brandGroups,
@@ -113,6 +124,19 @@ export default function OnboardingFlow({ outfits }: { outfits: OnboardingOutfit[
 
   return (
     <div className="min-h-screen bg-white">
+      {preview && (
+        <div className="flex items-center justify-between gap-4 px-6 py-2.5 bg-[#0A0A0A] text-white">
+          <span className="text-[9px] tracking-[0.22em] text-[#C4A882]">
+            ADMIN PREVIEW · THIS IS THE NEW-USER SIGN-UP FLOW · NOTHING IS SAVED
+          </span>
+          <button
+            onClick={() => router.push('/admin/the-edit')}
+            className="text-[9px] tracking-[0.20em] text-white/70 hover:text-white border border-white/30 hover:border-white px-3 py-1 transition-colors"
+          >
+            EXIT PREVIEW ✕
+          </button>
+        </div>
+      )}
       <header className="flex items-center justify-center px-8 h-14 border-b border-[#E2E0DB]">
         <p className="text-[13px] tracking-[0.30em] text-[#0A0A0A]">MYRA</p>
       </header>

@@ -4,13 +4,25 @@ import OnboardingFlow, { type OnboardingOutfit } from './OnboardingFlow'
 
 export const dynamic = 'force-dynamic'
 
-export default async function OnboardingPage() {
+export default async function OnboardingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ preview?: string }>
+}) {
+  const { preview } = await searchParams
+
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) redirect('/earlyaccess')
-  // Already done — straight to browsing.
-  if (user.user_metadata?.onboarded) redirect('/edit')
+
+  // Admin preview mode: walk through the exact flow without it saving or
+  // redirecting away. Only the admin account gets this.
+  const isAdmin = user.id === process.env.ADMIN_USER_ID
+  const previewMode = preview === '1' && isAdmin
+
+  // Already done — straight to browsing (unless previewing).
+  if (!previewMode && user.user_metadata?.onboarded) redirect('/edit')
 
   // Fetch all live outfits (lightweight — just what the rating cards need).
   // age_ranges drives which outfits we show per the user's selected age.
@@ -39,5 +51,5 @@ export default async function OnboardingPage() {
     ageRanges: o.age_ranges ?? [],
   }))
 
-  return <OnboardingFlow outfits={outfits} />
+  return <OnboardingFlow outfits={outfits} preview={previewMode} />
 }
