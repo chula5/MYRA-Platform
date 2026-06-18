@@ -37,12 +37,20 @@ export default async function TheEditPreviewPage() {
           then click through just like a visitor would. It is private to the admin area: the public
           page still shows &ldquo;Launching soon&rdquo; until you go live.
         </p>
-        <a
-          href="/onboarding?preview=1"
-          className="inline-flex items-center gap-2 mt-4 border border-[#0A0A0A] text-[#0A0A0A] px-5 py-2.5 rounded-[3px] text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-300"
-        >
-          ▶ PREVIEW NEW-USER SIGN-UP FLOW
-        </a>
+        <div className="flex flex-wrap gap-3 mt-4">
+          <a
+            href="/onboarding?preview=1"
+            className="inline-flex items-center gap-2 border border-[#0A0A0A] text-[#0A0A0A] px-5 py-2.5 rounded-[3px] text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-300"
+          >
+            ▶ PREVIEW NEW-USER SIGN-UP FLOW
+          </a>
+          <a
+            href="/admin/age-tagging"
+            className="inline-flex items-center gap-2 border border-[#E2E0DB] text-[#6B6B6B] px-5 py-2.5 rounded-[3px] text-[10px] tracking-[0.20em] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors duration-300"
+          >
+            ⊕ AGE-TAG OUTFITS
+          </a>
+        </div>
       </div>
 
       {/* Status + Go Live */}
