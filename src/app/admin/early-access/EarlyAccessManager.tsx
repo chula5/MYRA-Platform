@@ -36,7 +36,7 @@ export default function EarlyAccessManager({
   // Build the shareable sign-up link against the LIVE domain (not whatever
   // origin you happen to be viewing the admin on — e.g. localhost), so the
   // link is always safe to send to people. Override with NEXT_PUBLIC_SITE_URL.
-  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://myraassistant.co.uk').replace(/\/+$/, '')
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.myraassistant.co.uk').replace(/\/+$/, '')
   const signupLink = `${siteUrl}/earlyaccess/join?key=${encodeURIComponent(inviteCode)}`
   const [linkCopied, setLinkCopied] = useState(false)
 
