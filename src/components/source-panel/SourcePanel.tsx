@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import type { Item, Brand } from '@/types/database'
+import { recordItemClick } from '@/app/actions/item-click'
 
 type SourceItem = Item & { brand: Brand }
 
@@ -10,9 +11,11 @@ interface SourcePanelProps {
   items: SourceItem[]
   onClose: () => void
   isOpen: boolean
+  // The outfit these items belong to — recorded with each click for attribution.
+  outfitId?: string
 }
 
-export default function SourcePanel({ items, onClose, isOpen }: SourcePanelProps) {
+export default function SourcePanel({ items, onClose, isOpen, outfitId }: SourcePanelProps) {
   const panelRef = useRef<HTMLDivElement>(null)
 
   // Close on click outside
@@ -100,7 +103,7 @@ export default function SourcePanel({ items, onClose, isOpen }: SourcePanelProps
           ) : (
             <div className="divide-y divide-[#E2E0DB]">
               {items.map((item) => (
-                <SourceItemRow key={item.item_id} item={item} />
+                <SourceItemRow key={item.item_id} item={item} outfitId={outfitId} />
               ))}
             </div>
           )}
@@ -112,6 +115,7 @@ export default function SourcePanel({ items, onClose, isOpen }: SourcePanelProps
             onClick={() => {
               const firstItem = items[0]
               if (firstItem?.retailer_url) {
+                recordItemClick(firstItem.item_id, outfitId)
                 window.open(firstItem.retailer_url, '_blank', 'noopener,noreferrer')
               }
             }}
@@ -133,11 +137,12 @@ export default function SourcePanel({ items, onClose, isOpen }: SourcePanelProps
 
 // ── Individual item row ───────────────────────────────────────
 
-function SourceItemRow({ item }: { item: SourceItem }) {
+function SourceItemRow({ item, outfitId }: { item: SourceItem; outfitId?: string }) {
   const [imgFailed, setImgFailed] = useState(false)
 
   const handleClick = () => {
     if (item.retailer_url) {
+      recordItemClick(item.item_id, outfitId)
       window.open(item.retailer_url, '_blank', 'noopener,noreferrer')
     }
   }

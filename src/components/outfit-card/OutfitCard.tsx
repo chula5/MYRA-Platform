@@ -212,6 +212,7 @@ export default function OutfitCard({
         items={items}
         isOpen={sourcePanelOpen}
         onClose={() => setSourcePanelOpen(false)}
+        outfitId={outfit.outfit_id}
       />
     </article>
   )

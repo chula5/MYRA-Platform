@@ -66,6 +66,42 @@ export default async function SignupPreferencesPage() {
     }
   }
 
+  // ── Most-clicked items (retailer click-throughs) ──
+  let itemClicksReady = true
+  const clickCounts = new Map<string, number>()
+  {
+    const { data: clicks, error: clickErr } = await admin
+      .from('item_click' as any)
+      .select('item_id')
+      .limit(10000)
+    if (clickErr) {
+      itemClicksReady = false
+    } else {
+      for (const c of (clicks ?? []) as { item_id: string }[]) {
+        clickCounts.set(c.item_id, (clickCounts.get(c.item_id) ?? 0) + 1)
+      }
+    }
+  }
+
+  const topItemEntries = [...clickCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 24)
+  const topItemMeta = new Map<string, { name: string; brand: string; image: string; url: string; price: string }>()
+  if (topItemEntries.length > 0) {
+    const { data: itemsData } = await admin
+      .from('item')
+      .select('item_id, product_name, image_url, retailer_url, price, currency, brand(name)')
+      .in('item_id', topItemEntries.map(([id]) => id))
+    for (const it of (itemsData ?? []) as any[]) {
+      topItemMeta.set(it.item_id, {
+        name: it.product_name ?? 'Unknown',
+        brand: it.brand?.name ?? '',
+        image: it.image_url ?? '',
+        url: it.retailer_url ?? '',
+        price: it.price ? `${it.price}` : '',
+      })
+    }
+  }
+  const totalClicks = [...clickCounts.values()].reduce((s, n) => s + n, 0)
+
   const renderOutfitGrid = (entries: [string, number][], tone: 'like' | 'dislike') => (
     <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
       {entries.map(([id, count]) => {
@@ -196,6 +232,77 @@ ALTER TABLE public.signup_preference ENABLE ROW LEVEL SECURITY;`}</pre>
           {renderOutfitGrid(topDislikedIds, 'dislike')}
         </div>
       )}
+
+      {/* ── Most-clicked items (retailer click-throughs) ── */}
+      <div className="border border-[#E2E0DB] bg-white rounded-[3px] p-6 mb-8">
+        <div className="flex items-baseline justify-between mb-5">
+          <p className="text-[10px] tracking-[0.22em] text-[#6B6B6B]">
+            MOST-CLICKED ITEMS · SHOP-THROUGHS
+          </p>
+          {itemClicksReady && (
+            <p className="text-[9px] tracking-[0.16em] text-[#A8A8A4]">
+              {totalClicks.toLocaleString()} TOTAL CLICK{totalClicks === 1 ? '' : 'S'}
+            </p>
+          )}
+        </div>
+
+        {!itemClicksReady ? (
+          <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[3px] p-4">
+            <p className="text-[10px] tracking-[0.14em] text-[#8A7A4E] leading-relaxed mb-2">
+              Run migration <span className="font-mono">0007_item_click.sql</span> in Supabase to start
+              tracking retailer click-throughs:
+            </p>
+            <pre className="text-[9px] bg-white border border-[#E8D9B8] p-3 rounded overflow-x-auto text-[#6B6B6B] leading-relaxed">{`CREATE TABLE IF NOT EXISTS public.item_click (
+  click_id   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  item_id    uuid NOT NULL,
+  outfit_id  uuid,
+  clicked_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS item_click_item_id_idx ON public.item_click (item_id);
+ALTER TABLE public.item_click ENABLE ROW LEVEL SECURITY;`}</pre>
+          </div>
+        ) : topItemEntries.length === 0 ? (
+          <p className="text-[10px] tracking-[0.18em] text-[#A8A8A4] py-8 text-center">
+            NO ITEM CLICKS YET — THEY APPEAR HERE AS USERS CLICK THROUGH TO RETAILERS FROM SOURCE ITEMS.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {topItemEntries.map(([id, count], i) => {
+              const m = topItemMeta.get(id)
+              return (
+                <div
+                  key={id}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-[3px] ${i % 2 ? 'bg-[#FAFAF8]' : 'bg-white'} border border-[#F2F2F2]`}
+                >
+                  <span className="text-[10px] tracking-[0.10em] text-[#A8A8A4] w-5 text-right flex-shrink-0">
+                    {i + 1}
+                  </span>
+                  <div className="relative w-[44px] h-[56px] flex-shrink-0 rounded-[2px] overflow-hidden bg-[#F2F2F2]">
+                    {m?.image && <Image src={m.image} alt={m.name} fill className="object-cover" sizes="44px" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] tracking-[0.12em] text-[#6B6B6B] truncate">{(m?.brand || '').toUpperCase()}</p>
+                    <p className="text-[11px] tracking-[0.06em] text-[#0A0A0A] truncate">{m?.name ?? id}</p>
+                  </div>
+                  {m?.url && (
+                    <a
+                      href={m.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[9px] tracking-[0.16em] text-[#A8A8A4] hover:text-[#0A0A0A] flex-shrink-0"
+                    >
+                      ↗
+                    </a>
+                  )}
+                  <span className="text-[12px] tracking-[0.06em] text-[#0A0A0A] w-12 text-right flex-shrink-0">
+                    {count}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
 
       {/* Per-user table */}
       {total > 0 && (

@@ -384,6 +384,7 @@ export default function OutfitDetailClient({
         items={items}
         isOpen={sourcePanelOpen}
         onClose={() => setSourcePanelOpen(false)}
+        outfitId={outfitId}
       />
     </div>
   )
