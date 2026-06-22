@@ -1,16 +1,166 @@
 'use client'
 
-import WaitlistModal from '@/components/WaitlistModal'
+import { useEffect, useState } from 'react'
+import { joinWaitlist } from '@/app/admin/ai/waitlist-actions'
 import LandingTracker, { trackLandingClick } from '@/components/analytics/LandingTracker'
 
-export default function LandingPageClient({ triggerClassName }: { triggerClassName: string }) {
+const POPUP_SEEN_KEY = 'myra_waitlist_popup_seen'
+const POPUP_DELAY_MS = 2500
+
+export default function LandingPageClient() {
+  const [modalOpen, setModalOpen] = useState(false)
+  const [dismissed, setDismissed] = useState(false) // popup closed → show inline form at bottom
+
+  const [email, setEmail] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
+
+  // Auto-open the invite popup once per session, a couple of seconds in.
+  useEffect(() => {
+    let seen = false
+    try { seen = sessionStorage.getItem(POPUP_SEEN_KEY) === '1' } catch {}
+    if (seen) { setDismissed(true); return }
+    const t = setTimeout(() => {
+      setModalOpen(true)
+      try { sessionStorage.setItem(POPUP_SEEN_KEY, '1') } catch {}
+    }, POPUP_DELAY_MS)
+    return () => clearTimeout(t)
+  }, [])
+
+  function closeModal() {
+    setModalOpen(false)
+    setDismissed(true) // reveal the inline email box at the bottom
+  }
+
+  function openModal() {
+    setModalOpen(true)
+    try { sessionStorage.setItem(POPUP_SEEN_KEY, '1') } catch {}
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    if (submitting) return
+    setSubmitting(true)
+    setError(null)
+    trackLandingClick('cta_click')
+    const res = await joinWaitlist(email)
+    setSubmitting(false)
+    if (res.error) { setError(res.error); return }
+    setSuccess(true)
+  }
+
   return (
     <>
       <LandingTracker />
-      <WaitlistModal
-        triggerClassName={triggerClassName}
-        onOpen={() => trackLandingClick('cta_click')}
-      />
+
+      {/* ── Invite popup ─────────────────────────────────────── */}
+      {modalOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center px-5"
+          style={{ backgroundColor: 'rgba(10,10,10,0.55)' }}
+          onClick={closeModal}
+        >
+          <div
+            className="relative w-full max-w-[440px] bg-white px-8 sm:px-12 py-12 sm:py-14 shadow-[0_20px_60px_rgba(0,0,0,0.25)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={closeModal}
+              aria-label="Close"
+              className="absolute top-4 right-5 text-[#A8A8A4] hover:text-[#0A0A0A] text-[22px] leading-none transition-colors"
+            >
+              ×
+            </button>
+
+            {success ? (
+              <div className="text-center py-6">
+                <p className="text-[13px] tracking-[0.22em] text-[#0A0A0A] mb-3">YOU&rsquo;RE ON THE LIST</p>
+                <p className="text-[11px] tracking-[0.12em] text-[#6B6B6B] leading-relaxed">
+                  Thank you — we&rsquo;ll be in touch with your first look at MYRA.
+                </p>
+              </div>
+            ) : (
+              <div className="text-center">
+                <p className="text-[10px] tracking-[0.32em] text-[#A8A8A4] mb-6">MYRA · THE WAITLIST</p>
+                <h2 className="text-[clamp(34px,9vw,48px)] tracking-[0.04em] text-[#0A0A0A] leading-[0.95] mb-5">
+                  BE FIRST.
+                </h2>
+                <p className="text-[12px] tracking-[0.10em] text-[#6B6B6B] leading-relaxed mb-8 max-w-[320px] mx-auto">
+                  Join the waitlist for first access to MYRA — curated outfits, styled for you, the
+                  moment we launch.
+                </p>
+
+                <form onSubmit={submit} className="flex flex-col gap-3">
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="YOUR EMAIL ADDRESS"
+                    className="w-full border border-[#E2E0DB] px-4 py-3.5 text-[12px] tracking-[0.10em] text-[#0A0A0A] placeholder-[#A8A8A4] text-center focus:outline-none focus:border-[#0A0A0A] transition-colors"
+                  />
+                  {error && <p className="text-[10px] tracking-[0.12em] text-[#B83A3A]">{error}</p>}
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="w-full bg-[#0A0A0A] text-white py-3.5 text-[11px] tracking-[0.22em] hover:opacity-85 transition-opacity disabled:opacity-50"
+                  >
+                    {submitting ? 'JOINING…' : 'REQUEST ACCESS'}
+                  </button>
+                </form>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Sticky bottom dock ───────────────────────────────── */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 pointer-events-none flex justify-center pb-5 sm:pb-7 px-4">
+        <div className="pointer-events-auto w-full max-w-[460px]">
+          {success ? (
+            <div className="bg-[#0A0A0A] text-white text-center text-[11px] tracking-[0.20em] px-8 py-4 shadow-[0_8px_24px_rgba(0,0,0,0.18)]">
+              YOU&rsquo;RE ON THE LIST ✓
+            </div>
+          ) : dismissed ? (
+            // Inline email form — shown after the popup is dismissed.
+            <form
+              onSubmit={submit}
+              className="flex items-stretch gap-0 bg-white border border-[#0A0A0A] shadow-[0_8px_24px_rgba(0,0,0,0.18)] overflow-hidden"
+            >
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="JOIN THE WAITLIST — YOUR EMAIL"
+                className="flex-1 min-w-0 px-4 sm:px-5 py-3.5 text-[11px] tracking-[0.12em] text-[#0A0A0A] placeholder-[#A8A8A4] focus:outline-none"
+              />
+              <button
+                type="submit"
+                disabled={submitting}
+                aria-label="Join the waitlist"
+                className="flex-shrink-0 bg-[#0A0A0A] text-white px-6 sm:px-8 text-[12px] tracking-[0.20em] hover:opacity-85 transition-opacity disabled:opacity-50"
+              >
+                {submitting ? '…' : '→'}
+              </button>
+            </form>
+          ) : (
+            // Initial state — the pill button (also opens the popup).
+            <div className="flex justify-center">
+              <button
+                onClick={openModal}
+                className="inline-flex items-center gap-3 bg-[#0A0A0A] text-white text-[11px] sm:text-[12px] tracking-[0.22em] px-10 sm:px-14 py-3.5 sm:py-4 shadow-[0_8px_24px_rgba(0,0,0,0.18)] hover:opacity-90 transition-opacity duration-300"
+              >
+                JOIN THE WAITLIST
+              </button>
+            </div>
+          )}
+          {dismissed && !success && error && (
+            <p className="text-[9px] tracking-[0.14em] text-[#B83A3A] text-center mt-2 bg-white/90 py-1 rounded">{error}</p>
+          )}
+        </div>
+      </div>
     </>
   )
 }
