@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import Hotspot from '@/components/hotspot/Hotspot'
@@ -53,6 +53,11 @@ export default function OutfitDetailClient({
   const [loading, setLoading] = useState(!initialOutfit)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
 
+  // Ordered list of sibling outfits so the user can swipe/arrow between looks.
+  const [siblingIds, setSiblingIds] = useState<string[]>([])
+  const touchStartX = useRef<number | null>(null)
+  const touchStartY = useRef<number | null>(null)
+
   // ── Fetch main outfit ─────────────────────────────────────
   useEffect(() => {
     // Admin preview supplies the outfit (with items) directly — skip the browser
@@ -85,6 +90,39 @@ export default function OutfitDetailClient({
 
     load()
   }, [outfitId, initialOutfit])
+
+  // ── Load sibling outfits (for swiping between looks) ──────
+  useEffect(() => {
+    async function loadSiblings() {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from('outfit')
+        .select('outfit_id')
+        .eq('status', 'live')
+        .order('published_at', { ascending: false })
+      if (data) setSiblingIds(data.map((o: { outfit_id: string }) => o.outfit_id))
+    }
+    loadSiblings()
+  }, [])
+
+  // Navigate to the previous / next look in the list.
+  const goToSibling = useCallback((dir: -1 | 1) => {
+    const idx = siblingIds.indexOf(outfitId)
+    if (idx === -1) return
+    const target = idx + dir
+    if (target < 0 || target >= siblingIds.length) return
+    router.push(`${linkBase}/${siblingIds[target]}`)
+  }, [siblingIds, outfitId, router, linkBase])
+
+  // Arrow keys move between looks (desktop).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'ArrowLeft') goToSibling(-1)
+      else if (e.key === 'ArrowRight') goToSibling(1)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [goToSibling])
 
   // ── Fetch style item outfits ──────────────────────────────
   const fetchStyleItemOutfits = useCallback(async (itemId: string) => {
@@ -213,6 +251,27 @@ export default function OutfitDetailClient({
   const safeIndex = Math.min(currentImageIndex, allImages.length - 1)
   const currentImageUrl = allImages[safeIndex] ?? outfit.image_url
 
+  // Position of this look in the list, for prev/next between outfits.
+  const siblingIdx = siblingIds.indexOf(outfitId)
+  const hasPrevLook = siblingIdx > 0
+  const hasNextLook = siblingIdx >= 0 && siblingIdx < siblingIds.length - 1
+
+  // Swipe between looks (horizontal swipe wins over vertical scroll).
+  function onLookTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0].clientX
+    touchStartY.current = e.touches[0].clientY
+  }
+  function onLookTouchEnd(e: React.TouchEvent) {
+    if (touchStartX.current === null || touchStartY.current === null) return
+    const dx = e.changedTouches[0].clientX - touchStartX.current
+    const dy = e.changedTouches[0].clientY - touchStartY.current
+    touchStartX.current = null
+    touchStartY.current = null
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      goToSibling(dx < 0 ? 1 : -1) // swipe left → next, swipe right → prev
+    }
+  }
+
   return (
     <div className="max-w-[1440px] mx-auto px-10 py-8">
 
@@ -226,13 +285,18 @@ export default function OutfitDetailClient({
         </button>
         <div className="flex items-center gap-4">
           <button
-            onClick={() => router.back()}
-            className="text-[20px] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors duration-300 leading-none"
+            onClick={() => goToSibling(-1)}
+            disabled={!hasPrevLook}
+            aria-label="Previous look"
+            className="text-[20px] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors duration-300 leading-none disabled:opacity-25 disabled:cursor-default"
           >
             ‹
           </button>
           <button
-            className="text-[20px] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors duration-300 leading-none"
+            onClick={() => goToSibling(1)}
+            disabled={!hasNextLook}
+            aria-label="Next look"
+            className="text-[20px] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors duration-300 leading-none disabled:opacity-25 disabled:cursor-default"
           >
             ›
           </button>
@@ -241,8 +305,9 @@ export default function OutfitDetailClient({
 
       {/* ── Main outfit detail ────────────────────────────── */}
       <div className="max-w-[560px] mx-auto mb-12">
-        {/* Outfit image with hotspots + carousel arrows */}
-        <div className="relative">
+        {/* Outfit image with hotspots + carousel arrows.
+            Swipe horizontally to move between looks. */}
+        <div className="relative" onTouchStart={onLookTouchStart} onTouchEnd={onLookTouchEnd}>
           <ImageWithHotspots
             key={currentImageUrl}
             outfit={outfit}
