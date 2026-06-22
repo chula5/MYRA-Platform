@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { joinWaitlist } from '@/app/admin/ai/waitlist-actions'
-import LandingTracker, { trackLandingClick } from '@/components/analytics/LandingTracker'
+import LandingTracker, { trackLandingClick, trackLandingSignup } from '@/components/analytics/LandingTracker'
 
 const POPUP_SEEN_KEY = 'myra_waitlist_popup_seen'
 const POPUP_DELAY_MS = 2500
@@ -47,6 +47,7 @@ export default function LandingPageClient() {
     const res = await joinWaitlist(email)
     setSubmitting(false)
     if (res.error) { setError(res.error); return }
+    trackLandingSignup()
     setSuccess(true)
   }
 
