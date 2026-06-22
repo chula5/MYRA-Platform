@@ -471,7 +471,7 @@ export default function FeedClient({
                 value={filterBrand}
                 onChange={(e) => setFilterBrand(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); setFilterPanel(null) } }}
-                placeholder="E.G. REFORMATION, TOTEME, JACQUEMUS…"
+                placeholder="E.G. STAUD, TOTEME, JACQUEMUS…"
                 autoFocus
                 className="w-full border border-[#E2E0DB] bg-[#FAFAF8] px-4 py-2.5 text-[11px] tracking-[0.12em] text-[#0A0A0A] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors"
               />
