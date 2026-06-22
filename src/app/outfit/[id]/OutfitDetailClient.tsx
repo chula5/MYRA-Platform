@@ -54,7 +54,7 @@ export default function OutfitDetailClient({
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
 
   // Ordered list of sibling outfits so the user can swipe/arrow between looks.
-  const [siblingIds, setSiblingIds] = useState<string[]>([])
+  const [siblings, setSiblings] = useState<{ id: string; image: string }[]>([])
   const touchStartX = useRef<number | null>(null)
   const touchStartY = useRef<number | null>(null)
 
@@ -97,22 +97,32 @@ export default function OutfitDetailClient({
       const supabase = createClient()
       const { data } = await supabase
         .from('outfit')
-        .select('outfit_id')
+        .select('outfit_id, image_url')
         .eq('status', 'live')
         .order('published_at', { ascending: false })
-      if (data) setSiblingIds(data.map((o: { outfit_id: string }) => o.outfit_id))
+      if (data) {
+        setSiblings(
+          (data as { outfit_id: string; image_url: string }[]).map((o) => ({
+            id: o.outfit_id,
+            image: o.image_url,
+          })),
+        )
+      }
     }
     loadSiblings()
   }, [])
 
-  // Navigate to the previous / next look in the list.
+  // Navigate to a specific look (by absolute index) or by direction.
+  const goToIndex = useCallback((target: number) => {
+    if (target < 0 || target >= siblings.length) return
+    router.push(`${linkBase}/${siblings[target].id}`)
+  }, [siblings, router, linkBase])
+
   const goToSibling = useCallback((dir: -1 | 1) => {
-    const idx = siblingIds.indexOf(outfitId)
+    const idx = siblings.findIndex((s) => s.id === outfitId)
     if (idx === -1) return
-    const target = idx + dir
-    if (target < 0 || target >= siblingIds.length) return
-    router.push(`${linkBase}/${siblingIds[target]}`)
-  }, [siblingIds, outfitId, router, linkBase])
+    goToIndex(idx + dir)
+  }, [siblings, outfitId, goToIndex])
 
   // Arrow keys move between looks (desktop).
   useEffect(() => {
@@ -252,9 +262,21 @@ export default function OutfitDetailClient({
   const currentImageUrl = allImages[safeIndex] ?? outfit.image_url
 
   // Position of this look in the list, for prev/next between outfits.
-  const siblingIdx = siblingIds.indexOf(outfitId)
+  const siblingIdx = siblings.findIndex((s) => s.id === outfitId)
   const hasPrevLook = siblingIdx > 0
-  const hasNextLook = siblingIdx >= 0 && siblingIdx < siblingIds.length - 1
+  const hasNextLook = siblingIdx >= 0 && siblingIdx < siblings.length - 1
+  const prevImage = hasPrevLook ? siblings[siblingIdx - 1].image : null
+  const nextImage = hasNextLook ? siblings[siblingIdx + 1].image : null
+
+  // Windowed dots (the list can be long — show up to 7 around the current look).
+  const DOTS = 7
+  const dotStart = siblings.length <= DOTS
+    ? 0
+    : Math.max(0, Math.min(siblingIdx - Math.floor(DOTS / 2), siblings.length - DOTS))
+  const dotIndices = Array.from(
+    { length: Math.min(DOTS, siblings.length) },
+    (_, k) => dotStart + k,
+  )
 
   // Swipe between looks (horizontal swipe wins over vertical scroll).
   function onLookTouchStart(e: React.TouchEvent) {
@@ -304,47 +326,111 @@ export default function OutfitDetailClient({
       </div>
 
       {/* ── Main outfit detail ────────────────────────────── */}
-      <div className="max-w-[560px] mx-auto mb-12">
-        {/* Outfit image with hotspots + carousel arrows.
-            Swipe horizontally to move between looks. */}
-        <div className="relative" onTouchStart={onLookTouchStart} onTouchEnd={onLookTouchEnd}>
-          <ImageWithHotspots
-            key={currentImageUrl}
-            outfit={outfit}
-            imageUrl={currentImageUrl}
-            activeItemLabel={activeItemLabel}
-            onStyleItem={handleStyleItem}
-          />
-
-          {allImages.length > 1 && (
-            <>
-              {/* Prev arrow */}
+      <div className="mb-12">
+        {/* Look carousel — current look sharp & centred, neighbours peek behind.
+            Swipe horizontally (or use the arrows / dots) to move between looks. */}
+        <div className="relative overflow-hidden">
+          <div
+            className="relative mx-auto max-w-[440px]"
+            onTouchStart={onLookTouchStart}
+            onTouchEnd={onLookTouchEnd}
+          >
+            {/* Previous look — peeking, blurred */}
+            {prevImage && (
               <button
                 type="button"
-                onClick={() => setCurrentImageIndex((i) => (i - 1 + allImages.length) % allImages.length)}
-                className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center bg-white/85 hover:bg-white text-[#0A0A0A] text-[22px] leading-none rounded-full shadow-sm transition-colors duration-200 z-10"
-                aria-label="Previous photo"
+                onClick={() => goToSibling(-1)}
+                aria-label="Previous look"
+                className="absolute top-1/2 right-full w-full z-0 hidden sm:block cursor-pointer"
+                style={{ transform: 'translateY(-50%) translateX(56%) scale(0.9)' }}
               >
-                ‹
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={prevImage}
+                  alt=""
+                  className="w-full aspect-[3/4] object-cover rounded-[2px]"
+                  style={{ filter: 'blur(3px)', opacity: 0.45 }}
+                />
               </button>
-              {/* Next arrow */}
+            )}
+            {/* Next look — peeking, blurred */}
+            {nextImage && (
               <button
                 type="button"
-                onClick={() => setCurrentImageIndex((i) => (i + 1) % allImages.length)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center bg-white/85 hover:bg-white text-[#0A0A0A] text-[22px] leading-none rounded-full shadow-sm transition-colors duration-200 z-10"
-                aria-label="Next photo"
+                onClick={() => goToSibling(1)}
+                aria-label="Next look"
+                className="absolute top-1/2 left-full w-full z-0 hidden sm:block cursor-pointer"
+                style={{ transform: 'translateY(-50%) translateX(-56%) scale(0.9)' }}
               >
-                ›
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={nextImage}
+                  alt=""
+                  className="w-full aspect-[3/4] object-cover rounded-[2px]"
+                  style={{ filter: 'blur(3px)', opacity: 0.45 }}
+                />
               </button>
+            )}
 
-              {/* Counter */}
-              <div className="absolute top-3 right-3 bg-black/60 text-white text-[10px] tracking-[0.15em] px-2.5 py-1 rounded-full">
-                {safeIndex + 1} / {allImages.length}
-              </div>
-            </>
-          )}
+            {/* Current look */}
+            <div className="relative z-10 bg-white shadow-[0_20px_60px_rgba(0,0,0,0.18)]">
+              <ImageWithHotspots
+                key={currentImageUrl}
+                outfit={outfit}
+                imageUrl={currentImageUrl}
+                activeItemLabel={activeItemLabel}
+                onStyleItem={handleStyleItem}
+              />
+
+              {allImages.length > 1 && (
+                <>
+                  {/* Prev photo */}
+                  <button
+                    type="button"
+                    onClick={() => setCurrentImageIndex((i) => (i - 1 + allImages.length) % allImages.length)}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center bg-white/85 hover:bg-white text-[#0A0A0A] text-[22px] leading-none rounded-full shadow-sm transition-colors duration-200 z-20"
+                    aria-label="Previous photo"
+                  >
+                    ‹
+                  </button>
+                  {/* Next photo */}
+                  <button
+                    type="button"
+                    onClick={() => setCurrentImageIndex((i) => (i + 1) % allImages.length)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center bg-white/85 hover:bg-white text-[#0A0A0A] text-[22px] leading-none rounded-full shadow-sm transition-colors duration-200 z-20"
+                    aria-label="Next photo"
+                  >
+                    ›
+                  </button>
+
+                  {/* Counter */}
+                  <div className="absolute top-3 right-3 bg-black/60 text-white text-[10px] tracking-[0.15em] px-2.5 py-1 rounded-full z-20">
+                    {safeIndex + 1} / {allImages.length}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
 
+        {/* Look position dots */}
+        {siblings.length > 1 && (
+          <div className="flex items-center justify-center gap-1.5 mt-5 mb-1">
+            {dotIndices.map((di) => (
+              <button
+                key={di}
+                type="button"
+                onClick={() => goToIndex(di)}
+                aria-label={`Go to look ${di + 1}`}
+                className={`h-1.5 rounded-full transition-all duration-300 ${
+                  di === siblingIdx ? 'w-5 bg-[#0A0A0A]' : 'w-1.5 bg-[#D8D6D1] hover:bg-[#A8A8A4]'
+                }`}
+              />
+            ))}
+          </div>
+        )}
+
+        <div className="max-w-[560px] mx-auto mt-6">
         {/* Thumbnail strip */}
         {allImages.length > 1 && (
           <div className="flex gap-2 justify-center mb-4 mt-3">
@@ -399,6 +485,7 @@ export default function OutfitDetailClient({
               </CardButton>
             </>
           )}
+        </div>
         </div>
       </div>
 
