@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import Hotspot from '@/components/hotspot/Hotspot'
-import SourcePanel from '@/components/source-panel/SourcePanel'
+import ShopTheLookOverlay from '@/components/source-panel/ShopTheLookOverlay'
 import OutfitCard from '@/components/outfit-card/OutfitCard'
 import CardButton from '@/components/ui/CardButton'
 import { createClient } from '@/lib/supabase'
@@ -382,6 +382,15 @@ export default function OutfitDetailClient({
                 onStyleItem={handleStyleItem}
               />
 
+              {/* Shop-the-look cards overlaid on the image (toggled by SOURCE ITEMS) */}
+              {sourcePanelOpen && items.length > 0 && (
+                <ShopTheLookOverlay
+                  items={items}
+                  outfitId={outfitId}
+                  onClose={() => setSourcePanelOpen(false)}
+                />
+              )}
+
               {allImages.length > 1 && (
                 <>
                   {/* Prev photo */}
@@ -472,7 +481,7 @@ export default function OutfitDetailClient({
             Flip the flag back to `true` to re-expose them — all downstream
             code (handlers, fetch logic, result grids) is untouched. */}
         <div className="flex items-center justify-center gap-2">
-          <CardButton variant="filled" onClick={() => setSourcePanelOpen(true)}>
+          <CardButton variant="filled" onClick={() => setSourcePanelOpen((v) => !v)}>
             SOURCE ITEMS
           </CardButton>
           {showBrowse && (
@@ -530,14 +539,6 @@ export default function OutfitDetailClient({
           </div>
         </div>
       )}
-
-      {/* Source panel */}
-      <SourcePanel
-        items={items}
-        isOpen={sourcePanelOpen}
-        onClose={() => setSourcePanelOpen(false)}
-        outfitId={outfitId}
-      />
     </div>
   )
 }
