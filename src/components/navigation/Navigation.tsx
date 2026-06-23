@@ -35,10 +35,22 @@ export default function Navigation({ transparent = false }: { transparent?: bool
           </Link>
         </div>
 
-        {/* Centre — wordmark */}
+        {/* Centre — logo wordmark (white over the hero, black on the white nav) */}
         <div className="flex justify-center shrink-0">
-          <Link href="/" className={`text-[18px] sm:text-[22px] tracking-[0.22em] sm:tracking-[0.25em] leading-none hover:opacity-70 transition-colors duration-500 ${textColor}`}>
-            MYRA
+          <Link href="/" aria-label="MYRA" className="relative block h-[20px] sm:h-[26px] hover:opacity-70 transition-opacity duration-500">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/myra-logo-white.png"
+              alt="MYRA"
+              className={`h-full w-auto transition-opacity duration-500 ${isTransparent ? 'opacity-100' : 'opacity-0'}`}
+            />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/myra-logo-black.png"
+              alt=""
+              aria-hidden="true"
+              className={`absolute inset-0 h-full w-auto transition-opacity duration-500 ${isTransparent ? 'opacity-0' : 'opacity-100'}`}
+            />
           </Link>
         </div>
 
