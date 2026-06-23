@@ -33,26 +33,26 @@ export default function ShopTheLookOverlay({
   }
 
   return (
-    <div className="absolute top-3 left-3 z-30 w-[clamp(150px,46%,250px)] max-h-[calc(100%-1.5rem)] overflow-y-auto pr-1">
+    <div className="absolute top-2.5 left-2.5 z-30 w-[clamp(118px,33%,176px)] max-h-[calc(100%-1.25rem)] overflow-y-auto pr-1">
       {/* Header */}
-      <div className="flex items-center gap-2 mb-2.5">
-        <span className="text-white text-[10px] sm:text-[11px] tracking-[0.20em] drop-shadow-[0_1px_3px_rgba(0,0,0,0.5)]">
+      <div className="flex items-center gap-1.5 mb-2">
+        <span className="text-white text-[8px] sm:text-[9px] tracking-[0.18em] drop-shadow-[0_1px_3px_rgba(0,0,0,0.55)]">
           SHOP THE LOOK
         </span>
-        <span className="bg-white/90 text-[#0A0A0A] text-[9px] tracking-[0.1em] rounded-full px-2 py-0.5 leading-none">
+        <span className="bg-white/90 text-[#0A0A0A] text-[8px] tracking-[0.08em] rounded-full px-1.5 py-0.5 leading-none">
           {items.length}
         </span>
         <button
           onClick={onClose}
           aria-label="Hide shop the look"
-          className="ml-auto bg-white/90 text-[#0A0A0A] w-5 h-5 rounded-full text-[12px] leading-none flex items-center justify-center hover:bg-white"
+          className="ml-auto bg-white/90 text-[#0A0A0A] w-4 h-4 rounded-full text-[10px] leading-none flex items-center justify-center hover:bg-white"
         >
           ×
         </button>
       </div>
 
       {/* Cards */}
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         {items.map((item) => (
           <ItemCard key={item.item_id} item={item} onShop={() => shop(item)} />
         ))}
@@ -67,39 +67,39 @@ function ItemCard({ item, onShop }: { item: SourceItem; onShop: () => void }) {
   const price = formatPrice(item.price ?? null, item.currency ?? null)
 
   return (
-    <div className="bg-white rounded-[8px] shadow-[0_4px_14px_rgba(0,0,0,0.14)] p-2 flex gap-2 items-stretch">
+    <div className="bg-white rounded-[6px] shadow-[0_3px_10px_rgba(0,0,0,0.14)] p-1.5 flex gap-1.5 items-stretch">
       {/* Thumbnail */}
-      <div className="relative w-[40px] h-[52px] flex-shrink-0 rounded-[3px] overflow-hidden bg-[#F2F2F2]">
+      <div className="relative w-[28px] h-[38px] flex-shrink-0 rounded-[2px] overflow-hidden bg-[#F2F2F2]">
         {item.image_url && !imgFailed ? (
           <Image
             src={item.image_url}
             alt={item.product_name}
             fill
             className="object-cover"
-            sizes="40px"
+            sizes="28px"
             onError={() => setImgFailed(true)}
           />
         ) : (
           <div className="w-full h-full bg-[#E2E0DB] flex items-center justify-center">
-            <span className="text-[11px] text-[#6B6B6B]">{brandInitial}</span>
+            <span className="text-[9px] text-[#6B6B6B]">{brandInitial}</span>
           </div>
         )}
       </div>
 
       {/* Info */}
       <div className="flex-1 min-w-0 flex flex-col">
-        <p className="text-[7px] sm:text-[8px] tracking-[0.14em] text-[#6B6B6B] uppercase truncate">
+        <p className="text-[6px] sm:text-[7px] tracking-[0.12em] text-[#6B6B6B] uppercase truncate">
           {item.brand?.name ?? 'BRAND'}
         </p>
-        <p className="text-[9px] sm:text-[10px] leading-tight text-[#0A0A0A] font-semibold line-clamp-2">
+        <p className="text-[8px] sm:text-[9px] leading-[1.15] text-[#0A0A0A] font-semibold line-clamp-2">
           {item.product_name}
         </p>
-        <div className="mt-auto flex items-center justify-between gap-1 pt-1">
-          <span className="text-[9px] sm:text-[10px] text-[#0A0A0A]">{price}</span>
+        <div className="mt-auto flex items-center justify-between gap-1 pt-0.5">
+          <span className="text-[8px] sm:text-[9px] text-[#0A0A0A]">{price}</span>
           {item.retailer_url && (
             <button
               onClick={onShop}
-              className="bg-[#0A0A0A] text-white text-[7px] sm:text-[8px] tracking-[0.12em] px-2 py-1 rounded hover:opacity-85 transition-opacity flex-shrink-0"
+              className="bg-[#0A0A0A] text-white text-[6px] sm:text-[7px] tracking-[0.10em] px-1.5 py-0.5 rounded hover:opacity-85 transition-opacity flex-shrink-0"
             >
               SHOP
             </button>
