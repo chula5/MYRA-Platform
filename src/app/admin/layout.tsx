@@ -95,6 +95,12 @@ export default async function AdminLayout({
             PREFERENCES
           </a>
           <a
+            href="/admin/product-view"
+            className="text-[11px] tracking-[0.20em] text-white/70 hover:text-white transition-colors duration-300"
+          >
+            PRODUCT VIEW
+          </a>
+          <a
             href="/"
             className="text-[11px] tracking-[0.20em] text-white/50 hover:text-white transition-colors duration-300"
           >
