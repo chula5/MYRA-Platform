@@ -62,7 +62,6 @@ export default async function EditPage() {
       {/* The Edit — occasion search + browse (read-only). Items come with the
           server-fetched outfits, so Source Items / hotspots work. */}
       <FeedClient
-        showAllOption
         injectedOutfits={liveOutfits}
         detailHrefBase="/edit"
         canSave
