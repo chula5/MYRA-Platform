@@ -348,8 +348,8 @@ export default function FeedClient({
   // ── LANDING VIEW ──────────────────────────────────────────
   if (!occasion && !searchMode) {
     return (
-      <div className="max-w-[1440px] mx-auto px-6 sm:px-10 py-16">
-        <div className="text-center mb-12">
+      <div className="max-w-[1440px] mx-auto px-6 sm:px-10 py-16 flex flex-col">
+        <div className="order-1 text-center mb-10">
           <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-4">YOUR OCCASION</p>
           <h1 className="text-[clamp(28px,3vw,40px)] tracking-[0.045em] text-[#4A4E57] leading-tight">
             WHAT ARE YOU DRESSING FOR?
@@ -358,7 +358,7 @@ export default function FeedClient({
 
         {/* Recommended for you — personalised from saves + brand worlds */}
         {recommendedOutfits.length > 0 && (
-          <div className="max-w-[1100px] mx-auto mb-12">
+          <div className="order-4 max-w-[1100px] mx-auto mb-12">
             <div className="flex items-baseline justify-between mb-4">
               <p className="text-[11px] tracking-[0.099em] text-[#4A4E57]">RECOMMENDED FOR YOU</p>
               <p className="text-[9px] tracking-[0.072em] text-[#A8A8A4]">BASED ON WHAT YOU LIKE</p>
@@ -388,7 +388,7 @@ export default function FeedClient({
         )}
 
         {showAllOption && (
-          <div className="max-w-[900px] mx-auto mb-6">
+          <div className="order-5 max-w-[900px] mx-auto mb-6">
             <button
               onClick={() => setOccasion('all')}
               className="glass-dark w-full text-[#4A4E57] px-4 py-4 text-[11px] tracking-[0.09em] rounded-full"
@@ -399,7 +399,7 @@ export default function FeedClient({
         )}
 
         {/* Occasion grid */}
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-w-[900px] mx-auto mb-10">
+        <div className="order-6 grid grid-cols-2 md:grid-cols-3 gap-3 max-w-[900px] mx-auto mb-10">
           {PRESET_OCCASIONS.map((occ) => (
             <button
               key={occ.tag}
@@ -412,14 +412,14 @@ export default function FeedClient({
         </div>
 
         {/* Divider */}
-        <div className="flex items-center gap-6 max-w-[900px] mx-auto mb-8">
+        <div className="order-2 flex items-center gap-6 max-w-[900px] mx-auto mb-8">
           <div className="flex-1 border-t border-[#E2E0DB]" />
           <span className="text-[10px] tracking-[0.113em] text-[#A8A8A4]">OR SEARCH</span>
           <div className="flex-1 border-t border-[#E2E0DB]" />
         </div>
 
         {/* Search + filter area */}
-        <div className="max-w-[700px] mx-auto">
+        <div className="order-3 max-w-[700px] mx-auto mb-10">
 
           {/* Active filter chips */}
           {(filterColour || filterItemGroup || filterBrand.trim()) && (
