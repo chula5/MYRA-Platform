@@ -105,7 +105,7 @@ export default function LandingPageClient() {
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="glass-dark w-full rounded-full py-3.5 text-[11px] tracking-[0.22em] text-white disabled:opacity-50"
+                    className="glass-dark w-full rounded-full py-3.5 text-[11px] tracking-[0.22em] text-[#0A0A0A] disabled:opacity-50"
                   >
                     {submitting ? 'JOINING…' : 'REQUEST ACCESS'}
                   </button>
@@ -120,7 +120,7 @@ export default function LandingPageClient() {
       <div className="fixed bottom-0 left-0 right-0 z-40 pointer-events-none flex justify-center pb-5 sm:pb-7 px-4">
         <div className="pointer-events-auto w-full max-w-[460px]">
           {success ? (
-            <div className="glass-dark rounded-full text-white text-center text-[11px] tracking-[0.20em] px-8 py-4">
+            <div className="glass-dark rounded-full text-[#0A0A0A] text-center text-[11px] tracking-[0.20em] px-8 py-4">
               YOU&rsquo;RE ON THE LIST ✓
             </div>
           ) : dismissed ? (
@@ -141,7 +141,7 @@ export default function LandingPageClient() {
                 type="submit"
                 disabled={submitting}
                 aria-label="Join the waitlist"
-                className="glass-dark flex-shrink-0 text-white px-6 sm:px-8 text-[16px] rounded-full m-1 disabled:opacity-50"
+                className="glass-dark flex-shrink-0 text-[#0A0A0A] px-6 sm:px-8 text-[16px] rounded-full m-1 disabled:opacity-50"
               >
                 {submitting ? '…' : '→'}
               </button>
@@ -151,7 +151,7 @@ export default function LandingPageClient() {
             <div className="flex justify-center">
               <button
                 onClick={openModal}
-                className="glass-dark inline-flex items-center gap-3 rounded-full text-white text-[11px] sm:text-[12px] tracking-[0.22em] px-10 sm:px-14 py-3.5 sm:py-4"
+                className="glass-dark inline-flex items-center gap-3 rounded-full text-[#0A0A0A] text-[11px] sm:text-[12px] tracking-[0.22em] px-10 sm:px-14 py-3.5 sm:py-4"
               >
                 JOIN THE WAITLIST
               </button>

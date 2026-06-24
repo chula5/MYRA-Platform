@@ -391,7 +391,7 @@ export default function FeedClient({
           <div className="max-w-[900px] mx-auto mb-6">
             <button
               onClick={() => setOccasion('all')}
-              className="glass-dark w-full text-white px-4 py-4 text-[11px] tracking-[0.20em] rounded-full"
+              className="glass-dark w-full text-[#0A0A0A] px-4 py-4 text-[11px] tracking-[0.20em] rounded-full"
             >
               ↓ VIEW EVERYTHING LIVE
             </button>
@@ -460,7 +460,7 @@ export default function FeedClient({
             <button
               type="submit"
               disabled={!hasActiveSearch}
-              className="glass-dark text-white px-7 py-3.5 rounded-full text-[11px] tracking-[0.20em] flex-shrink-0 disabled:opacity-30"
+              className="glass-dark text-[#0A0A0A] px-7 py-3.5 rounded-full text-[11px] tracking-[0.20em] flex-shrink-0 disabled:opacity-30"
             >
               FIND
             </button>

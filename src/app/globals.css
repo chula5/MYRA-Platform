@@ -91,30 +91,24 @@ html {
   z-index: 2;
 }
 
-/* Glossy dark — primary buttons */
+/* Primary — soft light frosted with a gentle bottom glow (neumorphic) */
 .glass-dark {
-  background: linear-gradient(180deg, rgba(48, 48, 48, 0.92) 0%, rgba(10, 10, 10, 0.94) 64%);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  color: #fff;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(236, 236, 236, 0.78) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  color: #0A0A0A;
   box-shadow:
-    0 8px 22px rgba(0, 0, 0, 0.24),
-    inset 0 1px 0 rgba(255, 255, 255, 0.32),
-    inset 0 -8px 14px rgba(0, 0, 0, 0.28);
-}
-.glass-dark::before {
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.30) 0%,
-    rgba(255, 255, 255, 0.06) 42%,
-    rgba(255, 255, 255, 0) 56%
-  );
+    0 10px 24px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -12px 20px -10px rgba(255, 255, 255, 0.9),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.05);
 }
 .glass-dark:hover {
-  background: linear-gradient(180deg, rgba(62, 62, 62, 0.95) 0%, rgba(20, 20, 20, 0.96) 64%);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 1) 0%, rgba(245, 245, 245, 0.9) 100%);
   box-shadow:
-    0 10px 28px rgba(0, 0, 0, 0.30),
-    inset 0 1px 0 rgba(255, 255, 255, 0.40),
-    inset 0 -8px 14px rgba(0, 0, 0, 0.30);
+    0 14px 30px rgba(0, 0, 0, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -12px 20px -10px rgba(255, 255, 255, 1),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.05);
 }
 
 /* Frosted light — secondary buttons / tiles */
