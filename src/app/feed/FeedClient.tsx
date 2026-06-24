@@ -10,7 +10,7 @@ import type { OutfitWithItems, ItemType, ColourFamily } from '@/types/database'
 // ── Preset occasions ──────────────────────────────────────────
 const PRESET_OCCASIONS = [
   { label: 'WEEKEND AWAY', tag: 'weekend away' },
-  { label: 'RACE DAY', tag: 'race day' },
+  { label: 'WIMBLEDON', tag: 'wimbledon' },
   { label: 'WEDDING GUEST', tag: 'wedding guest' },
   { label: 'DATE NIGHT', tag: 'date night' },
   { label: 'CITY SUMMER EVENING', tag: 'city summer evening' },

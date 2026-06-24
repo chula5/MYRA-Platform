@@ -8,7 +8,7 @@ import { updateOutfitTags } from '@/app/admin/projects/actions'
 // PRESET_OCCASIONS in src/app/feed/FeedClient.tsx.
 const PRESET_OCCASIONS = [
   { label: 'WEEKEND AWAY', tag: 'weekend away' },
-  { label: 'RACE DAY', tag: 'race day' },
+  { label: 'WIMBLEDON', tag: 'wimbledon' },
   { label: 'WEDDING GUEST', tag: 'wedding guest' },
   { label: 'DATE NIGHT', tag: 'date night' },
   { label: 'CITY SUMMER EVENING', tag: 'city summer evening' },

@@ -59,7 +59,7 @@ Return ONLY a JSON array of 3 to 6 short, lowercase occasion/season tags that ge
 
 PRIMARY OCCASIONS — these are the filters in the app. Use the EXACT phrase for every one the outfit genuinely suits (include as many as fit):
 - "weekend away"
-- "race day"
+- "wimbledon"
 - "wedding guest"
 - "date night"
 - "city summer evening"  (a polished but not black-tie summer evening look for the city — dinner / drinks / gallery)

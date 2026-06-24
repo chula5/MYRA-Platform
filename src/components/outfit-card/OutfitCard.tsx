@@ -193,7 +193,7 @@ export default function OutfitCard({
         )}
 
         {/* Action buttons */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-center gap-2">
           <CardButton
             variant="filled"
             onClick={() => setSourcePanelOpen(true)}
