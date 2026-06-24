@@ -53,6 +53,106 @@ html {
   transition: all 400ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* ── Liquid glass surfaces ───────────────────────────────────────
+   Frosted, reflective surfaces that lean into MYRA's mirror idea.
+   .glass-dark  — glossy dark surface (primary buttons)
+   .glass-light — frosted light surface (secondary buttons, tiles)
+   .glass-input — frosted input field
+   Each gets a soft top "reflection" sheen via ::before. */
+.glass-dark,
+.glass-light,
+.glass-input {
+  position: relative;
+  isolation: isolate;
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  backdrop-filter: blur(10px) saturate(140%);
+  transition: box-shadow 0.4s ease, background 0.4s ease, border-color 0.3s ease;
+}
+.glass-dark::before,
+.glass-light::before,
+.glass-input::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 1;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.42) 0%,
+    rgba(255, 255, 255, 0.08) 36%,
+    rgba(255, 255, 255, 0) 54%
+  );
+}
+.glass-dark > *,
+.glass-light > *,
+.glass-input > * {
+  position: relative;
+  z-index: 2;
+}
+
+/* Glossy dark — primary buttons */
+.glass-dark {
+  background: linear-gradient(180deg, rgba(48, 48, 48, 0.92) 0%, rgba(10, 10, 10, 0.94) 64%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #fff;
+  box-shadow:
+    0 8px 22px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    inset 0 -8px 14px rgba(0, 0, 0, 0.28);
+}
+.glass-dark::before {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.30) 0%,
+    rgba(255, 255, 255, 0.06) 42%,
+    rgba(255, 255, 255, 0) 56%
+  );
+}
+.glass-dark:hover {
+  background: linear-gradient(180deg, rgba(62, 62, 62, 0.95) 0%, rgba(20, 20, 20, 0.96) 64%);
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.30),
+    inset 0 1px 0 rgba(255, 255, 255, 0.40),
+    inset 0 -8px 14px rgba(0, 0, 0, 0.30);
+}
+
+/* Frosted light — secondary buttons / tiles */
+.glass-light {
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  color: #0A0A0A;
+  box-shadow:
+    0 8px 22px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -4px 10px rgba(0, 0, 0, 0.04);
+}
+.glass-light:hover {
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -4px 10px rgba(0, 0, 0, 0.05);
+}
+
+/* Frosted input field */
+.glass-input {
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 2px 6px rgba(0, 0, 0, 0.05),
+    0 6px 18px rgba(0, 0, 0, 0.06);
+}
+.glass-input:focus-within,
+.glass-input:focus {
+  border-color: rgba(10, 10, 10, 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 2px 6px rgba(0, 0, 0, 0.06),
+    0 8px 22px rgba(0, 0, 0, 0.10);
+}
+
 /* ── Source panel slide animation ───────────────────────────── */
 @keyframes slideInFromLeft {
   from {

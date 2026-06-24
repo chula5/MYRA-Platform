@@ -99,13 +99,13 @@ export default function LandingPageClient() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="YOUR EMAIL ADDRESS"
-                    className="w-full border border-[#E2E0DB] px-4 py-3.5 text-[12px] tracking-[0.10em] text-[#0A0A0A] placeholder-[#A8A8A4] text-center focus:outline-none focus:border-[#0A0A0A] transition-colors"
+                    className="glass-input w-full rounded-full px-5 py-3.5 text-[12px] tracking-[0.10em] text-[#0A0A0A] placeholder-[#A8A8A4] text-center focus:outline-none"
                   />
                   {error && <p className="text-[10px] tracking-[0.12em] text-[#B83A3A]">{error}</p>}
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="w-full bg-[#0A0A0A] text-white py-3.5 text-[11px] tracking-[0.22em] hover:opacity-85 transition-opacity disabled:opacity-50"
+                    className="glass-dark w-full rounded-full py-3.5 text-[11px] tracking-[0.22em] text-white disabled:opacity-50"
                   >
                     {submitting ? 'JOINING…' : 'REQUEST ACCESS'}
                   </button>
@@ -120,14 +120,14 @@ export default function LandingPageClient() {
       <div className="fixed bottom-0 left-0 right-0 z-40 pointer-events-none flex justify-center pb-5 sm:pb-7 px-4">
         <div className="pointer-events-auto w-full max-w-[460px]">
           {success ? (
-            <div className="bg-[#0A0A0A] text-white text-center text-[11px] tracking-[0.20em] px-8 py-4 shadow-[0_8px_24px_rgba(0,0,0,0.18)]">
+            <div className="glass-dark rounded-full text-white text-center text-[11px] tracking-[0.20em] px-8 py-4">
               YOU&rsquo;RE ON THE LIST ✓
             </div>
           ) : dismissed ? (
             // Inline email form — shown after the popup is dismissed.
             <form
               onSubmit={submit}
-              className="flex items-stretch gap-0 bg-white border border-[#0A0A0A] shadow-[0_8px_24px_rgba(0,0,0,0.18)] overflow-hidden"
+              className="glass-input flex items-stretch gap-0 rounded-full overflow-hidden"
             >
               <input
                 type="email"
@@ -135,13 +135,13 @@ export default function LandingPageClient() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="JOIN THE WAITLIST — YOUR EMAIL"
-                className="flex-1 min-w-0 px-4 sm:px-5 py-3.5 text-[11px] tracking-[0.12em] text-[#0A0A0A] placeholder-[#A8A8A4] focus:outline-none"
+                className="flex-1 min-w-0 bg-transparent px-5 sm:px-6 py-3.5 text-[11px] tracking-[0.12em] text-[#0A0A0A] placeholder-[#A8A8A4] focus:outline-none"
               />
               <button
                 type="submit"
                 disabled={submitting}
                 aria-label="Join the waitlist"
-                className="flex-shrink-0 bg-[#0A0A0A] text-white px-6 sm:px-8 text-[12px] tracking-[0.20em] hover:opacity-85 transition-opacity disabled:opacity-50"
+                className="glass-dark flex-shrink-0 text-white px-6 sm:px-8 text-[16px] rounded-full m-1 disabled:opacity-50"
               >
                 {submitting ? '…' : '→'}
               </button>
@@ -151,7 +151,7 @@ export default function LandingPageClient() {
             <div className="flex justify-center">
               <button
                 onClick={openModal}
-                className="inline-flex items-center gap-3 bg-[#0A0A0A] text-white text-[11px] sm:text-[12px] tracking-[0.22em] px-10 sm:px-14 py-3.5 sm:py-4 shadow-[0_8px_24px_rgba(0,0,0,0.18)] hover:opacity-90 transition-opacity duration-300"
+                className="glass-dark inline-flex items-center gap-3 rounded-full text-white text-[11px] sm:text-[12px] tracking-[0.22em] px-10 sm:px-14 py-3.5 sm:py-4"
               >
                 JOIN THE WAITLIST
               </button>

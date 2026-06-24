@@ -391,7 +391,7 @@ export default function FeedClient({
           <div className="max-w-[900px] mx-auto mb-6">
             <button
               onClick={() => setOccasion('all')}
-              className="w-full border border-[#0A0A0A] bg-[#0A0A0A] text-white px-4 py-4 text-[11px] tracking-[0.20em] rounded-[3px] hover:bg-[#333] transition-colors duration-300"
+              className="glass-dark w-full text-white px-4 py-4 text-[11px] tracking-[0.20em] rounded-full"
             >
               ↓ VIEW EVERYTHING LIVE
             </button>
@@ -404,7 +404,7 @@ export default function FeedClient({
             <button
               key={occ.tag}
               onClick={() => setOccasion(occ.tag)}
-              className="border border-[#E2E0DB] bg-white px-4 py-6 text-[11px] tracking-[0.20em] text-[#0A0A0A] text-center rounded-[3px] transition-all duration-400 hover:border-[#0A0A0A] hover:bg-[#FAFAF8] active:bg-[#0A0A0A] active:text-white"
+              className="glass-light px-4 py-6 text-[11px] tracking-[0.20em] text-[#0A0A0A] text-center rounded-[16px] active:scale-[0.99]"
             >
               {occ.label}
             </button>
@@ -455,12 +455,12 @@ export default function FeedClient({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="SEARCH BY STYLE, COLOUR, BRAND, MATERIAL…"
-              className="flex-1 border border-[#E2E0DB] bg-white px-5 py-3.5 rounded-[3px] text-[11px] tracking-[0.12em] text-[#0A0A0A] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors duration-300"
+              className="glass-input flex-1 px-5 py-3.5 rounded-full text-[11px] tracking-[0.12em] text-[#0A0A0A] placeholder:text-[#A8A8A4] focus:outline-none"
             />
             <button
               type="submit"
               disabled={!hasActiveSearch}
-              className="bg-[#0A0A0A] text-white px-7 py-3.5 rounded-[3px] text-[11px] tracking-[0.20em] hover:opacity-85 transition-opacity duration-400 flex-shrink-0 disabled:opacity-30"
+              className="glass-dark text-white px-7 py-3.5 rounded-full text-[11px] tracking-[0.20em] flex-shrink-0 disabled:opacity-30"
             >
               FIND
             </button>

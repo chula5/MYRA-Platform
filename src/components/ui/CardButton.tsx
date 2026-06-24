@@ -22,14 +22,8 @@ const CardButton = forwardRef<HTMLButtonElement, CardButtonProps>(
     `
 
     const variants = {
-      filled: `
-        bg-[#0A0A0A] text-white border border-[#0A0A0A]
-        hover:opacity-85
-      `,
-      outlined: `
-        bg-transparent text-[#0A0A0A] border border-[#0A0A0A]
-        hover:bg-[#F2F2F2]
-      `,
+      filled: `glass-dark text-white`,
+      outlined: `glass-light text-[#0A0A0A]`,
     }
 
     return (
