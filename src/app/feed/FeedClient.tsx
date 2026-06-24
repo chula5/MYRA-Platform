@@ -7,6 +7,18 @@ import SaveHeartButton from '@/components/outfit-card/SaveHeartButton'
 import { createClient } from '@/lib/supabase'
 import type { OutfitWithItems, ItemType, ColourFamily } from '@/types/database'
 
+// Example occasions that "type" themselves into the search bar as a prompt.
+const SEARCH_EXAMPLES = [
+  'A GIRLS HOLIDAY IN MYKONOS',
+  'A SUMMER WEDDING IN ITALY',
+  'DINNER ON A ROOFTOP',
+  'WIMBLEDON IN JULY',
+  'BRUNCH WITH THE GIRLS',
+  'A FIRST DATE',
+  'A WEEKEND IN THE COUNTRYSIDE',
+  'A BLACK LACE DRESS FOR A PARTY',
+]
+
 // ── Preset occasions ──────────────────────────────────────────
 const PRESET_OCCASIONS = [
   { label: 'WEEKEND AWAY', tag: 'weekend away' },
@@ -213,6 +225,31 @@ export default function FeedClient({
   const [searchMode, setSearchMode]       = useState(false)
   const [searchResults, setSearchResults] = useState<OutfitWithItems[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
+  const [typedHint, setTypedHint] = useState('')
+
+  // Typewriter — cycle example occasions into the search placeholder.
+  useEffect(() => {
+    let phrase = 0
+    let char = 0
+    let deleting = false
+    let timer: ReturnType<typeof setTimeout>
+    const tick = () => {
+      const full = SEARCH_EXAMPLES[phrase]
+      if (!deleting) {
+        char++
+        setTypedHint(full.slice(0, char))
+        if (char === full.length) { deleting = true; timer = setTimeout(tick, 1800); return }
+        timer = setTimeout(tick, 55)
+      } else {
+        char--
+        setTypedHint(full.slice(0, char))
+        if (char === 0) { deleting = false; phrase = (phrase + 1) % SEARCH_EXAMPLES.length; timer = setTimeout(tick, 400); return }
+        timer = setTimeout(tick, 28)
+      }
+    }
+    timer = setTimeout(tick, 700)
+    return () => clearTimeout(timer)
+  }, [])
 
   const LIMIT = 9
   const router = useRouter()
@@ -454,7 +491,7 @@ export default function FeedClient({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="SEARCH BY STYLE, COLOUR, BRAND, MATERIAL…"
+              placeholder={typedHint ? `${typedHint}▌` : 'SEARCH BY STYLE, COLOUR, BRAND, MATERIAL…'}
               className="glass-input flex-1 px-5 py-3.5 rounded-full text-[11px] tracking-[0.054em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none"
             />
             <button
