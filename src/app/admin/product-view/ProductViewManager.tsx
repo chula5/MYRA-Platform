@@ -66,11 +66,10 @@ export default function ProductViewManager({ clips }: { clips: Clip[] }) {
     <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <p className="text-[10px] tracking-[0.25em] text-[#6B6B6B] mb-1">ADMIN</p>
-          <h1 className="text-[22px] tracking-[0.10em] text-[#0A0A0A]">PRODUCT VIEW</h1>
+          <h2 className="text-[14px] tracking-[0.14em] text-[#0A0A0A]">DEMO VIDEOS</h2>
           <p className="text-[11px] tracking-[0.13em] text-[#A8A8A4] mt-1 max-w-[560px] leading-relaxed">
-            Quick demo videos of MYRA&rsquo;s areas. Screen-record a flow, host it (Cloudinary, Loom or a
-            YouTube link), then add it here with a title and caption.
+            Optional saved clips. Screen-record a flow (or capture one of the previews above), host it
+            (Cloudinary, Loom or a YouTube link), then add it here with a title and caption.
           </p>
         </div>
         {!adding && (
