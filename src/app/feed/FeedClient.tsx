@@ -91,6 +91,36 @@ function antiRepeatOrder(list: OutfitWithItems[]): OutfitWithItems[] {
   return result
 }
 
+// ── Anchor de-duplication ─────────────────────────────────────
+// The "anchor" is the hero garment an outfit is built around (the dress, or the
+// top/bottom). Several outfits can share the same anchor styled different ways —
+// in the occasion feed we only want to show each anchor ONCE; the other stylings
+// stay reachable via SIMILAR LOOKS / EXPLORE STYLES.
+function anchorItemId(o: OutfitWithItems): string | null {
+  const its = (o.outfit_item ?? []).filter((oi) => oi.item)
+  const bySlot = (slot: string) => its.find((oi) => oi.slot === slot)?.item_id
+  return (
+    bySlot('dress') ||
+    bySlot('top') ||
+    bySlot('bottom') ||
+    bySlot('outerwear') ||
+    its[0]?.item_id ||
+    null
+  )
+}
+
+function dedupeByAnchor(list: OutfitWithItems[]): OutfitWithItems[] {
+  const seen = new Set<string>()
+  const out: OutfitWithItems[] = []
+  for (const o of list) {
+    const a = anchorItemId(o)
+    if (a && seen.has(a)) continue
+    if (a) seen.add(a)
+    out.push(o)
+  }
+  return out
+}
+
 // ── Outfit matching logic ─────────────────────────────────────
 
 // Match token as a whole word so "red" doesn't match "flared", "tailored", "structured" etc.
@@ -184,7 +214,8 @@ export default function FeedClient({
       const filtered = tag && tag !== 'all'
         ? injectedOutfits.filter((o) => (o.occasion_tags ?? []).includes(tag))
         : injectedOutfits
-      const ordered = antiRepeatOrder(filtered)
+      // One outfit per anchor item — variants stay in Similar/Explore.
+      const ordered = antiRepeatOrder(dedupeByAnchor(filtered))
       const end = currentOffset + LIMIT
       setOutfits(ordered.slice(0, end))
       setHasMore(ordered.length > end)
@@ -211,7 +242,8 @@ export default function FeedClient({
     const { data, error } = await query
     if (!error && data) {
       const typed = data as OutfitWithItems[]
-      setOutfits((prev) => append ? [...prev, ...typed] : typed)
+      // De-dupe by anchor across pages so the same hero piece isn't repeated.
+      setOutfits((prev) => dedupeByAnchor(append ? [...prev, ...typed] : typed))
       setHasMore(data.length === LIMIT)
     }
     setLoading(false)
