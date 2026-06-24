@@ -228,7 +228,7 @@ export default function OutfitDetailClient({
   if (loading) {
     return (
       <div className="max-w-[800px] mx-auto px-10 py-12">
-        <div className="aspect-[3/4] bg-[#F2F2F2] animate-pulse rounded-[2px]" />
+        <div className="aspect-[3/4] bg-[#F2F2F2] animate-pulse rounded-[10px]" />
       </div>
     )
   }
@@ -359,7 +359,7 @@ export default function OutfitDetailClient({
                 <img
                   src={prevImage}
                   alt=""
-                  className="w-full aspect-[3/4] object-cover rounded-[2px]"
+                  className="w-full aspect-[3/4] object-cover rounded-[10px]"
                   style={{ filter: 'blur(3px)', opacity: 0.45 }}
                 />
               </button>
@@ -377,7 +377,7 @@ export default function OutfitDetailClient({
                 <img
                   src={nextImage}
                   alt=""
-                  className="w-full aspect-[3/4] object-cover rounded-[2px]"
+                  className="w-full aspect-[3/4] object-cover rounded-[10px]"
                   style={{ filter: 'blur(3px)', opacity: 0.45 }}
                 />
               </button>

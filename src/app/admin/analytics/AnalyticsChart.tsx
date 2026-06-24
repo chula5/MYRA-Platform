@@ -22,7 +22,7 @@ export default function AnalyticsChart({ days }: { days: DayData[] }) {
       {/* Tooltip */}
       {hovered !== null && (
         <div
-          className="absolute z-10 bg-[#0A0A0A] text-white text-[9px] tracking-[0.063em] px-2.5 py-1.5 rounded-[2px] pointer-events-none whitespace-nowrap"
+          className="absolute z-10 bg-[#0A0A0A] text-white text-[9px] tracking-[0.063em] px-2.5 py-1.5 rounded-[10px] pointer-events-none whitespace-nowrap"
           style={{
             left: `${(hovered / days.length) * 100}%`,
             transform: 'translateX(-50%)',

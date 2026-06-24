@@ -16,7 +16,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     const base = `
       inline-flex items-center justify-center gap-2
       text-[11px] tracking-[0.09em]
-      rounded-[3px]
+      rounded-[12px]
       transition-all duration-400
       cursor-pointer
       disabled:opacity-40 disabled:cursor-not-allowed

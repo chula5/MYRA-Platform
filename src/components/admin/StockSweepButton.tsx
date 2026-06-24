@@ -59,7 +59,7 @@ export default function StockSweepButton() {
   const progressPct = total > 0 ? Math.round((done / total) * 100) : 0
 
   return (
-    <div className="border border-[#E2E0DB] bg-white p-5 rounded-[3px]">
+    <div className="border border-[#E2E0DB] bg-white p-5 rounded-[12px]">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-[10px] tracking-[0.09em] text-[#4A4E57] mb-1">CHECK ALL STOCK</p>

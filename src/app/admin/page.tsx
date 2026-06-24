@@ -22,7 +22,7 @@ export default async function AdminDashboard() {
       {stats.outOfStockItems + stats.lowStockItems > 0 && (
         <a
           href="/admin/items?stock=flagged"
-          className="block mb-6 p-4 border border-[#E8B4B4] bg-[#FDECEC] rounded-[3px] hover:border-[#B83A3A] transition-colors duration-300"
+          className="block mb-6 p-4 border border-[#E8B4B4] bg-[#FDECEC] rounded-[12px] hover:border-[#B83A3A] transition-colors duration-300"
         >
           <p className="text-[10px] tracking-[0.09em] text-[#B83A3A]">
             {stats.outOfStockItems} OUT OF STOCK
@@ -161,14 +161,14 @@ function StatCard({
 
   if (href) {
     return (
-      <a href={href} className="block bg-white border border-[#E2E0DB] p-6 rounded-[3px] hover:border-[#0A0A0A] transition-colors duration-300">
+      <a href={href} className="block bg-white border border-[#E2E0DB] p-6 rounded-[12px] hover:border-[#0A0A0A] transition-colors duration-300">
         {inner}
       </a>
     )
   }
 
   return (
-    <div className="bg-white border border-[#E2E0DB] p-6 rounded-[3px]">
+    <div className="bg-white border border-[#E2E0DB] p-6 rounded-[12px]">
       {inner}
     </div>
   )
@@ -187,7 +187,7 @@ function StudioCard({
     <a
       href={href}
       className="
-        block border border-[#E2E0DB] bg-white p-8 rounded-[3px]
+        block border border-[#E2E0DB] bg-white p-8 rounded-[12px]
         transition-all duration-400
         hover:border-[#0A0A0A] hover:shadow-[0_2px_16px_rgba(0,0,0,0.06)]
         group

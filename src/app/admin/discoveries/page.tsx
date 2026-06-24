@@ -57,7 +57,7 @@ export default async function DiscoveriesPage({ searchParams }: PageProps) {
           <Link
             key={tab}
             href={`/admin/discoveries?status=${tab}`}
-            className={`px-4 py-2 text-[10px] tracking-[0.09em] transition-all duration-300 rounded-[2px] ${
+            className={`px-4 py-2 text-[10px] tracking-[0.09em] transition-all duration-300 rounded-[10px] ${
               activeTab === tab
                 ? 'bg-[#0A0A0A] text-white'
                 : 'border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57]'
@@ -70,7 +70,7 @@ export default async function DiscoveriesPage({ searchParams }: PageProps) {
 
       {/* Grid */}
       {discoveries.length === 0 ? (
-        <div className="py-20 text-center border border-[#E2E0DB] bg-white rounded-[3px]">
+        <div className="py-20 text-center border border-[#E2E0DB] bg-white rounded-[12px]">
           <p className="text-[11px] tracking-[0.09em] text-[#A8A8A4]">
             {activeTab === 'new'
               ? 'NO NEW DISCOVERIES. OPEN AN ITEM AND CLICK ✦ DISCOVER SIMILAR.'
@@ -80,7 +80,7 @@ export default async function DiscoveriesPage({ searchParams }: PageProps) {
       ) : (
         <div className="grid grid-cols-3 gap-5">
           {discoveries.map((d) => (
-            <div key={d.discovered_id} className="bg-white border border-[#E2E0DB] rounded-[3px] overflow-hidden flex flex-col">
+            <div key={d.discovered_id} className="bg-white border border-[#E2E0DB] rounded-[12px] overflow-hidden flex flex-col">
               {/* Image */}
               <div className="aspect-[3/4] bg-[#F2F2F0] overflow-hidden">
                 {d.image_url ? (

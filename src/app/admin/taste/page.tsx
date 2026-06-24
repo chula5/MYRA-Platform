@@ -16,7 +16,7 @@ export default async function TastePage() {
     return (
       <div>
         <Header />
-        <div className="py-20 text-center border border-[#E2E0DB] bg-white rounded-[3px]">
+        <div className="py-20 text-center border border-[#E2E0DB] bg-white rounded-[12px]">
           <p className="text-[11px] tracking-[0.09em] text-[#A8A8A4]">
             NO TASTE DATA YET. START LOGGING ITEMS IN THE ITEM LIBRARY.
           </p>
@@ -217,7 +217,7 @@ function Header() {
 
 function SummaryCard({ label, value, isText = false }: { label: string; value: number | string; isText?: boolean }) {
   return (
-    <div className="bg-white border border-[#E2E0DB] p-6 rounded-[3px]">
+    <div className="bg-white border border-[#E2E0DB] p-6 rounded-[12px]">
       <p
         className="text-[#4A4E57] mb-1 tracking-[0.036em]"
         style={{ fontSize: isText ? '16px' : '32px', lineHeight: 1 }}
@@ -231,7 +231,7 @@ function SummaryCard({ label, value, isText = false }: { label: string; value: n
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white border border-[#E2E0DB] p-5 rounded-[3px]">
+    <div className="bg-white border border-[#E2E0DB] p-5 rounded-[12px]">
       <p className="text-[10px] tracking-[0.09em] text-[#6B6B6B] mb-4 pb-3 border-b border-[#E2E0DB]">
         {title}
       </p>

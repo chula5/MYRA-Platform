@@ -61,7 +61,7 @@ export default function AgeRangeEditor({
               type="button"
               onClick={() => toggle(r)}
               disabled={status === 'saving'}
-              className={`px-4 py-2 text-[10px] tracking-[0.063em] rounded-[3px] border transition-colors disabled:opacity-50 ${
+              className={`px-4 py-2 text-[10px] tracking-[0.063em] rounded-[12px] border transition-colors disabled:opacity-50 ${
                 active
                   ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]'
                   : 'bg-white text-[#6B6B6B] border-[#E2E0DB] hover:border-[#0A0A0A] hover:text-[#4A4E57]'

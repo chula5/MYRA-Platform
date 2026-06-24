@@ -71,7 +71,7 @@ export default function AgeTaggingGrid({ outfits }: { outfits: TaggingOutfit[] }
         </p>
         <button
           onClick={() => setHideTagged((v) => !v)}
-          className={`text-[10px] tracking-[0.081em] px-4 py-2 rounded-[3px] border transition-colors ${
+          className={`text-[10px] tracking-[0.081em] px-4 py-2 rounded-[12px] border transition-colors ${
             hideTagged
               ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]'
               : 'bg-white text-[#6B6B6B] border-[#E2E0DB] hover:border-[#0A0A0A]'
@@ -86,9 +86,9 @@ export default function AgeTaggingGrid({ outfits }: { outfits: TaggingOutfit[] }
           const ranges = state[o.id] ?? []
           const st = saving[o.id]
           return (
-            <div key={o.id} className="border border-[#E2E0DB] bg-white rounded-[4px] overflow-hidden">
+            <div key={o.id} className="border border-[#E2E0DB] bg-white rounded-[12px] overflow-hidden">
               <div className="flex gap-3 p-3">
-                <div className="relative w-[90px] h-[120px] flex-shrink-0 rounded-[2px] overflow-hidden bg-[#FAFAF8]">
+                <div className="relative w-[90px] h-[120px] flex-shrink-0 rounded-[10px] overflow-hidden bg-[#FAFAF8]">
                   {o.image && (
                     <Image src={o.image} alt={o.label} fill className="object-cover" sizes="90px" />
                   )}
@@ -116,7 +116,7 @@ export default function AgeTaggingGrid({ outfits }: { outfits: TaggingOutfit[] }
                         <button
                           key={r}
                           onClick={() => toggle(o.id, r)}
-                          className={`px-2 py-1 text-[9px] tracking-[0.036em] rounded-[2px] border transition-colors ${
+                          className={`px-2 py-1 text-[9px] tracking-[0.036em] rounded-[10px] border transition-colors ${
                             active
                               ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]'
                               : 'bg-white text-[#6B6B6B] border-[#E2E0DB] hover:border-[#0A0A0A]'

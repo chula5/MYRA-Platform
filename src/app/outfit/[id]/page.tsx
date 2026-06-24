@@ -31,7 +31,7 @@ export default async function OutfitDetailPage({ params, searchParams }: PagePro
 function DetailSkeleton() {
   return (
     <div className="max-w-[800px] mx-auto px-10 py-12">
-      <div className="aspect-[3/4] bg-[#F2F2F2] animate-pulse rounded-[2px]" />
+      <div className="aspect-[3/4] bg-[#F2F2F2] animate-pulse rounded-[10px]" />
     </div>
   )
 }

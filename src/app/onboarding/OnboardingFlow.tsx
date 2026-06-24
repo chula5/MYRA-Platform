@@ -164,7 +164,7 @@ export default function OnboardingFlow({
                   <button
                     key={g.key}
                     onClick={() => toggleBrandGroup(g.key)}
-                    className={`text-left p-5 rounded-[4px] border transition-all duration-200 ${
+                    className={`text-left p-5 rounded-[12px] border transition-all duration-200 ${
                       active
                         ? 'border-[#0A0A0A] bg-[#0A0A0A] text-white'
                         : 'border-[#E2E0DB] bg-white hover:border-[#0A0A0A]'
@@ -193,7 +193,7 @@ export default function OnboardingFlow({
               <button
                 disabled={brandGroups.length === 0}
                 onClick={() => setStep(2)}
-                className="bg-[#0A0A0A] text-white px-12 py-3.5 rounded-[3px] text-[11px] tracking-[0.099em] hover:opacity-85 transition-opacity disabled:opacity-25"
+                className="bg-[#0A0A0A] text-white px-12 py-3.5 rounded-[12px] text-[11px] tracking-[0.099em] hover:opacity-85 transition-opacity disabled:opacity-25"
               >
                 CONTINUE →
               </button>
@@ -226,7 +226,7 @@ export default function OnboardingFlow({
                   <button
                     key={r}
                     onClick={() => setAgeRange(r)}
-                    className={`py-6 rounded-[4px] border text-[14px] tracking-[0.045em] transition-all duration-200 ${
+                    className={`py-6 rounded-[12px] border text-[14px] tracking-[0.045em] transition-all duration-200 ${
                       active
                         ? 'border-[#0A0A0A] bg-[#0A0A0A] text-white'
                         : 'border-[#E2E0DB] bg-white text-[#4A4E57] hover:border-[#0A0A0A]'
@@ -248,7 +248,7 @@ export default function OnboardingFlow({
               <button
                 disabled={!ageRange}
                 onClick={() => setStep(3)}
-                className="bg-[#0A0A0A] text-white px-12 py-3.5 rounded-[3px] text-[11px] tracking-[0.099em] hover:opacity-85 transition-opacity disabled:opacity-25"
+                className="bg-[#0A0A0A] text-white px-12 py-3.5 rounded-[12px] text-[11px] tracking-[0.099em] hover:opacity-85 transition-opacity disabled:opacity-25"
               >
                 CONTINUE →
               </button>
@@ -277,7 +277,7 @@ export default function OnboardingFlow({
                 <button
                   onClick={() => finish(liked, disliked)}
                   disabled={submitting}
-                  className="bg-[#0A0A0A] text-white px-12 py-3.5 rounded-[3px] text-[11px] tracking-[0.099em] hover:opacity-85 transition-opacity disabled:opacity-50"
+                  className="bg-[#0A0A0A] text-white px-12 py-3.5 rounded-[12px] text-[11px] tracking-[0.099em] hover:opacity-85 transition-opacity disabled:opacity-50"
                 >
                   {submitting ? 'FINISHING…' : 'ENTER THE EDIT →'}
                 </button>
@@ -293,7 +293,7 @@ export default function OnboardingFlow({
                 <div className="relative max-w-[340px] mx-auto mb-8" style={{ height: '454px' }}>
                   {ratingOutfits[cardIdx] && (
                     <div
-                      className="absolute inset-0 rounded-[6px] overflow-hidden border border-[#E2E0DB] bg-[#FAFAF8] select-none"
+                      className="absolute inset-0 rounded-[14px] overflow-hidden border border-[#E2E0DB] bg-[#FAFAF8] select-none"
                       style={{
                         transform: `translateX(${dragX}px) rotate(${dragX * 0.04}deg)`,
                         transition: touchStartX.current === null ? 'transform 0.25s ease' : 'none',

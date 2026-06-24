@@ -27,7 +27,7 @@ export default function ProductPreviews({ previews }: { previews: Preview[] }) {
       <div className="flex items-center justify-between mb-5">
         <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B]">LIVE PREVIEWS · INTERACT DIRECTLY</p>
         <div className="flex items-center gap-2">
-          <div className="flex border border-[#E2E0DB] rounded-[3px] overflow-hidden">
+          <div className="flex border border-[#E2E0DB] rounded-[12px] overflow-hidden">
             {(['phone', 'desktop'] as const).map((d) => (
               <button
                 key={d}
@@ -42,7 +42,7 @@ export default function ProductPreviews({ previews }: { previews: Preview[] }) {
           </div>
           <button
             onClick={() => setNonce((n) => n + 1)}
-            className="px-3 py-1.5 text-[9px] tracking-[0.072em] border border-[#E2E0DB] rounded-[3px] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors"
+            className="px-3 py-1.5 text-[9px] tracking-[0.072em] border border-[#E2E0DB] rounded-[12px] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors"
           >
             ↻ RELOAD
           </button>
@@ -83,7 +83,7 @@ export default function ProductPreviews({ previews }: { previews: Preview[] }) {
                   href={p.path}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex-shrink-0 text-[9px] tracking-[0.072em] text-[#6B6B6B] hover:text-[#4A4E57] border border-[#E2E0DB] hover:border-[#0A0A0A] rounded-[3px] px-2.5 py-1.5 transition-colors"
+                  className="flex-shrink-0 text-[9px] tracking-[0.072em] text-[#6B6B6B] hover:text-[#4A4E57] border border-[#E2E0DB] hover:border-[#0A0A0A] rounded-[12px] px-2.5 py-1.5 transition-colors"
                 >
                   OPEN ↗
                 </a>

@@ -255,7 +255,7 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
                   {item.product_name.toUpperCase()}
                 </p>
                 <div className="flex items-center justify-between">
-                  <span className="inline-block bg-[#F2F2F0] px-2 py-0.5 text-[8px] tracking-[0.068em] text-[#6B6B6B] rounded-[2px]">
+                  <span className="inline-block bg-[#F2F2F0] px-2 py-0.5 text-[8px] tracking-[0.068em] text-[#6B6B6B] rounded-[10px]">
                     {item.item_type.replace(/_/g, ' ').toUpperCase()}
                   </span>
                   {!selectMode && (

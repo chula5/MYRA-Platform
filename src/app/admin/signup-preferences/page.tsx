@@ -129,7 +129,7 @@ export default async function SignupPreferencesPage() {
       {entries.map(([id, count]) => {
         const o = outfitImg.get(id)
         return (
-          <div key={id} className="relative aspect-[3/4] rounded-[3px] overflow-hidden border border-[#E2E0DB] bg-[#FAFAF8]">
+          <div key={id} className="relative aspect-[3/4] rounded-[12px] overflow-hidden border border-[#E2E0DB] bg-[#FAFAF8]">
             {o?.image && (
               <Image src={o.image} alt={o.label} fill className="object-cover" sizes="120px" />
             )}
@@ -157,7 +157,7 @@ export default async function SignupPreferencesPage() {
       </div>
 
       {!tableReady && (
-        <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[3px] p-5 mb-8 max-w-[640px]">
+        <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[12px] p-5 mb-8 max-w-[640px]">
           <p className="text-[11px] tracking-[0.081em] text-[#8A7A4E] mb-3">DATABASE TABLE NOT YET CREATED</p>
           <p className="text-[10px] tracking-[0.054em] text-[#8A7A4E] leading-relaxed mb-3">
             Run migration <span className="font-mono">0006_signup_onboarding.sql</span> in your Supabase SQL Editor
@@ -188,7 +188,7 @@ ALTER TABLE public.signup_preference ENABLE ROW LEVEL SECURITY;`}</pre>
           { label: 'TOP AGE RANGE', value: [...ageRanked].sort((a, b) => b.count - a.count)[0]?.count ? [...ageRanked].sort((a, b) => b.count - a.count)[0].range : '—' },
           { label: 'OUTFITS RATED', value: ([...likeCounts.values()].reduce((s, n) => s + n, 0) + [...dislikeCounts.values()].reduce((s, n) => s + n, 0)).toLocaleString() },
         ].map((s) => (
-          <div key={s.label} className="border border-[#E2E0DB] bg-white rounded-[3px] px-5 py-4">
+          <div key={s.label} className="border border-[#E2E0DB] bg-white rounded-[12px] px-5 py-4">
             <p className="text-[9px] tracking-[0.09em] text-[#A8A8A4] mb-2">{s.label}</p>
             <p className="text-[20px] tracking-[0.018em] text-[#4A4E57] leading-tight">{s.value}</p>
           </div>
@@ -204,7 +204,7 @@ ALTER TABLE public.signup_preference ENABLE ROW LEVEL SECURITY;`}</pre>
       {total > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           {/* Brand group popularity */}
-          <div className="border border-[#E2E0DB] bg-white rounded-[3px] p-6">
+          <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6">
             <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B] mb-5">BRAND WORLDS · MOST LOVED</p>
             <div className="space-y-3">
               {groupRanked.map((g) => (
@@ -222,7 +222,7 @@ ALTER TABLE public.signup_preference ENABLE ROW LEVEL SECURITY;`}</pre>
           </div>
 
           {/* Age range breakdown */}
-          <div className="border border-[#E2E0DB] bg-white rounded-[3px] p-6">
+          <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6">
             <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B] mb-5">AGE RANGES</p>
             <div className="space-y-3">
               {ageRanked.map((a) => (
@@ -243,20 +243,20 @@ ALTER TABLE public.signup_preference ENABLE ROW LEVEL SECURITY;`}</pre>
 
       {/* Most liked / disliked outfits */}
       {topLikedIds.length > 0 && (
-        <div className="border border-[#E2E0DB] bg-white rounded-[3px] p-6 mb-6">
+        <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6 mb-6">
           <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B] mb-5">MOST-LOVED OUTFITS</p>
           {renderOutfitGrid(topLikedIds, 'like')}
         </div>
       )}
       {topDislikedIds.length > 0 && (
-        <div className="border border-[#E2E0DB] bg-white rounded-[3px] p-6 mb-8">
+        <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6 mb-8">
           <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B] mb-5">MOST-PASSED OUTFITS</p>
           {renderOutfitGrid(topDislikedIds, 'dislike')}
         </div>
       )}
 
       {/* ── Most-clicked items (retailer click-throughs) ── */}
-      <div className="border border-[#E2E0DB] bg-white rounded-[3px] p-6 mb-8">
+      <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6 mb-8">
         <div className="flex items-baseline justify-between mb-5">
           <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B]">
             MOST-CLICKED ITEMS · SHOP-THROUGHS
@@ -269,7 +269,7 @@ ALTER TABLE public.signup_preference ENABLE ROW LEVEL SECURITY;`}</pre>
         </div>
 
         {!itemClicksReady ? (
-          <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[3px] p-4">
+          <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[12px] p-4">
             <p className="text-[10px] tracking-[0.063em] text-[#8A7A4E] leading-relaxed mb-2">
               Run migration <span className="font-mono">0007_item_click.sql</span> in Supabase to start
               tracking retailer click-throughs:
@@ -294,12 +294,12 @@ ALTER TABLE public.item_click ENABLE ROW LEVEL SECURITY;`}</pre>
               return (
                 <div
                   key={id}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-[3px] ${i % 2 ? 'bg-[#FAFAF8]' : 'bg-white'} border border-[#F2F2F2]`}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-[12px] ${i % 2 ? 'bg-[#FAFAF8]' : 'bg-white'} border border-[#F2F2F2]`}
                 >
                   <span className="text-[10px] tracking-[0.045em] text-[#A8A8A4] w-5 text-right flex-shrink-0">
                     {i + 1}
                   </span>
-                  <div className="relative w-[44px] h-[56px] flex-shrink-0 rounded-[2px] overflow-hidden bg-[#F2F2F2]">
+                  <div className="relative w-[44px] h-[56px] flex-shrink-0 rounded-[10px] overflow-hidden bg-[#F2F2F2]">
                     {m?.image && <Image src={m.image} alt={m.name} fill className="object-cover" sizes="44px" />}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -327,7 +327,7 @@ ALTER TABLE public.item_click ENABLE ROW LEVEL SECURITY;`}</pre>
       </div>
 
       {/* ── Most-saved outfits ── */}
-      <div className="border border-[#E2E0DB] bg-white rounded-[3px] p-6 mb-8">
+      <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6 mb-8">
         <div className="flex items-baseline justify-between mb-5">
           <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B]">MOST-SAVED OUTFITS</p>
           {savesReady && (
@@ -337,7 +337,7 @@ ALTER TABLE public.item_click ENABLE ROW LEVEL SECURITY;`}</pre>
           )}
         </div>
         {!savesReady ? (
-          <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[3px] p-4">
+          <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[12px] p-4">
             <p className="text-[10px] tracking-[0.063em] text-[#8A7A4E] leading-relaxed mb-2">
               Run migration <span className="font-mono">0010_saved_outfit.sql</span> in Supabase to track saves:
             </p>
@@ -359,7 +359,7 @@ ALTER TABLE public.saved_outfit ENABLE ROW LEVEL SECURITY;`}</pre>
             {topSavedEntries.map(([id, count]) => {
               const o = savedImg.get(id)
               return (
-                <div key={id} className="relative aspect-[3/4] rounded-[3px] overflow-hidden border border-[#E2E0DB] bg-[#FAFAF8]">
+                <div key={id} className="relative aspect-[3/4] rounded-[12px] overflow-hidden border border-[#E2E0DB] bg-[#FAFAF8]">
                   {o?.image && <Image src={o.image} alt={o.label} fill className="object-cover" sizes="120px" />}
                   <span className="absolute top-1.5 right-1.5 text-[9px] tracking-[0.045em] px-1.5 py-0.5 rounded-sm text-white bg-[#0A0A0A]">
                     {count} ♥
@@ -373,7 +373,7 @@ ALTER TABLE public.saved_outfit ENABLE ROW LEVEL SECURITY;`}</pre>
 
       {/* Per-user table */}
       {total > 0 && (
-        <div className="border border-[#E2E0DB] bg-white rounded-[3px] overflow-hidden">
+        <div className="border border-[#E2E0DB] bg-white rounded-[12px] overflow-hidden">
           <div className="grid grid-cols-[1fr_90px_1fr_70px] gap-3 px-5 py-3 border-b border-[#E2E0DB] bg-[#FAFAF8]">
             <span className="text-[9px] tracking-[0.081em] text-[#6B6B6B]">EMAIL</span>
             <span className="text-[9px] tracking-[0.081em] text-[#6B6B6B]">AGE</span>

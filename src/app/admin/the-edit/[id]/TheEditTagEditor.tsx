@@ -90,7 +90,7 @@ export default function TheEditTagEditor({
               type="button"
               onClick={() => toggle(occ.tag)}
               disabled={status === 'saving'}
-              className={`px-3 py-2 text-[9px] tracking-[0.072em] rounded-[3px] border transition-colors disabled:opacity-50 ${
+              className={`px-3 py-2 text-[9px] tracking-[0.072em] rounded-[12px] border transition-colors disabled:opacity-50 ${
                 active
                   ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]'
                   : 'bg-white text-[#6B6B6B] border-[#E2E0DB] hover:border-[#0A0A0A] hover:text-[#4A4E57]'
@@ -108,7 +108,7 @@ export default function TheEditTagEditor({
           {customTags.map((t) => (
             <span
               key={t}
-              className="inline-flex items-center gap-2 px-3 py-2 text-[9px] tracking-[0.072em] rounded-[3px] border border-[#C4A882] bg-white text-[#4A4E57]"
+              className="inline-flex items-center gap-2 px-3 py-2 text-[9px] tracking-[0.072em] rounded-[12px] border border-[#C4A882] bg-white text-[#4A4E57]"
             >
               {t.toUpperCase()}
               <button

@@ -75,7 +75,7 @@ export default function ProductViewManager({ clips }: { clips: Clip[] }) {
         {!adding && (
           <button
             onClick={() => { setAdding(true); setEditingId(null) }}
-            className="bg-[#0A0A0A] text-white px-5 py-2.5 rounded-[3px] text-[10px] tracking-[0.09em] hover:opacity-85 transition-opacity"
+            className="bg-[#0A0A0A] text-white px-5 py-2.5 rounded-[12px] text-[10px] tracking-[0.09em] hover:opacity-85 transition-opacity"
           >
             + ADD VIDEO
           </button>
@@ -161,8 +161,8 @@ function ShowcaseCard({ clip, onEdit, onDelete }: { clip: Clip; onEdit: () => vo
           {clip.title}
         </h2>
         <div className="flex gap-2 flex-shrink-0 pt-1">
-          <button onClick={onEdit} className="text-[9px] tracking-[0.072em] text-[#6B6B6B] hover:text-[#4A4E57] border border-[#E2E0DB] hover:border-[#0A0A0A] px-3 py-1.5 rounded-[3px] transition-colors">EDIT</button>
-          <button onClick={onDelete} className="text-[9px] tracking-[0.072em] text-[#A8A8A4] hover:text-[#B83A3A] border border-[#E2E0DB] hover:border-[#B83A3A] px-3 py-1.5 rounded-[3px] transition-colors">DELETE</button>
+          <button onClick={onEdit} className="text-[9px] tracking-[0.072em] text-[#6B6B6B] hover:text-[#4A4E57] border border-[#E2E0DB] hover:border-[#0A0A0A] px-3 py-1.5 rounded-[12px] transition-colors">EDIT</button>
+          <button onClick={onDelete} className="text-[9px] tracking-[0.072em] text-[#A8A8A4] hover:text-[#B83A3A] border border-[#E2E0DB] hover:border-[#B83A3A] px-3 py-1.5 rounded-[12px] transition-colors">DELETE</button>
         </div>
       </div>
     </div>
@@ -200,7 +200,7 @@ function ClipForm({
   }
 
   return (
-    <div className="border border-[#E2E0DB] bg-[#FAFAF8] rounded-[6px] p-6 mb-2">
+    <div className="border border-[#E2E0DB] bg-[#FAFAF8] rounded-[14px] p-6 mb-2">
       <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B] mb-4">{initial ? 'EDIT VIDEO' : 'NEW VIDEO'}</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-[820px]">
         <div className="sm:col-span-2">
@@ -209,7 +209,7 @@ function ClipForm({
           {!initial && (
             <div className="flex flex-wrap gap-1.5 mt-2">
               {SUGGESTED.map((s) => (
-                <button key={s} type="button" onClick={() => setTitle(s)} className="text-[9px] tracking-[0.045em] text-[#6B6B6B] border border-[#E2E0DB] hover:border-[#0A0A0A] px-2 py-1 rounded-[3px] transition-colors">
+                <button key={s} type="button" onClick={() => setTitle(s)} className="text-[9px] tracking-[0.045em] text-[#6B6B6B] border border-[#E2E0DB] hover:border-[#0A0A0A] px-2 py-1 rounded-[12px] transition-colors">
                   {s}
                 </button>
               ))}
@@ -237,7 +237,7 @@ function ClipForm({
       {error && <p className="text-[10px] tracking-[0.054em] text-[#B83A3A] mt-3">{error}</p>}
 
       <div className="flex gap-3 mt-5">
-        <button onClick={save} disabled={saving} className="bg-[#0A0A0A] text-white px-6 py-2.5 rounded-[3px] text-[10px] tracking-[0.09em] hover:opacity-85 transition-opacity disabled:opacity-50">
+        <button onClick={save} disabled={saving} className="bg-[#0A0A0A] text-white px-6 py-2.5 rounded-[12px] text-[10px] tracking-[0.09em] hover:opacity-85 transition-opacity disabled:opacity-50">
           {saving ? 'SAVING…' : initial ? 'SAVE CHANGES' : 'ADD VIDEO'}
         </button>
         <button onClick={onCancel} className="text-[10px] tracking-[0.09em] text-[#6B6B6B] hover:text-[#4A4E57] px-4 transition-colors">CANCEL</button>

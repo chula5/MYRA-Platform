@@ -21,7 +21,7 @@ export default function StockBadge({
       ? 'text-[8px] tracking-[0.068em] px-1.5 py-0.5'
       : 'text-[9px] tracking-[0.09em] px-2.5 py-1'
   return (
-    <span className={`inline-block rounded-[2px] ${sizing} ${style.classes}`}>
+    <span className={`inline-block rounded-[10px] ${sizing} ${style.classes}`}>
       {style.label}
     </span>
   )

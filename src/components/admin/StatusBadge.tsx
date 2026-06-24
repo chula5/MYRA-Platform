@@ -8,7 +8,7 @@ export default function StatusBadge({ status }: { status: string }) {
   }
   return (
     <span
-      className={`inline-block text-[9px] tracking-[0.09em] px-2.5 py-1 rounded-[2px] ${colours[status] ?? colours.draft}`}
+      className={`inline-block text-[9px] tracking-[0.09em] px-2.5 py-1 rounded-[10px] ${colours[status] ?? colours.draft}`}
     >
       {status.toUpperCase().replace('_', ' ')}
     </span>

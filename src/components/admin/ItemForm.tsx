@@ -523,7 +523,7 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
 
         {/* Brand Form — create or edit (must be a div, not a form) */}
         {showBrandForm && (
-          <div className="mb-4 p-4 bg-[#F8F8F6] border border-[#E2E0DB] rounded-[2px]">
+          <div className="mb-4 p-4 bg-[#F8F8F6] border border-[#E2E0DB] rounded-[10px]">
             <p className="text-[9px] tracking-[0.09em] text-[#6B6B6B] mb-3">
               {brandFormMode === 'edit' ? 'EDIT BRAND' : 'NEW BRAND'}
             </p>
@@ -700,7 +700,7 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
                 maxLength={7}
               />
               {colourHex && (
-                <div className="w-8 h-8 border border-[#E2E0DB] shrink-0 rounded-[2px]" style={{ backgroundColor: colourHex }} />
+                <div className="w-8 h-8 border border-[#E2E0DB] shrink-0 rounded-[10px]" style={{ backgroundColor: colourHex }} />
               )}
             </div>
           </div>

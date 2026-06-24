@@ -67,9 +67,9 @@ function ItemCard({ item, onShop }: { item: SourceItem; onShop: () => void }) {
   const price = formatPrice(item.price ?? null, item.currency ?? null)
 
   return (
-    <div className="bg-white rounded-[6px] shadow-[0_3px_10px_rgba(0,0,0,0.14)] p-1.5 flex gap-1.5 items-stretch">
+    <div className="bg-white rounded-[14px] shadow-[0_3px_10px_rgba(0,0,0,0.14)] p-1.5 flex gap-1.5 items-stretch">
       {/* Thumbnail */}
-      <div className="relative w-[28px] h-[38px] flex-shrink-0 rounded-[2px] overflow-hidden bg-[#F2F2F2]">
+      <div className="relative w-[28px] h-[38px] flex-shrink-0 rounded-[10px] overflow-hidden bg-[#F2F2F2]">
         {item.image_url && !imgFailed ? (
           <Image
             src={item.image_url}

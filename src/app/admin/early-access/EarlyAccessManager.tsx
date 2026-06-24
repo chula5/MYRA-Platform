@@ -87,7 +87,7 @@ export default function EarlyAccessManager({
   return (
     <div>
       {/* Shareable self-sign-up link */}
-      <div className="border border-[#E2E0DB] bg-white rounded-[3px] p-6 mb-8 max-w-[560px]">
+      <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6 mb-8 max-w-[560px]">
         <p className="text-[10px] tracking-[0.113em] text-[#6B6B6B] mb-2">SHAREABLE SIGN-UP LINK</p>
         <p className="text-[10px] tracking-[0.054em] text-[#6B6B6B] leading-relaxed mb-4">
           Send this link to anyone you want to give early access. They open it, enter their own email and
@@ -112,7 +112,7 @@ export default function EarlyAccessManager({
       </div>
 
       {/* Create form */}
-      <div className="border border-[#E2E0DB] bg-white rounded-[3px] p-6 mb-8 max-w-[560px]">
+      <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6 mb-8 max-w-[560px]">
         <p className="text-[10px] tracking-[0.113em] text-[#6B6B6B] mb-4">OR CREATE A LOGIN MANUALLY</p>
         <form onSubmit={handleCreate} className="space-y-3">
           <input
@@ -152,7 +152,7 @@ export default function EarlyAccessManager({
         </form>
 
         {created && (
-          <div className="mt-5 border border-green-300 bg-green-50 p-4 rounded-[3px]">
+          <div className="mt-5 border border-green-300 bg-green-50 p-4 rounded-[12px]">
             <p className="text-[10px] tracking-[0.081em] text-green-800 mb-2">✓ LOGIN CREATED — SHARE THESE DETAILS</p>
             <p className="text-[11px] tracking-[0.045em] text-[#4A4E57]">myraassistant.co.uk/earlyaccess</p>
             <p className="text-[11px] tracking-[0.045em] text-[#4A4E57] mt-1">Email: {created.email}</p>
@@ -178,7 +178,7 @@ export default function EarlyAccessManager({
       {initialUsers.length === 0 ? (
         <p className="text-[10px] tracking-[0.068em] text-[#A8A8A4]">NO LOGINS YET.</p>
       ) : (
-        <div className="border border-[#E2E0DB] rounded-[3px] overflow-hidden">
+        <div className="border border-[#E2E0DB] rounded-[12px] overflow-hidden">
           {initialUsers.map((u, i) => (
             <div
               key={u.id}

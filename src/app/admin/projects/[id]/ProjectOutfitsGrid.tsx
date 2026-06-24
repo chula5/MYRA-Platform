@@ -125,7 +125,7 @@ export default function ProjectOutfitsGrid({
             <div
               key={outfit.outfit_id}
               onClick={selectMode ? () => toggle(outfit.outfit_id) : undefined}
-              className={`relative border bg-white rounded-[3px] overflow-hidden group transition-colors duration-300 ${
+              className={`relative border bg-white rounded-[12px] overflow-hidden group transition-colors duration-300 ${
                 selectMode ? 'cursor-pointer' : ''
               } ${
                 isSelected
@@ -187,7 +187,7 @@ export default function ProjectOutfitsGrid({
         {!selectMode && (
           <Link
             href={`/admin/projects/${projectId}/outfits/new`}
-            className="border border-dashed border-[#E2E0DB] bg-transparent rounded-[3px] flex items-center justify-center min-h-[280px] hover:border-[#0A0A0A] transition-colors duration-400 group"
+            className="border border-dashed border-[#E2E0DB] bg-transparent rounded-[12px] flex items-center justify-center min-h-[280px] hover:border-[#0A0A0A] transition-colors duration-400 group"
           >
             <div className="text-center">
               <p className="text-[24px] text-[#E2E0DB] group-hover:text-[#A8A8A4] transition-colors duration-300 mb-2">+</p>

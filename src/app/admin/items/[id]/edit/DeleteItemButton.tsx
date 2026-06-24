@@ -44,7 +44,7 @@ export default function DeleteItemButton({
           DELETE ITEM
         </button>
       ) : (
-        <div className="border border-[#E8B4B4] bg-[#FDECEC] p-3 rounded-[3px]">
+        <div className="border border-[#E8B4B4] bg-[#FDECEC] p-3 rounded-[12px]">
           <p className="text-[10px] tracking-[0.054em] text-[#B83A3A] leading-relaxed mb-3">
             Permanently delete &ldquo;{productName}&rdquo;? This also removes it from any outfits it&rsquo;s in. This can&rsquo;t be undone.
           </p>

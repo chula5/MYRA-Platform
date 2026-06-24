@@ -76,7 +76,7 @@ export default async function SocialPostPage({ params }: PageProps) {
               {products.length} ITEM{products.length === 1 ? '' : 'S'} · BUILT FROM THIS OUTFIT&rsquo;S DISPLAY IMAGE
             </p>
 
-            <div className="border border-[#E2E0DB] bg-[#FAFAF8] rounded-[3px] p-4 mb-4">
+            <div className="border border-[#E2E0DB] bg-[#FAFAF8] rounded-[12px] p-4 mb-4">
               <p className="text-[10px] tracking-[0.081em] text-[#6B6B6B] leading-relaxed">
                 The post auto-fills from this outfit: the <span className="text-[#4A4E57]">display image</span> is the
                 backdrop, and each item becomes a <span className="text-[#4A4E57]">Shop-the-look</span> card (brand,
@@ -86,14 +86,14 @@ export default async function SocialPostPage({ params }: PageProps) {
             </div>
 
             {products.length === 0 && (
-              <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[3px] p-4 mb-4">
+              <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[12px] p-4 mb-4">
                 <p className="text-[10px] tracking-[0.081em] text-[#8A7A4E] leading-relaxed">
                   This outfit has no items yet, so there are no shop-the-look cards. Add items to it in Projects.
                 </p>
               </div>
             )}
             {!outfit.image_url && (
-              <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[3px] p-4">
+              <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[12px] p-4">
                 <p className="text-[10px] tracking-[0.081em] text-[#8A7A4E] leading-relaxed">
                   No display image set — the backdrop is empty. Set a display image (e.g. a Higgsfield shoot) on the
                   outfit for the full effect.

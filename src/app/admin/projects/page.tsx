@@ -36,7 +36,7 @@ export default async function ProjectsPage({ searchParams }: PageProps) {
           <Link
             key={tab}
             href={tab === 'all' ? '/admin/projects' : `/admin/projects?filter=${tab}`}
-            className={`px-4 py-2 text-[10px] tracking-[0.09em] transition-all duration-300 rounded-[2px] ${
+            className={`px-4 py-2 text-[10px] tracking-[0.09em] transition-all duration-300 rounded-[10px] ${
               activeFilter === tab
                 ? 'bg-[#0A0A0A] text-white'
                 : 'border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57]'
@@ -75,7 +75,7 @@ export default async function ProjectsPage({ searchParams }: PageProps) {
           {projects.map((project) => (
             <div
               key={project.project_id}
-              className="border border-[#E2E0DB] bg-white rounded-[3px] overflow-hidden hover:border-[#C4A882] transition-colors duration-400 group"
+              className="border border-[#E2E0DB] bg-white rounded-[12px] overflow-hidden hover:border-[#C4A882] transition-colors duration-400 group"
             >
               {/* Cover image */}
               <div className="aspect-video bg-[#F2F2F0] overflow-hidden">

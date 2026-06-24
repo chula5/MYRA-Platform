@@ -50,7 +50,7 @@ export default function ScoreInput({
             key={n}
             type="button"
             onClick={() => handleSelect(n)}
-            className={`w-9 h-9 text-[11px] tracking-[0.045em] transition-all duration-300 rounded-[2px] ${
+            className={`w-9 h-9 text-[11px] tracking-[0.045em] transition-all duration-300 rounded-[10px] ${
               selected === n
                 ? 'bg-[#0A0A0A] text-white'
                 : 'border border-[#E2E0DB] bg-white text-[#6B6B6B] hover:border-[#0A0A0A]'

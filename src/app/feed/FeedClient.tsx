@@ -370,7 +370,7 @@ export default function FeedClient({
                   onClick={() => router.push(`${detailHrefBase}/${o.outfit_id}`)}
                   className="group relative shrink-0 w-[150px] sm:w-[170px]"
                 >
-                  <div className="relative aspect-[3/4] w-full overflow-hidden rounded-[3px] bg-[#EDEDED]">
+                  <div className="relative aspect-[3/4] w-full overflow-hidden rounded-[12px] bg-[#EDEDED]">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={o.image_url || '/placeholder-outfit.jpg'}
@@ -425,19 +425,19 @@ export default function FeedClient({
           {(filterColour || filterItemGroup || filterBrand.trim()) && (
             <div className="flex flex-wrap gap-2 mb-3">
               {filterColour && (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0A0A0A] text-white text-[9px] tracking-[0.072em] rounded-[3px]">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0A0A0A] text-white text-[9px] tracking-[0.072em] rounded-[12px]">
                   {COLOUR_OPTIONS.find(c => c.value === filterColour)?.label}
                   <button onClick={() => setFilterColour(null)} className="opacity-70 hover:opacity-100 text-[11px] leading-none">×</button>
                 </span>
               )}
               {filterItemGroup && (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0A0A0A] text-white text-[9px] tracking-[0.072em] rounded-[3px]">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0A0A0A] text-white text-[9px] tracking-[0.072em] rounded-[12px]">
                   {filterItemGroup}
                   <button onClick={() => setFilterItemGroup(null)} className="opacity-70 hover:opacity-100 text-[11px] leading-none">×</button>
                 </span>
               )}
               {filterBrand.trim() && (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0A0A0A] text-white text-[9px] tracking-[0.072em] rounded-[3px]">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0A0A0A] text-white text-[9px] tracking-[0.072em] rounded-[12px]">
                   {filterBrand.toUpperCase()}
                   <button onClick={() => setFilterBrand('')} className="opacity-70 hover:opacity-100 text-[11px] leading-none">×</button>
                 </span>
@@ -475,7 +475,7 @@ export default function FeedClient({
                 <button
                   key={type}
                   onClick={() => setFilterPanel(isActive ? null : type)}
-                  className={`px-4 py-2 text-[9px] tracking-[0.081em] rounded-[3px] border transition-colors duration-200 ${
+                  className={`px-4 py-2 text-[9px] tracking-[0.081em] rounded-[12px] border transition-colors duration-200 ${
                     hasValue
                       ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]'
                       : isActive
@@ -491,13 +491,13 @@ export default function FeedClient({
 
           {/* Colour panel */}
           {filterPanel === 'colour' && (
-            <div className="border border-[#E2E0DB] bg-white rounded-[3px] p-4 mb-4">
+            <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-4 mb-4">
               <div className="flex flex-wrap gap-2">
                 {COLOUR_OPTIONS.map((c) => (
                   <button
                     key={c.value}
                     onClick={() => { setFilterColour(filterColour === c.value ? null : c.value); setFilterPanel(null) }}
-                    className={`flex items-center gap-2 px-3 py-2 text-[9px] tracking-[0.063em] rounded-[3px] border transition-colors ${
+                    className={`flex items-center gap-2 px-3 py-2 text-[9px] tracking-[0.063em] rounded-[12px] border transition-colors ${
                       filterColour === c.value
                         ? 'border-[#0A0A0A] bg-[#0A0A0A] text-white'
                         : 'border-[#E2E0DB] text-[#4A4E57] hover:border-[#0A0A0A]'
@@ -516,13 +516,13 @@ export default function FeedClient({
 
           {/* Item type panel */}
           {filterPanel === 'item' && (
-            <div className="border border-[#E2E0DB] bg-white rounded-[3px] p-4 mb-4">
+            <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-4 mb-4">
               <div className="flex flex-wrap gap-2">
                 {ITEM_GROUPS.map((g) => (
                   <button
                     key={g.label}
                     onClick={() => { setFilterItemGroup(filterItemGroup === g.label ? null : g.label); setFilterPanel(null) }}
-                    className={`px-3 py-2 text-[9px] tracking-[0.063em] rounded-[3px] border transition-colors ${
+                    className={`px-3 py-2 text-[9px] tracking-[0.063em] rounded-[12px] border transition-colors ${
                       filterItemGroup === g.label
                         ? 'border-[#0A0A0A] bg-[#0A0A0A] text-white'
                         : 'border-[#E2E0DB] text-[#4A4E57] hover:border-[#0A0A0A]'
@@ -537,7 +537,7 @@ export default function FeedClient({
 
           {/* Brand panel */}
           {filterPanel === 'brand' && (
-            <div className="border border-[#E2E0DB] bg-white rounded-[3px] p-4 mb-4">
+            <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-4 mb-4">
               <input
                 type="text"
                 value={filterBrand}
@@ -571,7 +571,7 @@ export default function FeedClient({
           </div>
           <button
             onClick={clearSearch}
-            className="text-[11px] tracking-[0.09em] text-[#6B6B6B] border border-[#E2E0DB] px-5 py-2.5 rounded-[3px] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-all duration-300"
+            className="text-[11px] tracking-[0.09em] text-[#6B6B6B] border border-[#E2E0DB] px-5 py-2.5 rounded-[12px] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-all duration-300"
           >
             CLEAR
           </button>
@@ -580,7 +580,7 @@ export default function FeedClient({
         {searchLoading && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[1, 2, 3, 4, 5, 6].map((n) => (
-              <div key={n} className="aspect-[3/4] bg-[#F2F2F2] animate-pulse rounded-[2px]" />
+              <div key={n} className="aspect-[3/4] bg-[#F2F2F2] animate-pulse rounded-[10px]" />
             ))}
           </div>
         )}
@@ -590,7 +590,7 @@ export default function FeedClient({
             <p className="text-[11px] tracking-[0.113em] text-[#A8A8A4] mb-6">NO OUTFITS FOUND</p>
             <button
               onClick={clearSearch}
-              className="border border-[#0A0A0A] text-[#4A4E57] px-8 py-3 rounded-[3px] text-[11px] tracking-[0.09em] hover:bg-[#0A0A0A] hover:text-white transition-all duration-400"
+              className="border border-[#0A0A0A] text-[#4A4E57] px-8 py-3 rounded-[12px] text-[11px] tracking-[0.09em] hover:bg-[#0A0A0A] hover:text-white transition-all duration-400"
             >
               TRY ANOTHER SEARCH
             </button>
@@ -629,7 +629,7 @@ export default function FeedClient({
         </div>
         <button
           onClick={() => setOccasion(null)}
-          className="text-[11px] tracking-[0.09em] text-[#6B6B6B] border border-[#E2E0DB] px-5 py-2.5 rounded-[3px] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-all duration-300"
+          className="text-[11px] tracking-[0.09em] text-[#6B6B6B] border border-[#E2E0DB] px-5 py-2.5 rounded-[12px] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-all duration-300"
         >
           CHANGE
         </button>
@@ -638,7 +638,7 @@ export default function FeedClient({
       {loading && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {[1, 2, 3, 4, 5, 6].map((n) => (
-            <div key={n} className="aspect-[3/4] bg-[#F2F2F2] animate-pulse rounded-[2px]" />
+            <div key={n} className="aspect-[3/4] bg-[#F2F2F2] animate-pulse rounded-[10px]" />
           ))}
         </div>
       )}
@@ -648,7 +648,7 @@ export default function FeedClient({
           <p className="text-[11px] tracking-[0.113em] text-[#A8A8A4] mb-6">NO OUTFITS YET FOR THIS OCCASION</p>
           <button
             onClick={() => setOccasion(null)}
-            className="border border-[#0A0A0A] text-[#4A4E57] px-8 py-3 rounded-[3px] text-[11px] tracking-[0.09em] hover:bg-[#0A0A0A] hover:text-white transition-all duration-400"
+            className="border border-[#0A0A0A] text-[#4A4E57] px-8 py-3 rounded-[12px] text-[11px] tracking-[0.09em] hover:bg-[#0A0A0A] hover:text-white transition-all duration-400"
           >
             TRY ANOTHER OCCASION
           </button>

@@ -41,7 +41,7 @@ export default async function SocialPostsPage() {
               <Link
                 key={o.outfit_id}
                 href={`/admin/social/${o.outfit_id}`}
-                className="group border border-[#E2E0DB] bg-white rounded-[3px] overflow-hidden hover:border-[#0A0A0A] transition-colors"
+                className="group border border-[#E2E0DB] bg-white rounded-[12px] overflow-hidden hover:border-[#0A0A0A] transition-colors"
               >
                 <div className="aspect-[3/4] bg-[#F8F8F6] overflow-hidden relative">
                   {o.image_url ? (
@@ -57,7 +57,7 @@ export default async function SocialPostsPage() {
                     </div>
                   )}
                   {o.status === 'live' && (
-                    <span className="absolute top-2 left-2 text-[8px] tracking-[0.072em] text-white bg-[#0A0A0A]/70 px-2 py-1 rounded-[2px]">
+                    <span className="absolute top-2 left-2 text-[8px] tracking-[0.072em] text-white bg-[#0A0A0A]/70 px-2 py-1 rounded-[10px]">
                       LIVE
                     </span>
                   )}

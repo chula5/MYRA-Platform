@@ -20,7 +20,7 @@ export default function GoLiveButton({ liveCount }: { liveCount: number }) {
         type="button"
         disabled={disabled}
         title="Deactivated — turning this on publishes The Edit to your public site (/feed)"
-        className="bg-[#0A0A0A] text-white px-7 py-3 text-[10px] tracking-[0.09em] rounded-[3px] opacity-40 cursor-not-allowed"
+        className="bg-[#0A0A0A] text-white px-7 py-3 text-[10px] tracking-[0.09em] rounded-[12px] opacity-40 cursor-not-allowed"
       >
         GO LIVE — PUBLISH THE EDIT · 🔒 LOCKED
       </button>

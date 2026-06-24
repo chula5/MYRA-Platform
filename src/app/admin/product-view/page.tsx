@@ -51,7 +51,7 @@ export default async function ProductViewPage() {
         {clipsErr ? (
           <div>
             <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B] mb-3">DEMO VIDEOS</p>
-            <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[3px] p-5 max-w-[640px]">
+            <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[12px] p-5 max-w-[640px]">
               <p className="text-[11px] tracking-[0.081em] text-[#8A7A4E] mb-3">VIDEO LIBRARY NOT SET UP YET</p>
               <p className="text-[10px] tracking-[0.054em] text-[#8A7A4E] leading-relaxed mb-3">
                 Run migration <span className="font-mono">0009_product_view.sql</span> in Supabase to add saved demo

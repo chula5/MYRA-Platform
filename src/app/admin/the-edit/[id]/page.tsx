@@ -31,7 +31,7 @@ export default async function TheEditPreviewDetailPage({ params, searchParams }:
       {!outfit ? (
         <p className="text-[11px] tracking-[0.113em] text-[#A8A8A4] py-24 text-center">OUTFIT NOT FOUND</p>
       ) : (
-        <div className="bg-white border border-[#E2E0DB] rounded-[3px] overflow-hidden">
+        <div className="bg-white border border-[#E2E0DB] rounded-[12px] overflow-hidden">
           <div className="flex items-center justify-between px-4 py-2 border-b border-[#E2E0DB] bg-[#FAFAF8]">
             <span className="text-[9px] tracking-[0.09em] text-[#6B6B6B]">PREVIEW · OUTFIT DETAIL</span>
             <span className="text-[9px] tracking-[0.081em] text-[#A8A8A4]">

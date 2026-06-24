@@ -128,7 +128,7 @@ export default async function AnalyticsPage() {
       </div>
 
       {!tableReady && (
-        <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[3px] p-5 mb-8 max-w-[600px]">
+        <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[12px] p-5 mb-8 max-w-[600px]">
           <p className="text-[11px] tracking-[0.081em] text-[#8A7A4E] mb-3">DATABASE TABLE NOT YET CREATED</p>
           <p className="text-[10px] tracking-[0.054em] text-[#8A7A4E] leading-relaxed mb-3">
             Run the following SQL once in your Supabase SQL Editor to start collecting data:
@@ -153,7 +153,7 @@ ALTER TABLE public.landing_event ENABLE ROW LEVEL SECURITY;`}</pre>
           { label: 'WAITLIST SIGN-UPS',  value: last30Signups.toLocaleString(), sub: 'LAST 30 DAYS' },
           { label: 'SIGN-UP RATE',       value: `${signupRate}%`, sub: 'SIGN-UPS / VIEWS' },
         ].map((s) => (
-          <div key={s.label} className="border border-[#E2E0DB] bg-white rounded-[3px] px-5 py-4">
+          <div key={s.label} className="border border-[#E2E0DB] bg-white rounded-[12px] px-5 py-4">
             <p className="text-[9px] tracking-[0.09em] text-[#A8A8A4] mb-2">{s.label}</p>
             <p className="text-[28px] tracking-[0.023em] text-[#4A4E57] leading-none">{s.value}</p>
             <p className="text-[8px] tracking-[0.072em] text-[#C4A882] mt-1">{s.sub}</p>
@@ -162,7 +162,7 @@ ALTER TABLE public.landing_event ENABLE ROW LEVEL SECURITY;`}</pre>
       </div>
 
       {/* Chart */}
-      <div className="border border-[#E2E0DB] bg-white rounded-[3px] p-6 mb-8">
+      <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6 mb-8">
         <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B] mb-6">LAST 30 DAYS</p>
         {tableReady ? (
           <AnalyticsChart days={days} />
@@ -174,7 +174,7 @@ ALTER TABLE public.landing_event ENABLE ROW LEVEL SECURITY;`}</pre>
       </div>
 
       {/* ── Referral tracking ── */}
-      <div className="border border-[#E2E0DB] bg-white rounded-[3px] p-6 mb-8">
+      <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6 mb-8">
         <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B] mb-2">REFERRAL LINKS</p>
         <p className="text-[10px] tracking-[0.054em] text-[#A8A8A4] leading-relaxed mb-5 max-w-[620px]">
           Share these links so visits and waitlist sign-ups are attributed to each source. Add{' '}
@@ -186,7 +186,7 @@ ALTER TABLE public.landing_event ENABLE ROW LEVEL SECURITY;`}</pre>
         </div>
 
         {!refColumnReady ? (
-          <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[3px] p-4 max-w-[620px]">
+          <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[12px] p-4 max-w-[620px]">
             <p className="text-[10px] tracking-[0.063em] text-[#8A7A4E] leading-relaxed mb-2">
               Run migration <span className="font-mono">0008_landing_event_ref.sql</span> in Supabase to start
               tracking referrals:
@@ -199,7 +199,7 @@ CREATE INDEX IF NOT EXISTS landing_event_ref_idx ON public.landing_event (ref);`
             NO REFERRAL TRAFFIC YET · LAST 30 DAYS — IT APPEARS HERE ONCE PEOPLE VISIT VIA A ?REF LINK.
           </p>
         ) : (
-          <div className="border border-[#E2E0DB] rounded-[3px] overflow-hidden max-w-[620px]">
+          <div className="border border-[#E2E0DB] rounded-[12px] overflow-hidden max-w-[620px]">
             <div className="grid grid-cols-[1fr_80px_90px_80px] gap-2 px-4 py-2.5 bg-[#FAFAF8] border-b border-[#E2E0DB]">
               <span className="text-[9px] tracking-[0.081em] text-[#6B6B6B]">SOURCE</span>
               <span className="text-[9px] tracking-[0.081em] text-[#6B6B6B] text-right">VISITS</span>
@@ -224,7 +224,7 @@ CREATE INDEX IF NOT EXISTS landing_event_ref_idx ON public.landing_event (ref);`
 
       {/* Click breakdown */}
       {tableReady && Object.keys(clickTypes).length > 0 && (
-        <div className="border border-[#E2E0DB] bg-white rounded-[3px] p-6 max-w-[480px]">
+        <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6 max-w-[480px]">
           <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B] mb-5">CLICK BREAKDOWN · LAST 30 DAYS</p>
           <div className="space-y-3">
             {Object.entries(clickTypes)

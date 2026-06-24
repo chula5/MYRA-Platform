@@ -14,7 +14,7 @@ export default function ReferralLinkCard({ label, url }: { label: string; url: s
   }
 
   return (
-    <div className="border border-[#E2E0DB] bg-white rounded-[3px] p-4 flex items-center justify-between gap-4">
+    <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-4 flex items-center justify-between gap-4">
       <div className="min-w-0">
         <p className="text-[9px] tracking-[0.09em] text-[#A8A8A4] mb-1">{label}</p>
         <p className="text-[12px] tracking-[0.018em] text-[#4A4E57] truncate font-mono">{url}</p>

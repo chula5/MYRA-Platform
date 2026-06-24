@@ -36,7 +36,7 @@ export default async function ItemsPage({ searchParams }: PageProps) {
         <div className="mb-4">
           <Link
             href="/admin/items"
-            className="inline-flex items-center gap-2 px-3 py-1.5 text-[10px] tracking-[0.09em] bg-[#FDECEC] text-[#B83A3A] rounded-[2px] hover:bg-[#FBDCDC] transition-colors"
+            className="inline-flex items-center gap-2 px-3 py-1.5 text-[10px] tracking-[0.09em] bg-[#FDECEC] text-[#B83A3A] rounded-[10px] hover:bg-[#FBDCDC] transition-colors"
           >
             STOCK: {stockFilter.toUpperCase().replace('_', ' ')} · CLEAR ×
           </Link>
@@ -49,7 +49,7 @@ export default async function ItemsPage({ searchParams }: PageProps) {
           <Link
             key={tab}
             href={tab === 'all' ? '/admin/items' : `/admin/items?status=${tab}`}
-            className={`px-4 py-2 text-[10px] tracking-[0.09em] transition-all duration-300 rounded-[2px] ${
+            className={`px-4 py-2 text-[10px] tracking-[0.09em] transition-all duration-300 rounded-[10px] ${
               activeTab === tab
                 ? 'bg-[#0A0A0A] text-white'
                 : 'border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57]'
