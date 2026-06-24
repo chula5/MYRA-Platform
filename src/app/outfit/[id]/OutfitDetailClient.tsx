@@ -253,11 +253,17 @@ export default function OutfitDetailClient({
     ? activeItemType.toUpperCase().replace('_', ' ')
     : null
 
-  // Build the full image list: main image + any additional images
-  const allImages: string[] = [
-    outfit.image_url,
-    ...(((outfit as unknown as { additional_images?: string[] }).additional_images) ?? []),
-  ].filter(Boolean)
+  // Build the full image list so the user can scroll through every piece:
+  // the outfit shot, any additional shots, then each item's product photo.
+  const allImages: string[] = Array.from(
+    new Set(
+      [
+        outfit.image_url,
+        ...(((outfit as unknown as { additional_images?: string[] }).additional_images) ?? []),
+        ...items.map((it) => it.image_url),
+      ].filter(Boolean) as string[],
+    ),
+  )
   const safeIndex = Math.min(currentImageIndex, allImages.length - 1)
   const currentImageUrl = allImages[safeIndex] ?? outfit.image_url
 
@@ -378,8 +384,9 @@ export default function OutfitDetailClient({
                 key={currentImageUrl}
                 outfit={outfit}
                 imageUrl={currentImageUrl}
-                activeItemLabel={activeItemLabel}
+                activeItemLabel={safeIndex === 0 ? activeItemLabel : null}
                 onStyleItem={handleStyleItem}
+                showHotspots={safeIndex === 0}
               />
 
               {/* Shop-the-look cards overlaid on the image (toggled by SOURCE ITEMS) */}
@@ -544,11 +551,13 @@ function ImageWithHotspots({
   imageUrl,
   activeItemLabel,
   onStyleItem,
+  showHotspots = true,
 }: {
   outfit: OutfitWithItems
   imageUrl?: string
   activeItemLabel: string | null
   onStyleItem: (itemId: string, itemType: ItemType) => void
+  showHotspots?: boolean
 }) {
   const [imageHovered, setImageHovered] = useState(false)
   const src = imageUrl || outfit.image_url || '/placeholder-outfit.jpg'
@@ -576,7 +585,7 @@ function ImageWithHotspots({
         </div>
       )}
 
-      {(outfit.outfit_item ?? []).filter((oi) => oi.item != null).map((oi) => {
+      {showHotspots && (outfit.outfit_item ?? []).filter((oi) => oi.item != null).map((oi) => {
         const pos = getDetailHotspotPosition(oi.slot)
         return (
           <Hotspot
