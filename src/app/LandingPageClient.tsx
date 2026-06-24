@@ -63,28 +63,29 @@ export default function LandingPageClient() {
           onClick={closeModal}
         >
           <div
-            className="relative w-full max-w-[440px] bg-white px-8 sm:px-12 py-12 sm:py-14 shadow-[0_20px_60px_rgba(0,0,0,0.25)]"
+            className="mirror-frame relative w-full max-w-[420px]"
             onClick={(e) => e.stopPropagation()}
           >
             <button
               onClick={closeModal}
               aria-label="Close"
-              className="absolute top-4 right-5 text-[#A8A8A4] hover:text-[#0A0A0A] text-[22px] leading-none transition-colors"
+              className="absolute top-5 right-7 z-20 text-[#6B6B6B] hover:text-[#0A0A0A] text-[20px] leading-none transition-colors"
             >
               ×
             </button>
 
+            <div className="mirror-glass px-8 sm:px-12 pt-16 pb-12 sm:pb-14">
             {success ? (
               <div className="text-center py-6">
-                <p className="text-[13px] tracking-[0.22em] text-[#0A0A0A] mb-3">YOU&rsquo;RE ON THE LIST</p>
+                <p className="mirror-engrave text-[13px] tracking-[0.22em] text-[#0A0A0A] mb-3">YOU&rsquo;RE ON THE LIST</p>
                 <p className="text-[11px] tracking-[0.12em] text-[#6B6B6B] leading-relaxed">
                   Thank you — we&rsquo;ll be in touch with your first look at MYRA.
                 </p>
               </div>
             ) : (
               <div className="text-center">
-                <p className="text-[10px] tracking-[0.32em] text-[#A8A8A4] mb-6">MYRA · THE WAITLIST</p>
-                <h2 className="text-[clamp(34px,9vw,48px)] tracking-[0.04em] text-[#0A0A0A] leading-[0.95] mb-5">
+                <p className="text-[10px] tracking-[0.32em] text-[#8A8A86] mb-6">MYRA · THE WAITLIST</p>
+                <h2 className="mirror-engrave text-[clamp(34px,9vw,48px)] tracking-[0.04em] text-[#0A0A0A] leading-[0.95] mb-5">
                   BE FIRST.
                 </h2>
                 <p className="text-[12px] tracking-[0.10em] text-[#6B6B6B] leading-relaxed mb-8 max-w-[320px] mx-auto">
@@ -112,6 +113,7 @@ export default function LandingPageClient() {
                 </form>
               </div>
             )}
+            </div>
           </div>
         </div>
       )}
