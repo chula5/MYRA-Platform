@@ -97,7 +97,7 @@ export default function OutfitCard({
     <article className="relative bg-white flex flex-col">
       {/* Image carousel — 3:4 portrait */}
       <div
-        className="relative aspect-[3/4] w-full overflow-hidden cursor-pointer"
+        className="relative aspect-[3/4] w-full overflow-hidden cursor-pointer rounded-[16px]"
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
         onClick={handleTap}
