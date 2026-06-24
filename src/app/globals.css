@@ -19,6 +19,24 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Form controls don't inherit font from the universal rule (browser UA styles
+   win), so set Pragmatica explicitly. Inputs keep natural case so typed emails
+   aren't forced uppercase; placeholders/buttons stay uppercase. */
+button,
+select {
+  font-family: 'Pragmatica', 'Arial Black', sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+input,
+textarea {
+  font-family: 'Pragmatica', 'Arial Black', sans-serif;
+  font-weight: 700;
+}
+::placeholder {
+  font-family: 'Pragmatica', 'Arial Black', sans-serif;
+}
+
 /* ── Base resets ─────────────────────────────────────────────── */
 html,
 body {
