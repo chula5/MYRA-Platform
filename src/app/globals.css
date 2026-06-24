@@ -12,7 +12,7 @@
 
 /* ── Universal type rule ─────────────────────────────────────── */
 * {
-  font-family: 'Pragmatica', 'Arial Black', sans-serif;
+  font-family: var(--font-manrope), 'Pragmatica', 'Arial Black', sans-serif;
   font-weight: 700;
   text-transform: uppercase;
   -webkit-font-smoothing: antialiased;
@@ -24,17 +24,17 @@
    aren't forced uppercase; placeholders/buttons stay uppercase. */
 button,
 select {
-  font-family: 'Pragmatica', 'Arial Black', sans-serif;
+  font-family: var(--font-manrope), 'Pragmatica', 'Arial Black', sans-serif;
   font-weight: 700;
   text-transform: uppercase;
 }
 input,
 textarea {
-  font-family: 'Pragmatica', 'Arial Black', sans-serif;
+  font-family: var(--font-manrope), 'Pragmatica', 'Arial Black', sans-serif;
   font-weight: 700;
 }
 ::placeholder {
-  font-family: 'Pragmatica', 'Arial Black', sans-serif;
+  font-family: var(--font-manrope), 'Pragmatica', 'Arial Black', sans-serif;
 }
 
 /* ── Base resets ─────────────────────────────────────────────── */
