@@ -44,19 +44,27 @@ export default async function EditPage() {
     <div className="min-h-screen bg-[#F2F2F2]">
       {/* Minimal header */}
       <header className="flex items-center justify-between px-8 h-14 border-b border-[#E2E0DB] bg-white">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/myra-logo-black.png" alt="MYRA" className="h-[18px] w-auto" />
-        <div className="flex items-center gap-5">
-          <span className="text-[10px] tracking-[0.18em] text-[#A8A8A4]">BETA</span>
-          <form action={earlyAccessSignOut}>
-            <button
-              type="submit"
-              className="text-[10px] tracking-[0.09em] text-[#6B6B6B] hover:text-[#4A4E57] border border-[#E2E0DB] hover:border-[#0A0A0A] px-4 py-2 rounded-full transition-colors duration-300"
-            >
-              SIGN OUT
-            </button>
-          </form>
+        <div className="flex items-center gap-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/myra-logo-black.png" alt="MYRA" className="h-[18px] w-auto" />
+          <span
+            className="text-[8px] sm:text-[9px] tracking-[0.22em] text-[#4A4E57] px-2.5 py-1 rounded-full"
+            style={{
+              background: 'linear-gradient(135deg, #f7f8f9 0%, #e6e8ec 45%, #fcfcfd 62%, #e1e4e9 100%)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.95), inset 0 -1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.12)',
+            }}
+          >
+            BETA
+          </span>
         </div>
+        <form action={earlyAccessSignOut}>
+          <button
+            type="submit"
+            className="text-[9px] tracking-[0.09em] text-[#6B6B6B] hover:text-[#4A4E57] border border-[#E2E0DB] hover:border-[#0A0A0A] px-3 py-1.5 rounded-full transition-colors duration-300"
+          >
+            SIGN OUT
+          </button>
+        </form>
       </header>
 
       {/* The Edit — occasion search + browse (read-only). Items come with the
