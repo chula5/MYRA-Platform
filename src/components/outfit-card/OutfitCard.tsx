@@ -94,7 +94,7 @@ export default function OutfitCard({
   const dotOffset = total > MAX_DOTS ? Math.max(0, Math.min(current - Math.floor(MAX_DOTS / 2), total - MAX_DOTS)) : 0
 
   return (
-    <article className="relative bg-white flex flex-col">
+    <article className="relative flex flex-col">
       {/* Image carousel — 3:4 portrait */}
       <div
         className="relative aspect-[3/4] w-full overflow-hidden cursor-pointer rounded-[16px]"
