@@ -482,7 +482,7 @@ export default function OutfitDetailClient({
             while the corresponding edit/occasions sections aren't live yet.
             Flip the flag back to `true` to re-expose them — all downstream
             code (handlers, fetch logic, result grids) is untouched. */}
-        <div className="flex items-center justify-center gap-2">
+        <div className="flex flex-wrap items-center justify-center gap-2">
           <CardButton variant="filled" onClick={() => setSourcePanelOpen((v) => !v)}>
             SOURCE ITEMS
           </CardButton>
