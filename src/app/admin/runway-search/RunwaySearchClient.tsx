@@ -55,12 +55,12 @@ export default function RunwaySearchClient() {
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
             placeholder="E.G. LOEWE AW26, BEST TAILORING LOOKS AW26, MIU MIU LATEST..."
-            className="flex-1 border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.10em] text-[#4A4E57] placeholder-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors"
+            className="flex-1 border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.045em] text-[#4A4E57] placeholder-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors"
           />
           <button
             onClick={() => handleSearch()}
             disabled={loading}
-            className="bg-[#0A0A0A] text-white px-8 py-3 text-[11px] tracking-[0.20em] hover:bg-[#333] disabled:opacity-40 transition-colors whitespace-nowrap"
+            className="bg-[#0A0A0A] text-white px-8 py-3 text-[11px] tracking-[0.09em] hover:bg-[#333] disabled:opacity-40 transition-colors whitespace-nowrap"
           >
             {loading ? 'SEARCHING...' : 'SEARCH →'}
           </button>
@@ -74,7 +74,7 @@ export default function RunwaySearchClient() {
             key={s}
             onClick={() => { setQuery(s); handleSearch(s) }}
             disabled={loading}
-            className="border border-[#E2E0DB] px-3 py-1.5 text-[10px] tracking-[0.15em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors disabled:opacity-40"
+            className="border border-[#E2E0DB] px-3 py-1.5 text-[10px] tracking-[0.068em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors disabled:opacity-40"
           >
             {s.toUpperCase()}
           </button>
@@ -82,12 +82,12 @@ export default function RunwaySearchClient() {
       </div>
 
       {error && (
-        <p className="text-[11px] tracking-[0.12em] text-red-500 mb-6">{error}</p>
+        <p className="text-[11px] tracking-[0.054em] text-red-500 mb-6">{error}</p>
       )}
 
       {loading && (
         <div className="py-20 text-center">
-          <p className="text-[11px] tracking-[0.20em] text-[#A8A8A4] animate-pulse">
+          <p className="text-[11px] tracking-[0.09em] text-[#A8A8A4] animate-pulse">
             ASKING AI FOR THE BEST LOOKS...
           </p>
         </div>
@@ -95,7 +95,7 @@ export default function RunwaySearchClient() {
 
       {result && (
         <div>
-          <p className="text-[11px] tracking-[0.15em] text-[#6B6B6B] mb-8 pb-4 border-b border-[#E2E0DB]">
+          <p className="text-[11px] tracking-[0.068em] text-[#6B6B6B] mb-8 pb-4 border-b border-[#E2E0DB]">
             {result.summary.toUpperCase()}
           </p>
           <div className="grid grid-cols-2 gap-6">
@@ -136,7 +136,7 @@ function LookCard({ look }: { look: LookWithImages }) {
             </a>
           ) : (
             <div key={i} className="aspect-square bg-[#F2F2F0] flex items-center justify-center">
-              <p className="text-[9px] tracking-[0.15em] text-[#D0D0CB]">LOADING</p>
+              <p className="text-[9px] tracking-[0.068em] text-[#D0D0CB]">LOADING</p>
             </div>
           )
         })}
@@ -146,20 +146,20 @@ function LookCard({ look }: { look: LookWithImages }) {
         {/* Header */}
         <div className="flex items-start justify-between mb-4">
           <div>
-            <span className="text-[10px] tracking-[0.25em] text-[#A8A8A4]">LOOK {look.letter}</span>
-            <p className="text-[14px] tracking-[0.15em] text-[#4A4E57] mt-0.5">{look.brand.toUpperCase()}</p>
-            <p className="text-[10px] tracking-[0.20em] text-[#6B6B6B]">{look.season}</p>
+            <span className="text-[10px] tracking-[0.113em] text-[#A8A8A4]">LOOK {look.letter}</span>
+            <p className="text-[14px] tracking-[0.068em] text-[#4A4E57] mt-0.5">{look.brand.toUpperCase()}</p>
+            <p className="text-[10px] tracking-[0.09em] text-[#6B6B6B]">{look.season}</p>
           </div>
-          <span className="text-[10px] tracking-[0.15em] text-[#6B6B6B] italic">{look.mood}</span>
+          <span className="text-[10px] tracking-[0.068em] text-[#6B6B6B] italic">{look.mood}</span>
         </div>
 
         {/* Description */}
-        <p className="text-[12px] tracking-[0.08em] text-[#4A4E57] leading-relaxed mb-3">
+        <p className="text-[12px] tracking-[0.036em] text-[#4A4E57] leading-relaxed mb-3">
           {look.description}
         </p>
 
         {/* Why interesting */}
-        <p className="text-[11px] tracking-[0.08em] text-[#6B6B6B] leading-relaxed mb-5 italic">
+        <p className="text-[11px] tracking-[0.036em] text-[#6B6B6B] leading-relaxed mb-5 italic">
           {look.whyInteresting}
         </p>
 
@@ -169,7 +169,7 @@ function LookCard({ look }: { look: LookWithImages }) {
             href={look.sourceUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors border border-[#E2E0DB] px-3 py-1.5 hover:border-[#0A0A0A]"
+            className="text-[10px] tracking-[0.09em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors border border-[#E2E0DB] px-3 py-1.5 hover:border-[#0A0A0A]"
           >
             VIEW SOURCE →
           </a>

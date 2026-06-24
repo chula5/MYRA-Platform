@@ -236,10 +236,10 @@ export default function OutfitDetailClient({
   if (!outfit) {
     return (
       <div className="text-center py-24 px-10">
-        <p className="text-[11px] tracking-[0.25em] text-[#A8A8A4]">OUTFIT NOT FOUND</p>
+        <p className="text-[11px] tracking-[0.113em] text-[#A8A8A4]">OUTFIT NOT FOUND</p>
         <button
           onClick={() => router.back()}
-          className="mt-6 text-[11px] tracking-[0.20em] underline text-[#6B6B6B]"
+          className="mt-6 text-[11px] tracking-[0.09em] underline text-[#6B6B6B]"
         >
           GO BACK
         </button>
@@ -312,7 +312,7 @@ export default function OutfitDetailClient({
       <div className="flex items-center justify-between mb-8">
         <button
           onClick={() => router.back()}
-          className="text-[11px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300 flex items-center gap-2"
+          className="text-[11px] tracking-[0.09em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300 flex items-center gap-2"
         >
           ← BACK
         </button>
@@ -425,7 +425,7 @@ export default function OutfitDetailClient({
                   </button>
 
                   {/* Counter */}
-                  <div className="absolute top-3 right-3 bg-black/60 text-white text-[10px] tracking-[0.15em] px-2.5 py-1 rounded-full z-20">
+                  <div className="absolute top-3 right-3 bg-black/60 text-white text-[10px] tracking-[0.068em] px-2.5 py-1 rounded-full z-20">
                     {safeIndex + 1} / {allImages.length}
                   </div>
                 </>
@@ -477,7 +477,7 @@ export default function OutfitDetailClient({
 
         {/* Occasion tags */}
         {outfit.occasion_tags?.length > 0 && (
-          <p className="text-[11px] tracking-[0.20em] text-[#6B6B6B] mb-5">
+          <p className="text-[11px] tracking-[0.09em] text-[#6B6B6B] mb-5">
             {outfit.occasion_tags.join(' · ')}
           </p>
         )}
@@ -530,7 +530,7 @@ export default function OutfitDetailClient({
       {relatedOutfits.length > 0 && !activeStyleItemId && (
         <div className="mt-16">
           <div className="border-t border-[#E2E0DB] mb-8" />
-          <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-8 text-center">
+          <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-8 text-center">
             {activeMode === 'explore' ? 'EXPLORE STYLES' : 'SIMILAR LOOKS'}
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -585,7 +585,7 @@ function ImageWithHotspots({
 
       {activeItemLabel && (
         <div className="absolute top-4 left-4 bg-white border border-[#0A0A0A] rounded-full px-3 py-1.5">
-          <span className="text-[10px] tracking-[0.15em] text-[#4A4E57]">
+          <span className="text-[10px] tracking-[0.068em] text-[#4A4E57]">
             STYLE {activeItemLabel} ↗
           </span>
         </div>

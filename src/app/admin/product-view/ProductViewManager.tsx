@@ -66,8 +66,8 @@ export default function ProductViewManager({ clips }: { clips: Clip[] }) {
     <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h2 className="text-[14px] tracking-[0.14em] text-[#4A4E57]">DEMO VIDEOS</h2>
-          <p className="text-[11px] tracking-[0.13em] text-[#A8A8A4] mt-1 max-w-[560px] leading-relaxed">
+          <h2 className="text-[14px] tracking-[0.063em] text-[#4A4E57]">DEMO VIDEOS</h2>
+          <p className="text-[11px] tracking-[0.059em] text-[#A8A8A4] mt-1 max-w-[560px] leading-relaxed">
             Optional saved clips. Screen-record a flow (or capture one of the previews above), host it
             (Cloudinary, Loom or a YouTube link), then add it here with a title and caption.
           </p>
@@ -75,7 +75,7 @@ export default function ProductViewManager({ clips }: { clips: Clip[] }) {
         {!adding && (
           <button
             onClick={() => { setAdding(true); setEditingId(null) }}
-            className="bg-[#0A0A0A] text-white px-5 py-2.5 rounded-[3px] text-[10px] tracking-[0.20em] hover:opacity-85 transition-opacity"
+            className="bg-[#0A0A0A] text-white px-5 py-2.5 rounded-[3px] text-[10px] tracking-[0.09em] hover:opacity-85 transition-opacity"
           >
             + ADD VIDEO
           </button>
@@ -95,7 +95,7 @@ export default function ProductViewManager({ clips }: { clips: Clip[] }) {
       )}
 
       {clips.length === 0 && !adding && (
-        <p className="text-[11px] tracking-[0.20em] text-[#A8A8A4] py-16 text-center">
+        <p className="text-[11px] tracking-[0.09em] text-[#A8A8A4] py-16 text-center">
           NO VIDEOS YET — ADD YOUR FIRST DEMO ABOVE.
         </p>
       )}
@@ -146,7 +146,7 @@ function ShowcaseCard({ clip, onEdit, onDelete }: { clip: Clip; onEdit: () => vo
           <span className="w-1.5 h-1.5 rounded-full bg-[#D8D6D1]" />
         </div>
         {clip.caption && (
-          <span className="text-[10px] tracking-[0.22em] text-[#4A4E57] uppercase">{clip.caption}</span>
+          <span className="text-[10px] tracking-[0.099em] text-[#4A4E57] uppercase">{clip.caption}</span>
         )}
       </div>
 
@@ -157,12 +157,12 @@ function ShowcaseCard({ clip, onEdit, onDelete }: { clip: Clip; onEdit: () => vo
 
       {/* Title + actions */}
       <div className="flex items-start justify-between gap-3 px-1 pt-4">
-        <h2 className="text-[20px] leading-tight text-[#4A4E57] tracking-[0.01em]" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
+        <h2 className="text-[20px] leading-tight text-[#4A4E57] tracking-[0.005em]" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
           {clip.title}
         </h2>
         <div className="flex gap-2 flex-shrink-0 pt-1">
-          <button onClick={onEdit} className="text-[9px] tracking-[0.16em] text-[#6B6B6B] hover:text-[#4A4E57] border border-[#E2E0DB] hover:border-[#0A0A0A] px-3 py-1.5 rounded-[3px] transition-colors">EDIT</button>
-          <button onClick={onDelete} className="text-[9px] tracking-[0.16em] text-[#A8A8A4] hover:text-[#B83A3A] border border-[#E2E0DB] hover:border-[#B83A3A] px-3 py-1.5 rounded-[3px] transition-colors">DELETE</button>
+          <button onClick={onEdit} className="text-[9px] tracking-[0.072em] text-[#6B6B6B] hover:text-[#4A4E57] border border-[#E2E0DB] hover:border-[#0A0A0A] px-3 py-1.5 rounded-[3px] transition-colors">EDIT</button>
+          <button onClick={onDelete} className="text-[9px] tracking-[0.072em] text-[#A8A8A4] hover:text-[#B83A3A] border border-[#E2E0DB] hover:border-[#B83A3A] px-3 py-1.5 rounded-[3px] transition-colors">DELETE</button>
         </div>
       </div>
     </div>
@@ -189,7 +189,7 @@ function ClipForm({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const input = 'w-full border border-[#E2E0DB] bg-white px-4 py-2.5 text-[12px] tracking-[0.06em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors'
+  const input = 'w-full border border-[#E2E0DB] bg-white px-4 py-2.5 text-[12px] tracking-[0.027em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors'
 
   async function save() {
     setSaving(true)
@@ -201,15 +201,15 @@ function ClipForm({
 
   return (
     <div className="border border-[#E2E0DB] bg-[#FAFAF8] rounded-[6px] p-6 mb-2">
-      <p className="text-[10px] tracking-[0.22em] text-[#6B6B6B] mb-4">{initial ? 'EDIT VIDEO' : 'NEW VIDEO'}</p>
+      <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B] mb-4">{initial ? 'EDIT VIDEO' : 'NEW VIDEO'}</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-[820px]">
         <div className="sm:col-span-2">
-          <label className="text-[9px] tracking-[0.18em] text-[#A8A8A4] block mb-1">TITLE</label>
+          <label className="text-[9px] tracking-[0.081em] text-[#A8A8A4] block mb-1">TITLE</label>
           <input className={input} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Pick an occasion, see the looks" />
           {!initial && (
             <div className="flex flex-wrap gap-1.5 mt-2">
               {SUGGESTED.map((s) => (
-                <button key={s} type="button" onClick={() => setTitle(s)} className="text-[9px] tracking-[0.10em] text-[#6B6B6B] border border-[#E2E0DB] hover:border-[#0A0A0A] px-2 py-1 rounded-[3px] transition-colors">
+                <button key={s} type="button" onClick={() => setTitle(s)} className="text-[9px] tracking-[0.045em] text-[#6B6B6B] border border-[#E2E0DB] hover:border-[#0A0A0A] px-2 py-1 rounded-[3px] transition-colors">
                   {s}
                 </button>
               ))}
@@ -217,30 +217,30 @@ function ClipForm({
           )}
         </div>
         <div className="sm:col-span-2">
-          <label className="text-[9px] tracking-[0.18em] text-[#A8A8A4] block mb-1">AREA LABEL (small caps, top-right of card)</label>
+          <label className="text-[9px] tracking-[0.081em] text-[#A8A8A4] block mb-1">AREA LABEL (small caps, top-right of card)</label>
           <input className={input} value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="e.g. THE EDIT · OCCASIONS" />
         </div>
         <div className="sm:col-span-2">
-          <label className="text-[9px] tracking-[0.18em] text-[#A8A8A4] block mb-1">VIDEO LINK (mp4 / Cloudinary / YouTube / Loom)</label>
+          <label className="text-[9px] tracking-[0.081em] text-[#A8A8A4] block mb-1">VIDEO LINK (mp4 / Cloudinary / YouTube / Loom)</label>
           <input className={input} value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="https://res.cloudinary.com/.../demo.mp4" />
         </div>
         <div>
-          <label className="text-[9px] tracking-[0.18em] text-[#A8A8A4] block mb-1">POSTER IMAGE (optional)</label>
+          <label className="text-[9px] tracking-[0.081em] text-[#A8A8A4] block mb-1">POSTER IMAGE (optional)</label>
           <input className={input} value={posterUrl} onChange={(e) => setPosterUrl(e.target.value)} placeholder="https://.../thumbnail.jpg" />
         </div>
         <div>
-          <label className="text-[9px] tracking-[0.18em] text-[#A8A8A4] block mb-1">ORDER</label>
+          <label className="text-[9px] tracking-[0.081em] text-[#A8A8A4] block mb-1">ORDER</label>
           <input type="number" className={input} value={sortOrder} onChange={(e) => setSortOrder(Number(e.target.value))} />
         </div>
       </div>
 
-      {error && <p className="text-[10px] tracking-[0.12em] text-[#B83A3A] mt-3">{error}</p>}
+      {error && <p className="text-[10px] tracking-[0.054em] text-[#B83A3A] mt-3">{error}</p>}
 
       <div className="flex gap-3 mt-5">
-        <button onClick={save} disabled={saving} className="bg-[#0A0A0A] text-white px-6 py-2.5 rounded-[3px] text-[10px] tracking-[0.20em] hover:opacity-85 transition-opacity disabled:opacity-50">
+        <button onClick={save} disabled={saving} className="bg-[#0A0A0A] text-white px-6 py-2.5 rounded-[3px] text-[10px] tracking-[0.09em] hover:opacity-85 transition-opacity disabled:opacity-50">
           {saving ? 'SAVING…' : initial ? 'SAVE CHANGES' : 'ADD VIDEO'}
         </button>
-        <button onClick={onCancel} className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#4A4E57] px-4 transition-colors">CANCEL</button>
+        <button onClick={onCancel} className="text-[10px] tracking-[0.09em] text-[#6B6B6B] hover:text-[#4A4E57] px-4 transition-colors">CANCEL</button>
       </div>
     </div>
   )

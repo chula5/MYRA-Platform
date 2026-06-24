@@ -24,13 +24,13 @@ export default async function ProjectPage({ params }: PageProps) {
       <div className="mb-8">
         <Link
           href="/admin/projects"
-          className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300 mb-4 inline-block"
+          className="text-[10px] tracking-[0.09em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300 mb-4 inline-block"
         >
           ← PROJECTS
         </Link>
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-2">
+            <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-2">
               {outfits.length} OUTFIT{outfits.length !== 1 ? 'S' : ''}
             </p>
             <div className="flex items-center gap-4">
@@ -50,7 +50,7 @@ export default async function ProjectPage({ params }: PageProps) {
               >
                 <button
                   type="submit"
-                  className="border border-[#0A0A0A] bg-transparent text-[#4A4E57] px-6 py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#F2F2F0] transition-colors duration-400"
+                  className="border border-[#0A0A0A] bg-transparent text-[#4A4E57] px-6 py-2.5 text-[10px] tracking-[0.09em] hover:bg-[#F2F2F0] transition-colors duration-400"
                 >
                   MARK IN REVIEW
                 </button>
@@ -67,7 +67,7 @@ export default async function ProjectPage({ params }: PageProps) {
                 >
                   <button
                     type="submit"
-                    className="border border-[#E2E0DB] bg-transparent text-[#6B6B6B] px-6 py-2.5 text-[10px] tracking-[0.20em] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors duration-400"
+                    className="border border-[#E2E0DB] bg-transparent text-[#6B6B6B] px-6 py-2.5 text-[10px] tracking-[0.09em] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors duration-400"
                   >
                     BACK TO DRAFT
                   </button>
@@ -80,7 +80,7 @@ export default async function ProjectPage({ params }: PageProps) {
                 >
                   <button
                     type="submit"
-                    className="bg-[#0A0A0A] text-white px-8 py-3.5 text-[11px] tracking-[0.20em] hover:bg-[#333] transition-colors duration-400"
+                    className="bg-[#0A0A0A] text-white px-8 py-3.5 text-[11px] tracking-[0.09em] hover:bg-[#333] transition-colors duration-400"
                   >
                     PUBLISH PROJECT
                   </button>
@@ -97,7 +97,7 @@ export default async function ProjectPage({ params }: PageProps) {
               >
                 <button
                   type="submit"
-                  className="border border-[#E2E0DB] bg-transparent text-[#6B6B6B] px-6 py-2.5 text-[10px] tracking-[0.20em] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors duration-400"
+                  className="border border-[#E2E0DB] bg-transparent text-[#6B6B6B] px-6 py-2.5 text-[10px] tracking-[0.09em] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors duration-400"
                 >
                   ARCHIVE PROJECT
                 </button>
@@ -107,7 +107,7 @@ export default async function ProjectPage({ params }: PageProps) {
         </div>
 
         {project.notes && (
-          <p className="mt-4 text-[11px] tracking-[0.12em] text-[#6B6B6B] max-w-2xl leading-relaxed">
+          <p className="mt-4 text-[11px] tracking-[0.054em] text-[#6B6B6B] max-w-2xl leading-relaxed">
             {project.notes}
           </p>
         )}
@@ -118,7 +118,7 @@ export default async function ProjectPage({ params }: PageProps) {
 
       {/* Project meta */}
       <div className="mt-12 pt-8 border-t border-[#E2E0DB]">
-        <div className="grid grid-cols-3 gap-6 text-[9px] tracking-[0.15em] text-[#A8A8A4]">
+        <div className="grid grid-cols-3 gap-6 text-[9px] tracking-[0.068em] text-[#A8A8A4]">
           <div>
             <p className="mb-1">CREATED</p>
             <p className="text-[#6B6B6B]">

@@ -57,10 +57,10 @@ const PRICE_TIER_LABELS: Record<number, string> = {
 }
 
 const inputClass =
-  'w-full border border-[#E2E0DB] bg-white px-4 py-2.5 text-[12px] tracking-[0.10em] text-[#4A4E57] focus:outline-none focus:border-[#0A0A0A] transition-colors duration-300'
-const labelClass = 'text-[10px] tracking-[0.20em] text-[#6B6B6B] mb-1.5 block'
+  'w-full border border-[#E2E0DB] bg-white px-4 py-2.5 text-[12px] tracking-[0.045em] text-[#4A4E57] focus:outline-none focus:border-[#0A0A0A] transition-colors duration-300'
+const labelClass = 'text-[10px] tracking-[0.09em] text-[#6B6B6B] mb-1.5 block'
 const sectionHeadingClass =
-  'text-[10px] tracking-[0.25em] text-[#6B6B6B] mb-6 pb-3 border-b border-[#E2E0DB]'
+  'text-[10px] tracking-[0.113em] text-[#6B6B6B] mb-6 pb-3 border-b border-[#E2E0DB]'
 const sectionClass = 'mb-10'
 
 interface ItemFormProps {
@@ -377,20 +377,20 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
               type="button"
               onClick={() => handleUrlAnalyse(retailerUrl)}
               disabled={analysing || !retailerUrl}
-              className="shrink-0 border border-[#E2E0DB] bg-white px-4 text-[10px] tracking-[0.15em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] disabled:opacity-40 transition-colors whitespace-nowrap"
+              className="shrink-0 border border-[#E2E0DB] bg-white px-4 text-[10px] tracking-[0.068em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] disabled:opacity-40 transition-colors whitespace-nowrap"
             >
               {analysing ? 'ANALYSING...' : 'AUTO-FILL ✦'}
             </button>
           </div>
           {analysing && (
-            <p className="mt-1.5 text-[10px] tracking-[0.15em] text-[#A8A8A4] animate-pulse">
+            <p className="mt-1.5 text-[10px] tracking-[0.068em] text-[#A8A8A4] animate-pulse">
               Analysing product page with AI...
             </p>
           )}
           {analyseError && (
             <div className="mt-1.5">
-              <p className="text-[10px] tracking-[0.15em] text-red-400">{analyseError}</p>
-              <p className="mt-1 text-[10px] tracking-[0.15em] text-[#A8A8A4]">
+              <p className="text-[10px] tracking-[0.068em] text-red-400">{analyseError}</p>
+              <p className="mt-1 text-[10px] tracking-[0.068em] text-[#A8A8A4]">
                 Can&apos;t scrape this URL? Save the product image to Cloudinary below,
                 then use ANALYSE IMAGE to fill the scores from the photo.
               </p>
@@ -405,17 +405,17 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
               onClick={handleCheckStock}
               disabled={checkingStock || !item?.item_id || !retailerUrl}
               title={item?.item_id ? 'Fetch the retailer page and detect stock' : 'Save the item first'}
-              className="border border-[#E2E0DB] bg-white px-3 py-1.5 text-[10px] tracking-[0.15em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="border border-[#E2E0DB] bg-white px-3 py-1.5 text-[10px] tracking-[0.068em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               {checkingStock ? 'CHECKING...' : 'CHECK STOCK'}
             </button>
             {stockCheckedAt && (
-              <span className="text-[9px] tracking-[0.15em] text-[#A8A8A4]">
+              <span className="text-[9px] tracking-[0.068em] text-[#A8A8A4]">
                 CHECKED {new Date(stockCheckedAt).toLocaleString()}
               </span>
             )}
             {stockError && (
-              <span className="text-[9px] tracking-[0.15em] text-red-500">{stockError}</span>
+              <span className="text-[9px] tracking-[0.068em] text-red-500">{stockError}</span>
             )}
           </div>
 
@@ -426,12 +426,12 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
               onClick={handleDiscoverSimilar}
               disabled={discovering || !item?.item_id}
               title={item?.item_id ? 'Ask AI to search the web for similar pieces' : 'Save the item first'}
-              className="border border-[#E2E0DB] bg-white px-3 py-1.5 text-[10px] tracking-[0.15em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="border border-[#E2E0DB] bg-white px-3 py-1.5 text-[10px] tracking-[0.068em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               {discovering ? 'SEARCHING THE WEB...' : '✦ DISCOVER SIMILAR'}
             </button>
             {discoverMessage && (
-              <span className="text-[9px] tracking-[0.15em] text-[#6B6B6B]">{discoverMessage}</span>
+              <span className="text-[9px] tracking-[0.068em] text-[#6B6B6B]">{discoverMessage}</span>
             )}
           </div>
         </div>
@@ -505,7 +505,7 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
                 onClick={() => openBrandForm('edit')}
                 disabled={!brandId}
                 title={brandId ? 'Edit selected brand' : 'Select a brand first'}
-                className="shrink-0 border border-[#E2E0DB] bg-white px-3 text-[10px] tracking-[0.15em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-300"
+                className="shrink-0 border border-[#E2E0DB] bg-white px-3 text-[10px] tracking-[0.068em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-300"
               >
                 EDIT
               </button>
@@ -513,7 +513,7 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
                 type="button"
                 onClick={() => openBrandForm('create')}
                 title="Add new brand"
-                className="shrink-0 border border-[#E2E0DB] bg-white px-3 text-[10px] tracking-[0.15em] text-[#6B6B6B] hover:border-[#0A0A0A] transition-colors duration-300"
+                className="shrink-0 border border-[#E2E0DB] bg-white px-3 text-[10px] tracking-[0.068em] text-[#6B6B6B] hover:border-[#0A0A0A] transition-colors duration-300"
               >
                 +
               </button>
@@ -524,7 +524,7 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
         {/* Brand Form — create or edit (must be a div, not a form) */}
         {showBrandForm && (
           <div className="mb-4 p-4 bg-[#F8F8F6] border border-[#E2E0DB] rounded-[2px]">
-            <p className="text-[9px] tracking-[0.20em] text-[#6B6B6B] mb-3">
+            <p className="text-[9px] tracking-[0.09em] text-[#6B6B6B] mb-3">
               {brandFormMode === 'edit' ? 'EDIT BRAND' : 'NEW BRAND'}
             </p>
             <div className="grid grid-cols-2 gap-3 mb-3">
@@ -545,17 +545,17 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
                 </select>
               </div>
             </div>
-            {brandError && <p className="text-[10px] tracking-[0.15em] text-red-500 mb-3">{brandError}</p>}
+            {brandError && <p className="text-[10px] tracking-[0.068em] text-red-500 mb-3">{brandError}</p>}
             <div className="flex gap-3">
               <button
                 type="button"
                 onClick={brandFormMode === 'edit' ? handleUpdateBrand : handleCreateBrand}
                 disabled={brandSubmitting}
-                className="bg-[#0A0A0A] text-white px-6 py-2 text-[10px] tracking-[0.20em] disabled:opacity-50"
+                className="bg-[#0A0A0A] text-white px-6 py-2 text-[10px] tracking-[0.09em] disabled:opacity-50"
               >
                 {brandSubmitting ? 'SAVING...' : brandFormMode === 'edit' ? 'UPDATE BRAND' : 'SAVE BRAND'}
               </button>
-              <button type="button" onClick={() => setShowBrandForm(false)} className="border border-[#E2E0DB] bg-transparent text-[#4A4E57] px-6 py-2 text-[10px] tracking-[0.20em]">
+              <button type="button" onClick={() => setShowBrandForm(false)} className="border border-[#E2E0DB] bg-transparent text-[#4A4E57] px-6 py-2 text-[10px] tracking-[0.09em]">
                 CANCEL
               </button>
             </div>
@@ -592,16 +592,16 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
                   onClick={handleCloudinaryUpload}
                   disabled={uploadingImage || !retailerUrl}
                   title="Scrape product image from retailer URL and upload to Cloudinary. For protected sites: paste the direct image URL above first, then click this button."
-                  className="shrink-0 border border-[#E2E0DB] bg-white px-3 text-[10px] tracking-[0.12em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] disabled:opacity-40 transition-colors whitespace-nowrap"
+                  className="shrink-0 border border-[#E2E0DB] bg-white px-3 text-[10px] tracking-[0.054em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] disabled:opacity-40 transition-colors whitespace-nowrap"
                 >
                   {uploadingImage ? 'UPLOADING...' : '☁ SAVE TO CLOUDINARY'}
                 </button>
               </div>
               {uploadingImage && (
-                <p className="text-[10px] tracking-[0.12em] text-[#A8A8A4] animate-pulse">Scraping image and uploading to Cloudinary...</p>
+                <p className="text-[10px] tracking-[0.054em] text-[#A8A8A4] animate-pulse">Scraping image and uploading to Cloudinary...</p>
               )}
               {uploadImageError && (
-                <p className="text-[10px] tracking-[0.12em] text-red-400">{uploadImageError}</p>
+                <p className="text-[10px] tracking-[0.054em] text-red-400">{uploadImageError}</p>
               )}
 
               {/* Analyse image — vision fallback when the retailer URL can't be scraped */}
@@ -611,22 +611,22 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
                   onClick={handleImageAnalyse}
                   disabled={analysingImage || !imageUrl}
                   title="Read the item's features straight off this image with AI and fill the 1-5 scores below"
-                  className="border border-[#E2E0DB] bg-white px-3 py-1.5 text-[10px] tracking-[0.12em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] disabled:opacity-40 transition-colors whitespace-nowrap"
+                  className="border border-[#E2E0DB] bg-white px-3 py-1.5 text-[10px] tracking-[0.054em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] disabled:opacity-40 transition-colors whitespace-nowrap"
                 >
                   {analysingImage ? 'ANALYSING IMAGE...' : '✦ ANALYSE IMAGE'}
                 </button>
                 {analysingImage && (
-                  <span className="text-[10px] tracking-[0.12em] text-[#A8A8A4] animate-pulse">
+                  <span className="text-[10px] tracking-[0.054em] text-[#A8A8A4] animate-pulse">
                     Reading features from the photo with AI...
                   </span>
                 )}
                 {analyseImageDone && !analysingImage && (
-                  <span className="text-[10px] tracking-[0.12em] text-[#6B6B6B]">
+                  <span className="text-[10px] tracking-[0.054em] text-[#6B6B6B]">
                     ✓ Scores filled from image — review below
                   </span>
                 )}
                 {analyseImageError && (
-                  <span className="text-[10px] tracking-[0.12em] text-red-400">{analyseImageError}</span>
+                  <span className="text-[10px] tracking-[0.054em] text-red-400">{analyseImageError}</span>
                 )}
               </div>
             </div>
@@ -657,7 +657,7 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
           <div className="flex items-end pb-2.5">
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" name="in_inventory" defaultChecked={item?.in_inventory || false} className="w-4 h-4 accent-[#0A0A0A]" />
-              <span className="text-[10px] tracking-[0.20em] text-[#6B6B6B]">IN INVENTORY</span>
+              <span className="text-[10px] tracking-[0.09em] text-[#6B6B6B]">IN INVENTORY</span>
             </label>
           </div>
         </div>
@@ -787,7 +787,7 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
           </div>
           <div className="flex items-center gap-2">
             <input type="checkbox" name="jewellery_layering" defaultChecked={item?.jewellery_layering || false} className="w-4 h-4 accent-[#0A0A0A]" />
-            <span className="text-[10px] tracking-[0.20em] text-[#6B6B6B]">LAYERING PIECE</span>
+            <span className="text-[10px] tracking-[0.09em] text-[#6B6B6B]">LAYERING PIECE</span>
           </div>
         </div>
       )}
@@ -807,14 +807,14 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
 
       {error && (
         <div className="mb-6 p-4 border border-red-200 bg-red-50">
-          <p className="text-[10px] tracking-[0.15em] text-red-600">{error}</p>
+          <p className="text-[10px] tracking-[0.068em] text-red-600">{error}</p>
         </div>
       )}
 
       <button
         type="submit"
         disabled={submitting}
-        className="bg-[#0A0A0A] text-white px-8 py-3.5 text-[11px] tracking-[0.20em] transition-colors duration-400 hover:bg-[#333] disabled:opacity-50"
+        className="bg-[#0A0A0A] text-white px-8 py-3.5 text-[11px] tracking-[0.09em] transition-colors duration-400 hover:bg-[#333] disabled:opacity-50"
       >
         {submitting ? 'SAVING...' : 'SAVE ITEM'}
       </button>

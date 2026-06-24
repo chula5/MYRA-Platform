@@ -322,26 +322,26 @@ export default function ComposerClient({
             <img src={anchor.image_url} alt={anchor.product_name} className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
-              <span className="text-[9px] tracking-[0.20em] text-[#A8A8A4]">NO ANCHOR</span>
+              <span className="text-[9px] tracking-[0.09em] text-[#A8A8A4]">NO ANCHOR</span>
             </div>
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-[10px] tracking-[0.25em] text-[#6B6B6B] mb-2">ANCHOR ITEM</p>
+          <p className="text-[10px] tracking-[0.113em] text-[#6B6B6B] mb-2">ANCHOR ITEM</p>
           {anchor ? (
             <>
-              <p className="text-[11px] tracking-[0.20em] text-[#A8A8A4] mb-1">
+              <p className="text-[11px] tracking-[0.09em] text-[#A8A8A4] mb-1">
                 {(anchor.brand_name ?? '—').toUpperCase()}
               </p>
-              <p className="text-[18px] tracking-[0.08em] text-[#4A4E57] mb-2">
+              <p className="text-[18px] tracking-[0.036em] text-[#4A4E57] mb-2">
                 {anchor.product_name.toUpperCase()}
               </p>
-              <p className="text-[10px] tracking-[0.20em] text-[#6B6B6B]">
+              <p className="text-[10px] tracking-[0.09em] text-[#6B6B6B]">
                 {anchor.item_type.replace(/_/g, ' ').toUpperCase()}
               </p>
             </>
           ) : (
-            <p className="text-[13px] tracking-[0.10em] text-[#6B6B6B]">
+            <p className="text-[13px] tracking-[0.045em] text-[#6B6B6B]">
               PICK AN ITEM FROM YOUR LIBRARY TO ANCHOR THE COMPOSITION.
             </p>
           )}
@@ -349,7 +349,7 @@ export default function ComposerClient({
             <button
               type="button"
               onClick={() => setSearchOpen(o => !o)}
-              className="bg-[#0A0A0A] text-white px-6 py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#333] transition-colors duration-300"
+              className="bg-[#0A0A0A] text-white px-6 py-2.5 text-[10px] tracking-[0.09em] hover:bg-[#333] transition-colors duration-300"
             >
               {anchor ? 'CHANGE ANCHOR' : 'PICK ANCHOR'}
             </button>
@@ -358,12 +358,12 @@ export default function ComposerClient({
                 type="button"
                 onClick={() => compose(anchor.item_id)}
                 disabled={composing}
-                className="border border-[#0A0A0A] text-[#4A4E57] px-6 py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-300 disabled:opacity-50"
+                className="border border-[#0A0A0A] text-[#4A4E57] px-6 py-2.5 text-[10px] tracking-[0.09em] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-300 disabled:opacity-50"
               >
                 {composing ? 'COMPOSING…' : 'RECOMPOSE'}
               </button>
             )}
-            <span className="text-[10px] tracking-[0.20em] text-[#A8A8A4]">
+            <span className="text-[10px] tracking-[0.09em] text-[#A8A8A4]">
               LIBRARY: {libraryCount} READY/LIVE ITEMS
             </span>
           </div>
@@ -373,20 +373,20 @@ export default function ComposerClient({
       {/* Anchor picker drawer */}
       {searchOpen && (
         <div className="bg-white border border-[#E2E0DB] mb-8 p-6">
-          <p className="text-[10px] tracking-[0.25em] text-[#6B6B6B] mb-4">SELECT ANCHOR</p>
+          <p className="text-[10px] tracking-[0.113em] text-[#6B6B6B] mb-4">SELECT ANCHOR</p>
           <div className="flex gap-3 mb-4">
             <input
               type="text"
               placeholder="SEARCH BY PRODUCT NAME"
               value={searchQuery}
               onChange={(e) => runSearch(e.target.value, brandFilter)}
-              className="flex-1 border border-[#E2E0DB] bg-white px-4 py-2.5 text-[12px] tracking-[0.10em] text-[#4A4E57] focus:outline-none focus:border-[#0A0A0A]"
+              className="flex-1 border border-[#E2E0DB] bg-white px-4 py-2.5 text-[12px] tracking-[0.045em] text-[#4A4E57] focus:outline-none focus:border-[#0A0A0A]"
             />
             <select
               value={brandFilter}
               onChange={(e) => runSearch(searchQuery, e.target.value)}
               title="Filter anchor items by brand"
-              className="w-[200px] border border-[#E2E0DB] bg-white px-3 py-2.5 text-[11px] tracking-[0.12em] text-[#4A4E57] focus:outline-none focus:border-[#0A0A0A]"
+              className="w-[200px] border border-[#E2E0DB] bg-white px-3 py-2.5 text-[11px] tracking-[0.054em] text-[#4A4E57] focus:outline-none focus:border-[#0A0A0A]"
             >
               <option value="">ALL BRANDS</option>
               {brands.map((b) => (
@@ -396,10 +396,10 @@ export default function ComposerClient({
           </div>
           <div className="grid grid-cols-6 gap-3 max-h-[480px] overflow-y-auto">
             {searching && searchResults.length === 0 && (
-              <p className="col-span-6 text-[10px] tracking-[0.20em] text-[#A8A8A4]">SEARCHING…</p>
+              <p className="col-span-6 text-[10px] tracking-[0.09em] text-[#A8A8A4]">SEARCHING…</p>
             )}
             {searchResults.length === 0 && !searching && (
-              <p className="col-span-6 text-[10px] tracking-[0.20em] text-[#A8A8A4]">NO MATCHES</p>
+              <p className="col-span-6 text-[10px] tracking-[0.09em] text-[#A8A8A4]">NO MATCHES</p>
             )}
             {searchResults.map((item) => (
               <button
@@ -413,14 +413,14 @@ export default function ComposerClient({
                     <img src={item.image_url} alt={item.product_name} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
-                      <span className="text-[9px] tracking-[0.15em] text-[#A8A8A4]">NO IMAGE</span>
+                      <span className="text-[9px] tracking-[0.068em] text-[#A8A8A4]">NO IMAGE</span>
                     </div>
                   )}
                 </div>
-                <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4] truncate">
+                <p className="text-[9px] tracking-[0.09em] text-[#A8A8A4] truncate">
                   {(item.brand_name ?? '—').toUpperCase()}
                 </p>
-                <p className="text-[10px] tracking-[0.10em] text-[#4A4E57] truncate">
+                <p className="text-[10px] tracking-[0.045em] text-[#4A4E57] truncate">
                   {item.product_name.toUpperCase()}
                 </p>
               </button>
@@ -432,23 +432,23 @@ export default function ComposerClient({
       {/* Error */}
       {error && (
         <div className="mb-6 p-4 border border-[#E8B4B4] bg-[#FDECEC]">
-          <p className="text-[10px] tracking-[0.20em] text-[#B83A3A]">{error.toUpperCase()}</p>
+          <p className="text-[10px] tracking-[0.09em] text-[#B83A3A]">{error.toUpperCase()}</p>
         </div>
       )}
 
       {/* Candidates */}
       {composing && (
         <div className="py-20 text-center">
-          <p className="text-[11px] tracking-[0.25em] text-[#A8A8A4]">COMPOSING…</p>
+          <p className="text-[11px] tracking-[0.113em] text-[#A8A8A4]">COMPOSING…</p>
         </div>
       )}
 
       {!composing && anchor && visibleCandidates.length === 0 && candidates.length === 0 && !error && (
         <div className="py-20 text-center">
-          <p className="text-[11px] tracking-[0.25em] text-[#A8A8A4]">
+          <p className="text-[11px] tracking-[0.113em] text-[#A8A8A4]">
             NO COMPATIBLE COMPOSITIONS FOUND IN THE CURRENT LIBRARY.
           </p>
-          <p className="text-[10px] tracking-[0.20em] text-[#A8A8A4] mt-2">
+          <p className="text-[10px] tracking-[0.09em] text-[#A8A8A4] mt-2">
             ADD MORE READY/LIVE ITEMS OR PICK A DIFFERENT ANCHOR.
           </p>
         </div>
@@ -457,10 +457,10 @@ export default function ComposerClient({
       {!composing && visibleCandidates.length > 0 && (
         <div>
           <div className="flex items-baseline justify-between mb-6">
-            <p className="text-[10px] tracking-[0.25em] text-[#6B6B6B]">
+            <p className="text-[10px] tracking-[0.113em] text-[#6B6B6B]">
               {visibleCandidates.length} CANDIDATE COMPOSITION{visibleCandidates.length === 1 ? '' : 'S'}
             </p>
-            <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4]">
+            <p className="text-[9px] tracking-[0.09em] text-[#A8A8A4]">
               RANKED BY COMPOSITIONAL COHERENCE
             </p>
           </div>
@@ -476,13 +476,13 @@ export default function ComposerClient({
               return (
                 <div key={idx} className="bg-white border border-[#E2E0DB] p-5">
                   <div className="flex items-baseline justify-between mb-4">
-                    <p className="text-[10px] tracking-[0.25em] text-[#4A4E57]">
+                    <p className="text-[10px] tracking-[0.113em] text-[#4A4E57]">
                       COMPOSITION {String(idx + 1).padStart(2, '0')}
                       {isEdited && (
-                        <span className="ml-2 text-[9px] tracking-[0.20em] text-[#C4A882]">EDITED</span>
+                        <span className="ml-2 text-[9px] tracking-[0.09em] text-[#C4A882]">EDITED</span>
                       )}
                     </p>
-                    <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4]">
+                    <p className="text-[9px] tracking-[0.09em] text-[#A8A8A4]">
                       {isRescoring ? 'RESCORING…' : `COHERENCE ${(score * 100).toFixed(0)}`}
                     </p>
                   </div>
@@ -494,10 +494,10 @@ export default function ComposerClient({
                         <div className="aspect-[3/4] bg-[#F2F2F0] overflow-hidden">
                           <img src={anchor.image_url} alt={anchor.product_name} className="w-full h-full object-cover" />
                         </div>
-                        <div className="absolute top-1 left-1 bg-[#0A0A0A] text-white px-1.5 py-0.5 text-[8px] tracking-[0.15em]">
+                        <div className="absolute top-1 left-1 bg-[#0A0A0A] text-white px-1.5 py-0.5 text-[8px] tracking-[0.068em]">
                           ANCHOR
                         </div>
-                        <p className="text-[8px] tracking-[0.15em] text-[#A8A8A4] mt-1 truncate">
+                        <p className="text-[8px] tracking-[0.068em] text-[#A8A8A4] mt-1 truncate">
                           {(anchor.brand_name ?? '—').toUpperCase()}
                         </p>
                       </div>
@@ -518,7 +518,7 @@ export default function ComposerClient({
                             <button
                               type="button"
                               onClick={() => openSwap(idx, itemIdx, item.slot as Slot)}
-                              className="bg-white text-[#4A4E57] px-2 py-1 text-[9px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors"
+                              className="bg-white text-[#4A4E57] px-2 py-1 text-[9px] tracking-[0.09em] hover:bg-[#0A0A0A] hover:text-white transition-colors"
                             >
                               SWAP
                             </button>
@@ -526,16 +526,16 @@ export default function ComposerClient({
                               <button
                                 type="button"
                                 onClick={() => removeItem(idx, itemIdx)}
-                                className="bg-white/90 text-[#4A4E57] px-2 py-1 text-[9px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors"
+                                className="bg-white/90 text-[#4A4E57] px-2 py-1 text-[9px] tracking-[0.09em] hover:bg-[#0A0A0A] hover:text-white transition-colors"
                               >
                                 REMOVE
                               </button>
                             )}
                           </div>
-                          <p className="text-[8px] tracking-[0.20em] text-[#6B6B6B] mt-1">
+                          <p className="text-[8px] tracking-[0.09em] text-[#6B6B6B] mt-1">
                             {SLOT_LABEL[item.slot] ?? item.slot.toUpperCase()}
                           </p>
-                          <p className="text-[8px] tracking-[0.15em] text-[#A8A8A4] truncate">
+                          <p className="text-[8px] tracking-[0.068em] text-[#A8A8A4] truncate">
                             {(item.brand_name ?? '—').toUpperCase()}
                           </p>
                         </div>
@@ -546,13 +546,13 @@ export default function ComposerClient({
                   {/* Missing optional slots — add buttons */}
                   {missingOptionalSlots.length > 0 && (
                     <div className="flex flex-wrap items-center gap-2 mb-5">
-                      <span className="text-[9px] tracking-[0.20em] text-[#A8A8A4]">ADD:</span>
+                      <span className="text-[9px] tracking-[0.09em] text-[#A8A8A4]">ADD:</span>
                       {missingOptionalSlots.map((slot) => (
                         <button
                           key={slot}
                           type="button"
                           onClick={() => openAddSlot(idx, slot)}
-                          className="border border-[#E2E0DB] text-[#6B6B6B] px-2 py-1 text-[9px] tracking-[0.20em] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors"
+                          className="border border-[#E2E0DB] text-[#6B6B6B] px-2 py-1 text-[9px] tracking-[0.09em] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors"
                         >
                           + {SLOT_LABEL[slot] ?? slot.toUpperCase()}
                         </button>
@@ -563,7 +563,7 @@ export default function ComposerClient({
                   {/* Detail strip */}
                   <div className="border-t border-[#E2E0DB] pt-3 mb-4 space-y-1">
                     {items.map((item, itemIdx) => (
-                      <div key={`${item.item_id}-${itemIdx}-row`} className="flex items-center justify-between text-[10px] tracking-[0.10em]">
+                      <div key={`${item.item_id}-${itemIdx}-row`} className="flex items-center justify-between text-[10px] tracking-[0.045em]">
                         <span className="text-[#4A4E57] truncate flex-1 mr-3">
                           <span className="text-[#6B6B6B] mr-2">{SLOT_LABEL[item.slot] ?? item.slot}</span>
                           {item.product_name}
@@ -580,7 +580,7 @@ export default function ComposerClient({
                     {state?.approved && state.outfitId && state.projectId ? (
                       <a
                         href={`/admin/projects/${state.projectId}/outfits/${state.outfitId}/edit`}
-                        className="flex-1 bg-[#C4A882] text-white px-4 py-2.5 text-[10px] tracking-[0.20em] text-center hover:opacity-85 transition-opacity"
+                        className="flex-1 bg-[#C4A882] text-white px-4 py-2.5 text-[10px] tracking-[0.09em] text-center hover:opacity-85 transition-opacity"
                       >
                         APPROVED → EDIT DRAFT
                       </a>
@@ -589,7 +589,7 @@ export default function ComposerClient({
                         type="button"
                         disabled={state?.approving || isRescoring}
                         onClick={() => approve(idx, candidate)}
-                        className="flex-1 bg-[#0A0A0A] text-white px-4 py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#333] transition-colors duration-300 disabled:opacity-50"
+                        className="flex-1 bg-[#0A0A0A] text-white px-4 py-2.5 text-[10px] tracking-[0.09em] hover:bg-[#333] transition-colors duration-300 disabled:opacity-50"
                       >
                         {state?.approving ? 'APPROVING…' : 'APPROVE TO DRAFT'}
                       </button>
@@ -597,14 +597,14 @@ export default function ComposerClient({
                     <button
                       type="button"
                       onClick={() => discard(idx)}
-                      className="border border-[#E2E0DB] text-[#6B6B6B] px-4 py-2.5 text-[10px] tracking-[0.20em] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors duration-300"
+                      className="border border-[#E2E0DB] text-[#6B6B6B] px-4 py-2.5 text-[10px] tracking-[0.09em] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors duration-300"
                     >
                       DISCARD
                     </button>
                   </div>
 
                   {state?.approved && (
-                    <p className="mt-3 text-[9px] tracking-[0.18em] text-[#C4A882] leading-relaxed">
+                    <p className="mt-3 text-[9px] tracking-[0.081em] text-[#C4A882] leading-relaxed">
                       ✦ REFINED HIGGSFIELD SHOOT GENERATING IN THE BACKGROUND (~30–60S) — IT&rsquo;LL BE SAVED TO CLOUDINARY AND SET AS THE DRAFT&rsquo;S DISPLAY IMAGE.
                     </p>
                   )}
@@ -627,10 +627,10 @@ export default function ComposerClient({
           >
             <div className="flex items-baseline justify-between mb-4 pb-3 border-b border-[#E2E0DB]">
               <div>
-                <p className="text-[10px] tracking-[0.25em] text-[#6B6B6B]">
+                <p className="text-[10px] tracking-[0.113em] text-[#6B6B6B]">
                   {swap.itemIdx === null ? 'ADD' : 'SWAP'} · {SLOT_LABEL[swap.slot] ?? swap.slot.toUpperCase()}
                 </p>
-                <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4] mt-1">
+                <p className="text-[9px] tracking-[0.09em] text-[#A8A8A4] mt-1">
                   {swapQuery.trim()
                     ? 'SEARCHING ALL ITEMS · MOST RELEVANT FIRST'
                     : 'SUGGESTED FOR THIS SLOT · SEARCH TO PICK ANY ITEM'}
@@ -652,13 +652,13 @@ export default function ComposerClient({
               placeholder="SEARCH ANY ITEM BY NAME, BRAND OR TYPE…"
               value={swapQuery}
               onChange={(e) => onSwapQueryChange(e.target.value)}
-              className="w-full border border-[#E2E0DB] bg-white px-4 py-2.5 text-[12px] tracking-[0.10em] text-[#4A4E57] focus:outline-none focus:border-[#0A0A0A] mb-5"
+              className="w-full border border-[#E2E0DB] bg-white px-4 py-2.5 text-[12px] tracking-[0.045em] text-[#4A4E57] focus:outline-none focus:border-[#0A0A0A] mb-5"
             />
 
             {swapLoading ? (
-              <p className="text-[10px] tracking-[0.20em] text-[#A8A8A4] py-10 text-center">LOADING…</p>
+              <p className="text-[10px] tracking-[0.09em] text-[#A8A8A4] py-10 text-center">LOADING…</p>
             ) : swapOptions.length === 0 ? (
-              <p className="text-[10px] tracking-[0.20em] text-[#A8A8A4] py-10 text-center">
+              <p className="text-[10px] tracking-[0.09em] text-[#A8A8A4] py-10 text-center">
                 {swapQuery.trim() ? 'NO ITEMS MATCH THAT SEARCH.' : 'NO ITEMS IN THIS SLOT — SEARCH TO PICK ANY ITEM.'}
               </p>
             ) : (
@@ -677,18 +677,18 @@ export default function ComposerClient({
                         <div className="w-full h-full" />
                       )}
                     </div>
-                    <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4] truncate">
+                    <p className="text-[9px] tracking-[0.09em] text-[#A8A8A4] truncate">
                       {(opt.brand_name ?? '—').toUpperCase()}
                     </p>
-                    <p className="text-[10px] tracking-[0.10em] text-[#4A4E57] truncate">
+                    <p className="text-[10px] tracking-[0.045em] text-[#4A4E57] truncate">
                       {opt.product_name.toUpperCase()}
                     </p>
                     <div className="flex items-center justify-between mt-0.5">
-                      <span className="text-[9px] tracking-[0.20em] text-[#A8A8A4]">
+                      <span className="text-[9px] tracking-[0.09em] text-[#A8A8A4]">
                         COMPAT {(opt.compat * 100).toFixed(0)}
                       </span>
                       {!opt.sameSlot && (
-                        <span className="text-[8px] tracking-[0.15em] text-[#C4A882]">
+                        <span className="text-[8px] tracking-[0.068em] text-[#C4A882]">
                           → {SLOT_LABEL[opt.slot] ?? opt.slot.toUpperCase()}
                         </span>
                       )}

@@ -4,9 +4,9 @@ export default function IngestPage() {
   return (
     <div>
       <div className="mb-10">
-        <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-2">ADMIN STUDIO</p>
-        <h1 className="text-[28px] tracking-[0.10em] text-[#4A4E57] mb-3">BATCH INGEST</h1>
-        <p className="text-[12px] tracking-[0.10em] text-[#6B6B6B] max-w-2xl leading-relaxed">
+        <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-2">ADMIN STUDIO</p>
+        <h1 className="text-[28px] tracking-[0.045em] text-[#4A4E57] mb-3">BATCH INGEST</h1>
+        <p className="text-[12px] tracking-[0.045em] text-[#6B6B6B] max-w-2xl leading-relaxed">
           TWO MODES. URL LIST: PASTE PRODUCT URLS YOU&apos;VE ALREADY GATHERED. COLLECTION
           PAGE: PASTE A SINGLE BRAND OR RETAILER COLLECTION URL — CLAUDE BROWSES IT,
           CURATES 12–20 PRODUCTS AGAINST YOUR TASTE PROFILE, AND QUEUES THEM. EVERY

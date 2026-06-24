@@ -41,22 +41,22 @@ export default function BulkDiscoverButton() {
     <div className="mb-6 border border-[#E2E0DB] bg-white p-5 rounded-[3px]">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-[10px] tracking-[0.20em] text-[#4A4E57] mb-1">DISCOVER FROM MY TASTE</p>
-          <p className="text-[10px] tracking-[0.12em] text-[#6B6B6B]">
+          <p className="text-[10px] tracking-[0.09em] text-[#4A4E57] mb-1">DISCOVER FROM MY TASTE</p>
+          <p className="text-[10px] tracking-[0.054em] text-[#6B6B6B]">
             Ask AI to find pieces matching your overall aesthetic — not tied to a single item.
           </p>
           {!running && message && (
-            <p className="mt-2 text-[10px] tracking-[0.15em] text-[#3A6B3A]">{message}</p>
+            <p className="mt-2 text-[10px] tracking-[0.068em] text-[#3A6B3A]">{message}</p>
           )}
           {!running && error && (
-            <p className="mt-2 text-[10px] tracking-[0.15em] text-red-500">{error}</p>
+            <p className="mt-2 text-[10px] tracking-[0.068em] text-red-500">{error}</p>
           )}
         </div>
         <button
           type="button"
           onClick={handleClick}
           disabled={running}
-          className="shrink-0 bg-[#0A0A0A] text-white px-5 py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#333] disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
+          className="shrink-0 bg-[#0A0A0A] text-white px-5 py-2.5 text-[10px] tracking-[0.09em] hover:bg-[#333] disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
         >
           {running ? `SEARCHING… ${elapsed}s` : '✦ RUN DISCOVERY →'}
         </button>
@@ -70,7 +70,7 @@ export default function BulkDiscoverButton() {
             <span className="w-1.5 h-1.5 rounded-full bg-[#0A0A0A] animate-bounce" style={{ animationDelay: '150ms' }} />
             <span className="w-1.5 h-1.5 rounded-full bg-[#0A0A0A] animate-bounce" style={{ animationDelay: '300ms' }} />
           </div>
-          <p className="text-[10px] tracking-[0.15em] text-[#6B6B6B]">
+          <p className="text-[10px] tracking-[0.068em] text-[#6B6B6B]">
             SEARCHING THE WEB FOR NEW PIECES THAT MATCH YOUR TASTE — THIS USUALLY TAKES 30–90 SECONDS. DON&rsquo;T NAVIGATE AWAY. ({elapsed}s)
           </p>
         </div>

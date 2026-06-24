@@ -234,7 +234,7 @@ export default function LookShopperReel({
           type="button"
           onClick={() => setPlayKey((k) => k + 1)}
           disabled={recording}
-          className="bg-[#0A0A0A] text-white px-5 py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#333] transition-colors disabled:opacity-40"
+          className="bg-[#0A0A0A] text-white px-5 py-2.5 text-[10px] tracking-[0.09em] hover:bg-[#333] transition-colors disabled:opacity-40"
         >
           ↻ REPLAY ANIMATION
         </button>
@@ -242,13 +242,13 @@ export default function LookShopperReel({
           type="button"
           onClick={handleDownloadVideo}
           disabled={recording}
-          className="border border-[#0A0A0A] text-[#4A4E57] px-5 py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors disabled:opacity-50"
+          className="border border-[#0A0A0A] text-[#4A4E57] px-5 py-2.5 text-[10px] tracking-[0.09em] hover:bg-[#0A0A0A] hover:text-white transition-colors disabled:opacity-50"
         >
           {recording ? `● RECORDING… ${Math.ceil(recordMs / 1000)}s` : '⬇ DOWNLOAD VIDEO'}
         </button>
-        {recError && <span className="text-[9px] tracking-[0.15em] text-[#B83A3A]">{recError.toUpperCase()}</span>}
+        {recError && <span className="text-[9px] tracking-[0.068em] text-[#B83A3A]">{recError.toUpperCase()}</span>}
         {!recError && (
-          <span className="text-[9px] tracking-[0.15em] text-[#A8A8A4]">
+          <span className="text-[9px] tracking-[0.068em] text-[#A8A8A4]">
             CHOOSE “THIS TAB” WHEN PROMPTED — IT RECORDS JUST THE POST
           </span>
         )}

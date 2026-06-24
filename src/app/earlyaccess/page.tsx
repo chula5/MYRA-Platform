@@ -20,9 +20,9 @@ export default async function EarlyAccessPage({
     <main className="min-h-screen bg-white flex flex-col items-center justify-center px-6">
       <div className="w-full max-w-[360px]">
         <div className="text-center mb-10">
-          <p className="text-[11px] tracking-[0.35em] text-[#A8A8A4] mb-3">MYRA</p>
-          <h1 className="text-[clamp(22px,4vw,32px)] tracking-[0.12em] text-[#4A4E57]">EARLY ACCESS</h1>
-          <p className="mt-3 text-[11px] tracking-[0.18em] text-[#6B6B6B] leading-relaxed">
+          <p className="text-[11px] tracking-[0.158em] text-[#A8A8A4] mb-3">MYRA</p>
+          <h1 className="text-[clamp(22px,4vw,32px)] tracking-[0.054em] text-[#4A4E57]">EARLY ACCESS</h1>
+          <p className="mt-3 text-[11px] tracking-[0.081em] text-[#6B6B6B] leading-relaxed">
             Sign in with the details you were given to preview The Edit.
           </p>
         </div>
@@ -34,7 +34,7 @@ export default async function EarlyAccessPage({
             required
             autoComplete="email"
             placeholder="EMAIL"
-            className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.12em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors"
+            className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.054em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors"
           />
           <input
             type="password"
@@ -42,22 +42,22 @@ export default async function EarlyAccessPage({
             required
             autoComplete="current-password"
             placeholder="PASSWORD"
-            className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.12em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors"
+            className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.054em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors"
           />
 
           {error && (
-            <p className="text-[10px] tracking-[0.15em] text-[#B83A3A]">{error.toUpperCase()}</p>
+            <p className="text-[10px] tracking-[0.068em] text-[#B83A3A]">{error.toUpperCase()}</p>
           )}
 
           <button
             type="submit"
-            className="mt-2 bg-[#0A0A0A] text-white py-3 text-[11px] tracking-[0.22em] hover:bg-[#333] transition-colors duration-300"
+            className="mt-2 bg-[#0A0A0A] text-white py-3 text-[11px] tracking-[0.099em] hover:bg-[#333] transition-colors duration-300"
           >
             ENTER
           </button>
         </form>
 
-        <p className="mt-8 text-center text-[9px] tracking-[0.18em] text-[#A8A8A4]">
+        <p className="mt-8 text-center text-[9px] tracking-[0.081em] text-[#A8A8A4]">
           ACCESS BY INVITATION ONLY
         </p>
       </div>

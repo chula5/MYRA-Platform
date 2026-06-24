@@ -35,18 +35,18 @@ export default function EditableProjectTitle({
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setEditing(false) }}
-          className="text-[28px] tracking-[0.10em] text-[#4A4E57] border-b border-[#0A0A0A] bg-transparent focus:outline-none w-full max-w-[480px]"
+          className="text-[28px] tracking-[0.045em] text-[#4A4E57] border-b border-[#0A0A0A] bg-transparent focus:outline-none w-full max-w-[480px]"
         />
         <button
           onClick={handleSave}
           disabled={saving}
-          className="text-[10px] tracking-[0.20em] text-white bg-[#0A0A0A] px-4 py-2 hover:bg-[#333] disabled:opacity-50 transition-colors"
+          className="text-[10px] tracking-[0.09em] text-white bg-[#0A0A0A] px-4 py-2 hover:bg-[#333] disabled:opacity-50 transition-colors"
         >
           {saving ? 'SAVING...' : 'SAVE'}
         </button>
         <button
           onClick={() => setEditing(false)}
-          className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors"
+          className="text-[10px] tracking-[0.09em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors"
         >
           CANCEL
         </button>
@@ -57,10 +57,10 @@ export default function EditableProjectTitle({
   return (
     <button
       onClick={() => setEditing(true)}
-      className="text-[28px] tracking-[0.10em] text-[#4A4E57] hover:opacity-60 transition-opacity text-left group flex items-center gap-3"
+      className="text-[28px] tracking-[0.045em] text-[#4A4E57] hover:opacity-60 transition-opacity text-left group flex items-center gap-3"
     >
       {title.toUpperCase()}
-      <span className="text-[10px] tracking-[0.20em] text-[#A8A8A4] group-hover:text-[#6B6B6B] transition-colors">EDIT</span>
+      <span className="text-[10px] tracking-[0.09em] text-[#A8A8A4] group-hover:text-[#6B6B6B] transition-colors">EDIT</span>
     </button>
   )
 }

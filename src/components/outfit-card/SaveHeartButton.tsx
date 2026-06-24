@@ -33,7 +33,7 @@ export default function SaveHeartButton({
       <button
         onClick={toggle}
         disabled={busy}
-        className={`glass-dark inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[11px] tracking-[0.18em] text-[#4A4E57] disabled:opacity-60 ${saved ? 'ring-1 ring-[#0A0A0A]/30' : ''}`}
+        className={`glass-dark inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[11px] tracking-[0.081em] text-[#4A4E57] disabled:opacity-60 ${saved ? 'ring-1 ring-[#0A0A0A]/30' : ''}`}
       >
         <span className="text-[13px] leading-none">{saved ? '♥' : '♡'}</span>
         {saved ? 'SAVED' : 'SAVE'}

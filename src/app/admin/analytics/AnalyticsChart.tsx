@@ -22,7 +22,7 @@ export default function AnalyticsChart({ days }: { days: DayData[] }) {
       {/* Tooltip */}
       {hovered !== null && (
         <div
-          className="absolute z-10 bg-[#0A0A0A] text-white text-[9px] tracking-[0.14em] px-2.5 py-1.5 rounded-[2px] pointer-events-none whitespace-nowrap"
+          className="absolute z-10 bg-[#0A0A0A] text-white text-[9px] tracking-[0.063em] px-2.5 py-1.5 rounded-[2px] pointer-events-none whitespace-nowrap"
           style={{
             left: `${(hovered / days.length) * 100}%`,
             transform: 'translateX(-50%)',
@@ -76,7 +76,7 @@ export default function AnalyticsChart({ days }: { days: DayData[] }) {
         {days.map((d, i) => (
           <div key={d.isoDate} className="flex-1 text-center">
             {i % labelEvery === 0 && (
-              <span className="text-[8px] tracking-[0.08em] text-[#A8A8A4]">{d.date}</span>
+              <span className="text-[8px] tracking-[0.036em] text-[#A8A8A4]">{d.date}</span>
             )}
           </div>
         ))}
@@ -86,11 +86,11 @@ export default function AnalyticsChart({ days }: { days: DayData[] }) {
       <div className="flex gap-5 mt-4">
         <div className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded-sm bg-[#E2E0DB] inline-block" />
-          <span className="text-[9px] tracking-[0.14em] text-[#6B6B6B]">PAGE VIEWS</span>
+          <span className="text-[9px] tracking-[0.063em] text-[#6B6B6B]">PAGE VIEWS</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded-sm bg-[#0A0A0A] inline-block" />
-          <span className="text-[9px] tracking-[0.14em] text-[#6B6B6B]">CLICKS (CTA + SOCIAL)</span>
+          <span className="text-[9px] tracking-[0.063em] text-[#6B6B6B]">CLICKS (CTA + SOCIAL)</span>
         </div>
       </div>
     </div>

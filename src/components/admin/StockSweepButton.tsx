@@ -62,8 +62,8 @@ export default function StockSweepButton() {
     <div className="border border-[#E2E0DB] bg-white p-5 rounded-[3px]">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-[10px] tracking-[0.20em] text-[#4A4E57] mb-1">CHECK ALL STOCK</p>
-          <p className="text-[10px] tracking-[0.12em] text-[#6B6B6B]">
+          <p className="text-[10px] tracking-[0.09em] text-[#4A4E57] mb-1">CHECK ALL STOCK</p>
+          <p className="text-[10px] tracking-[0.054em] text-[#6B6B6B]">
             Sweeps every item with a retailer URL and flags low stock or out of stock.
           </p>
         </div>
@@ -71,7 +71,7 @@ export default function StockSweepButton() {
           type="button"
           onClick={handleSweep}
           disabled={running}
-          className="shrink-0 bg-[#0A0A0A] text-white px-5 py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#333] disabled:opacity-50 transition-colors"
+          className="shrink-0 bg-[#0A0A0A] text-white px-5 py-2.5 text-[10px] tracking-[0.09em] hover:bg-[#333] disabled:opacity-50 transition-colors"
         >
           {running ? `CHECKING ${done}/${total}...` : 'RUN STOCK CHECK →'}
         </button>
@@ -89,7 +89,7 @@ export default function StockSweepButton() {
       )}
 
       {tally && !running && (
-        <div className="mt-4 flex flex-wrap gap-3 text-[10px] tracking-[0.15em]">
+        <div className="mt-4 flex flex-wrap gap-3 text-[10px] tracking-[0.068em]">
           <span className="text-[#3A6B3A]">{tally.in_stock} IN STOCK</span>
           {tally.low_stock > 0 && <span className="text-[#8B5E00]">· {tally.low_stock} LOW</span>}
           {tally.out_of_stock > 0 && <span className="text-[#B83A3A]">· {tally.out_of_stock} OUT</span>}
@@ -99,7 +99,7 @@ export default function StockSweepButton() {
       )}
 
       {error && !running && (
-        <p className="mt-3 text-[10px] tracking-[0.15em] text-red-500">{error}</p>
+        <p className="mt-3 text-[10px] tracking-[0.068em] text-red-500">{error}</p>
       )}
     </div>
   )

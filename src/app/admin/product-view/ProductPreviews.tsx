@@ -25,14 +25,14 @@ export default function ProductPreviews({ previews }: { previews: Preview[] }) {
     <div>
       {/* Controls */}
       <div className="flex items-center justify-between mb-5">
-        <p className="text-[10px] tracking-[0.22em] text-[#6B6B6B]">LIVE PREVIEWS · INTERACT DIRECTLY</p>
+        <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B]">LIVE PREVIEWS · INTERACT DIRECTLY</p>
         <div className="flex items-center gap-2">
           <div className="flex border border-[#E2E0DB] rounded-[3px] overflow-hidden">
             {(['phone', 'desktop'] as const).map((d) => (
               <button
                 key={d}
                 onClick={() => setDevice(d)}
-                className={`px-3 py-1.5 text-[9px] tracking-[0.16em] transition-colors ${
+                className={`px-3 py-1.5 text-[9px] tracking-[0.072em] transition-colors ${
                   device === d ? 'bg-[#0A0A0A] text-white' : 'bg-white text-[#6B6B6B] hover:text-[#4A4E57]'
                 }`}
               >
@@ -42,7 +42,7 @@ export default function ProductPreviews({ previews }: { previews: Preview[] }) {
           </div>
           <button
             onClick={() => setNonce((n) => n + 1)}
-            className="px-3 py-1.5 text-[9px] tracking-[0.16em] border border-[#E2E0DB] rounded-[3px] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors"
+            className="px-3 py-1.5 text-[9px] tracking-[0.072em] border border-[#E2E0DB] rounded-[3px] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors"
           >
             ↻ RELOAD
           </button>
@@ -76,14 +76,14 @@ export default function ProductPreviews({ previews }: { previews: Preview[] }) {
               {/* Caption */}
               <div className="mt-3 flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4]">{p.label}</p>
-                  <p className="text-[11px] tracking-[0.04em] text-[#4A4E57] leading-snug">{p.title}</p>
+                  <p className="text-[9px] tracking-[0.09em] text-[#A8A8A4]">{p.label}</p>
+                  <p className="text-[11px] tracking-[0.018em] text-[#4A4E57] leading-snug">{p.title}</p>
                 </div>
                 <a
                   href={p.path}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex-shrink-0 text-[9px] tracking-[0.16em] text-[#6B6B6B] hover:text-[#4A4E57] border border-[#E2E0DB] hover:border-[#0A0A0A] rounded-[3px] px-2.5 py-1.5 transition-colors"
+                  className="flex-shrink-0 text-[9px] tracking-[0.072em] text-[#6B6B6B] hover:text-[#4A4E57] border border-[#E2E0DB] hover:border-[#0A0A0A] rounded-[3px] px-2.5 py-1.5 transition-colors"
                 >
                   OPEN ↗
                 </a>

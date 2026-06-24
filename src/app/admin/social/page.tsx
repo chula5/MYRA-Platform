@@ -22,9 +22,9 @@ export default async function SocialPostsPage() {
   return (
     <div>
       <div className="mb-8">
-        <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-2">MYRA ADMIN STUDIO</p>
-        <h1 className="text-[28px] tracking-[0.10em] text-[#4A4E57]">SOCIAL MEDIA POSTS</h1>
-        <p className="mt-3 max-w-[680px] text-[11px] tracking-[0.12em] text-[#6B6B6B] leading-relaxed">
+        <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-2">MYRA ADMIN STUDIO</p>
+        <h1 className="text-[28px] tracking-[0.045em] text-[#4A4E57]">SOCIAL MEDIA POSTS</h1>
+        <p className="mt-3 max-w-[680px] text-[11px] tracking-[0.054em] text-[#6B6B6B] leading-relaxed">
           Pick an outfit to turn it into a <span className="text-[#4A4E57]">Shop-the-look</span> post — a 3:4
           Instagram/reel design built automatically from the outfit&rsquo;s display image and its items (brand,
           name, price, photo). Click one to open the design, then screen-record it for a reel.
@@ -32,7 +32,7 @@ export default async function SocialPostsPage() {
       </div>
 
       {outfits.length === 0 ? (
-        <p className="text-[10px] tracking-[0.15em] text-[#A8A8A4]">NO OUTFITS YET.</p>
+        <p className="text-[10px] tracking-[0.068em] text-[#A8A8A4]">NO OUTFITS YET.</p>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {outfits.map((o) => {
@@ -52,21 +52,21 @@ export default async function SocialPostsPage() {
                       className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500"
                     />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-[9px] tracking-[0.15em] text-[#A8A8A4]">
+                    <div className="w-full h-full flex items-center justify-center text-[9px] tracking-[0.068em] text-[#A8A8A4]">
                       NO IMAGE
                     </div>
                   )}
                   {o.status === 'live' && (
-                    <span className="absolute top-2 left-2 text-[8px] tracking-[0.16em] text-white bg-[#0A0A0A]/70 px-2 py-1 rounded-[2px]">
+                    <span className="absolute top-2 left-2 text-[8px] tracking-[0.072em] text-white bg-[#0A0A0A]/70 px-2 py-1 rounded-[2px]">
                       LIVE
                     </span>
                   )}
                 </div>
                 <div className="p-2.5">
-                  <p className="text-[10px] tracking-[0.10em] text-[#4A4E57] truncate">
+                  <p className="text-[10px] tracking-[0.045em] text-[#4A4E57] truncate">
                     {(o.aesthetic_label || 'Untitled').toUpperCase()}
                   </p>
-                  <p className="text-[8px] tracking-[0.15em] text-[#A8A8A4] mt-1">
+                  <p className="text-[8px] tracking-[0.068em] text-[#A8A8A4] mt-1">
                     {count} ITEM{count === 1 ? '' : 'S'} · MAKE POST →
                   </p>
                 </div>

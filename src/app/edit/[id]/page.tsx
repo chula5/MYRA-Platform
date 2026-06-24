@@ -33,11 +33,11 @@ export default async function EditDetailPage({ params, searchParams }: PageProps
           <img src="/myra-logo-black.png" alt="MYRA" className="h-[18px] w-auto" />
         </Link>
         <div className="flex items-center gap-5">
-          <Link href="/edit" className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors">← THE EDIT</Link>
+          <Link href="/edit" className="text-[10px] tracking-[0.09em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors">← THE EDIT</Link>
           <form action={earlyAccessSignOut}>
             <button
               type="submit"
-              className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#4A4E57] border border-[#E2E0DB] hover:border-[#0A0A0A] px-4 py-2 transition-colors duration-300"
+              className="text-[10px] tracking-[0.09em] text-[#6B6B6B] hover:text-[#4A4E57] border border-[#E2E0DB] hover:border-[#0A0A0A] px-4 py-2 transition-colors duration-300"
             >
               SIGN OUT
             </button>
@@ -46,7 +46,7 @@ export default async function EditDetailPage({ params, searchParams }: PageProps
       </header>
 
       {!outfit ? (
-        <p className="text-[11px] tracking-[0.25em] text-[#A8A8A4] py-24 text-center">OUTFIT NOT FOUND</p>
+        <p className="text-[11px] tracking-[0.113em] text-[#A8A8A4] py-24 text-center">OUTFIT NOT FOUND</p>
       ) : (
         <OutfitDetailClient
           outfitId={id}

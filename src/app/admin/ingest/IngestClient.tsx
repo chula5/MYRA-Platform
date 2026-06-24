@@ -110,7 +110,7 @@ export default function IngestClient() {
           <button
             type="button"
             onClick={() => setMode('list')}
-            className={`px-4 py-2 text-[10px] tracking-[0.20em] transition-all duration-300 ${
+            className={`px-4 py-2 text-[10px] tracking-[0.09em] transition-all duration-300 ${
               mode === 'list'
                 ? 'bg-[#0A0A0A] text-white'
                 : 'border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57]'
@@ -121,7 +121,7 @@ export default function IngestClient() {
           <button
             type="button"
             onClick={() => setMode('collection')}
-            className={`px-4 py-2 text-[10px] tracking-[0.20em] transition-all duration-300 ${
+            className={`px-4 py-2 text-[10px] tracking-[0.09em] transition-all duration-300 ${
               mode === 'collection'
                 ? 'bg-[#0A0A0A] text-white'
                 : 'border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57]'
@@ -129,7 +129,7 @@ export default function IngestClient() {
           >
             COLLECTION PAGE
           </button>
-          <span className="ml-2 text-[9px] tracking-[0.20em] text-[#A8A8A4]">
+          <span className="ml-2 text-[9px] tracking-[0.09em] text-[#A8A8A4]">
             {mode === 'list'
               ? 'PASTE 1–30 PRODUCT URLS, ONE PER LINE'
               : 'PASTE ONE COLLECTION URL — CLAUDE CURATES 12–20 PRODUCTS, FILTERED BY YOUR TASTE PROFILE'}
@@ -145,7 +145,7 @@ export default function IngestClient() {
               ? 'https://www.net-a-porter.com/.../1683828\nhttps://www.mytheresa.com/.../P00789012\n...'
               : 'https://www.net-a-porter.com/en-gb/shop/designer/toteme/new-in'
           }
-          className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.05em] text-[#4A4E57] focus:outline-none focus:border-[#0A0A0A] transition-colors duration-300 font-mono leading-relaxed"
+          className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.023em] text-[#4A4E57] focus:outline-none focus:border-[#0A0A0A] transition-colors duration-300 font-mono leading-relaxed"
         />
 
         <div className="mt-4 flex items-center gap-3">
@@ -153,12 +153,12 @@ export default function IngestClient() {
             type="button"
             onClick={runAnalyse}
             disabled={analysing || !input.trim()}
-            className="bg-[#0A0A0A] text-white px-6 py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#333] transition-colors duration-300 disabled:opacity-50"
+            className="bg-[#0A0A0A] text-white px-6 py-2.5 text-[10px] tracking-[0.09em] hover:bg-[#333] transition-colors duration-300 disabled:opacity-50"
           >
             {analysing ? 'ANALYSING…' : 'ANALYSE'}
           </button>
           {queue.length > 0 && (
-            <span className="text-[10px] tracking-[0.20em] text-[#6B6B6B]">
+            <span className="text-[10px] tracking-[0.09em] text-[#6B6B6B]">
               QUEUE: {queue.length} · OK {okCount}
               {failCount > 0 && ` · FAILED ${failCount}`}
               {tasteFilterApplied && ' · TASTE-FILTERED'}
@@ -170,14 +170,14 @@ export default function IngestClient() {
       {/* Error */}
       {error && (
         <div className="mb-6 p-4 border border-[#E8B4B4] bg-[#FDECEC]">
-          <p className="text-[10px] tracking-[0.20em] text-[#B83A3A]">{error.toUpperCase()}</p>
+          <p className="text-[10px] tracking-[0.09em] text-[#B83A3A]">{error.toUpperCase()}</p>
         </div>
       )}
 
       {/* Result */}
       {result && (
         <div className="mb-6 p-4 border border-[#C4A882] bg-[#FAF6EE]">
-          <p className="text-[10px] tracking-[0.20em] text-[#4A4E57]">
+          <p className="text-[10px] tracking-[0.09em] text-[#4A4E57]">
             {result.created} ITEM{result.created === 1 ? '' : 'S'} CREATED AS DRAFTS
             {result.failed > 0 && ` · ${result.failed} FAILED`}
             {' · '}
@@ -192,12 +192,12 @@ export default function IngestClient() {
       {queue.length > 0 && (
         <div>
           <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#E2E0DB]">
-            <p className="text-[10px] tracking-[0.25em] text-[#6B6B6B]">REVIEW QUEUE</p>
+            <p className="text-[10px] tracking-[0.113em] text-[#6B6B6B]">REVIEW QUEUE</p>
             <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => selectAll(true)}
-                className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors"
+                className="text-[10px] tracking-[0.09em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors"
               >
                 SELECT ALL OK
               </button>
@@ -205,7 +205,7 @@ export default function IngestClient() {
               <button
                 type="button"
                 onClick={() => selectAll(false)}
-                className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors"
+                className="text-[10px] tracking-[0.09em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors"
               >
                 CLEAR
               </button>
@@ -213,7 +213,7 @@ export default function IngestClient() {
                 type="button"
                 disabled={approving || selectedCount === 0}
                 onClick={approve}
-                className="ml-4 bg-[#0A0A0A] text-white px-6 py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#333] transition-colors duration-300 disabled:opacity-50"
+                className="ml-4 bg-[#0A0A0A] text-white px-6 py-2.5 text-[10px] tracking-[0.09em] hover:bg-[#333] transition-colors duration-300 disabled:opacity-50"
               >
                 {approving
                   ? 'CREATING…'
@@ -249,13 +249,13 @@ export default function IngestClient() {
                 <div className="w-20 h-24 flex-shrink-0 bg-[#F2F2F0] overflow-hidden">
                   {q.imageLoading ? (
                     <div className="w-full h-full flex items-center justify-center">
-                      <span className="text-[8px] tracking-[0.15em] text-[#A8A8A4]">…</span>
+                      <span className="text-[8px] tracking-[0.068em] text-[#A8A8A4]">…</span>
                     </div>
                   ) : q.image_url ? (
                     <img src={q.image_url} alt={q.parsed?.product_name ?? ''} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
-                      <span className="text-[8px] tracking-[0.15em] text-[#A8A8A4]">NO IMG</span>
+                      <span className="text-[8px] tracking-[0.068em] text-[#A8A8A4]">NO IMG</span>
                     </div>
                   )}
                 </div>
@@ -264,13 +264,13 @@ export default function IngestClient() {
                 <div className="flex-1 min-w-0">
                   {q.ok && q.parsed ? (
                     <>
-                      <p className="text-[10px] tracking-[0.20em] text-[#A8A8A4] mb-1 truncate">
+                      <p className="text-[10px] tracking-[0.09em] text-[#A8A8A4] mb-1 truncate">
                         {(q.parsed.brand_name ?? 'UNKNOWN BRAND').toUpperCase()}
                       </p>
-                      <p className="text-[13px] tracking-[0.05em] text-[#4A4E57] mb-2 truncate">
+                      <p className="text-[13px] tracking-[0.023em] text-[#4A4E57] mb-2 truncate">
                         {(q.parsed.product_name ?? 'UNTITLED').toUpperCase()}
                       </p>
-                      <div className="flex items-center gap-3 flex-wrap text-[10px] tracking-[0.15em] text-[#6B6B6B]">
+                      <div className="flex items-center gap-3 flex-wrap text-[10px] tracking-[0.068em] text-[#6B6B6B]">
                         {q.parsed.item_type && <span>{q.parsed.item_type.replace(/_/g, ' ').toUpperCase()}</span>}
                         {q.parsed.colour_family && <span>· {q.parsed.colour_family.toUpperCase()}</span>}
                         {q.parsed.material_primary && <span>· {q.parsed.material_primary.toUpperCase()}</span>}
@@ -282,11 +282,11 @@ export default function IngestClient() {
                     </>
                   ) : (
                     <>
-                      <p className="text-[11px] tracking-[0.20em] text-[#B83A3A] mb-1">FAILED TO ANALYSE</p>
-                      <p className="text-[10px] tracking-[0.10em] text-[#6B6B6B]">{q.error}</p>
+                      <p className="text-[11px] tracking-[0.09em] text-[#B83A3A] mb-1">FAILED TO ANALYSE</p>
+                      <p className="text-[10px] tracking-[0.045em] text-[#6B6B6B]">{q.error}</p>
                     </>
                   )}
-                  <p className="text-[9px] tracking-[0.10em] text-[#A8A8A4] mt-2 truncate font-mono">
+                  <p className="text-[9px] tracking-[0.045em] text-[#A8A8A4] mt-2 truncate font-mono">
                     {q.source_url}
                   </p>
                 </div>
@@ -295,7 +295,7 @@ export default function IngestClient() {
                 <button
                   type="button"
                   onClick={() => discard(q.id)}
-                  className="text-[10px] tracking-[0.20em] text-[#A8A8A4] hover:text-[#4A4E57] transition-colors mt-1"
+                  className="text-[10px] tracking-[0.09em] text-[#A8A8A4] hover:text-[#4A4E57] transition-colors mt-1"
                 >
                   ×
                 </button>
@@ -323,7 +323,7 @@ function ScoreStrip({ parsed }: { parsed: NonNullable<ParsedCandidate['parsed']>
   return (
     <div className="flex items-center gap-3 mt-2 flex-wrap">
       {present.map(([label, val]) => (
-        <span key={label} className="text-[9px] tracking-[0.18em] text-[#A8A8A4]">
+        <span key={label} className="text-[9px] tracking-[0.081em] text-[#A8A8A4]">
           {label} <span className="text-[#4A4E57]">{val}</span>
         </span>
       ))}

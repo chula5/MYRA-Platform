@@ -80,7 +80,7 @@ export default function SourcePanel({ items, onClose, isOpen, outfitId }: Source
       >
         {/* Panel header */}
         <div className="flex items-center justify-between px-3 sm:px-5 pt-5 sm:pt-6 pb-3 sm:pb-4 border-b border-[#E2E0DB]">
-          <span className="text-[10px] sm:text-[11px] tracking-[0.2em] sm:tracking-[0.25em] text-[#4A4E57]">
+          <span className="text-[10px] sm:text-[11px] tracking-[0.09em] sm:tracking-[0.113em] text-[#4A4E57]">
             SOURCED PIECES
           </span>
           <button
@@ -96,7 +96,7 @@ export default function SourcePanel({ items, onClose, isOpen, outfitId }: Source
         <div className="flex-1 overflow-y-auto">
           {items.length === 0 ? (
             <div className="px-5 pt-8 text-center">
-              <p className="text-[11px] tracking-[0.15em] text-[#A8A8A4]">
+              <p className="text-[11px] tracking-[0.068em] text-[#A8A8A4]">
                 NO ITEMS SOURCED YET
               </p>
             </div>
@@ -122,7 +122,7 @@ export default function SourcePanel({ items, onClose, isOpen, outfitId }: Source
             className="
               w-full flex items-center justify-center gap-2
               bg-[#0A0A0A] text-white
-              text-[9px] sm:text-[11px] tracking-[0.15em] sm:tracking-[0.20em]
+              text-[9px] sm:text-[11px] tracking-[0.068em] sm:tracking-[0.09em]
               py-3 sm:py-3.5 rounded-full
               transition-opacity duration-400 hover:opacity-85
             "
@@ -176,21 +176,21 @@ function SourceItemRow({ item, outfitId }: { item: SourceItem; outfitId?: string
           />
         ) : (
           <div className="w-full h-full bg-[#E2E0DB] flex items-center justify-center">
-            <span className="text-[12px] tracking-[0.15em] text-[#6B6B6B]">{brandInitial}</span>
+            <span className="text-[12px] tracking-[0.068em] text-[#6B6B6B]">{brandInitial}</span>
           </div>
         )}
       </div>
 
       {/* Item info */}
       <div className="flex-1 min-w-0">
-        <p className="text-[10px] sm:text-[12px] tracking-[0.10em] sm:tracking-[0.12em] text-[#4A4E57] truncate">
+        <p className="text-[10px] sm:text-[12px] tracking-[0.045em] sm:tracking-[0.054em] text-[#4A4E57] truncate">
           {item.brand?.name ?? 'BRAND'}
         </p>
-        <p className="text-[10px] sm:text-[12px] tracking-[0.06em] sm:tracking-[0.08em] text-[#4A4E57] truncate">
+        <p className="text-[10px] sm:text-[12px] tracking-[0.027em] sm:tracking-[0.036em] text-[#4A4E57] truncate">
           {item.product_name}
         </p>
         {item.retailer_url && (
-          <p className="text-[9px] sm:text-[11px] tracking-[0.10em] text-[#6B6B6B] mt-0.5">
+          <p className="text-[9px] sm:text-[11px] tracking-[0.045em] text-[#6B6B6B] mt-0.5">
             VIEW ITEM
           </p>
         )}

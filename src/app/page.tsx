@@ -29,7 +29,7 @@ export default function LandingPage() {
         />
         {/* Headline overlaid on the trouser area */}
         <div className="absolute inset-x-0 bottom-[28%] sm:bottom-[28%] flex justify-center px-2 sm:px-6 z-10 pointer-events-none">
-          <h1 className="text-white text-center whitespace-nowrap leading-[1.05] tracking-[0.04em] sm:tracking-[0.08em] text-[clamp(14px,4.2vw,56px)] drop-shadow-[0_2px_12px_rgba(0,0,0,0.25)]">
+          <h1 className="text-white text-center whitespace-nowrap leading-[1.05] tracking-[0.018em] sm:tracking-[0.036em] text-[clamp(14px,4.2vw,56px)] drop-shadow-[0_2px_12px_rgba(0,0,0,0.25)]">
             A DIFFERENT WAY TO GET DRESSED.
           </h1>
         </div>
@@ -38,7 +38,7 @@ export default function LandingPage() {
       {/* ── Manifesto — sits directly under the hero photo ──── */}
       <section className="bg-[#FAFAF8] pt-20 sm:pt-28 pb-12 sm:pb-16 px-6 sm:px-10">
         <div className="max-w-5xl mx-auto text-center">
-          <p className="text-[#4A4E57] tracking-[0.10em] sm:tracking-[0.13em] leading-[1.65] text-[clamp(13px,1.7vw,18px)]">
+          <p className="text-[#4A4E57] tracking-[0.045em] sm:tracking-[0.059em] leading-[1.65] text-[clamp(13px,1.7vw,18px)]">
             THE FIRST OUTFIT-LED SHOPPING PLATFORM. WE CURATE THE BRANDS AND
             BUILD THE OUTFITS, SO YOU DON&apos;T HAVE&nbsp;TO.
           </p>
@@ -48,10 +48,10 @@ export default function LandingPage() {
       {/* ── Our Take ──────────────────────────────────────────── */}
       <section className="bg-[#FAFAF8] pb-24 sm:pb-32 px-6 sm:px-10">
         <div className="max-w-3xl mx-auto text-center">
-          <p className="text-[10px] sm:text-[11px] tracking-[0.30em] text-[#6B6B6B] mb-10 sm:mb-12">
+          <p className="text-[10px] sm:text-[11px] tracking-[0.135em] text-[#6B6B6B] mb-10 sm:mb-12">
             OUR TAKE
           </p>
-          <div className="text-[#4A4E57] tracking-[0.08em] sm:tracking-[0.10em] leading-[1.85] text-[clamp(12px,1.4vw,15px)] space-y-7 sm:space-y-8">
+          <div className="text-[#4A4E57] tracking-[0.036em] sm:tracking-[0.045em] leading-[1.85] text-[clamp(12px,1.4vw,15px)] space-y-7 sm:space-y-8">
             <p>
               SHOPPING HAS BECOME EXHAUSTING. NUMEROUS TABS, ENDLESS
               SCROLLING AND ALGORITHMS THAT FEED YOU MORE OF THE SAME. WE
@@ -114,7 +114,7 @@ export default function LandingPage() {
           <div className="text-center mb-10">
             <Link
               href="/"
-              className="text-[20px] tracking-[0.25em] text-[#4A4E57] hover:opacity-60 transition-opacity duration-300"
+              className="text-[20px] tracking-[0.113em] text-[#4A4E57] hover:opacity-60 transition-opacity duration-300"
             >
               MYRA
             </Link>
@@ -125,10 +125,10 @@ export default function LandingPage() {
 
           {/* Footer links */}
           <div className="flex justify-end items-center flex-wrap gap-8">
-            <a href="#" className="text-[11px] tracking-[0.22em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300">
+            <a href="#" className="text-[11px] tracking-[0.099em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300">
               PRIVACY
             </a>
-            <a href="#" className="text-[11px] tracking-[0.22em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300">
+            <a href="#" className="text-[11px] tracking-[0.099em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300">
               TERMS
             </a>
           </div>

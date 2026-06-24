@@ -14,8 +14,8 @@ export default async function AdminDashboard() {
     <div>
       {/* Header */}
       <div className="mb-10">
-        <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-2">MYRA ADMIN STUDIO</p>
-        <h1 className="text-[28px] tracking-[0.10em] text-[#4A4E57]">DASHBOARD</h1>
+        <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-2">MYRA ADMIN STUDIO</p>
+        <h1 className="text-[28px] tracking-[0.045em] text-[#4A4E57]">DASHBOARD</h1>
       </div>
 
       {/* Stock alert — only shown when there's something to fix */}
@@ -24,7 +24,7 @@ export default async function AdminDashboard() {
           href="/admin/items?stock=flagged"
           className="block mb-6 p-4 border border-[#E8B4B4] bg-[#FDECEC] rounded-[3px] hover:border-[#B83A3A] transition-colors duration-300"
         >
-          <p className="text-[10px] tracking-[0.20em] text-[#B83A3A]">
+          <p className="text-[10px] tracking-[0.09em] text-[#B83A3A]">
             {stats.outOfStockItems} OUT OF STOCK
             {stats.lowStockItems > 0 ? ` · ${stats.lowStockItems} LOW STOCK` : ''} · REVIEW →
           </p>
@@ -73,7 +73,7 @@ export default async function AdminDashboard() {
       </div>
 
       {/* Closed-loop studio — composition + ingest, the scale layer */}
-      <p className="text-[10px] tracking-[0.25em] text-[#6B6B6B] mb-4">CLOSED LOOP</p>
+      <p className="text-[10px] tracking-[0.113em] text-[#6B6B6B] mb-4">CLOSED LOOP</p>
       <div className="grid grid-cols-2 gap-6 mb-10">
         <StudioCard
           title="OUTFIT COMPOSER"
@@ -88,7 +88,7 @@ export default async function AdminDashboard() {
       </div>
 
       {/* Studio areas */}
-      <p className="text-[10px] tracking-[0.25em] text-[#6B6B6B] mb-4">STUDIO</p>
+      <p className="text-[10px] tracking-[0.113em] text-[#6B6B6B] mb-4">STUDIO</p>
       <div className="grid grid-cols-4 gap-6">
         <StudioCard
           title="THE EDIT — PREVIEW"
@@ -149,13 +149,13 @@ function StatCard({
   const inner = (
     <>
       <p
-        className="text-[#4A4E57] mb-1 tracking-[0.08em]"
+        className="text-[#4A4E57] mb-1 tracking-[0.036em]"
         style={{ fontSize: '32px', lineHeight: 1 }}
       >
         {value}
       </p>
-      <p className="text-[10px] tracking-[0.20em] text-[#4A4E57] mb-3">{label}</p>
-      <p className="text-[9px] tracking-[0.12em] text-[#A8A8A4]">{breakdown}</p>
+      <p className="text-[10px] tracking-[0.09em] text-[#4A4E57] mb-3">{label}</p>
+      <p className="text-[9px] tracking-[0.054em] text-[#A8A8A4]">{breakdown}</p>
     </>
   )
 
@@ -193,9 +193,9 @@ function StudioCard({
         group
       "
     >
-      <p className="text-[13px] tracking-[0.18em] text-[#4A4E57] mb-3">{title}</p>
-      <p className="text-[11px] tracking-[0.12em] text-[#6B6B6B] leading-relaxed">{description}</p>
-      <p className="mt-6 text-[11px] tracking-[0.18em] text-[#A8A8A4] group-hover:text-[#4A4E57] transition-colors duration-300">
+      <p className="text-[13px] tracking-[0.081em] text-[#4A4E57] mb-3">{title}</p>
+      <p className="text-[11px] tracking-[0.054em] text-[#6B6B6B] leading-relaxed">{description}</p>
+      <p className="mt-6 text-[11px] tracking-[0.081em] text-[#A8A8A4] group-hover:text-[#4A4E57] transition-colors duration-300">
         OPEN →
       </p>
     </a>

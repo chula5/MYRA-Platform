@@ -122,15 +122,15 @@ export default async function AnalyticsPage() {
   return (
     <div>
       <div className="mb-8">
-        <p className="text-[10px] tracking-[0.25em] text-[#6B6B6B] mb-1">ADMIN</p>
-        <h1 className="text-[22px] tracking-[0.10em] text-[#4A4E57]">ANALYTICS</h1>
-        <p className="text-[11px] tracking-[0.15em] text-[#A8A8A4] mt-1">Landing page · myraassistant.co.uk</p>
+        <p className="text-[10px] tracking-[0.113em] text-[#6B6B6B] mb-1">ADMIN</p>
+        <h1 className="text-[22px] tracking-[0.045em] text-[#4A4E57]">ANALYTICS</h1>
+        <p className="text-[11px] tracking-[0.068em] text-[#A8A8A4] mt-1">Landing page · myraassistant.co.uk</p>
       </div>
 
       {!tableReady && (
         <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[3px] p-5 mb-8 max-w-[600px]">
-          <p className="text-[11px] tracking-[0.18em] text-[#8A7A4E] mb-3">DATABASE TABLE NOT YET CREATED</p>
-          <p className="text-[10px] tracking-[0.12em] text-[#8A7A4E] leading-relaxed mb-3">
+          <p className="text-[11px] tracking-[0.081em] text-[#8A7A4E] mb-3">DATABASE TABLE NOT YET CREATED</p>
+          <p className="text-[10px] tracking-[0.054em] text-[#8A7A4E] leading-relaxed mb-3">
             Run the following SQL once in your Supabase SQL Editor to start collecting data:
           </p>
           <pre className="text-[9px] bg-white border border-[#E8D9B8] p-3 rounded overflow-x-auto text-[#6B6B6B] leading-relaxed">{`CREATE TABLE IF NOT EXISTS public.landing_event (
@@ -154,29 +154,29 @@ ALTER TABLE public.landing_event ENABLE ROW LEVEL SECURITY;`}</pre>
           { label: 'SIGN-UP RATE',       value: `${signupRate}%`, sub: 'SIGN-UPS / VIEWS' },
         ].map((s) => (
           <div key={s.label} className="border border-[#E2E0DB] bg-white rounded-[3px] px-5 py-4">
-            <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4] mb-2">{s.label}</p>
-            <p className="text-[28px] tracking-[0.05em] text-[#4A4E57] leading-none">{s.value}</p>
-            <p className="text-[8px] tracking-[0.16em] text-[#C4A882] mt-1">{s.sub}</p>
+            <p className="text-[9px] tracking-[0.09em] text-[#A8A8A4] mb-2">{s.label}</p>
+            <p className="text-[28px] tracking-[0.023em] text-[#4A4E57] leading-none">{s.value}</p>
+            <p className="text-[8px] tracking-[0.072em] text-[#C4A882] mt-1">{s.sub}</p>
           </div>
         ))}
       </div>
 
       {/* Chart */}
       <div className="border border-[#E2E0DB] bg-white rounded-[3px] p-6 mb-8">
-        <p className="text-[10px] tracking-[0.22em] text-[#6B6B6B] mb-6">LAST 30 DAYS</p>
+        <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B] mb-6">LAST 30 DAYS</p>
         {tableReady ? (
           <AnalyticsChart days={days} />
         ) : (
           <div className="h-[160px] flex items-center justify-center">
-            <p className="text-[10px] tracking-[0.20em] text-[#A8A8A4]">DATA WILL APPEAR HERE ONCE THE TABLE IS CREATED</p>
+            <p className="text-[10px] tracking-[0.09em] text-[#A8A8A4]">DATA WILL APPEAR HERE ONCE THE TABLE IS CREATED</p>
           </div>
         )}
       </div>
 
       {/* ── Referral tracking ── */}
       <div className="border border-[#E2E0DB] bg-white rounded-[3px] p-6 mb-8">
-        <p className="text-[10px] tracking-[0.22em] text-[#6B6B6B] mb-2">REFERRAL LINKS</p>
-        <p className="text-[10px] tracking-[0.12em] text-[#A8A8A4] leading-relaxed mb-5 max-w-[620px]">
+        <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B] mb-2">REFERRAL LINKS</p>
+        <p className="text-[10px] tracking-[0.054em] text-[#A8A8A4] leading-relaxed mb-5 max-w-[620px]">
           Share these links so visits and waitlist sign-ups are attributed to each source. Add{' '}
           <span className="font-mono text-[#6B6B6B]">?ref=yourcode</span> to any link to create a new one.
         </p>
@@ -187,7 +187,7 @@ ALTER TABLE public.landing_event ENABLE ROW LEVEL SECURITY;`}</pre>
 
         {!refColumnReady ? (
           <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[3px] p-4 max-w-[620px]">
-            <p className="text-[10px] tracking-[0.14em] text-[#8A7A4E] leading-relaxed mb-2">
+            <p className="text-[10px] tracking-[0.063em] text-[#8A7A4E] leading-relaxed mb-2">
               Run migration <span className="font-mono">0008_landing_event_ref.sql</span> in Supabase to start
               tracking referrals:
             </p>
@@ -195,29 +195,29 @@ ALTER TABLE public.landing_event ENABLE ROW LEVEL SECURITY;`}</pre>
 CREATE INDEX IF NOT EXISTS landing_event_ref_idx ON public.landing_event (ref);`}</pre>
           </div>
         ) : refRows.length === 0 ? (
-          <p className="text-[10px] tracking-[0.16em] text-[#A8A8A4] py-4">
+          <p className="text-[10px] tracking-[0.072em] text-[#A8A8A4] py-4">
             NO REFERRAL TRAFFIC YET · LAST 30 DAYS — IT APPEARS HERE ONCE PEOPLE VISIT VIA A ?REF LINK.
           </p>
         ) : (
           <div className="border border-[#E2E0DB] rounded-[3px] overflow-hidden max-w-[620px]">
             <div className="grid grid-cols-[1fr_80px_90px_80px] gap-2 px-4 py-2.5 bg-[#FAFAF8] border-b border-[#E2E0DB]">
-              <span className="text-[9px] tracking-[0.18em] text-[#6B6B6B]">SOURCE</span>
-              <span className="text-[9px] tracking-[0.18em] text-[#6B6B6B] text-right">VISITS</span>
-              <span className="text-[9px] tracking-[0.18em] text-[#6B6B6B] text-right">SIGN-UPS</span>
-              <span className="text-[9px] tracking-[0.18em] text-[#6B6B6B] text-right">CONV.</span>
+              <span className="text-[9px] tracking-[0.081em] text-[#6B6B6B]">SOURCE</span>
+              <span className="text-[9px] tracking-[0.081em] text-[#6B6B6B] text-right">VISITS</span>
+              <span className="text-[9px] tracking-[0.081em] text-[#6B6B6B] text-right">SIGN-UPS</span>
+              <span className="text-[9px] tracking-[0.081em] text-[#6B6B6B] text-right">CONV.</span>
             </div>
             {refRows.map((r, i) => (
               <div
                 key={r.ref}
                 className={`grid grid-cols-[1fr_80px_90px_80px] gap-2 px-4 py-3 items-center border-b border-[#E2E0DB] last:border-0 ${i % 2 ? 'bg-[#FAFAF8]' : 'bg-white'}`}
               >
-                <span className="text-[11px] tracking-[0.06em] text-[#4A4E57] truncate">{r.label}</span>
-                <span className="text-[12px] tracking-[0.04em] text-[#4A4E57] text-right">{r.views}</span>
-                <span className="text-[12px] tracking-[0.04em] text-[#3A6B3A] text-right">{r.signups}</span>
-                <span className="text-[11px] tracking-[0.04em] text-[#6B6B6B] text-right">{r.conv}%</span>
+                <span className="text-[11px] tracking-[0.027em] text-[#4A4E57] truncate">{r.label}</span>
+                <span className="text-[12px] tracking-[0.018em] text-[#4A4E57] text-right">{r.views}</span>
+                <span className="text-[12px] tracking-[0.018em] text-[#3A6B3A] text-right">{r.signups}</span>
+                <span className="text-[11px] tracking-[0.018em] text-[#6B6B6B] text-right">{r.conv}%</span>
               </div>
             ))}
-            <p className="text-[8px] tracking-[0.14em] text-[#A8A8A4] px-4 py-2 bg-[#FAFAF8]">LAST 30 DAYS</p>
+            <p className="text-[8px] tracking-[0.063em] text-[#A8A8A4] px-4 py-2 bg-[#FAFAF8]">LAST 30 DAYS</p>
           </div>
         )}
       </div>
@@ -225,7 +225,7 @@ CREATE INDEX IF NOT EXISTS landing_event_ref_idx ON public.landing_event (ref);`
       {/* Click breakdown */}
       {tableReady && Object.keys(clickTypes).length > 0 && (
         <div className="border border-[#E2E0DB] bg-white rounded-[3px] p-6 max-w-[480px]">
-          <p className="text-[10px] tracking-[0.22em] text-[#6B6B6B] mb-5">CLICK BREAKDOWN · LAST 30 DAYS</p>
+          <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B] mb-5">CLICK BREAKDOWN · LAST 30 DAYS</p>
           <div className="space-y-3">
             {Object.entries(clickTypes)
               .sort(([, a], [, b]) => b - a)
@@ -234,8 +234,8 @@ CREATE INDEX IF NOT EXISTS landing_event_ref_idx ON public.landing_event (ref);`
                 return (
                   <div key={type}>
                     <div className="flex justify-between mb-1">
-                      <span className="text-[9px] tracking-[0.16em] text-[#4A4E57]">{CLICK_LABELS[type] ?? type.toUpperCase()}</span>
-                      <span className="text-[9px] tracking-[0.12em] text-[#6B6B6B]">{count}</span>
+                      <span className="text-[9px] tracking-[0.072em] text-[#4A4E57]">{CLICK_LABELS[type] ?? type.toUpperCase()}</span>
+                      <span className="text-[9px] tracking-[0.054em] text-[#6B6B6B]">{count}</span>
                     </div>
                     <div className="h-[3px] bg-[#F2F2F2] rounded-full overflow-hidden">
                       <div className="h-full bg-[#0A0A0A] rounded-full" style={{ width: `${pct}%` }} />

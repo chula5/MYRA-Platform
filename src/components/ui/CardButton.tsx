@@ -13,7 +13,7 @@ const CardButton = forwardRef<HTMLButtonElement, CardButtonProps>(
   ({ variant = 'filled', children, className = '', ...props }, ref) => {
     const base = `
       inline-flex items-center justify-center
-      text-[10px] tracking-[0.18em]
+      text-[10px] tracking-[0.081em]
       rounded-full
       px-3 py-1.5
       transition-all duration-400

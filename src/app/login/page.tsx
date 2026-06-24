@@ -13,14 +13,14 @@ export default function LoginPage({
 
         {/* Wordmark */}
         <div className="text-center mb-14">
-          <p className="text-[22px] tracking-[0.30em] text-[#4A4E57]">MYRA</p>
-          <p className="text-[10px] tracking-[0.25em] text-[#A8A8A4] mt-2">ADMIN STUDIO</p>
+          <p className="text-[22px] tracking-[0.135em] text-[#4A4E57]">MYRA</p>
+          <p className="text-[10px] tracking-[0.113em] text-[#A8A8A4] mt-2">ADMIN STUDIO</p>
         </div>
 
         {/* Form */}
         <form action={signIn} className="space-y-5">
           <div>
-            <label className="block text-[10px] tracking-[0.20em] text-[#6B6B6B] mb-2">
+            <label className="block text-[10px] tracking-[0.09em] text-[#6B6B6B] mb-2">
               EMAIL
             </label>
             <input
@@ -30,14 +30,14 @@ export default function LoginPage({
               autoComplete="email"
               className="
                 w-full border border-[#0A0A0A] bg-white
-                px-4 py-3 text-[12px] tracking-[0.10em] text-[#4A4E57]
+                px-4 py-3 text-[12px] tracking-[0.045em] text-[#4A4E57]
                 focus:outline-none
               "
             />
           </div>
 
           <div>
-            <label className="block text-[10px] tracking-[0.20em] text-[#6B6B6B] mb-2">
+            <label className="block text-[10px] tracking-[0.09em] text-[#6B6B6B] mb-2">
               PASSWORD
             </label>
             <input
@@ -47,7 +47,7 @@ export default function LoginPage({
               autoComplete="current-password"
               className="
                 w-full border border-[#0A0A0A] bg-white
-                px-4 py-3 text-[12px] tracking-[0.10em] text-[#4A4E57]
+                px-4 py-3 text-[12px] tracking-[0.045em] text-[#4A4E57]
                 focus:outline-none
               "
             />
@@ -55,7 +55,7 @@ export default function LoginPage({
 
           {/* Error */}
           {error && (
-            <p className="text-[10px] tracking-[0.15em] text-red-600">
+            <p className="text-[10px] tracking-[0.068em] text-red-600">
               {decodeURIComponent(error).toUpperCase()}
             </p>
           )}
@@ -65,7 +65,7 @@ export default function LoginPage({
             type="submit"
             className="
               w-full bg-[#0A0A0A] text-white
-              text-[11px] tracking-[0.22em]
+              text-[11px] tracking-[0.099em]
               py-3.5 mt-2
               hover:opacity-80 transition-opacity duration-300
             "
@@ -78,7 +78,7 @@ export default function LoginPage({
         <div className="text-center mt-10">
           <a
             href="/"
-            className="text-[10px] tracking-[0.20em] text-[#A8A8A4] hover:text-[#4A4E57] transition-colors duration-300"
+            className="text-[10px] tracking-[0.09em] text-[#A8A8A4] hover:text-[#4A4E57] transition-colors duration-300"
           >
             ← BACK TO SITE
           </a>

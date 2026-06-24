@@ -41,7 +41,7 @@ export default function DiscoveryActions({
 
   if (currentStatus !== 'new') {
     return (
-      <p className="text-center py-1.5 text-[9px] tracking-[0.18em] text-[#A8A8A4]">
+      <p className="text-center py-1.5 text-[9px] tracking-[0.081em] text-[#A8A8A4]">
         {currentStatus === 'saved' ? 'ADDED TO LIBRARY' : 'DISMISSED'}
       </p>
     )
@@ -53,7 +53,7 @@ export default function DiscoveryActions({
         type="button"
         onClick={handleSave}
         disabled={!!pending}
-        className="py-1.5 text-[9px] tracking-[0.18em] bg-[#0A0A0A] text-white hover:bg-[#333] disabled:opacity-40 transition-colors"
+        className="py-1.5 text-[9px] tracking-[0.081em] bg-[#0A0A0A] text-white hover:bg-[#333] disabled:opacity-40 transition-colors"
       >
         {pending === 'save' ? 'ADDING...' : 'ADD TO LIBRARY'}
       </button>
@@ -61,11 +61,11 @@ export default function DiscoveryActions({
         type="button"
         onClick={handleDismiss}
         disabled={!!pending}
-        className="py-1.5 text-[9px] tracking-[0.18em] border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] disabled:opacity-40 transition-colors"
+        className="py-1.5 text-[9px] tracking-[0.081em] border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] disabled:opacity-40 transition-colors"
       >
         {pending === 'dismiss' ? 'DISMISSING...' : 'DISMISS'}
       </button>
-      {error && <p className="col-span-2 text-[9px] tracking-[0.15em] text-red-500">{error}</p>}
+      {error && <p className="col-span-2 text-[9px] tracking-[0.068em] text-red-500">{error}</p>}
     </div>
   )
 }

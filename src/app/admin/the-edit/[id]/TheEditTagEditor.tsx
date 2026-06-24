@@ -67,15 +67,15 @@ export default function TheEditTagEditor({
   return (
     <div className="border-b border-[#E2E0DB] bg-[#FAFAF8] px-5 py-5">
       <div className="flex items-center justify-between mb-3">
-        <p className="text-[10px] tracking-[0.22em] text-[#6B6B6B]">OCCASION TAGS</p>
-        <span className="text-[9px] tracking-[0.18em]">
+        <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B]">OCCASION TAGS</p>
+        <span className="text-[9px] tracking-[0.081em]">
           {status === 'saving' && <span className="text-[#A8A8A4]">SAVING…</span>}
           {status === 'saved' && <span className="text-[#3A6B3A]">✓ SAVED</span>}
           {status === 'error' && <span className="text-[#B83A3A]">{(errorMsg || 'SAVE FAILED').toUpperCase()}</span>}
         </span>
       </div>
 
-      <p className="text-[9px] tracking-[0.15em] text-[#A8A8A4] mb-3 leading-relaxed">
+      <p className="text-[9px] tracking-[0.068em] text-[#A8A8A4] mb-3 leading-relaxed">
         Tap an occasion to add or remove it. Changes save instantly and update what shows under each
         occasion in The Edit.
       </p>
@@ -90,7 +90,7 @@ export default function TheEditTagEditor({
               type="button"
               onClick={() => toggle(occ.tag)}
               disabled={status === 'saving'}
-              className={`px-3 py-2 text-[9px] tracking-[0.16em] rounded-[3px] border transition-colors disabled:opacity-50 ${
+              className={`px-3 py-2 text-[9px] tracking-[0.072em] rounded-[3px] border transition-colors disabled:opacity-50 ${
                 active
                   ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]'
                   : 'bg-white text-[#6B6B6B] border-[#E2E0DB] hover:border-[#0A0A0A] hover:text-[#4A4E57]'
@@ -108,7 +108,7 @@ export default function TheEditTagEditor({
           {customTags.map((t) => (
             <span
               key={t}
-              className="inline-flex items-center gap-2 px-3 py-2 text-[9px] tracking-[0.16em] rounded-[3px] border border-[#C4A882] bg-white text-[#4A4E57]"
+              className="inline-flex items-center gap-2 px-3 py-2 text-[9px] tracking-[0.072em] rounded-[3px] border border-[#C4A882] bg-white text-[#4A4E57]"
             >
               {t.toUpperCase()}
               <button
@@ -135,13 +135,13 @@ export default function TheEditTagEditor({
             if (e.key === 'Enter') { e.preventDefault(); addCustom() }
           }}
           placeholder="ADD A CUSTOM OCCASION"
-          className="flex-1 border border-[#E2E0DB] bg-white px-3 py-2 text-[10px] tracking-[0.12em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A]"
+          className="flex-1 border border-[#E2E0DB] bg-white px-3 py-2 text-[10px] tracking-[0.054em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A]"
         />
         <button
           type="button"
           onClick={addCustom}
           disabled={status === 'saving' || !custom.trim()}
-          className="shrink-0 border border-[#0A0A0A] text-[#4A4E57] px-4 text-[9px] tracking-[0.18em] hover:bg-[#0A0A0A] hover:text-white transition-colors disabled:opacity-40"
+          className="shrink-0 border border-[#0A0A0A] text-[#4A4E57] px-4 text-[9px] tracking-[0.081em] hover:bg-[#0A0A0A] hover:text-white transition-colors disabled:opacity-40"
         >
           ADD
         </button>

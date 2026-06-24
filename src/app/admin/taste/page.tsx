@@ -17,7 +17,7 @@ export default async function TastePage() {
       <div>
         <Header />
         <div className="py-20 text-center border border-[#E2E0DB] bg-white rounded-[3px]">
-          <p className="text-[11px] tracking-[0.20em] text-[#A8A8A4]">
+          <p className="text-[11px] tracking-[0.09em] text-[#A8A8A4]">
             NO TASTE DATA YET. START LOGGING ITEMS IN THE ITEM LIBRARY.
           </p>
         </div>
@@ -49,16 +49,16 @@ export default async function TastePage() {
             <ul className="space-y-2">
               {insights.topBrands.map((b) => (
                 <li key={b.name} className="flex items-center justify-between">
-                  <span className="text-[11px] tracking-[0.12em] text-[#4A4E57]">
+                  <span className="text-[11px] tracking-[0.054em] text-[#4A4E57]">
                     {b.name.toUpperCase()}
                   </span>
                   <div className="flex items-center gap-3">
                     {b.priceTier != null && (
-                      <span className="text-[9px] tracking-[0.15em] text-[#A8A8A4]">
+                      <span className="text-[9px] tracking-[0.068em] text-[#A8A8A4]">
                         {PRICE_TIER_LABELS[b.priceTier] ?? `TIER ${b.priceTier}`}
                       </span>
                     )}
-                    <span className="text-[10px] tracking-[0.12em] text-[#6B6B6B] w-8 text-right">
+                    <span className="text-[10px] tracking-[0.054em] text-[#6B6B6B] w-8 text-right">
                       {b.count}
                     </span>
                   </div>
@@ -75,7 +75,7 @@ export default async function TastePage() {
             <ul className="space-y-2">
               {insights.topItemTypes.map((t) => (
                 <li key={t.type} className="flex items-center justify-between">
-                  <span className="text-[11px] tracking-[0.12em] text-[#4A4E57]">
+                  <span className="text-[11px] tracking-[0.054em] text-[#4A4E57]">
                     {t.type.replace(/_/g, ' ').toUpperCase()}
                   </span>
                   <CountBar count={t.count} max={insights.topItemTypes[0].count} />
@@ -92,7 +92,7 @@ export default async function TastePage() {
             <ul className="space-y-2">
               {insights.topColourFamilies.map((c) => (
                 <li key={c.family} className="flex items-center justify-between">
-                  <span className="text-[11px] tracking-[0.12em] text-[#4A4E57]">
+                  <span className="text-[11px] tracking-[0.054em] text-[#4A4E57]">
                     {c.family.replace(/_/g, ' ').toUpperCase()}
                   </span>
                   <CountBar count={c.count} max={insights.topColourFamilies[0].count} />
@@ -109,7 +109,7 @@ export default async function TastePage() {
             <ul className="space-y-2">
               {insights.topMaterialCategories.map((m) => (
                 <li key={m.category} className="flex items-center justify-between">
-                  <span className="text-[11px] tracking-[0.12em] text-[#4A4E57]">
+                  <span className="text-[11px] tracking-[0.054em] text-[#4A4E57]">
                     {m.category.replace(/_/g, ' ').toUpperCase()}
                   </span>
                   <CountBar count={m.count} max={insights.topMaterialCategories[0].count} />
@@ -126,7 +126,7 @@ export default async function TastePage() {
             <ul className="space-y-2">
               {insights.priceTierDistribution.map((p) => (
                 <li key={p.tier} className="flex items-center justify-between">
-                  <span className="text-[11px] tracking-[0.12em] text-[#4A4E57]">
+                  <span className="text-[11px] tracking-[0.054em] text-[#4A4E57]">
                     {p.tier} — {PRICE_TIER_LABELS[p.tier] ?? ''}
                   </span>
                   <CountBar
@@ -143,10 +143,10 @@ export default async function TastePage() {
           <ul className="space-y-2">
             {Object.entries(insights.avgScores).map(([key, value]) => (
               <li key={key} className="flex items-center justify-between">
-                <span className="text-[11px] tracking-[0.12em] text-[#4A4E57]">
+                <span className="text-[11px] tracking-[0.054em] text-[#4A4E57]">
                   {key.replace(/_/g, ' ').toUpperCase()}
                 </span>
-                <span className="text-[10px] tracking-[0.12em] text-[#6B6B6B]">
+                <span className="text-[10px] tracking-[0.054em] text-[#6B6B6B]">
                   {value != null ? value.toFixed(2) : '—'}
                 </span>
               </li>
@@ -164,32 +164,32 @@ export default async function TastePage() {
             {insights.recent.map((r) => (
               <li key={r.log_id} className="flex items-center justify-between py-2">
                 <div>
-                  <span className="text-[11px] tracking-[0.12em] text-[#4A4E57]">
+                  <span className="text-[11px] tracking-[0.054em] text-[#4A4E57]">
                     {r.brand_name?.toUpperCase() ?? '—'}
                   </span>
                   <span className="mx-2 text-[#A8A8A4]">·</span>
-                  <span className="text-[10px] tracking-[0.12em] text-[#6B6B6B]">
+                  <span className="text-[10px] tracking-[0.054em] text-[#6B6B6B]">
                     {r.item_type?.replace(/_/g, ' ').toUpperCase() ?? '—'}
                   </span>
                   {r.colour_family && (
                     <>
                       <span className="mx-2 text-[#A8A8A4]">·</span>
-                      <span className="text-[10px] tracking-[0.12em] text-[#6B6B6B]">
+                      <span className="text-[10px] tracking-[0.054em] text-[#6B6B6B]">
                         {r.colour_family.toUpperCase()}
                       </span>
                     </>
                   )}
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-[9px] tracking-[0.15em] text-[#A8A8A4]">
+                  <span className="text-[9px] tracking-[0.068em] text-[#A8A8A4]">
                     {r.event_type.toUpperCase()}
                   </span>
-                  <span className="text-[9px] tracking-[0.12em] text-[#A8A8A4]">
+                  <span className="text-[9px] tracking-[0.054em] text-[#A8A8A4]">
                     {new Date(r.logged_at).toLocaleDateString()}
                   </span>
                   <Link
                     href={`/admin/items/${r.item_id}/edit`}
-                    className="text-[9px] tracking-[0.15em] text-[#6B6B6B] hover:text-[#4A4E57]"
+                    className="text-[9px] tracking-[0.068em] text-[#6B6B6B] hover:text-[#4A4E57]"
                   >
                     OPEN →
                   </Link>
@@ -206,9 +206,9 @@ export default async function TastePage() {
 function Header() {
   return (
     <div className="mb-10">
-      <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-2">ADMIN STUDIO</p>
-      <h1 className="text-[28px] tracking-[0.10em] text-[#4A4E57]">TASTE BRAIN</h1>
-      <p className="mt-2 text-[10px] tracking-[0.15em] text-[#A8A8A4]">
+      <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-2">ADMIN STUDIO</p>
+      <h1 className="text-[28px] tracking-[0.045em] text-[#4A4E57]">TASTE BRAIN</h1>
+      <p className="mt-2 text-[10px] tracking-[0.068em] text-[#A8A8A4]">
         AGGREGATED SIGNAL FROM EVERY ITEM YOU'VE LOGGED.
       </p>
     </div>
@@ -219,12 +219,12 @@ function SummaryCard({ label, value, isText = false }: { label: string; value: n
   return (
     <div className="bg-white border border-[#E2E0DB] p-6 rounded-[3px]">
       <p
-        className="text-[#4A4E57] mb-1 tracking-[0.08em]"
+        className="text-[#4A4E57] mb-1 tracking-[0.036em]"
         style={{ fontSize: isText ? '16px' : '32px', lineHeight: 1 }}
       >
         {value}
       </p>
-      <p className="text-[10px] tracking-[0.20em] text-[#4A4E57]">{label}</p>
+      <p className="text-[10px] tracking-[0.09em] text-[#4A4E57]">{label}</p>
     </div>
   )
 }
@@ -232,7 +232,7 @@ function SummaryCard({ label, value, isText = false }: { label: string; value: n
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="bg-white border border-[#E2E0DB] p-5 rounded-[3px]">
-      <p className="text-[10px] tracking-[0.20em] text-[#6B6B6B] mb-4 pb-3 border-b border-[#E2E0DB]">
+      <p className="text-[10px] tracking-[0.09em] text-[#6B6B6B] mb-4 pb-3 border-b border-[#E2E0DB]">
         {title}
       </p>
       {children}
@@ -247,13 +247,13 @@ function CountBar({ count, max }: { count: number; max: number }) {
       <div className="w-24 h-1 bg-[#F2F2F0] rounded-full overflow-hidden">
         <div className="h-full bg-[#0A0A0A]" style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-[10px] tracking-[0.12em] text-[#6B6B6B] w-8 text-right">{count}</span>
+      <span className="text-[10px] tracking-[0.054em] text-[#6B6B6B] w-8 text-right">{count}</span>
     </div>
   )
 }
 
 function Empty() {
-  return <p className="text-[10px] tracking-[0.15em] text-[#A8A8A4]">NO DATA YET.</p>
+  return <p className="text-[10px] tracking-[0.068em] text-[#A8A8A4]">NO DATA YET.</p>
 }
 
 function dominantTier(dist: { tier: number; count: number }[]): string {

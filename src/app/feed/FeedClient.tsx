@@ -350,8 +350,8 @@ export default function FeedClient({
     return (
       <div className="max-w-[1440px] mx-auto px-6 sm:px-10 py-16">
         <div className="text-center mb-12">
-          <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-4">YOUR OCCASION</p>
-          <h1 className="text-[clamp(28px,3vw,40px)] tracking-[0.10em] text-[#4A4E57] leading-tight">
+          <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-4">YOUR OCCASION</p>
+          <h1 className="text-[clamp(28px,3vw,40px)] tracking-[0.045em] text-[#4A4E57] leading-tight">
             WHAT ARE YOU DRESSING FOR?
           </h1>
         </div>
@@ -360,8 +360,8 @@ export default function FeedClient({
         {recommendedOutfits.length > 0 && (
           <div className="max-w-[1100px] mx-auto mb-12">
             <div className="flex items-baseline justify-between mb-4">
-              <p className="text-[11px] tracking-[0.22em] text-[#4A4E57]">RECOMMENDED FOR YOU</p>
-              <p className="text-[9px] tracking-[0.16em] text-[#A8A8A4]">BASED ON WHAT YOU LIKE</p>
+              <p className="text-[11px] tracking-[0.099em] text-[#4A4E57]">RECOMMENDED FOR YOU</p>
+              <p className="text-[9px] tracking-[0.072em] text-[#A8A8A4]">BASED ON WHAT YOU LIKE</p>
             </div>
             <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
               {recommendedOutfits.map((o) => (
@@ -391,7 +391,7 @@ export default function FeedClient({
           <div className="max-w-[900px] mx-auto mb-6">
             <button
               onClick={() => setOccasion('all')}
-              className="glass-dark w-full text-[#4A4E57] px-4 py-4 text-[11px] tracking-[0.20em] rounded-full"
+              className="glass-dark w-full text-[#4A4E57] px-4 py-4 text-[11px] tracking-[0.09em] rounded-full"
             >
               ↓ VIEW EVERYTHING LIVE
             </button>
@@ -404,7 +404,7 @@ export default function FeedClient({
             <button
               key={occ.tag}
               onClick={() => setOccasion(occ.tag)}
-              className="glass-light px-4 py-6 text-[11px] tracking-[0.20em] text-[#4A4E57] text-center rounded-[16px] active:scale-[0.99]"
+              className="glass-light px-4 py-6 text-[11px] tracking-[0.09em] text-[#4A4E57] text-center rounded-[16px] active:scale-[0.99]"
             >
               {occ.label}
             </button>
@@ -414,7 +414,7 @@ export default function FeedClient({
         {/* Divider */}
         <div className="flex items-center gap-6 max-w-[900px] mx-auto mb-8">
           <div className="flex-1 border-t border-[#E2E0DB]" />
-          <span className="text-[10px] tracking-[0.25em] text-[#A8A8A4]">OR SEARCH</span>
+          <span className="text-[10px] tracking-[0.113em] text-[#A8A8A4]">OR SEARCH</span>
           <div className="flex-1 border-t border-[#E2E0DB]" />
         </div>
 
@@ -425,19 +425,19 @@ export default function FeedClient({
           {(filterColour || filterItemGroup || filterBrand.trim()) && (
             <div className="flex flex-wrap gap-2 mb-3">
               {filterColour && (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0A0A0A] text-white text-[9px] tracking-[0.16em] rounded-[3px]">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0A0A0A] text-white text-[9px] tracking-[0.072em] rounded-[3px]">
                   {COLOUR_OPTIONS.find(c => c.value === filterColour)?.label}
                   <button onClick={() => setFilterColour(null)} className="opacity-70 hover:opacity-100 text-[11px] leading-none">×</button>
                 </span>
               )}
               {filterItemGroup && (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0A0A0A] text-white text-[9px] tracking-[0.16em] rounded-[3px]">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0A0A0A] text-white text-[9px] tracking-[0.072em] rounded-[3px]">
                   {filterItemGroup}
                   <button onClick={() => setFilterItemGroup(null)} className="opacity-70 hover:opacity-100 text-[11px] leading-none">×</button>
                 </span>
               )}
               {filterBrand.trim() && (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0A0A0A] text-white text-[9px] tracking-[0.16em] rounded-[3px]">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0A0A0A] text-white text-[9px] tracking-[0.072em] rounded-[3px]">
                   {filterBrand.toUpperCase()}
                   <button onClick={() => setFilterBrand('')} className="opacity-70 hover:opacity-100 text-[11px] leading-none">×</button>
                 </span>
@@ -455,12 +455,12 @@ export default function FeedClient({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="SEARCH BY STYLE, COLOUR, BRAND, MATERIAL…"
-              className="glass-input flex-1 px-5 py-3.5 rounded-full text-[11px] tracking-[0.12em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none"
+              className="glass-input flex-1 px-5 py-3.5 rounded-full text-[11px] tracking-[0.054em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none"
             />
             <button
               type="submit"
               disabled={!hasActiveSearch}
-              className="glass-dark text-[#4A4E57] px-7 py-3.5 rounded-full text-[11px] tracking-[0.20em] flex-shrink-0 disabled:opacity-30"
+              className="glass-dark text-[#4A4E57] px-7 py-3.5 rounded-full text-[11px] tracking-[0.09em] flex-shrink-0 disabled:opacity-30"
             >
               FIND
             </button>
@@ -475,7 +475,7 @@ export default function FeedClient({
                 <button
                   key={type}
                   onClick={() => setFilterPanel(isActive ? null : type)}
-                  className={`px-4 py-2 text-[9px] tracking-[0.18em] rounded-[3px] border transition-colors duration-200 ${
+                  className={`px-4 py-2 text-[9px] tracking-[0.081em] rounded-[3px] border transition-colors duration-200 ${
                     hasValue
                       ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]'
                       : isActive
@@ -497,7 +497,7 @@ export default function FeedClient({
                   <button
                     key={c.value}
                     onClick={() => { setFilterColour(filterColour === c.value ? null : c.value); setFilterPanel(null) }}
-                    className={`flex items-center gap-2 px-3 py-2 text-[9px] tracking-[0.14em] rounded-[3px] border transition-colors ${
+                    className={`flex items-center gap-2 px-3 py-2 text-[9px] tracking-[0.063em] rounded-[3px] border transition-colors ${
                       filterColour === c.value
                         ? 'border-[#0A0A0A] bg-[#0A0A0A] text-white'
                         : 'border-[#E2E0DB] text-[#4A4E57] hover:border-[#0A0A0A]'
@@ -522,7 +522,7 @@ export default function FeedClient({
                   <button
                     key={g.label}
                     onClick={() => { setFilterItemGroup(filterItemGroup === g.label ? null : g.label); setFilterPanel(null) }}
-                    className={`px-3 py-2 text-[9px] tracking-[0.14em] rounded-[3px] border transition-colors ${
+                    className={`px-3 py-2 text-[9px] tracking-[0.063em] rounded-[3px] border transition-colors ${
                       filterItemGroup === g.label
                         ? 'border-[#0A0A0A] bg-[#0A0A0A] text-white'
                         : 'border-[#E2E0DB] text-[#4A4E57] hover:border-[#0A0A0A]'
@@ -545,11 +545,11 @@ export default function FeedClient({
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); setFilterPanel(null) } }}
                 placeholder="E.G. STAUD, TOTEME, JACQUEMUS…"
                 autoFocus
-                className="w-full border border-[#E2E0DB] bg-[#FAFAF8] px-4 py-2.5 text-[11px] tracking-[0.12em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors"
+                className="w-full border border-[#E2E0DB] bg-[#FAFAF8] px-4 py-2.5 text-[11px] tracking-[0.054em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors"
               />
               <button
                 onClick={() => setFilterPanel(null)}
-                className="mt-3 text-[9px] tracking-[0.18em] text-[#6B6B6B] hover:text-[#4A4E57]"
+                className="mt-3 text-[9px] tracking-[0.081em] text-[#6B6B6B] hover:text-[#4A4E57]"
               >
                 DONE
               </button>
@@ -566,12 +566,12 @@ export default function FeedClient({
       <div className="max-w-[1440px] mx-auto px-6 sm:px-10 py-10">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-1">SEARCH</p>
-            <h2 className="text-[22px] tracking-[0.10em] text-[#4A4E57]">{activeFilterLabel()}</h2>
+            <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-1">SEARCH</p>
+            <h2 className="text-[22px] tracking-[0.045em] text-[#4A4E57]">{activeFilterLabel()}</h2>
           </div>
           <button
             onClick={clearSearch}
-            className="text-[11px] tracking-[0.20em] text-[#6B6B6B] border border-[#E2E0DB] px-5 py-2.5 rounded-[3px] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-all duration-300"
+            className="text-[11px] tracking-[0.09em] text-[#6B6B6B] border border-[#E2E0DB] px-5 py-2.5 rounded-[3px] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-all duration-300"
           >
             CLEAR
           </button>
@@ -587,10 +587,10 @@ export default function FeedClient({
 
         {!searchLoading && searchResults.length === 0 && (
           <div className="text-center py-24">
-            <p className="text-[11px] tracking-[0.25em] text-[#A8A8A4] mb-6">NO OUTFITS FOUND</p>
+            <p className="text-[11px] tracking-[0.113em] text-[#A8A8A4] mb-6">NO OUTFITS FOUND</p>
             <button
               onClick={clearSearch}
-              className="border border-[#0A0A0A] text-[#4A4E57] px-8 py-3 rounded-[3px] text-[11px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-all duration-400"
+              className="border border-[#0A0A0A] text-[#4A4E57] px-8 py-3 rounded-[3px] text-[11px] tracking-[0.09em] hover:bg-[#0A0A0A] hover:text-white transition-all duration-400"
             >
               TRY ANOTHER SEARCH
             </button>
@@ -622,14 +622,14 @@ export default function FeedClient({
     <div className="max-w-[1440px] mx-auto px-6 sm:px-10 py-10">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-1">YOUR OCCASION</p>
-          <h2 className="text-[22px] tracking-[0.10em] text-[#4A4E57]">
+          <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-1">YOUR OCCASION</p>
+          <h2 className="text-[22px] tracking-[0.045em] text-[#4A4E57]">
             {occasion === 'all' ? 'EVERYTHING LIVE' : occasion!.toUpperCase()}
           </h2>
         </div>
         <button
           onClick={() => setOccasion(null)}
-          className="text-[11px] tracking-[0.20em] text-[#6B6B6B] border border-[#E2E0DB] px-5 py-2.5 rounded-[3px] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-all duration-300"
+          className="text-[11px] tracking-[0.09em] text-[#6B6B6B] border border-[#E2E0DB] px-5 py-2.5 rounded-[3px] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-all duration-300"
         >
           CHANGE
         </button>
@@ -645,10 +645,10 @@ export default function FeedClient({
 
       {!loading && outfits.length === 0 && (
         <div className="text-center py-24">
-          <p className="text-[11px] tracking-[0.25em] text-[#A8A8A4] mb-6">NO OUTFITS YET FOR THIS OCCASION</p>
+          <p className="text-[11px] tracking-[0.113em] text-[#A8A8A4] mb-6">NO OUTFITS YET FOR THIS OCCASION</p>
           <button
             onClick={() => setOccasion(null)}
-            className="border border-[#0A0A0A] text-[#4A4E57] px-8 py-3 rounded-[3px] text-[11px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-all duration-400"
+            className="border border-[#0A0A0A] text-[#4A4E57] px-8 py-3 rounded-[3px] text-[11px] tracking-[0.09em] hover:bg-[#0A0A0A] hover:text-white transition-all duration-400"
           >
             TRY ANOTHER OCCASION
           </button>
@@ -681,7 +681,7 @@ export default function FeedClient({
               </div>
             )}
             {!hasMore && !loadingMore && outfits.length > 0 && (
-              <p className="text-[10px] tracking-[0.25em] text-[#A8A8A4]">END OF EDIT</p>
+              <p className="text-[10px] tracking-[0.113em] text-[#A8A8A4]">END OF EDIT</p>
             )}
           </div>
         </>

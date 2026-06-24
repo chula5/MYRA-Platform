@@ -26,13 +26,13 @@ export default async function NewOutfitPage({ params }: PageProps) {
       <div className="mb-8">
         <Link
           href={`/admin/projects/${id}`}
-          className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300 mb-4 inline-block"
+          className="text-[10px] tracking-[0.09em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300 mb-4 inline-block"
         >
           ← {project.title.toUpperCase()}
         </Link>
         <div>
-          <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-2">NEW OUTFIT</p>
-          <h1 className="text-[28px] tracking-[0.10em] text-[#4A4E57]">BUILD OUTFIT</h1>
+          <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-2">NEW OUTFIT</p>
+          <h1 className="text-[28px] tracking-[0.045em] text-[#4A4E57]">BUILD OUTFIT</h1>
         </div>
       </div>
 

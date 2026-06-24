@@ -105,9 +105,9 @@ export default function UploadOutfitSection({ projects }: { projects: Project[] 
         className="flex items-center justify-between w-full px-6 py-5 hover:border-[#0A0A0A] transition-colors duration-300 group"
       >
         <div className="text-left">
-          <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-1">CLOUDINARY UPLOAD</p>
-          <p className="text-[14px] tracking-[0.15em] text-[#4A4E57]">UPLOAD OUTFIT IMAGE ↑</p>
-          <p className="text-[10px] tracking-[0.12em] text-[#A8A8A4] mt-1">Paste, drag & drop, or enter a URL — uploads to Cloudinary and creates a new project</p>
+          <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-1">CLOUDINARY UPLOAD</p>
+          <p className="text-[14px] tracking-[0.068em] text-[#4A4E57]">UPLOAD OUTFIT IMAGE ↑</p>
+          <p className="text-[10px] tracking-[0.054em] text-[#A8A8A4] mt-1">Paste, drag & drop, or enter a URL — uploads to Cloudinary and creates a new project</p>
         </div>
         <span className="text-[24px] text-[#E2E0DB] group-hover:text-[#4A4E57] transition-colors duration-300">
           {expanded ? '−' : '+'}
@@ -120,7 +120,7 @@ export default function UploadOutfitSection({ projects }: { projects: Project[] 
 
             {/* Drop zone / preview */}
             <div>
-              <label className="block text-[10px] tracking-[0.20em] text-[#6B6B6B] mb-2">
+              <label className="block text-[10px] tracking-[0.09em] text-[#6B6B6B] mb-2">
                 IMAGE <span className="text-red-400">*</span>
               </label>
 
@@ -130,7 +130,7 @@ export default function UploadOutfitSection({ projects }: { projects: Project[] 
                   <button
                     type="button"
                     onClick={clearImage}
-                    className="absolute top-3 right-3 bg-white border border-[#E2E0DB] text-[10px] tracking-[0.15em] text-[#6B6B6B] px-3 py-1.5 hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors"
+                    className="absolute top-3 right-3 bg-white border border-[#E2E0DB] text-[10px] tracking-[0.068em] text-[#6B6B6B] px-3 py-1.5 hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors"
                   >
                     CLEAR ×
                   </button>
@@ -145,10 +145,10 @@ export default function UploadOutfitSection({ projects }: { projects: Project[] 
                     dragging ? 'border-[#0A0A0A] bg-[#F2F2F0]' : 'border-[#E2E0DB] bg-white'
                   }`}
                 >
-                  <p className="text-[11px] tracking-[0.20em] text-[#6B6B6B] mb-2">
+                  <p className="text-[11px] tracking-[0.09em] text-[#6B6B6B] mb-2">
                     DRAG & DROP OR PASTE AN IMAGE
                   </p>
-                  <p className="text-[10px] tracking-[0.12em] text-[#A8A8A4]">
+                  <p className="text-[10px] tracking-[0.054em] text-[#A8A8A4]">
                     — or enter a URL below —
                   </p>
                 </div>
@@ -158,7 +158,7 @@ export default function UploadOutfitSection({ projects }: { projects: Project[] 
             {/* URL fallback */}
             {!imageData && (
               <div>
-                <label className="block text-[10px] tracking-[0.20em] text-[#6B6B6B] mb-2">
+                <label className="block text-[10px] tracking-[0.09em] text-[#6B6B6B] mb-2">
                   IMAGE URL
                 </label>
                 <input
@@ -167,19 +167,19 @@ export default function UploadOutfitSection({ projects }: { projects: Project[] 
                   value={urlInput}
                   onChange={handleUrlChange}
                   placeholder="https://..."
-                  className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.08em] text-[#4A4E57] placeholder-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors"
+                  className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.036em] text-[#4A4E57] placeholder-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors"
                 />
               </div>
             )}
 
             {/* Project selector */}
             <div>
-              <label className="block text-[10px] tracking-[0.20em] text-[#6B6B6B] mb-2">
+              <label className="block text-[10px] tracking-[0.09em] text-[#6B6B6B] mb-2">
                 ADD TO PROJECT
               </label>
               <select
                 name="project_id"
-                className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.08em] text-[#4A4E57] focus:outline-none focus:border-[#0A0A0A] transition-colors appearance-none"
+                className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.036em] text-[#4A4E57] focus:outline-none focus:border-[#0A0A0A] transition-colors appearance-none"
               >
                 <option value="">— Create new project —</option>
                 {projects.map(p => (
@@ -192,44 +192,44 @@ export default function UploadOutfitSection({ projects }: { projects: Project[] 
 
             {/* Project title (only relevant when creating new) */}
             <div>
-              <label className="block text-[10px] tracking-[0.20em] text-[#6B6B6B] mb-2">
+              <label className="block text-[10px] tracking-[0.09em] text-[#6B6B6B] mb-2">
                 NEW PROJECT TITLE <span className="text-[#A8A8A4]">(IF CREATING NEW)</span>
               </label>
               <input
                 name="project_title"
                 type="text"
                 placeholder="New Outfit Project"
-                className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.08em] text-[#4A4E57] placeholder-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors"
+                className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.036em] text-[#4A4E57] placeholder-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors"
               />
             </div>
 
             {/* Celebrity name */}
             <div>
-              <label className="block text-[10px] tracking-[0.20em] text-[#6B6B6B] mb-2">
+              <label className="block text-[10px] tracking-[0.09em] text-[#6B6B6B] mb-2">
                 CELEBRITY NAME <span className="text-[#A8A8A4]">(OPTIONAL)</span>
               </label>
               <input
                 name="celebrity_name"
                 type="text"
                 placeholder="e.g. Zendaya"
-                className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.08em] text-[#4A4E57] placeholder-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors"
+                className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.036em] text-[#4A4E57] placeholder-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors"
               />
             </div>
 
             {error && (
-              <p className="text-[11px] tracking-[0.12em] text-red-500">{error}</p>
+              <p className="text-[11px] tracking-[0.054em] text-red-500">{error}</p>
             )}
 
             <div className="flex items-center gap-3 pt-2">
               <button
                 type="submit"
                 disabled={loading || !hasImage}
-                className="bg-[#0A0A0A] text-white px-8 py-3 text-[11px] tracking-[0.20em] hover:bg-[#333] disabled:opacity-40 transition-colors whitespace-nowrap"
+                className="bg-[#0A0A0A] text-white px-8 py-3 text-[11px] tracking-[0.09em] hover:bg-[#333] disabled:opacity-40 transition-colors whitespace-nowrap"
               >
                 {loading ? 'UPLOADING...' : 'UPLOAD & CREATE PROJECT →'}
               </button>
               {loading && (
-                <p className="text-[10px] tracking-[0.15em] text-[#A8A8A4] animate-pulse">
+                <p className="text-[10px] tracking-[0.068em] text-[#A8A8A4] animate-pulse">
                   Uploading to Cloudinary...
                 </p>
               )}

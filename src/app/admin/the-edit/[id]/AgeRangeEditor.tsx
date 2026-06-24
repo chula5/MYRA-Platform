@@ -39,15 +39,15 @@ export default function AgeRangeEditor({
   return (
     <div className="border-b border-[#E2E0DB] bg-white px-5 py-5">
       <div className="flex items-center justify-between mb-3">
-        <p className="text-[10px] tracking-[0.22em] text-[#6B6B6B]">AGE RANGES · ADMIN ONLY</p>
-        <span className="text-[9px] tracking-[0.18em]">
+        <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B]">AGE RANGES · ADMIN ONLY</p>
+        <span className="text-[9px] tracking-[0.081em]">
           {status === 'saving' && <span className="text-[#A8A8A4]">SAVING…</span>}
           {status === 'saved' && <span className="text-[#3A6B3A]">✓ SAVED</span>}
           {status === 'error' && <span className="text-[#B83A3A]">{(errorMsg || 'SAVE FAILED').toUpperCase()}</span>}
         </span>
       </div>
 
-      <p className="text-[9px] tracking-[0.15em] text-[#A8A8A4] mb-3 leading-relaxed">
+      <p className="text-[9px] tracking-[0.068em] text-[#A8A8A4] mb-3 leading-relaxed">
         Tag which age ranges this outfit suits. Used to show age-appropriate outfits during new-user
         sign-up. Never shown in The Edit. Leave empty = suitable for everyone.
       </p>
@@ -61,7 +61,7 @@ export default function AgeRangeEditor({
               type="button"
               onClick={() => toggle(r)}
               disabled={status === 'saving'}
-              className={`px-4 py-2 text-[10px] tracking-[0.14em] rounded-[3px] border transition-colors disabled:opacity-50 ${
+              className={`px-4 py-2 text-[10px] tracking-[0.063em] rounded-[3px] border transition-colors disabled:opacity-50 ${
                 active
                   ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]'
                   : 'bg-white text-[#6B6B6B] border-[#E2E0DB] hover:border-[#0A0A0A] hover:text-[#4A4E57]'

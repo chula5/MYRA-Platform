@@ -20,19 +20,19 @@ export default function GoLiveButton({ liveCount }: { liveCount: number }) {
         type="button"
         disabled={disabled}
         title="Deactivated — turning this on publishes The Edit to your public site (/feed)"
-        className="bg-[#0A0A0A] text-white px-7 py-3 text-[10px] tracking-[0.20em] rounded-[3px] opacity-40 cursor-not-allowed"
+        className="bg-[#0A0A0A] text-white px-7 py-3 text-[10px] tracking-[0.09em] rounded-[3px] opacity-40 cursor-not-allowed"
       >
         GO LIVE — PUBLISH THE EDIT · 🔒 LOCKED
       </button>
       <button
         type="button"
         onClick={() => setShowInfo((s) => !s)}
-        className="text-[9px] tracking-[0.18em] text-[#6B6B6B] hover:text-[#4A4E57] underline"
+        className="text-[9px] tracking-[0.081em] text-[#6B6B6B] hover:text-[#4A4E57] underline"
       >
         WHAT DOES THIS DO?
       </button>
       {showInfo && (
-        <p className="max-w-[320px] text-right text-[9px] tracking-[0.12em] text-[#A8A8A4] leading-relaxed">
+        <p className="max-w-[320px] text-right text-[9px] tracking-[0.054em] text-[#A8A8A4] leading-relaxed">
           When enabled, this publishes The Edit to your public site — the
           &ldquo;THE EDIT&rdquo; link on myra would show these {liveCount} live
           outfit{liveCount === 1 ? '' : 's'} instead of the &ldquo;Launching

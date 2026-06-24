@@ -7,7 +7,7 @@ import { EARLY_ACCESS_INVITE_CODE } from '../invite'
 export const dynamic = 'force-dynamic'
 
 const inputClass =
-  'w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.12em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors'
+  'w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.054em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors'
 
 export default async function EarlyAccessJoinPage({
   searchParams,
@@ -27,9 +27,9 @@ export default async function EarlyAccessJoinPage({
     <main className="min-h-screen bg-white flex flex-col items-center justify-center px-6">
       <div className="w-full max-w-[360px]">
         <div className="text-center mb-10">
-          <p className="text-[11px] tracking-[0.35em] text-[#A8A8A4] mb-3">MYRA</p>
-          <h1 className="text-[clamp(22px,4vw,32px)] tracking-[0.12em] text-[#4A4E57]">EARLY ACCESS</h1>
-          <p className="mt-3 text-[11px] tracking-[0.18em] text-[#6B6B6B] leading-relaxed">
+          <p className="text-[11px] tracking-[0.158em] text-[#A8A8A4] mb-3">MYRA</p>
+          <h1 className="text-[clamp(22px,4vw,32px)] tracking-[0.054em] text-[#4A4E57]">EARLY ACCESS</h1>
+          <p className="mt-3 text-[11px] tracking-[0.081em] text-[#6B6B6B] leading-relaxed">
             {validKey
               ? 'Create your login to preview The Edit.'
               : 'This sign-up link is invalid or expired.'}
@@ -68,18 +68,18 @@ export default async function EarlyAccessJoinPage({
               />
 
               {error && (
-                <p className="text-[10px] tracking-[0.15em] text-[#B83A3A]">{error.toUpperCase()}</p>
+                <p className="text-[10px] tracking-[0.068em] text-[#B83A3A]">{error.toUpperCase()}</p>
               )}
 
               <button
                 type="submit"
-                className="mt-2 bg-[#0A0A0A] text-white py-3 text-[11px] tracking-[0.22em] hover:bg-[#333] transition-colors duration-300"
+                className="mt-2 bg-[#0A0A0A] text-white py-3 text-[11px] tracking-[0.099em] hover:bg-[#333] transition-colors duration-300"
               >
                 CREATE ACCOUNT
               </button>
             </form>
 
-            <p className="mt-6 text-center text-[10px] tracking-[0.16em] text-[#A8A8A4]">
+            <p className="mt-6 text-center text-[10px] tracking-[0.072em] text-[#A8A8A4]">
               ALREADY HAVE A LOGIN?{' '}
               <Link href="/earlyaccess" className="text-[#4A4E57] underline underline-offset-2">
                 SIGN IN
@@ -87,7 +87,7 @@ export default async function EarlyAccessJoinPage({
             </p>
           </>
         ) : (
-          <p className="text-center text-[10px] tracking-[0.18em] text-[#A8A8A4]">
+          <p className="text-center text-[10px] tracking-[0.081em] text-[#A8A8A4]">
             PLEASE USE THE INVITATION LINK YOU WERE SENT.
           </p>
         )}

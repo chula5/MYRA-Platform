@@ -35,9 +35,9 @@ export default async function ProductViewPage() {
   return (
     <div>
       <div className="mb-8">
-        <p className="text-[10px] tracking-[0.25em] text-[#6B6B6B] mb-1">ADMIN</p>
-        <h1 className="text-[22px] tracking-[0.10em] text-[#4A4E57]">PRODUCT VIEW</h1>
-        <p className="text-[11px] tracking-[0.13em] text-[#A8A8A4] mt-1 max-w-[620px] leading-relaxed">
+        <p className="text-[10px] tracking-[0.113em] text-[#6B6B6B] mb-1">ADMIN</p>
+        <h1 className="text-[22px] tracking-[0.045em] text-[#4A4E57]">PRODUCT VIEW</h1>
+        <p className="text-[11px] tracking-[0.059em] text-[#A8A8A4] mt-1 max-w-[620px] leading-relaxed">
           Live, interactive previews of MYRA&rsquo;s key areas — click and scroll inside them just like a
           visitor. These are the flows to capture for a product reel.
         </p>
@@ -50,10 +50,10 @@ export default async function ProductViewPage() {
       <div className="border-t border-[#E2E0DB] mt-12 pt-10">
         {clipsErr ? (
           <div>
-            <p className="text-[10px] tracking-[0.22em] text-[#6B6B6B] mb-3">DEMO VIDEOS</p>
+            <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B] mb-3">DEMO VIDEOS</p>
             <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[3px] p-5 max-w-[640px]">
-              <p className="text-[11px] tracking-[0.18em] text-[#8A7A4E] mb-3">VIDEO LIBRARY NOT SET UP YET</p>
-              <p className="text-[10px] tracking-[0.12em] text-[#8A7A4E] leading-relaxed mb-3">
+              <p className="text-[11px] tracking-[0.081em] text-[#8A7A4E] mb-3">VIDEO LIBRARY NOT SET UP YET</p>
+              <p className="text-[10px] tracking-[0.054em] text-[#8A7A4E] leading-relaxed mb-3">
                 Run migration <span className="font-mono">0009_product_view.sql</span> in Supabase to add saved demo
                 videos here (optional — the live previews above work without it):
               </p>

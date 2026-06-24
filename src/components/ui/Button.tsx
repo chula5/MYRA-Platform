@@ -15,7 +15,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ variant = 'filled', size = 'md', arrow = false, children, className = '', ...props }, ref) => {
     const base = `
       inline-flex items-center justify-center gap-2
-      text-[11px] tracking-[0.20em]
+      text-[11px] tracking-[0.09em]
       rounded-[3px]
       transition-all duration-400
       cursor-pointer

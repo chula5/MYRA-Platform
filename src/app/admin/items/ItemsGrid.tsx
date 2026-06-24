@@ -111,7 +111,7 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
                   type="button"
                   onClick={handleDeleteSelected}
                   disabled={deleting}
-                  className="text-[10px] tracking-[0.20em] px-4 py-1.5 bg-[#B83A3A] text-white hover:bg-[#9c2f2f] transition-colors duration-200 disabled:opacity-50"
+                  className="text-[10px] tracking-[0.09em] px-4 py-1.5 bg-[#B83A3A] text-white hover:bg-[#9c2f2f] transition-colors duration-200 disabled:opacity-50"
                 >
                   {deleting ? 'DELETING…' : `CONFIRM DELETE (${selected.size})`}
                 </button>
@@ -119,7 +119,7 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
                   type="button"
                   onClick={() => setDeleteConfirm(false)}
                   disabled={deleting}
-                  className="text-[10px] tracking-[0.20em] px-3 py-1.5 border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors duration-200 disabled:opacity-50"
+                  className="text-[10px] tracking-[0.09em] px-3 py-1.5 border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors duration-200 disabled:opacity-50"
                 >
                   CANCEL
                 </button>
@@ -128,7 +128,7 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
               <button
                 type="button"
                 onClick={() => setDeleteConfirm(true)}
-                className="text-[10px] tracking-[0.20em] px-3 py-1.5 border border-[#E8B4B4] text-[#B83A3A] hover:bg-[#B83A3A] hover:text-white hover:border-[#B83A3A] transition-colors duration-200"
+                className="text-[10px] tracking-[0.09em] px-3 py-1.5 border border-[#E8B4B4] text-[#B83A3A] hover:bg-[#B83A3A] hover:text-white hover:border-[#B83A3A] transition-colors duration-200"
               >
                 🗑 DELETE
               </button>
@@ -140,14 +140,14 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
         <div className="flex items-center gap-2 flex-wrap">
           {selectMode && hasSelection && (
             <>
-              <span className="text-[10px] tracking-[0.20em] text-[#4A4E57] mr-1">
+              <span className="text-[10px] tracking-[0.09em] text-[#4A4E57] mr-1">
                 {selected.size} SELECTED
               </span>
               <button
                 type="button"
                 onClick={clearAll}
                 disabled={creating || deleting}
-                className="text-[10px] tracking-[0.20em] px-3 py-1.5 border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors duration-200 disabled:opacity-50"
+                className="text-[10px] tracking-[0.09em] px-3 py-1.5 border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors duration-200 disabled:opacity-50"
               >
                 CLEAR
               </button>
@@ -155,7 +155,7 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
                 type="button"
                 onClick={handleCopySelected}
                 disabled={creating || deleting}
-                className="text-[10px] tracking-[0.20em] px-3 py-1.5 border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors duration-200 disabled:opacity-50"
+                className="text-[10px] tracking-[0.09em] px-3 py-1.5 border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors duration-200 disabled:opacity-50"
               >
                 {copyState === 'copied'
                   ? 'COPIED ✓'
@@ -167,7 +167,7 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
                 type="button"
                 onClick={handleCreateOutfit}
                 disabled={creating || deleting}
-                className="text-[10px] tracking-[0.20em] px-4 py-1.5 bg-[#0A0A0A] text-white hover:bg-[#333] transition-colors duration-200 disabled:opacity-50"
+                className="text-[10px] tracking-[0.09em] px-4 py-1.5 bg-[#0A0A0A] text-white hover:bg-[#333] transition-colors duration-200 disabled:opacity-50"
               >
                 {creating ? 'CREATING…' : `CREATE OUTFIT → (${selected.size})`}
               </button>
@@ -180,7 +180,7 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
               setSelectMode((v) => !v)
               if (selectMode) clearAll()
             }}
-            className={`text-[10px] tracking-[0.20em] px-3 py-1.5 transition-colors duration-200 ${
+            className={`text-[10px] tracking-[0.09em] px-3 py-1.5 transition-colors duration-200 ${
               selectMode
                 ? 'bg-[#0A0A0A] text-white'
                 : 'border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57]'
@@ -192,7 +192,7 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
             <button
               type="button"
               onClick={selected.size === items.length ? clearAll : selectAll}
-              className="text-[10px] tracking-[0.20em] px-3 py-1.5 border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors duration-200"
+              className="text-[10px] tracking-[0.09em] px-3 py-1.5 border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors duration-200"
             >
               {selected.size === items.length ? 'CLEAR ALL' : 'SELECT ALL'}
             </button>
@@ -200,7 +200,7 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
         </div>
       </div>
       {createError && (
-        <p className="text-[10px] tracking-[0.20em] text-[#B83A3A] mb-3 text-right">
+        <p className="text-[10px] tracking-[0.09em] text-[#B83A3A] mb-3 text-right">
           {createError.toUpperCase()}
         </p>
       )}
@@ -222,7 +222,7 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
-                    <span className="text-[9px] tracking-[0.15em] text-[#A8A8A4]">NO IMAGE</span>
+                    <span className="text-[9px] tracking-[0.068em] text-[#A8A8A4]">NO IMAGE</span>
                   </div>
                 )}
 
@@ -248,18 +248,18 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
 
               {/* Body */}
               <div className="p-3">
-                <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4] mb-1 truncate">
+                <p className="text-[9px] tracking-[0.09em] text-[#A8A8A4] mb-1 truncate">
                   {item.brand?.name?.toUpperCase() ?? '—'}
                 </p>
-                <p className="text-[11px] tracking-[0.10em] text-[#4A4E57] mb-2 line-clamp-2 leading-snug min-h-[28px]">
+                <p className="text-[11px] tracking-[0.045em] text-[#4A4E57] mb-2 line-clamp-2 leading-snug min-h-[28px]">
                   {item.product_name.toUpperCase()}
                 </p>
                 <div className="flex items-center justify-between">
-                  <span className="inline-block bg-[#F2F2F0] px-2 py-0.5 text-[8px] tracking-[0.15em] text-[#6B6B6B] rounded-[2px]">
+                  <span className="inline-block bg-[#F2F2F0] px-2 py-0.5 text-[8px] tracking-[0.068em] text-[#6B6B6B] rounded-[2px]">
                     {item.item_type.replace(/_/g, ' ').toUpperCase()}
                   </span>
                   {!selectMode && (
-                    <span className="text-[9px] tracking-[0.15em] text-[#A8A8A4] group-hover:text-[#4A4E57] transition-colors">
+                    <span className="text-[9px] tracking-[0.068em] text-[#A8A8A4] group-hover:text-[#4A4E57] transition-colors">
                       EDIT →
                     </span>
                   )}

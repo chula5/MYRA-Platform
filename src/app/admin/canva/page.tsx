@@ -13,17 +13,17 @@ export default async function CanvaConnectPage({ searchParams }: PageProps) {
     <div className="max-w-[720px] mx-auto px-10 py-16">
       <Link
         href="/admin"
-        className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#4A4E57] mb-6 inline-block"
+        className="text-[10px] tracking-[0.09em] text-[#6B6B6B] hover:text-[#4A4E57] mb-6 inline-block"
       >
         ← ADMIN
       </Link>
 
-      <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-2">INTEGRATION</p>
-      <h1 className="text-[28px] tracking-[0.10em] text-[#4A4E57] mb-8">CANVA</h1>
+      <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-2">INTEGRATION</p>
+      <h1 className="text-[28px] tracking-[0.045em] text-[#4A4E57] mb-8">CANVA</h1>
 
       {error && (
         <div className="mb-6 border border-red-300 bg-red-50 p-4">
-          <p className="text-[10px] tracking-[0.15em] text-red-700">
+          <p className="text-[10px] tracking-[0.068em] text-red-700">
             CONNECTION ERROR: {error}
           </p>
         </div>
@@ -31,7 +31,7 @@ export default async function CanvaConnectPage({ searchParams }: PageProps) {
 
       {connected === '1' && (
         <div className="mb-6 border border-green-300 bg-green-50 p-4">
-          <p className="text-[10px] tracking-[0.15em] text-green-700">
+          <p className="text-[10px] tracking-[0.068em] text-green-700">
             ✓ CONNECTED SUCCESSFULLY
           </p>
         </div>
@@ -39,11 +39,11 @@ export default async function CanvaConnectPage({ searchParams }: PageProps) {
 
       <div className="border border-[#E2E0DB] bg-white p-6">
         <div className="flex items-center justify-between mb-4">
-          <p className="text-[12px] tracking-[0.15em] text-[#4A4E57]">
+          <p className="text-[12px] tracking-[0.068em] text-[#4A4E57]">
             STATUS
           </p>
           <p
-            className={`text-[10px] tracking-[0.20em] ${
+            className={`text-[10px] tracking-[0.09em] ${
               connectedNow ? 'text-green-700' : 'text-[#A8A8A4]'
             }`}
           >
@@ -58,7 +58,7 @@ export default async function CanvaConnectPage({ searchParams }: PageProps) {
 
         <a
           href="/api/canva/connect"
-          className="inline-block bg-[#0A0A0A] text-white px-6 py-3 text-[10px] tracking-[0.20em] hover:bg-[#333] transition-colors duration-300"
+          className="inline-block bg-[#0A0A0A] text-white px-6 py-3 text-[10px] tracking-[0.09em] hover:bg-[#333] transition-colors duration-300"
         >
           {connectedNow ? 'RECONNECT →' : 'CONNECT TO CANVA →'}
         </a>

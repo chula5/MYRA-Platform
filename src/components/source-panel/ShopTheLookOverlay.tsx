@@ -36,10 +36,10 @@ export default function ShopTheLookOverlay({
     <div className="absolute top-2.5 left-2.5 z-30 w-[clamp(118px,33%,176px)] max-h-[calc(100%-1.25rem)] overflow-y-auto pr-1">
       {/* Header */}
       <div className="flex items-center gap-1.5 mb-2">
-        <span className="text-white text-[8px] sm:text-[9px] tracking-[0.18em] drop-shadow-[0_1px_3px_rgba(0,0,0,0.55)]">
+        <span className="text-white text-[8px] sm:text-[9px] tracking-[0.081em] drop-shadow-[0_1px_3px_rgba(0,0,0,0.55)]">
           SHOP THE LOOK
         </span>
-        <span className="bg-white/90 text-[#4A4E57] text-[8px] tracking-[0.08em] rounded-full px-1.5 py-0.5 leading-none">
+        <span className="bg-white/90 text-[#4A4E57] text-[8px] tracking-[0.036em] rounded-full px-1.5 py-0.5 leading-none">
           {items.length}
         </span>
         <button
@@ -88,7 +88,7 @@ function ItemCard({ item, onShop }: { item: SourceItem; onShop: () => void }) {
 
       {/* Info */}
       <div className="flex-1 min-w-0 flex flex-col">
-        <p className="text-[6px] sm:text-[7px] tracking-[0.12em] text-[#6B6B6B] uppercase truncate">
+        <p className="text-[6px] sm:text-[7px] tracking-[0.054em] text-[#6B6B6B] uppercase truncate">
           {item.brand?.name ?? 'BRAND'}
         </p>
         <p className="text-[8px] sm:text-[9px] leading-[1.15] text-[#4A4E57] font-semibold line-clamp-2">
@@ -99,7 +99,7 @@ function ItemCard({ item, onShop }: { item: SourceItem; onShop: () => void }) {
           {item.retailer_url && (
             <button
               onClick={onShop}
-              className="bg-[#0A0A0A] text-white text-[6px] sm:text-[7px] tracking-[0.10em] px-1.5 py-0.5 rounded hover:opacity-85 transition-opacity flex-shrink-0"
+              className="bg-[#0A0A0A] text-white text-[6px] sm:text-[7px] tracking-[0.045em] px-1.5 py-0.5 rounded hover:opacity-85 transition-opacity flex-shrink-0"
             >
               SHOP
             </button>

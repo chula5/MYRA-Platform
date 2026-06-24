@@ -24,10 +24,10 @@ import { addOutfitToLookbook, removeOutfitFromLookbook } from '@/app/admin/lookb
 import type { Lookbook } from '@/types/database'
 
 const inputClass =
-  'w-full border border-[#E2E0DB] bg-white px-4 py-2.5 text-[12px] tracking-[0.10em] text-[#4A4E57] focus:outline-none focus:border-[#0A0A0A] transition-colors duration-300'
-const labelClass = 'text-[10px] tracking-[0.20em] text-[#6B6B6B] mb-1.5 block'
+  'w-full border border-[#E2E0DB] bg-white px-4 py-2.5 text-[12px] tracking-[0.045em] text-[#4A4E57] focus:outline-none focus:border-[#0A0A0A] transition-colors duration-300'
+const labelClass = 'text-[10px] tracking-[0.09em] text-[#6B6B6B] mb-1.5 block'
 const sectionHeadingClass =
-  'text-[10px] tracking-[0.25em] text-[#6B6B6B] mb-6 pb-3 border-b border-[#E2E0DB]'
+  'text-[10px] tracking-[0.113em] text-[#6B6B6B] mb-6 pb-3 border-b border-[#E2E0DB]'
 const sectionClass = 'mb-10'
 
 const SLOTS = ['outerwear', 'top', 'bottom', 'dress', 'shoe', 'bag', 'jewellery', 'accessory'] as const
@@ -772,12 +772,12 @@ INSTRUCTIONS:
                   type="button"
                   onClick={handleAnalyse}
                   disabled={analysing}
-                  className="mt-2 bg-[#0A0A0A] text-white px-5 py-2 text-[10px] tracking-[0.20em] transition-colors duration-300 hover:bg-[#333] disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="mt-2 bg-[#0A0A0A] text-white px-5 py-2 text-[10px] tracking-[0.09em] transition-colors duration-300 hover:bg-[#333] disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {analysing ? 'ANALYSING...' : 'ANALYSE WITH AI →'}
                 </button>
                 {aiError && (
-                  <p className="mt-2 text-[9px] tracking-[0.12em] text-red-500">{aiError}</p>
+                  <p className="mt-2 text-[9px] tracking-[0.054em] text-red-500">{aiError}</p>
                 )}
               </div>
             </div>
@@ -793,7 +793,7 @@ INSTRUCTIONS:
                   <div className="relative w-24 h-28 border-2 border-[#0A0A0A] bg-white overflow-hidden">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={imageUrl} alt="Display" className="w-full h-full object-cover" />
-                    <span className="absolute inset-x-0 bottom-0 bg-[#0A0A0A] text-white text-[8px] tracking-[0.15em] py-1 text-center">
+                    <span className="absolute inset-x-0 bottom-0 bg-[#0A0A0A] text-white text-[8px] tracking-[0.068em] py-1 text-center">
                       DISPLAY
                     </span>
                   </div>
@@ -815,7 +815,7 @@ INSTRUCTIONS:
                           prev.map((u, i) => (i === idx ? previousMain : u)).filter((u) => u),
                         )
                       }}
-                      className="absolute inset-x-0 bottom-0 bg-black/80 hover:bg-black text-white text-[8px] tracking-[0.15em] py-1 transition-colors"
+                      className="absolute inset-x-0 bottom-0 bg-black/80 hover:bg-black text-white text-[8px] tracking-[0.068em] py-1 transition-colors"
                       aria-label="Set as display photo"
                     >
                       SET AS DISPLAY
@@ -858,7 +858,7 @@ INSTRUCTIONS:
                   setAdditionalImages((prev) => [...prev, v])
                   setExtraImageInput('')
                 }}
-                className="shrink-0 bg-[#0A0A0A] text-white px-5 py-2 text-[10px] tracking-[0.20em] transition-colors duration-300 hover:bg-[#333]"
+                className="shrink-0 bg-[#0A0A0A] text-white px-5 py-2 text-[10px] tracking-[0.09em] transition-colors duration-300 hover:bg-[#333]"
               >
                 + ADD PHOTO
               </button>
@@ -892,7 +892,7 @@ INSTRUCTIONS:
               <div className="flex items-center gap-2">
                 <label className={`${labelClass} mb-0`}>OCCASION TAGS</label>
                 {tagsSaved && (
-                  <span className="text-[9px] tracking-[0.18em] text-[#3A6B3A]">SAVED ✓</span>
+                  <span className="text-[9px] tracking-[0.081em] text-[#3A6B3A]">SAVED ✓</span>
                 )}
               </div>
               {outfit && (
@@ -901,7 +901,7 @@ INSTRUCTIONS:
                   onClick={handleSuggestTags}
                   disabled={tagsBusy}
                   title="Generate occasion/season tags from this outfit's items with AI"
-                  className="text-[9px] tracking-[0.18em] text-[#6B6B6B] hover:text-[#4A4E57] border border-[#E2E0DB] hover:border-[#0A0A0A] px-2.5 py-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="text-[9px] tracking-[0.081em] text-[#6B6B6B] hover:text-[#4A4E57] border border-[#E2E0DB] hover:border-[#0A0A0A] px-2.5 py-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {tagsBusy ? 'SUGGESTING…' : '✦ SUGGEST TAGS'}
                 </button>
@@ -916,14 +916,14 @@ INSTRUCTIONS:
               className={inputClass}
             />
             {tagsError && (
-              <p className="mt-1.5 text-[9px] tracking-[0.12em] text-red-500">{tagsError}</p>
+              <p className="mt-1.5 text-[9px] tracking-[0.054em] text-red-500">{tagsError}</p>
             )}
             {tags.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-2">
                 {tags.map((tag) => (
                   <span
                     key={tag}
-                    className="inline-flex items-center bg-[#F2F2F0] border border-[#E2E0DB] pl-2.5 text-[9px] tracking-[0.15em] text-[#6B6B6B]"
+                    className="inline-flex items-center bg-[#F2F2F0] border border-[#E2E0DB] pl-2.5 text-[9px] tracking-[0.068em] text-[#6B6B6B]"
                   >
                     {tag.toUpperCase()}
                     <button
@@ -989,7 +989,7 @@ INSTRUCTIONS:
         <div className={sectionClass}>
           <p className={sectionHeadingClass}>SLOT SCORING</p>
 
-          <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4] mb-3">OUTERWEAR</p>
+          <p className="text-[9px] tracking-[0.09em] text-[#A8A8A4] mb-3">OUTERWEAR</p>
           <div className="grid grid-cols-2 gap-x-8 mb-6">
             <ScoreInput label="CONSTRUCTION" description="1=TAILORED → 5=RELAXED" name="outerwear_construction" value={scores.outerwear_construction ?? null} />
             <ScoreInput label="VOLUME" description="1=FITTED → 5=OVERSIZED" name="outerwear_volume" value={scores.outerwear_volume ?? null} />
@@ -997,7 +997,7 @@ INSTRUCTIONS:
             <ScoreInput label="MATERIAL FORMALITY" description="1=CASUAL → 5=OCCASION" name="outerwear_material_formality" value={scores.outerwear_material_formality ?? null} />
           </div>
 
-          <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4] mb-3">TOP</p>
+          <p className="text-[9px] tracking-[0.09em] text-[#A8A8A4] mb-3">TOP</p>
           <div className="grid grid-cols-2 gap-x-8 mb-6">
             <ScoreInput label="CONSTRUCTION" description="1=TAILORED → 5=RELAXED" name="top_construction" value={scores.top_construction ?? null} />
             <ScoreInput label="VOLUME" description="1=FITTED → 5=OVERSIZED" name="top_volume" value={scores.top_volume ?? null} />
@@ -1005,7 +1005,7 @@ INSTRUCTIONS:
             <ScoreInput label="MATERIAL FORMALITY" description="1=CASUAL → 5=OCCASION" name="top_material_formality" value={scores.top_material_formality ?? null} />
           </div>
 
-          <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4] mb-3">DRESS</p>
+          <p className="text-[9px] tracking-[0.09em] text-[#A8A8A4] mb-3">DRESS</p>
           <div className="grid grid-cols-2 gap-x-8 mb-6">
             <ScoreInput label="CONSTRUCTION" description="1=TAILORED → 5=RELAXED" name="dress_construction" value={(scores as any).dress_construction ?? null} />
             <ScoreInput label="VOLUME" description="1=FITTED → 5=OVERSIZED" name="dress_volume" value={(scores as any).dress_volume ?? null} />
@@ -1014,7 +1014,7 @@ INSTRUCTIONS:
             <ScoreInput label="MATERIAL FORMALITY" description="1=CASUAL → 5=OCCASION" name="dress_material_formality" value={(scores as any).dress_material_formality ?? null} />
           </div>
 
-          <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4] mb-3">BOTTOM</p>
+          <p className="text-[9px] tracking-[0.09em] text-[#A8A8A4] mb-3">BOTTOM</p>
           <div className="grid grid-cols-2 gap-x-8 mb-6">
             <ScoreInput label="CONSTRUCTION" description="1=TAILORED → 5=RELAXED" name="bottom_construction" value={scores.bottom_construction ?? null} />
             <ScoreInput label="VOLUME" description="1=FITTED → 5=OVERSIZED" name="bottom_volume" value={scores.bottom_volume ?? null} />
@@ -1023,18 +1023,18 @@ INSTRUCTIONS:
             <ScoreInput label="MATERIAL WEIGHT" description="1=SHEER → 5=STRUCTURAL" name="bottom_material_weight" value={scores.bottom_material_weight ?? null} />
           </div>
 
-          <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4] mb-3">SHOE</p>
+          <p className="text-[9px] tracking-[0.09em] text-[#A8A8A4] mb-3">SHOE</p>
           <div className="grid grid-cols-2 gap-x-8 mb-6">
             <ScoreInput label="FORMALITY" description="1=CASUAL → 5=OCCASION" name="shoe_formality" value={scores.shoe_formality ?? null} />
             <ScoreInput label="STYLE" description="1=FLAT/CASUAL → 5=HEEL/STATEMENT" name="shoe_style" value={scores.shoe_style ?? null} />
           </div>
 
-          <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4] mb-3">BAG</p>
+          <p className="text-[9px] tracking-[0.09em] text-[#A8A8A4] mb-3">BAG</p>
           <div className="grid grid-cols-2 gap-x-8 mb-6">
             <ScoreInput label="FORMALITY" description="1=CASUAL → 5=OCCASION" name="bag_formality" value={scores.bag_formality ?? null} />
           </div>
 
-          <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4] mb-3">JEWELLERY</p>
+          <p className="text-[9px] tracking-[0.09em] text-[#A8A8A4] mb-3">JEWELLERY</p>
           <div className="grid grid-cols-2 gap-x-8 mb-6">
             <ScoreInput label="SCALE" description="1=MICRO → 5=SCULPTURAL" name="jewellery_scale" value={scores.jewellery_scale ?? null} />
             <ScoreInput label="FORMALITY" description="1=EVERYDAY → 5=HAUTE JOAILLERIE" name="jewellery_formality" value={scores.jewellery_formality ?? null} />
@@ -1043,14 +1043,14 @@ INSTRUCTIONS:
 
         {error && (
           <div className="mb-6 p-4 border border-red-200 bg-red-50">
-            <p className="text-[10px] tracking-[0.15em] text-red-600">{error}</p>
+            <p className="text-[10px] tracking-[0.068em] text-red-600">{error}</p>
           </div>
         )}
 
         <button
           type="submit"
           disabled={submitting}
-          className="bg-[#0A0A0A] text-white px-8 py-3.5 text-[11px] tracking-[0.20em] transition-colors duration-400 hover:bg-[#333] disabled:opacity-50"
+          className="bg-[#0A0A0A] text-white px-8 py-3.5 text-[11px] tracking-[0.09em] transition-colors duration-400 hover:bg-[#333] disabled:opacity-50"
         >
           {submitting ? 'SAVING...' : 'SAVE OUTFIT'}
         </button>
@@ -1079,16 +1079,16 @@ INSTRUCTIONS:
                   return (
                     <div key={i} className={`border p-4 ${inp.added ? 'border-[#0A0A0A] bg-[#F8F8F6] opacity-60' : 'border-[#E2E0DB] bg-white'}`}>
                       <div className="flex items-center justify-between mb-3">
-                        <span className="text-[9px] tracking-[0.20em] text-[#A8A8A4]">{item.slot.toUpperCase()}</span>
-                        {inp.added && <span className="text-[9px] tracking-[0.15em] text-[#4A4E57]">ADDED ✓</span>}
+                        <span className="text-[9px] tracking-[0.09em] text-[#A8A8A4]">{item.slot.toUpperCase()}</span>
+                        {inp.added && <span className="text-[9px] tracking-[0.068em] text-[#4A4E57]">ADDED ✓</span>}
                       </div>
                       <div className="flex items-start justify-between gap-2 mb-3">
-                        <p className="text-[10px] tracking-[0.10em] text-[#6B6B6B] italic flex-1">{item.description}</p>
+                        <p className="text-[10px] tracking-[0.045em] text-[#6B6B6B] italic flex-1">{item.description}</p>
                         <a
                           href={`https://www.google.com/search?q=${encodeURIComponent(item.description)}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="shrink-0 border border-[#E2E0DB] px-2.5 py-1 text-[9px] tracking-[0.15em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors duration-300 whitespace-nowrap"
+                          className="shrink-0 border border-[#E2E0DB] px-2.5 py-1 text-[9px] tracking-[0.068em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors duration-300 whitespace-nowrap"
                         >
                           SEARCH →
                         </a>
@@ -1136,23 +1136,23 @@ INSTRUCTIONS:
                                 className={inputClass}
                               />
                               {(inp as any).scraping && (
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] tracking-[0.12em] text-[#A8A8A4]">
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] tracking-[0.054em] text-[#A8A8A4]">
                                   FETCHING...
                                 </span>
                               )}
                             </div>
                           </div>
                           {inp.error && (
-                            <p className="text-[9px] tracking-[0.12em] text-red-500 mb-2">{inp.error}</p>
+                            <p className="text-[9px] tracking-[0.054em] text-red-500 mb-2">{inp.error}</p>
                           )}
                           {!outfit ? (
-                            <p className="text-[9px] tracking-[0.12em] text-[#A8A8A4]">SAVE OUTFIT FIRST TO ADD ITEMS.</p>
+                            <p className="text-[9px] tracking-[0.054em] text-[#A8A8A4]">SAVE OUTFIT FIRST TO ADD ITEMS.</p>
                           ) : (
                             <button
                               type="button"
                               onClick={() => handleQuickAdd(i)}
                               disabled={inp.adding}
-                              className="w-full bg-[#0A0A0A] text-white py-2 text-[10px] tracking-[0.20em] transition-colors duration-300 hover:bg-[#333] disabled:opacity-40"
+                              className="w-full bg-[#0A0A0A] text-white py-2 text-[10px] tracking-[0.09em] transition-colors duration-300 hover:bg-[#333] disabled:opacity-40"
                             >
                               {inp.adding ? 'ADDING...' : 'ADD ITEM →'}
                             </button>
@@ -1162,7 +1162,7 @@ INSTRUCTIONS:
                             <button
                               type="button"
                               onClick={() => openInventoryFor(item.slot)}
-                              className="w-full mt-2 border border-[#0A0A0A] text-[#4A4E57] py-2 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-200"
+                              className="w-full mt-2 border border-[#0A0A0A] text-[#4A4E57] py-2 text-[10px] tracking-[0.09em] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-200"
                             >
                               PICK FROM INVENTORY →
                             </button>
@@ -1177,7 +1177,7 @@ INSTRUCTIONS:
           )}
 
           <div className="flex items-center justify-between mb-6 pb-3 border-b border-[#E2E0DB] gap-2">
-            <p className="text-[10px] tracking-[0.25em] text-[#6B6B6B]">ITEMS IN THIS OUTFIT</p>
+            <p className="text-[10px] tracking-[0.113em] text-[#6B6B6B]">ITEMS IN THIS OUTFIT</p>
             {outfit && (
               <div className="flex items-center gap-2">
                 <button
@@ -1185,7 +1185,7 @@ INSTRUCTIONS:
                   onClick={handleCopyItemsTable}
                   disabled={orderedItems.length === 0}
                   title="Copy as a tab-separated table for Sheets / Excel / Numbers"
-                  className="text-[9px] tracking-[0.20em] border border-[#E2E0DB] px-3 py-1.5 text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-200"
+                  className="text-[9px] tracking-[0.09em] border border-[#E2E0DB] px-3 py-1.5 text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-200"
                 >
                   {copyState === 'copied'
                     ? 'COPIED ✓'
@@ -1196,7 +1196,7 @@ INSTRUCTIONS:
                 <button
                   type="button"
                   onClick={() => openInventoryFor(null)}
-                  className="text-[9px] tracking-[0.20em] border border-[#0A0A0A] px-3 py-1.5 text-[#4A4E57] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-200"
+                  className="text-[9px] tracking-[0.09em] border border-[#0A0A0A] px-3 py-1.5 text-[#4A4E57] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-200"
                 >
                   + FROM INVENTORY
                 </button>
@@ -1204,7 +1204,7 @@ INSTRUCTIONS:
             )}
           </div>
             {!outfit ? (
-              <p className="text-[10px] tracking-[0.15em] text-[#A8A8A4]">
+              <p className="text-[10px] tracking-[0.068em] text-[#A8A8A4]">
                 SAVE THE OUTFIT FIRST TO ADD ITEMS.
               </p>
             ) : (
@@ -1219,7 +1219,7 @@ INSTRUCTIONS:
                             <div className="p-3">
                               <div className="flex items-center justify-between mb-3">
                                 <StatusBadge status={oi.slot} />
-                                <button type="button" onClick={() => setEditingItemId(null)} className="text-[9px] tracking-[0.15em] text-[#A8A8A4] hover:text-[#4A4E57]">CANCEL</button>
+                                <button type="button" onClick={() => setEditingItemId(null)} className="text-[9px] tracking-[0.068em] text-[#A8A8A4] hover:text-[#4A4E57]">CANCEL</button>
                               </div>
                               <div className="space-y-2">
                                 <input type="text" placeholder="PRODUCT NAME" value={editFields.productName} onChange={(e) => setEditFields((p) => ({ ...p, productName: e.target.value }))} className={inputClass} />
@@ -1227,12 +1227,12 @@ INSTRUCTIONS:
                                 <input type="url" placeholder="IMAGE URL" value={editFields.imageUrl} onChange={(e) => setEditFields((p) => ({ ...p, imageUrl: e.target.value }))} className={inputClass} />
                                 <input type="url" placeholder="RETAILER URL" value={editFields.retailerUrl} onChange={(e) => setEditFields((p) => ({ ...p, retailerUrl: e.target.value }))} className={inputClass} />
                               </div>
-                              {editError && <p className="mt-2 text-[9px] tracking-[0.12em] text-red-500">{editError}</p>}
+                              {editError && <p className="mt-2 text-[9px] tracking-[0.054em] text-red-500">{editError}</p>}
                               <button
                                 type="button"
                                 onClick={() => handleSaveEdit(oi.outfit_item_id, oi.item?.item_id ?? '')}
                                 disabled={savingEdit}
-                                className="mt-3 w-full bg-[#0A0A0A] text-white py-2 text-[10px] tracking-[0.20em] hover:bg-[#333] disabled:opacity-40"
+                                className="mt-3 w-full bg-[#0A0A0A] text-white py-2 text-[10px] tracking-[0.09em] hover:bg-[#333] disabled:opacity-40"
                               >
                                 {savingEdit ? 'SAVING...' : 'SAVE CHANGES'}
                               </button>
@@ -1266,12 +1266,12 @@ INSTRUCTIONS:
                                 />
                               ) : (
                                 <div className="w-[64px] h-[80px] bg-[#F2F2F0] border border-[#E2E0DB] shrink-0 flex items-center justify-center">
-                                  <span className="text-[8px] tracking-[0.10em] text-[#A8A8A4]">NO IMG</span>
+                                  <span className="text-[8px] tracking-[0.045em] text-[#A8A8A4]">NO IMG</span>
                                 </div>
                               )}
                               <div className="flex-1 min-w-0">
-                                <p className="text-[9px] tracking-[0.15em] text-[#A8A8A4] mb-0.5">{oi.item?.brand?.name?.toUpperCase()}</p>
-                                <p className="text-[10px] tracking-[0.12em] text-[#4A4E57] truncate">{oi.item?.product_name?.toUpperCase()}</p>
+                                <p className="text-[9px] tracking-[0.068em] text-[#A8A8A4] mb-0.5">{oi.item?.brand?.name?.toUpperCase()}</p>
+                                <p className="text-[10px] tracking-[0.054em] text-[#4A4E57] truncate">{oi.item?.product_name?.toUpperCase()}</p>
                                 <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                                   <StatusBadge status={oi.slot} />
                                   {oi.item?.stock_status && oi.item.stock_status !== 'in_stock' && (
@@ -1280,7 +1280,7 @@ INSTRUCTIONS:
                                 </div>
                               </div>
                               <div className="flex flex-col items-end gap-1.5 shrink-0">
-                                <button type="button" onClick={() => startEdit(oi)} className="text-[9px] tracking-[0.15em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors">EDIT</button>
+                                <button type="button" onClick={() => startEdit(oi)} className="text-[9px] tracking-[0.068em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors">EDIT</button>
                                 <button type="button" onClick={() => handleRemoveItem(oi.outfit_item_id)} disabled={removingId === oi.outfit_item_id} className="text-[#A8A8A4] hover:text-[#4A4E57] transition-colors text-[16px]">×</button>
                               </div>
                             </div>
@@ -1294,25 +1294,25 @@ INSTRUCTIONS:
                           type="button"
                           onClick={handleSaveOrder}
                           disabled={savingOrder}
-                          className="w-full border border-[#0A0A0A] text-[#4A4E57] py-2 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-300 disabled:opacity-40"
+                          className="w-full border border-[#0A0A0A] text-[#4A4E57] py-2 text-[10px] tracking-[0.09em] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-300 disabled:opacity-40"
                         >
                           {savingOrder ? 'SAVING ORDER...' : 'SAVE ORDER'}
                         </button>
                         {orderError && (
-                          <p className="mt-2 text-[9px] tracking-[0.12em] text-red-500">{orderError}</p>
+                          <p className="mt-2 text-[9px] tracking-[0.054em] text-red-500">{orderError}</p>
                         )}
                       </>
                     )}
                   </div>
                 ) : (
-                  <p className="text-[10px] tracking-[0.15em] text-[#A8A8A4] mb-6">
+                  <p className="text-[10px] tracking-[0.068em] text-[#A8A8A4] mb-6">
                     NO ITEMS ADDED YET.
                   </p>
                 )}
 
                 {/* Manual quick-add form */}
                 <div className="border border-[#E2E0DB] bg-[#F8F8F6] p-4">
-                  <p className="text-[9px] tracking-[0.20em] text-[#6B6B6B] mb-3">ADD ITEM MANUALLY</p>
+                  <p className="text-[9px] tracking-[0.09em] text-[#6B6B6B] mb-3">ADD ITEM MANUALLY</p>
                   <div className="space-y-2 mb-3">
                     <select
                       value={manualSlot}
@@ -1366,20 +1366,20 @@ INSTRUCTIONS:
                         className={inputClass}
                       />
                       {manualScraping && (
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] tracking-[0.12em] text-[#A8A8A4]">
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] tracking-[0.054em] text-[#A8A8A4]">
                           FETCHING...
                         </span>
                       )}
                     </div>
                   </div>
                   {manualError && (
-                    <p className="text-[9px] tracking-[0.12em] text-red-500 mb-2">{manualError}</p>
+                    <p className="text-[9px] tracking-[0.054em] text-red-500 mb-2">{manualError}</p>
                   )}
                   <button
                     type="button"
                     onClick={handleManualAdd}
                     disabled={manualAdding}
-                    className="w-full bg-[#0A0A0A] text-white py-2.5 text-[10px] tracking-[0.20em] transition-colors duration-300 hover:bg-[#333] disabled:opacity-40"
+                    className="w-full bg-[#0A0A0A] text-white py-2.5 text-[10px] tracking-[0.09em] transition-colors duration-300 hover:bg-[#333] disabled:opacity-40"
                   >
                     {manualAdding ? 'ADDING...' : 'ADD TO OUTFIT'}
                   </button>
@@ -1388,7 +1388,7 @@ INSTRUCTIONS:
                     <button
                       type="button"
                       onClick={() => openInventoryFor(manualSlot)}
-                      className="w-full mt-2 border border-[#0A0A0A] text-[#4A4E57] py-2 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-200"
+                      className="w-full mt-2 border border-[#0A0A0A] text-[#4A4E57] py-2 text-[10px] tracking-[0.09em] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-200"
                     >
                       PICK FROM INVENTORY →
                     </button>
@@ -1402,7 +1402,7 @@ INSTRUCTIONS:
               <div className="mt-10">
                 <p className={sectionHeadingClass}>LOOKBOOKS</p>
                 {!outfit ? (
-                  <p className="text-[10px] tracking-[0.15em] text-[#A8A8A4]">
+                  <p className="text-[10px] tracking-[0.068em] text-[#A8A8A4]">
                     SAVE THE OUTFIT FIRST TO ADD TO A LOOKBOOK.
                   </p>
                 ) : (
@@ -1422,7 +1422,7 @@ INSTRUCTIONS:
                               : 'border-[#E2E0DB] bg-white text-[#4A4E57] hover:border-[#0A0A0A]'
                           }`}
                         >
-                          <span className="text-[10px] tracking-[0.18em]">
+                          <span className="text-[10px] tracking-[0.081em]">
                             {lb.title.toUpperCase()}
                           </span>
                           <span className="text-[12px]">
@@ -1432,7 +1432,7 @@ INSTRUCTIONS:
                       )
                     })}
                     {lookbookError && (
-                      <p className="text-[9px] tracking-[0.12em] text-red-500">{lookbookError}</p>
+                      <p className="text-[9px] tracking-[0.054em] text-red-500">{lookbookError}</p>
                     )}
                   </div>
                 )}
@@ -1443,7 +1443,7 @@ INSTRUCTIONS:
             <div className="mt-10">
               <p className={sectionHeadingClass}>CANVA TEMPLATE</p>
               {!outfit ? (
-                <p className="text-[10px] tracking-[0.15em] text-[#A8A8A4]">
+                <p className="text-[10px] tracking-[0.068em] text-[#A8A8A4]">
                   SAVE THE OUTFIT FIRST TO GENERATE.
                 </p>
               ) : (
@@ -1452,7 +1452,7 @@ INSTRUCTIONS:
                     type="button"
                     onClick={handleCanvaExport}
                     disabled={canvaJobStatus === 'pending' || canvaJobStatus === 'running'}
-                    className="w-full bg-[#0A0A0A] text-white py-3 text-[10px] tracking-[0.20em] transition-colors duration-300 hover:bg-[#333] disabled:opacity-60"
+                    className="w-full bg-[#0A0A0A] text-white py-3 text-[10px] tracking-[0.09em] transition-colors duration-300 hover:bg-[#333] disabled:opacity-60"
                   >
                     {canvaJobStatus === 'pending' && 'STARTING…'}
                     {canvaJobStatus === 'running' && 'GENERATING ON CANVA… ⟳'}
@@ -1462,14 +1462,14 @@ INSTRUCTIONS:
                   </button>
 
                   {canvaJobStatus === 'running' && (
-                    <p className="mt-2 text-[9px] tracking-[0.12em] text-[#A8A8A4] leading-relaxed">
+                    <p className="mt-2 text-[9px] tracking-[0.054em] text-[#A8A8A4] leading-relaxed">
                       Working in the background. You&rsquo;ll be notified here when done — safe to keep editing.
                     </p>
                   )}
 
                   {canvaJobStatus === 'complete' && canvaEditUrl && (
                     <div className="mt-3 border border-green-300 bg-green-50 p-3">
-                      <p className="text-[10px] tracking-[0.18em] text-green-800 mb-2">
+                      <p className="text-[10px] tracking-[0.081em] text-green-800 mb-2">
                         ✓ YOUR DECK IS READY
                       </p>
                       {canvaPreviewUrl && (
@@ -1484,7 +1484,7 @@ INSTRUCTIONS:
                         href={canvaEditUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="block w-full bg-[#0A0A0A] text-white text-center py-2 text-[10px] tracking-[0.20em] hover:bg-[#333] transition-colors"
+                        className="block w-full bg-[#0A0A0A] text-white text-center py-2 text-[10px] tracking-[0.09em] hover:bg-[#333] transition-colors"
                       >
                         OPEN IN CANVA →
                       </a>
@@ -1492,7 +1492,7 @@ INSTRUCTIONS:
                   )}
 
                   {canvaJobStatus === 'failed' && canvaJobError && (
-                    <p className="mt-2 text-[9px] tracking-[0.12em] text-red-500 leading-relaxed">
+                    <p className="mt-2 text-[9px] tracking-[0.054em] text-red-500 leading-relaxed">
                       {canvaJobError}
                     </p>
                   )}
@@ -1500,7 +1500,7 @@ INSTRUCTIONS:
                   <button
                     type="button"
                     onClick={handleCanvaPromptFallback}
-                    className="mt-3 w-full text-[9px] tracking-[0.15em] text-[#6B6B6B] hover:text-[#4A4E57] underline"
+                    className="mt-3 w-full text-[9px] tracking-[0.068em] text-[#6B6B6B] hover:text-[#4A4E57] underline"
                   >
                     or copy Claude prompt instead
                   </button>
@@ -1512,12 +1512,12 @@ INSTRUCTIONS:
             <div className="mt-10">
               <p className={sectionHeadingClass}>HIGGSFIELD SHOOT</p>
               {!outfit ? (
-                <p className="text-[10px] tracking-[0.15em] text-[#A8A8A4]">
+                <p className="text-[10px] tracking-[0.068em] text-[#A8A8A4]">
                   SAVE THE OUTFIT FIRST TO GENERATE.
                 </p>
               ) : (
                 <>
-                  <p className="text-[9px] tracking-[0.18em] text-[#A8A8A4] mb-2 leading-relaxed">
+                  <p className="text-[9px] tracking-[0.081em] text-[#A8A8A4] mb-2 leading-relaxed">
                     CHOOSE A POSE — EACH GENERATES A SHOOT FROM THIS OUTFIT&rsquo;S ITEM PHOTOS (~1 CREDIT)
                   </p>
                   <div className="grid grid-cols-2 gap-2">
@@ -1536,10 +1536,10 @@ INSTRUCTIONS:
                               : 'border-[#E2E0DB] bg-white text-[#4A4E57] hover:border-[#0A0A0A] disabled:opacity-40'
                           }`}
                         >
-                          <span className="text-[10px] tracking-[0.15em]">
+                          <span className="text-[10px] tracking-[0.068em]">
                             {isThis ? 'GENERATING… ⟳' : opt.label}
                           </span>
-                          <span className={`text-[8px] tracking-[0.12em] mt-0.5 ${isThis ? 'text-white/70' : 'text-[#A8A8A4]'}`}>
+                          <span className={`text-[8px] tracking-[0.054em] mt-0.5 ${isThis ? 'text-white/70' : 'text-[#A8A8A4]'}`}>
                             {opt.sublabel}
                           </span>
                         </button>
@@ -1548,31 +1548,31 @@ INSTRUCTIONS:
                   </div>
 
                   {orderedItems.length === 0 && (
-                    <p className="mt-2 text-[9px] tracking-[0.12em] text-[#A8A8A4]">ADD ITEM PHOTOS TO THE OUTFIT FIRST.</p>
+                    <p className="mt-2 text-[9px] tracking-[0.054em] text-[#A8A8A4]">ADD ITEM PHOTOS TO THE OUTFIT FIRST.</p>
                   )}
 
                   {higgsfieldBusy && (
-                    <p className="mt-2 text-[9px] tracking-[0.12em] text-[#A8A8A4] leading-relaxed animate-pulse">
+                    <p className="mt-2 text-[9px] tracking-[0.054em] text-[#A8A8A4] leading-relaxed animate-pulse">
                       {higgsfieldCombo ? higgsfieldCombo + ' — ' : ''}generating on your Higgsfield account… (~30–60s)
                     </p>
                   )}
 
                   {higgsfieldResult && !higgsfieldBusy && (
                     <div className="mt-3 border border-green-300 bg-green-50 p-3">
-                      <p className="text-[10px] tracking-[0.18em] text-green-800 mb-1">✓ ADDED TO THIS OUTFIT&rsquo;S PHOTOS</p>
+                      <p className="text-[10px] tracking-[0.081em] text-green-800 mb-1">✓ ADDED TO THIS OUTFIT&rsquo;S PHOTOS</p>
                       {higgsfieldCombo && (
-                        <p className="text-[8px] tracking-[0.12em] text-green-700 mb-2">{higgsfieldCombo}</p>
+                        <p className="text-[8px] tracking-[0.054em] text-green-700 mb-2">{higgsfieldCombo}</p>
                       )}
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={higgsfieldResult} alt="Higgsfield shoot" className="w-full h-auto border border-green-200 mb-2" />
-                      <p className="text-[9px] tracking-[0.12em] text-[#6B6B6B]">
+                      <p className="text-[9px] tracking-[0.054em] text-[#6B6B6B]">
                         It&rsquo;s in the PHOTOS strip above — click SET AS DISPLAY to make it the hero image, or pick another pose to generate again.
                       </p>
                     </div>
                   )}
 
                   {higgsfieldError && !higgsfieldBusy && (
-                    <p className="mt-2 text-[9px] tracking-[0.12em] text-red-500 leading-relaxed">{higgsfieldError}</p>
+                    <p className="mt-2 text-[9px] tracking-[0.054em] text-red-500 leading-relaxed">{higgsfieldError}</p>
                   )}
                 </>
               )}
@@ -1582,18 +1582,18 @@ INSTRUCTIONS:
             <div className="mt-10">
               <p className={sectionHeadingClass}>SOCIAL MEDIA POST</p>
               {!outfit ? (
-                <p className="text-[10px] tracking-[0.15em] text-[#A8A8A4]">
+                <p className="text-[10px] tracking-[0.068em] text-[#A8A8A4]">
                   SAVE THE OUTFIT FIRST TO GENERATE.
                 </p>
               ) : (
                 <>
-                  <p className="text-[9px] tracking-[0.18em] text-[#A8A8A4] mb-2 leading-relaxed">
+                  <p className="text-[9px] tracking-[0.081em] text-[#A8A8A4] mb-2 leading-relaxed">
                     OPEN THIS OUTFIT AS A 3:4 SHOP-THE-LOOK POST — BUILT AUTOMATICALLY FROM THE DISPLAY IMAGE
                     + EACH ITEM&rsquo;S BRAND, NAME, PRICE &amp; PHOTO. SCREEN-RECORD IT FOR A REEL.
                   </p>
                   <a
                     href={`/admin/social/${outfit.outfit_id}`}
-                    className="block w-full text-center bg-[#0A0A0A] text-white py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#333] transition-colors"
+                    className="block w-full text-center bg-[#0A0A0A] text-white py-2.5 text-[10px] tracking-[0.09em] hover:bg-[#333] transition-colors"
                   >
                     OPEN AS SOCIAL POST →
                   </a>
@@ -1601,7 +1601,7 @@ INSTRUCTIONS:
                     type="button"
                     onClick={handleLookShopperPrompt}
                     disabled={orderedItems.length === 0}
-                    className="mt-2 w-full text-[9px] tracking-[0.15em] text-[#6B6B6B] hover:text-[#4A4E57] underline disabled:opacity-40 disabled:cursor-not-allowed disabled:no-underline"
+                    className="mt-2 w-full text-[9px] tracking-[0.068em] text-[#6B6B6B] hover:text-[#4A4E57] underline disabled:opacity-40 disabled:cursor-not-allowed disabled:no-underline"
                   >
                     {lookShopperCopied ? '✓ COPIED — PASTE INTO CLAUDE' : 'or copy prompt for the Claude design instead'}
                   </button>
@@ -1623,7 +1623,7 @@ INSTRUCTIONS:
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#E2E0DB]">
-              <p className="text-[11px] tracking-[0.25em] text-[#4A4E57]">CANVA SKILL PROMPT</p>
+              <p className="text-[11px] tracking-[0.113em] text-[#4A4E57]">CANVA SKILL PROMPT</p>
               <button
                 type="button"
                 onClick={() => setCanvaPromptOpen(false)}
@@ -1633,7 +1633,7 @@ INSTRUCTIONS:
               </button>
             </div>
             <div className="flex-1 overflow-auto p-6">
-              <p className="text-[10px] tracking-[0.15em] text-[#6B6B6B] mb-3">
+              <p className="text-[10px] tracking-[0.068em] text-[#6B6B6B] mb-3">
                 {canvaCopied ? 'COPIED — PASTE INTO CLAUDE' : 'COPY THIS AND PASTE INTO CLAUDE'}
               </p>
               <pre className="text-[11px] leading-relaxed text-[#4A4E57] whitespace-pre-wrap break-words font-mono bg-[#F8F8F6] p-4 border border-[#E2E0DB]">
@@ -1650,14 +1650,14 @@ INSTRUCTIONS:
                     setTimeout(() => setCanvaCopied(false), 2500)
                   } catch { /* ignore */ }
                 }}
-                className="flex-1 bg-[#0A0A0A] text-white py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#333] transition-colors"
+                className="flex-1 bg-[#0A0A0A] text-white py-2.5 text-[10px] tracking-[0.09em] hover:bg-[#333] transition-colors"
               >
                 {canvaCopied ? '✓ COPIED' : 'COPY TO CLIPBOARD'}
               </button>
               <button
                 type="button"
                 onClick={() => setCanvaPromptOpen(false)}
-                className="flex-1 border border-[#0A0A0A] text-[#4A4E57] py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors"
+                className="flex-1 border border-[#0A0A0A] text-[#4A4E57] py-2.5 text-[10px] tracking-[0.09em] hover:bg-[#0A0A0A] hover:text-white transition-colors"
               >
                 CLOSE
               </button>
@@ -1677,7 +1677,7 @@ INSTRUCTIONS:
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#E2E0DB]">
-              <p className="text-[11px] tracking-[0.25em] text-[#4A4E57]">LOOK SHOPPER PROMPT</p>
+              <p className="text-[11px] tracking-[0.113em] text-[#4A4E57]">LOOK SHOPPER PROMPT</p>
               <button
                 type="button"
                 onClick={() => setLookShopperOpen(false)}
@@ -1687,7 +1687,7 @@ INSTRUCTIONS:
               </button>
             </div>
             <div className="flex-1 overflow-auto p-6">
-              <p className="text-[10px] tracking-[0.15em] text-[#6B6B6B] mb-3">
+              <p className="text-[10px] tracking-[0.068em] text-[#6B6B6B] mb-3">
                 {lookShopperCopied ? 'COPIED — PASTE INTO YOUR LOOK SHOPPER CLAUDE DESIGN' : 'COPY THIS AND PASTE INTO YOUR LOOK SHOPPER CLAUDE DESIGN'}
               </p>
               <pre className="text-[11px] leading-relaxed text-[#4A4E57] whitespace-pre-wrap break-words font-mono bg-[#F8F8F6] p-4 border border-[#E2E0DB]">
@@ -1704,14 +1704,14 @@ INSTRUCTIONS:
                     setTimeout(() => setLookShopperCopied(false), 2500)
                   } catch { /* ignore */ }
                 }}
-                className="flex-1 bg-[#0A0A0A] text-white py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#333] transition-colors"
+                className="flex-1 bg-[#0A0A0A] text-white py-2.5 text-[10px] tracking-[0.09em] hover:bg-[#333] transition-colors"
               >
                 {lookShopperCopied ? '✓ COPIED' : 'COPY TO CLIPBOARD'}
               </button>
               <button
                 type="button"
                 onClick={() => setLookShopperOpen(false)}
-                className="flex-1 border border-[#0A0A0A] text-[#4A4E57] py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors"
+                className="flex-1 border border-[#0A0A0A] text-[#4A4E57] py-2.5 text-[10px] tracking-[0.09em] hover:bg-[#0A0A0A] hover:text-white transition-colors"
               >
                 CLOSE
               </button>
@@ -1732,9 +1732,9 @@ INSTRUCTIONS:
           >
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#E2E0DB]">
               <div>
-                <p className="text-[11px] tracking-[0.25em] text-[#4A4E57]">ITEM INVENTORY</p>
+                <p className="text-[11px] tracking-[0.113em] text-[#4A4E57]">ITEM INVENTORY</p>
                 {invTargetSlot && (
-                  <p className="mt-1 text-[9px] tracking-[0.20em] text-[#6B6B6B]">
+                  <p className="mt-1 text-[9px] tracking-[0.09em] text-[#6B6B6B]">
                     ADDING TO SLOT · {invTargetSlot.toUpperCase()}
                   </p>
                 )}
@@ -1758,15 +1758,15 @@ INSTRUCTIONS:
                 className={inputClass}
               />
               {invError && (
-                <p className="mt-2 text-[9px] tracking-[0.12em] text-red-500">{invError}</p>
+                <p className="mt-2 text-[9px] tracking-[0.054em] text-red-500">{invError}</p>
               )}
             </div>
 
             <div className="flex-1 overflow-auto px-6 pb-6">
               {invLoading ? (
-                <p className="text-[10px] tracking-[0.15em] text-[#A8A8A4] py-6 text-center">LOADING…</p>
+                <p className="text-[10px] tracking-[0.068em] text-[#A8A8A4] py-6 text-center">LOADING…</p>
               ) : invResults.length === 0 ? (
-                <p className="text-[10px] tracking-[0.15em] text-[#A8A8A4] py-6 text-center">
+                <p className="text-[10px] tracking-[0.068em] text-[#A8A8A4] py-6 text-center">
                   {invQuery.trim() ? 'NO ITEMS FOUND.' : 'NO ITEMS IN INVENTORY YET.'}
                 </p>
               ) : (
@@ -1791,29 +1791,29 @@ INSTRUCTIONS:
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={it.image_url} alt={it.product_name} className="w-full h-full object-cover" />
                           ) : (
-                            <div className="w-full h-full flex items-center justify-center text-[9px] tracking-[0.15em] text-[#A8A8A4]">NO IMAGE</div>
+                            <div className="w-full h-full flex items-center justify-center text-[9px] tracking-[0.068em] text-[#A8A8A4]">NO IMAGE</div>
                           )}
                         </div>
                         <div className="p-2.5">
-                          <p className="text-[10px] tracking-[0.10em] text-[#4A4E57] truncate">
+                          <p className="text-[10px] tracking-[0.045em] text-[#4A4E57] truncate">
                             {it.product_name.toUpperCase()}
                           </p>
                           {it.brand_name && (
-                            <p className="text-[9px] tracking-[0.10em] text-[#6B6B6B] truncate mt-0.5">
+                            <p className="text-[9px] tracking-[0.045em] text-[#6B6B6B] truncate mt-0.5">
                               {it.brand_name}
                             </p>
                           )}
                           <div className="flex items-center justify-between mt-1.5">
-                            <span className="text-[8px] tracking-[0.15em] text-[#A8A8A4]">
+                            <span className="text-[8px] tracking-[0.068em] text-[#A8A8A4]">
                               {it.item_type.replace(/_/g, ' ').toUpperCase()}
                             </span>
                             {it.price && (
-                              <span className="text-[9px] tracking-[0.10em] text-[#4A4E57]">
+                              <span className="text-[9px] tracking-[0.045em] text-[#4A4E57]">
                                 {it.currency ?? ''} {it.price}
                               </span>
                             )}
                           </div>
-                          <p className="mt-2 text-[9px] tracking-[0.15em] text-center">
+                          <p className="mt-2 text-[9px] tracking-[0.068em] text-center">
                             {alreadyAdded
                               ? 'ADDED ✓'
                               : adding

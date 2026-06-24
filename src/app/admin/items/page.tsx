@@ -20,12 +20,12 @@ export default async function ItemsPage({ searchParams }: PageProps) {
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-2">ADMIN STUDIO</p>
-          <h1 className="text-[28px] tracking-[0.10em] text-[#4A4E57]">ITEM LIBRARY</h1>
+          <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-2">ADMIN STUDIO</p>
+          <h1 className="text-[28px] tracking-[0.045em] text-[#4A4E57]">ITEM LIBRARY</h1>
         </div>
         <Link
           href="/admin/items/new"
-          className="bg-[#0A0A0A] text-white px-8 py-3.5 text-[11px] tracking-[0.20em] transition-colors duration-400 hover:bg-[#333]"
+          className="bg-[#0A0A0A] text-white px-8 py-3.5 text-[11px] tracking-[0.09em] transition-colors duration-400 hover:bg-[#333]"
         >
           NEW ITEM →
         </Link>
@@ -36,7 +36,7 @@ export default async function ItemsPage({ searchParams }: PageProps) {
         <div className="mb-4">
           <Link
             href="/admin/items"
-            className="inline-flex items-center gap-2 px-3 py-1.5 text-[10px] tracking-[0.20em] bg-[#FDECEC] text-[#B83A3A] rounded-[2px] hover:bg-[#FBDCDC] transition-colors"
+            className="inline-flex items-center gap-2 px-3 py-1.5 text-[10px] tracking-[0.09em] bg-[#FDECEC] text-[#B83A3A] rounded-[2px] hover:bg-[#FBDCDC] transition-colors"
           >
             STOCK: {stockFilter.toUpperCase().replace('_', ' ')} · CLEAR ×
           </Link>
@@ -49,7 +49,7 @@ export default async function ItemsPage({ searchParams }: PageProps) {
           <Link
             key={tab}
             href={tab === 'all' ? '/admin/items' : `/admin/items?status=${tab}`}
-            className={`px-4 py-2 text-[10px] tracking-[0.20em] transition-all duration-300 rounded-[2px] ${
+            className={`px-4 py-2 text-[10px] tracking-[0.09em] transition-all duration-300 rounded-[2px] ${
               activeTab === tab
                 ? 'bg-[#0A0A0A] text-white'
                 : 'border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57]'
@@ -63,7 +63,7 @@ export default async function ItemsPage({ searchParams }: PageProps) {
       {/* Grid */}
       {items.length === 0 ? (
         <div className="py-20 text-center">
-          <p className="text-[11px] tracking-[0.20em] text-[#A8A8A4]">
+          <p className="text-[11px] tracking-[0.09em] text-[#A8A8A4]">
             NO ITEMS YET. ADD YOUR FIRST ITEM.
           </p>
         </div>

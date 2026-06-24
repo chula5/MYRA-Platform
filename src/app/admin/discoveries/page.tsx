@@ -41,9 +41,9 @@ export default async function DiscoveriesPage({ searchParams }: PageProps) {
     <div>
       {/* Header */}
       <div className="mb-8">
-        <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-2">ADMIN STUDIO</p>
-        <h1 className="text-[28px] tracking-[0.10em] text-[#4A4E57]">DISCOVERIES</h1>
-        <p className="mt-2 text-[10px] tracking-[0.15em] text-[#A8A8A4]">
+        <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-2">ADMIN STUDIO</p>
+        <h1 className="text-[28px] tracking-[0.045em] text-[#4A4E57]">DISCOVERIES</h1>
+        <p className="mt-2 text-[10px] tracking-[0.068em] text-[#A8A8A4]">
           AI-SURFACED PIECES SIMILAR TO ITEMS IN YOUR LIBRARY.
         </p>
       </div>
@@ -57,7 +57,7 @@ export default async function DiscoveriesPage({ searchParams }: PageProps) {
           <Link
             key={tab}
             href={`/admin/discoveries?status=${tab}`}
-            className={`px-4 py-2 text-[10px] tracking-[0.20em] transition-all duration-300 rounded-[2px] ${
+            className={`px-4 py-2 text-[10px] tracking-[0.09em] transition-all duration-300 rounded-[2px] ${
               activeTab === tab
                 ? 'bg-[#0A0A0A] text-white'
                 : 'border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57]'
@@ -71,7 +71,7 @@ export default async function DiscoveriesPage({ searchParams }: PageProps) {
       {/* Grid */}
       {discoveries.length === 0 ? (
         <div className="py-20 text-center border border-[#E2E0DB] bg-white rounded-[3px]">
-          <p className="text-[11px] tracking-[0.20em] text-[#A8A8A4]">
+          <p className="text-[11px] tracking-[0.09em] text-[#A8A8A4]">
             {activeTab === 'new'
               ? 'NO NEW DISCOVERIES. OPEN AN ITEM AND CLICK ✦ DISCOVER SIMILAR.'
               : `NO ${activeTab.toUpperCase()} DISCOVERIES.`}
@@ -88,30 +88,30 @@ export default async function DiscoveriesPage({ searchParams }: PageProps) {
                   <img src={d.image_url} alt={d.title} className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
-                    <span className="text-[9px] tracking-[0.15em] text-[#A8A8A4]">NO IMAGE</span>
+                    <span className="text-[9px] tracking-[0.068em] text-[#A8A8A4]">NO IMAGE</span>
                   </div>
                 )}
               </div>
 
               {/* Body */}
               <div className="p-4 flex-1 flex flex-col">
-                <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4] mb-1">
+                <p className="text-[9px] tracking-[0.09em] text-[#A8A8A4] mb-1">
                   {d.brand_name?.toUpperCase() ?? '—'}
                 </p>
-                <p className="text-[11px] tracking-[0.10em] text-[#4A4E57] mb-2 leading-snug">
+                <p className="text-[11px] tracking-[0.045em] text-[#4A4E57] mb-2 leading-snug">
                   {d.title}
                 </p>
                 {d.price && (
-                  <p className="text-[10px] tracking-[0.12em] text-[#6B6B6B] mb-2">
+                  <p className="text-[10px] tracking-[0.054em] text-[#6B6B6B] mb-2">
                     {d.currency ?? ''} {d.price}
                   </p>
                 )}
                 {d.why_interesting && (
-                  <p className="text-[10px] tracking-[0.10em] text-[#6B6B6B] leading-relaxed mb-3 italic">
+                  <p className="text-[10px] tracking-[0.045em] text-[#6B6B6B] leading-relaxed mb-3 italic">
                     &ldquo;{d.why_interesting}&rdquo;
                   </p>
                 )}
-                <p className="text-[9px] tracking-[0.15em] text-[#A8A8A4] mb-3">
+                <p className="text-[9px] tracking-[0.068em] text-[#A8A8A4] mb-3">
                   {d.item
                     ? `INSPIRED BY: ${d.item.product_name.toUpperCase()}`
                     : 'INSPIRED BY YOUR TASTE PROFILE'}
@@ -123,7 +123,7 @@ export default async function DiscoveriesPage({ searchParams }: PageProps) {
                       href={d.retailer_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="block text-center border border-[#E2E0DB] py-1.5 text-[9px] tracking-[0.18em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors"
+                      className="block text-center border border-[#E2E0DB] py-1.5 text-[9px] tracking-[0.081em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors"
                     >
                       VIEW AT RETAILER ↗
                     </a>

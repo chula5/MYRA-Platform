@@ -18,8 +18,8 @@ export default function StockBadge({
   const style = STYLES[key]
   const sizing =
     size === 'sm'
-      ? 'text-[8px] tracking-[0.15em] px-1.5 py-0.5'
-      : 'text-[9px] tracking-[0.20em] px-2.5 py-1'
+      ? 'text-[8px] tracking-[0.068em] px-1.5 py-0.5'
+      : 'text-[9px] tracking-[0.09em] px-2.5 py-1'
   return (
     <span className={`inline-block rounded-[2px] ${sizing} ${style.classes}`}>
       {style.label}
