@@ -463,11 +463,6 @@ export default function OutfitDetailClient({
         )}
 
 
-        {/* Aesthetic label */}
-        <p className="text-[15px] tracking-[0.18em] text-[#0A0A0A] mb-2">
-          {outfit.aesthetic_label}
-        </p>
-
         {/* Occasion tags */}
         {outfit.occasion_tags?.length > 0 && (
           <p className="text-[11px] tracking-[0.20em] text-[#6B6B6B] mb-5">
