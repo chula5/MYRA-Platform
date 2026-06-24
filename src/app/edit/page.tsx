@@ -33,10 +33,11 @@ export default async function EditPage() {
   const liveOutfits = (liveRaw ?? []) as unknown as OutfitWithItems[]
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-[#F2F2F2]">
       {/* Minimal header */}
-      <header className="flex items-center justify-between px-8 h-14 border-b border-[#E2E0DB]">
-        <p className="text-[13px] tracking-[0.30em] text-[#0A0A0A]">MYRA</p>
+      <header className="flex items-center justify-between px-8 h-14 border-b border-[#E2E0DB] bg-white">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/myra-logo-black.png" alt="MYRA" className="h-[18px] w-auto" />
         <div className="flex items-center gap-5">
           <span className="text-[10px] tracking-[0.20em] text-[#A8A8A4]">THE EDIT · EARLY ACCESS</span>
           <form action={earlyAccessSignOut}>

@@ -24,9 +24,12 @@ export default async function EditDetailPage({ params, searchParams }: PageProps
   const outfit = await getOutfit(id)
 
   return (
-    <div className="min-h-screen bg-white">
-      <header className="flex items-center justify-between px-8 h-14 border-b border-[#E2E0DB]">
-        <Link href="/edit" className="text-[13px] tracking-[0.30em] text-[#0A0A0A]">MYRA</Link>
+    <div className="min-h-screen bg-[#F2F2F2]">
+      <header className="flex items-center justify-between px-8 h-14 border-b border-[#E2E0DB] bg-white">
+        <Link href="/edit" aria-label="MYRA" className="block">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/myra-logo-black.png" alt="MYRA" className="h-[18px] w-auto" />
+        </Link>
         <div className="flex items-center gap-5">
           <Link href="/edit" className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors">← THE EDIT</Link>
           <form action={earlyAccessSignOut}>
