@@ -3,6 +3,8 @@ import { createServerClient, createAdminClient } from '@/lib/supabase-server'
 import FeedClient from '@/app/feed/FeedClient'
 import { earlyAccessSignOut } from '@/app/earlyaccess/actions'
 import { recordEarlyAccessVisit } from '@/app/earlyaccess/activity'
+import { getSavedOutfitIds } from './save-actions'
+import { getRecommendedOutfits } from '@/lib/recommendations'
 import type { OutfitWithItems } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -32,6 +34,12 @@ export default async function EditPage() {
     .order('published_at', { ascending: false })
   const liveOutfits = (liveRaw ?? []) as unknown as OutfitWithItems[]
 
+  // Saved outfits + personalised recommendations (table may not exist yet → [] ).
+  const [savedIds, recommended] = await Promise.all([
+    getSavedOutfitIds(),
+    getRecommendedOutfits(user.id),
+  ])
+
   return (
     <div className="min-h-screen bg-[#F2F2F2]">
       {/* Minimal header */}
@@ -53,7 +61,14 @@ export default async function EditPage() {
 
       {/* The Edit — occasion search + browse (read-only). Items come with the
           server-fetched outfits, so Source Items / hotspots work. */}
-      <FeedClient showAllOption injectedOutfits={liveOutfits} detailHrefBase="/edit" />
+      <FeedClient
+        showAllOption
+        injectedOutfits={liveOutfits}
+        detailHrefBase="/edit"
+        canSave
+        savedOutfitIds={savedIds}
+        recommendedOutfits={recommended}
+      />
     </div>
   )
 }

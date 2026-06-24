@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import OutfitCard from '@/components/outfit-card/OutfitCard'
+import SaveHeartButton from '@/components/outfit-card/SaveHeartButton'
 import { createClient } from '@/lib/supabase'
 import type { OutfitWithItems, ItemType, ColourFamily } from '@/types/database'
 
@@ -181,11 +182,19 @@ export default function FeedClient({
   showAllOption = false,
   injectedOutfits,
   detailHrefBase = '/outfit',
+  canSave = false,
+  savedOutfitIds = [],
+  recommendedOutfits = [],
 }: {
   showAllOption?: boolean
   injectedOutfits?: OutfitWithItems[]
   detailHrefBase?: string
+  // Save (heart) + recommendations — only passed for signed-in early-access users.
+  canSave?: boolean
+  savedOutfitIds?: string[]
+  recommendedOutfits?: OutfitWithItems[]
 }) {
+  const savedSet = new Set(savedOutfitIds)
   // Occasion mode
   const [occasion, setOccasion]           = useState<string | null>(null)
   const [outfits, setOutfits]             = useState<OutfitWithItems[]>([])
@@ -346,6 +355,37 @@ export default function FeedClient({
             WHAT ARE YOU DRESSING FOR?
           </h1>
         </div>
+
+        {/* Recommended for you — personalised from saves + brand worlds */}
+        {recommendedOutfits.length > 0 && (
+          <div className="max-w-[1100px] mx-auto mb-12">
+            <div className="flex items-baseline justify-between mb-4">
+              <p className="text-[11px] tracking-[0.22em] text-[#0A0A0A]">RECOMMENDED FOR YOU</p>
+              <p className="text-[9px] tracking-[0.16em] text-[#A8A8A4]">BASED ON WHAT YOU LIKE</p>
+            </div>
+            <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
+              {recommendedOutfits.map((o) => (
+                <button
+                  key={o.outfit_id}
+                  onClick={() => router.push(`${detailHrefBase}/${o.outfit_id}`)}
+                  className="group relative shrink-0 w-[150px] sm:w-[170px]"
+                >
+                  <div className="relative aspect-[3/4] w-full overflow-hidden rounded-[3px] bg-[#EDEDED]">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={o.image_url || '/placeholder-outfit.jpg'}
+                      alt=""
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+                    />
+                    {canSave && (
+                      <SaveHeartButton outfitId={o.outfit_id} initialSaved={savedSet.has(o.outfit_id)} />
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {showAllOption && (
           <div className="max-w-[900px] mx-auto mb-6">
@@ -567,6 +607,8 @@ export default function FeedClient({
                 onSimilarLooks={handleSimilarLooks}
                 onExploreStyles={handleExploreStyles}
                 onStyleItem={handleStyleItem}
+                canSave={canSave}
+                initialSaved={savedSet.has(outfit.outfit_id)}
               />
             ))}
           </div>
@@ -624,6 +666,8 @@ export default function FeedClient({
                 onSimilarLooks={handleSimilarLooks}
                 onExploreStyles={handleExploreStyles}
                 onStyleItem={handleStyleItem}
+                canSave={canSave}
+                initialSaved={savedSet.has(outfit.outfit_id)}
               />
             ))}
           </div>

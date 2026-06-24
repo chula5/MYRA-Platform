@@ -4,6 +4,7 @@ import { createServerClient } from '@/lib/supabase-server'
 import { getOutfit } from '@/lib/admin-queries'
 import OutfitDetailClient from '@/app/outfit/[id]/OutfitDetailClient'
 import { earlyAccessSignOut } from '@/app/earlyaccess/actions'
+import { getSavedOutfitIds } from '../save-actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,6 +23,7 @@ export default async function EditDetailPage({ params, searchParams }: PageProps
 
   // Service-role read so the outfit's items are visible (RLS hides draft items).
   const outfit = await getOutfit(id)
+  const savedIds = await getSavedOutfitIds()
 
   return (
     <div className="min-h-screen bg-[#F2F2F2]">
@@ -54,6 +56,8 @@ export default async function EditDetailPage({ params, searchParams }: PageProps
           styleItemId={styleItem}
           itemType={itemType}
           mode={mode as 'similar' | 'explore' | undefined}
+          canSave
+          initialSaved={savedIds.includes(id)}
         />
       )}
     </div>

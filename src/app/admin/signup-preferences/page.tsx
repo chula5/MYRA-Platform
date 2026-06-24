@@ -102,6 +102,28 @@ export default async function SignupPreferencesPage() {
   }
   const totalClicks = [...clickCounts.values()].reduce((s, n) => s + n, 0)
 
+  // ── Most-saved outfits ──
+  let savesReady = true
+  const saveCounts = new Map<string, number>()
+  {
+    const { data: saves, error: savesErr } = await admin
+      .from('saved_outfit' as any)
+      .select('outfit_id')
+      .limit(10000)
+    if (savesErr) savesReady = false
+    else for (const s of (saves ?? []) as { outfit_id: string }[]) saveCounts.set(s.outfit_id, (saveCounts.get(s.outfit_id) ?? 0) + 1)
+  }
+  const totalSaves = [...saveCounts.values()].reduce((s, n) => s + n, 0)
+  const topSavedEntries = [...saveCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12)
+  const savedImg = new Map<string, { image: string; label: string }>()
+  if (topSavedEntries.length > 0) {
+    const { data: so } = await admin
+      .from('outfit')
+      .select('outfit_id, image_url, aesthetic_label')
+      .in('outfit_id', topSavedEntries.map(([id]) => id))
+    for (const o of (so ?? []) as any[]) savedImg.set(o.outfit_id, { image: o.image_url, label: o.aesthetic_label ?? '' })
+  }
+
   const renderOutfitGrid = (entries: [string, number][], tone: 'like' | 'dislike') => (
     <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
       {entries.map(([id, count]) => {
@@ -296,6 +318,51 @@ ALTER TABLE public.item_click ENABLE ROW LEVEL SECURITY;`}</pre>
                   )}
                   <span className="text-[12px] tracking-[0.06em] text-[#0A0A0A] w-12 text-right flex-shrink-0">
                     {count}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Most-saved outfits ── */}
+      <div className="border border-[#E2E0DB] bg-white rounded-[3px] p-6 mb-8">
+        <div className="flex items-baseline justify-between mb-5">
+          <p className="text-[10px] tracking-[0.22em] text-[#6B6B6B]">MOST-SAVED OUTFITS</p>
+          {savesReady && (
+            <p className="text-[9px] tracking-[0.16em] text-[#A8A8A4]">
+              {totalSaves.toLocaleString()} TOTAL SAVE{totalSaves === 1 ? '' : 'S'}
+            </p>
+          )}
+        </div>
+        {!savesReady ? (
+          <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[3px] p-4">
+            <p className="text-[10px] tracking-[0.14em] text-[#8A7A4E] leading-relaxed mb-2">
+              Run migration <span className="font-mono">0010_saved_outfit.sql</span> in Supabase to track saves:
+            </p>
+            <pre className="text-[9px] bg-white border border-[#E8D9B8] p-3 rounded overflow-x-auto text-[#6B6B6B] leading-relaxed">{`CREATE TABLE IF NOT EXISTS public.saved_outfit (
+  user_id    uuid NOT NULL,
+  outfit_id  uuid NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, outfit_id)
+);
+CREATE INDEX IF NOT EXISTS saved_outfit_outfit_idx ON public.saved_outfit (outfit_id);
+ALTER TABLE public.saved_outfit ENABLE ROW LEVEL SECURITY;`}</pre>
+          </div>
+        ) : topSavedEntries.length === 0 ? (
+          <p className="text-[10px] tracking-[0.18em] text-[#A8A8A4] py-8 text-center">
+            NO SAVES YET — THEY APPEAR HERE AS USERS SAVE OUTFITS IN THE EDIT.
+          </p>
+        ) : (
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+            {topSavedEntries.map(([id, count]) => {
+              const o = savedImg.get(id)
+              return (
+                <div key={id} className="relative aspect-[3/4] rounded-[3px] overflow-hidden border border-[#E2E0DB] bg-[#FAFAF8]">
+                  {o?.image && <Image src={o.image} alt={o.label} fill className="object-cover" sizes="120px" />}
+                  <span className="absolute top-1.5 right-1.5 text-[9px] tracking-[0.10em] px-1.5 py-0.5 rounded-sm text-white bg-[#0A0A0A]">
+                    {count} ♥
                   </span>
                 </div>
               )

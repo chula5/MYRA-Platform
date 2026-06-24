@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import Hotspot from '@/components/hotspot/Hotspot'
 import ShopTheLookOverlay from '@/components/source-panel/ShopTheLookOverlay'
 import OutfitCard from '@/components/outfit-card/OutfitCard'
+import SaveHeartButton from '@/components/outfit-card/SaveHeartButton'
 import CardButton from '@/components/ui/CardButton'
 import { createClient } from '@/lib/supabase'
 import { getRelatedOutfits } from './related-actions'
@@ -28,6 +29,8 @@ interface OutfitDetailClientProps {
   initialOutfit?: OutfitWithItems   // server-fetched (admin client) so items show despite RLS
   showBrowseButtons?: boolean       // force-enable SIMILAR / EXPLORE
   linkBase?: string                 // base path for related/result links (default public detail)
+  canSave?: boolean                 // show the SAVE toggle (signed-in users)
+  initialSaved?: boolean
 }
 
 export default function OutfitDetailClient({
@@ -38,6 +41,8 @@ export default function OutfitDetailClient({
   initialOutfit,
   showBrowseButtons,
   linkBase = '/outfit',
+  canSave = false,
+  initialSaved = false,
 }: OutfitDetailClientProps) {
   const router = useRouter()
   const showBrowse = showBrowseButtons ?? SHOW_BROWSE_BUTTONS
@@ -483,6 +488,7 @@ export default function OutfitDetailClient({
             Flip the flag back to `true` to re-expose them — all downstream
             code (handlers, fetch logic, result grids) is untouched. */}
         <div className="flex flex-wrap items-center justify-center gap-2">
+          {canSave && <SaveHeartButton outfitId={outfitId} initialSaved={initialSaved} variant="detail" />}
           <CardButton variant="filled" onClick={() => setSourcePanelOpen((v) => !v)}>
             SOURCE ITEMS
           </CardButton>

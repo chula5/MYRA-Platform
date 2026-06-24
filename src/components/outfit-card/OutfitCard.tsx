@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import CardButton from '@/components/ui/CardButton'
 import Hotspot from '@/components/hotspot/Hotspot'
 import SourcePanel from '@/components/source-panel/SourcePanel'
+import SaveHeartButton from '@/components/outfit-card/SaveHeartButton'
 import type { OutfitWithItems, Item, Brand, ItemType } from '@/types/database'
 
 type SourceItemData = Item & { brand: Brand }
@@ -21,6 +22,9 @@ interface OutfitCardProps {
   onExploreStyles?: (outfit: OutfitWithItems) => void
   onStyleItem?: (itemId: string, itemType: ItemType, outfit: OutfitWithItems) => void
   detailHref?: string
+  // Save (heart) — only shown for signed-in early-access users.
+  canSave?: boolean
+  initialSaved?: boolean
 }
 
 const MAX_DOTS = 7
@@ -31,6 +35,8 @@ export default function OutfitCard({
   onExploreStyles,
   onStyleItem,
   detailHref,
+  canSave = false,
+  initialSaved = false,
 }: OutfitCardProps) {
   const router = useRouter()
   const [sourcePanelOpen, setSourcePanelOpen] = useState(false)
@@ -116,6 +122,11 @@ export default function OutfitCard({
               priority={i === 0}
             />
           ))
+        )}
+
+        {/* Save heart (signed-in users) */}
+        {canSave && (
+          <SaveHeartButton outfitId={outfit.outfit_id} initialSaved={initialSaved} />
         )}
 
         {/* Desktop prev/next tap zones */}
