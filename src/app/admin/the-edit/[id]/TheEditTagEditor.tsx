@@ -93,7 +93,7 @@ export default function TheEditTagEditor({
               className={`px-3 py-2 text-[9px] tracking-[0.16em] rounded-[3px] border transition-colors disabled:opacity-50 ${
                 active
                   ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]'
-                  : 'bg-white text-[#6B6B6B] border-[#E2E0DB] hover:border-[#0A0A0A] hover:text-[#0A0A0A]'
+                  : 'bg-white text-[#6B6B6B] border-[#E2E0DB] hover:border-[#0A0A0A] hover:text-[#4A4E57]'
               }`}
             >
               {active ? '✓ ' : ''}{occ.label}
@@ -108,7 +108,7 @@ export default function TheEditTagEditor({
           {customTags.map((t) => (
             <span
               key={t}
-              className="inline-flex items-center gap-2 px-3 py-2 text-[9px] tracking-[0.16em] rounded-[3px] border border-[#C4A882] bg-white text-[#0A0A0A]"
+              className="inline-flex items-center gap-2 px-3 py-2 text-[9px] tracking-[0.16em] rounded-[3px] border border-[#C4A882] bg-white text-[#4A4E57]"
             >
               {t.toUpperCase()}
               <button
@@ -135,13 +135,13 @@ export default function TheEditTagEditor({
             if (e.key === 'Enter') { e.preventDefault(); addCustom() }
           }}
           placeholder="ADD A CUSTOM OCCASION"
-          className="flex-1 border border-[#E2E0DB] bg-white px-3 py-2 text-[10px] tracking-[0.12em] text-[#0A0A0A] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A]"
+          className="flex-1 border border-[#E2E0DB] bg-white px-3 py-2 text-[10px] tracking-[0.12em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A]"
         />
         <button
           type="button"
           onClick={addCustom}
           disabled={status === 'saving' || !custom.trim()}
-          className="shrink-0 border border-[#0A0A0A] text-[#0A0A0A] px-4 text-[9px] tracking-[0.18em] hover:bg-[#0A0A0A] hover:text-white transition-colors disabled:opacity-40"
+          className="shrink-0 border border-[#0A0A0A] text-[#4A4E57] px-4 text-[9px] tracking-[0.18em] hover:bg-[#0A0A0A] hover:text-white transition-colors disabled:opacity-40"
         >
           ADD
         </button>

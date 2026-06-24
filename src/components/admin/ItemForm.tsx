@@ -57,7 +57,7 @@ const PRICE_TIER_LABELS: Record<number, string> = {
 }
 
 const inputClass =
-  'w-full border border-[#E2E0DB] bg-white px-4 py-2.5 text-[12px] tracking-[0.10em] text-[#0A0A0A] focus:outline-none focus:border-[#0A0A0A] transition-colors duration-300'
+  'w-full border border-[#E2E0DB] bg-white px-4 py-2.5 text-[12px] tracking-[0.10em] text-[#4A4E57] focus:outline-none focus:border-[#0A0A0A] transition-colors duration-300'
 const labelClass = 'text-[10px] tracking-[0.20em] text-[#6B6B6B] mb-1.5 block'
 const sectionHeadingClass =
   'text-[10px] tracking-[0.25em] text-[#6B6B6B] mb-6 pb-3 border-b border-[#E2E0DB]'
@@ -377,7 +377,7 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
               type="button"
               onClick={() => handleUrlAnalyse(retailerUrl)}
               disabled={analysing || !retailerUrl}
-              className="shrink-0 border border-[#E2E0DB] bg-white px-4 text-[10px] tracking-[0.15em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] disabled:opacity-40 transition-colors whitespace-nowrap"
+              className="shrink-0 border border-[#E2E0DB] bg-white px-4 text-[10px] tracking-[0.15em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] disabled:opacity-40 transition-colors whitespace-nowrap"
             >
               {analysing ? 'ANALYSING...' : 'AUTO-FILL ✦'}
             </button>
@@ -405,7 +405,7 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
               onClick={handleCheckStock}
               disabled={checkingStock || !item?.item_id || !retailerUrl}
               title={item?.item_id ? 'Fetch the retailer page and detect stock' : 'Save the item first'}
-              className="border border-[#E2E0DB] bg-white px-3 py-1.5 text-[10px] tracking-[0.15em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="border border-[#E2E0DB] bg-white px-3 py-1.5 text-[10px] tracking-[0.15em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               {checkingStock ? 'CHECKING...' : 'CHECK STOCK'}
             </button>
@@ -426,7 +426,7 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
               onClick={handleDiscoverSimilar}
               disabled={discovering || !item?.item_id}
               title={item?.item_id ? 'Ask AI to search the web for similar pieces' : 'Save the item first'}
-              className="border border-[#E2E0DB] bg-white px-3 py-1.5 text-[10px] tracking-[0.15em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="border border-[#E2E0DB] bg-white px-3 py-1.5 text-[10px] tracking-[0.15em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               {discovering ? 'SEARCHING THE WEB...' : '✦ DISCOVER SIMILAR'}
             </button>
@@ -505,7 +505,7 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
                 onClick={() => openBrandForm('edit')}
                 disabled={!brandId}
                 title={brandId ? 'Edit selected brand' : 'Select a brand first'}
-                className="shrink-0 border border-[#E2E0DB] bg-white px-3 text-[10px] tracking-[0.15em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-300"
+                className="shrink-0 border border-[#E2E0DB] bg-white px-3 text-[10px] tracking-[0.15em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-300"
               >
                 EDIT
               </button>
@@ -555,7 +555,7 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
               >
                 {brandSubmitting ? 'SAVING...' : brandFormMode === 'edit' ? 'UPDATE BRAND' : 'SAVE BRAND'}
               </button>
-              <button type="button" onClick={() => setShowBrandForm(false)} className="border border-[#E2E0DB] bg-transparent text-[#0A0A0A] px-6 py-2 text-[10px] tracking-[0.20em]">
+              <button type="button" onClick={() => setShowBrandForm(false)} className="border border-[#E2E0DB] bg-transparent text-[#4A4E57] px-6 py-2 text-[10px] tracking-[0.20em]">
                 CANCEL
               </button>
             </div>
@@ -592,7 +592,7 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
                   onClick={handleCloudinaryUpload}
                   disabled={uploadingImage || !retailerUrl}
                   title="Scrape product image from retailer URL and upload to Cloudinary. For protected sites: paste the direct image URL above first, then click this button."
-                  className="shrink-0 border border-[#E2E0DB] bg-white px-3 text-[10px] tracking-[0.12em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] disabled:opacity-40 transition-colors whitespace-nowrap"
+                  className="shrink-0 border border-[#E2E0DB] bg-white px-3 text-[10px] tracking-[0.12em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] disabled:opacity-40 transition-colors whitespace-nowrap"
                 >
                   {uploadingImage ? 'UPLOADING...' : '☁ SAVE TO CLOUDINARY'}
                 </button>
@@ -611,7 +611,7 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
                   onClick={handleImageAnalyse}
                   disabled={analysingImage || !imageUrl}
                   title="Read the item's features straight off this image with AI and fill the 1-5 scores below"
-                  className="border border-[#E2E0DB] bg-white px-3 py-1.5 text-[10px] tracking-[0.12em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] disabled:opacity-40 transition-colors whitespace-nowrap"
+                  className="border border-[#E2E0DB] bg-white px-3 py-1.5 text-[10px] tracking-[0.12em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] disabled:opacity-40 transition-colors whitespace-nowrap"
                 >
                   {analysingImage ? 'ANALYSING IMAGE...' : '✦ ANALYSE IMAGE'}
                 </button>

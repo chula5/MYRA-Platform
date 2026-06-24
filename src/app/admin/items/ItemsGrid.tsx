@@ -119,7 +119,7 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
                   type="button"
                   onClick={() => setDeleteConfirm(false)}
                   disabled={deleting}
-                  className="text-[10px] tracking-[0.20em] px-3 py-1.5 border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors duration-200 disabled:opacity-50"
+                  className="text-[10px] tracking-[0.20em] px-3 py-1.5 border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors duration-200 disabled:opacity-50"
                 >
                   CANCEL
                 </button>
@@ -140,14 +140,14 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
         <div className="flex items-center gap-2 flex-wrap">
           {selectMode && hasSelection && (
             <>
-              <span className="text-[10px] tracking-[0.20em] text-[#0A0A0A] mr-1">
+              <span className="text-[10px] tracking-[0.20em] text-[#4A4E57] mr-1">
                 {selected.size} SELECTED
               </span>
               <button
                 type="button"
                 onClick={clearAll}
                 disabled={creating || deleting}
-                className="text-[10px] tracking-[0.20em] px-3 py-1.5 border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors duration-200 disabled:opacity-50"
+                className="text-[10px] tracking-[0.20em] px-3 py-1.5 border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors duration-200 disabled:opacity-50"
               >
                 CLEAR
               </button>
@@ -155,7 +155,7 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
                 type="button"
                 onClick={handleCopySelected}
                 disabled={creating || deleting}
-                className="text-[10px] tracking-[0.20em] px-3 py-1.5 border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors duration-200 disabled:opacity-50"
+                className="text-[10px] tracking-[0.20em] px-3 py-1.5 border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors duration-200 disabled:opacity-50"
               >
                 {copyState === 'copied'
                   ? 'COPIED ✓'
@@ -183,7 +183,7 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
             className={`text-[10px] tracking-[0.20em] px-3 py-1.5 transition-colors duration-200 ${
               selectMode
                 ? 'bg-[#0A0A0A] text-white'
-                : 'border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A]'
+                : 'border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57]'
             }`}
           >
             {selectMode ? 'EXIT SELECT' : 'SELECT ITEMS'}
@@ -192,7 +192,7 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
             <button
               type="button"
               onClick={selected.size === items.length ? clearAll : selectAll}
-              className="text-[10px] tracking-[0.20em] px-3 py-1.5 border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors duration-200"
+              className="text-[10px] tracking-[0.20em] px-3 py-1.5 border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors duration-200"
             >
               {selected.size === items.length ? 'CLEAR ALL' : 'SELECT ALL'}
             </button>
@@ -251,7 +251,7 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
                 <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4] mb-1 truncate">
                   {item.brand?.name?.toUpperCase() ?? '—'}
                 </p>
-                <p className="text-[11px] tracking-[0.10em] text-[#0A0A0A] mb-2 line-clamp-2 leading-snug min-h-[28px]">
+                <p className="text-[11px] tracking-[0.10em] text-[#4A4E57] mb-2 line-clamp-2 leading-snug min-h-[28px]">
                   {item.product_name.toUpperCase()}
                 </p>
                 <div className="flex items-center justify-between">
@@ -259,7 +259,7 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
                     {item.item_type.replace(/_/g, ' ').toUpperCase()}
                   </span>
                   {!selectMode && (
-                    <span className="text-[9px] tracking-[0.15em] text-[#A8A8A4] group-hover:text-[#0A0A0A] transition-colors">
+                    <span className="text-[9px] tracking-[0.15em] text-[#A8A8A4] group-hover:text-[#4A4E57] transition-colors">
                       EDIT →
                     </span>
                   )}

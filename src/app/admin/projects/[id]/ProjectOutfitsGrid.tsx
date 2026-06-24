@@ -80,7 +80,7 @@ export default function ProjectOutfitsGrid({
             type="button"
             onClick={() => setSelectMode(true)}
             disabled={outfits.length === 0}
-            className="border border-[#0A0A0A] text-[#0A0A0A] px-5 py-2 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-300 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="border border-[#0A0A0A] text-[#4A4E57] px-5 py-2 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-300 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             SELECT OUTFITS
           </button>
@@ -89,7 +89,7 @@ export default function ProjectOutfitsGrid({
             <button
               type="button"
               onClick={allLiveableSelected ? () => setSelected(new Set()) : selectAllLiveable}
-              className="border border-[#E2E0DB] text-[#6B6B6B] px-4 py-2 text-[10px] tracking-[0.20em] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors duration-300"
+              className="border border-[#E2E0DB] text-[#6B6B6B] px-4 py-2 text-[10px] tracking-[0.20em] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors duration-300"
             >
               {allLiveableSelected ? 'CLEAR ALL' : 'SELECT ALL'}
             </button>
@@ -104,7 +104,7 @@ export default function ProjectOutfitsGrid({
             <button
               type="button"
               onClick={exitSelect}
-              className="border border-[#E2E0DB] text-[#6B6B6B] px-4 py-2 text-[10px] tracking-[0.20em] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors duration-300"
+              className="border border-[#E2E0DB] text-[#6B6B6B] px-4 py-2 text-[10px] tracking-[0.20em] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors duration-300"
             >
               CANCEL
             </button>
@@ -161,7 +161,7 @@ export default function ProjectOutfitsGrid({
               {/* Card body */}
               <div className="p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-[11px] tracking-[0.15em] text-[#0A0A0A] truncate">
+                  <p className="text-[11px] tracking-[0.15em] text-[#4A4E57] truncate">
                     {(outfit.celebrity_name || outfit.aesthetic_label).toUpperCase()}
                   </p>
                   <StatusBadge status={outfit.status} />
@@ -173,7 +173,7 @@ export default function ProjectOutfitsGrid({
                 ) : (
                   <Link
                     href={`/admin/projects/${projectId}/outfits/${outfit.outfit_id}/edit`}
-                    className="text-[9px] tracking-[0.20em] text-[#6B6B6B] group-hover:text-[#0A0A0A] transition-colors duration-300"
+                    className="text-[9px] tracking-[0.20em] text-[#6B6B6B] group-hover:text-[#4A4E57] transition-colors duration-300"
                   >
                     EDIT →
                   </Link>
@@ -191,7 +191,7 @@ export default function ProjectOutfitsGrid({
           >
             <div className="text-center">
               <p className="text-[24px] text-[#E2E0DB] group-hover:text-[#A8A8A4] transition-colors duration-300 mb-2">+</p>
-              <p className="text-[10px] tracking-[0.20em] text-[#A8A8A4] group-hover:text-[#0A0A0A] transition-colors duration-300">
+              <p className="text-[10px] tracking-[0.20em] text-[#A8A8A4] group-hover:text-[#4A4E57] transition-colors duration-300">
                 ADD OUTFIT
               </p>
             </div>

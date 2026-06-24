@@ -14,7 +14,7 @@ export default function Navigation({ transparent = false }: { transparent?: bool
   }, [])
 
   const isTransparent = transparent && !scrolled
-  const textColor = isTransparent ? 'text-white' : 'text-[#0A0A0A]'
+  const textColor = isTransparent ? 'text-white' : 'text-[#4A4E57]'
 
   return (
     <nav

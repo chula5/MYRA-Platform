@@ -21,7 +21,7 @@ export default async function ItemsPage({ searchParams }: PageProps) {
       <div className="flex items-center justify-between mb-8">
         <div>
           <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-2">ADMIN STUDIO</p>
-          <h1 className="text-[28px] tracking-[0.10em] text-[#0A0A0A]">ITEM LIBRARY</h1>
+          <h1 className="text-[28px] tracking-[0.10em] text-[#4A4E57]">ITEM LIBRARY</h1>
         </div>
         <Link
           href="/admin/items/new"
@@ -52,7 +52,7 @@ export default async function ItemsPage({ searchParams }: PageProps) {
             className={`px-4 py-2 text-[10px] tracking-[0.20em] transition-all duration-300 rounded-[2px] ${
               activeTab === tab
                 ? 'bg-[#0A0A0A] text-white'
-                : 'border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A]'
+                : 'border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57]'
             }`}
           >
             {tab.toUpperCase().replace('_', ' ')}

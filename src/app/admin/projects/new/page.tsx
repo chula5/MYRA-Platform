@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { createProject } from '@/app/admin/projects/actions'
 
 const inputClass =
-  'w-full border border-[#E2E0DB] bg-white px-4 py-2.5 text-[12px] tracking-[0.10em] text-[#0A0A0A] focus:outline-none focus:border-[#0A0A0A] transition-colors duration-300'
+  'w-full border border-[#E2E0DB] bg-white px-4 py-2.5 text-[12px] tracking-[0.10em] text-[#4A4E57] focus:outline-none focus:border-[#0A0A0A] transition-colors duration-300'
 const labelClass = 'text-[10px] tracking-[0.20em] text-[#6B6B6B] mb-1.5 block'
 
 export default function NewProjectPage() {
@@ -36,13 +36,13 @@ export default function NewProjectPage() {
       <div className="mb-8">
         <Link
           href="/admin/projects"
-          className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors duration-300 mb-4 inline-block"
+          className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300 mb-4 inline-block"
         >
           ← PROJECTS
         </Link>
         <div>
           <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-2">ADMIN STUDIO</p>
-          <h1 className="text-[28px] tracking-[0.10em] text-[#0A0A0A]">NEW PROJECT</h1>
+          <h1 className="text-[28px] tracking-[0.10em] text-[#4A4E57]">NEW PROJECT</h1>
         </div>
       </div>
 
@@ -94,7 +94,7 @@ export default function NewProjectPage() {
           </button>
           <Link
             href="/admin/projects"
-            className="border border-[#0A0A0A] bg-transparent text-[#0A0A0A] px-8 py-3.5 text-[11px] tracking-[0.20em] transition-colors duration-400 hover:bg-[#F2F2F0]"
+            className="border border-[#0A0A0A] bg-transparent text-[#4A4E57] px-8 py-3.5 text-[11px] tracking-[0.20em] transition-colors duration-400 hover:bg-[#F2F2F0]"
           >
             CANCEL
           </Link>

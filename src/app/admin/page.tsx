@@ -15,7 +15,7 @@ export default async function AdminDashboard() {
       {/* Header */}
       <div className="mb-10">
         <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-2">MYRA ADMIN STUDIO</p>
-        <h1 className="text-[28px] tracking-[0.10em] text-[#0A0A0A]">DASHBOARD</h1>
+        <h1 className="text-[28px] tracking-[0.10em] text-[#4A4E57]">DASHBOARD</h1>
       </div>
 
       {/* Stock alert — only shown when there's something to fix */}
@@ -149,12 +149,12 @@ function StatCard({
   const inner = (
     <>
       <p
-        className="text-[#0A0A0A] mb-1 tracking-[0.08em]"
+        className="text-[#4A4E57] mb-1 tracking-[0.08em]"
         style={{ fontSize: '32px', lineHeight: 1 }}
       >
         {value}
       </p>
-      <p className="text-[10px] tracking-[0.20em] text-[#0A0A0A] mb-3">{label}</p>
+      <p className="text-[10px] tracking-[0.20em] text-[#4A4E57] mb-3">{label}</p>
       <p className="text-[9px] tracking-[0.12em] text-[#A8A8A4]">{breakdown}</p>
     </>
   )
@@ -193,9 +193,9 @@ function StudioCard({
         group
       "
     >
-      <p className="text-[13px] tracking-[0.18em] text-[#0A0A0A] mb-3">{title}</p>
+      <p className="text-[13px] tracking-[0.18em] text-[#4A4E57] mb-3">{title}</p>
       <p className="text-[11px] tracking-[0.12em] text-[#6B6B6B] leading-relaxed">{description}</p>
-      <p className="mt-6 text-[11px] tracking-[0.18em] text-[#A8A8A4] group-hover:text-[#0A0A0A] transition-colors duration-300">
+      <p className="mt-6 text-[11px] tracking-[0.18em] text-[#A8A8A4] group-hover:text-[#4A4E57] transition-colors duration-300">
         OPEN →
       </p>
     </a>

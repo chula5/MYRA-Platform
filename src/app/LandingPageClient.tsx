@@ -69,7 +69,7 @@ export default function LandingPageClient() {
             <button
               onClick={closeModal}
               aria-label="Close"
-              className="absolute top-5 right-7 z-20 text-[#6B6B6B] hover:text-[#0A0A0A] text-[20px] leading-none transition-colors"
+              className="absolute top-5 right-7 z-20 text-[#6B6B6B] hover:text-[#4A4E57] text-[20px] leading-none transition-colors"
             >
               ×
             </button>
@@ -77,7 +77,7 @@ export default function LandingPageClient() {
             <div className="mirror-glass px-8 sm:px-12 pt-16 pb-12 sm:pb-14">
             {success ? (
               <div className="text-center py-6">
-                <p className="mirror-engrave text-[13px] tracking-[0.22em] text-[#0A0A0A] mb-3">YOU&rsquo;RE ON THE LIST</p>
+                <p className="mirror-engrave text-[13px] tracking-[0.22em] text-[#4A4E57] mb-3">YOU&rsquo;RE ON THE LIST</p>
                 <p className="text-[11px] tracking-[0.12em] text-[#6B6B6B] leading-relaxed">
                   Thank you — we&rsquo;ll be in touch with your first look at MYRA.
                 </p>
@@ -85,7 +85,7 @@ export default function LandingPageClient() {
             ) : (
               <div className="text-center">
                 <p className="text-[10px] tracking-[0.32em] text-[#8A8A86] mb-6">MYRA · THE WAITLIST</p>
-                <h2 className="mirror-engrave text-[clamp(34px,9vw,48px)] tracking-[0.04em] text-[#0A0A0A] leading-[0.95] mb-5">
+                <h2 className="mirror-engrave text-[clamp(34px,9vw,48px)] tracking-[0.04em] text-[#4A4E57] leading-[0.95] mb-5">
                   BE FIRST.
                 </h2>
                 <p className="text-[12px] tracking-[0.10em] text-[#6B6B6B] leading-relaxed mb-8 max-w-[320px] mx-auto">
@@ -100,13 +100,13 @@ export default function LandingPageClient() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="YOUR EMAIL ADDRESS"
-                    className="glass-input w-full rounded-full px-5 py-3.5 text-[12px] tracking-[0.10em] text-[#0A0A0A] placeholder-[#A8A8A4] text-center focus:outline-none"
+                    className="glass-input w-full rounded-full px-5 py-3.5 text-[12px] tracking-[0.10em] text-[#4A4E57] placeholder-[#A8A8A4] text-center focus:outline-none"
                   />
                   {error && <p className="text-[10px] tracking-[0.12em] text-[#B83A3A]">{error}</p>}
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="glass-dark w-full rounded-full py-3.5 text-[11px] tracking-[0.22em] text-[#0A0A0A] disabled:opacity-50"
+                    className="glass-dark w-full rounded-full py-3.5 text-[11px] tracking-[0.22em] text-[#4A4E57] disabled:opacity-50"
                   >
                     {submitting ? 'JOINING…' : 'REQUEST ACCESS'}
                   </button>
@@ -122,7 +122,7 @@ export default function LandingPageClient() {
       <div className="fixed bottom-0 left-0 right-0 z-40 pointer-events-none flex justify-center pb-5 sm:pb-7 px-4">
         <div className="pointer-events-auto w-full max-w-[460px]">
           {success ? (
-            <div className="glass-dark rounded-full text-[#0A0A0A] text-center text-[11px] tracking-[0.20em] px-8 py-4">
+            <div className="glass-dark rounded-full text-[#4A4E57] text-center text-[11px] tracking-[0.20em] px-8 py-4">
               YOU&rsquo;RE ON THE LIST ✓
             </div>
           ) : dismissed ? (
@@ -137,13 +137,13 @@ export default function LandingPageClient() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="JOIN THE WAITLIST — YOUR EMAIL"
-                className="flex-1 min-w-0 bg-transparent px-5 sm:px-6 py-3.5 text-[11px] tracking-[0.12em] text-[#0A0A0A] placeholder-[#A8A8A4] focus:outline-none"
+                className="flex-1 min-w-0 bg-transparent px-5 sm:px-6 py-3.5 text-[11px] tracking-[0.12em] text-[#4A4E57] placeholder-[#A8A8A4] focus:outline-none"
               />
               <button
                 type="submit"
                 disabled={submitting}
                 aria-label="Join the waitlist"
-                className="glass-dark flex-shrink-0 text-[#0A0A0A] px-6 sm:px-8 text-[16px] rounded-full m-1 disabled:opacity-50"
+                className="glass-dark flex-shrink-0 text-[#4A4E57] px-6 sm:px-8 text-[16px] rounded-full m-1 disabled:opacity-50"
               >
                 {submitting ? '…' : '→'}
               </button>
@@ -153,7 +153,7 @@ export default function LandingPageClient() {
             <div className="flex justify-center">
               <button
                 onClick={openModal}
-                className="glass-dark inline-flex items-center gap-3 rounded-full text-[#0A0A0A] text-[11px] sm:text-[12px] tracking-[0.22em] px-10 sm:px-14 py-3.5 sm:py-4"
+                className="glass-dark inline-flex items-center gap-3 rounded-full text-[#4A4E57] text-[11px] sm:text-[12px] tracking-[0.22em] px-10 sm:px-14 py-3.5 sm:py-4"
               >
                 JOIN THE WAITLIST
               </button>

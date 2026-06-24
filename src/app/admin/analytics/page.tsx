@@ -123,7 +123,7 @@ export default async function AnalyticsPage() {
     <div>
       <div className="mb-8">
         <p className="text-[10px] tracking-[0.25em] text-[#6B6B6B] mb-1">ADMIN</p>
-        <h1 className="text-[22px] tracking-[0.10em] text-[#0A0A0A]">ANALYTICS</h1>
+        <h1 className="text-[22px] tracking-[0.10em] text-[#4A4E57]">ANALYTICS</h1>
         <p className="text-[11px] tracking-[0.15em] text-[#A8A8A4] mt-1">Landing page · myraassistant.co.uk</p>
       </div>
 
@@ -155,7 +155,7 @@ ALTER TABLE public.landing_event ENABLE ROW LEVEL SECURITY;`}</pre>
         ].map((s) => (
           <div key={s.label} className="border border-[#E2E0DB] bg-white rounded-[3px] px-5 py-4">
             <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4] mb-2">{s.label}</p>
-            <p className="text-[28px] tracking-[0.05em] text-[#0A0A0A] leading-none">{s.value}</p>
+            <p className="text-[28px] tracking-[0.05em] text-[#4A4E57] leading-none">{s.value}</p>
             <p className="text-[8px] tracking-[0.16em] text-[#C4A882] mt-1">{s.sub}</p>
           </div>
         ))}
@@ -211,8 +211,8 @@ CREATE INDEX IF NOT EXISTS landing_event_ref_idx ON public.landing_event (ref);`
                 key={r.ref}
                 className={`grid grid-cols-[1fr_80px_90px_80px] gap-2 px-4 py-3 items-center border-b border-[#E2E0DB] last:border-0 ${i % 2 ? 'bg-[#FAFAF8]' : 'bg-white'}`}
               >
-                <span className="text-[11px] tracking-[0.06em] text-[#0A0A0A] truncate">{r.label}</span>
-                <span className="text-[12px] tracking-[0.04em] text-[#0A0A0A] text-right">{r.views}</span>
+                <span className="text-[11px] tracking-[0.06em] text-[#4A4E57] truncate">{r.label}</span>
+                <span className="text-[12px] tracking-[0.04em] text-[#4A4E57] text-right">{r.views}</span>
                 <span className="text-[12px] tracking-[0.04em] text-[#3A6B3A] text-right">{r.signups}</span>
                 <span className="text-[11px] tracking-[0.04em] text-[#6B6B6B] text-right">{r.conv}%</span>
               </div>
@@ -234,7 +234,7 @@ CREATE INDEX IF NOT EXISTS landing_event_ref_idx ON public.landing_event (ref);`
                 return (
                   <div key={type}>
                     <div className="flex justify-between mb-1">
-                      <span className="text-[9px] tracking-[0.16em] text-[#0A0A0A]">{CLICK_LABELS[type] ?? type.toUpperCase()}</span>
+                      <span className="text-[9px] tracking-[0.16em] text-[#4A4E57]">{CLICK_LABELS[type] ?? type.toUpperCase()}</span>
                       <span className="text-[9px] tracking-[0.12em] text-[#6B6B6B]">{count}</span>
                     </div>
                     <div className="h-[3px] bg-[#F2F2F2] rounded-full overflow-hidden">

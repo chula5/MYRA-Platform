@@ -24,7 +24,7 @@ export default async function ProjectPage({ params }: PageProps) {
       <div className="mb-8">
         <Link
           href="/admin/projects"
-          className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors duration-300 mb-4 inline-block"
+          className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300 mb-4 inline-block"
         >
           ← PROJECTS
         </Link>
@@ -50,7 +50,7 @@ export default async function ProjectPage({ params }: PageProps) {
               >
                 <button
                   type="submit"
-                  className="border border-[#0A0A0A] bg-transparent text-[#0A0A0A] px-6 py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#F2F2F0] transition-colors duration-400"
+                  className="border border-[#0A0A0A] bg-transparent text-[#4A4E57] px-6 py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#F2F2F0] transition-colors duration-400"
                 >
                   MARK IN REVIEW
                 </button>
@@ -67,7 +67,7 @@ export default async function ProjectPage({ params }: PageProps) {
                 >
                   <button
                     type="submit"
-                    className="border border-[#E2E0DB] bg-transparent text-[#6B6B6B] px-6 py-2.5 text-[10px] tracking-[0.20em] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors duration-400"
+                    className="border border-[#E2E0DB] bg-transparent text-[#6B6B6B] px-6 py-2.5 text-[10px] tracking-[0.20em] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors duration-400"
                   >
                     BACK TO DRAFT
                   </button>
@@ -97,7 +97,7 @@ export default async function ProjectPage({ params }: PageProps) {
               >
                 <button
                   type="submit"
-                  className="border border-[#E2E0DB] bg-transparent text-[#6B6B6B] px-6 py-2.5 text-[10px] tracking-[0.20em] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors duration-400"
+                  className="border border-[#E2E0DB] bg-transparent text-[#6B6B6B] px-6 py-2.5 text-[10px] tracking-[0.20em] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors duration-400"
                 >
                   ARCHIVE PROJECT
                 </button>

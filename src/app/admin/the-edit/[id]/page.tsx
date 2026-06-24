@@ -23,7 +23,7 @@ export default async function TheEditPreviewDetailPage({ params, searchParams }:
     <div>
       <Link
         href="/admin/the-edit"
-        className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors duration-300 mb-6 inline-block"
+        className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300 mb-6 inline-block"
       >
         ← THE EDIT PREVIEW
       </Link>

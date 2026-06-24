@@ -66,7 +66,7 @@ export default function ProductViewManager({ clips }: { clips: Clip[] }) {
     <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h2 className="text-[14px] tracking-[0.14em] text-[#0A0A0A]">DEMO VIDEOS</h2>
+          <h2 className="text-[14px] tracking-[0.14em] text-[#4A4E57]">DEMO VIDEOS</h2>
           <p className="text-[11px] tracking-[0.13em] text-[#A8A8A4] mt-1 max-w-[560px] leading-relaxed">
             Optional saved clips. Screen-record a flow (or capture one of the previews above), host it
             (Cloudinary, Loom or a YouTube link), then add it here with a title and caption.
@@ -146,7 +146,7 @@ function ShowcaseCard({ clip, onEdit, onDelete }: { clip: Clip; onEdit: () => vo
           <span className="w-1.5 h-1.5 rounded-full bg-[#D8D6D1]" />
         </div>
         {clip.caption && (
-          <span className="text-[10px] tracking-[0.22em] text-[#0A0A0A] uppercase">{clip.caption}</span>
+          <span className="text-[10px] tracking-[0.22em] text-[#4A4E57] uppercase">{clip.caption}</span>
         )}
       </div>
 
@@ -157,11 +157,11 @@ function ShowcaseCard({ clip, onEdit, onDelete }: { clip: Clip; onEdit: () => vo
 
       {/* Title + actions */}
       <div className="flex items-start justify-between gap-3 px-1 pt-4">
-        <h2 className="text-[20px] leading-tight text-[#0A0A0A] tracking-[0.01em]" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
+        <h2 className="text-[20px] leading-tight text-[#4A4E57] tracking-[0.01em]" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
           {clip.title}
         </h2>
         <div className="flex gap-2 flex-shrink-0 pt-1">
-          <button onClick={onEdit} className="text-[9px] tracking-[0.16em] text-[#6B6B6B] hover:text-[#0A0A0A] border border-[#E2E0DB] hover:border-[#0A0A0A] px-3 py-1.5 rounded-[3px] transition-colors">EDIT</button>
+          <button onClick={onEdit} className="text-[9px] tracking-[0.16em] text-[#6B6B6B] hover:text-[#4A4E57] border border-[#E2E0DB] hover:border-[#0A0A0A] px-3 py-1.5 rounded-[3px] transition-colors">EDIT</button>
           <button onClick={onDelete} className="text-[9px] tracking-[0.16em] text-[#A8A8A4] hover:text-[#B83A3A] border border-[#E2E0DB] hover:border-[#B83A3A] px-3 py-1.5 rounded-[3px] transition-colors">DELETE</button>
         </div>
       </div>
@@ -189,7 +189,7 @@ function ClipForm({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const input = 'w-full border border-[#E2E0DB] bg-white px-4 py-2.5 text-[12px] tracking-[0.06em] text-[#0A0A0A] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors'
+  const input = 'w-full border border-[#E2E0DB] bg-white px-4 py-2.5 text-[12px] tracking-[0.06em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors'
 
   async function save() {
     setSaving(true)
@@ -240,7 +240,7 @@ function ClipForm({
         <button onClick={save} disabled={saving} className="bg-[#0A0A0A] text-white px-6 py-2.5 rounded-[3px] text-[10px] tracking-[0.20em] hover:opacity-85 transition-opacity disabled:opacity-50">
           {saving ? 'SAVING…' : initial ? 'SAVE CHANGES' : 'ADD VIDEO'}
         </button>
-        <button onClick={onCancel} className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#0A0A0A] px-4 transition-colors">CANCEL</button>
+        <button onClick={onCancel} className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#4A4E57] px-4 transition-colors">CANCEL</button>
       </div>
     </div>
   )

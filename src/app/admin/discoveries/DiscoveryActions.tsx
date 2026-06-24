@@ -61,7 +61,7 @@ export default function DiscoveryActions({
         type="button"
         onClick={handleDismiss}
         disabled={!!pending}
-        className="py-1.5 text-[9px] tracking-[0.18em] border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] disabled:opacity-40 transition-colors"
+        className="py-1.5 text-[9px] tracking-[0.18em] border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] disabled:opacity-40 transition-colors"
       >
         {pending === 'dismiss' ? 'DISMISSING...' : 'DISMISS'}
       </button>

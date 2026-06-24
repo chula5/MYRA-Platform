@@ -58,14 +58,14 @@ export default async function EditItemPage({ params }: PageProps) {
       <div className="mb-8">
         <Link
           href="/admin/items"
-          className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors duration-300 mb-4 inline-block"
+          className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300 mb-4 inline-block"
         >
           ← ITEM LIBRARY
         </Link>
         <div className="flex items-start justify-between">
           <div>
             <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-2">EDIT ITEM</p>
-            <h1 className="text-[28px] tracking-[0.10em] text-[#0A0A0A]">
+            <h1 className="text-[28px] tracking-[0.10em] text-[#4A4E57]">
               {item.product_name.toUpperCase()}
             </h1>
           </div>
@@ -80,7 +80,7 @@ export default async function EditItemPage({ params }: PageProps) {
               >
                 <button
                   type="submit"
-                  className="border border-[#0A0A0A] bg-transparent text-[#0A0A0A] px-6 py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-400"
+                  className="border border-[#0A0A0A] bg-transparent text-[#4A4E57] px-6 py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-400"
                 >
                   {nextStatusLabel}
                 </button>
@@ -104,7 +104,7 @@ export default async function EditItemPage({ params }: PageProps) {
                 COMPOSITIONAL YIELD
               </p>
               <div className="bg-white border border-[#E2E0DB] p-4">
-                <p className="text-[36px] tracking-[0.05em] text-[#0A0A0A] leading-none mb-2">
+                <p className="text-[36px] tracking-[0.05em] text-[#4A4E57] leading-none mb-2">
                   {yieldCount}
                 </p>
                 <p className="text-[10px] tracking-[0.18em] text-[#6B6B6B] mb-4 leading-relaxed">
@@ -150,7 +150,7 @@ export default async function EditItemPage({ params }: PageProps) {
                     </div>
                   )}
                   <div className="p-3">
-                    <p className="text-[10px] tracking-[0.12em] text-[#0A0A0A] truncate">
+                    <p className="text-[10px] tracking-[0.12em] text-[#4A4E57] truncate">
                       {(outfit.aesthetic_label || 'Untitled').toUpperCase()}
                     </p>
                     {outfit.celebrity_name && (
@@ -158,7 +158,7 @@ export default async function EditItemPage({ params }: PageProps) {
                         {outfit.celebrity_name}
                       </p>
                     )}
-                    <p className="text-[9px] tracking-[0.10em] text-[#C4A882] mt-1 group-hover:text-[#0A0A0A] transition-colors">
+                    <p className="text-[9px] tracking-[0.10em] text-[#C4A882] mt-1 group-hover:text-[#4A4E57] transition-colors">
                       VIEW →
                     </p>
                   </div>

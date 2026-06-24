@@ -38,7 +38,7 @@ export default function LandingPage() {
       {/* ── Manifesto — sits directly under the hero photo ──── */}
       <section className="bg-[#FAFAF8] pt-20 sm:pt-28 pb-12 sm:pb-16 px-6 sm:px-10">
         <div className="max-w-5xl mx-auto text-center">
-          <p className="text-[#0A0A0A] tracking-[0.10em] sm:tracking-[0.13em] leading-[1.65] text-[clamp(13px,1.7vw,18px)]">
+          <p className="text-[#4A4E57] tracking-[0.10em] sm:tracking-[0.13em] leading-[1.65] text-[clamp(13px,1.7vw,18px)]">
             THE FIRST OUTFIT-LED SHOPPING PLATFORM. WE CURATE THE BRANDS AND
             BUILD THE OUTFITS, SO YOU DON&apos;T HAVE&nbsp;TO.
           </p>
@@ -51,7 +51,7 @@ export default function LandingPage() {
           <p className="text-[10px] sm:text-[11px] tracking-[0.30em] text-[#6B6B6B] mb-10 sm:mb-12">
             OUR TAKE
           </p>
-          <div className="text-[#0A0A0A] tracking-[0.08em] sm:tracking-[0.10em] leading-[1.85] text-[clamp(12px,1.4vw,15px)] space-y-7 sm:space-y-8">
+          <div className="text-[#4A4E57] tracking-[0.08em] sm:tracking-[0.10em] leading-[1.85] text-[clamp(12px,1.4vw,15px)] space-y-7 sm:space-y-8">
             <p>
               SHOPPING HAS BECOME EXHAUSTING. NUMEROUS TABS, ENDLESS
               SCROLLING AND ALGORITHMS THAT FEED YOU MORE OF THE SAME. WE
@@ -114,7 +114,7 @@ export default function LandingPage() {
           <div className="text-center mb-10">
             <Link
               href="/"
-              className="text-[20px] tracking-[0.25em] text-[#0A0A0A] hover:opacity-60 transition-opacity duration-300"
+              className="text-[20px] tracking-[0.25em] text-[#4A4E57] hover:opacity-60 transition-opacity duration-300"
             >
               MYRA
             </Link>
@@ -125,10 +125,10 @@ export default function LandingPage() {
 
           {/* Footer links */}
           <div className="flex justify-end items-center flex-wrap gap-8">
-            <a href="#" className="text-[11px] tracking-[0.22em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors duration-300">
+            <a href="#" className="text-[11px] tracking-[0.22em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300">
               PRIVACY
             </a>
-            <a href="#" className="text-[11px] tracking-[0.22em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors duration-300">
+            <a href="#" className="text-[11px] tracking-[0.22em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300">
               TERMS
             </a>
           </div>

@@ -39,13 +39,13 @@ export default function ShopTheLookOverlay({
         <span className="text-white text-[8px] sm:text-[9px] tracking-[0.18em] drop-shadow-[0_1px_3px_rgba(0,0,0,0.55)]">
           SHOP THE LOOK
         </span>
-        <span className="bg-white/90 text-[#0A0A0A] text-[8px] tracking-[0.08em] rounded-full px-1.5 py-0.5 leading-none">
+        <span className="bg-white/90 text-[#4A4E57] text-[8px] tracking-[0.08em] rounded-full px-1.5 py-0.5 leading-none">
           {items.length}
         </span>
         <button
           onClick={onClose}
           aria-label="Hide shop the look"
-          className="ml-auto bg-white/90 text-[#0A0A0A] w-4 h-4 rounded-full text-[10px] leading-none flex items-center justify-center hover:bg-white"
+          className="ml-auto bg-white/90 text-[#4A4E57] w-4 h-4 rounded-full text-[10px] leading-none flex items-center justify-center hover:bg-white"
         >
           ×
         </button>
@@ -91,11 +91,11 @@ function ItemCard({ item, onShop }: { item: SourceItem; onShop: () => void }) {
         <p className="text-[6px] sm:text-[7px] tracking-[0.12em] text-[#6B6B6B] uppercase truncate">
           {item.brand?.name ?? 'BRAND'}
         </p>
-        <p className="text-[8px] sm:text-[9px] leading-[1.15] text-[#0A0A0A] font-semibold line-clamp-2">
+        <p className="text-[8px] sm:text-[9px] leading-[1.15] text-[#4A4E57] font-semibold line-clamp-2">
           {item.product_name}
         </p>
         <div className="mt-auto flex items-center justify-between gap-1 pt-0.5">
-          <span className="text-[8px] sm:text-[9px] text-[#0A0A0A]">{price}</span>
+          <span className="text-[8px] sm:text-[9px] text-[#4A4E57]">{price}</span>
           {item.retailer_url && (
             <button
               onClick={onShop}

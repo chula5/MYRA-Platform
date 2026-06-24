@@ -150,7 +150,7 @@ export default async function SignupPreferencesPage() {
     <div>
       <div className="mb-8">
         <p className="text-[10px] tracking-[0.25em] text-[#6B6B6B] mb-1">ADMIN</p>
-        <h1 className="text-[22px] tracking-[0.10em] text-[#0A0A0A]">SIGN-UP PREFERENCES</h1>
+        <h1 className="text-[22px] tracking-[0.10em] text-[#4A4E57]">SIGN-UP PREFERENCES</h1>
         <p className="text-[11px] tracking-[0.15em] text-[#A8A8A4] mt-1">
           What new users tell us about their taste at sign-up
         </p>
@@ -190,7 +190,7 @@ ALTER TABLE public.signup_preference ENABLE ROW LEVEL SECURITY;`}</pre>
         ].map((s) => (
           <div key={s.label} className="border border-[#E2E0DB] bg-white rounded-[3px] px-5 py-4">
             <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4] mb-2">{s.label}</p>
-            <p className="text-[20px] tracking-[0.04em] text-[#0A0A0A] leading-tight">{s.value}</p>
+            <p className="text-[20px] tracking-[0.04em] text-[#4A4E57] leading-tight">{s.value}</p>
           </div>
         ))}
       </div>
@@ -210,7 +210,7 @@ ALTER TABLE public.signup_preference ENABLE ROW LEVEL SECURITY;`}</pre>
               {groupRanked.map((g) => (
                 <div key={g.key}>
                   <div className="flex justify-between mb-1">
-                    <span className="text-[9px] tracking-[0.12em] text-[#0A0A0A]">{g.name.toUpperCase()}</span>
+                    <span className="text-[9px] tracking-[0.12em] text-[#4A4E57]">{g.name.toUpperCase()}</span>
                     <span className="text-[9px] tracking-[0.10em] text-[#6B6B6B]">{g.count}</span>
                   </div>
                   <div className="h-[4px] bg-[#F2F2F2] rounded-full overflow-hidden">
@@ -228,7 +228,7 @@ ALTER TABLE public.signup_preference ENABLE ROW LEVEL SECURITY;`}</pre>
               {ageRanked.map((a) => (
                 <div key={a.range}>
                   <div className="flex justify-between mb-1">
-                    <span className="text-[9px] tracking-[0.12em] text-[#0A0A0A]">{a.range}</span>
+                    <span className="text-[9px] tracking-[0.12em] text-[#4A4E57]">{a.range}</span>
                     <span className="text-[9px] tracking-[0.10em] text-[#6B6B6B]">{a.count}</span>
                   </div>
                   <div className="h-[4px] bg-[#F2F2F2] rounded-full overflow-hidden">
@@ -304,19 +304,19 @@ ALTER TABLE public.item_click ENABLE ROW LEVEL SECURITY;`}</pre>
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[10px] tracking-[0.12em] text-[#6B6B6B] truncate">{(m?.brand || '').toUpperCase()}</p>
-                    <p className="text-[11px] tracking-[0.06em] text-[#0A0A0A] truncate">{m?.name ?? id}</p>
+                    <p className="text-[11px] tracking-[0.06em] text-[#4A4E57] truncate">{m?.name ?? id}</p>
                   </div>
                   {m?.url && (
                     <a
                       href={m.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-[9px] tracking-[0.16em] text-[#A8A8A4] hover:text-[#0A0A0A] flex-shrink-0"
+                      className="text-[9px] tracking-[0.16em] text-[#A8A8A4] hover:text-[#4A4E57] flex-shrink-0"
                     >
                       ↗
                     </a>
                   )}
-                  <span className="text-[12px] tracking-[0.06em] text-[#0A0A0A] w-12 text-right flex-shrink-0">
+                  <span className="text-[12px] tracking-[0.06em] text-[#4A4E57] w-12 text-right flex-shrink-0">
                     {count}
                   </span>
                 </div>
@@ -385,7 +385,7 @@ ALTER TABLE public.saved_outfit ENABLE ROW LEVEL SECURITY;`}</pre>
               key={r.user_id}
               className={`grid grid-cols-[1fr_90px_1fr_70px] gap-3 px-5 py-3 border-b border-[#E2E0DB] last:border-0 items-center ${i % 2 ? 'bg-[#FAFAF8]' : 'bg-white'}`}
             >
-              <span className="text-[11px] tracking-[0.06em] text-[#0A0A0A] truncate">{r.email ?? '—'}</span>
+              <span className="text-[11px] tracking-[0.06em] text-[#4A4E57] truncate">{r.email ?? '—'}</span>
               <span className="text-[10px] tracking-[0.10em] text-[#6B6B6B]">{r.age_range ?? '—'}</span>
               <span className="text-[9px] tracking-[0.08em] text-[#6B6B6B] leading-relaxed">
                 {(r.brand_groups ?? []).map((g) => GROUP_NAME.get(g)?.split(' / ')[0] ?? g).join(', ') || '—'}

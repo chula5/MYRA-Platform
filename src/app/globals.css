@@ -41,7 +41,7 @@ textarea {
 html,
 body {
   background-color: #ffffff;
-  color: #0A0A0A;
+  color: #4A4E57;
   margin: 0;
   padding: 0;
 }
@@ -71,99 +71,69 @@ html {
   transition: all 400ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ── Liquid glass surfaces ───────────────────────────────────────
-   Frosted, reflective surfaces that lean into MYRA's mirror idea.
-   .glass-dark  — glossy dark surface (primary buttons)
-   .glass-light — frosted light surface (secondary buttons, tiles)
-   .glass-input — frosted input field
-   Each gets a soft top "reflection" sheen via ::before. */
+/* ── Soft neumorphic surfaces ────────────────────────────────────
+   Off-white raised elements with soft dual shadows (light top-left,
+   shadow bottom-right). Slate text. Pressed (inset) on click.
+   .glass-dark  — primary buttons (slightly crisper)
+   .glass-light — secondary buttons / tiles
+   .glass-input — input fields (recessed / inset) */
 .glass-dark,
 .glass-light,
 .glass-input {
   position: relative;
-  isolation: isolate;
-  -webkit-backdrop-filter: blur(10px) saturate(140%);
-  backdrop-filter: blur(10px) saturate(140%);
-  transition: box-shadow 0.4s ease, background 0.4s ease, border-color 0.3s ease;
-}
-.glass-dark::before,
-.glass-light::before,
-.glass-input::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  z-index: 1;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.42) 0%,
-    rgba(255, 255, 255, 0.08) 36%,
-    rgba(255, 255, 255, 0) 54%
-  );
-}
-.glass-dark > *,
-.glass-light > *,
-.glass-input > * {
-  position: relative;
-  z-index: 2;
+  border: none;
+  color: #4A4E57;
+  background: #eef0f3;
+  transition: box-shadow 0.3s ease, background 0.3s ease;
 }
 
-/* Primary — soft light frosted with a gentle bottom glow (neumorphic) */
+/* Primary */
 .glass-dark {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(236, 236, 236, 0.78) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  color: #0A0A0A;
   box-shadow:
-    0 10px 24px rgba(0, 0, 0, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 1),
-    inset 0 -12px 20px -10px rgba(255, 255, 255, 0.9),
-    inset 0 -3px 8px rgba(0, 0, 0, 0.05);
+    7px 7px 16px rgba(182, 188, 199, 0.65),
+    -7px -7px 16px rgba(255, 255, 255, 1);
 }
 .glass-dark:hover {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 1) 0%, rgba(245, 245, 245, 0.9) 100%);
   box-shadow:
-    0 14px 30px rgba(0, 0, 0, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 1),
-    inset 0 -12px 20px -10px rgba(255, 255, 255, 1),
-    inset 0 -3px 8px rgba(0, 0, 0, 0.05);
+    4px 4px 11px rgba(182, 188, 199, 0.6),
+    -4px -4px 11px rgba(255, 255, 255, 1);
+}
+.glass-dark:active {
+  box-shadow:
+    inset 4px 4px 9px rgba(182, 188, 199, 0.7),
+    inset -4px -4px 9px rgba(255, 255, 255, 0.95);
 }
 
-/* Frosted light — secondary buttons / tiles */
+/* Secondary */
 .glass-light {
-  background: rgba(255, 255, 255, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.75);
-  color: #0A0A0A;
   box-shadow:
-    0 8px 22px rgba(0, 0, 0, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.95),
-    inset 0 -4px 10px rgba(0, 0, 0, 0.04);
+    6px 6px 14px rgba(190, 196, 206, 0.55),
+    -6px -6px 14px rgba(255, 255, 255, 0.95);
 }
 .glass-light:hover {
-  background: rgba(255, 255, 255, 0.72);
   box-shadow:
-    0 12px 28px rgba(0, 0, 0, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 1),
-    inset 0 -4px 10px rgba(0, 0, 0, 0.05);
+    3px 3px 9px rgba(190, 196, 206, 0.5),
+    -3px -3px 9px rgba(255, 255, 255, 1);
+}
+.glass-light:active {
+  box-shadow:
+    inset 4px 4px 9px rgba(190, 196, 206, 0.65),
+    inset -4px -4px 9px rgba(255, 255, 255, 0.95);
 }
 
-/* Frosted input field */
+/* Input — recessed */
 .glass-input {
-  background: rgba(255, 255, 255, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.7);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.95),
-    inset 0 2px 6px rgba(0, 0, 0, 0.05),
-    0 6px 18px rgba(0, 0, 0, 0.06);
+    inset 4px 4px 9px rgba(190, 196, 206, 0.6),
+    inset -4px -4px 9px rgba(255, 255, 255, 0.95);
 }
 .glass-input:focus-within,
 .glass-input:focus {
-  border-color: rgba(10, 10, 10, 0.45);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 1),
-    inset 0 2px 6px rgba(0, 0, 0, 0.06),
-    0 8px 22px rgba(0, 0, 0, 0.10);
+    inset 5px 5px 11px rgba(182, 188, 199, 0.7),
+    inset -5px -5px 11px rgba(255, 255, 255, 1);
 }
+.glass-input::placeholder { color: #9aa0ab; }
 
 /* ── Mirror surface (waitlist popup) ─────────────────────────────
    An arched cheval-mirror frame around a reflective glass panel with a

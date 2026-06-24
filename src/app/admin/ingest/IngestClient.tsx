@@ -113,7 +113,7 @@ export default function IngestClient() {
             className={`px-4 py-2 text-[10px] tracking-[0.20em] transition-all duration-300 ${
               mode === 'list'
                 ? 'bg-[#0A0A0A] text-white'
-                : 'border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A]'
+                : 'border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57]'
             }`}
           >
             URL LIST
@@ -124,7 +124,7 @@ export default function IngestClient() {
             className={`px-4 py-2 text-[10px] tracking-[0.20em] transition-all duration-300 ${
               mode === 'collection'
                 ? 'bg-[#0A0A0A] text-white'
-                : 'border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A]'
+                : 'border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57]'
             }`}
           >
             COLLECTION PAGE
@@ -145,7 +145,7 @@ export default function IngestClient() {
               ? 'https://www.net-a-porter.com/.../1683828\nhttps://www.mytheresa.com/.../P00789012\n...'
               : 'https://www.net-a-porter.com/en-gb/shop/designer/toteme/new-in'
           }
-          className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.05em] text-[#0A0A0A] focus:outline-none focus:border-[#0A0A0A] transition-colors duration-300 font-mono leading-relaxed"
+          className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.05em] text-[#4A4E57] focus:outline-none focus:border-[#0A0A0A] transition-colors duration-300 font-mono leading-relaxed"
         />
 
         <div className="mt-4 flex items-center gap-3">
@@ -177,7 +177,7 @@ export default function IngestClient() {
       {/* Result */}
       {result && (
         <div className="mb-6 p-4 border border-[#C4A882] bg-[#FAF6EE]">
-          <p className="text-[10px] tracking-[0.20em] text-[#0A0A0A]">
+          <p className="text-[10px] tracking-[0.20em] text-[#4A4E57]">
             {result.created} ITEM{result.created === 1 ? '' : 'S'} CREATED AS DRAFTS
             {result.failed > 0 && ` · ${result.failed} FAILED`}
             {' · '}
@@ -197,7 +197,7 @@ export default function IngestClient() {
               <button
                 type="button"
                 onClick={() => selectAll(true)}
-                className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors"
+                className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors"
               >
                 SELECT ALL OK
               </button>
@@ -205,7 +205,7 @@ export default function IngestClient() {
               <button
                 type="button"
                 onClick={() => selectAll(false)}
-                className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors"
+                className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors"
               >
                 CLEAR
               </button>
@@ -267,7 +267,7 @@ export default function IngestClient() {
                       <p className="text-[10px] tracking-[0.20em] text-[#A8A8A4] mb-1 truncate">
                         {(q.parsed.brand_name ?? 'UNKNOWN BRAND').toUpperCase()}
                       </p>
-                      <p className="text-[13px] tracking-[0.05em] text-[#0A0A0A] mb-2 truncate">
+                      <p className="text-[13px] tracking-[0.05em] text-[#4A4E57] mb-2 truncate">
                         {(q.parsed.product_name ?? 'UNTITLED').toUpperCase()}
                       </p>
                       <div className="flex items-center gap-3 flex-wrap text-[10px] tracking-[0.15em] text-[#6B6B6B]">
@@ -295,7 +295,7 @@ export default function IngestClient() {
                 <button
                   type="button"
                   onClick={() => discard(q.id)}
-                  className="text-[10px] tracking-[0.20em] text-[#A8A8A4] hover:text-[#0A0A0A] transition-colors mt-1"
+                  className="text-[10px] tracking-[0.20em] text-[#A8A8A4] hover:text-[#4A4E57] transition-colors mt-1"
                 >
                   ×
                 </button>
@@ -324,7 +324,7 @@ function ScoreStrip({ parsed }: { parsed: NonNullable<ParsedCandidate['parsed']>
     <div className="flex items-center gap-3 mt-2 flex-wrap">
       {present.map(([label, val]) => (
         <span key={label} className="text-[9px] tracking-[0.18em] text-[#A8A8A4]">
-          {label} <span className="text-[#0A0A0A]">{val}</span>
+          {label} <span className="text-[#4A4E57]">{val}</span>
         </span>
       ))}
     </div>

@@ -24,7 +24,7 @@ import { addOutfitToLookbook, removeOutfitFromLookbook } from '@/app/admin/lookb
 import type { Lookbook } from '@/types/database'
 
 const inputClass =
-  'w-full border border-[#E2E0DB] bg-white px-4 py-2.5 text-[12px] tracking-[0.10em] text-[#0A0A0A] focus:outline-none focus:border-[#0A0A0A] transition-colors duration-300'
+  'w-full border border-[#E2E0DB] bg-white px-4 py-2.5 text-[12px] tracking-[0.10em] text-[#4A4E57] focus:outline-none focus:border-[#0A0A0A] transition-colors duration-300'
 const labelClass = 'text-[10px] tracking-[0.20em] text-[#6B6B6B] mb-1.5 block'
 const sectionHeadingClass =
   'text-[10px] tracking-[0.25em] text-[#6B6B6B] mb-6 pb-3 border-b border-[#E2E0DB]'
@@ -901,7 +901,7 @@ INSTRUCTIONS:
                   onClick={handleSuggestTags}
                   disabled={tagsBusy}
                   title="Generate occasion/season tags from this outfit's items with AI"
-                  className="text-[9px] tracking-[0.18em] text-[#6B6B6B] hover:text-[#0A0A0A] border border-[#E2E0DB] hover:border-[#0A0A0A] px-2.5 py-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="text-[9px] tracking-[0.18em] text-[#6B6B6B] hover:text-[#4A4E57] border border-[#E2E0DB] hover:border-[#0A0A0A] px-2.5 py-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {tagsBusy ? 'SUGGESTING…' : '✦ SUGGEST TAGS'}
                 </button>
@@ -1080,7 +1080,7 @@ INSTRUCTIONS:
                     <div key={i} className={`border p-4 ${inp.added ? 'border-[#0A0A0A] bg-[#F8F8F6] opacity-60' : 'border-[#E2E0DB] bg-white'}`}>
                       <div className="flex items-center justify-between mb-3">
                         <span className="text-[9px] tracking-[0.20em] text-[#A8A8A4]">{item.slot.toUpperCase()}</span>
-                        {inp.added && <span className="text-[9px] tracking-[0.15em] text-[#0A0A0A]">ADDED ✓</span>}
+                        {inp.added && <span className="text-[9px] tracking-[0.15em] text-[#4A4E57]">ADDED ✓</span>}
                       </div>
                       <div className="flex items-start justify-between gap-2 mb-3">
                         <p className="text-[10px] tracking-[0.10em] text-[#6B6B6B] italic flex-1">{item.description}</p>
@@ -1088,7 +1088,7 @@ INSTRUCTIONS:
                           href={`https://www.google.com/search?q=${encodeURIComponent(item.description)}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="shrink-0 border border-[#E2E0DB] px-2.5 py-1 text-[9px] tracking-[0.15em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors duration-300 whitespace-nowrap"
+                          className="shrink-0 border border-[#E2E0DB] px-2.5 py-1 text-[9px] tracking-[0.15em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors duration-300 whitespace-nowrap"
                         >
                           SEARCH →
                         </a>
@@ -1162,7 +1162,7 @@ INSTRUCTIONS:
                             <button
                               type="button"
                               onClick={() => openInventoryFor(item.slot)}
-                              className="w-full mt-2 border border-[#0A0A0A] text-[#0A0A0A] py-2 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-200"
+                              className="w-full mt-2 border border-[#0A0A0A] text-[#4A4E57] py-2 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-200"
                             >
                               PICK FROM INVENTORY →
                             </button>
@@ -1185,7 +1185,7 @@ INSTRUCTIONS:
                   onClick={handleCopyItemsTable}
                   disabled={orderedItems.length === 0}
                   title="Copy as a tab-separated table for Sheets / Excel / Numbers"
-                  className="text-[9px] tracking-[0.20em] border border-[#E2E0DB] px-3 py-1.5 text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-200"
+                  className="text-[9px] tracking-[0.20em] border border-[#E2E0DB] px-3 py-1.5 text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-200"
                 >
                   {copyState === 'copied'
                     ? 'COPIED ✓'
@@ -1196,7 +1196,7 @@ INSTRUCTIONS:
                 <button
                   type="button"
                   onClick={() => openInventoryFor(null)}
-                  className="text-[9px] tracking-[0.20em] border border-[#0A0A0A] px-3 py-1.5 text-[#0A0A0A] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-200"
+                  className="text-[9px] tracking-[0.20em] border border-[#0A0A0A] px-3 py-1.5 text-[#4A4E57] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-200"
                 >
                   + FROM INVENTORY
                 </button>
@@ -1219,7 +1219,7 @@ INSTRUCTIONS:
                             <div className="p-3">
                               <div className="flex items-center justify-between mb-3">
                                 <StatusBadge status={oi.slot} />
-                                <button type="button" onClick={() => setEditingItemId(null)} className="text-[9px] tracking-[0.15em] text-[#A8A8A4] hover:text-[#0A0A0A]">CANCEL</button>
+                                <button type="button" onClick={() => setEditingItemId(null)} className="text-[9px] tracking-[0.15em] text-[#A8A8A4] hover:text-[#4A4E57]">CANCEL</button>
                               </div>
                               <div className="space-y-2">
                                 <input type="text" placeholder="PRODUCT NAME" value={editFields.productName} onChange={(e) => setEditFields((p) => ({ ...p, productName: e.target.value }))} className={inputClass} />
@@ -1245,7 +1245,7 @@ INSTRUCTIONS:
                                   type="button"
                                   onClick={() => moveItem(idx, -1)}
                                   disabled={idx === 0}
-                                  className="w-5 h-5 flex items-center justify-center text-[#A8A8A4] hover:text-[#0A0A0A] disabled:opacity-20 transition-colors text-[10px]"
+                                  className="w-5 h-5 flex items-center justify-center text-[#A8A8A4] hover:text-[#4A4E57] disabled:opacity-20 transition-colors text-[10px]"
                                 >
                                   ▲
                                 </button>
@@ -1253,7 +1253,7 @@ INSTRUCTIONS:
                                   type="button"
                                   onClick={() => moveItem(idx, 1)}
                                   disabled={idx === orderedItems.length - 1}
-                                  className="w-5 h-5 flex items-center justify-center text-[#A8A8A4] hover:text-[#0A0A0A] disabled:opacity-20 transition-colors text-[10px]"
+                                  className="w-5 h-5 flex items-center justify-center text-[#A8A8A4] hover:text-[#4A4E57] disabled:opacity-20 transition-colors text-[10px]"
                                 >
                                   ▼
                                 </button>
@@ -1271,7 +1271,7 @@ INSTRUCTIONS:
                               )}
                               <div className="flex-1 min-w-0">
                                 <p className="text-[9px] tracking-[0.15em] text-[#A8A8A4] mb-0.5">{oi.item?.brand?.name?.toUpperCase()}</p>
-                                <p className="text-[10px] tracking-[0.12em] text-[#0A0A0A] truncate">{oi.item?.product_name?.toUpperCase()}</p>
+                                <p className="text-[10px] tracking-[0.12em] text-[#4A4E57] truncate">{oi.item?.product_name?.toUpperCase()}</p>
                                 <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                                   <StatusBadge status={oi.slot} />
                                   {oi.item?.stock_status && oi.item.stock_status !== 'in_stock' && (
@@ -1280,8 +1280,8 @@ INSTRUCTIONS:
                                 </div>
                               </div>
                               <div className="flex flex-col items-end gap-1.5 shrink-0">
-                                <button type="button" onClick={() => startEdit(oi)} className="text-[9px] tracking-[0.15em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors">EDIT</button>
-                                <button type="button" onClick={() => handleRemoveItem(oi.outfit_item_id)} disabled={removingId === oi.outfit_item_id} className="text-[#A8A8A4] hover:text-[#0A0A0A] transition-colors text-[16px]">×</button>
+                                <button type="button" onClick={() => startEdit(oi)} className="text-[9px] tracking-[0.15em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors">EDIT</button>
+                                <button type="button" onClick={() => handleRemoveItem(oi.outfit_item_id)} disabled={removingId === oi.outfit_item_id} className="text-[#A8A8A4] hover:text-[#4A4E57] transition-colors text-[16px]">×</button>
                               </div>
                             </div>
                           )}
@@ -1294,7 +1294,7 @@ INSTRUCTIONS:
                           type="button"
                           onClick={handleSaveOrder}
                           disabled={savingOrder}
-                          className="w-full border border-[#0A0A0A] text-[#0A0A0A] py-2 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-300 disabled:opacity-40"
+                          className="w-full border border-[#0A0A0A] text-[#4A4E57] py-2 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-300 disabled:opacity-40"
                         >
                           {savingOrder ? 'SAVING ORDER...' : 'SAVE ORDER'}
                         </button>
@@ -1388,7 +1388,7 @@ INSTRUCTIONS:
                     <button
                       type="button"
                       onClick={() => openInventoryFor(manualSlot)}
-                      className="w-full mt-2 border border-[#0A0A0A] text-[#0A0A0A] py-2 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-200"
+                      className="w-full mt-2 border border-[#0A0A0A] text-[#4A4E57] py-2 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-200"
                     >
                       PICK FROM INVENTORY →
                     </button>
@@ -1419,7 +1419,7 @@ INSTRUCTIONS:
                           className={`w-full flex items-center justify-between px-4 py-3 border text-left transition-colors duration-200 disabled:opacity-50 ${
                             checked
                               ? 'border-[#0A0A0A] bg-[#0A0A0A] text-white'
-                              : 'border-[#E2E0DB] bg-white text-[#0A0A0A] hover:border-[#0A0A0A]'
+                              : 'border-[#E2E0DB] bg-white text-[#4A4E57] hover:border-[#0A0A0A]'
                           }`}
                         >
                           <span className="text-[10px] tracking-[0.18em]">
@@ -1500,7 +1500,7 @@ INSTRUCTIONS:
                   <button
                     type="button"
                     onClick={handleCanvaPromptFallback}
-                    className="mt-3 w-full text-[9px] tracking-[0.15em] text-[#6B6B6B] hover:text-[#0A0A0A] underline"
+                    className="mt-3 w-full text-[9px] tracking-[0.15em] text-[#6B6B6B] hover:text-[#4A4E57] underline"
                   >
                     or copy Claude prompt instead
                   </button>
@@ -1533,7 +1533,7 @@ INSTRUCTIONS:
                           className={`flex flex-col items-start text-left border px-3 py-2 transition-colors duration-200 disabled:cursor-not-allowed ${
                             isThis
                               ? 'border-[#0A0A0A] bg-[#0A0A0A] text-white'
-                              : 'border-[#E2E0DB] bg-white text-[#0A0A0A] hover:border-[#0A0A0A] disabled:opacity-40'
+                              : 'border-[#E2E0DB] bg-white text-[#4A4E57] hover:border-[#0A0A0A] disabled:opacity-40'
                           }`}
                         >
                           <span className="text-[10px] tracking-[0.15em]">
@@ -1601,7 +1601,7 @@ INSTRUCTIONS:
                     type="button"
                     onClick={handleLookShopperPrompt}
                     disabled={orderedItems.length === 0}
-                    className="mt-2 w-full text-[9px] tracking-[0.15em] text-[#6B6B6B] hover:text-[#0A0A0A] underline disabled:opacity-40 disabled:cursor-not-allowed disabled:no-underline"
+                    className="mt-2 w-full text-[9px] tracking-[0.15em] text-[#6B6B6B] hover:text-[#4A4E57] underline disabled:opacity-40 disabled:cursor-not-allowed disabled:no-underline"
                   >
                     {lookShopperCopied ? '✓ COPIED — PASTE INTO CLAUDE' : 'or copy prompt for the Claude design instead'}
                   </button>
@@ -1623,11 +1623,11 @@ INSTRUCTIONS:
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#E2E0DB]">
-              <p className="text-[11px] tracking-[0.25em] text-[#0A0A0A]">CANVA SKILL PROMPT</p>
+              <p className="text-[11px] tracking-[0.25em] text-[#4A4E57]">CANVA SKILL PROMPT</p>
               <button
                 type="button"
                 onClick={() => setCanvaPromptOpen(false)}
-                className="text-[#6B6B6B] hover:text-[#0A0A0A] text-[18px] leading-none"
+                className="text-[#6B6B6B] hover:text-[#4A4E57] text-[18px] leading-none"
               >
                 ×
               </button>
@@ -1636,7 +1636,7 @@ INSTRUCTIONS:
               <p className="text-[10px] tracking-[0.15em] text-[#6B6B6B] mb-3">
                 {canvaCopied ? 'COPIED — PASTE INTO CLAUDE' : 'COPY THIS AND PASTE INTO CLAUDE'}
               </p>
-              <pre className="text-[11px] leading-relaxed text-[#0A0A0A] whitespace-pre-wrap break-words font-mono bg-[#F8F8F6] p-4 border border-[#E2E0DB]">
+              <pre className="text-[11px] leading-relaxed text-[#4A4E57] whitespace-pre-wrap break-words font-mono bg-[#F8F8F6] p-4 border border-[#E2E0DB]">
                 {canvaPromptText}
               </pre>
             </div>
@@ -1657,7 +1657,7 @@ INSTRUCTIONS:
               <button
                 type="button"
                 onClick={() => setCanvaPromptOpen(false)}
-                className="flex-1 border border-[#0A0A0A] text-[#0A0A0A] py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors"
+                className="flex-1 border border-[#0A0A0A] text-[#4A4E57] py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors"
               >
                 CLOSE
               </button>
@@ -1677,11 +1677,11 @@ INSTRUCTIONS:
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#E2E0DB]">
-              <p className="text-[11px] tracking-[0.25em] text-[#0A0A0A]">LOOK SHOPPER PROMPT</p>
+              <p className="text-[11px] tracking-[0.25em] text-[#4A4E57]">LOOK SHOPPER PROMPT</p>
               <button
                 type="button"
                 onClick={() => setLookShopperOpen(false)}
-                className="text-[#6B6B6B] hover:text-[#0A0A0A] text-[18px] leading-none"
+                className="text-[#6B6B6B] hover:text-[#4A4E57] text-[18px] leading-none"
               >
                 ×
               </button>
@@ -1690,7 +1690,7 @@ INSTRUCTIONS:
               <p className="text-[10px] tracking-[0.15em] text-[#6B6B6B] mb-3">
                 {lookShopperCopied ? 'COPIED — PASTE INTO YOUR LOOK SHOPPER CLAUDE DESIGN' : 'COPY THIS AND PASTE INTO YOUR LOOK SHOPPER CLAUDE DESIGN'}
               </p>
-              <pre className="text-[11px] leading-relaxed text-[#0A0A0A] whitespace-pre-wrap break-words font-mono bg-[#F8F8F6] p-4 border border-[#E2E0DB]">
+              <pre className="text-[11px] leading-relaxed text-[#4A4E57] whitespace-pre-wrap break-words font-mono bg-[#F8F8F6] p-4 border border-[#E2E0DB]">
                 {lookShopperText}
               </pre>
             </div>
@@ -1711,7 +1711,7 @@ INSTRUCTIONS:
               <button
                 type="button"
                 onClick={() => setLookShopperOpen(false)}
-                className="flex-1 border border-[#0A0A0A] text-[#0A0A0A] py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors"
+                className="flex-1 border border-[#0A0A0A] text-[#4A4E57] py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors"
               >
                 CLOSE
               </button>
@@ -1732,7 +1732,7 @@ INSTRUCTIONS:
           >
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#E2E0DB]">
               <div>
-                <p className="text-[11px] tracking-[0.25em] text-[#0A0A0A]">ITEM INVENTORY</p>
+                <p className="text-[11px] tracking-[0.25em] text-[#4A4E57]">ITEM INVENTORY</p>
                 {invTargetSlot && (
                   <p className="mt-1 text-[9px] tracking-[0.20em] text-[#6B6B6B]">
                     ADDING TO SLOT · {invTargetSlot.toUpperCase()}
@@ -1742,7 +1742,7 @@ INSTRUCTIONS:
               <button
                 type="button"
                 onClick={() => setInvOpen(false)}
-                className="text-[#6B6B6B] hover:text-[#0A0A0A] text-[18px] leading-none"
+                className="text-[#6B6B6B] hover:text-[#4A4E57] text-[18px] leading-none"
               >
                 ×
               </button>
@@ -1795,7 +1795,7 @@ INSTRUCTIONS:
                           )}
                         </div>
                         <div className="p-2.5">
-                          <p className="text-[10px] tracking-[0.10em] text-[#0A0A0A] truncate">
+                          <p className="text-[10px] tracking-[0.10em] text-[#4A4E57] truncate">
                             {it.product_name.toUpperCase()}
                           </p>
                           {it.brand_name && (
@@ -1808,7 +1808,7 @@ INSTRUCTIONS:
                               {it.item_type.replace(/_/g, ' ').toUpperCase()}
                             </span>
                             {it.price && (
-                              <span className="text-[9px] tracking-[0.10em] text-[#0A0A0A]">
+                              <span className="text-[9px] tracking-[0.10em] text-[#4A4E57]">
                                 {it.currency ?? ''} {it.price}
                               </span>
                             )}
@@ -1818,7 +1818,7 @@ INSTRUCTIONS:
                               ? 'ADDED ✓'
                               : adding
                                 ? 'ADDING…'
-                                : <span className="text-[#0A0A0A] group-hover:underline">+ ADD TO OUTFIT</span>
+                                : <span className="text-[#4A4E57] group-hover:underline">+ ADD TO OUTFIT</span>
                             }
                           </p>
                         </div>

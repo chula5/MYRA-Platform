@@ -13,7 +13,7 @@ export default function LoginPage({
 
         {/* Wordmark */}
         <div className="text-center mb-14">
-          <p className="text-[22px] tracking-[0.30em] text-[#0A0A0A]">MYRA</p>
+          <p className="text-[22px] tracking-[0.30em] text-[#4A4E57]">MYRA</p>
           <p className="text-[10px] tracking-[0.25em] text-[#A8A8A4] mt-2">ADMIN STUDIO</p>
         </div>
 
@@ -30,7 +30,7 @@ export default function LoginPage({
               autoComplete="email"
               className="
                 w-full border border-[#0A0A0A] bg-white
-                px-4 py-3 text-[12px] tracking-[0.10em] text-[#0A0A0A]
+                px-4 py-3 text-[12px] tracking-[0.10em] text-[#4A4E57]
                 focus:outline-none
               "
             />
@@ -47,7 +47,7 @@ export default function LoginPage({
               autoComplete="current-password"
               className="
                 w-full border border-[#0A0A0A] bg-white
-                px-4 py-3 text-[12px] tracking-[0.10em] text-[#0A0A0A]
+                px-4 py-3 text-[12px] tracking-[0.10em] text-[#4A4E57]
                 focus:outline-none
               "
             />
@@ -78,7 +78,7 @@ export default function LoginPage({
         <div className="text-center mt-10">
           <a
             href="/"
-            className="text-[10px] tracking-[0.20em] text-[#A8A8A4] hover:text-[#0A0A0A] transition-colors duration-300"
+            className="text-[10px] tracking-[0.20em] text-[#A8A8A4] hover:text-[#4A4E57] transition-colors duration-300"
           >
             ← BACK TO SITE
           </a>

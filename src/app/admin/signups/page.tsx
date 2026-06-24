@@ -13,7 +13,7 @@ export default async function SignupsPage() {
     <div>
       <div className="flex items-center justify-between mb-10">
         <div>
-          <h1 className="text-[13px] tracking-[0.25em] text-[#0A0A0A] mb-1">EMAIL SIGN UPS</h1>
+          <h1 className="text-[13px] tracking-[0.25em] text-[#4A4E57] mb-1">EMAIL SIGN UPS</h1>
           <p className="text-[11px] tracking-[0.15em] text-[#6B6B6B]">{signups.length} {signups.length === 1 ? 'person' : 'people'} on the waitlist</p>
         </div>
       </div>
@@ -38,7 +38,7 @@ export default async function SignupsPage() {
               key={s.id}
               className={`grid grid-cols-[1fr_200px] gap-4 px-6 py-4 border-b border-[#E2E0DB] last:border-b-0 items-center ${i % 2 === 0 ? 'bg-white' : 'bg-[#FAFAF8]'}`}
             >
-              <span className="text-[12px] tracking-[0.08em] text-[#0A0A0A]">{s.email}</span>
+              <span className="text-[12px] tracking-[0.08em] text-[#4A4E57]">{s.email}</span>
               <span className="text-[11px] tracking-[0.10em] text-[#6B6B6B]">
                 {new Date(s.created_at).toLocaleDateString('en-GB', {
                   day: 'numeric',

@@ -7,7 +7,7 @@ import { EARLY_ACCESS_INVITE_CODE } from '../invite'
 export const dynamic = 'force-dynamic'
 
 const inputClass =
-  'w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.12em] text-[#0A0A0A] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors'
+  'w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.12em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors'
 
 export default async function EarlyAccessJoinPage({
   searchParams,
@@ -28,7 +28,7 @@ export default async function EarlyAccessJoinPage({
       <div className="w-full max-w-[360px]">
         <div className="text-center mb-10">
           <p className="text-[11px] tracking-[0.35em] text-[#A8A8A4] mb-3">MYRA</p>
-          <h1 className="text-[clamp(22px,4vw,32px)] tracking-[0.12em] text-[#0A0A0A]">EARLY ACCESS</h1>
+          <h1 className="text-[clamp(22px,4vw,32px)] tracking-[0.12em] text-[#4A4E57]">EARLY ACCESS</h1>
           <p className="mt-3 text-[11px] tracking-[0.18em] text-[#6B6B6B] leading-relaxed">
             {validKey
               ? 'Create your login to preview The Edit.'
@@ -81,7 +81,7 @@ export default async function EarlyAccessJoinPage({
 
             <p className="mt-6 text-center text-[10px] tracking-[0.16em] text-[#A8A8A4]">
               ALREADY HAVE A LOGIN?{' '}
-              <Link href="/earlyaccess" className="text-[#0A0A0A] underline underline-offset-2">
+              <Link href="/earlyaccess" className="text-[#4A4E57] underline underline-offset-2">
                 SIGN IN
               </Link>
             </p>

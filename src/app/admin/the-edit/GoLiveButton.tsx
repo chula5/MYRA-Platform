@@ -27,7 +27,7 @@ export default function GoLiveButton({ liveCount }: { liveCount: number }) {
       <button
         type="button"
         onClick={() => setShowInfo((s) => !s)}
-        className="text-[9px] tracking-[0.18em] text-[#6B6B6B] hover:text-[#0A0A0A] underline"
+        className="text-[9px] tracking-[0.18em] text-[#6B6B6B] hover:text-[#4A4E57] underline"
       >
         WHAT DOES THIS DO?
       </button>

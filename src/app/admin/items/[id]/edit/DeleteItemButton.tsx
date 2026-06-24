@@ -61,7 +61,7 @@ export default function DeleteItemButton({
               type="button"
               onClick={() => setConfirming(false)}
               disabled={busy}
-              className="px-3 py-2 text-[10px] tracking-[0.18em] border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors disabled:opacity-50"
+              className="px-3 py-2 text-[10px] tracking-[0.18em] border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors disabled:opacity-50"
             >
               CANCEL
             </button>

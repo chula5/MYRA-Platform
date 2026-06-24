@@ -55,7 +55,7 @@ export default function RunwaySearchClient() {
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
             placeholder="E.G. LOEWE AW26, BEST TAILORING LOOKS AW26, MIU MIU LATEST..."
-            className="flex-1 border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.10em] text-[#0A0A0A] placeholder-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors"
+            className="flex-1 border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.10em] text-[#4A4E57] placeholder-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors"
           />
           <button
             onClick={() => handleSearch()}
@@ -74,7 +74,7 @@ export default function RunwaySearchClient() {
             key={s}
             onClick={() => { setQuery(s); handleSearch(s) }}
             disabled={loading}
-            className="border border-[#E2E0DB] px-3 py-1.5 text-[10px] tracking-[0.15em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors disabled:opacity-40"
+            className="border border-[#E2E0DB] px-3 py-1.5 text-[10px] tracking-[0.15em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors disabled:opacity-40"
           >
             {s.toUpperCase()}
           </button>
@@ -147,14 +147,14 @@ function LookCard({ look }: { look: LookWithImages }) {
         <div className="flex items-start justify-between mb-4">
           <div>
             <span className="text-[10px] tracking-[0.25em] text-[#A8A8A4]">LOOK {look.letter}</span>
-            <p className="text-[14px] tracking-[0.15em] text-[#0A0A0A] mt-0.5">{look.brand.toUpperCase()}</p>
+            <p className="text-[14px] tracking-[0.15em] text-[#4A4E57] mt-0.5">{look.brand.toUpperCase()}</p>
             <p className="text-[10px] tracking-[0.20em] text-[#6B6B6B]">{look.season}</p>
           </div>
           <span className="text-[10px] tracking-[0.15em] text-[#6B6B6B] italic">{look.mood}</span>
         </div>
 
         {/* Description */}
-        <p className="text-[12px] tracking-[0.08em] text-[#0A0A0A] leading-relaxed mb-3">
+        <p className="text-[12px] tracking-[0.08em] text-[#4A4E57] leading-relaxed mb-3">
           {look.description}
         </p>
 
@@ -169,7 +169,7 @@ function LookCard({ look }: { look: LookWithImages }) {
             href={look.sourceUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors border border-[#E2E0DB] px-3 py-1.5 hover:border-[#0A0A0A]"
+            className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors border border-[#E2E0DB] px-3 py-1.5 hover:border-[#0A0A0A]"
           >
             VIEW SOURCE →
           </a>

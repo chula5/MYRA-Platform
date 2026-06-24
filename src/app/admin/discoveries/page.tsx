@@ -42,7 +42,7 @@ export default async function DiscoveriesPage({ searchParams }: PageProps) {
       {/* Header */}
       <div className="mb-8">
         <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-2">ADMIN STUDIO</p>
-        <h1 className="text-[28px] tracking-[0.10em] text-[#0A0A0A]">DISCOVERIES</h1>
+        <h1 className="text-[28px] tracking-[0.10em] text-[#4A4E57]">DISCOVERIES</h1>
         <p className="mt-2 text-[10px] tracking-[0.15em] text-[#A8A8A4]">
           AI-SURFACED PIECES SIMILAR TO ITEMS IN YOUR LIBRARY.
         </p>
@@ -60,7 +60,7 @@ export default async function DiscoveriesPage({ searchParams }: PageProps) {
             className={`px-4 py-2 text-[10px] tracking-[0.20em] transition-all duration-300 rounded-[2px] ${
               activeTab === tab
                 ? 'bg-[#0A0A0A] text-white'
-                : 'border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A]'
+                : 'border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57]'
             }`}
           >
             {tab.toUpperCase()}
@@ -98,7 +98,7 @@ export default async function DiscoveriesPage({ searchParams }: PageProps) {
                 <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4] mb-1">
                   {d.brand_name?.toUpperCase() ?? '—'}
                 </p>
-                <p className="text-[11px] tracking-[0.10em] text-[#0A0A0A] mb-2 leading-snug">
+                <p className="text-[11px] tracking-[0.10em] text-[#4A4E57] mb-2 leading-snug">
                   {d.title}
                 </p>
                 {d.price && (
@@ -123,7 +123,7 @@ export default async function DiscoveriesPage({ searchParams }: PageProps) {
                       href={d.retailer_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="block text-center border border-[#E2E0DB] py-1.5 text-[9px] tracking-[0.18em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors"
+                      className="block text-center border border-[#E2E0DB] py-1.5 text-[9px] tracking-[0.18em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors"
                     >
                       VIEW AT RETAILER ↗
                     </a>

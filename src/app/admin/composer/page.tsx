@@ -32,7 +32,7 @@ export default async function ComposerPage({ searchParams }: PageProps) {
     <div>
       <div className="mb-10">
         <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-2">ADMIN STUDIO</p>
-        <h1 className="text-[28px] tracking-[0.10em] text-[#0A0A0A] mb-3">OUTFIT COMPOSER</h1>
+        <h1 className="text-[28px] tracking-[0.10em] text-[#4A4E57] mb-3">OUTFIT COMPOSER</h1>
         <p className="text-[12px] tracking-[0.10em] text-[#6B6B6B] max-w-2xl leading-relaxed">
           PICK AN ANCHOR ITEM. THE COMPOSER WILL RETURN OUTFIT COMPOSITIONS BUILT
           FROM YOUR EXISTING LIBRARY, RANKED BY COMPOSITIONAL COHERENCE. APPROVE

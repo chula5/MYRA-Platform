@@ -21,7 +21,7 @@ export default async function EarlyAccessPage({
       <div className="w-full max-w-[360px]">
         <div className="text-center mb-10">
           <p className="text-[11px] tracking-[0.35em] text-[#A8A8A4] mb-3">MYRA</p>
-          <h1 className="text-[clamp(22px,4vw,32px)] tracking-[0.12em] text-[#0A0A0A]">EARLY ACCESS</h1>
+          <h1 className="text-[clamp(22px,4vw,32px)] tracking-[0.12em] text-[#4A4E57]">EARLY ACCESS</h1>
           <p className="mt-3 text-[11px] tracking-[0.18em] text-[#6B6B6B] leading-relaxed">
             Sign in with the details you were given to preview The Edit.
           </p>
@@ -34,7 +34,7 @@ export default async function EarlyAccessPage({
             required
             autoComplete="email"
             placeholder="EMAIL"
-            className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.12em] text-[#0A0A0A] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors"
+            className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.12em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors"
           />
           <input
             type="password"
@@ -42,7 +42,7 @@ export default async function EarlyAccessPage({
             required
             autoComplete="current-password"
             placeholder="PASSWORD"
-            className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.12em] text-[#0A0A0A] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors"
+            className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.12em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors"
           />
 
           {error && (

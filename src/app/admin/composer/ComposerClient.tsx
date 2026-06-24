@@ -333,7 +333,7 @@ export default function ComposerClient({
               <p className="text-[11px] tracking-[0.20em] text-[#A8A8A4] mb-1">
                 {(anchor.brand_name ?? '—').toUpperCase()}
               </p>
-              <p className="text-[18px] tracking-[0.08em] text-[#0A0A0A] mb-2">
+              <p className="text-[18px] tracking-[0.08em] text-[#4A4E57] mb-2">
                 {anchor.product_name.toUpperCase()}
               </p>
               <p className="text-[10px] tracking-[0.20em] text-[#6B6B6B]">
@@ -358,7 +358,7 @@ export default function ComposerClient({
                 type="button"
                 onClick={() => compose(anchor.item_id)}
                 disabled={composing}
-                className="border border-[#0A0A0A] text-[#0A0A0A] px-6 py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-300 disabled:opacity-50"
+                className="border border-[#0A0A0A] text-[#4A4E57] px-6 py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-300 disabled:opacity-50"
               >
                 {composing ? 'COMPOSING…' : 'RECOMPOSE'}
               </button>
@@ -380,13 +380,13 @@ export default function ComposerClient({
               placeholder="SEARCH BY PRODUCT NAME"
               value={searchQuery}
               onChange={(e) => runSearch(e.target.value, brandFilter)}
-              className="flex-1 border border-[#E2E0DB] bg-white px-4 py-2.5 text-[12px] tracking-[0.10em] text-[#0A0A0A] focus:outline-none focus:border-[#0A0A0A]"
+              className="flex-1 border border-[#E2E0DB] bg-white px-4 py-2.5 text-[12px] tracking-[0.10em] text-[#4A4E57] focus:outline-none focus:border-[#0A0A0A]"
             />
             <select
               value={brandFilter}
               onChange={(e) => runSearch(searchQuery, e.target.value)}
               title="Filter anchor items by brand"
-              className="w-[200px] border border-[#E2E0DB] bg-white px-3 py-2.5 text-[11px] tracking-[0.12em] text-[#0A0A0A] focus:outline-none focus:border-[#0A0A0A]"
+              className="w-[200px] border border-[#E2E0DB] bg-white px-3 py-2.5 text-[11px] tracking-[0.12em] text-[#4A4E57] focus:outline-none focus:border-[#0A0A0A]"
             >
               <option value="">ALL BRANDS</option>
               {brands.map((b) => (
@@ -420,7 +420,7 @@ export default function ComposerClient({
                 <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4] truncate">
                   {(item.brand_name ?? '—').toUpperCase()}
                 </p>
-                <p className="text-[10px] tracking-[0.10em] text-[#0A0A0A] truncate">
+                <p className="text-[10px] tracking-[0.10em] text-[#4A4E57] truncate">
                   {item.product_name.toUpperCase()}
                 </p>
               </button>
@@ -476,7 +476,7 @@ export default function ComposerClient({
               return (
                 <div key={idx} className="bg-white border border-[#E2E0DB] p-5">
                   <div className="flex items-baseline justify-between mb-4">
-                    <p className="text-[10px] tracking-[0.25em] text-[#0A0A0A]">
+                    <p className="text-[10px] tracking-[0.25em] text-[#4A4E57]">
                       COMPOSITION {String(idx + 1).padStart(2, '0')}
                       {isEdited && (
                         <span className="ml-2 text-[9px] tracking-[0.20em] text-[#C4A882]">EDITED</span>
@@ -518,7 +518,7 @@ export default function ComposerClient({
                             <button
                               type="button"
                               onClick={() => openSwap(idx, itemIdx, item.slot as Slot)}
-                              className="bg-white text-[#0A0A0A] px-2 py-1 text-[9px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors"
+                              className="bg-white text-[#4A4E57] px-2 py-1 text-[9px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors"
                             >
                               SWAP
                             </button>
@@ -526,7 +526,7 @@ export default function ComposerClient({
                               <button
                                 type="button"
                                 onClick={() => removeItem(idx, itemIdx)}
-                                className="bg-white/90 text-[#0A0A0A] px-2 py-1 text-[9px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors"
+                                className="bg-white/90 text-[#4A4E57] px-2 py-1 text-[9px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors"
                               >
                                 REMOVE
                               </button>
@@ -552,7 +552,7 @@ export default function ComposerClient({
                           key={slot}
                           type="button"
                           onClick={() => openAddSlot(idx, slot)}
-                          className="border border-[#E2E0DB] text-[#6B6B6B] px-2 py-1 text-[9px] tracking-[0.20em] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors"
+                          className="border border-[#E2E0DB] text-[#6B6B6B] px-2 py-1 text-[9px] tracking-[0.20em] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors"
                         >
                           + {SLOT_LABEL[slot] ?? slot.toUpperCase()}
                         </button>
@@ -564,7 +564,7 @@ export default function ComposerClient({
                   <div className="border-t border-[#E2E0DB] pt-3 mb-4 space-y-1">
                     {items.map((item, itemIdx) => (
                       <div key={`${item.item_id}-${itemIdx}-row`} className="flex items-center justify-between text-[10px] tracking-[0.10em]">
-                        <span className="text-[#0A0A0A] truncate flex-1 mr-3">
+                        <span className="text-[#4A4E57] truncate flex-1 mr-3">
                           <span className="text-[#6B6B6B] mr-2">{SLOT_LABEL[item.slot] ?? item.slot}</span>
                           {item.product_name}
                         </span>
@@ -597,7 +597,7 @@ export default function ComposerClient({
                     <button
                       type="button"
                       onClick={() => discard(idx)}
-                      className="border border-[#E2E0DB] text-[#6B6B6B] px-4 py-2.5 text-[10px] tracking-[0.20em] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors duration-300"
+                      className="border border-[#E2E0DB] text-[#6B6B6B] px-4 py-2.5 text-[10px] tracking-[0.20em] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors duration-300"
                     >
                       DISCARD
                     </button>
@@ -639,7 +639,7 @@ export default function ComposerClient({
               <button
                 type="button"
                 onClick={() => setSwap(null)}
-                className="text-[18px] text-[#A8A8A4] hover:text-[#0A0A0A] transition-colors"
+                className="text-[18px] text-[#A8A8A4] hover:text-[#4A4E57] transition-colors"
               >
                 ×
               </button>
@@ -652,7 +652,7 @@ export default function ComposerClient({
               placeholder="SEARCH ANY ITEM BY NAME, BRAND OR TYPE…"
               value={swapQuery}
               onChange={(e) => onSwapQueryChange(e.target.value)}
-              className="w-full border border-[#E2E0DB] bg-white px-4 py-2.5 text-[12px] tracking-[0.10em] text-[#0A0A0A] focus:outline-none focus:border-[#0A0A0A] mb-5"
+              className="w-full border border-[#E2E0DB] bg-white px-4 py-2.5 text-[12px] tracking-[0.10em] text-[#4A4E57] focus:outline-none focus:border-[#0A0A0A] mb-5"
             />
 
             {swapLoading ? (
@@ -680,7 +680,7 @@ export default function ComposerClient({
                     <p className="text-[9px] tracking-[0.20em] text-[#A8A8A4] truncate">
                       {(opt.brand_name ?? '—').toUpperCase()}
                     </p>
-                    <p className="text-[10px] tracking-[0.10em] text-[#0A0A0A] truncate">
+                    <p className="text-[10px] tracking-[0.10em] text-[#4A4E57] truncate">
                       {opt.product_name.toUpperCase()}
                     </p>
                     <div className="flex items-center justify-between mt-0.5">

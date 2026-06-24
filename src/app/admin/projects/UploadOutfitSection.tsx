@@ -106,10 +106,10 @@ export default function UploadOutfitSection({ projects }: { projects: Project[] 
       >
         <div className="text-left">
           <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-1">CLOUDINARY UPLOAD</p>
-          <p className="text-[14px] tracking-[0.15em] text-[#0A0A0A]">UPLOAD OUTFIT IMAGE ↑</p>
+          <p className="text-[14px] tracking-[0.15em] text-[#4A4E57]">UPLOAD OUTFIT IMAGE ↑</p>
           <p className="text-[10px] tracking-[0.12em] text-[#A8A8A4] mt-1">Paste, drag & drop, or enter a URL — uploads to Cloudinary and creates a new project</p>
         </div>
-        <span className="text-[24px] text-[#E2E0DB] group-hover:text-[#0A0A0A] transition-colors duration-300">
+        <span className="text-[24px] text-[#E2E0DB] group-hover:text-[#4A4E57] transition-colors duration-300">
           {expanded ? '−' : '+'}
         </span>
       </button>
@@ -130,7 +130,7 @@ export default function UploadOutfitSection({ projects }: { projects: Project[] 
                   <button
                     type="button"
                     onClick={clearImage}
-                    className="absolute top-3 right-3 bg-white border border-[#E2E0DB] text-[10px] tracking-[0.15em] text-[#6B6B6B] px-3 py-1.5 hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors"
+                    className="absolute top-3 right-3 bg-white border border-[#E2E0DB] text-[10px] tracking-[0.15em] text-[#6B6B6B] px-3 py-1.5 hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors"
                   >
                     CLEAR ×
                   </button>
@@ -167,7 +167,7 @@ export default function UploadOutfitSection({ projects }: { projects: Project[] 
                   value={urlInput}
                   onChange={handleUrlChange}
                   placeholder="https://..."
-                  className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.08em] text-[#0A0A0A] placeholder-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors"
+                  className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.08em] text-[#4A4E57] placeholder-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors"
                 />
               </div>
             )}
@@ -179,7 +179,7 @@ export default function UploadOutfitSection({ projects }: { projects: Project[] 
               </label>
               <select
                 name="project_id"
-                className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.08em] text-[#0A0A0A] focus:outline-none focus:border-[#0A0A0A] transition-colors appearance-none"
+                className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.08em] text-[#4A4E57] focus:outline-none focus:border-[#0A0A0A] transition-colors appearance-none"
               >
                 <option value="">— Create new project —</option>
                 {projects.map(p => (
@@ -199,7 +199,7 @@ export default function UploadOutfitSection({ projects }: { projects: Project[] 
                 name="project_title"
                 type="text"
                 placeholder="New Outfit Project"
-                className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.08em] text-[#0A0A0A] placeholder-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors"
+                className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.08em] text-[#4A4E57] placeholder-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors"
               />
             </div>
 
@@ -212,7 +212,7 @@ export default function UploadOutfitSection({ projects }: { projects: Project[] 
                 name="celebrity_name"
                 type="text"
                 placeholder="e.g. Zendaya"
-                className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.08em] text-[#0A0A0A] placeholder-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors"
+                className="w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.08em] text-[#4A4E57] placeholder-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors"
               />
             </div>
 

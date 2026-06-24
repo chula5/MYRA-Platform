@@ -11,7 +11,7 @@ export default async function EarlyAccessAdminPage() {
     <div>
       <div className="mb-8">
         <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-2">MYRA ADMIN STUDIO</p>
-        <h1 className="text-[28px] tracking-[0.10em] text-[#0A0A0A]">EARLY ACCESS</h1>
+        <h1 className="text-[28px] tracking-[0.10em] text-[#4A4E57]">EARLY ACCESS</h1>
         <p className="mt-3 max-w-[640px] text-[11px] tracking-[0.12em] text-[#6B6B6B] leading-relaxed">
           Share the sign-up link below so people can create their own login, or create one manually. Either way
           they can only search occasions and browse The Edit — they cannot reach the admin studio. Below you can

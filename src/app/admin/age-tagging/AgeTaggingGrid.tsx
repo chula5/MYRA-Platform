@@ -67,7 +67,7 @@ export default function AgeTaggingGrid({ outfits }: { outfits: TaggingOutfit[] }
       {/* Toolbar */}
       <div className="flex items-center justify-between mb-6 sticky top-0 bg-[#FAFAF8] py-3 z-10 border-b border-[#E2E0DB]">
         <p className="text-[11px] tracking-[0.15em] text-[#6B6B6B]">
-          <span className="text-[#0A0A0A]">{taggedCount}</span> of {outfits.length} tagged
+          <span className="text-[#4A4E57]">{taggedCount}</span> of {outfits.length} tagged
         </p>
         <button
           onClick={() => setHideTagged((v) => !v)}
@@ -95,7 +95,7 @@ export default function AgeTaggingGrid({ outfits }: { outfits: TaggingOutfit[] }
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-1">
-                    <p className="text-[10px] tracking-[0.12em] text-[#0A0A0A] truncate">
+                    <p className="text-[10px] tracking-[0.12em] text-[#4A4E57] truncate">
                       {(o.label || 'UNTITLED').toUpperCase()}
                     </p>
                     <span className="text-[8px] tracking-[0.16em] ml-2 flex-shrink-0">
@@ -132,13 +132,13 @@ export default function AgeTaggingGrid({ outfits }: { outfits: TaggingOutfit[] }
                   <div className="flex flex-wrap gap-2 mt-2">
                     <button
                       onClick={() => applyAll(o.id, ['25-30', '30-40'])}
-                      className="text-[8px] tracking-[0.12em] text-[#6B6B6B] underline underline-offset-2 hover:text-[#0A0A0A]"
+                      className="text-[8px] tracking-[0.12em] text-[#6B6B6B] underline underline-offset-2 hover:text-[#4A4E57]"
                     >
                       YOUNGER (–35)
                     </button>
                     <button
                       onClick={() => applyAll(o.id, ['40-50', '50-60', '60-70', '70+'])}
-                      className="text-[8px] tracking-[0.12em] text-[#6B6B6B] underline underline-offset-2 hover:text-[#0A0A0A]"
+                      className="text-[8px] tracking-[0.12em] text-[#6B6B6B] underline underline-offset-2 hover:text-[#4A4E57]"
                     >
                       40+
                     </button>

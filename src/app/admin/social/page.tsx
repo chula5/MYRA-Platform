@@ -23,9 +23,9 @@ export default async function SocialPostsPage() {
     <div>
       <div className="mb-8">
         <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-2">MYRA ADMIN STUDIO</p>
-        <h1 className="text-[28px] tracking-[0.10em] text-[#0A0A0A]">SOCIAL MEDIA POSTS</h1>
+        <h1 className="text-[28px] tracking-[0.10em] text-[#4A4E57]">SOCIAL MEDIA POSTS</h1>
         <p className="mt-3 max-w-[680px] text-[11px] tracking-[0.12em] text-[#6B6B6B] leading-relaxed">
-          Pick an outfit to turn it into a <span className="text-[#0A0A0A]">Shop-the-look</span> post — a 3:4
+          Pick an outfit to turn it into a <span className="text-[#4A4E57]">Shop-the-look</span> post — a 3:4
           Instagram/reel design built automatically from the outfit&rsquo;s display image and its items (brand,
           name, price, photo). Click one to open the design, then screen-record it for a reel.
         </p>
@@ -63,7 +63,7 @@ export default async function SocialPostsPage() {
                   )}
                 </div>
                 <div className="p-2.5">
-                  <p className="text-[10px] tracking-[0.10em] text-[#0A0A0A] truncate">
+                  <p className="text-[10px] tracking-[0.10em] text-[#4A4E57] truncate">
                     {(o.aesthetic_label || 'Untitled').toUpperCase()}
                   </p>
                   <p className="text-[8px] tracking-[0.15em] text-[#A8A8A4] mt-1">

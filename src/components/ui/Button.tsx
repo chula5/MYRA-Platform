@@ -33,7 +33,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         hover:opacity-85
       `,
       outlined: `
-        bg-transparent text-[#0A0A0A] border border-[#0A0A0A]
+        bg-transparent text-[#4A4E57] border border-[#0A0A0A]
         hover:bg-[#F2F2F2]
       `,
     }

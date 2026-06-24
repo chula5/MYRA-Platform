@@ -51,7 +51,7 @@ export default async function EditPage() {
           <form action={earlyAccessSignOut}>
             <button
               type="submit"
-              className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#0A0A0A] border border-[#E2E0DB] hover:border-[#0A0A0A] px-4 py-2 transition-colors duration-300"
+              className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#4A4E57] border border-[#E2E0DB] hover:border-[#0A0A0A] px-4 py-2 transition-colors duration-300"
             >
               SIGN OUT
             </button>

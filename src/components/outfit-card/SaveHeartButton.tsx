@@ -33,7 +33,7 @@ export default function SaveHeartButton({
       <button
         onClick={toggle}
         disabled={busy}
-        className={`glass-dark inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[11px] tracking-[0.18em] text-[#0A0A0A] disabled:opacity-60 ${saved ? 'ring-1 ring-[#0A0A0A]/30' : ''}`}
+        className={`glass-dark inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[11px] tracking-[0.18em] text-[#4A4E57] disabled:opacity-60 ${saved ? 'ring-1 ring-[#0A0A0A]/30' : ''}`}
       >
         <span className="text-[13px] leading-none">{saved ? '♥' : '♡'}</span>
         {saved ? 'SAVED' : 'SAVE'}
@@ -49,7 +49,7 @@ export default function SaveHeartButton({
       aria-label={saved ? 'Remove from saved' : 'Save outfit'}
       className="absolute top-3 right-3 z-20 w-9 h-9 rounded-full bg-white/90 hover:bg-white shadow-sm flex items-center justify-center transition-colors"
     >
-      <span className={`text-[16px] leading-none ${saved ? 'text-[#0A0A0A]' : 'text-[#6B6B6B]'}`}>
+      <span className={`text-[16px] leading-none ${saved ? 'text-[#4A4E57]' : 'text-[#6B6B6B]'}`}>
         {saved ? '♥' : '♡'}
       </span>
     </button>

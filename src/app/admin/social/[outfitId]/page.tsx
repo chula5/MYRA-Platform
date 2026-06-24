@@ -52,7 +52,7 @@ export default async function SocialPostPage({ params }: PageProps) {
     <div>
       <Link
         href="/admin/social"
-        className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors duration-300 mb-6 inline-block"
+        className="text-[10px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300 mb-6 inline-block"
       >
         ← SOCIAL MEDIA POSTS
       </Link>
@@ -69,7 +69,7 @@ export default async function SocialPostPage({ params }: PageProps) {
 
           {/* Info / how-to */}
           <div className="max-w-[420px]">
-            <p className="text-[11px] tracking-[0.20em] text-[#0A0A0A] mb-1">
+            <p className="text-[11px] tracking-[0.20em] text-[#4A4E57] mb-1">
               {(outfit.aesthetic_label || 'UNTITLED OUTFIT').toUpperCase()}
             </p>
             <p className="text-[10px] tracking-[0.15em] text-[#6B6B6B] mb-6">
@@ -78,9 +78,9 @@ export default async function SocialPostPage({ params }: PageProps) {
 
             <div className="border border-[#E2E0DB] bg-[#FAFAF8] rounded-[3px] p-4 mb-4">
               <p className="text-[10px] tracking-[0.18em] text-[#6B6B6B] leading-relaxed">
-                The post auto-fills from this outfit: the <span className="text-[#0A0A0A]">display image</span> is the
-                backdrop, and each item becomes a <span className="text-[#0A0A0A]">Shop-the-look</span> card (brand,
-                name, price, photo). Press <span className="text-[#0A0A0A]">REPLAY</span> to re-run the cascade, then
+                The post auto-fills from this outfit: the <span className="text-[#4A4E57]">display image</span> is the
+                backdrop, and each item becomes a <span className="text-[#4A4E57]">Shop-the-look</span> card (brand,
+                name, price, photo). Press <span className="text-[#4A4E57]">REPLAY</span> to re-run the cascade, then
                 screen-record the frame for an Instagram reel or post.
               </p>
             </div>

@@ -22,8 +22,8 @@ const CardButton = forwardRef<HTMLButtonElement, CardButtonProps>(
     `
 
     const variants = {
-      filled: `glass-dark text-[#0A0A0A]`,
-      outlined: `glass-light text-[#0A0A0A]`,
+      filled: `glass-dark text-[#4A4E57]`,
+      outlined: `glass-light text-[#4A4E57]`,
     }
 
     return (

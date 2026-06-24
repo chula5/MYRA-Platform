@@ -138,7 +138,7 @@ export default function OnboardingFlow({
         </div>
       )}
       <header className="flex items-center justify-center px-8 h-14 border-b border-[#E2E0DB]">
-        <p className="text-[13px] tracking-[0.30em] text-[#0A0A0A]">MYRA</p>
+        <p className="text-[13px] tracking-[0.30em] text-[#4A4E57]">MYRA</p>
       </header>
 
       <div className="max-w-[760px] mx-auto px-6 py-12 sm:py-16">
@@ -149,7 +149,7 @@ export default function OnboardingFlow({
           <div>
             <div className="text-center mb-10">
               <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-3">A FEW QUESTIONS</p>
-              <h1 className="text-[clamp(22px,3vw,32px)] tracking-[0.08em] text-[#0A0A0A] leading-tight mb-3">
+              <h1 className="text-[clamp(22px,3vw,32px)] tracking-[0.08em] text-[#4A4E57] leading-tight mb-3">
                 WHICH OF THESE FEEL LIKE YOU?
               </h1>
               <p className="text-[11px] tracking-[0.12em] text-[#A8A8A4] leading-relaxed max-w-[440px] mx-auto">
@@ -171,7 +171,7 @@ export default function OnboardingFlow({
                     }`}
                   >
                     <div className="flex items-start justify-between mb-2">
-                      <span className={`text-[12px] tracking-[0.10em] ${active ? 'text-white' : 'text-[#0A0A0A]'}`}>
+                      <span className={`text-[12px] tracking-[0.10em] ${active ? 'text-white' : 'text-[#4A4E57]'}`}>
                         {g.name.toUpperCase()}
                       </span>
                       <span className={`text-[14px] leading-none ${active ? 'text-white' : 'text-[#C4A882]'}`}>
@@ -211,7 +211,7 @@ export default function OnboardingFlow({
           <div>
             <div className="text-center mb-10">
               <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-3">A FEW QUESTIONS</p>
-              <h1 className="text-[clamp(22px,3vw,32px)] tracking-[0.08em] text-[#0A0A0A] leading-tight mb-3">
+              <h1 className="text-[clamp(22px,3vw,32px)] tracking-[0.08em] text-[#4A4E57] leading-tight mb-3">
                 WHICH AGE RANGE ARE YOU IN?
               </h1>
               <p className="text-[11px] tracking-[0.12em] text-[#A8A8A4] leading-relaxed max-w-[440px] mx-auto">
@@ -229,7 +229,7 @@ export default function OnboardingFlow({
                     className={`py-6 rounded-[4px] border text-[14px] tracking-[0.10em] transition-all duration-200 ${
                       active
                         ? 'border-[#0A0A0A] bg-[#0A0A0A] text-white'
-                        : 'border-[#E2E0DB] bg-white text-[#0A0A0A] hover:border-[#0A0A0A]'
+                        : 'border-[#E2E0DB] bg-white text-[#4A4E57] hover:border-[#0A0A0A]'
                     }`}
                   >
                     {r}
@@ -241,7 +241,7 @@ export default function OnboardingFlow({
             <div className="flex items-center justify-center gap-4">
               <button
                 onClick={() => setStep(1)}
-                className="text-[11px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#0A0A0A] px-6 py-3.5 transition-colors"
+                className="text-[11px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#4A4E57] px-6 py-3.5 transition-colors"
               >
                 ← BACK
               </button>
@@ -261,7 +261,7 @@ export default function OnboardingFlow({
           <div>
             <div className="text-center mb-8">
               <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-3">LAST STEP — OPTIONAL</p>
-              <h1 className="text-[clamp(22px,3vw,32px)] tracking-[0.08em] text-[#0A0A0A] leading-tight mb-3">
+              <h1 className="text-[clamp(22px,3vw,32px)] tracking-[0.08em] text-[#4A4E57] leading-tight mb-3">
                 LOVE IT OR LEAVE IT?
               </h1>
               <p className="text-[11px] tracking-[0.12em] text-[#A8A8A4] leading-relaxed max-w-[440px] mx-auto">
@@ -356,7 +356,7 @@ export default function OnboardingFlow({
                   <button
                     onClick={() => finish(liked, disliked)}
                     disabled={submitting}
-                    className="text-[10px] tracking-[0.20em] text-[#A8A8A4] hover:text-[#0A0A0A] underline underline-offset-4 transition-colors disabled:opacity-50"
+                    className="text-[10px] tracking-[0.20em] text-[#A8A8A4] hover:text-[#4A4E57] underline underline-offset-4 transition-colors disabled:opacity-50"
                   >
                     {submitting ? 'FINISHING…' : 'SKIP & ENTER THE EDIT →'}
                   </button>

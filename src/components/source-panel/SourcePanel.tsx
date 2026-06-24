@@ -80,13 +80,13 @@ export default function SourcePanel({ items, onClose, isOpen, outfitId }: Source
       >
         {/* Panel header */}
         <div className="flex items-center justify-between px-3 sm:px-5 pt-5 sm:pt-6 pb-3 sm:pb-4 border-b border-[#E2E0DB]">
-          <span className="text-[10px] sm:text-[11px] tracking-[0.2em] sm:tracking-[0.25em] text-[#0A0A0A]">
+          <span className="text-[10px] sm:text-[11px] tracking-[0.2em] sm:tracking-[0.25em] text-[#4A4E57]">
             SOURCED PIECES
           </span>
           <button
             onClick={onClose}
             aria-label="Close source panel"
-            className="text-[#0A0A0A] hover:opacity-50 transition-opacity duration-300 text-lg leading-none"
+            className="text-[#4A4E57] hover:opacity-50 transition-opacity duration-300 text-lg leading-none"
           >
             ×
           </button>
@@ -183,10 +183,10 @@ function SourceItemRow({ item, outfitId }: { item: SourceItem; outfitId?: string
 
       {/* Item info */}
       <div className="flex-1 min-w-0">
-        <p className="text-[10px] sm:text-[12px] tracking-[0.10em] sm:tracking-[0.12em] text-[#0A0A0A] truncate">
+        <p className="text-[10px] sm:text-[12px] tracking-[0.10em] sm:tracking-[0.12em] text-[#4A4E57] truncate">
           {item.brand?.name ?? 'BRAND'}
         </p>
-        <p className="text-[10px] sm:text-[12px] tracking-[0.06em] sm:tracking-[0.08em] text-[#0A0A0A] truncate">
+        <p className="text-[10px] sm:text-[12px] tracking-[0.06em] sm:tracking-[0.08em] text-[#4A4E57] truncate">
           {item.product_name}
         </p>
         {item.retailer_url && (
@@ -197,7 +197,7 @@ function SourceItemRow({ item, outfitId }: { item: SourceItem; outfitId?: string
       </div>
 
       {/* Link arrow */}
-      <span className="text-[#0A0A0A] text-sm sm:text-base opacity-40 group-hover:opacity-100 transition-opacity duration-300 flex-shrink-0">
+      <span className="text-[#4A4E57] text-sm sm:text-base opacity-40 group-hover:opacity-100 transition-opacity duration-300 flex-shrink-0">
         ↗
       </span>
     </div>

@@ -20,7 +20,7 @@ export default async function ProjectsPage({ searchParams }: PageProps) {
       <div className="flex items-center justify-between mb-8">
         <div>
           <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-2">ADMIN STUDIO</p>
-          <h1 className="text-[28px] tracking-[0.10em] text-[#0A0A0A]">OUTFIT PROJECTS</h1>
+          <h1 className="text-[28px] tracking-[0.10em] text-[#4A4E57]">OUTFIT PROJECTS</h1>
         </div>
         <Link
           href="/admin/projects/new"
@@ -39,7 +39,7 @@ export default async function ProjectsPage({ searchParams }: PageProps) {
             className={`px-4 py-2 text-[10px] tracking-[0.20em] transition-all duration-300 rounded-[2px] ${
               activeFilter === tab
                 ? 'bg-[#0A0A0A] text-white'
-                : 'border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A]'
+                : 'border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57]'
             }`}
           >
             {tab.toUpperCase().replace('_', ' ')}
@@ -57,10 +57,10 @@ export default async function ProjectsPage({ searchParams }: PageProps) {
       >
         <div>
           <p className="text-[11px] tracking-[0.25em] text-[#6B6B6B] mb-1">AI POWERED</p>
-          <p className="text-[14px] tracking-[0.15em] text-[#0A0A0A]">SEARCH FOR NEW OUTFITS →</p>
+          <p className="text-[14px] tracking-[0.15em] text-[#4A4E57]">SEARCH FOR NEW OUTFITS →</p>
           <p className="text-[10px] tracking-[0.12em] text-[#A8A8A4] mt-1">Browse SS26 / AW25 runway looks by brand or trend</p>
         </div>
-        <span className="text-[24px] text-[#E2E0DB] group-hover:text-[#0A0A0A] transition-colors duration-300">↗</span>
+        <span className="text-[24px] text-[#E2E0DB] group-hover:text-[#4A4E57] transition-colors duration-300">↗</span>
       </Link>
 
       {/* Grid */}
@@ -95,7 +95,7 @@ export default async function ProjectsPage({ searchParams }: PageProps) {
               {/* Card body */}
               <div className="p-6">
                 <div className="flex items-start justify-between mb-3">
-                  <h2 className="text-[14px] tracking-[0.15em] text-[#0A0A0A]">
+                  <h2 className="text-[14px] tracking-[0.15em] text-[#4A4E57]">
                     {project.title.toUpperCase()}
                   </h2>
                   <StatusBadge status={project.status} />
@@ -114,7 +114,7 @@ export default async function ProjectsPage({ searchParams }: PageProps) {
                 </div>
                 <Link
                   href={`/admin/projects/${project.project_id}`}
-                  className="text-[10px] tracking-[0.20em] text-[#6B6B6B] group-hover:text-[#0A0A0A] transition-colors duration-300"
+                  className="text-[10px] tracking-[0.20em] text-[#6B6B6B] group-hover:text-[#4A4E57] transition-colors duration-300"
                 >
                   OPEN PROJECT →
                 </Link>

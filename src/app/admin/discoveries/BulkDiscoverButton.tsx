@@ -41,7 +41,7 @@ export default function BulkDiscoverButton() {
     <div className="mb-6 border border-[#E2E0DB] bg-white p-5 rounded-[3px]">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-[10px] tracking-[0.20em] text-[#0A0A0A] mb-1">DISCOVER FROM MY TASTE</p>
+          <p className="text-[10px] tracking-[0.20em] text-[#4A4E57] mb-1">DISCOVER FROM MY TASTE</p>
           <p className="text-[10px] tracking-[0.12em] text-[#6B6B6B]">
             Ask AI to find pieces matching your overall aesthetic — not tied to a single item.
           </p>

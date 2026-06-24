@@ -242,7 +242,7 @@ export default function LookShopperReel({
           type="button"
           onClick={handleDownloadVideo}
           disabled={recording}
-          className="border border-[#0A0A0A] text-[#0A0A0A] px-5 py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors disabled:opacity-50"
+          className="border border-[#0A0A0A] text-[#4A4E57] px-5 py-2.5 text-[10px] tracking-[0.20em] hover:bg-[#0A0A0A] hover:text-white transition-colors disabled:opacity-50"
         >
           {recording ? `● RECORDING… ${Math.ceil(recordMs / 1000)}s` : '⬇ DOWNLOAD VIDEO'}
         </button>

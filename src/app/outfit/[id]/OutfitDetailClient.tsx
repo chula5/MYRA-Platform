@@ -312,7 +312,7 @@ export default function OutfitDetailClient({
       <div className="flex items-center justify-between mb-8">
         <button
           onClick={() => router.back()}
-          className="text-[11px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors duration-300 flex items-center gap-2"
+          className="text-[11px] tracking-[0.20em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300 flex items-center gap-2"
         >
           ← BACK
         </button>
@@ -321,7 +321,7 @@ export default function OutfitDetailClient({
             onClick={() => goToSibling(-1)}
             disabled={!hasPrevLook}
             aria-label="Previous look"
-            className="text-[20px] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors duration-300 leading-none disabled:opacity-25 disabled:cursor-default"
+            className="text-[20px] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300 leading-none disabled:opacity-25 disabled:cursor-default"
           >
             ‹
           </button>
@@ -329,7 +329,7 @@ export default function OutfitDetailClient({
             onClick={() => goToSibling(1)}
             disabled={!hasNextLook}
             aria-label="Next look"
-            className="text-[20px] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors duration-300 leading-none disabled:opacity-25 disabled:cursor-default"
+            className="text-[20px] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300 leading-none disabled:opacity-25 disabled:cursor-default"
           >
             ›
           </button>
@@ -409,7 +409,7 @@ export default function OutfitDetailClient({
                   <button
                     type="button"
                     onClick={() => setCurrentImageIndex((i) => (i - 1 + allImages.length) % allImages.length)}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center bg-white/85 hover:bg-white text-[#0A0A0A] text-[22px] leading-none rounded-full shadow-sm transition-colors duration-200 z-20"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center bg-white/85 hover:bg-white text-[#4A4E57] text-[22px] leading-none rounded-full shadow-sm transition-colors duration-200 z-20"
                     aria-label="Previous photo"
                   >
                     ‹
@@ -418,7 +418,7 @@ export default function OutfitDetailClient({
                   <button
                     type="button"
                     onClick={() => setCurrentImageIndex((i) => (i + 1) % allImages.length)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center bg-white/85 hover:bg-white text-[#0A0A0A] text-[22px] leading-none rounded-full shadow-sm transition-colors duration-200 z-20"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center bg-white/85 hover:bg-white text-[#4A4E57] text-[22px] leading-none rounded-full shadow-sm transition-colors duration-200 z-20"
                     aria-label="Next photo"
                   >
                     ›
@@ -585,7 +585,7 @@ function ImageWithHotspots({
 
       {activeItemLabel && (
         <div className="absolute top-4 left-4 bg-white border border-[#0A0A0A] rounded-full px-3 py-1.5">
-          <span className="text-[10px] tracking-[0.15em] text-[#0A0A0A]">
+          <span className="text-[10px] tracking-[0.15em] text-[#4A4E57]">
             STYLE {activeItemLabel} ↗
           </span>
         </div>
