@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import CardButton from '@/components/ui/CardButton'
 import Hotspot from '@/components/hotspot/Hotspot'
-import SourcePanel from '@/components/source-panel/SourcePanel'
+import ShopTheLookOverlay from '@/components/source-panel/ShopTheLookOverlay'
 import SaveHeartButton from '@/components/outfit-card/SaveHeartButton'
 import type { OutfitWithItems, Item, Brand, ItemType } from '@/types/database'
 
@@ -162,6 +162,22 @@ export default function OutfitCard({
             />
           )
         })}
+
+        {/* Shop-the-look cards overlaid on the photo (toggled by SOURCE ITEMS) */}
+        {sourcePanelOpen && items.length > 0 && (
+          <div
+            className="absolute inset-0 z-30"
+            onClick={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            onTouchEnd={(e) => e.stopPropagation()}
+          >
+            <ShopTheLookOverlay
+              items={items}
+              outfitId={outfit.outfit_id}
+              onClose={() => setSourcePanelOpen(false)}
+            />
+          </div>
+        )}
       </div>
 
       {/* Card footer */}
@@ -196,7 +212,7 @@ export default function OutfitCard({
         <div className="flex flex-wrap items-center justify-center gap-2">
           <CardButton
             variant="filled"
-            onClick={() => setSourcePanelOpen(true)}
+            onClick={() => setSourcePanelOpen((v) => !v)}
             className="flex-1"
           >
             SOURCE ITEMS
@@ -218,13 +234,6 @@ export default function OutfitCard({
         </div>
       </div>
 
-      {/* Source panel — slides from left */}
-      <SourcePanel
-        items={items}
-        isOpen={sourcePanelOpen}
-        onClose={() => setSourcePanelOpen(false)}
-        outfitId={outfit.outfit_id}
-      />
     </article>
   )
 }
