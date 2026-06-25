@@ -384,7 +384,7 @@ export default function OutfitDetailClient({
             )}
 
             {/* Current look */}
-            <div className="relative z-10 bg-white shadow-[0_20px_60px_rgba(0,0,0,0.18)]">
+            <div className="relative z-10 bg-white rounded-[16px] overflow-hidden">
               <ImageWithHotspots
                 key={currentImageUrl}
                 outfit={outfit}
@@ -570,7 +570,7 @@ function ImageWithHotspots({
 
   return (
     <div
-      className="relative aspect-[3/4] w-full overflow-hidden mb-4 bg-white"
+      className="relative aspect-[3/4] w-full overflow-hidden bg-white"
       onMouseEnter={() => setImageHovered(true)}
       onMouseLeave={() => setImageHovered(false)}
     >
