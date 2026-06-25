@@ -1,6 +1,8 @@
 'use server'
 
 import { createServerClient, createAdminClient } from '@/lib/supabase-server'
+import { recordTasteEvent } from '@/lib/taste-profile'
+import { EVENT_WEIGHTS } from '@/lib/taste-vector'
 
 // IDs of every outfit the current user has saved.
 export async function getSavedOutfitIds(): Promise<string[]> {
@@ -37,9 +39,28 @@ export async function toggleSaveOutfit(outfitId: string): Promise<{ saved?: bool
     }
     const { error } = await (admin.from('saved_outfit') as any).insert({ user_id: user.id, outfit_id: outfitId })
     if (error) throw error
+    // A save is a strong taste signal — learn from it.
+    void recordTasteEvent(user.id, outfitId, 'save')
     return { saved: true }
   } catch (err: unknown) {
     console.error('[toggleSaveOutfit]', err)
     return { error: err instanceof Error ? err.message : 'Failed to save' }
+  }
+}
+
+// Record a softer taste signal (shop click-out, explore/style/similar tap) from
+// the Edit. Fire-and-forget — never blocks the UI.
+export async function recordTasteInteraction(
+  outfitId: string,
+  eventType: keyof typeof EVENT_WEIGHTS,
+  occasion?: string,
+): Promise<void> {
+  try {
+    const supabase = await createServerClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    await recordTasteEvent(user.id, outfitId, eventType, { occasion })
+  } catch {
+    // swallow — analytics must never break browsing
   }
 }

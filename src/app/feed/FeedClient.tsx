@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import OutfitCard from '@/components/outfit-card/OutfitCard'
 import SaveHeartButton from '@/components/outfit-card/SaveHeartButton'
 import { createClient } from '@/lib/supabase'
+import { rankByTaste, isZero } from '@/lib/taste-vector'
+import { recordTasteInteraction } from '@/app/edit/save-actions'
 import type { OutfitWithItems, ItemType, ColourFamily } from '@/types/database'
 
 // Example occasions that "type" themselves into the search bar as a prompt.
@@ -197,6 +199,7 @@ export default function FeedClient({
   canSave = false,
   savedOutfitIds = [],
   recommendedOutfits = [],
+  tasteVector,
 }: {
   showAllOption?: boolean
   injectedOutfits?: OutfitWithItems[]
@@ -205,7 +208,14 @@ export default function FeedClient({
   canSave?: boolean
   savedOutfitIds?: string[]
   recommendedOutfits?: OutfitWithItems[]
+  // The viewer's 34-dim taste vector — re-ranks the occasion feed by cosine.
+  tasteVector?: number[]
 }) {
+  const hasTaste = !!tasteVector && !isZero(tasteVector)
+  // Occasion gates the catalogue; cosine ranks what's left (highest taste
+  // similarity first), falling back to anti-repetition when there's no signal.
+  const orderForFeed = (list: OutfitWithItems[]): OutfitWithItems[] =>
+    hasTaste ? rankByTaste(tasteVector!, list).map((r) => r.outfit) : antiRepeatOrder(list)
   const savedSet = new Set(savedOutfitIds)
   // Occasion mode
   const [occasion, setOccasion]           = useState<string | null>(null)
@@ -260,8 +270,9 @@ export default function FeedClient({
       const filtered = tag && tag !== 'all'
         ? injectedOutfits.filter((o) => (o.occasion_tags ?? []).includes(tag))
         : injectedOutfits
-      // One outfit per anchor item — variants stay in Similar/Explore.
-      const ordered = antiRepeatOrder(dedupeByAnchor(filtered))
+      // One outfit per anchor item — variants stay in Similar/Explore — then
+      // rank by taste (cosine) inside the occasion gate.
+      const ordered = orderForFeed(dedupeByAnchor(filtered))
       const end = currentOffset + LIMIT
       setOutfits(ordered.slice(0, end))
       setHasMore(ordered.length > end)
@@ -350,7 +361,7 @@ export default function FeedClient({
     const results = allOutfits.filter(o =>
       matchesSearch(o, searchQuery, filterColour, itemTypes, filterBrand)
     )
-    setSearchResults(antiRepeatOrder(results))
+    setSearchResults(orderForFeed(results))
     setSearchLoading(false)
   }, [hasActiveSearch, injectedOutfits, searchQuery, filterColour, filterItemGroup, filterBrand])
 
@@ -365,12 +376,22 @@ export default function FeedClient({
   }
 
   // ── Handlers ───────────────────────────────────────────────
-  const handleStyleItem    = (itemId: string, itemType: ItemType, outfit: OutfitWithItems) =>
+  // Soft taste signals (+1) — fire-and-forget when the user is signed in.
+  const signal = (outfitId: string, type: 'style_tap' | 'similar_tap' | 'explore_tap') => {
+    if (canSave) void recordTasteInteraction(outfitId, type, occasion ?? undefined)
+  }
+  const handleStyleItem    = (itemId: string, itemType: ItemType, outfit: OutfitWithItems) => {
+    signal(outfit.outfit_id, 'style_tap')
     router.push(`${detailHrefBase}/${outfit.outfit_id}?styleItem=${itemId}&itemType=${itemType}`)
-  const handleSimilarLooks = (outfit: OutfitWithItems) =>
+  }
+  const handleSimilarLooks = (outfit: OutfitWithItems) => {
+    signal(outfit.outfit_id, 'similar_tap')
     router.push(`${detailHrefBase}/${outfit.outfit_id}?mode=similar`)
-  const handleExploreStyles = (outfit: OutfitWithItems) =>
+  }
+  const handleExploreStyles = (outfit: OutfitWithItems) => {
+    signal(outfit.outfit_id, 'explore_tap')
     router.push(`${detailHrefBase}/${outfit.outfit_id}?mode=explore`)
+  }
 
   // ── Active filter label ────────────────────────────────────
   function activeFilterLabel(): string {
@@ -393,12 +414,14 @@ export default function FeedClient({
           </h1>
         </div>
 
-        {/* Recommended for you — personalised from saves + brand worlds */}
+        {/* Cosine taste recommendations — ranked by the user's taste vector */}
         {recommendedOutfits.length > 0 && (
           <div className="order-4 max-w-[1100px] mx-auto mb-12">
             <div className="flex items-baseline justify-between mb-4">
-              <p className="text-[11px] tracking-[0.099em] text-[#4A4E57]">RECOMMENDED FOR YOU</p>
-              <p className="text-[9px] tracking-[0.072em] text-[#A8A8A4]">BASED ON WHAT YOU LIKE</p>
+              <p className="text-[11px] tracking-[0.099em] text-[#4A4E57] inline-flex items-center gap-1.5">
+                <span className="text-[#C8302A]" aria-hidden>♥</span> RECOMMENDATIONS BASED ON YOUR TASTE
+              </p>
+              <p className="text-[9px] tracking-[0.072em] text-[#A8A8A4]">LEARNED FROM WHAT YOU LIKE</p>
             </div>
             <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
               {recommendedOutfits.map((o) => (

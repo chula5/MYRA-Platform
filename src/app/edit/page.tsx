@@ -4,7 +4,7 @@ import FeedClient from '@/app/feed/FeedClient'
 import { earlyAccessSignOut } from '@/app/earlyaccess/actions'
 import { recordEarlyAccessVisit } from '@/app/earlyaccess/activity'
 import { getSavedOutfitIds } from './save-actions'
-import { getRecommendedOutfits } from '@/lib/recommendations'
+import { getTasteRecommendations, getUserTasteVector } from '@/lib/taste-profile'
 import type { OutfitWithItems } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -34,10 +34,12 @@ export default async function EditPage() {
     .order('published_at', { ascending: false })
   const liveOutfits = (liveRaw ?? []) as unknown as OutfitWithItems[]
 
-  // Saved outfits + personalised recommendations (table may not exist yet → [] ).
-  const [savedIds, recommended] = await Promise.all([
+  // Saved outfits, cosine taste recommendations, and the user's taste vector
+  // (so the occasion feed can re-rank by taste). Tables may not exist yet → [] .
+  const [savedIds, recommended, tasteVector] = await Promise.all([
     getSavedOutfitIds(),
-    getRecommendedOutfits(user.id),
+    getTasteRecommendations(user.id),
+    getUserTasteVector(user.id),
   ])
 
   return (
@@ -75,6 +77,7 @@ export default async function EditPage() {
         canSave
         savedOutfitIds={savedIds}
         recommendedOutfits={recommended}
+        tasteVector={tasteVector}
       />
     </div>
   )
