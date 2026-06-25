@@ -125,7 +125,7 @@ export default function LandingPage() {
 
           {/* Footer links */}
           <div className="flex justify-end items-center flex-wrap gap-8">
-            <a href="#" className="text-[11px] tracking-[0.099em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300">
+            <a href="/privacy" className="text-[11px] tracking-[0.099em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300">
               PRIVACY
             </a>
             <a href="#" className="text-[11px] tracking-[0.099em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300">

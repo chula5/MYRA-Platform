@@ -35,3 +35,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 ._*
+
+# Capacitor / iOS
+/ios/App/Pods/
+/ios/App/build/
+/ios/App/App/public/
+/ios/DerivedData/
+.DS_Store
