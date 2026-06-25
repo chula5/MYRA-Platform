@@ -78,7 +78,7 @@ export default function PrivacyPage() {
             <h2 className="text-[14px] tracking-[0.06em] text-[#4A4E57] mb-3">CONTACT</h2>
             <p>
               Questions or requests? Email us at{' '}
-              <a href="mailto:hello@myraassistant.co.uk" className="underline underline-offset-2">hello@myraassistant.co.uk</a>.
+              <a href="mailto:chloe@myraassistant.co.uk" className="underline underline-offset-2">chloe@myraassistant.co.uk</a>.
             </p>
           </section>
         </div>
