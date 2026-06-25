@@ -25,9 +25,12 @@ interface CandState {
 }
 
 export default function OutfitReviewClient({ anchors }: { anchors: ReviewAnchor[] }) {
-  const [visible, setVisible] = useState(6)
+  // Freeze the queue for this session so approving an outfit (which refreshes
+  // the route) never reshuffles or drops anchors you're mid-review on.
+  const [queue] = useState(anchors)
+  const [visible, setVisible] = useState(8)
 
-  if (anchors.length === 0) {
+  if (queue.length === 0) {
     return (
       <p className="text-[12px] tracking-[0.09em] text-[#A8A8A4] py-20 text-center">
         EVERY ANCHOR ALREADY HAS 3+ OUTFITS — NOTHING TO REVIEW. 🎉
@@ -37,16 +40,16 @@ export default function OutfitReviewClient({ anchors }: { anchors: ReviewAnchor[
 
   return (
     <div className="space-y-12">
-      {anchors.slice(0, visible).map((a) => (
+      {queue.slice(0, visible).map((a) => (
         <AnchorReview key={a.item_id} anchor={a} />
       ))}
-      {visible < anchors.length && (
+      {visible < queue.length && (
         <div className="text-center pt-2">
           <button
-            onClick={() => setVisible((v) => v + 6)}
+            onClick={() => setVisible((v) => v + 8)}
             className="border border-[#0A0A0A] text-[#4A4E57] px-8 py-3 text-[11px] tracking-[0.16em] rounded-full hover:bg-[#0A0A0A] hover:text-white transition-colors"
           >
-            LOAD MORE ANCHORS ({anchors.length - visible} LEFT)
+            LOAD MORE ANCHORS ({queue.length - visible} LEFT)
           </button>
         </div>
       )}
@@ -61,6 +64,8 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
   const [error, setError] = useState<string | null>(null)
   const [cands, setCands] = useState<ReviewCandidate[]>([])
   const [states, setStates] = useState<Record<number, CandState>>({})
+  // Outfits approved this session, added on top of the saved count.
+  const [built, setBuilt] = useState(0)
 
   // Swap modal
   const [swap, setSwap] = useState<SwapTarget | null>(null)
@@ -89,6 +94,7 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
       return
     }
     setStates((s) => ({ ...s, [idx]: { approved: true, outfitId: res.outfitId, projectId: res.projectId } }))
+    setBuilt((b) => b + 1)
   }
 
   function discard(idx: number) {
@@ -151,7 +157,7 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
           {anchor.price && <p className="text-[10px] tracking-[0.06em] text-[#6B6B6B] mt-0.5">{anchor.price}</p>}
         </div>
         <div className="text-right flex-shrink-0">
-          <p className="text-[18px] tracking-[0.04em] text-[#4A4E57] leading-none">{anchor.existingCount}<span className="text-[#A8A8A4]"> / 3</span></p>
+          <p className="text-[18px] tracking-[0.04em] text-[#4A4E57] leading-none">{anchor.existingCount + built}<span className="text-[#A8A8A4]"> / 3</span></p>
           <p className="text-[8px] tracking-[0.16em] text-[#C4A882] mt-1">OUTFITS BUILT</p>
         </div>
       </div>
