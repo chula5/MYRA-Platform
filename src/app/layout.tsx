@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Manrope } from 'next/font/google'
 import { FeedProvider } from '@/context/FeedContext'
 import './globals.css'
@@ -10,6 +10,16 @@ const manrope = Manrope({
   variable: '--font-manrope',
   display: 'swap',
 })
+
+// Prevent iOS from zooming in when a small-font input is focused (and disable
+// pinch-zoom) for an app-like feel. viewportFit cover handles the notch/safe area.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: 'cover',
+}
 
 export const metadata: Metadata = {
   title: 'MYRA',
