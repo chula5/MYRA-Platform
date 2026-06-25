@@ -2,15 +2,13 @@
 
 import { createAdminClient } from '@/lib/supabase-server'
 import { getItem, getReadyAndLiveItems } from '@/lib/admin-queries'
-import { generateCandidates, pairCompat, slotForItemType } from '@/lib/composer'
+import { pairCompat, slotForItemType } from '@/lib/composer'
 
 // Anchor garments we generate review outfits for.
-const DRESS = ['mini_dress', 'midi_dress', 'maxi_dress', 'shirt_dress', 'slip_dress']
-const TOP = ['shirt', 'blouse', 't-shirt', 'knitwear', 'corset', 'bodysuit']
-const BOTTOM = ['skirt', 'trousers', 'jeans']
-const ANCHOR_TYPES = new Set<string>([...DRESS, ...BOTTOM, ...TOP])
-
-// Outerwear is excluded from review candidates (no forcing a jacket/cape).
+const DRESS = new Set(['mini_dress', 'midi_dress', 'maxi_dress', 'shirt_dress', 'slip_dress'])
+const TOP = new Set(['shirt', 'blouse', 't-shirt', 'knitwear', 'corset', 'bodysuit'])
+const BOTTOM = new Set(['skirt', 'trousers', 'jeans'])
+const ANCHOR_TYPES = new Set<string>([...DRESS, ...TOP, ...BOTTOM])
 const OUTERWEAR = new Set(['coat', 'trench', 'jacket', 'blazer', 'gilet', 'cape'])
 
 const TARGET = 3
@@ -28,6 +26,23 @@ function fmtPrice(price: string | null | undefined, currency: string | null | un
 function tierBandViolation(tiers: (number | null | undefined)[]): boolean {
   const t = tiers.filter((x): x is number => typeof x === 'number')
   return t.some((x) => x <= 2) && t.some((x) => x >= 4)
+}
+
+function anchorCategory(itemType: string): 'dress' | 'top' | 'bottom' {
+  if (DRESS.has(itemType)) return 'dress'
+  if (TOP.has(itemType)) return 'top'
+  return 'bottom'
+}
+
+// Coherence of a combo: average pairwise compat, anchor pairs weighted 2×.
+function comboScore(anchor: any, additions: any[]): number {
+  let sum = 0
+  let w = 0
+  for (const it of additions) { sum += 2 * pairCompat(anchor, it).total; w += 2 }
+  for (let i = 0; i < additions.length; i++) {
+    for (let j = i + 1; j < additions.length; j++) { sum += pairCompat(additions[i], additions[j]).total; w += 1 }
+  }
+  return w ? sum / w : 0
 }
 
 export interface ReviewAnchor {
@@ -56,7 +71,6 @@ export interface ReviewCandidate {
   items: ReviewItem[]
 }
 
-// Anchor items that don't yet have TARGET outfits built around them.
 export async function getReviewQueue(limit = 60): Promise<{ anchors: ReviewAnchor[]; error?: string }> {
   try {
     const admin = createAdminClient()
@@ -71,8 +85,7 @@ export async function getReviewQueue(limit = 60): Promise<{ anchors: ReviewAncho
     for (const o of (outfits ?? []) as any[]) {
       const items = (o.outfit_item ?? []) as { item_id: string; slot: string }[]
       const bySlot = (s: string) => items.find((i) => i.slot === s)?.item_id
-      const anchorId =
-        bySlot('dress') || bySlot('top') || bySlot('bottom') || bySlot('outerwear') || items[0]?.item_id
+      const anchorId = bySlot('dress') || bySlot('top') || bySlot('bottom') || bySlot('outerwear') || items[0]?.item_id
       if (anchorId) count.set(anchorId, (count.get(anchorId) ?? 0) + 1)
     }
 
@@ -98,7 +111,7 @@ export async function getReviewQueue(limit = 60): Promise<{ anchors: ReviewAncho
   }
 }
 
-// Library minus outerwear, the anchor itself, and any duplicate listing of it.
+// Library minus outerwear, the anchor, and any duplicate listing of it.
 function styleLibrary(library: any[], anchor: any): any[] {
   const anchorImg = String(anchor.image_url ?? '')
   const anchorName = String(anchor.product_name ?? '').toLowerCase().trim()
@@ -119,59 +132,91 @@ export async function composeForReview(anchorItemId: string): Promise<{
   try {
     const anchor: any = await getItem(anchorItemId)
     if (!anchor) return { error: 'Anchor not found' }
-    const library = styleLibrary(await getReadyAndLiveItems(), anchor)
-    if (library.length < 2) return { error: 'Not enough compatible items in the library yet' }
-
-    const raw = generateCandidates({ anchor, library, maxCandidates: 18 })
+    const lib = styleLibrary(await getReadyAndLiveItems(), anchor)
     const anchorTier = anchor.brand?.price_tier ?? null
+    const cat = anchorCategory(String(anchor.item_type))
 
-    // Tier rule + diversity: unique addition sets, and cap reuse of any single
-    // item so candidates aren't all the same shoe/bag.
-    const seenSets = new Set<string>()
-    const itemUse = new Map<string, number>()
-    const picked: typeof raw = []
-    for (const c of raw) {
-      if (tierBandViolation([anchorTier, ...c.items.map((ci: any) => ci.item.brand?.price_tier ?? null)])) continue
-      const ids = c.items.map((i: any) => i.item.item_id).sort()
-      const key = ids.join('|')
-      if (seenSets.has(key)) continue
-      // Skip if every item in this combo is already used twice elsewhere.
-      const overused = ids.length > 0 && ids.every((id: string) => (itemUse.get(id) ?? 0) >= 2)
-      if (overused) continue
-      seenSets.add(key)
-      ids.forEach((id: string) => itemUse.set(id, (itemUse.get(id) ?? 0) + 1))
-      picked.push(c)
-      if (picked.length >= 6) break
+    // Top-ranked, brand-tier-coherent items per slot.
+    const pool = (slot: string) =>
+      lib
+        .filter((it: any) => slotForItemType(it.item_type) === slot && !tierBandViolation([anchorTier, it.brand?.price_tier ?? null]))
+        .map((it: any) => ({ it, c: pairCompat(anchor, it).total }))
+        .sort((a, b) => b.c - a.c)
+        .slice(0, 5)
+        .map((x) => x.it)
+
+    // Required slots → complete outfit. Dress: shoes + bag. Separates: the other
+    // garment + shoes + bag.
+    const garmentSlot = cat === 'top' ? 'bottom' : cat === 'bottom' ? 'top' : null
+    const slotPools: { slot: string; items: any[] }[] = []
+    if (garmentSlot) slotPools.push({ slot: garmentSlot, items: pool(garmentSlot) })
+    slotPools.push({ slot: 'shoe', items: pool('shoe') })
+    slotPools.push({ slot: 'bag', items: pool('bag') })
+
+    const pools = slotPools.filter((p) => p.items.length > 0) // best-effort if a slot is empty
+    if (pools.length === 0) {
+      return { anchor: anchorPayload(anchor), candidates: [] }
     }
 
-    const candidates: ReviewCandidate[] = picked.map((c, idx) => ({
+    // Cartesian product of the slot pools.
+    let combos: any[][] = [[]]
+    for (const p of pools) {
+      const next: any[][] = []
+      for (const combo of combos) for (const it of p.items) next.push([...combo, it])
+      combos = next
+    }
+
+    const scored = combos
+      .filter((items) => !tierBandViolation([anchorTier, ...items.map((i) => i.brand?.price_tier ?? null)]))
+      .map((items) => ({ items, score: comboScore(anchor, items) }))
+      .sort((a, b) => b.score - a.score)
+
+    // Diversity: no single item appears in more than 2 candidates.
+    const use = new Map<string, number>()
+    const picked: typeof scored = []
+    for (const s of scored) {
+      if (s.items.some((it) => (use.get(it.item_id) ?? 0) >= 2)) continue
+      s.items.forEach((it) => use.set(it.item_id, (use.get(it.item_id) ?? 0) + 1))
+      picked.push(s)
+      if (picked.length >= 6) break
+    }
+    if (picked.length < 6) {
+      for (const s of scored) {
+        if (picked.includes(s)) continue
+        picked.push(s)
+        if (picked.length >= 6) break
+      }
+    }
+
+    const candidates: ReviewCandidate[] = picked.map((s, idx) => ({
       candidateIndex: idx,
-      score: Number(c.score.toFixed(3)),
-      items: c.items.map(({ item, slot }: any) => ({
-        slot,
-        item_id: item.item_id,
-        product_name: item.product_name,
-        brand_name: item.brand?.name ?? null,
-        image_url: item.image_url,
-        price: fmtPrice(item.price, item.currency),
-        compat: Number((c.breakdown.find((b: any) => b.itemId === item.item_id)?.compatWithAnchor ?? 0).toFixed(3)),
+      score: Number(s.score.toFixed(3)),
+      items: s.items.map((it: any) => ({
+        slot: slotForItemType(it.item_type),
+        item_id: it.item_id,
+        product_name: it.product_name,
+        brand_name: it.brand?.name ?? null,
+        image_url: it.image_url,
+        price: fmtPrice(it.price, it.currency),
+        compat: Number(pairCompat(anchor, it).total.toFixed(3)),
       })),
     }))
 
-    return {
-      anchor: {
-        item_id: anchor.item_id,
-        product_name: anchor.product_name,
-        brand_name: anchor.brand?.name ?? null,
-        image_url: anchor.image_url,
-        item_type: String(anchor.item_type),
-        price: fmtPrice(anchor.price, anchor.currency),
-      },
-      candidates,
-    }
+    return { anchor: anchorPayload(anchor), candidates }
   } catch (err) {
     console.error('[composeForReview]', err)
     return { error: err instanceof Error ? err.message : 'Failed to compose' }
+  }
+}
+
+function anchorPayload(anchor: any) {
+  return {
+    item_id: anchor.item_id,
+    product_name: anchor.product_name,
+    brand_name: anchor.brand?.name ?? null,
+    image_url: anchor.image_url,
+    item_type: String(anchor.item_type),
+    price: fmtPrice(anchor.price, anchor.currency),
   }
 }
 
@@ -199,7 +244,6 @@ export async function getReviewSwapOptions(
       pool = pool.filter((it: any) => slotForItemType(it.item_type) === slot)
     }
 
-    // Brand-tier coherent only.
     pool = pool.filter((it: any) => !tierBandViolation([anchorTier, it.brand?.price_tier ?? null]))
 
     const options: ReviewItem[] = pool
