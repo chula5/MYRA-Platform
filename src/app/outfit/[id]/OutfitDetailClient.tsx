@@ -570,9 +570,9 @@ export default function OutfitDetailClient({
 
       {/* ── Style Item results ─────────────────────────────── */}
       {activeStyleItemId && styleItemOutfits.length > 0 && (
-        <div className="mt-16">
+        <div className="mt-8">
           {/* Spacer between original and results */}
-          <div className="border-t border-[#E2E0DB] mb-12" />
+          <div className="border-t border-[#E2E0DB] mb-6" />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {styleItemOutfits.map((o) => (
               <OutfitCard
@@ -590,8 +590,8 @@ export default function OutfitDetailClient({
 
       {/* ── Similar / Explore results ──────────────────────── */}
       {relatedOutfits.length > 0 && !activeStyleItemId && (
-        <div className="mt-16">
-          <div className="border-t border-[#E2E0DB] mb-8" />
+        <div className="mt-8">
+          <div className="border-t border-[#E2E0DB] mb-6" />
           <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-8 text-center">
             {activeMode === 'explore' ? 'EXPLORE STYLES' : 'SIMILAR LOOKS'}
           </p>
