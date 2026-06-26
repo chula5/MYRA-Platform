@@ -63,6 +63,46 @@ export default async function AnalyticsPage() {
     ? await admin.from('landing_event' as any).select('*', { count: 'exact', head: true }).eq('event_type', 'pageview').eq('path', '/')
     : { count: 0 }
 
+  // ── Retention: time on site + repeat session rate (last 30 days) ──
+  let retentionReady = true
+  let totalSessions = 0
+  let repeatRate = '—'
+  let avgTime = '—'
+  let returningVisitorRate = '—'
+  {
+    const { data: sessions, error: sErr } = await admin
+      .from('site_session' as any)
+      .select('visitor_id, is_returning, started_at, last_seen_at')
+      .gte('started_at', since.toISOString())
+      .limit(50000)
+    if (sErr) {
+      retentionReady = false
+    } else {
+      const rows = (sessions ?? []) as { visitor_id: string; is_returning: boolean; started_at: string; last_seen_at: string }[]
+      totalSessions = rows.length
+      if (totalSessions > 0) {
+        const returningSessions = rows.filter((r) => r.is_returning).length
+        repeatRate = `${((returningSessions / totalSessions) * 100).toFixed(0)}%`
+
+        // Avg session duration, capped at 1h to ignore idle/zombie tabs.
+        const durations = rows
+          .map((r) => (new Date(r.last_seen_at).getTime() - new Date(r.started_at).getTime()) / 1000)
+          .map((d) => Math.max(0, Math.min(d, 3600)))
+        const meanSec = durations.reduce((s, d) => s + d, 0) / durations.length
+        const m = Math.floor(meanSec / 60)
+        const s = Math.round(meanSec % 60)
+        avgTime = `${m}:${String(s).padStart(2, '0')}`
+
+        // Returning visitor rate: visitors seen in >1 session this window.
+        const sessionsByVisitor = new Map<string, number>()
+        for (const r of rows) sessionsByVisitor.set(r.visitor_id, (sessionsByVisitor.get(r.visitor_id) ?? 0) + 1)
+        const visitors = sessionsByVisitor.size
+        const returningVisitors = [...sessionsByVisitor.values()].filter((n) => n > 1).length
+        returningVisitorRate = visitors > 0 ? `${((returningVisitors / visitors) * 100).toFixed(0)}%` : '—'
+      }
+    }
+  }
+
   // Build 30-day series
   const dayMap = buildDayMap(DAYS)
   const clickTypes: Record<string, number> = {}
@@ -159,6 +199,46 @@ ALTER TABLE public.landing_event ENABLE ROW LEVEL SECURITY;`}</pre>
             <p className="text-[8px] tracking-[0.072em] text-[#C4A882] mt-1">{s.sub}</p>
           </div>
         ))}
+      </div>
+
+      {/* Retention */}
+      <div className="mb-10">
+        <p className="text-[10px] tracking-[0.135em] text-[#6B6B6B] mb-4">RETENTION · LAST 30 DAYS</p>
+        {!retentionReady ? (
+          <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[12px] p-5 max-w-[600px]">
+            <p className="text-[11px] tracking-[0.081em] text-[#8A7A4E] mb-3">SESSION TABLE NOT YET CREATED</p>
+            <p className="text-[10px] tracking-[0.054em] text-[#8A7A4E] leading-relaxed mb-3">
+              Run migration <span className="font-mono">0013_site_session.sql</span> in Supabase to start
+              measuring time on site and repeat sessions.
+            </p>
+            <pre className="text-[9px] bg-white border border-[#E8D9B8] p-3 rounded overflow-x-auto text-[#6B6B6B] leading-relaxed">{`create table if not exists site_session (
+  session_id   text primary key,
+  visitor_id   text not null,
+  is_returning boolean not null default false,
+  path         text,
+  started_at   timestamptz not null default now(),
+  last_seen_at timestamptz not null default now()
+);
+create index if not exists site_session_visitor_idx on site_session (visitor_id);
+create index if not exists site_session_started_idx on site_session (started_at);
+alter table site_session enable row level security;`}</pre>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { label: 'AVG TIME ON SITE', value: avgTime, sub: 'MIN:SEC PER SESSION' },
+              { label: 'REPEAT SESSION RATE', value: repeatRate, sub: 'SESSIONS FROM RETURN VISITS' },
+              { label: 'RETURNING VISITORS', value: returningVisitorRate, sub: 'VISITORS WITH 2+ SESSIONS' },
+              { label: 'SESSIONS (30 DAYS)', value: totalSessions.toLocaleString(), sub: 'TOTAL VISITS' },
+            ].map((s) => (
+              <div key={s.label} className="border border-[#E2E0DB] bg-white rounded-[12px] px-5 py-4">
+                <p className="text-[9px] tracking-[0.09em] text-[#A8A8A4] mb-2">{s.label}</p>
+                <p className="text-[28px] tracking-[0.023em] text-[#4A4E57] leading-none">{s.value}</p>
+                <p className="text-[8px] tracking-[0.072em] text-[#C4A882] mt-1">{s.sub}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Chart */}

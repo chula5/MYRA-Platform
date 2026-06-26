@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Manrope } from 'next/font/google'
 import { FeedProvider } from '@/context/FeedContext'
+import SessionTracker from '@/components/analytics/SessionTracker'
 import './globals.css'
 
 // Site typeface — a clean, gently rounded grotesque close to Pragmatica.
@@ -42,6 +43,7 @@ export default function RootLayout({
         <FeedProvider>
           {children}
         </FeedProvider>
+        <SessionTracker />
       </body>
     </html>
   )
