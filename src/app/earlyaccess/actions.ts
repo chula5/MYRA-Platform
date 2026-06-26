@@ -66,6 +66,40 @@ export async function earlyAccessSignUp(formData: FormData) {
   redirect('/edit')
 }
 
+// Open, public sign-up (no invite key) — lets anyone create a login from the
+// landing page to start saving outfits and get personalised recommendations.
+export async function publicSignUp(formData: FormData) {
+  const email = ((formData.get('email') as string) || '').trim().toLowerCase()
+  const password = (formData.get('password') as string) || ''
+  const confirm = (formData.get('confirm') as string) || ''
+
+  const back = (msg: string) => redirect(`/earlyaccess?mode=signup&error=${encodeURIComponent(msg)}`)
+
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) back('Enter a valid email address')
+  if (!password || password.length < 8) back('Password must be at least 8 characters')
+  if (password !== confirm) back('Passwords do not match')
+
+  const admin = createAdminClient()
+  const { error: createErr } = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { role: ROLE },
+  })
+  if (createErr) {
+    if (/already|exists|registered/i.test(createErr.message)) {
+      redirect(`/earlyaccess?error=${encodeURIComponent('You already have an account — sign in')}`)
+    }
+    back('Could not create your account — please try again')
+  }
+
+  const supabase = await createServerClient()
+  const { data, error: signErr } = await supabase.auth.signInWithPassword({ email, password })
+  if (signErr) redirect(`/earlyaccess?error=${encodeURIComponent('Account created — please sign in')}`)
+  if (data.user) await recordEarlyAccessLogin(data.user.id)
+  redirect('/edit')
+}
+
 export async function earlyAccessSignOut() {
   const supabase = await createServerClient()
   await supabase.auth.signOut()

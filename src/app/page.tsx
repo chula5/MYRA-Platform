@@ -1,33 +1,90 @@
 import Link from 'next/link'
 import Navigation from '@/components/navigation/Navigation'
-import LandingPageClient from './LandingPageClient'
+import FeedClient from '@/app/feed/FeedClient'
+import SignupPrompt from '@/components/SignupPrompt'
+import LandingTracker from '@/components/analytics/LandingTracker'
+import { createServerClient, createAdminClient } from '@/lib/supabase-server'
+import { getSavedOutfitIds } from '@/app/edit/save-actions'
+import {
+  getTasteRecommendations,
+  getUserTasteVector,
+  getBrandAffinityRows,
+  getOccasionOrder,
+  type BrandRow,
+} from '@/lib/taste-profile'
+import type { OutfitWithItems } from '@/types/database'
 
-export default function LandingPage() {
+export const dynamic = 'force-dynamic'
+
+export default async function LandingPage() {
+  const supabase = await createServerClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  // Live outfits power the Edit at the top of the page (service-role so items
+  // show despite RLS) — for everyone, signed in or not.
+  const admin = createAdminClient()
+  const { data: liveRaw } = await admin
+    .from('outfit')
+    .select('*, outfit_item(*, item(*, brand(*)))')
+    .eq('status', 'live')
+    .order('published_at', { ascending: false })
+  const liveOutfits = (liveRaw ?? []) as unknown as OutfitWithItems[]
+
+  // Personalisation only for signed-in users.
+  let savedIds: string[] = []
+  let recommended: OutfitWithItems[] = []
+  let tasteVector: number[] | undefined
+  let brandRows: BrandRow[] = []
+  let occasionOrder: string[] | undefined
+  if (user) {
+    const [s, r, v] = await Promise.all([
+      getSavedOutfitIds(),
+      getTasteRecommendations(user.id),
+      getUserTasteVector(user.id),
+    ])
+    savedIds = s
+    recommended = r
+    tasteVector = v
+    brandRows = await getBrandAffinityRows(user.id, liveOutfits, v)
+    occasionOrder = getOccasionOrder(v, liveOutfits)
+  }
+
   return (
     <>
-      <Navigation transparent />
+      <Navigation authed={!!user} />
+
+      {/* ── The Edit — first thing the user sees ────────────────── */}
+      <main className="bg-[#F2F2F2] pt-14">
+        <FeedClient
+          injectedOutfits={liveOutfits}
+          detailHrefBase={user ? '/edit' : '/outfit'}
+          canSave={!!user}
+          savedOutfitIds={savedIds}
+          recommendedOutfits={recommended}
+          tasteVector={tasteVector}
+          brandRows={brandRows}
+          occasionOrder={occasionOrder}
+          signupHref={user ? undefined : '/earlyaccess'}
+        />
+      </main>
+      {!user && <SignupPrompt href="/earlyaccess" />}
 
       {/* ── Hero ──────────────────────────────────────────────
           Mobile: image fills the viewport (h-screen + object-cover).
-          Desktop: image fills the full width at its natural aspect ratio
-                   — the section grows taller than the viewport, so the
-                   user scrolls down to reveal the rest of the outfit. */}
+          Desktop: image fills the full width at its natural aspect ratio. */}
       <section className="relative w-screen overflow-hidden bg-[#FAFAF8] h-screen sm:h-auto">
-        {/* Mobile image — absolutely positioned to fill the viewport */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/Mesh%20Cape.png"
           alt=""
           className="sm:hidden absolute inset-0 w-full h-full object-cover object-top"
         />
-        {/* Desktop image — fills width, height adapts naturally */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/Mesh%20Cape.png"
           alt=""
           className="hidden sm:block w-full h-auto"
         />
-        {/* Headline overlaid on the trouser area */}
         <div className="absolute inset-x-0 bottom-[28%] sm:bottom-[28%] flex justify-center px-2 sm:px-6 z-10 pointer-events-none">
           <h1 className="text-white text-center whitespace-nowrap leading-[1.05] tracking-[0.018em] sm:tracking-[0.036em] text-[clamp(14px,4.2vw,56px)] drop-shadow-[0_2px_12px_rgba(0,0,0,0.25)]">
             A DIFFERENT WAY TO GET DRESSED.
@@ -35,7 +92,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Manifesto — sits directly under the hero photo ──── */}
+      {/* ── Manifesto ──── */}
       <section className="bg-[#FAFAF8] pt-20 sm:pt-28 pb-12 sm:pb-16 px-6 sm:px-10">
         <div className="max-w-5xl mx-auto text-center">
           <p className="text-[#4A4E57] tracking-[0.045em] sm:tracking-[0.059em] leading-[1.65] text-[clamp(13px,1.7vw,18px)]">
@@ -73,57 +130,34 @@ export default function LandingPage() {
       <section className="bg-[#FAFAF8] pb-32 sm:pb-40 px-4 sm:px-10">
         <div className="max-w-6xl mx-auto">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-6">
-            {/* Left — top aligned */}
             <div className="sm:mt-0">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/VB.png"
-                alt=""
-                className="w-full h-auto block hover:opacity-90 transition-opacity duration-500"
-              />
+              <img src="/VB.png" alt="" className="w-full h-auto block hover:opacity-90 transition-opacity duration-500" />
             </div>
-            {/* Middle — offset down */}
             <div className="sm:mt-32">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/Blue%20Ruffle.png"
-                alt=""
-                className="w-full h-auto block hover:opacity-90 transition-opacity duration-500"
-              />
+              <img src="/Blue%20Ruffle.png" alt="" className="w-full h-auto block hover:opacity-90 transition-opacity duration-500" />
             </div>
-            {/* Right — partial offset */}
             <div className="sm:mt-16">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/DRIES%20Skirt.png"
-                alt=""
-                className="w-full h-auto block hover:opacity-90 transition-opacity duration-500"
-              />
+              <img src="/DRIES%20Skirt.png" alt="" className="w-full h-auto block hover:opacity-90 transition-opacity duration-500" />
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── Sticky waitlist CTA + auto invite popup (self-positioning) ── */}
-      <LandingPageClient />
+      {/* Pageview analytics (no more waitlist popup) */}
+      <LandingTracker />
 
-      {/* ── Footer — extra bottom padding so sticky CTA never covers copyright */}
-      <footer className="bg-white pt-16 pb-28 sm:pb-24 px-10">
+      {/* ── Footer ──── */}
+      <footer className="bg-white pt-16 pb-24 px-10">
         <div className="max-w-[1440px] mx-auto">
-          {/* Wordmark */}
           <div className="text-center mb-10">
-            <Link
-              href="/"
-              className="text-[20px] tracking-[0.113em] text-[#4A4E57] hover:opacity-60 transition-opacity duration-300"
-            >
+            <Link href="/" className="text-[20px] tracking-[0.113em] text-[#4A4E57] hover:opacity-60 transition-opacity duration-300">
               MYRA
             </Link>
           </div>
-
-          {/* Divider */}
           <div className="border-t border-[#E2E0DB] mb-8" />
-
-          {/* Footer links */}
           <div className="flex justify-end items-center flex-wrap gap-8">
             <a href="/privacy" className="text-[11px] tracking-[0.099em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300">
               PRIVACY

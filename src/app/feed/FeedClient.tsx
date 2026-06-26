@@ -290,6 +290,7 @@ export default function FeedClient({
   tasteVector,
   brandRows = [],
   occasionOrder,
+  signupHref,
 }: {
   showAllOption?: boolean
   injectedOutfits?: OutfitWithItems[]
@@ -304,6 +305,9 @@ export default function FeedClient({
   brandRows?: BrandRow[]
   // Personalised order of occasion tiles (tags); falls back to the base six.
   occasionOrder?: string[]
+  // When set (anonymous visitors), a sign-up prompt appears after the first
+  // occasion tap or search. Links here ("/earlyaccess").
+  signupHref?: string
 }) {
   const hasTaste = !!tasteVector && !isZero(tasteVector)
   // Occasion gates the catalogue; cosine ranks what's left (highest taste
@@ -362,6 +366,18 @@ export default function FeedClient({
 
   const LIMIT = 9
   const router = useRouter()
+
+  // Anonymous visitors: once they engage (pick an occasion or search), nudge
+  // them to create a login. Fires a window event the SignupPrompt listens for.
+  useEffect(() => {
+    if (!signupHref) return
+    if (!occasion && !searchMode) return
+    try {
+      if (sessionStorage.getItem('myra_signup_prompted') === '1') return
+      sessionStorage.setItem('myra_signup_prompted', '1')
+    } catch { /* ignore */ }
+    window.dispatchEvent(new CustomEvent('myra:engage'))
+  }, [occasion, searchMode, signupHref])
 
   // ── Occasion fetch ─────────────────────────────────────────
   const fetchOutfits = useCallback(async (tag: string, currentOffset: number, append: boolean) => {

@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { trackLandingClick } from '@/components/analytics/LandingTracker'
 
-export default function Navigation({ transparent = false }: { transparent?: boolean }) {
+export default function Navigation({ transparent = false, authed = false }: { transparent?: boolean; authed?: boolean }) {
   const [scrolled, setScrolled] = useState(false)
 
   useEffect(() => {
@@ -75,6 +75,17 @@ export default function Navigation({ transparent = false }: { transparent?: bool
           >
             <TikTokIcon />
           </a>
+          {/* Constant auth button */}
+          <Link
+            href={authed ? '/edit' : '/earlyaccess'}
+            className={`whitespace-nowrap rounded-full border px-3 sm:px-4 py-1.5 text-[9px] sm:text-[10px] tracking-[0.09em] transition-colors duration-300 ${
+              isTransparent
+                ? 'border-white/70 text-white hover:bg-white/15'
+                : 'border-[#0A0A0A] text-[#4A4E57] hover:bg-[#0A0A0A] hover:text-white'
+            }`}
+          >
+            {authed ? 'MY EDIT' : 'LOG IN / SIGN UP'}
+          </Link>
         </div>
       </div>
     </nav>
