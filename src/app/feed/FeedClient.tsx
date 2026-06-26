@@ -145,6 +145,10 @@ function wordMatch(text: string | null | undefined, token: string): boolean {
   return new RegExp(`\\b${token}\\b`, 'i').test(text)
 }
 
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 // Search-word → colour_family (incl. common synonyms).
 const COLOUR_WORDS: Record<string, ColourFamily> = {
   white: 'white', ivory: 'white', cream: 'cream', ecru: 'cream', beige: 'cream', oatmeal: 'cream',
@@ -189,6 +193,7 @@ function matchesSearch(
   colour: ColourFamily | null,
   itemTypes: string[] | null,
   brand: string,
+  knownBrands: string[] = [],
 ): boolean {
   const items = (outfit.outfit_item ?? []).filter(oi => oi.item).map(oi => oi.item)
 
@@ -208,33 +213,44 @@ function matchesSearch(
     if (!items.some(it => (it as any).brand?.name?.toLowerCase().includes(b))) return false
   }
 
-  // Free text. Classify each word as a COLOUR, an ITEM-TYPE, or a free token.
+  // Free text. Pull out a brand name first, then classify the remaining words as
+  // COLOUR / ITEM-TYPE / free. Brand + type + colour must all hold on the SAME
+  // item — "jacquemus trousers" means trousers that ARE Jacquemus, not a
+  // Jacquemus bag standing next to someone else's trousers.
   if (query.trim()) {
-    const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean)
+    let q = query.toLowerCase().trim()
+    let brandTok: string | null = null
+    for (const b of knownBrands) {
+      if (new RegExp(`\\b${escapeRe(b)}\\b`).test(q)) {
+        brandTok = b
+        q = q.replace(new RegExp(`\\b${escapeRe(b)}\\b`, 'g'), ' ')
+        break
+      }
+    }
+
+    const tokens = q.split(/\s+/).filter(Boolean)
     const colourTokens = tokens.filter(t => COLOUR_WORDS[t])
     const wantTypes = new Set(tokens.flatMap(t => TYPE_WORDS[t] ?? []))
     const freeTokens = tokens.filter(t => !COLOUR_WORDS[t] && !TYPE_WORDS[t])
 
-    const itemIsType = (it: any) => wantTypes.has(String(it.item_type))
     // "blue" colloquially includes navy; everything else is its single family.
     const famsFor = (tok: string): ColourFamily[] => (tok === 'blue' ? ['blue', 'navy'] : [COLOUR_WORDS[tok]])
-    const itemIsColour = (it: any) =>
-      colourTokens.some(tok => famsFor(tok).includes(it.colour_family) || wordMatch(it.product_name, tok))
 
-    // "blue dress" → ONE item must be BOTH that type AND that colour (not a blue
-    // bag next to a cream dress). This is the key precision fix.
-    if (colourTokens.length && wantTypes.size) {
-      if (!items.some(it => itemIsType(it) && itemIsColour(it))) return false
-    } else {
-      if (colourTokens.length && !items.some(itemIsColour)) return false
-      if (wantTypes.size && !items.some(itemIsType)) return false
+    if (brandTok || wantTypes.size || colourTokens.length) {
+      const ok = items.some((it: any) => {
+        if (brandTok && !(it.brand?.name ?? '').toLowerCase().includes(brandTok)) return false
+        if (wantTypes.size && !wantTypes.has(String(it.item_type))) return false
+        if (colourTokens.length && !colourTokens.some(tok => famsFor(tok).includes(it.colour_family) || wordMatch(it.product_name, tok))) return false
+        return true
+      })
+      if (!ok) return false
     }
 
-    // Remaining words (brand, material, occasion, aesthetic) — whole word anywhere.
+    // Remaining descriptive words (material, occasion, aesthetic) — anywhere.
     for (const token of freeTokens) {
-      const hit = items.some(it =>
+      const hit = items.some((it: any) =>
         wordMatch(it.product_name, token) ||
-        wordMatch((it as any).brand?.name, token) ||
+        wordMatch(it.brand?.name, token) ||
         wordMatch(it.material_primary, token) ||
         wordMatch(String(it.item_type).replace(/_/g, ' '), token),
       ) ||
@@ -416,8 +432,19 @@ export default function FeedClient({
       ? ITEM_GROUPS.find(g => g.label === filterItemGroup)?.types ?? null
       : null
 
+    // Brand names present in the catalogue — longest first so multi-word brands
+    // (e.g. "veronica beard") are matched before any single-word subset.
+    const brandSet = new Set<string>()
+    for (const o of allOutfits) {
+      for (const oi of (o.outfit_item ?? [])) {
+        const n = (oi as any).item?.brand?.name
+        if (n) brandSet.add(String(n).toLowerCase())
+      }
+    }
+    const knownBrands = [...brandSet].sort((a, b) => b.length - a.length)
+
     const results = allOutfits.filter(o =>
-      matchesSearch(o, searchQuery, filterColour, itemTypes, filterBrand)
+      matchesSearch(o, searchQuery, filterColour, itemTypes, filterBrand, knownBrands)
     )
     setSearchResults(orderForFeed(results))
     setSearchLoading(false)
@@ -466,15 +493,17 @@ export default function FeedClient({
     return (
       <div className="max-w-[1440px] mx-auto px-6 sm:px-10 py-16 flex flex-col">
         <div className="order-1 text-center mb-10">
-          <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-4">YOUR OCCASION</p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/myra-mirror-icon.png" alt="MYRA" className="h-16 w-auto mx-auto mb-5" />
           <h1 className="text-[clamp(28px,3vw,40px)] tracking-[0.045em] text-[#4A4E57] leading-tight">
             WHAT ARE YOU DRESSING FOR?
           </h1>
         </div>
 
-        {/* Cosine taste recommendations — ranked by the user's taste vector */}
+        {/* Cosine taste recommendations — ranked by the user's taste vector.
+            order-7 so it sits BELOW the occasion grid. */}
         {recommendedOutfits.length > 0 && (
-          <div className="order-4 max-w-[1100px] mx-auto mb-12">
+          <div className="order-7 max-w-[1100px] mx-auto mt-2 mb-12">
             <div className="flex items-baseline justify-between mb-4">
               <p className="text-[11px] tracking-[0.099em] text-[#4A4E57] inline-flex items-center gap-1.5">
                 <span className="text-[#C8302A]" aria-hidden>♥</span> RECOMMENDATIONS BASED ON YOUR TASTE
@@ -529,15 +558,8 @@ export default function FeedClient({
           ))}
         </div>
 
-        {/* Divider */}
-        <div className="order-2 flex items-center gap-6 max-w-[900px] mx-auto mb-8">
-          <div className="flex-1 border-t border-[#E2E0DB]" />
-          <span className="text-[10px] tracking-[0.113em] text-[#A8A8A4]">OR SEARCH</span>
-          <div className="flex-1 border-t border-[#E2E0DB]" />
-        </div>
-
         {/* Search + filter area */}
-        <div className="order-3 max-w-[700px] mx-auto mb-10">
+        <div className="order-3 w-full max-w-[860px] mx-auto mb-10">
 
           {/* Active filter chips */}
           {(filterColour || filterItemGroup || filterBrand.trim()) && (
@@ -566,14 +588,14 @@ export default function FeedClient({
           {/* Search input */}
           <form
             onSubmit={(e) => { e.preventDefault(); executeSearch() }}
-            className="flex gap-3 mb-4"
+            className="flex gap-3 mb-4 w-full"
           >
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={typedHint ? `${typedHint}▌` : 'SEARCH BY STYLE, COLOUR, BRAND, MATERIAL…'}
-              className="glass-input flex-1 px-5 py-3.5 rounded-full text-[11px] tracking-[0.054em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none"
+              className="glass-input flex-1 w-full min-w-0 px-5 py-3.5 rounded-full text-[11px] tracking-[0.054em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none"
             />
             <button
               type="submit"
