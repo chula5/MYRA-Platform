@@ -67,7 +67,7 @@ export const HIGGSFIELD_COMBOS: Record<string, HiggsfieldCombo> = {
     poseRef: null,
     // Same pose as REFINED (E5) — only the lighting/background changes.
     pose: 'straight on facing camera, feet together, arms at sides hands relaxed, statement accessory, composed and architectural',
-    lighting: 'bright high-key pure white seamless studio background, soft even diffused daylight, clean and airy, luminous and minimal, only a faint soft floor shadow, fresh true-to-life colours, elevated e-commerce editorial',
+    lighting: 'bright high-key pure white studio background, soft even daylight, clean airy and luminous, faint floor shadow, true-to-life colours',
     hair: 'severely slicked back',
   },
 }
