@@ -102,7 +102,7 @@ export default function Hotspot({
               absolute top-1/2 -translate-y-1/2 z-20
               ${pillRight ? 'right-full mr-2' : 'left-full ml-2'}
               hidden group-hover/hot:flex items-center
-              bg-white border border-[#0A0A0A] rounded-full
+              bg-[#9B9B9B]/30 backdrop-blur-md border border-white/40 rounded-full
               px-2.5 py-1 whitespace-nowrap pointer-events-none
             `}
           >
@@ -133,7 +133,7 @@ export default function Hotspot({
                 absolute top-1/2 -translate-y-1/2 z-20
                 ${pillRight ? 'right-full mr-3' : 'left-full ml-3'}
                 flex items-center gap-1
-                bg-white border border-[#0A0A0A]
+                bg-[#9B9B9B]/30 backdrop-blur-md border border-white/40
                 px-3 py-1.5 rounded-full
                 whitespace-nowrap
               `}
