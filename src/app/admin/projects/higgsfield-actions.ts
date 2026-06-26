@@ -232,6 +232,15 @@ export async function generateHiggsfieldShootForOutfit(
     } catch (err) {
       console.error('[generateHiggsfieldShootForOutfit] set display failed', err)
     }
+
+    // Image-score the freshly generated shoot so its taste vector is real
+    // instead of the composer's default 3s. Scans the new display image.
+    try {
+      const { rescoreOutfitFromImage } = await import('@/app/admin/vectors/actions')
+      await rescoreOutfitFromImage(outfitId)
+    } catch (err) {
+      console.error('[generateHiggsfieldShootForOutfit] auto-score failed', err)
+    }
   }
 
   return res
