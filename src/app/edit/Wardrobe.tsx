@@ -103,10 +103,14 @@ export default function Wardrobe() {
               </div>
             ) : (
               <>
-                {/* Saved looks — hanging on the rail */}
-                {outfits.length > 0 && (
-                  <div className="mb-8">
-                    <p className="text-[9px] tracking-[0.16em] text-[#6B6B6B] mb-3">SAVED LOOKS · {outfits.length}</p>
+                {/* ── TOP COMPARTMENT: saved looks, hanging on the rail ── */}
+                <div className="mb-7">
+                  <p className="text-[9px] tracking-[0.16em] text-[#6B6B6B] mb-3">SAVED LOOKS · {outfits.length}</p>
+                  {outfits.length === 0 ? (
+                    <p className="text-[9px] tracking-[0.08em] text-[#A8A8A4] leading-relaxed py-3">
+                      No saved looks yet — tap <span className="text-[#C8302A]">♥</span> on an outfit.
+                    </p>
+                  ) : (
                     <div className="relative">
                       {/* the rail */}
                       <div className="absolute left-1 right-1 top-0 h-[2px] bg-gradient-to-r from-[#C9AE80] via-[#B89A6E] to-[#C9AE80] rounded-full" />
@@ -133,14 +137,21 @@ export default function Wardrobe() {
                         ))}
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
 
-                {/* Saved items — on the shelf */}
-                {items.length > 0 && (
-                  <div>
-                    <p className="text-[9px] tracking-[0.16em] text-[#6B6B6B] mb-2">SAVED ITEMS · {items.length}</p>
-                    <div className="h-[3px] bg-gradient-to-r from-[#E0DACD] to-[#D8D2C6] rounded-full mb-3" />
+                {/* divider between the two wardrobe compartments */}
+                <div className="border-t border-dashed border-[#E2E0DB]" />
+
+                {/* ── BOTTOM COMPARTMENT: saved items, on the shelf ── */}
+                <div className="mt-6">
+                  <p className="text-[9px] tracking-[0.16em] text-[#6B6B6B] mb-2">SAVED ITEMS · {items.length}</p>
+                  <div className="h-[3px] bg-gradient-to-r from-[#E0DACD] to-[#D8D2C6] rounded-full mb-3" />
+                  {items.length === 0 ? (
+                    <p className="text-[9px] tracking-[0.08em] text-[#A8A8A4] leading-relaxed py-1">
+                      No saved items yet — tap <span className="text-[#C8302A]">♥</span> on an item in Shop The Look.
+                    </p>
+                  ) : (
                     <div className="space-y-2">
                       {items.map((it) => (
                         <div key={it.item_id} className="flex items-stretch gap-2.5 bg-white rounded-[12px] border border-[#E2E0DB] p-2">
@@ -175,8 +186,8 @@ export default function Wardrobe() {
                         </div>
                       ))}
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </>
             )}
           </div>
