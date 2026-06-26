@@ -14,6 +14,21 @@ import { getRecommendedOutfits } from '@/lib/recommendations'
 
 const OUTFIT_SELECT = '*, outfit_item(*, item(*, brand(*)))'
 
+// taste_vector is a pgvector vector(34) column — PostgREST returns it as a
+// string like "[0.1,0.2,...]", not a JS array. Parse it back to numbers.
+function parseVector(v: unknown): number[] | null {
+  if (Array.isArray(v) && v.length === VECTOR_DIM) return v as number[]
+  if (typeof v === 'string') {
+    try {
+      const a = JSON.parse(v)
+      if (Array.isArray(a) && a.length === VECTOR_DIM) return a as number[]
+    } catch {
+      /* not parseable */
+    }
+  }
+  return null
+}
+
 function anchorItemId(o: OutfitWithItems): string | null {
   const its = (o.outfit_item ?? []).filter((oi) => oi.item)
   const bySlot = (slot: string) => its.find((oi) => oi.slot === slot)?.item_id
@@ -67,8 +82,8 @@ export async function getUserTasteVector(userId: string): Promise<number[]> {
       .eq('user_id', userId)
       .maybeSingle()
 
-    const stored = (data as any)?.taste_vector as number[] | null | undefined
-    if (Array.isArray(stored) && stored.length === VECTOR_DIM) return stored
+    const stored = parseVector((data as any)?.taste_vector)
+    if (stored) return stored
 
     const seeded = await seedVectorFromHistory(userId)
     await (admin.from('user_taste_profile') as any).upsert(
@@ -110,20 +125,15 @@ export async function recordTasteEvent(
     // Fold the outfit's vector into the running profile.
     const [{ data: outfitRow }, { data: profile }] = await Promise.all([
       admin.from('outfit').select(OUTFIT_SELECT).eq('outfit_id', outfitId).maybeSingle(),
-      admin.from('user_taste_profile').select('taste_vector, event_count').eq('user_id', userId).maybeSingle(),
+      admin.from('user_taste_profile').select('taste_vector').eq('user_id', userId).maybeSingle(),
     ])
     if (!outfitRow) return
 
-    const current =
-      Array.isArray((profile as any)?.taste_vector) && (profile as any).taste_vector.length === VECTOR_DIM
-        ? ((profile as any).taste_vector as number[])
-        : await seedVectorFromHistory(userId)
-
+    const current = parseVector((profile as any)?.taste_vector) ?? (await seedVectorFromHistory(userId))
     const next = accumulate(current, buildOutfitVector(outfitRow as unknown as OutfitWithItems), weight)
-    const count = ((profile as any)?.event_count ?? 0) + 1
 
     await (admin.from('user_taste_profile') as any).upsert(
-      { user_id: userId, taste_vector: next, event_count: count, updated_at: new Date().toISOString() },
+      { user_id: userId, taste_vector: next, updated_at: new Date().toISOString() },
       { onConflict: 'user_id' },
     )
   } catch (err) {
