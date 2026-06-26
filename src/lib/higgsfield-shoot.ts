@@ -105,26 +105,35 @@ const MODEL_HAIR_COLOUR = [
   'dark brown', 'soft black', 'jet black', 'chestnut brown', 'warm chestnut',
   'auburn', 'deep espresso brown', 'ash blonde', 'honey blonde', 'light brown', 'cool brunette',
 ]
-const MODEL_SKIN_TONE = [
-  'fair', 'light', 'light olive', 'olive', 'warm tan', 'golden brown', 'deep brown', 'rich dark brown',
+// Heritage drives the model's ethnicity AND skin tone, so the feed shows a real
+// mix of ethnicities rather than one default look. Picked fresh per shoot.
+const MODEL_HERITAGE = [
+  'East Asian', 'Korean', 'Japanese', 'Chinese', 'Southeast Asian', 'Filipina', 'Vietnamese',
+  'South Asian', 'Indian',
+  'Black', 'West African', 'Nigerian', 'Ethiopian', 'Afro-Caribbean', 'African-American',
+  'Latina', 'Brazilian', 'Mexican', 'Colombian',
+  'Middle Eastern', 'Persian', 'Lebanese', 'North African', 'Moroccan',
+  'Mediterranean', 'Italian', 'Spanish', 'Greek', 'Turkish',
+  'Scandinavian', 'Northern European', 'Slavic', 'Irish', 'French',
+  'mixed-race', 'Eurasian', 'mixed Black and European',
+]
+const MODEL_BEAUTY = [
+  'strikingly beautiful', 'stunning', 'captivating', 'radiant', 'beautiful and distinctive', 'striking and elegant',
 ]
 const MODEL_AGE = [
   'in her mid 20s', 'in her late 20s', 'around 30', 'in her early 30s', 'in her mid 30s',
-]
-const MODEL_FEATURES = [
-  'fresh natural features', 'striking editorial features', 'soft understated features',
-  'angular modern features', 'classic refined features', 'distinctive high-fashion features',
 ]
 
 function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]
 }
 
-// A fresh, randomised description of a fictional model. Called per generation so
-// the face/hair changes every time. Skin is described as one overall complexion
-// (used consistently head-to-toe — see the MODEL clause in buildGenerationPrompt).
+// A fresh, randomised description of a beautiful, diverse fictional model. Called
+// per generation so the ethnicity, skin tone, face and hair change every time.
+// Heritage implies the complexion (rendered consistently head-to-toe — see the
+// MODEL clause in buildGenerationPrompt). Kept short to stay within the prompt limit.
 export function randomModelSubject(): string {
-  return `a fictional female fashion model ${pick(MODEL_AGE)} with ${pick(MODEL_HAIR_COLOUR)} hair and an even ${pick(MODEL_SKIN_TONE)} complexion, ${pick(MODEL_FEATURES)}, slim build, minimal makeup`
+  return `a ${pick(MODEL_BEAUTY)} fictional ${pick(MODEL_HERITAGE)} female fashion model ${pick(MODEL_AGE)}, ${pick(MODEL_HAIR_COLOUR)} hair, flawless skin, slim build, minimal makeup`
 }
 
 // Build the editorial generation prompt for a pose + a set of outfit items.
@@ -141,6 +150,7 @@ export function buildGenerationPrompt(combo: HiggsfieldCombo, items: ShootItem[]
     })
     .filter(Boolean)
     .join(', ')
+    .slice(0, 380) // keep the total prompt within Higgsfield's ~2048 char limit
 
   const productRefCount = items.filter((it) => it.image_url).slice(0, 5).length
   const productRefs = productRefCount === 1 ? 'the first reference image' : `the first ${productRefCount} reference images`
@@ -150,15 +160,15 @@ export function buildGenerationPrompt(combo: HiggsfieldCombo, items: ShootItem[]
     ? 'The FINAL reference image is a POSE-AND-LIGHTING GUIDE ONLY — copy its pose, framing and lighting, but completely IGNORE the person, face, skin tone, clothing, colours, background and styling shown in it. '
     : ''
 
-  return `${subject}, hair ${combo.hair}, wearing ${garments || 'the items shown in the product reference images'}. ` +
-    `MODEL — render ONE single, coherent, photorealistic woman. CRITICAL: her face, neck, shoulders, arms, hands and legs must ALL be the SAME person with ONE uniform, consistent skin tone and complexion head-to-toe — the head must clearly belong to the body, with NO mismatched or differing skin colours and NO pasted-on, swapped, or floating face. She is a fresh, fictional model who does not resemble any real, recognisable or famous person. The reference photos show ONLY the clothing — do NOT take her face, body, or skin tone from them; simply dress this one coherent model in those exact garments. ` +
-    `GARMENTS — reproduce each piece EXACTLY as shown in ${productRefs}: match the fabric and texture, the silhouette, the cut, the length, the neckline, sleeves, and every visible detail and trim. Do not restyle or substitute. ` +
-    `COLOUR — take the exact colour of every garment from its product reference photo: reproduce the true hue, depth, warmth and saturation faithfully. Do NOT wash out, desaturate, lighten, or shift any garment toward white, ivory or cream. ` +
+  return `${subject}, hair ${combo.hair}, wearing ${garments || 'the items in the reference images'}. ` +
+    `MODEL — render ONE invented, beautiful, photorealistic woman exactly as described above. The reference photos may show a DIFFERENT model — IGNORE that person entirely; use the photos ONLY to read the clothing, and do NOT copy anyone's face, hair, skin tone, body or pose from them. Keep ONE consistent skin tone head-to-toe, head clearly belonging to the body, no pasted-on or floating face. Not a real or famous person. ` +
+    `GARMENTS — reproduce each piece EXACTLY as in ${productRefs}: fabric, texture, silhouette, cut, length, neckline, sleeves and every detail; do not restyle or substitute. ` +
+    `COLOUR — keep each garment's true colour from its photo; do NOT wash out, lighten or shift it toward white or cream. ` +
     `POSE: ${combo.pose}. ` +
     poseGuide +
-    `BACKGROUND: flat seamless studio only, no props, no runway, no audience. ` +
+    `BACKGROUND: flat seamless studio, no props or audience. ` +
     `LIGHTING: ${combo.lighting}. ` +
-    `Fashion editorial photography, 35mm lens, photorealistic, ONE single subject only, full-length head-to-toe, no smiling, no outdoor or busy background.`
+    `Editorial fashion photo, 35mm, photorealistic, ONE subject, full-length head-to-toe, no smile, plain studio.`
 }
 
 // Reference images: the outfit's item photos (Cloudinary→JPG) plus the pose
