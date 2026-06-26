@@ -158,7 +158,16 @@ export async function analyseOutfit(
       raw = raw.replace(/^```[a-z]*\n?/, '').replace(/```$/, '').trim()
     }
 
-    const data = JSON.parse(raw) as OutfitAnalysis
+    // The model sometimes groups scores under "occasion"/"outfit"/"slot" keys
+    // instead of a flat object — merge one level of nesting so every score key
+    // lands at the top level.
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    const flat: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(parsed)) {
+      if (v && typeof v === 'object' && !Array.isArray(v)) Object.assign(flat, v as object)
+      else flat[k] = v
+    }
+    const data = flat as unknown as OutfitAnalysis
     return { data }
   } catch (err: unknown) {
     console.error('[analyseOutfit]', err)
