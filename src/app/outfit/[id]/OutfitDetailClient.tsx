@@ -128,20 +128,35 @@ export default function OutfitDetailClient({
       const supabase = createClient()
       const { data } = await supabase
         .from('outfit')
-        .select('outfit_id, image_url')
+        .select('outfit_id, image_url, outfit_item(item_id, slot)')
         .eq('status', 'live')
         .order('published_at', { ascending: false })
-      if (data) {
-        setSiblings(
-          (data as { outfit_id: string; image_url: string }[]).map((o) => ({
-            id: o.outfit_id,
-            image: o.image_url,
-          })),
-        )
+      if (!data) return
+
+      // Hero garment of an outfit (dress → top → bottom → outerwear → first).
+      const anchorOf = (oi: { item_id: string; slot: string }[]): string | null => {
+        const bySlot = (s: string) => oi.find((x) => x.slot === s)?.item_id
+        return bySlot('dress') || bySlot('top') || bySlot('bottom') || bySlot('outerwear') || oi[0]?.item_id || null
       }
+
+      // One look per anchor garment so adjacent looks aren't the same piece
+      // styled twice. Keep the FIRST per anchor, but make sure THIS outfit is
+      // the one kept for its own anchor (so nav/peek stays anchored on it).
+      const seen = new Map<string, number>()
+      const out: { id: string; image: string }[] = []
+      for (const o of data as { outfit_id: string; image_url: string; outfit_item: { item_id: string; slot: string }[] }[]) {
+        const anchor = anchorOf(o.outfit_item ?? [])
+        if (anchor && seen.has(anchor)) {
+          if (o.outfit_id === outfitId) out[seen.get(anchor)!] = { id: o.outfit_id, image: o.image_url }
+          continue
+        }
+        if (anchor) seen.set(anchor, out.length)
+        out.push({ id: o.outfit_id, image: o.image_url })
+      }
+      setSiblings(out)
     }
     loadSiblings()
-  }, [])
+  }, [outfitId])
 
   // Navigate to a specific look (by absolute index) or by direction.
   const goToIndex = useCallback((target: number) => {
