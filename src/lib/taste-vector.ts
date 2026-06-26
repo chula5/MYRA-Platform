@@ -55,16 +55,20 @@ export function buildOutfitVector(o: OutfitWithItems): number[] {
   const n = items.length || 1
   const colours = items.map((it) => String(it.colour_family ?? ''))
   const types = items.map((it) => String(it.item_type ?? ''))
-  const frac = (pred: (it: any) => boolean) => items.filter(pred).length / n
   const colourFrac = (...c: string[]) => colours.filter((x) => c.includes(x)).length / n
   const hasType = (...t: string[]) => (types.some((x) => t.includes(x)) ? 1 : 0)
+  const itemAvg = (f: string) => avg(items.map((it: any) => it[f]))
 
   const v: number[] = [
-    // ── Outfit-level styling scores (0-8) ──
-    n5(oo.formality),
-    n5(oo.planning),
-    n5(oo.wearer_priority),
-    n5(oo.time_of_day),
+    // ── Dims 0-3: occasion scores (formality/planning/wearer_priority/time_of_day)
+    // are flat at 3 on every live outfit (never AI-scored), so we use richly
+    // populated item-level signals instead: garment structure, print/pattern,
+    // layering complexity, and a dressiness axis from shoe + bag formality.
+    n5(itemAvg('structure')),
+    n5(itemAvg('pattern')),
+    Math.min(items.length / 6, 1),
+    n5(avg([oo.shoe_formality, oo.bag_formality].filter((x: any) => x != null))),
+    // ── Outfit-level styling scores that DO vary (4-8) ──
     n5(oo.construction),
     n5(oo.surface_story),
     n5(oo.volume),
