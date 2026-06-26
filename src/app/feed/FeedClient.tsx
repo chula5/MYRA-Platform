@@ -313,6 +313,8 @@ export default function FeedClient({
   const savedSet = new Set(savedOutfitIds)
   // Occasion mode
   const [occasion, setOccasion]           = useState<string | null>(null)
+  // A brand the user tapped to "discover more" — shows that brand's outfits.
+  const [brandView, setBrandView]         = useState<BrandRow | null>(null)
   const [outfits, setOutfits]             = useState<OutfitWithItems[]>([])
   const [loading, setLoading]             = useState(false)
   const [loadingMore, setLoadingMore]     = useState(false)
@@ -520,7 +522,7 @@ export default function FeedClient({
   }
 
   // ── LANDING VIEW ──────────────────────────────────────────
-  if (!occasion && !searchMode) {
+  if (!occasion && !searchMode && !brandView) {
     return (
       <div className="max-w-[1440px] mx-auto px-6 sm:px-10 py-16 flex flex-col">
         <div className="order-1 text-center mb-10">
@@ -565,36 +567,45 @@ export default function FeedClient({
           </div>
         )}
 
-        {/* Discover more from the houses she loves — brand-affinity rows. */}
-        {brandRows.map((row) => (
-          <div key={row.brand} className="order-8 max-w-[1100px] mx-auto mb-12">
+        {/* Discover more from the houses she loves — a row of brand tiles, each a
+            2×2 collage; tap one to open that brand's scrolling feed. */}
+        {brandRows.length > 0 && (
+          <div className="order-8 max-w-[1100px] mx-auto mb-12">
             <div className="flex items-baseline justify-between mb-4">
-              <p className="text-[11px] tracking-[0.099em] text-[#4A4E57]">{row.label}</p>
-              <p className="text-[9px] tracking-[0.072em] text-[#A8A8A4]">A BRAND YOU LOVE</p>
+              <p className="text-[11px] tracking-[0.099em] text-[#4A4E57]">DISCOVER MORE FROM BRANDS YOU LIKE</p>
+              <p className="text-[9px] tracking-[0.072em] text-[#A8A8A4]">HOUSES YOU LOVE</p>
             </div>
             <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
-              {row.outfits.map((o) => (
+              {brandRows.map((row) => (
                 <button
-                  key={o.outfit_id}
-                  onClick={() => router.push(`${detailHrefBase}/${o.outfit_id}`)}
-                  className="group relative shrink-0 w-[150px] sm:w-[170px]"
+                  key={row.brand}
+                  onClick={() => { setBrandView(row); window.scrollTo({ top: 0 }) }}
+                  className="group shrink-0 w-[150px] sm:w-[170px] text-left"
                 >
-                  <div className="relative aspect-[3/4] w-full overflow-hidden rounded-[12px] bg-[#EDEDED]">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={o.image_url || '/placeholder-outfit.jpg'}
-                      alt=""
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
-                    />
-                    {canSave && (
-                      <SaveHeartButton outfitId={o.outfit_id} initialSaved={savedSet.has(o.outfit_id)} />
-                    )}
+                  <div className="grid grid-cols-2 grid-rows-2 gap-[2px] aspect-square w-full overflow-hidden rounded-[14px] bg-[#EDEDED]">
+                    {Array.from({ length: 4 }).map((_, i) => {
+                      const o = row.outfits[i]
+                      return (
+                        <div key={i} className="relative w-full h-full overflow-hidden bg-[#EDEDED]">
+                          {o && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={o.image_url || '/placeholder-outfit.jpg'}
+                              alt=""
+                              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                            />
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
+                  <p className="text-[11px] tracking-[0.06em] text-[#4A4E57] mt-2 truncate">{row.brand.toUpperCase()}</p>
+                  <p className="text-[8px] tracking-[0.09em] text-[#A8A8A4]">{row.outfits.length} LOOKS →</p>
                 </button>
               ))}
             </div>
           </div>
-        ))}
+        )}
 
         {showAllOption && (
           <div className="order-5 max-w-[900px] mx-auto mb-6">
@@ -757,6 +768,40 @@ export default function FeedClient({
               </button>
             </div>
           )}
+        </div>
+      </div>
+    )
+  }
+
+  // ── BRAND DISCOVERY VIEW ──────────────────────────────────
+  if (brandView) {
+    return (
+      <div className="max-w-[1440px] mx-auto px-6 sm:px-10 py-10">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-1">DISCOVER</p>
+            <h2 className="text-[22px] tracking-[0.045em] text-[#4A4E57]">{brandView.label}</h2>
+          </div>
+          <button
+            onClick={() => setBrandView(null)}
+            className="text-[11px] tracking-[0.09em] text-[#6B6B6B] border border-[#E2E0DB] px-5 py-2.5 rounded-[12px] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-all duration-300"
+          >
+            CLOSE
+          </button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {brandView.outfits.map((outfit) => (
+            <OutfitCard
+              key={outfit.outfit_id}
+              outfit={outfit}
+              detailHref={`${detailHrefBase}/${outfit.outfit_id}`}
+              onSimilarLooks={handleSimilarLooks}
+              onExploreStyles={handleExploreStyles}
+              onStyleItem={handleStyleItem}
+              canSave={canSave}
+              initialSaved={savedSet.has(outfit.outfit_id)}
+            />
+          ))}
         </div>
       </div>
     )

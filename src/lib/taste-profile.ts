@@ -209,7 +209,7 @@ export async function getBrandAffinityRows(
   userId: string,
   liveOutfits: OutfitWithItems[],
   userVec: number[],
-  maxRows = 2,
+  maxRows = 8,
 ): Promise<BrandRow[]> {
   try {
     const admin = createAdminClient()
@@ -280,8 +280,9 @@ export async function getBrandAffinityRows(
         if (a && seenAnchor.has(a)) continue
         if (a) seenAnchor.add(a)
         deduped.push(o)
-        if (deduped.length >= 10) break
+        if (deduped.length >= 24) break
       }
+      if (deduped.length < 2) continue
 
       const label = rows.length % 2 === 0 ? `MORE FROM ${displayName.toUpperCase()}` : `${displayName.toUpperCase()}, FOR YOU`
       rows.push({ brand: displayName, label, outfits: deduped })
