@@ -189,7 +189,7 @@ export default function OutfitDetailClient({
       .select('outfit_id')
       .eq('item_id', itemId)
       .neq('outfit_id', outfitId)
-      .limit(6)
+      .limit(40)
 
     if (!outfitItems?.length) return
 
@@ -209,7 +209,7 @@ export default function OutfitDetailClient({
       `)
       .in('outfit_id', ids)
       .eq('status', 'live')
-      .limit(3)
+      .limit(12)
 
     setStyleItemOutfits((data ?? []) as OutfitWithItems[])
   }, [outfitId])
