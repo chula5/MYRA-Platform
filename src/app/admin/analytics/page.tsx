@@ -257,12 +257,12 @@ alter table site_session enable row level security;`}</pre>
       <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6 mb-8">
         <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B] mb-2">REFERRAL LINKS</p>
         <p className="text-[10px] tracking-[0.054em] text-[#A8A8A4] leading-relaxed mb-5 max-w-[620px]">
-          Share these links so visits and waitlist sign-ups are attributed to each source. Add{' '}
-          <span className="font-mono text-[#6B6B6B]">?ref=yourcode</span> to any link to create a new one.
+          Share these links so visits are attributed to each source. Just add{' '}
+          <span className="font-mono text-[#6B6B6B]">/yourcode</span> to the site URL to create a new one.
         </p>
 
         <div className="space-y-3 mb-6 max-w-[620px]">
-          <ReferralLinkCard label="@THEDATAFASHIONBRIEF" url={`${SITE_URL}/?ref=tdfb`} />
+          <ReferralLinkCard label="@THEDATAFASHIONBRIEF" url={`${SITE_URL}/tdfb`} />
         </div>
 
         {!refColumnReady ? (

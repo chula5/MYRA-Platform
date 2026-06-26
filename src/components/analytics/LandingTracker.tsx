@@ -21,10 +21,15 @@ export function getRef(): string | null {
 }
 
 // Drop this anywhere on the landing page — fires one pageview per mount.
-export default function LandingTracker() {
+// `initialRef` is the referral code resolved server-side (from a /code pretty
+// link), since the browser URL stays clean and has no ?ref to read client-side.
+export default function LandingTracker({ initialRef }: { initialRef?: string | null }) {
   useEffect(() => {
-    recordLandingEvent('pageview', '/', getRef())
-  }, [])
+    if (initialRef) {
+      try { sessionStorage.setItem(REF_KEY, initialRef) } catch { /* ignore */ }
+    }
+    recordLandingEvent('pageview', '/', initialRef || getRef())
+  }, [initialRef])
   return null
 }
 

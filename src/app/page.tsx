@@ -16,7 +16,12 @@ import type { OutfitWithItems } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
 
-export default async function LandingPage() {
+export default async function LandingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ ref?: string }>
+}) {
+  const { ref } = await searchParams
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -147,7 +152,7 @@ export default async function LandingPage() {
       </section>
 
       {/* Pageview analytics (no more waitlist popup) */}
-      <LandingTracker />
+      <LandingTracker initialRef={ref ?? null} />
 
       {/* ── Footer ──── */}
       <footer className="bg-white pt-16 pb-24 px-10">
