@@ -8,9 +8,12 @@ import {
   cosine,
   isZero,
   rankByTaste,
+  rankOccasions,
   zeroVector,
 } from '@/lib/taste-vector'
 import { getRecommendedOutfits } from '@/lib/recommendations'
+import { BRAND_GROUPS } from '@/app/onboarding/brand-groups'
+import { BASE_OCCASIONS, CANDIDATE_OCCASIONS, OCCASION_TILE_COUNT } from '@/lib/occasions'
 
 const OUTFIT_SELECT = '*, outfit_item(*, item(*, brand(*)))'
 
@@ -181,6 +184,125 @@ export async function getTasteRecommendations(userId: string, limit = 8): Promis
     console.error('[getTasteRecommendations]', err)
     return getRecommendedOutfits(userId, limit)
   }
+}
+
+// ── Brand-affinity discovery row ────────────────────────────────────────────
+
+export interface BrandRow {
+  brand: string
+  label: string
+  outfits: OutfitWithItems[]
+}
+
+function brandsOfOutfit(o: OutfitWithItems): Set<string> {
+  const s = new Set<string>()
+  for (const oi of o.outfit_item ?? []) {
+    const n = (oi.item as any)?.brand?.name
+    if (n) s.add(String(n).toLowerCase())
+  }
+  return s
+}
+
+// Outfits to "discover more" from the brands the user actually engages with —
+// saved outfits/items, retailer click-outs, and onboarding brand worlds.
+export async function getBrandAffinityRows(
+  userId: string,
+  liveOutfits: OutfitWithItems[],
+  userVec: number[],
+  maxRows = 2,
+): Promise<BrandRow[]> {
+  try {
+    const admin = createAdminClient()
+    const [{ data: savedO }, { data: savedI }, { data: clicks }, { data: pref }] = await Promise.all([
+      admin.from('saved_outfit').select('outfit_id').eq('user_id', userId),
+      admin.from('saved_item').select('item_id').eq('user_id', userId),
+      admin.from('taste_event').select('item_id').eq('user_id', userId).eq('event_type', 'shop_click').not('item_id', 'is', null),
+      admin.from('signup_preference').select('brand_groups').eq('user_id', userId).maybeSingle(),
+    ])
+
+    const savedOutfitIds = new Set(((savedO ?? []) as any[]).map((r) => r.outfit_id))
+    const savedItemIds = ((savedI ?? []) as any[]).map((r) => r.item_id)
+    const clickItemIds = ((clicks ?? []) as any[]).map((r) => r.item_id).filter(Boolean)
+    const brandGroups: string[] = (pref as any)?.brand_groups ?? []
+
+    const weight = new Map<string, number>()
+    const add = (name: string | null | undefined, w: number) => {
+      if (!name) return
+      const k = String(name).toLowerCase()
+      weight.set(k, (weight.get(k) ?? 0) + w)
+    }
+
+    // Brands inside the user's saved outfits.
+    const outfitById = new Map(liveOutfits.map((o) => [o.outfit_id, o]))
+    for (const id of savedOutfitIds) {
+      const o = outfitById.get(id)
+      if (o) for (const b of brandsOfOutfit(o)) add(b, 2)
+    }
+
+    // Brands of saved + clicked individual items.
+    const lookupIds = [...new Set([...savedItemIds, ...clickItemIds])]
+    if (lookupIds.length) {
+      const { data: itemsData } = await admin.from('item').select('item_id, brand(name)').in('item_id', lookupIds)
+      const brandOf = new Map(((itemsData ?? []) as any[]).map((i) => [i.item_id, i.brand?.name]))
+      for (const id of savedItemIds) add(brandOf.get(id), 3)
+      for (const id of clickItemIds) add(brandOf.get(id), 3)
+    }
+
+    // Onboarding brand worlds (weakest signal).
+    for (const g of brandGroups) {
+      const grp = BRAND_GROUPS.find((x) => x.key === g)
+      for (const b of grp?.brands ?? []) add(b, 1)
+    }
+
+    if (weight.size === 0) return []
+
+    const ranked = [...weight.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k)
+    const rows: BrandRow[] = []
+
+    for (const brandLower of ranked) {
+      const matches = liveOutfits.filter(
+        (o) => !savedOutfitIds.has(o.outfit_id) && brandsOfOutfit(o).has(brandLower),
+      )
+      if (matches.length < 2) continue
+
+      // Proper-cased brand name from a matching item.
+      let displayName = brandLower
+      for (const o of matches) {
+        const hit = (o.outfit_item ?? []).find((oi) => ((oi.item as any)?.brand?.name ?? '').toLowerCase() === brandLower)
+        if (hit) { displayName = (hit.item as any).brand.name; break }
+      }
+
+      const ordered = isZero(userVec) ? matches : rankByTaste(userVec, matches).map((r) => r.outfit)
+      const deduped: OutfitWithItems[] = []
+      const seenAnchor = new Set<string>()
+      for (const o of ordered) {
+        const a = anchorItemId(o)
+        if (a && seenAnchor.has(a)) continue
+        if (a) seenAnchor.add(a)
+        deduped.push(o)
+        if (deduped.length >= 10) break
+      }
+
+      const label = rows.length % 2 === 0 ? `MORE FROM ${displayName.toUpperCase()}` : `${displayName.toUpperCase()}, FOR YOU`
+      rows.push({ brand: displayName, label, outfits: deduped })
+      if (rows.length >= maxRows) break
+    }
+
+    return rows
+  } catch (err) {
+    console.error('[getBrandAffinityRows]', err)
+    return []
+  }
+}
+
+// Personalised occasion order — occasions whose outfits best match the user's
+// taste come first, with the always-on base occasions guaranteed to appear.
+export function getOccasionOrder(userVec: number[], liveOutfits: OutfitWithItems[]): string[] {
+  if (isZero(userVec)) return BASE_OCCASIONS
+  const ranked = rankOccasions(userVec, liveOutfits, CANDIDATE_OCCASIONS).map((x) => x.tag)
+  const seen = new Set(ranked)
+  const withBase = [...ranked, ...BASE_OCCASIONS.filter((t) => !seen.has(t))]
+  return withBase.slice(0, OCCASION_TILE_COUNT)
 }
 
 export { cosine }

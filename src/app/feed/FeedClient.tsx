@@ -8,6 +8,8 @@ import { createClient } from '@/lib/supabase'
 import { rankByTaste, isZero } from '@/lib/taste-vector'
 import { recordTasteInteraction } from '@/app/edit/save-actions'
 import { recordSearchQuery } from '@/app/actions/landing-analytics'
+import { occasionLabel, BASE_OCCASIONS } from '@/lib/occasions'
+import type { BrandRow } from '@/lib/taste-profile'
 import type { OutfitWithItems, ItemType, ColourFamily } from '@/types/database'
 
 // Example occasions that "type" themselves into the search bar as a prompt.
@@ -135,6 +137,20 @@ function dedupeByAnchor(list: OutfitWithItems[]): OutfitWithItems[] {
     out.push(o)
   }
   return out
+}
+
+// Rotate a taste-ranked list by how many times the user has opened this
+// occasion. First visit (count 0) = pure taste order (best foot forward); each
+// RETURN rotates the start, so different looks lead and the feed feels alive.
+function rotateByVisit(list: OutfitWithItems[], tag: string): OutfitWithItems[] {
+  if (list.length <= 2 || typeof window === 'undefined') return list
+  let visits: Record<string, number> = {}
+  try { visits = JSON.parse(localStorage.getItem('myra_occ_visits') || '{}') } catch { /* ignore */ }
+  const v = visits[tag] ?? 0
+  visits[tag] = v + 1
+  try { localStorage.setItem('myra_occ_visits', JSON.stringify(visits)) } catch { /* ignore */ }
+  const shift = (v * 4) % list.length
+  return shift ? [...list.slice(shift), ...list.slice(0, shift)] : list
 }
 
 // ── Outfit matching logic ─────────────────────────────────────
@@ -272,6 +288,8 @@ export default function FeedClient({
   savedOutfitIds = [],
   recommendedOutfits = [],
   tasteVector,
+  brandRows = [],
+  occasionOrder,
 }: {
   showAllOption?: boolean
   injectedOutfits?: OutfitWithItems[]
@@ -282,6 +300,10 @@ export default function FeedClient({
   recommendedOutfits?: OutfitWithItems[]
   // The viewer's 34-dim taste vector — re-ranks the occasion feed by cosine.
   tasteVector?: number[]
+  // Discovery rows from brands the user engages with.
+  brandRows?: BrandRow[]
+  // Personalised order of occasion tiles (tags); falls back to the base six.
+  occasionOrder?: string[]
 }) {
   const hasTaste = !!tasteVector && !isZero(tasteVector)
   // Occasion gates the catalogue; cosine ranks what's left (highest taste
@@ -297,6 +319,9 @@ export default function FeedClient({
   const [offset, setOffset]               = useState(0)
   const [hasMore, setHasMore]             = useState(true)
   const loadMoreRef                        = useRef<HTMLDivElement>(null)
+  // The rotated, taste-ranked list for the current occasion (computed once at
+  // offset 0, then paginated from) so the feed feels alive on each return.
+  const occOrderedRef                      = useRef<OutfitWithItems[]>([])
 
   // Search / filter mode
   const [searchQuery, setSearchQuery]     = useState('')
@@ -339,12 +364,18 @@ export default function FeedClient({
   // ── Occasion fetch ─────────────────────────────────────────
   const fetchOutfits = useCallback(async (tag: string, currentOffset: number, append: boolean) => {
     if (injectedOutfits) {
-      const filtered = tag && tag !== 'all'
-        ? injectedOutfits.filter((o) => (o.occasion_tags ?? []).includes(tag))
-        : injectedOutfits
-      // One outfit per anchor item — variants stay in Similar/Explore — then
-      // rank by taste (cosine) inside the occasion gate.
-      const ordered = orderForFeed(dedupeByAnchor(filtered))
+      // Compute the full ordered list once (at offset 0); paginate from the ref.
+      if (currentOffset === 0) {
+        const filtered = tag && tag !== 'all'
+          ? injectedOutfits.filter((o) => (o.occasion_tags ?? []).includes(tag))
+          : injectedOutfits
+        // One outfit per anchor — variants stay in Similar/Explore — taste-ranked
+        // inside the occasion gate, then rotated by visit count so each RETURN
+        // leads with different looks (the "feels alive" effect).
+        const ranked = orderForFeed(dedupeByAnchor(filtered))
+        occOrderedRef.current = rotateByVisit(ranked, tag)
+      }
+      const ordered = occOrderedRef.current
       const end = currentOffset + LIMIT
       setOutfits(ordered.slice(0, end))
       setHasMore(ordered.length > end)
@@ -534,6 +565,37 @@ export default function FeedClient({
           </div>
         )}
 
+        {/* Discover more from the houses she loves — brand-affinity rows. */}
+        {brandRows.map((row) => (
+          <div key={row.brand} className="order-8 max-w-[1100px] mx-auto mb-12">
+            <div className="flex items-baseline justify-between mb-4">
+              <p className="text-[11px] tracking-[0.099em] text-[#4A4E57]">{row.label}</p>
+              <p className="text-[9px] tracking-[0.072em] text-[#A8A8A4]">A BRAND YOU LOVE</p>
+            </div>
+            <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
+              {row.outfits.map((o) => (
+                <button
+                  key={o.outfit_id}
+                  onClick={() => router.push(`${detailHrefBase}/${o.outfit_id}`)}
+                  className="group relative shrink-0 w-[150px] sm:w-[170px]"
+                >
+                  <div className="relative aspect-[3/4] w-full overflow-hidden rounded-[12px] bg-[#EDEDED]">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={o.image_url || '/placeholder-outfit.jpg'}
+                      alt=""
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+                    />
+                    {canSave && (
+                      <SaveHeartButton outfitId={o.outfit_id} initialSaved={savedSet.has(o.outfit_id)} />
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+
         {showAllOption && (
           <div className="order-5 max-w-[900px] mx-auto mb-6">
             <button
@@ -545,15 +607,15 @@ export default function FeedClient({
           </div>
         )}
 
-        {/* Occasion grid */}
+        {/* Occasion grid — order personalised by the user's taste vector. */}
         <div className="order-6 grid grid-cols-2 md:grid-cols-3 gap-3 max-w-[900px] mx-auto mb-10">
-          {PRESET_OCCASIONS.map((occ) => (
+          {(occasionOrder && occasionOrder.length ? occasionOrder : BASE_OCCASIONS).map((tag) => (
             <button
-              key={occ.tag}
-              onClick={() => setOccasion(occ.tag)}
+              key={tag}
+              onClick={() => setOccasion(tag)}
               className="glass-light px-4 py-6 text-[11px] tracking-[0.09em] text-[#4A4E57] text-center rounded-[16px] active:scale-[0.99]"
             >
-              {occ.label}
+              {occasionLabel(tag)}
             </button>
           ))}
         </div>

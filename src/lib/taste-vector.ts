@@ -159,3 +159,36 @@ export function rankByTaste<T extends OutfitWithItems>(
     .map((o) => ({ outfit: o, score: cosine(userVec, buildOutfitVector(o)) }))
     .sort((a, b) => b.score - a.score)
 }
+
+// Rank occasion tags by how well their outfits match the user's taste, so the
+// occasion grid can reorder itself per person. Tags below `minCount` outfits are
+// dropped. With a zero (no-signal) vector every score is 0, preserving the
+// candidate order — i.e. the default grid.
+export function rankOccasions(
+  userVec: number[],
+  outfits: OutfitWithItems[],
+  candidates: string[],
+  minCount = 6,
+): { tag: string; score: number; count: number }[] {
+  const set = new Set(candidates)
+  const byTag = new Map<string, number[]>()
+  for (const o of outfits) {
+    const sim = cosine(userVec, buildOutfitVector(o))
+    for (const t of o.occasion_tags ?? []) {
+      if (!set.has(t)) continue
+      const arr = byTag.get(t) ?? []
+      arr.push(sim)
+      byTag.set(t, arr)
+    }
+  }
+  return candidates
+    .map((tag) => {
+      const sims = (byTag.get(tag) ?? []).sort((a, b) => b - a)
+      if (sims.length < minCount) return { tag, score: -1, count: sims.length }
+      const top = sims.slice(0, 15)
+      const mean = top.reduce((s, x) => s + x, 0) / top.length
+      return { tag, score: mean, count: sims.length }
+    })
+    .filter((x) => x.count >= minCount)
+    .sort((a, b) => b.score - a.score)
+}

@@ -5,7 +5,7 @@ import { earlyAccessSignOut } from '@/app/earlyaccess/actions'
 import { recordEarlyAccessVisit } from '@/app/earlyaccess/activity'
 import { getSavedOutfitIds } from './save-actions'
 import Wardrobe from './Wardrobe'
-import { getTasteRecommendations, getUserTasteVector } from '@/lib/taste-profile'
+import { getTasteRecommendations, getUserTasteVector, getBrandAffinityRows, getOccasionOrder } from '@/lib/taste-profile'
 import type { OutfitWithItems } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -43,6 +43,10 @@ export default async function EditPage() {
     getUserTasteVector(user.id),
   ])
 
+  // Brand-affinity discovery rows + a per-user occasion order.
+  const brandRows = await getBrandAffinityRows(user.id, liveOutfits, tasteVector)
+  const occasionOrder = getOccasionOrder(tasteVector, liveOutfits)
+
   return (
     <div className="min-h-screen bg-[#F2F2F2]">
       {/* Minimal header */}
@@ -79,6 +83,8 @@ export default async function EditPage() {
         savedOutfitIds={savedIds}
         recommendedOutfits={recommended}
         tasteVector={tasteVector}
+        brandRows={brandRows}
+        occasionOrder={occasionOrder}
       />
 
       {/* Slide-out wardrobe of saved outfits + items */}
