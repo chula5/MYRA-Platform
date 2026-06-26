@@ -7,6 +7,7 @@ import SaveHeartButton from '@/components/outfit-card/SaveHeartButton'
 import { createClient } from '@/lib/supabase'
 import { rankByTaste, isZero } from '@/lib/taste-vector'
 import { recordTasteInteraction } from '@/app/edit/save-actions'
+import { recordSearchQuery } from '@/app/actions/landing-analytics'
 import type { OutfitWithItems, ItemType, ColourFamily } from '@/types/database'
 
 // Example occasions that "type" themselves into the search bar as a prompt.
@@ -144,6 +145,44 @@ function wordMatch(text: string | null | undefined, token: string): boolean {
   return new RegExp(`\\b${token}\\b`, 'i').test(text)
 }
 
+// Search-word → colour_family (incl. common synonyms).
+const COLOUR_WORDS: Record<string, ColourFamily> = {
+  white: 'white', ivory: 'white', cream: 'cream', ecru: 'cream', beige: 'cream', oatmeal: 'cream',
+  black: 'black', grey: 'grey', gray: 'grey', charcoal: 'grey', slate: 'grey',
+  navy: 'navy', blue: 'blue', cobalt: 'blue', teal: 'blue', powder: 'blue',
+  brown: 'brown', chocolate: 'brown', camel: 'camel', tan: 'camel', taupe: 'camel',
+  green: 'green', olive: 'green', sage: 'green', khaki: 'green', emerald: 'green', forest: 'green',
+  burgundy: 'burgundy', wine: 'burgundy', maroon: 'burgundy', oxblood: 'burgundy',
+  red: 'red', scarlet: 'red', crimson: 'red',
+  pink: 'pink', blush: 'pink', rose: 'pink', fuchsia: 'pink',
+  yellow: 'yellow', mustard: 'yellow', lemon: 'yellow',
+  orange: 'orange', rust: 'orange', terracotta: 'orange', coral: 'orange',
+  purple: 'purple', lilac: 'purple', lavender: 'purple', violet: 'purple', plum: 'purple', mauve: 'purple',
+  multi: 'multicolour', multicolour: 'multicolour', multicoloured: 'multicolour', floral: 'multicolour', print: 'multicolour',
+}
+
+const _DRESS = ['mini_dress', 'midi_dress', 'maxi_dress', 'shirt_dress', 'slip_dress']
+const _TOPS = ['shirt', 'blouse', 't-shirt', 'knitwear', 'corset', 'bodysuit']
+const _SHOES = ['boot', 'heel', 'flat', 'sneaker', 'mule', 'sandal']
+const _BAGS = ['tote', 'shoulder_bag', 'clutch', 'crossbody', 'structured_bag']
+const _JEWEL = ['necklace', 'earrings', 'bracelet', 'ring', 'brooch']
+
+// Search-word → the item_types it refers to.
+const TYPE_WORDS: Record<string, string[]> = {
+  dress: _DRESS, dresses: _DRESS, gown: ['maxi_dress'], gowns: ['maxi_dress'],
+  maxi: ['maxi_dress'], midi: ['midi_dress'], mini: ['mini_dress'], slip: ['slip_dress'],
+  skirt: ['skirt'], skirts: ['skirt'],
+  trouser: ['trousers'], trousers: ['trousers'], pant: ['trousers'], pants: ['trousers'],
+  jean: ['jeans'], jeans: ['jeans'], short: ['shorts'], shorts: ['shorts'],
+  top: _TOPS, tops: _TOPS, shirt: ['shirt'], shirts: ['shirt'], blouse: ['blouse'], blouses: ['blouse'],
+  tee: ['t-shirt'], tshirt: ['t-shirt'], knit: ['knitwear'], knitwear: ['knitwear'], jumper: ['knitwear'], sweater: ['knitwear'], cardigan: ['knitwear'], corset: ['corset'], bodysuit: ['bodysuit'],
+  coat: ['coat'], coats: ['coat'], trench: ['trench'], jacket: ['jacket'], jackets: ['jacket'], blazer: ['blazer'], blazers: ['blazer'], gilet: ['gilet'], cape: ['cape'],
+  shoe: _SHOES, shoes: _SHOES, boot: ['boot'], boots: ['boot'], heel: ['heel'], heels: ['heel'], pump: ['heel'], pumps: ['heel'], flat: ['flat'], flats: ['flat'], sneaker: ['sneaker'], sneakers: ['sneaker'], trainer: ['sneaker'], trainers: ['sneaker'], mule: ['mule'], mules: ['mule'], sandal: ['sandal'], sandals: ['sandal'],
+  bag: _BAGS, bags: _BAGS, handbag: _BAGS, tote: ['tote'], clutch: ['clutch'], crossbody: ['crossbody'],
+  jewellery: _JEWEL, jewelry: _JEWEL, necklace: ['necklace'], earring: ['earrings'], earrings: ['earrings'], bracelet: ['bracelet'], ring: ['ring'], brooch: ['brooch'],
+  belt: ['belt'], scarf: ['scarf'], hat: ['hat'], sunglasses: ['sunglasses'],
+}
+
 function matchesSearch(
   outfit: OutfitWithItems,
   query: string,
@@ -169,19 +208,36 @@ function matchesSearch(
     if (!items.some(it => (it as any).brand?.name?.toLowerCase().includes(b))) return false
   }
 
-  // Free text: each token must match a whole word in at least one field
+  // Free text. Classify each word as a COLOUR, an ITEM-TYPE, or a free token.
   if (query.trim()) {
-    const tokens = query.toLowerCase().trim().split(/\s+/)
-    for (const token of tokens) {
-      const hit = items.some(it => {
-        if (wordMatch(it.product_name, token)) return true
-        if (wordMatch((it as any).brand?.name, token)) return true
-        if (wordMatch(it.material_primary, token)) return true
-        if (wordMatch(String(it.item_type).replace(/_/g, ' '), token)) return true
-        // colour_family: exact match only
-        if (it.colour_family === token) return true
-        return false
-      }) ||
+    const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean)
+    const colourTokens = tokens.filter(t => COLOUR_WORDS[t])
+    const wantTypes = new Set(tokens.flatMap(t => TYPE_WORDS[t] ?? []))
+    const freeTokens = tokens.filter(t => !COLOUR_WORDS[t] && !TYPE_WORDS[t])
+
+    const itemIsType = (it: any) => wantTypes.has(String(it.item_type))
+    // "blue" colloquially includes navy; everything else is its single family.
+    const famsFor = (tok: string): ColourFamily[] => (tok === 'blue' ? ['blue', 'navy'] : [COLOUR_WORDS[tok]])
+    const itemIsColour = (it: any) =>
+      colourTokens.some(tok => famsFor(tok).includes(it.colour_family) || wordMatch(it.product_name, tok))
+
+    // "blue dress" → ONE item must be BOTH that type AND that colour (not a blue
+    // bag next to a cream dress). This is the key precision fix.
+    if (colourTokens.length && wantTypes.size) {
+      if (!items.some(it => itemIsType(it) && itemIsColour(it))) return false
+    } else {
+      if (colourTokens.length && !items.some(itemIsColour)) return false
+      if (wantTypes.size && !items.some(itemIsType)) return false
+    }
+
+    // Remaining words (brand, material, occasion, aesthetic) — whole word anywhere.
+    for (const token of freeTokens) {
+      const hit = items.some(it =>
+        wordMatch(it.product_name, token) ||
+        wordMatch((it as any).brand?.name, token) ||
+        wordMatch(it.material_primary, token) ||
+        wordMatch(String(it.item_type).replace(/_/g, ' '), token),
+      ) ||
         wordMatch(outfit.aesthetic_label, token) ||
         (outfit.occasion_tags ?? []).some(t => wordMatch(t, token))
       if (!hit) return false
@@ -335,6 +391,8 @@ export default function FeedClient({
 
   const executeSearch = useCallback(async () => {
     if (!hasActiveSearch) return
+    // Log what people type (occasions, brands) for admin trend tracking.
+    if (searchQuery.trim()) void recordSearchQuery(searchQuery)
     setSearchLoading(true)
     setSearchMode(true)
     setFilterPanel(null)

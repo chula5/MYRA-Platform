@@ -124,6 +124,23 @@ export default async function SignupPreferencesPage() {
     for (const o of (so ?? []) as any[]) savedImg.set(o.outfit_id, { image: o.image_url, label: o.aesthetic_label ?? '' })
   }
 
+  // ── Top searches (what people type in the search bar — occasions & brands) ──
+  const searchCounts = new Map<string, number>()
+  {
+    const { data: searches } = await admin
+      .from('landing_event' as any)
+      .select('path')
+      .eq('event_type', 'search')
+      .limit(20000)
+    for (const s of (searches ?? []) as { path: string }[]) {
+      const q = (s.path ?? '').trim()
+      if (q) searchCounts.set(q, (searchCounts.get(q) ?? 0) + 1)
+    }
+  }
+  const totalSearches = [...searchCounts.values()].reduce((s, n) => s + n, 0)
+  const topSearches = [...searchCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 30)
+  const maxSearch = Math.max(1, ...topSearches.map(([, c]) => c))
+
   const renderOutfitGrid = (entries: [string, number][], tone: 'like' | 'dislike') => (
     <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
       {entries.map(([id, count]) => {
@@ -193,6 +210,33 @@ ALTER TABLE public.signup_preference ENABLE ROW LEVEL SECURITY;`}</pre>
             <p className="text-[20px] tracking-[0.018em] text-[#4A4E57] leading-tight">{s.value}</p>
           </div>
         ))}
+      </div>
+
+      {/* Top searches — what people type (occasions & brands) */}
+      <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6 mb-10">
+        <div className="flex items-baseline justify-between mb-5">
+          <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B]">SEARCH BAR · WHAT PEOPLE ARE LOOKING FOR</p>
+          <p className="text-[9px] tracking-[0.072em] text-[#A8A8A4]">{totalSearches.toLocaleString()} SEARCHES</p>
+        </div>
+        {topSearches.length === 0 ? (
+          <p className="text-[10px] tracking-[0.072em] text-[#A8A8A4] py-6 text-center">
+            NO SEARCHES YET — TYPED QUERIES (E.G. &ldquo;BLUE DRESS&rdquo;, &ldquo;JACQUEMUS&rdquo;, &ldquo;SUMMER WEDDING&rdquo;) APPEAR HERE.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2.5">
+            {topSearches.map(([q, count]) => (
+              <div key={q}>
+                <div className="flex justify-between mb-1">
+                  <span className="text-[10px] tracking-[0.045em] text-[#4A4E57] truncate pr-3">{q.toUpperCase()}</span>
+                  <span className="text-[9px] tracking-[0.045em] text-[#6B6B6B] flex-shrink-0">{count}</span>
+                </div>
+                <div className="h-[4px] bg-[#F2F2F2] rounded-full overflow-hidden">
+                  <div className="h-full bg-[#C4A882] rounded-full" style={{ width: `${(count / maxSearch) * 100}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {total === 0 && tableReady && (
