@@ -632,7 +632,7 @@ function ImageWithHotspots({
 
       {activeItemLabel && (
         <div className="absolute top-4 left-4 bg-[#9B9B9B]/30 backdrop-blur-md border border-white/40 rounded-full px-3 py-1.5">
-          <span className="text-[10px] tracking-[0.068em] text-[#4A4E57]">
+          <span className="text-[10px] tracking-[0.068em] text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.35)]">
             STYLE {activeItemLabel} ↗
           </span>
         </div>

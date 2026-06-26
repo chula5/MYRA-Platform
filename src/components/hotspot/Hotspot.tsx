@@ -106,7 +106,7 @@ export default function Hotspot({
               px-2.5 py-1 whitespace-nowrap pointer-events-none
             `}
           >
-            <span className="text-[10px] tracking-[0.068em] text-[#4A4E57]">
+            <span className="text-[10px] tracking-[0.068em] text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.35)]">
               STYLE {label} <span className="text-sm">↗</span>
             </span>
           </div>
@@ -140,7 +140,7 @@ export default function Hotspot({
             >
               <button
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); onStyleItem?.(itemId, itemType) }}
-                className="text-[10px] tracking-[0.068em] text-[#4A4E57] flex items-center gap-1"
+                className="text-[10px] tracking-[0.068em] text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.35)] flex items-center gap-1"
               >
                 STYLE {label} <span className="text-sm">↗</span>
               </button>

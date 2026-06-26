@@ -33,7 +33,7 @@ export default function SignupPrompt({ href = '/earlyaccess' }: { href?: string 
           <img src="/myra-mirror-icon.png" alt="" className="h-10 w-auto flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-[11px] tracking-[0.06em] text-[#4A4E57] leading-relaxed">
-              CREATE A LOGIN TO SAVE OUTFITS — AND WE&rsquo;LL LEARN YOUR TASTE TO RECOMMEND LOOKS MADE FOR YOU.
+              CREATE A LOGIN TO SAVE OUTFITS AND WE&rsquo;LL LEARN YOUR TASTE TO RECOMMEND LOOKS MADE FOR YOU.
             </p>
             <Link
               href={href}
