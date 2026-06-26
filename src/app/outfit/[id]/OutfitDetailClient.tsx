@@ -391,7 +391,7 @@ export default function OutfitDetailClient({
                   src={prevImage}
                   alt=""
                   className="w-full aspect-[3/4] object-cover rounded-[10px]"
-                  style={{ filter: 'blur(3px)', opacity: 0.45 }}
+                  style={{ filter: 'blur(1px)', opacity: 0.7 }}
                 />
               </button>
             )}
@@ -409,7 +409,7 @@ export default function OutfitDetailClient({
                   src={nextImage}
                   alt=""
                   className="w-full aspect-[3/4] object-cover rounded-[10px]"
-                  style={{ filter: 'blur(3px)', opacity: 0.45 }}
+                  style={{ filter: 'blur(1px)', opacity: 0.7 }}
                 />
               </button>
             )}
