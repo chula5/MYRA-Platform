@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import { useState } from 'react'
 import { recordItemClick } from '@/app/actions/item-click'
+import { toggleSaveItem } from '@/app/edit/save-actions'
 import type { Item, Brand } from '@/types/database'
 
 type SourceItem = Item & { brand: Brand }
@@ -21,11 +22,16 @@ export default function ShopTheLookOverlay({
   items,
   outfitId,
   onClose,
+  canSave = false,
+  savedItemIds = [],
 }: {
   items: SourceItem[]
   outfitId?: string
   onClose: () => void
+  canSave?: boolean
+  savedItemIds?: string[]
 }) {
+  const savedSet = new Set(savedItemIds)
   function shop(item: SourceItem) {
     if (!item.retailer_url) return
     recordItemClick(item.item_id, outfitId)
@@ -54,17 +60,50 @@ export default function ShopTheLookOverlay({
       {/* Cards */}
       <div className="space-y-1.5">
         {items.map((item) => (
-          <ItemCard key={item.item_id} item={item} onShop={() => shop(item)} />
+          <ItemCard
+            key={item.item_id}
+            item={item}
+            outfitId={outfitId}
+            onShop={() => shop(item)}
+            canSave={canSave}
+            initialSaved={savedSet.has(item.item_id)}
+          />
         ))}
       </div>
     </div>
   )
 }
 
-function ItemCard({ item, onShop }: { item: SourceItem; onShop: () => void }) {
+function ItemCard({
+  item,
+  outfitId,
+  onShop,
+  canSave,
+  initialSaved,
+}: {
+  item: SourceItem
+  outfitId?: string
+  onShop: () => void
+  canSave: boolean
+  initialSaved: boolean
+}) {
   const [imgFailed, setImgFailed] = useState(false)
+  const [saved, setSaved] = useState(initialSaved)
+  const [busy, setBusy] = useState(false)
   const brandInitial = (item.brand?.name ?? 'M').trim().charAt(0).toUpperCase()
   const price = formatPrice(item.price ?? null, item.currency ?? null)
+
+  async function toggleSave(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (busy) return
+    setBusy(true)
+    const optimistic = !saved
+    setSaved(optimistic)
+    const res = await toggleSaveItem(item.item_id, outfitId)
+    if (res.error) setSaved(!optimistic)
+    else if (typeof res.saved === 'boolean') setSaved(res.saved)
+    setBusy(false)
+  }
 
   return (
     <div className="bg-white rounded-[14px] shadow-[0_3px_10px_rgba(0,0,0,0.14)] p-1.5 flex gap-1.5 items-stretch">
@@ -83,6 +122,16 @@ function ItemCard({ item, onShop }: { item: SourceItem; onShop: () => void }) {
           <div className="w-full h-full bg-[#E2E0DB] flex items-center justify-center">
             <span className="text-[9px] text-[#6B6B6B]">{brandInitial}</span>
           </div>
+        )}
+        {canSave && (
+          <button
+            onClick={toggleSave}
+            disabled={busy}
+            aria-label={saved ? 'Remove item from wardrobe' : 'Save item to wardrobe'}
+            className="absolute top-0.5 right-0.5 w-3.5 h-3.5 rounded-full bg-white/90 flex items-center justify-center shadow-sm"
+          >
+            <span className={`text-[8px] leading-none ${saved ? 'text-[#C8302A]' : 'text-[#6B6B6B]'}`}>{saved ? '♥' : '♡'}</span>
+          </button>
         )}
       </div>
 

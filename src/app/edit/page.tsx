@@ -4,6 +4,7 @@ import FeedClient from '@/app/feed/FeedClient'
 import { earlyAccessSignOut } from '@/app/earlyaccess/actions'
 import { recordEarlyAccessVisit } from '@/app/earlyaccess/activity'
 import { getSavedOutfitIds } from './save-actions'
+import Wardrobe from './Wardrobe'
 import { getTasteRecommendations, getUserTasteVector } from '@/lib/taste-profile'
 import type { OutfitWithItems } from '@/types/database'
 
@@ -79,6 +80,9 @@ export default async function EditPage() {
         recommendedOutfits={recommended}
         tasteVector={tasteVector}
       />
+
+      {/* Slide-out wardrobe of saved outfits + items */}
+      <Wardrobe />
     </div>
   )
 }

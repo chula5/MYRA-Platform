@@ -31,6 +31,7 @@ interface OutfitDetailClientProps {
   linkBase?: string                 // base path for related/result links (default public detail)
   canSave?: boolean                 // show the SAVE toggle (signed-in users)
   initialSaved?: boolean
+  savedItemIds?: string[]           // item ids already in the user's wardrobe
 }
 
 export default function OutfitDetailClient({
@@ -43,6 +44,7 @@ export default function OutfitDetailClient({
   linkBase = '/outfit',
   canSave = false,
   initialSaved = false,
+  savedItemIds = [],
 }: OutfitDetailClientProps) {
   const router = useRouter()
   const showBrowse = showBrowseButtons ?? SHOW_BROWSE_BUTTONS
@@ -400,6 +402,8 @@ export default function OutfitDetailClient({
                   items={items}
                   outfitId={outfitId}
                   onClose={() => setSourcePanelOpen(false)}
+                  canSave={canSave}
+                  savedItemIds={savedItemIds}
                 />
               )}
 
