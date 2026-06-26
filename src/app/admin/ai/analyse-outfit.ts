@@ -82,16 +82,17 @@ SLOT SCORING (nullable integers 1-5 — only score garment slots visible in the 
 Return ONLY a valid JSON object. No markdown, no explanation, no code fences.`
 
 /**
- * Inject size-capping transforms into a Cloudinary URL so the image stays under
- * Claude's 5MB vision limit. Leaves non-Cloudinary URLs untouched.
- *
- *   .../upload/v123/foo.jpg  →  .../upload/w_2000,q_auto,f_jpg/v123/foo.jpg
+ * Downscale any source image to a small JPEG so it fits Claude's vision size
+ * limit. Cloudinary URLs use their own account's transform; every other host
+ * (Higgsfield/CloudFront PNGs are ~16MB, plus retailer images) is routed
+ * through an image-resize proxy. Both yield a sub-1MB JPEG.
  */
-function capCloudinaryImage(url: string): string {
-  if (!url.includes('res.cloudinary.com')) return url
-  // Avoid double-applying if a transform is already present
-  if (/\/upload\/[^/]*[wqf]_/.test(url)) return url
-  return url.replace('/upload/', '/upload/w_2000,q_auto,f_jpg/')
+function downscaleForVision(url: string): string {
+  if (url.includes('res.cloudinary.com')) {
+    if (/\/upload\/[^/]*[wqf]_/.test(url)) return url
+    return url.replace('/upload/', '/upload/w_1400,q_auto,f_jpg/')
+  }
+  return `https://images.weserv.nl/?url=${encodeURIComponent(url)}&w=1400&output=jpg&q=82`
 }
 
 export async function analyseOutfit(
@@ -103,7 +104,7 @@ export async function analyseOutfit(
   if (!apiKey) return { error: 'ANTHROPIC_API_KEY not configured' }
 
   try {
-    const safeUrl = capCloudinaryImage(imageUrl)
+    const safeUrl = downscaleForVision(imageUrl)
 
     // Fetch image server-side and convert to base64 so any URL works
     const imgRes = await fetch(safeUrl)
@@ -126,7 +127,7 @@ export async function analyseOutfit(
     const client = new Anthropic({ apiKey })
 
     const response = await client.messages.create({
-      model: 'claude-opus-4-6',
+      model: 'claude-sonnet-4-6',
       max_tokens: 1024,
       messages: [
         {

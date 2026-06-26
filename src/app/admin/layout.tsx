@@ -53,6 +53,12 @@ export default async function AdminLayout({
             OUTFIT REVIEW
           </a>
           <a
+            href="/admin/vectors"
+            className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
+          >
+            VECTORS
+          </a>
+          <a
             href="/admin/the-edit"
             className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
           >
