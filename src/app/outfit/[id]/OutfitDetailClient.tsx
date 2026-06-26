@@ -10,6 +10,7 @@ import SaveHeartButton from '@/components/outfit-card/SaveHeartButton'
 import CardButton from '@/components/ui/CardButton'
 import { createClient } from '@/lib/supabase'
 import { getRelatedOutfits } from './related-actions'
+import { toggleSaveItem } from '@/app/edit/save-actions'
 import type { OutfitWithItems, Item, Brand, ItemType } from '@/types/database'
 
 // Feature flag — hide the SIMILAR LOOKS / EXPLORE STYLES buttons on the
@@ -55,6 +56,29 @@ export default function OutfitDetailClient({
   // is only the initial value; clicking the buttons updates this).
   const [activeMode, setActiveMode] = useState<'similar' | 'explore' | null>(mode ?? null)
   const [sourcePanelOpen, setSourcePanelOpen] = useState(false)
+
+  // Saved items live here (lifted) so the Shop-the-look hearts and the image
+  // hover heart stay in sync. Optimistic; reverts on error.
+  const [savedItemSet, setSavedItemSet] = useState<Set<string>>(() => new Set(savedItemIds))
+  function toggleItem(itemId: string) {
+    const willSave = !savedItemSet.has(itemId)
+    setSavedItemSet((prev) => {
+      const next = new Set(prev)
+      if (willSave) next.add(itemId)
+      else next.delete(itemId)
+      return next
+    })
+    toggleSaveItem(itemId, outfitId).then((res) => {
+      if (res?.error) {
+        setSavedItemSet((prev) => {
+          const next = new Set(prev)
+          if (willSave) next.delete(itemId)
+          else next.add(itemId)
+          return next
+        })
+      }
+    })
+  }
   const [activeStyleItemId, setActiveStyleItemId] = useState<string | null>(styleItemId ?? null)
   const [activeItemType, setActiveItemType] = useState<ItemType | null>(itemType as ItemType ?? null)
   const [loading, setLoading] = useState(!initialOutfit)
@@ -274,6 +298,11 @@ export default function OutfitDetailClient({
   const safeIndex = Math.min(currentImageIndex, allImages.length - 1)
   const currentImageUrl = allImages[safeIndex] ?? outfit.image_url
 
+  // Which item (if any) the currently-shown photo belongs to — so we can offer
+  // to save that specific piece when the user hovers its image.
+  const imageItemMap = new Map(items.filter((it) => it.image_url).map((it) => [it.image_url as string, it]))
+  const currentItem = imageItemMap.get(currentImageUrl)
+
   // Position of this look in the list, for prev/next between outfits.
   const siblingIdx = siblings.findIndex((s) => s.id === outfitId)
   const hasPrevLook = siblingIdx > 0
@@ -386,7 +415,7 @@ export default function OutfitDetailClient({
             )}
 
             {/* Current look */}
-            <div className="relative z-10 bg-white rounded-[16px] overflow-hidden">
+            <div className="relative z-10 bg-white rounded-[16px] overflow-hidden group">
               <ImageWithHotspots
                 key={currentImageUrl}
                 outfit={outfit}
@@ -396,6 +425,19 @@ export default function OutfitDetailClient({
                 showHotspots={safeIndex === 0}
               />
 
+              {/* Save heart on an ITEM photo — appears on hover, top-right */}
+              {canSave && currentItem && !sourcePanelOpen && (
+                <button
+                  onClick={() => toggleItem(currentItem.item_id)}
+                  aria-label={savedItemSet.has(currentItem.item_id) ? 'Remove item from wardrobe' : 'Save item to wardrobe'}
+                  className="absolute top-3 right-3 z-30 w-9 h-9 rounded-full bg-white/90 hover:bg-white shadow-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <span className={`text-[16px] leading-none ${savedItemSet.has(currentItem.item_id) ? 'text-[#C8302A]' : 'text-[#6B6B6B]'}`}>
+                    {savedItemSet.has(currentItem.item_id) ? '♥' : '♡'}
+                  </span>
+                </button>
+              )}
+
               {/* Shop-the-look cards overlaid on the image (toggled by SOURCE ITEMS) */}
               {sourcePanelOpen && items.length > 0 && (
                 <ShopTheLookOverlay
@@ -403,7 +445,8 @@ export default function OutfitDetailClient({
                   outfitId={outfitId}
                   onClose={() => setSourcePanelOpen(false)}
                   canSave={canSave}
-                  savedItemIds={savedItemIds}
+                  savedItemIds={[...savedItemSet]}
+                  onToggleItem={toggleItem}
                 />
               )}
 

@@ -3,7 +3,6 @@
 import Image from 'next/image'
 import { useState } from 'react'
 import { recordItemClick } from '@/app/actions/item-click'
-import { toggleSaveItem } from '@/app/edit/save-actions'
 import type { Item, Brand } from '@/types/database'
 
 type SourceItem = Item & { brand: Brand }
@@ -24,12 +23,14 @@ export default function ShopTheLookOverlay({
   onClose,
   canSave = false,
   savedItemIds = [],
+  onToggleItem,
 }: {
   items: SourceItem[]
   outfitId?: string
   onClose: () => void
   canSave?: boolean
   savedItemIds?: string[]
+  onToggleItem?: (itemId: string) => void
 }) {
   const savedSet = new Set(savedItemIds)
   function shop(item: SourceItem) {
@@ -63,10 +64,10 @@ export default function ShopTheLookOverlay({
           <ItemCard
             key={item.item_id}
             item={item}
-            outfitId={outfitId}
             onShop={() => shop(item)}
             canSave={canSave}
-            initialSaved={savedSet.has(item.item_id)}
+            saved={savedSet.has(item.item_id)}
+            onToggle={() => onToggleItem?.(item.item_id)}
           />
         ))}
       </div>
@@ -76,37 +77,34 @@ export default function ShopTheLookOverlay({
 
 function ItemCard({
   item,
-  outfitId,
   onShop,
   canSave,
-  initialSaved,
+  saved,
+  onToggle,
 }: {
   item: SourceItem
-  outfitId?: string
   onShop: () => void
   canSave: boolean
-  initialSaved: boolean
+  saved: boolean
+  onToggle: () => void
 }) {
   const [imgFailed, setImgFailed] = useState(false)
-  const [saved, setSaved] = useState(initialSaved)
-  const [busy, setBusy] = useState(false)
   const brandInitial = (item.brand?.name ?? 'M').trim().charAt(0).toUpperCase()
   const price = formatPrice(item.price ?? null, item.currency ?? null)
 
-  async function toggleSave(e: React.MouseEvent) {
-    e.stopPropagation()
-    if (busy) return
-    setBusy(true)
-    const optimistic = !saved
-    setSaved(optimistic)
-    const res = await toggleSaveItem(item.item_id, outfitId)
-    if (res.error) setSaved(!optimistic)
-    else if (typeof res.saved === 'boolean') setSaved(res.saved)
-    setBusy(false)
-  }
-
   return (
-    <div className="bg-white rounded-[14px] shadow-[0_3px_10px_rgba(0,0,0,0.14)] p-1.5 flex gap-1.5 items-stretch">
+    <div className="relative bg-white rounded-[14px] shadow-[0_3px_10px_rgba(0,0,0,0.14)] p-1.5 flex gap-1.5 items-stretch">
+      {/* Save heart — top-right corner of the card */}
+      {canSave && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggle() }}
+          aria-label={saved ? 'Remove item from wardrobe' : 'Save item to wardrobe'}
+          className="absolute top-1 right-1 z-10 w-4 h-4 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.18)] flex items-center justify-center"
+        >
+          <span className={`text-[9px] leading-none ${saved ? 'text-[#C8302A]' : 'text-[#6B6B6B]'}`}>{saved ? '♥' : '♡'}</span>
+        </button>
+      )}
+
       {/* Thumbnail */}
       <div className="relative w-[28px] h-[38px] flex-shrink-0 rounded-[10px] overflow-hidden bg-[#F2F2F2]">
         {item.image_url && !imgFailed ? (
@@ -123,20 +121,10 @@ function ItemCard({
             <span className="text-[9px] text-[#6B6B6B]">{brandInitial}</span>
           </div>
         )}
-        {canSave && (
-          <button
-            onClick={toggleSave}
-            disabled={busy}
-            aria-label={saved ? 'Remove item from wardrobe' : 'Save item to wardrobe'}
-            className="absolute top-0.5 right-0.5 w-3.5 h-3.5 rounded-full bg-white/90 flex items-center justify-center shadow-sm"
-          >
-            <span className={`text-[8px] leading-none ${saved ? 'text-[#C8302A]' : 'text-[#6B6B6B]'}`}>{saved ? '♥' : '♡'}</span>
-          </button>
-        )}
       </div>
 
-      {/* Info */}
-      <div className="flex-1 min-w-0 flex flex-col">
+      {/* Info — leave room on the right for the heart */}
+      <div className="flex-1 min-w-0 flex flex-col pr-3">
         <p className="text-[6px] sm:text-[7px] tracking-[0.054em] text-[#6B6B6B] uppercase truncate">
           {item.brand?.name ?? 'BRAND'}
         </p>
