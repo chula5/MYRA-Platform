@@ -25,6 +25,8 @@ export function getRef(): string | null {
 // link), since the browser URL stays clean and has no ?ref to read client-side.
 export default function LandingTracker({ initialRef }: { initialRef?: string | null }) {
   useEffect(() => {
+    // Skip the team's own browsers (any that have visited /admin).
+    try { if (localStorage.getItem('myra_is_admin') === '1') return } catch { /* ignore */ }
     if (initialRef) {
       try { sessionStorage.setItem(REF_KEY, initialRef) } catch { /* ignore */ }
     }
