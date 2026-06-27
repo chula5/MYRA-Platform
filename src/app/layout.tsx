@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next'
+import Script from 'next/script'
 import { Manrope } from 'next/font/google'
 import { FeedProvider } from '@/context/FeedContext'
 import SessionTracker from '@/components/analytics/SessionTracker'
@@ -44,6 +45,12 @@ export default function RootLayout({
           {children}
         </FeedProvider>
         <SessionTracker />
+        {/* Skimlinks — rewrites outbound retailer links to affiliate-tracked
+            ones so click-throughs and purchases are monetised + tracked. */}
+        <Script
+          src="https://s.skimresources.com/js/305335X1793531.skimlinks.js"
+          strategy="afterInteractive"
+        />
       </body>
     </html>
   )

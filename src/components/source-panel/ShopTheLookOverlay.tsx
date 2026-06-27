@@ -33,10 +33,10 @@ export default function ShopTheLookOverlay({
   onToggleItem?: (itemId: string) => void
 }) {
   const savedSet = new Set(savedItemIds)
+  // Just record the click — navigation is handled by the real <a> link so
+  // Skimlinks can rewrite it to an affiliate-tracked URL.
   function shop(item: SourceItem) {
-    if (!item.retailer_url) return
     recordItemClick(item.item_id, outfitId)
-    window.open(item.retailer_url, '_blank', 'noopener,noreferrer')
   }
 
   return (
@@ -134,12 +134,15 @@ function ItemCard({
         <div className="mt-auto flex items-center justify-between gap-1 pt-0.5">
           <span className="text-[8px] sm:text-[9px] text-[#4A4E57]">{price}</span>
           {item.retailer_url && (
-            <button
-              onClick={onShop}
+            <a
+              href={item.retailer_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => { e.stopPropagation(); onShop() }}
               className="bg-[#0A0A0A] text-white text-[6px] sm:text-[7px] tracking-[0.045em] px-1.5 py-0.5 rounded hover:opacity-85 transition-opacity flex-shrink-0"
             >
               SHOP
-            </button>
+            </a>
           )}
         </div>
       </div>
