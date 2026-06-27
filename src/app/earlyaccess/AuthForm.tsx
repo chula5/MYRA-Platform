@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { earlyAccessSignIn, publicSignUp } from './actions'
 
 const INPUT =
-  'w-full border border-[#E2E0DB] bg-white px-4 py-3 text-[12px] tracking-[0.054em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors'
+  'w-full border border-[#E2E0DB] bg-white rounded-[14px] px-4 py-3 text-[12px] tracking-[0.054em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors'
 
 export default function AuthForm({ initialMode = 'signin', error }: { initialMode?: 'signin' | 'signup'; error?: string }) {
   const [mode, setMode] = useState<'signin' | 'signup'>(initialMode)
@@ -47,7 +47,7 @@ export default function AuthForm({ initialMode = 'signin', error }: { initialMod
           <input type="password" name="password" required autoComplete="new-password" placeholder="PASSWORD (MIN 8 CHARS)" className={INPUT} />
           <input type="password" name="confirm" required autoComplete="new-password" placeholder="CONFIRM PASSWORD" className={INPUT} />
           {error && <p className="text-[10px] tracking-[0.068em] text-[#B83A3A]">{error.toUpperCase()}</p>}
-          <button type="submit" className="mt-2 bg-[#0A0A0A] text-white py-3 text-[11px] tracking-[0.099em] hover:bg-[#333] transition-colors duration-300">
+          <button type="submit" className="mt-2 bg-[#0A0A0A] text-white rounded-[14px] py-3 text-[11px] tracking-[0.099em] hover:bg-[#333] transition-colors duration-300">
             CREATE ACCOUNT
           </button>
         </form>
@@ -56,7 +56,7 @@ export default function AuthForm({ initialMode = 'signin', error }: { initialMod
           <input type="email" name="email" required autoComplete="email" placeholder="EMAIL" className={INPUT} />
           <input type="password" name="password" required autoComplete="current-password" placeholder="PASSWORD" className={INPUT} />
           {error && <p className="text-[10px] tracking-[0.068em] text-[#B83A3A]">{error.toUpperCase()}</p>}
-          <button type="submit" className="mt-2 bg-[#0A0A0A] text-white py-3 text-[11px] tracking-[0.099em] hover:bg-[#333] transition-colors duration-300">
+          <button type="submit" className="mt-2 bg-[#0A0A0A] text-white rounded-[14px] py-3 text-[11px] tracking-[0.099em] hover:bg-[#333] transition-colors duration-300">
             ENTER
           </button>
         </form>

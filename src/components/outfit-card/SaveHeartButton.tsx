@@ -42,9 +42,9 @@ export default function SaveHeartButton({
             try { window.dispatchEvent(new CustomEvent('myra:engage')) } catch { /* ignore */ }
           }}
           aria-label="Sign in to save"
-          className="w-9 h-9 rounded-full bg-white/70 backdrop-blur-sm shadow-sm flex items-center justify-center cursor-pointer"
+          className="w-9 h-9 rounded-full bg-white/90 hover:bg-white shadow-sm flex items-center justify-center cursor-pointer transition-colors"
         >
-          <span className="text-[16px] leading-none text-[#C4C4C0]">♡</span>
+          <span className="text-[16px] leading-none text-[#6B6B6B]">♡</span>
         </button>
         <span className="pointer-events-none absolute right-0 top-full mt-1.5 whitespace-nowrap bg-[#0A0A0A] text-white text-[8px] tracking-[0.09em] px-2 py-1 rounded-md opacity-0 group-hover/heart:opacity-100 transition-opacity duration-200">
           SIGN IN TO SAVE
