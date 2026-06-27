@@ -1,6 +1,8 @@
-import { Suspense } from 'react'
 import Navigation from '@/components/navigation/Navigation'
+import { getOutfit } from '@/lib/admin-queries'
 import OutfitDetailClient from './OutfitDetailClient'
+
+export const dynamic = 'force-dynamic'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -11,27 +13,27 @@ export default async function OutfitDetailPage({ params, searchParams }: PagePro
   const { id } = await params
   const { styleItem, itemType, mode } = await searchParams
 
+  // Service-role read so all of the outfit's items (and hotspots) show, even
+  // when an item's status would hide it from anonymous RLS.
+  const outfit = await getOutfit(id)
+
   return (
     <>
       <Navigation />
       <main className="pt-16 min-h-screen bg-white">
-        <Suspense fallback={<DetailSkeleton />}>
+        {!outfit ? (
+          <p className="text-[11px] tracking-[0.113em] text-[#A8A8A4] py-24 text-center">OUTFIT NOT FOUND</p>
+        ) : (
           <OutfitDetailClient
             outfitId={id}
+            initialOutfit={outfit}
+            showBrowseButtons
             styleItemId={styleItem}
             itemType={itemType}
             mode={mode as 'similar' | 'explore' | undefined}
           />
-        </Suspense>
+        )}
       </main>
     </>
-  )
-}
-
-function DetailSkeleton() {
-  return (
-    <div className="max-w-[800px] mx-auto px-10 py-12">
-      <div className="aspect-[3/4] bg-[#F2F2F2] animate-pulse rounded-[10px]" />
-    </div>
   )
 }

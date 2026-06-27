@@ -17,7 +17,7 @@ import type { OutfitWithItems, Item, Brand, ItemType } from '@/types/database'
 // outfit detail page until THE EDIT / OCCASIONS sections are launched.
 // Flip to `true` to re-expose both buttons (all handlers + result grids
 // stay in place, so nothing else needs to change).
-const SHOW_BROWSE_BUTTONS = false
+const SHOW_BROWSE_BUTTONS = true
 
 type SourceItemData = Item & { brand: Brand }
 
