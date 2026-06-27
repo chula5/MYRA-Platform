@@ -10,7 +10,7 @@ export default function LandingFeedback() {
         <p className="text-[10px] sm:text-[11px] tracking-[0.135em] text-[#6B6B6B] mb-6">MORE OUTFITS ON THE WAY</p>
         <p className="text-[#4A4E57] tracking-[0.04em] sm:tracking-[0.045em] leading-[1.75] text-[clamp(12px,1.45vw,16px)] max-w-[640px] mx-auto mb-12">
           We&rsquo;re working hard to bring you more outfits and more brands every week. If there&rsquo;s a label
-          you&rsquo;d love to see — or any feedback at all — tell us below.
+          you&rsquo;d love to see, or any feedback at all, tell us below.
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 text-left mb-12">
