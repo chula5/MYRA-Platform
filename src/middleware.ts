@@ -7,6 +7,15 @@ const RESERVED_SEGMENTS = new Set([
 ])
 
 export async function middleware(request: NextRequest) {
+  // Supabase password-recovery links land on the Site URL (/) with a one-time
+  // ?code — forward those to the reset-password page so the user can set a new
+  // password (covers cases where the exact redirect URL isn't allow-listed).
+  if (request.nextUrl.pathname === '/' && request.nextUrl.searchParams.has('code')) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/reset-password'
+    return NextResponse.redirect(url)
+  }
+
   // Pretty referral links: /tdfb → serve the landing page with ?ref=tdfb, while
   // the browser URL stays the clean /tdfb. Only a single, file-less, non-reserved
   // segment qualifies.
