@@ -1,6 +1,17 @@
 'use server'
 
+import { headers } from 'next/headers'
 import { createAdminClient } from '@/lib/supabase-server'
+
+// Visitor country from the edge geo header (Vercel / Cloudflare). Null locally.
+function getCountry(): string | null {
+  try {
+    const h = headers()
+    return h.get('x-vercel-ip-country') || h.get('cf-ipcountry') || null
+  } catch {
+    return null
+  }
+}
 
 // Start (or re-register) a browser session. Fire-and-forget; analytics must
 // never break the page.
@@ -20,6 +31,7 @@ export async function startSession(
         visitor_id: visitorId,
         is_returning: isReturning,
         path: (path || '/').slice(0, 200),
+        country: getCountry(),
         started_at: now,
         last_seen_at: now,
       },

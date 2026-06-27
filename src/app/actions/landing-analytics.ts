@@ -1,5 +1,6 @@
 'use server'
 
+import { headers } from 'next/headers'
 import { createAdminClient } from '@/lib/supabase-server'
 
 export type LandingEventType =
@@ -8,6 +9,16 @@ export type LandingEventType =
   | 'instagram_click'
   | 'tiktok_click'
   | 'waitlist_signup'
+  | 'account_signup'
+
+function getCountry(): string | null {
+  try {
+    const h = headers()
+    return h.get('x-vercel-ip-country') || h.get('cf-ipcountry') || null
+  } catch {
+    return null
+  }
+}
 
 export async function recordLandingEvent(
   eventType: LandingEventType,
@@ -19,11 +30,11 @@ export async function recordLandingEvent(
     const cleanRef = ref ? ref.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40) || null : null
     const { error } = await admin
       .from('landing_event')
-      .insert({ event_type: eventType, path, ref: cleanRef } as any)
-    // If the ref column doesn't exist yet (migration not run), retry without it
-    // so core tracking keeps working.
+      .insert({ event_type: eventType, path, ref: cleanRef, country: getCountry() } as any)
+    // If the ref/country columns don't exist yet (migration not run), retry
+    // without them so core tracking keeps working.
     if (error) {
-      await admin.from('landing_event').insert({ event_type: eventType, path })
+      await admin.from('landing_event').insert({ event_type: eventType, path } as any)
     }
   } catch {
     // Analytics should never break the page — silently swallow all errors.

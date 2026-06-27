@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { createServerClient, createAdminClient } from '@/lib/supabase-server'
 import { recordEarlyAccessLogin } from './activity'
+import { recordLandingEvent } from '@/app/actions/landing-analytics'
 import { EARLY_ACCESS_INVITE_CODE } from './invite'
 
 const ROLE = 'early_access'
@@ -63,6 +64,7 @@ export async function earlyAccessSignUp(formData: FormData) {
     redirect(`/signin?error=${encodeURIComponent('Account created — please sign in')}`)
   }
   if (data.user) await recordEarlyAccessLogin(data.user.id)
+  await recordLandingEvent('account_signup')
   redirect('/edit')
 }
 
@@ -97,6 +99,7 @@ export async function publicSignUp(formData: FormData) {
   const { data, error: signErr } = await supabase.auth.signInWithPassword({ email, password })
   if (signErr) redirect(`/signin?error=${encodeURIComponent('Account created — please sign in')}`)
   if (data.user) await recordEarlyAccessLogin(data.user.id)
+  await recordLandingEvent('account_signup')
   redirect('/edit')
 }
 

@@ -38,7 +38,7 @@ export default async function AnalyticsPage() {
   // Try fetching with ref — table/column might not exist yet if migration not run.
   let { data, error } = await admin
     .from('landing_event' as any)
-    .select('event_type, occurred_at, ref')
+    .select('event_type, occurred_at, ref, country')
     .eq('path', '/')
     .gte('occurred_at', since.toISOString())
     .order('occurred_at', { ascending: true })
@@ -67,35 +67,40 @@ export default async function AnalyticsPage() {
   let retentionReady = true
   let totalSessions = 0
   let repeatRate = '—'
-  let avgTime = '—'
+  let medianTime = '—'
   let returningVisitorRate = '—'
+  const sessionsByCountry = new Map<string, number>()
   {
     const { data: sessions, error: sErr } = await admin
       .from('site_session' as any)
-      .select('visitor_id, is_returning, started_at, last_seen_at')
+      .select('visitor_id, is_returning, started_at, last_seen_at, country')
       .gte('started_at', since.toISOString())
       .limit(50000)
     if (sErr) {
       retentionReady = false
     } else {
-      const rows = (sessions ?? []) as { visitor_id: string; is_returning: boolean; started_at: string; last_seen_at: string }[]
+      const rows = (sessions ?? []) as { visitor_id: string; is_returning: boolean; started_at: string; last_seen_at: string; country?: string | null }[]
       totalSessions = rows.length
       if (totalSessions > 0) {
         const returningSessions = rows.filter((r) => r.is_returning).length
         repeatRate = `${((returningSessions / totalSessions) * 100).toFixed(0)}%`
 
-        // Avg session duration, capped at 1h to ignore idle/zombie tabs.
+        // MEDIAN session duration (robust to idle tabs), capped at 30 min.
         const durations = rows
           .map((r) => (new Date(r.last_seen_at).getTime() - new Date(r.started_at).getTime()) / 1000)
-          .map((d) => Math.max(0, Math.min(d, 3600)))
-        const meanSec = durations.reduce((s, d) => s + d, 0) / durations.length
-        const m = Math.floor(meanSec / 60)
-        const s = Math.round(meanSec % 60)
-        avgTime = `${m}:${String(s).padStart(2, '0')}`
+          .map((d) => Math.max(0, Math.min(d, 1800)))
+          .sort((a, b) => a - b)
+        const mid = Math.floor(durations.length / 2)
+        const medSec = durations.length % 2 ? durations[mid] : (durations[mid - 1] + durations[mid]) / 2
+        medianTime = `${Math.floor(medSec / 60)}:${String(Math.round(medSec % 60)).padStart(2, '0')}`
 
         // Returning visitor rate: visitors seen in >1 session this window.
         const sessionsByVisitor = new Map<string, number>()
-        for (const r of rows) sessionsByVisitor.set(r.visitor_id, (sessionsByVisitor.get(r.visitor_id) ?? 0) + 1)
+        for (const r of rows) {
+          sessionsByVisitor.set(r.visitor_id, (sessionsByVisitor.get(r.visitor_id) ?? 0) + 1)
+          const c = r.country || '—'
+          sessionsByCountry.set(c, (sessionsByCountry.get(c) ?? 0) + 1)
+        }
         const visitors = sessionsByVisitor.size
         const returningVisitors = [...sessionsByVisitor.values()].filter((n) => n > 1).length
         returningVisitorRate = visitors > 0 ? `${((returningVisitors / visitors) * 100).toFixed(0)}%` : '—'
@@ -108,13 +113,16 @@ export default async function AnalyticsPage() {
   const clickTypes: Record<string, number> = {}
   // Referral attribution (last 30 days): ref → { views, signups }
   const refMap = new Map<string, { views: number; signups: number }>()
-  let last30Signups = 0
+  let last30Signups = 0   // account sign-ups
+  const viewsByCountry = new Map<string, number>()
+  const signupsByCountry = new Map<string, number>()
 
   if (tableReady && data) {
-    for (const row of data as { event_type: string; occurred_at: string; ref?: string | null }[]) {
+    for (const row of data as { event_type: string; occurred_at: string; ref?: string | null; country?: string | null }[]) {
       const day = row.occurred_at.slice(0, 10)
       const entry = dayMap.get(day)
       const ref = row.ref ?? null
+      const country = row.country || '—'
       if (ref) {
         if (!refMap.has(ref)) refMap.set(ref, { views: 0, signups: 0 })
       }
@@ -122,9 +130,11 @@ export default async function AnalyticsPage() {
       if (row.event_type === 'pageview') {
         if (entry) entry.views++
         if (ref) refMap.get(ref)!.views++
-      } else if (row.event_type === 'waitlist_signup') {
+        viewsByCountry.set(country, (viewsByCountry.get(country) ?? 0) + 1)
+      } else if (row.event_type === 'account_signup' || row.event_type === 'waitlist_signup') {
         last30Signups++
         if (ref) refMap.get(ref)!.signups++
+        signupsByCountry.set(country, (signupsByCountry.get(country) ?? 0) + 1)
       } else {
         if (entry) entry.clicks++
         clickTypes[row.event_type] = (clickTypes[row.event_type] ?? 0) + 1
@@ -152,6 +162,26 @@ export default async function AnalyticsPage() {
   const last30Clicks = days.reduce((s, d) => s + d.clicks, 0)
   const clickRate    = last30Views > 0 ? ((last30Clicks / last30Views) * 100).toFixed(1) : '—'
   const signupRate   = last30Views > 0 ? ((last30Signups / last30Views) * 100).toFixed(1) : '—'
+
+  // ── Location: views + sign-ups + sessions by country (top 12) ──
+  const COUNTRY_NAMES: Record<string, string> = {
+    GB: 'United Kingdom', US: 'United States', IE: 'Ireland', FR: 'France', DE: 'Germany',
+    ES: 'Spain', IT: 'Italy', NL: 'Netherlands', AU: 'Australia', CA: 'Canada', AE: 'UAE',
+    CH: 'Switzerland', SE: 'Sweden', DK: 'Denmark', PT: 'Portugal', BE: 'Belgium', '—': 'Unknown',
+  }
+  const countryCodes = new Set<string>([...viewsByCountry.keys(), ...signupsByCountry.keys(), ...sessionsByCountry.keys()])
+  const countryRows = [...countryCodes]
+    .map((code) => ({
+      code,
+      label: COUNTRY_NAMES[code] ?? code,
+      views: viewsByCountry.get(code) ?? 0,
+      signups: signupsByCountry.get(code) ?? 0,
+      sessions: sessionsByCountry.get(code) ?? 0,
+    }))
+    .sort((a, b) => b.views + b.sessions - (a.views + a.sessions))
+    .slice(0, 12)
+  const maxCountry = Math.max(1, ...countryRows.map((c) => c.views + c.sessions))
+  const hasGeo = countryRows.some((c) => c.code !== '—')
 
   const CLICK_LABELS: Record<string, string> = {
     cta_click: 'JOIN THE WAITLIST',
@@ -190,7 +220,7 @@ ALTER TABLE public.landing_event ENABLE ROW LEVEL SECURITY;`}</pre>
         {[
           { label: 'TOTAL VIEWS',        value: totalViews?.toLocaleString() ?? '—', sub: 'ALL TIME' },
           { label: 'VIEWS (30 DAYS)',    value: last30Views.toLocaleString(), sub: 'LAST 30 DAYS' },
-          { label: 'WAITLIST SIGN-UPS',  value: last30Signups.toLocaleString(), sub: 'LAST 30 DAYS' },
+          { label: 'ACCOUNT SIGN-UPS',   value: last30Signups.toLocaleString(), sub: 'LAST 30 DAYS' },
           { label: 'SIGN-UP RATE',       value: `${signupRate}%`, sub: 'SIGN-UPS / VIEWS' },
         ].map((s) => (
           <div key={s.label} className="border border-[#E2E0DB] bg-white rounded-[12px] px-5 py-4">
@@ -226,7 +256,7 @@ alter table site_session enable row level security;`}</pre>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
-              { label: 'AVG TIME ON SITE', value: avgTime, sub: 'MIN:SEC PER SESSION' },
+              { label: 'TYPICAL TIME ON SITE', value: medianTime, sub: 'MEDIAN MIN:SEC PER SESSION' },
               { label: 'REPEAT SESSION RATE', value: repeatRate, sub: 'SESSIONS FROM RETURN VISITS' },
               { label: 'RETURNING VISITORS', value: returningVisitorRate, sub: 'VISITORS WITH 2+ SESSIONS' },
               { label: 'SESSIONS (30 DAYS)', value: totalSessions.toLocaleString(), sub: 'TOTAL VISITS' },
@@ -238,6 +268,38 @@ alter table site_session enable row level security;`}</pre>
               </div>
             ))}
           </div>
+        )}
+      </div>
+
+      {/* ── Location ── */}
+      <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6 mb-10">
+        <div className="flex items-baseline justify-between mb-5">
+          <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B]">BY LOCATION · LAST 30 DAYS</p>
+          <p className="text-[8px] tracking-[0.072em] text-[#A8A8A4]">VIEWS · SIGN-UPS</p>
+        </div>
+        {countryRows.length === 0 ? (
+          <p className="text-[10px] tracking-[0.072em] text-[#A8A8A4] py-4 text-center">NO LOCATION DATA YET.</p>
+        ) : (
+          <>
+            <div className="space-y-2.5">
+              {countryRows.map((c) => (
+                <div key={c.code} className="flex items-center gap-3">
+                  <span className="text-[10px] tracking-[0.045em] text-[#4A4E57] w-[130px] flex-shrink-0 truncate">{c.label.toUpperCase()}</span>
+                  <div className="flex-1 h-[6px] bg-[#F2F2F2] rounded-full overflow-hidden">
+                    <div className="h-full bg-[#C4A882] rounded-full" style={{ width: `${((c.views + c.sessions) / maxCountry) * 100}%` }} />
+                  </div>
+                  <span className="text-[9px] tracking-[0.045em] text-[#6B6B6B] w-[70px] text-right flex-shrink-0">
+                    {c.views} · {c.signups}
+                  </span>
+                </div>
+              ))}
+            </div>
+            {!hasGeo && (
+              <p className="text-[9px] tracking-[0.054em] text-[#A8A8A4] mt-4 leading-relaxed">
+                Country shows as &ldquo;Unknown&rdquo; on localhost — it&rsquo;s populated from the edge once live on Vercel.
+              </p>
+            )}
+          </>
         )}
       </div>
 
