@@ -3,7 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 
 // Top-level routes that must never be treated as a referral code.
 const RESERVED_SEGMENTS = new Set([
-  'actions', 'admin', 'api', 'earlyaccess', 'edit', 'signin', 'feed', 'login', 'onboarding', 'outfit', 'privacy',
+  'actions', 'admin', 'api', 'earlyaccess', 'edit', 'signin', 'reset-password', 'feed', 'login', 'onboarding', 'outfit', 'privacy',
 ])
 
 export async function middleware(request: NextRequest) {
