@@ -1,20 +1,7 @@
-import LaunchingSoon from '@/components/ui/LaunchingSoon'
+import { redirect } from 'next/navigation'
 
+// The Edit is now live on the homepage, so /feed (the old "launching soon"
+// holding page) just forwards there.
 export default function FeedPage() {
-  return <LaunchingSoon />
+  redirect('/')
 }
-
-// ── Full feed page — restore when ready to launch ───────────────
-// import Navigation from '@/components/navigation/Navigation'
-// import FeedClient from './FeedClient'
-//
-// export default function FeedPage() {
-//   return (
-//     <>
-//       <Navigation />
-//       <main className="pt-16 min-h-screen bg-white">
-//         <FeedClient />
-//       </main>
-//     </>
-//   )
-// }

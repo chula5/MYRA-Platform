@@ -30,7 +30,7 @@ export default function Navigation({ transparent = false, authed = false }: { tr
 
         {/* Left — nav links */}
         <div className="flex items-center gap-3 sm:gap-5 md:gap-6 flex-1 min-w-0">
-          <Link href="/feed" className={`text-[9px] sm:text-[10px] tracking-[0.054em] sm:tracking-[0.068em] hover:opacity-60 transition-colors duration-500 whitespace-nowrap ${textColor}`}>
+          <Link href="/" className={`text-[9px] sm:text-[10px] tracking-[0.054em] sm:tracking-[0.068em] hover:opacity-60 transition-colors duration-500 whitespace-nowrap ${textColor}`}>
             THE EDIT
           </Link>
         </div>
