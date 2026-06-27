@@ -545,7 +545,7 @@ export default function FeedClient({
       <div className="max-w-[1440px] mx-auto px-6 sm:px-10 py-16 flex flex-col">
         <div className="order-1 text-center mb-10">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/myra-mirror-icon.png" alt="MYRA" className="h-16 w-auto mx-auto mb-5 mix-blend-multiply" />
+          <img src="/myra-mirror-transparent.png" alt="MYRA" className="h-16 w-auto mx-auto mb-5" />
           <h1 className="text-[clamp(28px,3vw,40px)] tracking-[0.045em] text-[#4A4E57] leading-tight">
             WHAT ARE YOU DRESSING FOR?
           </h1>

@@ -39,7 +39,7 @@ export default function AuthForm({ initialMode = 'signin', error }: { initialMod
     <div className="w-full max-w-[360px]">
       <div className="text-center mb-8">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/myra-mirror-icon.png" alt="MYRA" className="h-14 w-auto mx-auto mb-4" />
+        <img src="/myra-mirror-transparent.png" alt="MYRA" className="h-14 w-auto mx-auto mb-4" />
         <h1 className="text-[clamp(20px,4vw,28px)] tracking-[0.05em] text-[#4A4E57]">
           {mode === 'reset' ? 'RESET PASSWORD' : isSignup ? 'CREATE YOUR LOGIN' : 'WELCOME BACK'}
         </h1>

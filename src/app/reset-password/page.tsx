@@ -49,7 +49,7 @@ export default function ResetPasswordPage() {
     <main className="min-h-screen bg-white flex flex-col items-center justify-center px-6">
       <div className="w-full max-w-[360px] text-center">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/myra-mirror-icon.png" alt="MYRA" className="h-14 w-auto mx-auto mb-4" />
+        <img src="/myra-mirror-transparent.png" alt="MYRA" className="h-14 w-auto mx-auto mb-4" />
         <h1 className="text-[clamp(20px,4vw,28px)] tracking-[0.05em] text-[#4A4E57]">SET A NEW PASSWORD</h1>
 
         {status === 'verifying' && (

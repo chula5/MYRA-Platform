@@ -30,7 +30,7 @@ export default function SignupPrompt({ href = '/signin' }: { href?: string }) {
         </button>
         <div className="flex items-start gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/myra-mirror-icon.png" alt="" className="h-10 w-auto flex-shrink-0 mt-0.5" />
+          <img src="/myra-mirror-transparent.png" alt="" className="h-10 w-auto flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-[11px] tracking-[0.06em] text-[#4A4E57] leading-relaxed">
               CREATE A LOGIN TO SAVE OUTFITS AND WE&rsquo;LL LEARN YOUR TASTE TO RECOMMEND LOOKS MADE FOR YOU.
