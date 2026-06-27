@@ -7,10 +7,13 @@ export default function SaveHeartButton({
   outfitId,
   initialSaved = false,
   variant = 'card',
+  locked = false,
 }: {
   outfitId: string
   initialSaved?: boolean
   variant?: 'card' | 'detail'
+  // Anonymous visitors: a greyed heart that invites sign-in instead of saving.
+  locked?: boolean
 }) {
   const [saved, setSaved] = useState(initialSaved)
   const [busy, setBusy] = useState(false)
@@ -26,6 +29,28 @@ export default function SaveHeartButton({
     if (res.error) setSaved(!optimistic)
     else if (typeof res.saved === 'boolean') setSaved(res.saved)
     setBusy(false)
+  }
+
+  // Locked (signed-out) — greyed heart, hover tooltip, click nudges sign-in.
+  if (locked) {
+    return (
+      <div className="absolute top-3 right-3 z-20 group/heart">
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            e.preventDefault()
+            try { window.dispatchEvent(new CustomEvent('myra:engage')) } catch { /* ignore */ }
+          }}
+          aria-label="Sign in to save"
+          className="w-9 h-9 rounded-full bg-white/70 backdrop-blur-sm shadow-sm flex items-center justify-center cursor-pointer"
+        >
+          <span className="text-[16px] leading-none text-[#C4C4C0]">♡</span>
+        </button>
+        <span className="pointer-events-none absolute right-0 top-full mt-1.5 whitespace-nowrap bg-[#0A0A0A] text-white text-[8px] tracking-[0.09em] px-2 py-1 rounded-md opacity-0 group-hover/heart:opacity-100 transition-opacity duration-200">
+          SIGN IN TO SAVE
+        </span>
+      </div>
+    )
   }
 
   if (variant === 'detail') {

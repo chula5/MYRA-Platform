@@ -310,6 +310,8 @@ export default function FeedClient({
   signupHref?: string
 }) {
   const hasTaste = !!tasteVector && !isZero(tasteVector)
+  // Signed-out on the public site: show greyed "sign in to save" hearts.
+  const lockedSave = !canSave && !!signupHref
   // Occasion gates the catalogue; cosine ranks what's left (highest taste
   // similarity first), falling back to anti-repetition when there's no signal.
   const orderForFeed = (list: OutfitWithItems[]): OutfitWithItems[] =>
@@ -816,6 +818,7 @@ export default function FeedClient({
               onStyleItem={handleStyleItem}
               canSave={canSave}
               initialSaved={savedSet.has(outfit.outfit_id)}
+              lockedSave={lockedSave}
             />
           ))}
         </div>
@@ -872,6 +875,7 @@ export default function FeedClient({
                 onStyleItem={handleStyleItem}
                 canSave={canSave}
                 initialSaved={savedSet.has(outfit.outfit_id)}
+                lockedSave={lockedSave}
               />
             ))}
           </div>
@@ -931,6 +935,7 @@ export default function FeedClient({
                 onStyleItem={handleStyleItem}
                 canSave={canSave}
                 initialSaved={savedSet.has(outfit.outfit_id)}
+                lockedSave={lockedSave}
               />
             ))}
           </div>

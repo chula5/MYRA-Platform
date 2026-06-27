@@ -25,6 +25,8 @@ interface OutfitCardProps {
   // Save (heart) — only shown for signed-in early-access users.
   canSave?: boolean
   initialSaved?: boolean
+  // Signed-out: show a greyed heart that nudges sign-in instead.
+  lockedSave?: boolean
 }
 
 const MAX_DOTS = 7
@@ -37,6 +39,7 @@ export default function OutfitCard({
   detailHref,
   canSave = false,
   initialSaved = false,
+  lockedSave = false,
 }: OutfitCardProps) {
   const router = useRouter()
   const [sourcePanelOpen, setSourcePanelOpen] = useState(false)
@@ -125,9 +128,11 @@ export default function OutfitCard({
         )}
 
         {/* Save heart (signed-in users) */}
-        {canSave && (
+        {canSave ? (
           <SaveHeartButton outfitId={outfit.outfit_id} initialSaved={initialSaved} />
-        )}
+        ) : lockedSave ? (
+          <SaveHeartButton outfitId={outfit.outfit_id} locked />
+        ) : null}
 
         {/* Desktop prev/next tap zones */}
         {total > 1 && (
