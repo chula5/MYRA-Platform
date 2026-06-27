@@ -2,6 +2,7 @@ import Link from 'next/link'
 import Navigation from '@/components/navigation/Navigation'
 import FeedClient from '@/app/feed/FeedClient'
 import SignupPrompt from '@/components/SignupPrompt'
+import LandingFeedback from '@/components/LandingFeedback'
 import LandingTracker from '@/components/analytics/LandingTracker'
 import { createServerClient, createAdminClient } from '@/lib/supabase-server'
 import { getSavedOutfitIds } from '@/app/edit/save-actions'
@@ -150,6 +151,9 @@ export default async function LandingPage({
           </div>
         </div>
       </section>
+
+      {/* Brand suggestions + feedback + contact */}
+      <LandingFeedback />
 
       {/* Pageview analytics (no more waitlist popup) */}
       <LandingTracker initialRef={ref ?? null} />

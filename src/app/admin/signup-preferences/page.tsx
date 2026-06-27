@@ -139,6 +139,21 @@ export default async function SignupPreferencesPage() {
   }
   const totalSearches = [...searchCounts.values()].reduce((s, n) => s + n, 0)
   const topSearches = [...searchCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 30)
+
+  // ── Landing feedback + brand requests ──
+  let brandRequests: { message: string; created_at: string }[] = []
+  let feedbackNotes: { message: string; created_at: string; email: string | null }[] = []
+  {
+    const { data: fb } = await admin
+      .from('feedback_submission' as any)
+      .select('kind, message, email, created_at')
+      .order('created_at', { ascending: false })
+      .limit(200)
+    for (const r of (fb ?? []) as any[]) {
+      if (r.kind === 'brand') brandRequests.push({ message: r.message, created_at: r.created_at })
+      else feedbackNotes.push({ message: r.message, created_at: r.created_at, email: r.email })
+    }
+  }
   const maxSearch = Math.max(1, ...topSearches.map(([, c]) => c))
 
   const renderOutfitGrid = (entries: [string, number][], tone: 'like' | 'dislike') => (
@@ -237,6 +252,46 @@ ALTER TABLE public.signup_preference ENABLE ROW LEVEL SECURITY;`}</pre>
             ))}
           </div>
         )}
+      </div>
+
+      {/* Brand requests + feedback from the landing page */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
+        <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6">
+          <div className="flex items-baseline justify-between mb-4">
+            <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B]">BRAND REQUESTS</p>
+            <p className="text-[9px] tracking-[0.072em] text-[#A8A8A4]">{brandRequests.length}</p>
+          </div>
+          {brandRequests.length === 0 ? (
+            <p className="text-[10px] tracking-[0.072em] text-[#A8A8A4] py-4">No brand suggestions yet.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {brandRequests.map((b, i) => (
+                <span key={i} className="text-[10px] tracking-[0.045em] text-[#4A4E57] bg-[#FAFAF8] border border-[#E2E0DB] rounded-full px-3 py-1.5">
+                  {b.message.toUpperCase()}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6">
+          <div className="flex items-baseline justify-between mb-4">
+            <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B]">FEEDBACK</p>
+            <p className="text-[9px] tracking-[0.072em] text-[#A8A8A4]">{feedbackNotes.length}</p>
+          </div>
+          {feedbackNotes.length === 0 ? (
+            <p className="text-[10px] tracking-[0.072em] text-[#A8A8A4] py-4">No feedback yet.</p>
+          ) : (
+            <div className="space-y-3 max-h-[280px] overflow-y-auto">
+              {feedbackNotes.map((f, i) => (
+                <div key={i} className="border-b border-[#F2F2F2] pb-3 last:border-0">
+                  <p className="text-[11px] tracking-[0.03em] text-[#4A4E57] leading-relaxed">{f.message}</p>
+                  <p className="text-[8px] tracking-[0.06em] text-[#A8A8A4] mt-1">{new Date(f.created_at).toLocaleDateString()}{f.email ? ` · ${f.email}` : ''}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {total === 0 && tableReady && (
