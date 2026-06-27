@@ -69,10 +69,10 @@ export default async function LandingPage({
           tasteVector={tasteVector}
           brandRows={brandRows}
           occasionOrder={occasionOrder}
-          signupHref={user ? undefined : '/earlyaccess'}
+          signupHref={user ? undefined : '/signin'}
         />
       </main>
-      {!user && <SignupPrompt href="/earlyaccess" />}
+      {!user && <SignupPrompt href="/signin" />}
 
       {/* ── Hero ──────────────────────────────────────────────
           Mobile: image fills the viewport (h-screen + object-cover).

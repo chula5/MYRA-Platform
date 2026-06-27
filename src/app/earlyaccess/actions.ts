@@ -12,14 +12,14 @@ export async function earlyAccessSignIn(formData: FormData) {
   const password = (formData.get('password') as string) || ''
 
   if (!email || !password) {
-    redirect(`/earlyaccess?error=${encodeURIComponent('Enter your email and password')}`)
+    redirect(`/signin?error=${encodeURIComponent('Enter your email and password')}`)
   }
 
   const supabase = await createServerClient()
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
   if (error) {
-    redirect(`/earlyaccess?error=${encodeURIComponent('Incorrect email or password')}`)
+    redirect(`/signin?error=${encodeURIComponent('Incorrect email or password')}`)
   }
 
   if (data.user) await recordEarlyAccessLogin(data.user.id)
@@ -51,7 +51,7 @@ export async function earlyAccessSignUp(formData: FormData) {
   })
   if (createErr) {
     if (/already|exists|registered/i.test(createErr.message)) {
-      redirect(`/earlyaccess?error=${encodeURIComponent('You already have an account — sign in below')}`)
+      redirect(`/signin?error=${encodeURIComponent('You already have an account — sign in below')}`)
     }
     back('Could not create your account — please try again')
   }
@@ -60,7 +60,7 @@ export async function earlyAccessSignUp(formData: FormData) {
   const supabase = await createServerClient()
   const { data, error: signErr } = await supabase.auth.signInWithPassword({ email, password })
   if (signErr) {
-    redirect(`/earlyaccess?error=${encodeURIComponent('Account created — please sign in')}`)
+    redirect(`/signin?error=${encodeURIComponent('Account created — please sign in')}`)
   }
   if (data.user) await recordEarlyAccessLogin(data.user.id)
   redirect('/edit')
@@ -73,7 +73,7 @@ export async function publicSignUp(formData: FormData) {
   const password = (formData.get('password') as string) || ''
   const confirm = (formData.get('confirm') as string) || ''
 
-  const back = (msg: string) => redirect(`/earlyaccess?mode=signup&error=${encodeURIComponent(msg)}`)
+  const back = (msg: string) => redirect(`/signin?mode=signup&error=${encodeURIComponent(msg)}`)
 
   if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) back('Enter a valid email address')
   if (!password || password.length < 8) back('Password must be at least 8 characters')
@@ -88,14 +88,14 @@ export async function publicSignUp(formData: FormData) {
   })
   if (createErr) {
     if (/already|exists|registered/i.test(createErr.message)) {
-      redirect(`/earlyaccess?error=${encodeURIComponent('You already have an account — sign in')}`)
+      redirect(`/signin?error=${encodeURIComponent('You already have an account — sign in')}`)
     }
     back('Could not create your account — please try again')
   }
 
   const supabase = await createServerClient()
   const { data, error: signErr } = await supabase.auth.signInWithPassword({ email, password })
-  if (signErr) redirect(`/earlyaccess?error=${encodeURIComponent('Account created — please sign in')}`)
+  if (signErr) redirect(`/signin?error=${encodeURIComponent('Account created — please sign in')}`)
   if (data.user) await recordEarlyAccessLogin(data.user.id)
   redirect('/edit')
 }
@@ -103,5 +103,5 @@ export async function publicSignUp(formData: FormData) {
 export async function earlyAccessSignOut() {
   const supabase = await createServerClient()
   await supabase.auth.signOut()
-  redirect('/earlyaccess')
+  redirect('/signin')
 }

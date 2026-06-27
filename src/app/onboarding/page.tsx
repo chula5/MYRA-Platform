@@ -14,7 +14,7 @@ export default async function OnboardingPage({
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  if (!user) redirect('/earlyaccess')
+  if (!user) redirect('/signin')
 
   // Admin preview mode: walk through the exact flow without it saving or
   // redirecting away. Only the admin account gets this.

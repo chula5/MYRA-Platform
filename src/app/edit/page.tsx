@@ -15,7 +15,7 @@ export default async function EditPage() {
   const { data: { user } } = await supabase.auth.getUser()
 
   // Early-access (or admin) sign-in required.
-  if (!user) redirect('/earlyaccess')
+  if (!user) redirect('/signin')
 
   // First-time users complete the taste onboarding before browsing.
   // The admin account is exempt (it previews the live edit directly).

@@ -77,7 +77,7 @@ export default function Navigation({ transparent = false, authed = false }: { tr
           </a>
           {/* Constant auth button */}
           <Link
-            href={authed ? '/edit' : '/earlyaccess'}
+            href={authed ? '/edit' : '/signin'}
             className={`whitespace-nowrap rounded-full border px-3 sm:px-4 py-1.5 text-[9px] sm:text-[10px] tracking-[0.09em] transition-colors duration-300 ${
               isTransparent
                 ? 'border-white/70 text-white hover:bg-white/15'

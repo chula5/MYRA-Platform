@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react'
 // anonymous visitor engages with the Edit (picks an occasion / searches),
 // inviting them to create a login. Listens for the 'myra:engage' window event
 // dispatched by FeedClient.
-export default function SignupPrompt({ href = '/earlyaccess' }: { href?: string }) {
+export default function SignupPrompt({ href = '/signin' }: { href?: string }) {
   const [show, setShow] = useState(false)
 
   useEffect(() => {

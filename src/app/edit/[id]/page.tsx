@@ -16,7 +16,7 @@ interface PageProps {
 export default async function EditDetailPage({ params, searchParams }: PageProps) {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/earlyaccess')
+  if (!user) redirect('/signin')
 
   const { id } = await params
   const { styleItem, itemType, mode } = await searchParams
