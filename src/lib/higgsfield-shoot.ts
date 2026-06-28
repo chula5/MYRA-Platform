@@ -87,13 +87,23 @@ export interface ShootItem {
 }
 
 // Convert a Cloudinary URL to the JPG transform Higgsfield needs (webp causes
-// credit refunds). Non-Cloudinary URLs pass through untouched.
+// credit refunds) AND pixelate any detected faces, so the generator cannot copy
+// the reference model's face — it must invent a new person from the prompt.
+// `e_pixelate_faces` is a no-op on flat-lay / accessory shots with no face.
+// Non-Cloudinary URLs pass through untouched (no de-identification possible).
+const HF_REF_TRANSFORM = 'f_jpg,q_90,w_1024,e_pixelate_faces:45'
 export function toHiggsfieldJpg(url: string): string {
   if (!url || !url.includes('res.cloudinary.com')) return url
-  const transformed = /\/upload\/[^/]*f_jpg/.test(url)
-    ? url
-    : url.replace('/upload/', '/upload/f_jpg,q_90,w_1024/')
-  return transformed.replace(/\.(webp|png|jpe?g|avif)$/i, '')
+  let out: string
+  if (/\/upload\/[^/]*f_jpg/.test(url)) {
+    // Already has a transform segment — append face pixelation if not present.
+    out = url.includes('e_pixelate_faces')
+      ? url
+      : url.replace(/\/upload\/([^/]*)\//, '/upload/$1,e_pixelate_faces:45/')
+  } else {
+    out = url.replace('/upload/', `/upload/${HF_REF_TRANSFORM}/`)
+  }
+  return out.replace(/\.(webp|png|jpe?g|avif)$/i, '')
 }
 
 // ── Model variation ───────────────────────────────────────────────────────────
