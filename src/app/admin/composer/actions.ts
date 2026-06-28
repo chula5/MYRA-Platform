@@ -279,6 +279,7 @@ export async function approveCandidate(
   anchorItemId: string,
   itemIds: string[],
   slots: Slot[],
+  opts?: { autoShoot?: boolean },
 ): Promise<{ outfitId?: string; projectId?: string; error?: string }> {
   if (itemIds.length !== slots.length) return { error: 'itemIds and slots length mismatch' }
 
@@ -353,10 +354,14 @@ export async function approveCandidate(
     // Auto-generate a Refined Higgsfield shoot in the background. Fire-and-forget
     // so Approve to Draft returns instantly; the image attaches to the outfit's
     // additional_images (~30–60s, ~1 credit) and shows when the draft is opened.
-    // Never let a shoot failure break approval.
-    void generateHiggsfieldShootForOutfit(outfitId, 'E5').catch((err) =>
-      console.error('[approveCandidate→higgsfield]', err),
-    )
+    // Never let a shoot failure break approval. Callers that drive the shoot
+    // themselves (e.g. Outfit Review, which awaits it for live status) pass
+    // autoShoot:false so it isn't generated twice.
+    if (opts?.autoShoot !== false) {
+      void generateHiggsfieldShootForOutfit(outfitId, 'E5').catch((err) =>
+        console.error('[approveCandidate→higgsfield]', err),
+      )
+    }
 
     // Auto-generate occasion tags from the outfit's items (fast; fire-and-forget).
     void generateOccasionTags(outfitId, { skipIfTagged: true }).catch((err) =>

@@ -9,6 +9,7 @@ import {
   type ReviewItem,
 } from './actions'
 import { approveCandidate, rescoreCandidate } from '@/app/admin/composer/actions'
+import { generateHiggsfieldShootForOutfit } from '@/app/admin/projects/higgsfield-actions'
 
 const SLOT_LABEL: Record<string, string> = {
   outerwear: 'OUTERWEAR', top: 'TOP', bottom: 'BOTTOM', dress: 'DRESS',
@@ -22,6 +23,8 @@ interface CandState {
   outfitId?: string
   projectId?: string
   error?: string
+  shoot?: 'running' | 'done' | 'failed'
+  shootError?: string
 }
 
 export default function OutfitReviewClient({ anchors }: { anchors: ReviewAnchor[] }) {
@@ -88,13 +91,32 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
   async function approve(idx: number) {
     const c = cands[idx]
     setStates((s) => ({ ...s, [idx]: { ...s[idx], approving: true, error: undefined } }))
-    const res: any = await approveCandidate(anchor.item_id, c.items.map((i) => i.item_id), c.items.map((i) => i.slot))
+    // autoShoot:false — we drive the Higgsfield shoot ourselves below so we can
+    // await it and show live status (instead of an unreliable server background job).
+    const res: any = await approveCandidate(
+      anchor.item_id,
+      c.items.map((i) => i.item_id),
+      c.items.map((i) => i.slot),
+      { autoShoot: false },
+    )
     if (res?.error) {
       setStates((s) => ({ ...s, [idx]: { ...s[idx], approving: false, error: res.error } }))
       return
     }
-    setStates((s) => ({ ...s, [idx]: { approved: true, outfitId: res.outfitId, projectId: res.projectId } }))
+    setStates((s) => ({ ...s, [idx]: { approved: true, outfitId: res.outfitId, projectId: res.projectId, shoot: 'running' } }))
     setBuilt((b) => b + 1)
+
+    // Coordinate the Refined Higgsfield shoot now, awaiting the result so the
+    // card reflects whether it actually generated. ~30–90s.
+    try {
+      const shot: any = await generateHiggsfieldShootForOutfit(res.outfitId, 'E5')
+      setStates((s) => ({
+        ...s,
+        [idx]: { ...s[idx], shoot: shot?.imageUrl ? 'done' : 'failed', shootError: shot?.error },
+      }))
+    } catch (err: any) {
+      setStates((s) => ({ ...s, [idx]: { ...s[idx], shoot: 'failed', shootError: err?.message } }))
+    }
   }
 
   function discard(idx: number) {
@@ -222,7 +244,15 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
                     <a href={`/admin/projects/${st.projectId}/outfits/${st.outfitId}/edit`} className="block text-center bg-[#C4A882] text-white py-2.5 text-[10px] tracking-[0.16em] rounded-full">
                       ✓ YES → EDIT DRAFT
                     </a>
-                    <p className="mt-2 text-[8px] tracking-[0.10em] text-[#C4A882] leading-relaxed">✦ HIGGSFIELD SHOOT GENERATING (~30–60S) — IT&rsquo;LL BECOME THE DISPLAY IMAGE.</p>
+                    {st.shoot === 'running' && (
+                      <p className="mt-2 text-[8px] tracking-[0.10em] text-[#C4A882] leading-relaxed">✦ HIGGSFIELD SHOOT GENERATING (~30–90S) — KEEP THIS TAB OPEN; IT&rsquo;LL BECOME THE DISPLAY IMAGE.</p>
+                    )}
+                    {st.shoot === 'done' && (
+                      <p className="mt-2 text-[8px] tracking-[0.10em] text-[#4A7A5A] leading-relaxed">✓ HIGGSFIELD SHOOT DONE — SET AS THE DISPLAY IMAGE.</p>
+                    )}
+                    {st.shoot === 'failed' && (
+                      <p className="mt-2 text-[8px] tracking-[0.10em] text-[#B83A3A] leading-relaxed">✕ SHOOT FAILED{st.shootError ? ` — ${st.shootError.slice(0, 80).toUpperCase()}` : ''}. THE DRAFT IS STILL SAVED.</p>
+                    )}
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">

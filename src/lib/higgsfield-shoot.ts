@@ -160,8 +160,8 @@ export function buildGenerationPrompt(combo: HiggsfieldCombo, items: ShootItem[]
     ? 'The FINAL reference image is a POSE-AND-LIGHTING GUIDE ONLY — copy its pose, framing and lighting, but completely IGNORE the person, face, skin tone, clothing, colours, background and styling shown in it. '
     : ''
 
-  return `${subject}, hair ${combo.hair}, wearing ${garments || 'the items in the reference images'}. ` +
-    `MODEL — render ONE invented, beautiful, photorealistic woman exactly as described above. The reference photos may show a DIFFERENT model — IGNORE that person entirely; use the photos ONLY to read the clothing, and do NOT copy anyone's face, hair, skin tone, body or pose from them. Keep ONE consistent skin tone head-to-toe, head clearly belonging to the body, no pasted-on or floating face. Not a real or famous person. ` +
+  return `Editorial fashion photograph of ${subject}, hair ${combo.hair}, wearing ${garments || 'the items in the reference images'}. ` +
+    `MODEL IDENTITY (most important) — the woman is a BRAND-NEW INVENTED PERSON who must look CLEARLY AND OBVIOUSLY DIFFERENT from whoever appears in the reference images: a different ethnicity and skin tone, a different face shape and features, and different hair, exactly matching the description above (${subject}). Do NOT reproduce, recreate or lightly modify the reference model — change the person completely. The reference images are CLOTHING SWATCHES ONLY: read the garments from them, but never borrow the reference model's face, hair, skin tone, body, expression or pose. Keep ONE consistent skin tone head-to-toe, head clearly belonging to the body, no pasted-on or floating face. Not a real or famous person. ` +
     `GARMENTS — reproduce each piece EXACTLY as in ${productRefs}: fabric, texture, silhouette, cut, length, neckline, sleeves and every detail; do not restyle or substitute. ` +
     `COLOUR — keep each garment's true colour from its photo; do NOT wash out, lighten or shift it toward white or cream. ` +
     `POSE: ${combo.pose}. ` +
