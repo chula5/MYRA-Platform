@@ -6,6 +6,25 @@ import type { ItemType } from '@/types/database'
 // Style-Item hotspots site-wide. Flip to `false` to hide.
 const HOTSPOTS_ENABLED = true
 
+// Thin diagonal arrow drawn as SVG so it renders identically on every platform
+// (the Unicode ↗ shows as a blue emoji on iOS).
+function StyleArrow() {
+  return (
+    <svg
+      viewBox="0 0 12 12"
+      className="inline-block w-2.5 h-2.5 -mt-px"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3.5 8.5 8.5 3.5M4.7 3.5h3.8v3.8" />
+    </svg>
+  )
+}
+
 interface HotspotProps {
   itemId: string
   itemType: ItemType
@@ -107,7 +126,7 @@ export default function Hotspot({
             `}
           >
             <span className="text-[10px] tracking-[0.068em] text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.35)]">
-              STYLE {label} <span className="text-sm">↗</span>
+              STYLE {label} <StyleArrow />
             </span>
           </div>
         </div>
@@ -142,7 +161,7 @@ export default function Hotspot({
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); onStyleItem?.(itemId, itemType) }}
                 className="text-[10px] tracking-[0.068em] text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.35)] flex items-center gap-1"
               >
-                STYLE {label} <span className="text-sm">↗</span>
+                STYLE {label} <StyleArrow />
               </button>
             </div>
           )}
