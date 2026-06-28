@@ -4,12 +4,15 @@ import { useEffect, useState } from 'react'
 import {
   composeForReview,
   getReviewSwapOptions,
+  getReviewAddOptions,
+  getReviewQueue,
   type ReviewAnchor,
   type ReviewCandidate,
   type ReviewItem,
 } from './actions'
 import { approveCandidate, rescoreCandidate, recordSkipDecision } from '@/app/admin/composer/actions'
 import { generateHiggsfieldShootForOutfit } from '@/app/admin/projects/higgsfield-actions'
+import type { Slot } from '@/lib/composer'
 
 const SLOT_LABEL: Record<string, string> = {
   outerwear: 'OUTERWEAR', top: 'TOP', bottom: 'BOTTOM', dress: 'DRESS',
@@ -28,39 +31,64 @@ interface CandState {
 }
 
 export default function OutfitReviewClient({ anchors }: { anchors: ReviewAnchor[] }) {
-  // Freeze the queue for this session so approving an outfit (which refreshes
-  // the route) never reshuffles or drops anchors you're mid-review on.
-  const [queue] = useState(anchors)
+  const [queue, setQueue] = useState(anchors)
   const [visible, setVisible] = useState(8)
+  const [refreshKey, setRefreshKey] = useState(0)  // remount cards on refresh
+  const [refreshing, setRefreshing] = useState(false)
 
-  if (queue.length === 0) {
-    return (
-      <p className="text-[12px] tracking-[0.09em] text-[#A8A8A4] py-20 text-center">
-        EVERY ANCHOR ALREADY HAS 3+ OUTFITS — NOTHING TO REVIEW. 🎉
-      </p>
-    )
+  // Reshuffle which anchors appear (they're the same on every page load otherwise).
+  async function refresh() {
+    setRefreshing(true)
+    const res = await getReviewQueue(60, true)
+    setRefreshing(false)
+    if (res.anchors?.length) {
+      setQueue(res.anchors)
+      setVisible(8)
+      setRefreshKey((k) => k + 1)
+    }
   }
 
   return (
-    <div className="space-y-12">
-      {queue.slice(0, visible).map((a) => (
-        <AnchorReview key={a.item_id} anchor={a} />
-      ))}
-      {visible < queue.length && (
-        <div className="text-center pt-2">
-          <button
-            onClick={() => setVisible((v) => v + 8)}
-            className="border border-[#0A0A0A] text-[#4A4E57] px-8 py-3 text-[11px] tracking-[0.16em] rounded-full hover:bg-[#0A0A0A] hover:text-white transition-colors"
-          >
-            LOAD MORE ANCHORS ({queue.length - visible} LEFT)
-          </button>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] tracking-[0.14em] text-[#A8A8A4]">
+          {queue.length} ANCHOR{queue.length === 1 ? '' : 'S'} IN QUEUE
+        </p>
+        <button
+          onClick={refresh}
+          disabled={refreshing}
+          className="border border-[#0A0A0A] text-[#4A4E57] px-5 py-2 text-[10px] tracking-[0.14em] rounded-full hover:bg-[#0A0A0A] hover:text-white transition-colors disabled:opacity-50"
+        >
+          {refreshing ? 'SHUFFLING…' : '↻ REFRESH ANCHORS'}
+        </button>
+      </div>
+
+      {queue.length === 0 ? (
+        <p className="text-[12px] tracking-[0.09em] text-[#A8A8A4] py-20 text-center">
+          EVERY ANCHOR ALREADY HAS 3+ OUTFITS — NOTHING TO REVIEW. 🎉
+        </p>
+      ) : (
+        <div className="space-y-12">
+          {queue.slice(0, visible).map((a) => (
+            <AnchorReview key={`${a.item_id}-${refreshKey}`} anchor={a} />
+          ))}
+          {visible < queue.length && (
+            <div className="text-center pt-2">
+              <button
+                onClick={() => setVisible((v) => v + 8)}
+                className="border border-[#0A0A0A] text-[#4A4E57] px-8 py-3 text-[11px] tracking-[0.16em] rounded-full hover:bg-[#0A0A0A] hover:text-white transition-colors"
+              >
+                LOAD MORE ANCHORS ({queue.length - visible} LEFT)
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
   )
 }
 
-type SwapTarget = { candIdx: number; itemIdx: number; slot: string }
+type SwapTarget = { candIdx: number; itemIdx: number; slot: string; mode: 'swap' | 'add' }
 
 function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
   const [loading, setLoading] = useState(true)
@@ -96,7 +124,7 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
     const res: any = await approveCandidate(
       anchor.item_id,
       c.items.map((i) => i.item_id),
-      c.items.map((i) => i.slot),
+      c.items.map((i) => i.slot as Slot),
       { autoShoot: false, source: 'review', score: c.score },
     )
     if (res?.error) {
@@ -127,11 +155,24 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
   }
 
   async function openSwap(candIdx: number, itemIdx: number, slot: string) {
-    setSwap({ candIdx, itemIdx, slot })
+    setSwap({ candIdx, itemIdx, slot, mode: 'swap' })
     setSwapQuery('')
     setSwapLoading(true)
     const exclude = [anchor.item_id, ...cands[candIdx].items.map((i) => i.item_id)]
     const res = await getReviewSwapOptions(anchor.item_id, slot, exclude, '')
+    setSwapOptions(res.options)
+    setSwapLoading(false)
+  }
+
+  // ADD a new item to the candidate — defaults to the slots not yet filled
+  // (bag, shoes, jewellery, a bottom…), or search the whole library.
+  async function openAdd(candIdx: number) {
+    setSwap({ candIdx, itemIdx: -1, slot: '', mode: 'add' })
+    setSwapQuery('')
+    setSwapLoading(true)
+    const exclude = [anchor.item_id, ...cands[candIdx].items.map((i) => i.item_id)]
+    const present = cands[candIdx].items.map((i) => i.slot)
+    const res = await getReviewAddOptions(anchor.item_id, present, exclude, '')
     setSwapOptions(res.options)
     setSwapLoading(false)
   }
@@ -141,23 +182,30 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
     if (!swap) return
     setSwapLoading(true)
     const exclude = [anchor.item_id, ...cands[swap.candIdx].items.map((i) => i.item_id)]
-    const res = await getReviewSwapOptions(anchor.item_id, swap.slot, exclude, q)
+    const res =
+      swap.mode === 'add'
+        ? await getReviewAddOptions(anchor.item_id, cands[swap.candIdx].items.map((i) => i.slot), exclude, q)
+        : await getReviewSwapOptions(anchor.item_id, swap.slot, exclude, q)
     setSwapOptions(res.options)
     setSwapLoading(false)
   }
 
   async function performSwap(opt: ReviewItem) {
     if (!swap) return
-    const { candIdx, itemIdx } = swap
+    const { candIdx, itemIdx, mode } = swap
+    // Compute the new item list (append in add mode, replace in swap mode).
+    const items =
+      mode === 'add'
+        ? [...cands[candIdx].items, { ...opt, slot: opt.slot }]
+        : cands[candIdx].items.map((it, i) => (i === itemIdx ? { ...opt, slot: opt.slot } : it))
     setCands((prev) => {
       const next = prev.map((c) => ({ ...c, items: [...c.items] }))
-      next[candIdx].items[itemIdx] = { ...opt, slot: opt.slot }
+      next[candIdx].items = items
       return next
     })
     setSwap(null)
     // Rescore coherence with the new combo.
-    const items = cands[candIdx].items.map((it, i) => (i === itemIdx ? opt : it))
-    const res: any = await rescoreCandidate(anchor.item_id, items.map((i) => ({ itemId: i.item_id, slot: i.slot })))
+    const res: any = await rescoreCandidate(anchor.item_id, items.map((i) => ({ itemId: i.item_id, slot: i.slot as Slot })))
     if (typeof res?.score === 'number') {
       setCands((prev) => {
         const next = [...prev]
@@ -240,6 +288,15 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
                       {item.price && <p className="text-[7px] tracking-[0.04em] text-[#4A4E57]">{item.price}</p>}
                     </div>
                   ))}
+                  {editable && (
+                    <button
+                      onClick={() => openAdd(idx)}
+                      className="aspect-[3/4] rounded-[6px] border border-dashed border-[#C9C7C2] flex flex-col items-center justify-center text-[#A8A8A4] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors"
+                    >
+                      <span className="text-[18px] leading-none">+</span>
+                      <span className="text-[7px] tracking-[0.12em] mt-1">ADD ITEM</span>
+                    </button>
+                  )}
                 </div>
 
                 {st?.approved ? (
@@ -279,7 +336,9 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
         <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center pt-16 px-4" onClick={() => setSwap(null)}>
           <div className="bg-white border border-[#E2E0DB] rounded-[12px] w-full max-w-3xl max-h-[80vh] overflow-y-auto p-5" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-baseline justify-between mb-4 pb-3 border-b border-[#E2E0DB]">
-              <p className="text-[10px] tracking-[0.16em] text-[#6B6B6B]">SWAP · {SLOT_LABEL[swap.slot] ?? swap.slot}</p>
+              <p className="text-[10px] tracking-[0.16em] text-[#6B6B6B]">
+                {swap.mode === 'add' ? 'ADD ITEM' : `SWAP · ${SLOT_LABEL[swap.slot] ?? swap.slot}`}
+              </p>
               <button onClick={() => setSwap(null)} className="text-[#A8A8A4] hover:text-[#0A0A0A] text-[18px] leading-none">×</button>
             </div>
             <input

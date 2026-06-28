@@ -2,7 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase-server'
 import { getItem, getReadyAndLiveItems } from '@/lib/admin-queries'
-import { pairCompat, slotForItemType } from '@/lib/composer'
+import { pairCompat, slotForItemType, slotPlanForAnchor } from '@/lib/composer'
 import { loadStyleModel } from '@/lib/style-brain-store'
 import { blendedScore } from '@/lib/style-brain'
 
@@ -73,7 +73,7 @@ export interface ReviewCandidate {
   items: ReviewItem[]
 }
 
-export async function getReviewQueue(limit = 60): Promise<{ anchors: ReviewAnchor[]; error?: string }> {
+export async function getReviewQueue(limit = 60, shuffle = false): Promise<{ anchors: ReviewAnchor[]; error?: string }> {
   try {
     const admin = createAdminClient()
     const library = await getReadyAndLiveItems()
@@ -91,7 +91,7 @@ export async function getReviewQueue(limit = 60): Promise<{ anchors: ReviewAncho
       if (anchorId) count.set(anchorId, (count.get(anchorId) ?? 0) + 1)
     }
 
-    const anchors: ReviewAnchor[] = (library as any[])
+    const mapped: ReviewAnchor[] = (library as any[])
       .filter((it) => ANCHOR_TYPES.has(String(it.item_type)) && it.image_url)
       .map((it) => ({
         item_id: it.item_id,
@@ -103,7 +103,18 @@ export async function getReviewQueue(limit = 60): Promise<{ anchors: ReviewAncho
         existingCount: count.get(it.item_id) ?? 0,
       }))
       .filter((a) => a.existingCount < TARGET)
-      .sort((a, b) => a.existingCount - b.existingCount || a.product_name.localeCompare(b.product_name))
+
+    // Refresh = reshuffle so different anchors surface each time. We still keep
+    // most-needed (fewest existing outfits) first; the shuffle randomises ties,
+    // and Array.sort is stable so that random order is preserved within a band.
+    if (shuffle) {
+      for (let i = mapped.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1))
+        ;[mapped[i], mapped[j]] = [mapped[j], mapped[i]]
+      }
+    }
+    const anchors = mapped
+      .sort((a, b) => a.existingCount - b.existingCount || (shuffle ? 0 : a.product_name.localeCompare(b.product_name)))
       .slice(0, limit)
 
     return { anchors }
@@ -234,6 +245,57 @@ function anchorPayload(anchor: any) {
 }
 
 // Swap options (with price), brand-tier-coherent, no outerwear.
+// ADD an item to a candidate: returns the best items for the slots NOT yet
+// filled for this anchor (e.g. add a bag, shoes, jewellery, or a bottom),
+// ranked by compatibility. A query searches the whole library instead.
+export async function getReviewAddOptions(
+  anchorItemId: string,
+  presentSlots: string[],
+  excludeItemIds: string[],
+  query: string,
+): Promise<{ options: ReviewItem[]; missingSlots: string[] }> {
+  try {
+    const anchor: any = await getItem(anchorItemId)
+    if (!anchor) return { options: [], missingSlots: [] }
+    const anchorTier = anchor.brand?.price_tier ?? null
+    const exclude = new Set(excludeItemIds)
+    const q = query.trim().toLowerCase()
+
+    const plan = slotPlanForAnchor(slotForItemType(anchor.item_type))
+    const valid = new Set<string>([...plan.required, ...plan.optional])
+    const present = new Set(presentSlots)
+    const missing = Array.from(valid).filter((s) => !present.has(s))
+
+    let pool = styleLibrary(await getReadyAndLiveItems(), anchor).filter((it: any) => !exclude.has(it.item_id))
+    if (q) {
+      pool = pool.filter((it: any) =>
+        `${it.product_name} ${it.brand?.name ?? ''} ${String(it.item_type).replace(/_/g, ' ')}`.toLowerCase().includes(q),
+      )
+    } else {
+      pool = pool.filter((it: any) => missing.includes(slotForItemType(it.item_type)))
+    }
+    pool = pool.filter((it: any) => !tierBandViolation([anchorTier, it.brand?.price_tier ?? null]))
+
+    const options: ReviewItem[] = pool
+      .map((it: any) => ({
+        slot: slotForItemType(it.item_type),
+        item_id: it.item_id,
+        product_name: it.product_name,
+        brand_name: it.brand?.name ?? null,
+        image_url: it.image_url,
+        price: fmtPrice(it.price, it.currency),
+        compat: Number(pairCompat(anchor, it).total.toFixed(3)),
+      }))
+      .sort((a, b) => b.compat - a.compat)
+      .slice(0, 30)
+
+    return { options, missingSlots: missing }
+  } catch (err) {
+    console.error('[getReviewAddOptions]', err)
+    return { options: [], missingSlots: [] }
+  }
+}
+
 export async function getReviewSwapOptions(
   anchorItemId: string,
   slot: string,
