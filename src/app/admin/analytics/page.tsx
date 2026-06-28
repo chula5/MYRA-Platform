@@ -69,6 +69,9 @@ export default async function AnalyticsPage() {
   let repeatRate = '—'
   let medianTime = '—'
   let returningVisitorRate = '—'
+  let avgVisits = '—'                       // avg sessions per visitor (30 days)
+  let uniqueVisitors = 0
+  const visitDist = { once: 0, twice: 0, three: 0, power: 0 }  // 1 / 2 / 3 / 4+ visits
   const sessionsByCountry = new Map<string, number>()
   {
     const { data: sessions, error: sErr } = await admin
@@ -102,8 +105,18 @@ export default async function AnalyticsPage() {
           sessionsByCountry.set(c, (sessionsByCountry.get(c) ?? 0) + 1)
         }
         const visitors = sessionsByVisitor.size
+        uniqueVisitors = visitors
         const returningVisitors = [...sessionsByVisitor.values()].filter((n) => n > 1).length
         returningVisitorRate = visitors > 0 ? `${((returningVisitors / visitors) * 100).toFixed(0)}%` : '—'
+
+        // Repeat-use frequency: average visits per visitor + distribution.
+        avgVisits = visitors > 0 ? (totalSessions / visitors).toFixed(1) : '—'
+        for (const n of sessionsByVisitor.values()) {
+          if (n >= 4) visitDist.power++
+          else if (n === 3) visitDist.three++
+          else if (n === 2) visitDist.twice++
+          else visitDist.once++
+        }
       }
     }
   }
@@ -270,6 +283,43 @@ alter table site_session enable row level security;`}</pre>
           </div>
         )}
       </div>
+
+      {/* ── Repeat use (proves multiple visits per month) ── */}
+      {retentionReady && totalSessions > 0 && (
+        <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6 mb-10">
+          <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B] mb-5">REPEAT USE · LAST 30 DAYS</p>
+          <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-8 items-center">
+            <div>
+              <p className="text-[40px] tracking-[0.01em] text-[#4A4E57] leading-none">{avgVisits}</p>
+              <p className="text-[9px] tracking-[0.072em] text-[#C4A882] mt-2">AVG VISITS / VISITOR</p>
+              <p className="text-[9px] tracking-[0.054em] text-[#A8A8A4] mt-1">{uniqueVisitors} UNIQUE VISITORS</p>
+            </div>
+            <div className="space-y-2.5">
+              {([
+                { label: '1 VISIT', n: visitDist.once },
+                { label: '2 VISITS', n: visitDist.twice },
+                { label: '3 VISITS', n: visitDist.three },
+                { label: '4+ VISITS', n: visitDist.power },
+              ] as const).map((b) => {
+                const maxN = Math.max(1, visitDist.once, visitDist.twice, visitDist.three, visitDist.power)
+                const repeat = b.label !== '1 VISIT'
+                return (
+                  <div key={b.label} className="flex items-center gap-3">
+                    <span className="text-[10px] tracking-[0.045em] text-[#4A4E57] w-[70px] flex-shrink-0">{b.label}</span>
+                    <div className="flex-1 h-[8px] bg-[#F2F2F2] rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${repeat ? 'bg-[#C4A882]' : 'bg-[#D8D6D1]'}`} style={{ width: `${(b.n / maxN) * 100}%` }} />
+                    </div>
+                    <span className="text-[10px] tracking-[0.045em] text-[#6B6B6B] w-[34px] text-right flex-shrink-0">{b.n}</span>
+                  </div>
+                )
+              })}
+              <p className="text-[9px] tracking-[0.054em] text-[#A8A8A4] pt-1">
+                {visitDist.twice + visitDist.three + visitDist.power} of {uniqueVisitors} visitors came back 2+ times this month.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Location ── */}
       <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6 mb-10">
