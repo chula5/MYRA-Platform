@@ -3,6 +3,8 @@
 import { createAdminClient } from '@/lib/supabase-server'
 import { getItem, getReadyAndLiveItems } from '@/lib/admin-queries'
 import { pairCompat, slotForItemType } from '@/lib/composer'
+import { loadStyleModel } from '@/lib/style-brain-store'
+import { blendedScore } from '@/lib/style-brain'
 
 // Anchor garments we generate review outfits for.
 const DRESS = new Set(['mini_dress', 'midi_dress', 'maxi_dress', 'shirt_dress', 'slip_dress'])
@@ -166,9 +168,20 @@ export async function composeForReview(anchorItemId: string): Promise<{
       combos = next
     }
 
+    // Style Brain re-rank: blend Chloe's learned taste into the compose score
+    // (safe no-op until there are decisions).
+    const styleModel = await loadStyleModel()
+    const feat = (it: any) => ({
+      item_type: it.item_type, colour_family: it.colour_family ?? null, pattern: it.pattern ?? null,
+      material_formality: it.material_formality ?? null, brand_name: it.brand?.name ?? null,
+      price_tier: it.brand?.price_tier ?? null,
+    })
     const scored = combos
       .filter((items) => !tierBandViolation([anchorTier, ...items.map((i) => i.brand?.price_tier ?? null)]))
-      .map((items) => ({ items, score: comboScore(anchor, items) }))
+      .map((items) => ({
+        items,
+        score: Math.max(0, Math.min(1, blendedScore(styleModel, comboScore(anchor, items), [feat(anchor), ...items.map(feat)]))),
+      }))
       .sort((a, b) => b.score - a.score)
 
     // Diversity: no single item appears in more than 2 candidates.

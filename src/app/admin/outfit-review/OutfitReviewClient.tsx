@@ -8,7 +8,7 @@ import {
   type ReviewCandidate,
   type ReviewItem,
 } from './actions'
-import { approveCandidate, rescoreCandidate } from '@/app/admin/composer/actions'
+import { approveCandidate, rescoreCandidate, recordSkipDecision } from '@/app/admin/composer/actions'
 import { generateHiggsfieldShootForOutfit } from '@/app/admin/projects/higgsfield-actions'
 
 const SLOT_LABEL: Record<string, string> = {
@@ -97,7 +97,7 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
       anchor.item_id,
       c.items.map((i) => i.item_id),
       c.items.map((i) => i.slot),
-      { autoShoot: false },
+      { autoShoot: false, source: 'review', score: c.score },
     )
     if (res?.error) {
       setStates((s) => ({ ...s, [idx]: { ...s[idx], approving: false, error: res.error } }))
@@ -121,6 +121,9 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
 
   function discard(idx: number) {
     setStates((s) => ({ ...s, [idx]: { ...s[idx], discarded: true } }))
+    // Style Brain: a SKIP is a negative training signal.
+    const c = cands[idx]
+    if (c) void recordSkipDecision(anchor.item_id, c.items.map((i) => i.item_id), 'review', c.score)
   }
 
   async function openSwap(candIdx: number, itemIdx: number, slot: string) {

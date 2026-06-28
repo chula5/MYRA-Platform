@@ -136,6 +136,11 @@ export default async function AdminDashboard() {
       <p className="text-[10px] tracking-[0.113em] text-[#6B6B6B] mb-4 mt-12">INSIGHTS &amp; TOOLS</p>
       <div className="grid grid-cols-4 gap-6">
         <StudioCard
+          title="STYLE BRAIN"
+          description="Learns which combinations you approve in the Composer + Outfit Review, and re-ranks future suggestions toward your taste. Shows your learned house style."
+          href="/admin/style-brain"
+        />
+        <StudioCard
           title="OUTFIT REVIEW"
           description="Review composed outfits before they go live — approve, adjust, or reject each look."
           href="/admin/outfit-review"

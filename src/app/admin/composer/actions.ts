@@ -14,6 +14,20 @@ import {
 import { revalidatePath } from 'next/cache'
 import { generateHiggsfieldShootForOutfit } from '@/app/admin/projects/higgsfield-actions'
 import { generateOccasionTags } from '@/app/admin/ai/occasion-tags'
+import { loadStyleModel, recordStyleDecision } from '@/lib/style-brain-store'
+import { blendedScore, type FeatureItem } from '@/lib/style-brain'
+
+// Map a library item to the Style Brain's feature shape.
+function toFeature(it: ItemWithBrand): FeatureItem {
+  return {
+    item_type: it.item_type,
+    colour_family: (it as any).colour_family ?? null,
+    pattern: (it as any).pattern ?? null,
+    material_formality: (it as any).material_formality ?? null,
+    brand_name: it.brand?.name ?? null,
+    price_tier: (it.brand as any)?.price_tier ?? null,
+  }
+}
 
 // ── Compose ──────────────────────────────────────────────────────────────────
 
@@ -55,9 +69,19 @@ export async function composeForAnchor(
 
     const raw = generateCandidates({ anchor, library })
 
-    const candidates: ComposedCandidatePayload[] = raw.map((c, idx) => ({
+    // Style Brain: re-rank candidates by Chloe's learned taste (safe no-op until
+    // there are decisions). Blends a learned bonus into each candidate's score.
+    const model = await loadStyleModel()
+    const ranked = raw
+      .map((c) => {
+        const feats = [toFeature(anchor), ...c.items.map((x) => toFeature(x.item))]
+        return { c, score: Math.max(0, Math.min(1, blendedScore(model, c.score, feats))) }
+      })
+      .sort((a, b) => b.score - a.score)
+
+    const candidates: ComposedCandidatePayload[] = ranked.map(({ c, score }, idx) => ({
       candidateIndex: idx,
-      score: Number(c.score.toFixed(3)),
+      score: Number(score.toFixed(3)),
       items: c.items.map(({ item, slot }) => ({
         slot,
         item_id: item.item_id,
@@ -279,7 +303,7 @@ export async function approveCandidate(
   anchorItemId: string,
   itemIds: string[],
   slots: Slot[],
-  opts?: { autoShoot?: boolean },
+  opts?: { autoShoot?: boolean; source?: 'composer' | 'review'; score?: number },
 ): Promise<{ outfitId?: string; projectId?: string; error?: string }> {
   if (itemIds.length !== slots.length) return { error: 'itemIds and slots length mismatch' }
 
@@ -368,9 +392,48 @@ export async function approveCandidate(
       console.error('[approveCandidate→occasionTags]', err),
     )
 
+    // Style Brain: this YES is a positive training signal — learn the combination.
+    await recordStyleDecision({
+      items: allEntries.map((e) => toFeature(e.item)),
+      decision: 'approve',
+      source: opts?.source ?? 'composer',
+      anchorItemId,
+      itemIds: allEntries.map((e) => e.item.item_id),
+      baseScore: opts?.score ?? null,
+    })
+
     return { outfitId, projectId }
   } catch (err: unknown) {
     console.error('[approveCandidate]', err)
     return { error: err instanceof Error ? err.message : 'Approve failed' }
   }
+}
+
+// Style Brain: record a SKIP (negative signal) when a shown candidate is passed
+// over. Fetches full item attributes server-side from the ids. Fire-and-forget
+// safe — never blocks the UI, never throws.
+export async function recordSkipDecision(
+  anchorItemId: string,
+  itemIds: string[],
+  source: 'composer' | 'review' = 'review',
+  score?: number,
+): Promise<{ ok: true }> {
+  try {
+    const anchor = await getItem(anchorItemId)
+    const items = (await Promise.all(itemIds.map((id) => getItem(id)))).filter(Boolean) as ItemWithBrand[]
+    const all = [anchor, ...items].filter(Boolean) as ItemWithBrand[]
+    if (all.length >= 2) {
+      await recordStyleDecision({
+        items: all.map(toFeature),
+        decision: 'skip',
+        source,
+        anchorItemId,
+        itemIds: all.map((i) => i.item_id),
+        baseScore: score ?? null,
+      })
+    }
+  } catch (err) {
+    console.error('[recordSkipDecision]', err)
+  }
+  return { ok: true }
 }

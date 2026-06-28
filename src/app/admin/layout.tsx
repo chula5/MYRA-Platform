@@ -59,6 +59,12 @@ export default async function AdminLayout({
             VECTORS
           </a>
           <a
+            href="/admin/style-brain"
+            className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
+          >
+            STYLE BRAIN
+          </a>
+          <a
             href="/admin/the-edit"
             className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
           >
