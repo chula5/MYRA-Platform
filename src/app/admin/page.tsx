@@ -131,6 +131,46 @@ export default async function AdminDashboard() {
           href="/admin/projects?filter=archived"
         />
       </div>
+
+      {/* Insights & tools — the remaining sections from the top bar */}
+      <p className="text-[10px] tracking-[0.113em] text-[#6B6B6B] mb-4 mt-12">INSIGHTS &amp; TOOLS</p>
+      <div className="grid grid-cols-4 gap-6">
+        <StudioCard
+          title="OUTFIT REVIEW"
+          description="Review composed outfits before they go live — approve, adjust, or reject each look."
+          href="/admin/outfit-review"
+        />
+        <StudioCard
+          title="VECTORS"
+          description="Inspect and backfill the AI taste vectors that score and rank every outfit."
+          href="/admin/vectors"
+        />
+        <StudioCard
+          title="SOCIAL"
+          description="Turn live outfits into social-media posts and manage what goes out."
+          href="/admin/social"
+        />
+        <StudioCard
+          title="RUNWAY SEARCH"
+          description="Search runway looks to source inspiration and build new outfits."
+          href="/admin/runway-search"
+        />
+        <StudioCard
+          title="ANALYTICS"
+          description="Landing-page traffic, account sign-ups, retention, location, and repeat-use stats."
+          href="/admin/analytics"
+        />
+        <StudioCard
+          title="PREFERENCES"
+          description="What sign-ups are into — onboarding picks, most-clicked items, top searches, plus brand requests and feedback."
+          href="/admin/signup-preferences"
+        />
+        <StudioCard
+          title="PRODUCT VIEW"
+          description="Live, interactive previews of MYRA's key flows — the screens to capture for a product reel."
+          href="/admin/product-view"
+        />
+      </div>
     </div>
   )
 }
