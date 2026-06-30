@@ -645,17 +645,6 @@ function ImageWithHotspots({
         sizes="(max-width: 768px) 100vw, 560px"
       />
 
-      {activeItemLabel && (
-        <div className="absolute top-4 left-4 bg-[#9B9B9B]/30 backdrop-blur-md border border-white/40 rounded-full px-3 py-1.5">
-          <span className="text-[10px] tracking-[0.068em] text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.35)] inline-flex items-center gap-1">
-            STYLE {activeItemLabel}
-            <svg viewBox="0 0 12 12" className="inline-block w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M3.5 8.5 8.5 3.5M4.7 3.5h3.8v3.8" />
-            </svg>
-          </span>
-        </div>
-      )}
-
       {showHotspots && (outfit.outfit_item ?? []).filter((oi) => oi.item != null).map((oi) => {
         const pos = getDetailHotspotPosition(oi.slot)
         return (
