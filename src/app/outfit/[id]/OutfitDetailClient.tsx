@@ -56,6 +56,15 @@ export default function OutfitDetailClient({
   // is only the initial value; clicking the buttons updates this).
   const [activeMode, setActiveMode] = useState<'similar' | 'explore' | null>(mode ?? null)
   const [sourcePanelOpen, setSourcePanelOpen] = useState(false)
+  // The Source Items panel overlays the hero image; keep a ref so opening it
+  // always scrolls the hero into view (it can be off-screen after scrolling
+  // down to the styled results).
+  const heroRef = useRef<HTMLDivElement>(null)
+  const openSourcePanel = () => {
+    const next = !sourcePanelOpen
+    setSourcePanelOpen(next)
+    if (next) requestAnimationFrame(() => heroRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+  }
 
   // Saved items live here (lifted) so the Shop-the-look hearts and the image
   // hover heart stay in sync. Optimistic; reverts on error.
@@ -430,7 +439,7 @@ export default function OutfitDetailClient({
             )}
 
             {/* Current look */}
-            <div className="relative z-10 bg-white rounded-[16px] overflow-hidden group">
+            <div ref={heroRef} className="relative z-10 bg-white rounded-[16px] overflow-hidden group scroll-mt-20">
               <ImageWithHotspots
                 key={currentImageUrl}
                 outfit={outfit}
@@ -551,7 +560,7 @@ export default function OutfitDetailClient({
             code (handlers, fetch logic, result grids) is untouched. */}
         <div className="flex flex-wrap items-center justify-center gap-2">
           {canSave && <SaveHeartButton outfitId={outfitId} initialSaved={initialSaved} variant="detail" />}
-          <CardButton variant="filled" onClick={() => setSourcePanelOpen((v) => !v)}>
+          <CardButton variant="filled" onClick={openSourcePanel}>
             SOURCE ITEMS
           </CardButton>
           {showBrowse && (
