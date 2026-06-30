@@ -51,6 +51,17 @@ export default function RootLayout({
           src="https://s.skimresources.com/js/305335X1793531.skimlinks.js"
           strategy="afterInteractive"
         />
+        {/* Google Analytics (gtag.js) */}
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-0G4EXD8T8B"
+          strategy="afterInteractive"
+        />
+        <Script id="ga-gtag" strategy="afterInteractive">
+          {`window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'G-0G4EXD8T8B');`}
+        </Script>
       </body>
     </html>
   )

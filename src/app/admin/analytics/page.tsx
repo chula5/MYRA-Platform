@@ -56,6 +56,17 @@ export default async function AnalyticsPage() {
   const since = new Date()
   since.setDate(since.getDate() - DAYS)
 
+  // Account sign-ups (auth users) — emails so we can see exactly who joined.
+  let signupUsers: { email: string; created_at: string }[] = []
+  try {
+    const { data: usersData } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 })
+    signupUsers = (usersData?.users ?? [])
+      .map((u: any) => ({ email: (u.email as string) ?? '(no email)', created_at: u.created_at as string }))
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  } catch {
+    /* listUsers may be unavailable in some environments */
+  }
+
   // Try fetching with ref — table/column might not exist yet if migration not run.
   let { data, error } = await admin
     .from('landing_event' as any)
@@ -288,6 +299,28 @@ ALTER TABLE public.landing_event ENABLE ROW LEVEL SECURITY;`}</pre>
             <p className="text-[8px] tracking-[0.072em] text-[#C4A882] mt-1">{s.sub}</p>
           </div>
         ))}
+      </div>
+
+      {/* Who signed up — account emails */}
+      <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6 mb-10 max-w-[620px]">
+        <div className="flex items-baseline justify-between mb-4">
+          <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B]">ACCOUNT SIGN-UPS · EMAILS</p>
+          <p className="text-[9px] tracking-[0.072em] text-[#A8A8A4]">{signupUsers.length} TOTAL</p>
+        </div>
+        {signupUsers.length === 0 ? (
+          <p className="text-[10px] tracking-[0.072em] text-[#A8A8A4] py-3">No accounts yet.</p>
+        ) : (
+          <div className="divide-y divide-[#F2F2F2] max-h-[360px] overflow-y-auto">
+            {signupUsers.map((u) => (
+              <div key={u.email} className="flex items-center justify-between gap-3 py-2.5">
+                <span className="text-[11px] tracking-[0.018em] text-[#4A4E57] truncate">{u.email}</span>
+                <span className="text-[9px] tracking-[0.054em] text-[#A8A8A4] flex-shrink-0">
+                  {new Date(u.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Retention */}
