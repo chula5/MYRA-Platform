@@ -23,6 +23,27 @@ function buildDayMap(n: number): Map<string, { views: number; clicks: number }> 
   return map
 }
 
+// A labelled top-N list used in the per-referral behaviour breakdown.
+function RefList({ title, rows, empty }: { title: string; rows: [string, number][]; empty: string }) {
+  return (
+    <div>
+      <p className="text-[9px] tracking-[0.09em] text-[#6B6B6B] mb-2">{title}</p>
+      {rows.length === 0 ? (
+        <p className="text-[9px] tracking-[0.054em] text-[#C9C7C2]">{empty}</p>
+      ) : (
+        <div className="space-y-1.5">
+          {rows.map(([name, count]) => (
+            <div key={name} className="flex justify-between gap-2">
+              <span className="text-[10px] tracking-[0.027em] text-[#4A4E57] truncate">{name.toUpperCase()}</span>
+              <span className="text-[9px] tracking-[0.045em] text-[#A8A8A4] flex-shrink-0">{count}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function fmtDate(iso: string): string {
   const d = new Date(iso + 'T12:00:00Z')
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
@@ -155,6 +176,28 @@ export default async function AnalyticsPage() {
     }
   }
 
+  // ── Per-referral behaviour: what each referred visitor actually did ──
+  const refDetail = new Map<string, { occasions: Map<string, number>; items: Map<string, number>; searches: Map<string, number> }>()
+  {
+    const { data: refEvents } = await admin
+      .from('landing_event' as any)
+      .select('event_type, path, ref')
+      .not('ref', 'is', null)
+      .in('event_type', ['occasion_click', 'item_click', 'search'])
+      .gte('occurred_at', since.toISOString())
+      .limit(50000)
+    const bump = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1)
+    for (const e of (refEvents ?? []) as { event_type: string; path: string; ref: string }[]) {
+      if (!refDetail.has(e.ref)) refDetail.set(e.ref, { occasions: new Map(), items: new Map(), searches: new Map() })
+      const d = refDetail.get(e.ref)!
+      if (e.event_type === 'occasion_click') bump(d.occasions, e.path)
+      else if (e.event_type === 'item_click') bump(d.items, e.path)
+      else if (e.event_type === 'search') bump(d.searches, e.path)
+    }
+  }
+  const topN = (m: Map<string, number> | undefined, n: number) =>
+    m ? [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, n) : []
+
   const refRows = [...refMap.entries()]
     .map(([ref, v]) => ({
       ref,
@@ -162,6 +205,9 @@ export default async function AnalyticsPage() {
       views: v.views,
       signups: v.signups,
       conv: v.views > 0 ? ((v.signups / v.views) * 100).toFixed(1) : '—',
+      occasions: topN(refDetail.get(ref)?.occasions, 6),
+      items: topN(refDetail.get(ref)?.items, 6),
+      searches: topN(refDetail.get(ref)?.searches, 6),
     }))
     .sort((a, b) => b.views - a.views)
 
@@ -410,6 +456,27 @@ CREATE INDEX IF NOT EXISTS landing_event_ref_idx ON public.landing_event (ref);`
               </div>
             ))}
             <p className="text-[8px] tracking-[0.063em] text-[#A8A8A4] px-4 py-2 bg-[#FAFAF8]">LAST 30 DAYS</p>
+          </div>
+        )}
+
+        {/* What referred visitors did on the site */}
+        {refRows.some((r) => r.occasions.length || r.items.length || r.searches.length) && (
+          <div className="mt-7 space-y-5">
+            <p className="text-[9px] tracking-[0.099em] text-[#A8A8A4]">WHAT REFERRED VISITORS DID</p>
+            {refRows
+              .filter((r) => r.occasions.length || r.items.length || r.searches.length)
+              .map((r) => (
+                <div key={r.ref} className="border border-[#E2E0DB] rounded-[12px] p-5 max-w-[880px]">
+                  <p className="text-[11px] tracking-[0.045em] text-[#4A4E57] mb-4">
+                    {r.label} <span className="text-[#A8A8A4]">· {r.views} VISITS · {r.signups} SIGN-UPS</span>
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+                    <RefList title="OCCASIONS CLICKED" rows={r.occasions} empty="None yet" />
+                    <RefList title="ITEMS CLICKED" rows={r.items} empty="None yet" />
+                    <RefList title="SEARCHES" rows={r.searches} empty="None yet" />
+                  </div>
+                </div>
+              ))}
           </div>
         )}
       </div>

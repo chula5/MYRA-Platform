@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { earlyAccessSignIn, publicSignUp } from './actions'
+import { getStoredRef } from '@/lib/ref'
 import { createClient } from '@/lib/supabase'
 
 const INPUT =
@@ -10,6 +11,9 @@ const INPUT =
 export default function AuthForm({ initialMode = 'signin', error }: { initialMode?: 'signin' | 'signup'; error?: string }) {
   const [mode, setMode] = useState<'signin' | 'signup' | 'reset'>(initialMode)
   const isSignup = mode === 'signup'
+  // Carry the referral code into the sign-up so it can be attributed to a source.
+  const [refCode, setRefCode] = useState('')
+  useEffect(() => { setRefCode(getStoredRef() ?? '') }, [])
 
   // Forgot-password state
   const [resetEmail, setResetEmail] = useState('')
@@ -106,6 +110,7 @@ export default function AuthForm({ initialMode = 'signin', error }: { initialMod
 
           {isSignup ? (
             <form action={publicSignUp} className="flex flex-col gap-3">
+              <input type="hidden" name="ref" value={refCode} readOnly />
               <input type="email" name="email" required autoComplete="email" placeholder="EMAIL" className={INPUT} />
               <input type="password" name="password" required autoComplete="new-password" placeholder="PASSWORD (MIN 8 CHARS)" className={INPUT} />
               <input type="password" name="confirm" required autoComplete="new-password" placeholder="CONFIRM PASSWORD" className={INPUT} />

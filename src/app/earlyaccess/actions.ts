@@ -74,6 +74,7 @@ export async function publicSignUp(formData: FormData) {
   const email = ((formData.get('email') as string) || '').trim().toLowerCase()
   const password = (formData.get('password') as string) || ''
   const confirm = (formData.get('confirm') as string) || ''
+  const ref = ((formData.get('ref') as string) || '').trim() || null
 
   const back = (msg: string) => redirect(`/signin?mode=signup&error=${encodeURIComponent(msg)}`)
 
@@ -99,7 +100,7 @@ export async function publicSignUp(formData: FormData) {
   const { data, error: signErr } = await supabase.auth.signInWithPassword({ email, password })
   if (signErr) redirect(`/signin?error=${encodeURIComponent('Account created — please sign in')}`)
   if (data.user) await recordEarlyAccessLogin(data.user.id)
-  await recordLandingEvent('account_signup')
+  await recordLandingEvent('account_signup', '/', ref)
   redirect('/edit')
 }
 

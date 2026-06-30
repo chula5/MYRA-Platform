@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import { useState } from 'react'
 import { recordItemClick } from '@/app/actions/item-click'
+import { getStoredRef } from '@/lib/ref'
 import type { Item, Brand } from '@/types/database'
 
 type SourceItem = Item & { brand: Brand }
@@ -36,7 +37,8 @@ export default function ShopTheLookOverlay({
   // Just record the click — navigation is handled by the real <a> link so
   // Skimlinks can rewrite it to an affiliate-tracked URL.
   function shop(item: SourceItem) {
-    recordItemClick(item.item_id, outfitId)
+    const label = [item.brand?.name, item.product_name].filter(Boolean).join(' — ')
+    recordItemClick(item.item_id, outfitId, getStoredRef(), label)
   }
 
   return (

@@ -7,7 +7,8 @@ import SaveHeartButton from '@/components/outfit-card/SaveHeartButton'
 import { createClient } from '@/lib/supabase'
 import { rankByTaste, isZero } from '@/lib/taste-vector'
 import { recordTasteInteraction } from '@/app/edit/save-actions'
-import { recordSearchQuery } from '@/app/actions/landing-analytics'
+import { recordSearchQuery, recordLandingEvent } from '@/app/actions/landing-analytics'
+import { getStoredRef } from '@/lib/ref'
 import { occasionLabel, BASE_OCCASIONS } from '@/lib/occasions'
 import type { BrandRow } from '@/lib/taste-profile'
 import type { OutfitWithItems, ItemType, ColourFamily } from '@/types/database'
@@ -432,6 +433,8 @@ export default function FeedClient({
 
   useEffect(() => {
     if (!occasion) return
+    // Attribute the occasion view to the referral source (if any).
+    void recordLandingEvent('occasion_click', occasion, getStoredRef())
     setOffset(0)
     setHasMore(true)
     fetchOutfits(occasion, 0, false)
@@ -459,7 +462,7 @@ export default function FeedClient({
   const executeSearch = useCallback(async () => {
     if (!hasActiveSearch) return
     // Log what people type (occasions, brands) for admin trend tracking.
-    if (searchQuery.trim()) void recordSearchQuery(searchQuery)
+    if (searchQuery.trim()) void recordSearchQuery(searchQuery, getStoredRef())
     setSearchLoading(true)
     setSearchMode(true)
     setFilterPanel(null)

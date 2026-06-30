@@ -4,8 +4,11 @@ import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import type { Item, Brand } from '@/types/database'
 import { recordItemClick } from '@/app/actions/item-click'
+import { getStoredRef } from '@/lib/ref'
 
 type SourceItem = Item & { brand: Brand }
+
+const itemLabel = (it: SourceItem) => [it.brand?.name, it.product_name].filter(Boolean).join(' — ')
 
 interface SourcePanelProps {
   items: SourceItem[]
@@ -115,7 +118,7 @@ export default function SourcePanel({ items, onClose, isOpen, outfitId }: Source
             onClick={() => {
               const firstItem = items[0]
               if (firstItem?.retailer_url) {
-                recordItemClick(firstItem.item_id, outfitId)
+                recordItemClick(firstItem.item_id, outfitId, getStoredRef(), itemLabel(firstItem))
                 window.open(firstItem.retailer_url, '_blank', 'noopener,noreferrer')
               }
             }}
@@ -142,7 +145,7 @@ function SourceItemRow({ item, outfitId }: { item: SourceItem; outfitId?: string
 
   const handleClick = () => {
     if (item.retailer_url) {
-      recordItemClick(item.item_id, outfitId)
+      recordItemClick(item.item_id, outfitId, getStoredRef(), itemLabel(item))
       window.open(item.retailer_url, '_blank', 'noopener,noreferrer')
     }
   }

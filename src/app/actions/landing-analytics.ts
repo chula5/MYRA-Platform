@@ -10,6 +10,12 @@ export type LandingEventType =
   | 'tiktok_click'
   | 'waitlist_signup'
   | 'account_signup'
+  | 'occasion_click'
+  | 'item_click'
+
+function cleanRef(ref?: string | null): string | null {
+  return ref ? ref.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40) || null : null
+}
 
 function getCountry(): string | null {
   try {
@@ -27,10 +33,9 @@ export async function recordLandingEvent(
 ) {
   try {
     const admin = createAdminClient()
-    const cleanRef = ref ? ref.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40) || null : null
     const { error } = await admin
       .from('landing_event')
-      .insert({ event_type: eventType, path, ref: cleanRef, country: getCountry() } as any)
+      .insert({ event_type: eventType, path, ref: cleanRef(ref), country: getCountry() } as any)
     // If the ref/country columns don't exist yet (migration not run), retry
     // without them so core tracking keeps working.
     if (error) {
@@ -44,12 +49,12 @@ export async function recordLandingEvent(
 // Log a free-text search query (occasion or brand, e.g. "summer wedding",
 // "jacquemus dress") so admins can see what people are searching for. Reuses
 // landing_event with event_type 'search'; the query lives in `path`.
-export async function recordSearchQuery(query: string) {
+export async function recordSearchQuery(query: string, ref?: string | null) {
   try {
     const q = query.trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 120)
     if (!q) return
     const admin = createAdminClient()
-    await admin.from('landing_event').insert({ event_type: 'search', path: q } as any)
+    await admin.from('landing_event').insert({ event_type: 'search', path: q, ref: cleanRef(ref), country: getCountry() } as any)
   } catch {
     // never break browsing
   }
