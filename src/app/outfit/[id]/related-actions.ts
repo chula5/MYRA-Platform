@@ -37,6 +37,31 @@ function outfitSilhouette(outfit: any): string {
  *              skirts, trousers — completely different looks for that occasion)
  * Guaranteed disjoint (same vs different silhouette).
  */
+// Other live outfits that use a given item ("Style this item"). Fetched
+// server-side with the admin client so the result cards carry their full items
+// (anon RLS would drop them, breaking each card's SOURCE ITEMS).
+export async function getStyleItemOutfits(
+  currentOutfitId: string,
+  itemId: string,
+): Promise<{ outfits: OutfitWithItems[] }> {
+  const admin = createAdminClient()
+  const { data: oi } = await admin
+    .from('outfit_item')
+    .select('outfit_id')
+    .eq('item_id', itemId)
+    .neq('outfit_id', currentOutfitId)
+    .limit(40)
+  const ids = Array.from(new Set((oi ?? []).map((r: any) => r.outfit_id)))
+  if (!ids.length) return { outfits: [] }
+  const { data } = await admin
+    .from('outfit')
+    .select(SELECT)
+    .in('outfit_id', ids)
+    .eq('status', 'live')
+    .limit(12)
+  return { outfits: (data ?? []) as OutfitWithItems[] }
+}
+
 export async function getRelatedOutfits(
   outfitId: string,
   mode: 'similar' | 'explore',

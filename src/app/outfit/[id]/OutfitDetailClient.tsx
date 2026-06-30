@@ -9,7 +9,7 @@ import OutfitCard from '@/components/outfit-card/OutfitCard'
 import SaveHeartButton from '@/components/outfit-card/SaveHeartButton'
 import CardButton from '@/components/ui/CardButton'
 import { createClient } from '@/lib/supabase'
-import { getRelatedOutfits } from './related-actions'
+import { getRelatedOutfits, getStyleItemOutfits } from './related-actions'
 import { toggleSaveItem } from '@/app/edit/save-actions'
 import type { OutfitWithItems, Item, Brand, ItemType } from '@/types/database'
 
@@ -190,37 +190,11 @@ export default function OutfitDetailClient({
   }, [goToSibling])
 
   // ── Fetch style item outfits ──────────────────────────────
+  // Server action (admin client) so each result card carries its full items —
+  // the anon client drops them under RLS, which broke the cards' SOURCE ITEMS.
   const fetchStyleItemOutfits = useCallback(async (itemId: string) => {
-    const supabase = createClient()
-
-    const { data: outfitItems } = await supabase
-      .from('outfit_item')
-      .select('outfit_id')
-      .eq('item_id', itemId)
-      .neq('outfit_id', outfitId)
-      .limit(40)
-
-    if (!outfitItems?.length) return
-
-    const ids = outfitItems.map((oi) => oi.outfit_id)
-
-    const { data } = await supabase
-      .from('outfit')
-      .select(`
-        *,
-        outfit_item (
-          *,
-          item (
-            *,
-            brand (*)
-          )
-        )
-      `)
-      .in('outfit_id', ids)
-      .eq('status', 'live')
-      .limit(12)
-
-    setStyleItemOutfits((data ?? []) as OutfitWithItems[])
+    const res = await getStyleItemOutfits(outfitId, itemId)
+    setStyleItemOutfits(res.outfits ?? [])
   }, [outfitId])
 
   // ── Fetch similar / explore outfits ───────────────────────
