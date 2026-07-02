@@ -81,13 +81,13 @@ export default async function LandingPage({
       <section className="relative w-screen overflow-hidden bg-[#FAFAF8] h-screen sm:h-auto">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/Mesh%20Cape.png"
+          src="/Mesh%20Cape.webp"
           alt=""
           className="sm:hidden absolute inset-0 w-full h-full object-cover object-top"
         />
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/Mesh%20Cape.png"
+          src="/Mesh%20Cape.webp"
           alt=""
           className="hidden sm:block w-full h-auto"
         />
@@ -138,15 +138,15 @@ export default async function LandingPage({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-6">
             <div className="sm:mt-0">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/VB.png" alt="" className="w-full h-auto block hover:opacity-90 transition-opacity duration-500" />
+              <img src="/VB.webp" alt="" loading="lazy" className="w-full h-auto block hover:opacity-90 transition-opacity duration-500" />
             </div>
             <div className="sm:mt-32">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/Blue%20Ruffle.png" alt="" className="w-full h-auto block hover:opacity-90 transition-opacity duration-500" />
+              <img src="/Blue%20Ruffle.webp" alt="" loading="lazy" className="w-full h-auto block hover:opacity-90 transition-opacity duration-500" />
             </div>
             <div className="sm:mt-16">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/DRIES%20Skirt.png" alt="" className="w-full h-auto block hover:opacity-90 transition-opacity duration-500" />
+              <img src="/DRIES%20Skirt.webp" alt="" loading="lazy" className="w-full h-auto block hover:opacity-90 transition-opacity duration-500" />
             </div>
           </div>
         </div>

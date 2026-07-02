@@ -4,9 +4,9 @@ import Image from 'next/image'
 import { useEffect, useState } from 'react'
 
 const SLIDES = [
-  { src: '/Chanel.png', alt: 'Chanel' },
-  { src: '/Saint Laurent.png', alt: 'Saint Laurent' },
-  { src: '/Dior.png', alt: 'Dior' },
+  { src: '/Chanel.webp', alt: 'Chanel' },
+  { src: '/Saint Laurent.webp', alt: 'Saint Laurent' },
+  { src: '/Dior.webp', alt: 'Dior' },
 ]
 
 const INTERVAL_MS = 5000
