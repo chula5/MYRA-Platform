@@ -9,6 +9,7 @@ import { rankByTaste, isZero } from '@/lib/taste-vector'
 import { recordTasteInteraction } from '@/app/edit/save-actions'
 import { recordSearchQuery, recordLandingEvent } from '@/app/actions/landing-analytics'
 import { getStoredRef } from '@/lib/ref'
+import { parseQuery, searchOutfits } from '@/lib/search-taxonomy'
 import { occasionLabel, BASE_OCCASIONS } from '@/lib/occasions'
 import type { BrandRow } from '@/lib/taste-profile'
 import type { OutfitWithItems, ItemType, ColourFamily } from '@/types/database'
@@ -495,13 +496,30 @@ export default function FeedClient({
     }
     const knownBrands = [...brandSet].sort((a, b) => b.length - a.length)
 
-    const results = allOutfits.filter(o =>
-      matchesSearch(o, searchQuery, filterColour, itemTypes, filterBrand, knownBrands)
+    // 1. HARD filters — the explicit chips (colour / item group / brand). These
+    //    are deliberate user choices, so they're applied strictly.
+    const pool = allOutfits.filter(o =>
+      matchesSearch(o, '', filterColour, itemTypes, filterBrand, knownBrands)
     )
-    // Log the query WITH how many outfits it returned, so admin can spot
-    // searches that got no results (content gaps to fill).
-    if (searchQuery.trim()) void recordSearchQuery(searchQuery, getStoredRef(), results.length)
-    setSearchResults(orderForFeed(results))
+
+    // 2. Free-text query → understand it (synonyms, typos, intent) and score the
+    //    pool so the result is relevant and NEVER empty (spec §7 fallback).
+    let finalOutfits: OutfitWithItems[]
+    let matchCount: number
+    if (searchQuery.trim()) {
+      const parsed = parseQuery(searchQuery, knownBrands)
+      const res = searchOutfits(pool, parsed, orderForFeed)
+      finalOutfits = res.outfits
+      matchCount = res.matchCount
+    } else {
+      finalOutfits = orderForFeed(pool)
+      matchCount = pool.length
+    }
+
+    // Log the query with how many outfits GENUINELY matched (0 = a real content
+    // gap, even though the UI still shows closest matches).
+    if (searchQuery.trim()) void recordSearchQuery(searchQuery, getStoredRef(), matchCount)
+    setSearchResults(finalOutfits)
     setSearchLoading(false)
   }, [hasActiveSearch, injectedOutfits, searchQuery, filterColour, filterItemGroup, filterBrand])
 
