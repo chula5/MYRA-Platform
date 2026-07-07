@@ -124,21 +124,35 @@ export default async function SignupPreferencesPage() {
     for (const o of (so ?? []) as any[]) savedImg.set(o.outfit_id, { image: o.image_url, label: o.aesthetic_label ?? '' })
   }
 
-  // ── Top searches (what people type in the search bar — occasions & brands) ──
-  const searchCounts = new Map<string, number>()
+  // ── Top searches (what people type) + how many outfits each returned ──
+  // results = the most recent known result count for that query (null = unknown,
+  // i.e. searched before result-count logging existed).
+  const searchAgg = new Map<string, { count: number; results: number | null }>()
   {
-    const { data: searches } = await admin
+    // Try with result_count; fall back if the column isn't there yet.
+    let res = await admin
       .from('landing_event' as any)
-      .select('path')
+      .select('path, result_count, occurred_at')
       .eq('event_type', 'search')
+      .order('occurred_at', { ascending: true })
       .limit(20000)
-    for (const s of (searches ?? []) as { path: string }[]) {
+    if (res.error) {
+      res = await admin.from('landing_event' as any).select('path').eq('event_type', 'search').limit(20000)
+    }
+    for (const s of (res.data ?? []) as { path: string; result_count?: number | null }[]) {
       const q = (s.path ?? '').trim()
-      if (q) searchCounts.set(q, (searchCounts.get(q) ?? 0) + 1)
+      if (!q) continue
+      const cur = searchAgg.get(q) ?? { count: 0, results: null }
+      cur.count++
+      if (s.result_count != null) cur.results = s.result_count // asc order → last wins = latest
+      searchAgg.set(q, cur)
     }
   }
-  const totalSearches = [...searchCounts.values()].reduce((s, n) => s + n, 0)
-  const topSearches = [...searchCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 30)
+  const totalSearches = [...searchAgg.values()].reduce((s, v) => s + v.count, 0)
+  const topSearches = [...searchAgg.entries()].sort((a, b) => b[1].count - a[1].count).slice(0, 60)
+  const noResultSearches = [...searchAgg.entries()]
+    .filter(([, v]) => v.results === 0)
+    .sort((a, b) => b[1].count - a[1].count)
 
   // ── Landing feedback + brand requests ──
   let brandRequests: { message: string; created_at: string }[] = []
@@ -154,7 +168,7 @@ export default async function SignupPreferencesPage() {
       else feedbackNotes.push({ message: r.message, created_at: r.created_at, email: r.email })
     }
   }
-  const maxSearch = Math.max(1, ...topSearches.map(([, c]) => c))
+  const maxSearch = Math.max(1, ...topSearches.map(([, v]) => v.count))
 
   const renderOutfitGrid = (entries: [string, number][], tone: 'like' | 'dislike') => (
     <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
@@ -229,30 +243,59 @@ ALTER TABLE public.signup_preference ENABLE ROW LEVEL SECURITY;`}</pre>
 
       {/* Top searches — what people type (occasions & brands) */}
       <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6 mb-10">
-        <div className="flex items-baseline justify-between mb-5">
+        <div className="flex items-baseline justify-between mb-2">
           <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B]">SEARCH BAR · WHAT PEOPLE ARE LOOKING FOR</p>
-          <p className="text-[9px] tracking-[0.072em] text-[#A8A8A4]">{totalSearches.toLocaleString()} SEARCHES</p>
+          <p className="text-[9px] tracking-[0.072em] text-[#A8A8A4]">
+            {totalSearches.toLocaleString()} SEARCHES · {searchAgg.size} UNIQUE
+          </p>
         </div>
+        <p className="text-[8px] tracking-[0.063em] text-[#A8A8A4] mb-5">
+          NUMBER = TIMES SEARCHED · TAG = OUTFITS RETURNED (LATEST). &ldquo;NO RESULTS&rdquo; = A GAP TO FILL.
+        </p>
         {topSearches.length === 0 ? (
           <p className="text-[10px] tracking-[0.072em] text-[#A8A8A4] py-6 text-center">
             NO SEARCHES YET — TYPED QUERIES (E.G. &ldquo;BLUE DRESS&rdquo;, &ldquo;JACQUEMUS&rdquo;, &ldquo;SUMMER WEDDING&rdquo;) APPEAR HERE.
           </p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2.5">
-            {topSearches.map(([q, count]) => (
+            {topSearches.map(([q, v]) => (
               <div key={q}>
-                <div className="flex justify-between mb-1">
-                  <span className="text-[10px] tracking-[0.045em] text-[#4A4E57] truncate pr-3">{q.toUpperCase()}</span>
-                  <span className="text-[9px] tracking-[0.045em] text-[#6B6B6B] flex-shrink-0">{count}</span>
+                <div className="flex justify-between items-baseline gap-2 mb-1">
+                  <span className="text-[10px] tracking-[0.045em] text-[#4A4E57] truncate pr-1">{q.toUpperCase()}</span>
+                  <span className="flex items-baseline gap-2 flex-shrink-0">
+                    {v.results === 0 ? (
+                      <span className="text-[8px] tracking-[0.072em] text-[#B83A3A]">NO RESULTS</span>
+                    ) : v.results != null ? (
+                      <span className="text-[8px] tracking-[0.06em] text-[#A8A8A4]">{v.results} SHOWN</span>
+                    ) : null}
+                    <span className="text-[9px] tracking-[0.045em] text-[#6B6B6B]">{v.count}</span>
+                  </span>
                 </div>
                 <div className="h-[4px] bg-[#F2F2F2] rounded-full overflow-hidden">
-                  <div className="h-full bg-[#C4A882] rounded-full" style={{ width: `${(count / maxSearch) * 100}%` }} />
+                  <div className={`h-full rounded-full ${v.results === 0 ? 'bg-[#B83A3A]' : 'bg-[#C4A882]'}`} style={{ width: `${(v.count / maxSearch) * 100}%` }} />
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Searches that returned nothing — the clearest content gaps */}
+      {noResultSearches.length > 0 && (
+        <div className="border border-[#E8B4B4] bg-[#FDECEC] rounded-[12px] p-6 mb-10">
+          <div className="flex items-baseline justify-between mb-4">
+            <p className="text-[10px] tracking-[0.099em] text-[#B83A3A]">SEARCHES WITH NO RESULTS · GAPS TO FILL</p>
+            <p className="text-[9px] tracking-[0.072em] text-[#C77]">{noResultSearches.length}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {noResultSearches.map(([q, v]) => (
+              <span key={q} className="text-[10px] tracking-[0.045em] text-[#8A3A3A] bg-white border border-[#E8B4B4] rounded-full px-3 py-1.5">
+                {q.toUpperCase()}{v.count > 1 ? ` ·${v.count}` : ''}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Brand requests + feedback from the landing page */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">

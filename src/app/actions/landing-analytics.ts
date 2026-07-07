@@ -49,12 +49,17 @@ export async function recordLandingEvent(
 // Log a free-text search query (occasion or brand, e.g. "summer wedding",
 // "jacquemus dress") so admins can see what people are searching for. Reuses
 // landing_event with event_type 'search'; the query lives in `path`.
-export async function recordSearchQuery(query: string, ref?: string | null) {
+export async function recordSearchQuery(query: string, ref?: string | null, resultCount?: number | null) {
   try {
     const q = query.trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 120)
     if (!q) return
     const admin = createAdminClient()
-    await admin.from('landing_event').insert({ event_type: 'search', path: q, ref: cleanRef(ref), country: getCountry() } as any)
+    const rc = typeof resultCount === 'number' ? resultCount : null
+    const { error } = await admin
+      .from('landing_event')
+      .insert({ event_type: 'search', path: q, ref: cleanRef(ref), country: getCountry(), result_count: rc } as any)
+    // If result_count/ref columns don't exist yet, retry without them.
+    if (error) await admin.from('landing_event').insert({ event_type: 'search', path: q } as any)
   } catch {
     // never break browsing
   }

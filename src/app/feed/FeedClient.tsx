@@ -461,8 +461,6 @@ export default function FeedClient({
 
   const executeSearch = useCallback(async () => {
     if (!hasActiveSearch) return
-    // Log what people type (occasions, brands) for admin trend tracking.
-    if (searchQuery.trim()) void recordSearchQuery(searchQuery, getStoredRef())
     setSearchLoading(true)
     setSearchMode(true)
     setFilterPanel(null)
@@ -500,6 +498,9 @@ export default function FeedClient({
     const results = allOutfits.filter(o =>
       matchesSearch(o, searchQuery, filterColour, itemTypes, filterBrand, knownBrands)
     )
+    // Log the query WITH how many outfits it returned, so admin can spot
+    // searches that got no results (content gaps to fill).
+    if (searchQuery.trim()) void recordSearchQuery(searchQuery, getStoredRef(), results.length)
     setSearchResults(orderForFeed(results))
     setSearchLoading(false)
   }, [hasActiveSearch, injectedOutfits, searchQuery, filterColour, filterItemGroup, filterBrand])
