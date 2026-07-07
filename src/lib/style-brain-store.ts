@@ -26,13 +26,15 @@ export async function loadStyleModel(): Promise<StyleModel> {
   }
 }
 
-export async function loadHouseStyle(): Promise<{ md: string; decisions: number }> {
+export async function loadHouseStyle(): Promise<{ md: string; decisions: number; ready: boolean }> {
   try {
     const admin = createAdminClient()
-    const { data } = await admin.from('style_model' as any).select('house_style_md, decisions').eq('id', 1).maybeSingle()
-    return { md: (data as any)?.house_style_md ?? '', decisions: (data as any)?.decisions ?? 0 }
+    const { data, error } = await admin.from('style_model' as any).select('house_style_md, decisions').eq('id', 1).maybeSingle()
+    // ready = the table is reachable via the API (migration run + schema cache
+    // refreshed). Distinguishes "no data yet" from "table missing".
+    return { md: (data as any)?.house_style_md ?? '', decisions: (data as any)?.decisions ?? 0, ready: !error }
   } catch {
-    return { md: '', decisions: 0 }
+    return { md: '', decisions: 0, ready: false }
   }
 }
 
@@ -40,9 +42,11 @@ async function saveStyleModel(model: StyleModel): Promise<void> {
   const admin = createAdminClient()
   model.updatedAt = new Date().toISOString()
   const house = buildHouseStyle(model)
+  // Upsert (not update) so the singleton row is created if the migration's seed
+  // insert didn't run — otherwise an UPDATE on a missing row silently no-ops and
+  // decisions are lost.
   await (admin.from('style_model') as any)
-    .update({ model, house_style_md: house, decisions: Math.round(model.decisions), updated_at: model.updatedAt })
-    .eq('id', 1)
+    .upsert({ id: 1, model, house_style_md: house, decisions: Math.round(model.decisions), updated_at: model.updatedAt }, { onConflict: 'id' })
 }
 
 // Record one decision: append to the raw log AND fold it into the live model.

@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 export default async function StyleBrainPage() {
   const [model, house] = await Promise.all([loadStyleModel(), loadHouseStyle()])
   const learnedPairs = Object.keys(model.pairs).length
-  const tableReady = house.md !== '' || model.decisions > 0 || learnedPairs > 0
+  const tableReady = house.ready
 
   return (
     <div>
