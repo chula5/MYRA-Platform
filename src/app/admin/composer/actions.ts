@@ -409,6 +409,55 @@ export async function approveCandidate(
   }
 }
 
+// Style Brain: record a SWAP (or remove). Captures the piece swapped OUT as a
+// soft negative AND the from→to detail + how different the replacement was, so
+// admin can see what got swapped and whether it was a minor tweak or a
+// completely different piece. Fire-and-forget safe.
+export async function recordSwap(
+  anchorItemId: string,
+  fromItemId: string,
+  toItemId?: string | null,
+): Promise<{ ok: true }> {
+  try {
+    const [anchor, from, to] = await Promise.all([
+      getItem(anchorItemId),
+      getItem(fromItemId),
+      toItemId ? getItem(toItemId) : Promise.resolve(null),
+    ])
+    if (!anchor || !from) return { ok: true }
+    const label = (it: ItemWithBrand) => [it.brand?.name, it.product_name].filter(Boolean).join(' — ') || (it.item_type as string)
+    const changed: string[] = []
+    if (to) {
+      if (String(from.item_type) !== String(to.item_type)) changed.push('type')
+      if ((from as any).colour_family !== (to as any).colour_family) changed.push('colour')
+      if ((from.brand?.name ?? '') !== (to.brand?.name ?? '')) changed.push('brand')
+    }
+    // "completely different" = a different item type, or two+ attributes changed.
+    const different = to ? (changed.includes('type') || changed.length >= 2) : true
+    await recordStyleDecision({
+      items: [toFeature(anchor), toFeature(from)],
+      decision: 'skip',
+      source: 'swap',
+      anchorItemId,
+      itemIds: [anchor.item_id, from.item_id],
+      extraFeatures: {
+        swap: {
+          action: to ? 'swap' : 'remove',
+          from: label(from),
+          to: to ? label(to) : null,
+          fromType: from.item_type,
+          toType: to?.item_type ?? null,
+          changed,
+          different,
+        },
+      },
+    })
+  } catch (err) {
+    console.error('[recordSwap]', err)
+  }
+  return { ok: true }
+}
+
 // Style Brain: record a SKIP (negative signal) when a shown candidate is passed
 // over. Fetches full item attributes server-side from the ids. Fire-and-forget
 // safe — never blocks the UI, never throws.

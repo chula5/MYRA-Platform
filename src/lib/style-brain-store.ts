@@ -2,6 +2,7 @@
 // the composer and the admin page can both call them. Uses the admin client.
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase-server'
+import { cosine } from '@/lib/taste-vector'
 import {
   type StyleModel,
   type FeatureItem,
@@ -23,6 +24,62 @@ export async function loadStyleModel(): Promise<StyleModel> {
     return { ...emptyModel(), ...m, singles: m.singles ?? {}, pairs: m.pairs ?? {} } as StyleModel
   } catch {
     return emptyModel()
+  }
+}
+
+// ── Recent swaps ─────────────────────────────────────────────────────────────
+// What was swapped out, what for, and whether it was a completely different
+// piece — read from the swap decisions' stored metadata.
+export interface SwapRecord { from: string; to: string | null; action: string; changed: string[]; different: boolean; at: string }
+export async function loadRecentSwaps(limit = 20): Promise<{ recent: SwapRecord[]; total: number; differentCount: number } | null> {
+  try {
+    const admin = createAdminClient()
+    const { data, error } = await admin
+      .from('style_decision' as any)
+      .select('features, created_at')
+      .eq('source', 'swap')
+      .order('created_at', { ascending: false })
+      .limit(2000)
+    if (error || !data) return null
+    const all = (data as any[])
+      .map((r) => ({ swap: r.features?.swap, at: r.created_at as string }))
+      .filter((r) => r.swap)
+    const recent = all.slice(0, limit).map((r) => ({
+      from: r.swap.from ?? '—', to: r.swap.to ?? null, action: r.swap.action ?? 'swap',
+      changed: Array.isArray(r.swap.changed) ? r.swap.changed : [], different: !!r.swap.different, at: r.at,
+    }))
+    return { recent, total: all.length, differentCount: all.filter((r) => r.swap.different).length }
+  } catch {
+    return null
+  }
+}
+
+// ── Taste spread / diversity ─────────────────────────────────────────────────
+// How varied the live outfits are in taste-vector space. spread = 1 − average
+// cosine of each outfit to the collection centroid: high = a wide range of
+// aesthetics, low = everything clusters around one look ("samey").
+export async function loadTasteSpread(): Promise<{ spread: number; label: string; n: number } | null> {
+  try {
+    const admin = createAdminClient()
+    const { data, error } = await admin.from('outfit' as any).select('taste_vector').eq('status', 'live').limit(5000)
+    if (error || !data) return null
+    const parse = (v: unknown): number[] | null => {
+      if (Array.isArray(v)) return v as number[]
+      if (typeof v === 'string') { try { const a = JSON.parse(v); return Array.isArray(a) ? a : null } catch { return null } }
+      return null
+    }
+    const vecs = (data as any[]).map((o) => parse(o.taste_vector)).filter((v): v is number[] => !!v && v.length > 0)
+    if (vecs.length < 3) return { spread: 0, label: 'NOT ENOUGH SCORED OUTFITS', n: vecs.length }
+    const dim = vecs[0].length
+    const centroid = new Array(dim).fill(0)
+    for (const v of vecs) for (let i = 0; i < dim; i++) centroid[i] += v[i] ?? 0
+    for (let i = 0; i < dim; i++) centroid[i] /= vecs.length
+    const avgCos = vecs.reduce((s, v) => s + cosine(v, centroid), 0) / vecs.length
+    const spread = Math.max(0, Math.min(1, 1 - avgCos))
+    const label = spread > 0.35 ? 'GOOD RANGE' : spread > 0.18 ? 'MODERATE' : 'QUITE SAMEY'
+    return { spread, label, n: vecs.length }
+  } catch {
+    return null
   }
 }
 
@@ -176,10 +233,11 @@ export async function recordStyleDecision(opts: {
   itemIds?: string[]
   baseScore?: number | null
   weight?: number
+  extraFeatures?: Record<string, unknown>
 }): Promise<void> {
   try {
     const admin = createAdminClient()
-    const features = extractFeatures(opts.items)
+    const features = { ...extractFeatures(opts.items), ...(opts.extraFeatures ?? {}) }
     // 1. Append to the immutable training log.
     await (admin.from('style_decision') as any).insert({
       decision: opts.decision,

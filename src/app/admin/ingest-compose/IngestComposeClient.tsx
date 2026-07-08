@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { ingestAndComposeUrl, type IngestComposeResult } from './actions'
-import { approveCandidate, rescoreCandidate, recordSkipDecision } from '@/app/admin/composer/actions'
+import { approveCandidate, rescoreCandidate, recordSkipDecision, recordSwap } from '@/app/admin/composer/actions'
 import { getReviewSwapOptions, getReviewAddOptions, type ReviewItem } from '@/app/admin/outfit-review/actions'
 import type { Slot } from '@/lib/composer'
 
@@ -101,7 +101,7 @@ export default function IngestComposeClient() {
     if (!cand || !block.item) return
     const removed = cand.items[itemIdx]
     // Removing a piece is a "not this one here" signal for the Style Brain.
-    if (removed) void recordSkipDecision(block.item.item_id, [removed.item_id], 'swap')
+    if (removed) void recordSwap(block.item.item_id, removed.item_id, null)
     const items = cand.items.filter((_, i) => i !== itemIdx)
     setItems(bi, ci, items)
     const res: any = await rescoreCandidate(block.item.item_id, items.map((i) => ({ itemId: i.item_id, slot: i.slot as Slot })))
@@ -112,9 +112,9 @@ export default function IngestComposeClient() {
     if (!swap) return
     const { bi, ci, itemIdx, mode } = swap
     const block = blocks[bi]; const cand = block.candidates?.[ci]; if (!cand || !block.item) return
-    // A swap means you rejected the piece that was there — record it as a
-    // "not this one here" signal for the Style Brain.
-    if (mode === 'swap' && cand.items[itemIdx]) void recordSkipDecision(block.item.item_id, [cand.items[itemIdx].item_id], 'swap')
+    // A swap means you rejected the piece that was there for `opt` — record the
+    // from→to detail for the Style Brain.
+    if (mode === 'swap' && cand.items[itemIdx]) void recordSwap(block.item.item_id, cand.items[itemIdx].item_id, opt.item_id)
     const mapped: CandItem = { slot: opt.slot, item_id: opt.item_id, product_name: opt.product_name, brand_name: opt.brand_name, image_url: opt.image_url, compat: opt.compat }
     const items = mode === 'add' ? [...cand.items, mapped] : cand.items.map((it, i) => (i === itemIdx ? mapped : it))
     setItems(bi, ci, items)

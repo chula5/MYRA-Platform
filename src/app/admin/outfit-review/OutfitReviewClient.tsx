@@ -10,7 +10,7 @@ import {
   type ReviewCandidate,
   type ReviewItem,
 } from './actions'
-import { approveCandidate, rescoreCandidate, recordSkipDecision } from '@/app/admin/composer/actions'
+import { approveCandidate, rescoreCandidate, recordSkipDecision, recordSwap } from '@/app/admin/composer/actions'
 import { generateHiggsfieldShootForOutfit } from '@/app/admin/projects/higgsfield-actions'
 import type { Slot } from '@/lib/composer'
 
@@ -193,8 +193,8 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
   async function performSwap(opt: ReviewItem) {
     if (!swap) return
     const { candIdx, itemIdx, mode } = swap
-    // Swapping out a piece is a "not this one here" signal for the Style Brain.
-    if (mode === 'swap' && cands[candIdx].items[itemIdx]) void recordSkipDecision(anchor.item_id, [cands[candIdx].items[itemIdx].item_id], 'swap')
+    // Swapping out a piece for `opt` — record the from→to detail for the Style Brain.
+    if (mode === 'swap' && cands[candIdx].items[itemIdx]) void recordSwap(anchor.item_id, cands[candIdx].items[itemIdx].item_id, opt.item_id)
     // Compute the new item list (append in add mode, replace in swap mode).
     const items =
       mode === 'add'

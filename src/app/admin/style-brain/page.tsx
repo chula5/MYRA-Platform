@@ -1,10 +1,12 @@
-import { loadStyleModel, loadHouseStyle, loadDecisionStats, loadCatalogueBalance } from '@/lib/style-brain-store'
+import { loadStyleModel, loadHouseStyle, loadDecisionStats, loadCatalogueBalance, loadTasteSpread, loadRecentSwaps } from '@/lib/style-brain-store'
 import RecomputeButton from './RecomputeButton'
 
 export const dynamic = 'force-dynamic'
 
 export default async function StyleBrainPage() {
-  const [model, house, stats, balance] = await Promise.all([loadStyleModel(), loadHouseStyle(), loadDecisionStats(), loadCatalogueBalance()])
+  const [model, house, stats, balance, spread, swaps] = await Promise.all([
+    loadStyleModel(), loadHouseStyle(), loadDecisionStats(), loadCatalogueBalance(), loadTasteSpread(), loadRecentSwaps(),
+  ])
   const learnedPairs = Object.keys(model.pairs).length
   const tableReady = house.ready
 
@@ -91,6 +93,28 @@ export default async function StyleBrainPage() {
         )}
       </div>
 
+      {/* Recent swaps — what got swapped out, for what, how different */}
+      {swaps && swaps.total > 0 && (
+        <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6 mb-6">
+          <div className="flex items-baseline justify-between mb-1">
+            <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B]">RECENT SWAPS</p>
+            <p className="text-[9px] tracking-[0.072em] text-[#A8A8A4]">{swaps.total} SWAPS · {swaps.differentCount} TO A COMPLETELY DIFFERENT PIECE</p>
+          </div>
+          <p className="text-[8px] tracking-[0.063em] text-[#A8A8A4] mb-4">WHAT YOU CHANGED WHILE BUILDING — TEACHES THE BRAIN WHAT YOU REACH PAST</p>
+          <div className="space-y-2">
+            {swaps.recent.map((s, i) => (
+              <div key={i} className="flex items-center gap-2 text-[10px] tracking-[0.03em]">
+                <span className="text-[#6B6B6B] line-through truncate max-w-[38%]">{s.from.toUpperCase()}</span>
+                <span className="text-[#A8A8A4] flex-shrink-0">→</span>
+                <span className="text-[#4A4E57] truncate max-w-[38%]">{s.to ? s.to.toUpperCase() : 'REMOVED'}</span>
+                {s.different && <span className="text-[8px] tracking-[0.06em] text-[#C4A882] flex-shrink-0">· DIFFERENT</span>}
+                {s.changed.length > 0 && <span className="text-[8px] tracking-[0.06em] text-[#A8A8A4] flex-shrink-0">({s.changed.join(', ')})</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Catalogue balance — distribution of the live collection */}
       {balance && balance.totalOutfits > 0 && (
         <div className="mb-6">
@@ -99,6 +123,18 @@ export default async function StyleBrainPage() {
             How your live outfits spread across occasions, colours, price and formality — spot where you&rsquo;re
             thin (a gap to build) or over-concentrated.
           </p>
+          {spread && (
+            <div className="border border-[#E2E0DB] bg-white rounded-[12px] px-5 py-4 mb-6 flex items-center justify-between max-w-[420px]">
+              <div>
+                <p className="text-[9px] tracking-[0.09em] text-[#A8A8A4] mb-2">TASTE SPREAD</p>
+                <p className="text-[28px] tracking-[0.023em] text-[#4A4E57] leading-none">{spread.n < 3 ? '—' : `${Math.round(spread.spread * 100)}%`}</p>
+              </div>
+              <div className="text-right">
+                <p className={`text-[12px] tracking-[0.06em] ${spread.label === 'QUITE SAMEY' ? 'text-[#B83A3A]' : spread.label === 'GOOD RANGE' ? 'text-[#4A7A5A]' : 'text-[#6B6B6B]'}`}>{spread.label}</p>
+                <p className="text-[8px] tracking-[0.063em] text-[#A8A8A4] mt-1">DIVERSITY OF {spread.n} SCORED OUTFITS</p>
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <BalancePanel title="BY OCCASION" rows={balance.occasions} unit="outfits" />
             <BalancePanel title="BY PRICE (PER ITEM)" rows={balance.priceBands.map((b) => [b.label, b.count] as [string, number])} unit="items" keepOrder />

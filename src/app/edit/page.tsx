@@ -5,6 +5,7 @@ import { earlyAccessSignOut } from '@/app/earlyaccess/actions'
 import { recordEarlyAccessVisit } from '@/app/earlyaccess/activity'
 import { getSavedOutfitIds } from './save-actions'
 import Wardrobe from './Wardrobe'
+import HelpPopover from '@/components/HelpPopover'
 import { getTasteRecommendations, getUserTasteVector, getBrandAffinityRows, getOccasionOrder } from '@/lib/taste-profile'
 import type { OutfitWithItems } from '@/types/database'
 
@@ -89,6 +90,16 @@ export default async function EditPage() {
 
       {/* Slide-out wardrobe of saved outfits + items */}
       <Wardrobe />
+
+      <HelpPopover
+        id="wardrobe-intro"
+        title="YOUR WARDROBE"
+        points={[
+          { label: 'SAVE', text: 'tap the ♥ on any outfit or item to keep it.' },
+          { label: 'WARDROBE', text: 'everything you save lands in your Wardrobe — open it anytime to shop or restyle.' },
+          { label: 'YOUR TASTE', text: 'what you save teaches MYRA to recommend looks made for you.' },
+        ]}
+      />
     </div>
   )
 }
