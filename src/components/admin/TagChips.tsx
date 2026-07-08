@@ -12,10 +12,12 @@ export default function TagChips({
   outfitId,
   initialTags,
   suggestions,
+  coTags = {},
 }: {
   outfitId: string
   initialTags: string[]
   suggestions: string[]
+  coTags?: Record<string, string[]>
 }) {
   const [tags, setTags] = useState<string[]>(initialTags)
   const [adding, setAdding] = useState(false)
@@ -34,8 +36,13 @@ export default function TagChips({
     setInput('')
   }
 
-  // Quick-add: top catalogue tags not already on this outfit.
-  const quick = suggestions.filter((s) => !tags.includes(s)).slice(0, 6)
+  // Quick-add: tags that most often CO-OCCUR with this outfit's current tags
+  // (context-aware) first, then the popular catalogue tags. Ranked by how many
+  // of the current tags each candidate co-occurs with.
+  const coScore = new Map<string, number>()
+  for (const t of tags) for (const co of coTags[t] ?? []) if (!tags.includes(co)) coScore.set(co, (coScore.get(co) ?? 0) + 1)
+  const contextual = [...coScore.entries()].sort((a, b) => b[1] - a[1]).map(([t]) => t)
+  const quick = [...contextual, ...suggestions.filter((s) => !tags.includes(s) && !coScore.has(s))].slice(0, 6)
 
   return (
     <div onClick={(e) => e.stopPropagation()}>

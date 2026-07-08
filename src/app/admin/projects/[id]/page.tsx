@@ -15,20 +15,31 @@ export default async function ProjectPage({ params }: PageProps) {
   const { id } = await params
   const [project, outfits] = await Promise.all([getProject(id), getProjectOutfits(id)])
 
-  // Catalogue tag vocabulary (most-used tags across all outfits) — powers quick-
-  // add + autocomplete, so tagging gets faster and reflects your growing set.
+  // Catalogue tag vocabulary + co-occurrence — powers quick-add + autocomplete.
+  // popularTags = most-used tags overall; coTags[tag] = tags that most often
+  // appear ALONGSIDE it, so suggestions get context-aware (e.g. an outfit tagged
+  // "summer" suggests "garden party" / "boat day").
   let popularTags: string[] = []
+  let coTags: Record<string, string[]> = {}
   try {
     const admin = createAdminClient()
     const { data: tagRows } = await admin.from('outfit' as any).select('occasion_tags').limit(20000)
     const freq = new Map<string, number>()
+    const cooc = new Map<string, Map<string, number>>()
     for (const r of (tagRows ?? []) as { occasion_tags: string[] | null }[]) {
-      for (const t of r.occasion_tags ?? []) {
-        const k = String(t).trim().toLowerCase()
-        if (k) freq.set(k, (freq.get(k) ?? 0) + 1)
+      const tags = Array.from(new Set((r.occasion_tags ?? []).map((t) => String(t).trim().toLowerCase()).filter(Boolean)))
+      for (const a of tags) {
+        freq.set(a, (freq.get(a) ?? 0) + 1)
+        for (const b of tags) {
+          if (a === b) continue
+          if (!cooc.has(a)) cooc.set(a, new Map())
+          const m = cooc.get(a)!
+          m.set(b, (m.get(b) ?? 0) + 1)
+        }
       }
     }
     popularTags = [...freq.entries()].sort((a, b) => b[1] - a[1]).map(([t]) => t).slice(0, 40)
+    for (const [a, m] of cooc) coTags[a] = [...m.entries()].sort((x, y) => y[1] - x[1]).map(([t]) => t).slice(0, 10)
   } catch { /* non-fatal */ }
 
   if (!project) {
@@ -131,7 +142,7 @@ export default async function ProjectPage({ params }: PageProps) {
       </div>
 
       {/* Outfits grid — with bulk "select outfits → go live" */}
-      <ProjectOutfitsGrid projectId={id} outfits={outfits as any} popularTags={popularTags} />
+      <ProjectOutfitsGrid projectId={id} outfits={outfits as any} popularTags={popularTags} coTags={coTags} />
 
       {/* Project meta */}
       <div className="mt-12 pt-8 border-t border-[#E2E0DB]">

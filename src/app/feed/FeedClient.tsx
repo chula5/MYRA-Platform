@@ -341,6 +341,7 @@ export default function FeedClient({
   const [filterPanel, setFilterPanel]     = useState<'colour' | 'item' | 'brand' | null>(null)
   const [searchMode, setSearchMode]       = useState(false)
   const [searchResults, setSearchResults] = useState<OutfitWithItems[]>([])
+  const [searchRelaxed, setSearchRelaxed] = useState(false)
   const [searchLoading, setSearchLoading] = useState(false)
   const [typedHint, setTypedHint] = useState('')
 
@@ -516,8 +517,11 @@ export default function FeedClient({
       matchCount = pool.length
     }
 
-    // Log the query with how many outfits GENUINELY matched (0 = a real content
-    // gap, even though the UI still shows closest matches).
+    // If a typed query matched nothing genuinely, we still show closest looks —
+    // but flag it so the UI is honest ("no exact matches") rather than implying
+    // these ARE what was asked for.
+    setSearchRelaxed(!!searchQuery.trim() && matchCount === 0)
+    // Log the query with how many outfits GENUINELY matched (0 = a real content gap).
     if (searchQuery.trim()) void recordSearchQuery(searchQuery, getStoredRef(), matchCount)
     setSearchResults(finalOutfits)
     setSearchLoading(false)
@@ -526,6 +530,7 @@ export default function FeedClient({
   function clearSearch() {
     setSearchMode(false)
     setSearchResults([])
+    setSearchRelaxed(false)
     setSearchQuery('')
     setFilterColour(null)
     setFilterItemGroup(null)
@@ -883,6 +888,12 @@ export default function FeedClient({
               TRY ANOTHER SEARCH
             </button>
           </div>
+        )}
+
+        {!searchLoading && searchRelaxed && searchResults.length > 0 && (
+          <p className="text-[11px] tracking-[0.06em] text-[#6B6B6B] mb-6 -mt-2">
+            We don&rsquo;t have an exact match for &ldquo;{searchQuery.trim().toUpperCase()}&rdquo; yet — here are the closest looks.
+          </p>
         )}
 
         {!searchLoading && searchResults.length > 0 && (

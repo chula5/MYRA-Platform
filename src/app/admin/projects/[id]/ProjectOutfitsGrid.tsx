@@ -21,10 +21,12 @@ export default function ProjectOutfitsGrid({
   projectId,
   outfits,
   popularTags = [],
+  coTags = {},
 }: {
   projectId: string
   outfits: OutfitLite[]
   popularTags?: string[]
+  coTags?: Record<string, string[]>
 }) {
   const router = useRouter()
   const [selectMode, setSelectMode] = useState(false)
@@ -188,6 +190,7 @@ export default function ProjectOutfitsGrid({
                         outfitId={outfit.outfit_id}
                         initialTags={(outfit.occasion_tags ?? []).map((t) => t.toLowerCase())}
                         suggestions={popularTags}
+                        coTags={coTags}
                       />
                     </div>
                     <Link

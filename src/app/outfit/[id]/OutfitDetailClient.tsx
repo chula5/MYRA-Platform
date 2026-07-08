@@ -524,12 +524,7 @@ export default function OutfitDetailClient({
         )}
 
 
-        {/* Occasion tags */}
-        {outfit.occasion_tags?.length > 0 && (
-          <p className="text-[11px] tracking-[0.09em] text-[#6B6B6B] mb-5">
-            {outfit.occasion_tags.join(' · ')}
-          </p>
-        )}
+        {/* Occasion tags are internal (search/curation) — not shown to visitors. */}
 
         {/* Action buttons — centred.
             SIMILAR LOOKS and EXPLORE STYLES are hidden via SHOW_BROWSE_BUTTONS
