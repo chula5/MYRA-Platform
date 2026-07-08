@@ -100,9 +100,10 @@ export async function loadCatalogueBalance(): Promise<CatalogueBalance | null> {
 // trend. avgApprovedScore = the composer's own coherence score on outfits you
 // kept (quality of what it proposes).
 export interface DecisionStats {
-  total: number
+  total: number                // genuine approve/skip decisions (excludes swaps)
   approves: number
   skips: number
+  swaps: number                // pieces swapped out / removed (source='swap')
   approvalRate: number         // 0..1
   earlyRate: number            // 0..1, first half
   recentRate: number           // 0..1, second half
@@ -117,9 +118,11 @@ export async function loadDecisionStats(): Promise<DecisionStats | null> {
       .order('created_at', { ascending: true })
       .limit(100000)
     if (error || !data) return null
-    // Exclude swap-rejects (source='swap') — they train the model but aren't a
-    // deliberate approve/skip, so they shouldn't move the approval-rate metric.
-    const rows = (data as { decision: string; source: string | null; base_score: number | null }[]).filter((r) => r.source !== 'swap')
+    const allRows = data as { decision: string; source: string | null; base_score: number | null }[]
+    const swaps = allRows.filter((r) => r.source === 'swap').length
+    // Exclude swap-rejects from the approve/skip stats — they train the model but
+    // aren't a deliberate approve/skip, so they shouldn't move the approval rate.
+    const rows = allRows.filter((r) => r.source !== 'swap')
     const total = rows.length
     const approves = rows.filter((r) => r.decision === 'approve').length
     const rateOf = (arr: typeof rows) => (arr.length ? arr.filter((r) => r.decision === 'approve').length / arr.length : 0)
@@ -129,6 +132,7 @@ export async function loadDecisionStats(): Promise<DecisionStats | null> {
       total,
       approves,
       skips: total - approves,
+      swaps,
       approvalRate: total ? approves / total : 0,
       earlyRate: rateOf(rows.slice(0, half)),
       recentRate: rateOf(rows.slice(half)),

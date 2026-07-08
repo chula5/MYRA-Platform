@@ -27,12 +27,13 @@ export default async function StyleBrainPage() {
         </p>
       </div>
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
+      {/* Stat cards — genuine approve/skip from the log; swaps shown separately */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-10">
         {[
-          { label: 'DECISIONS', value: Math.round(model.decisions), sub: 'YES + SKIP LOGGED' },
-          { label: 'APPROVALS', value: Math.round(model.approves), sub: 'OUTFITS YOU LIKED' },
-          { label: 'SKIPS', value: Math.round(model.skips), sub: 'PASSED OVER' },
+          { label: 'DECISIONS', value: stats ? stats.total : Math.round(model.decisions), sub: 'YES + SKIP LOGGED' },
+          { label: 'APPROVALS', value: stats ? stats.approves : Math.round(model.approves), sub: 'OUTFITS YOU LIKED' },
+          { label: 'SKIPS', value: stats ? stats.skips : Math.round(model.skips), sub: 'OPTIONS PASSED OVER' },
+          { label: 'SWAPS', value: stats ? stats.swaps : 0, sub: 'PIECES SWAPPED / REMOVED' },
           { label: 'PAIRINGS LEARNED', value: learnedPairs, sub: 'ATTRIBUTE COMBINATIONS' },
         ].map((s) => (
           <div key={s.label} className="border border-[#E2E0DB] bg-white rounded-[12px] px-5 py-4">
