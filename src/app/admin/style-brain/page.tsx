@@ -1,10 +1,10 @@
-import { loadStyleModel, loadHouseStyle, loadDecisionStats } from '@/lib/style-brain-store'
+import { loadStyleModel, loadHouseStyle, loadDecisionStats, loadCatalogueBalance } from '@/lib/style-brain-store'
 import RecomputeButton from './RecomputeButton'
 
 export const dynamic = 'force-dynamic'
 
 export default async function StyleBrainPage() {
-  const [model, house, stats] = await Promise.all([loadStyleModel(), loadHouseStyle(), loadDecisionStats()])
+  const [model, house, stats, balance] = await Promise.all([loadStyleModel(), loadHouseStyle(), loadDecisionStats(), loadCatalogueBalance()])
   const learnedPairs = Object.keys(model.pairs).length
   const tableReady = house.ready
 
@@ -90,6 +90,23 @@ export default async function StyleBrainPage() {
         )}
       </div>
 
+      {/* Catalogue balance — distribution of the live collection */}
+      {balance && balance.totalOutfits > 0 && (
+        <div className="mb-6">
+          <p className="text-[10px] tracking-[0.135em] text-[#6B6B6B] mb-1">CATALOGUE BALANCE · {balance.totalOutfits} LIVE OUTFITS</p>
+          <p className="text-[9px] tracking-[0.06em] text-[#A8A8A4] mb-4 max-w-[720px] leading-relaxed">
+            How your live outfits spread across occasions, colours, price and formality — spot where you&rsquo;re
+            thin (a gap to build) or over-concentrated.
+          </p>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <BalancePanel title="BY OCCASION" rows={balance.occasions} unit="outfits" />
+            <BalancePanel title="BY PRICE (PER ITEM)" rows={balance.priceBands.map((b) => [b.label, b.count] as [string, number])} unit="items" keepOrder />
+            <BalancePanel title="BY COLOUR (PER ITEM)" rows={balance.colours} unit="items" />
+            <BalancePanel title="BY FORMALITY" rows={balance.formality.map((f) => [f.label, f.count] as [string, number])} unit="outfits" keepOrder />
+          </div>
+        </div>
+      )}
+
       {!tableReady && (
         <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[12px] p-5 max-w-[640px]">
           <p className="text-[11px] tracking-[0.081em] text-[#8A7A4E] mb-2">RUN MIGRATION TO ENABLE LEARNING</p>
@@ -99,6 +116,37 @@ export default async function StyleBrainPage() {
           </p>
         </div>
       )}
+    </div>
+  )
+}
+
+// A labelled bar list for the catalogue-balance panels. `keepOrder` preserves
+// the given order (price bands, formality); otherwise sorts by count desc.
+function BalancePanel({ title, rows, unit, keepOrder }: { title: string; rows: [string, number][]; unit: string; keepOrder?: boolean }) {
+  const sorted = keepOrder ? rows : [...rows].sort((a, b) => b[1] - a[1])
+  const shown = sorted.slice(0, 14)
+  const max = Math.max(1, ...shown.map(([, n]) => n))
+  return (
+    <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-5">
+      <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B] mb-4">{title}</p>
+      {shown.length === 0 ? (
+        <p className="text-[10px] tracking-[0.072em] text-[#A8A8A4] py-2">No data yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {shown.map(([label, n]) => (
+            <div key={label}>
+              <div className="flex justify-between mb-0.5">
+                <span className="text-[10px] tracking-[0.04em] text-[#4A4E57] truncate pr-3">{label.toUpperCase()}</span>
+                <span className="text-[9px] tracking-[0.045em] text-[#6B6B6B] flex-shrink-0">{n}</span>
+              </div>
+              <div className="h-[4px] bg-[#F2F2F2] rounded-full overflow-hidden">
+                <div className={`h-full rounded-full ${n === 0 ? 'bg-[#E8B4B4]' : 'bg-[#C4A882]'}`} style={{ width: `${Math.max(n === 0 ? 0 : 4, (n / max) * 100)}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="text-[8px] tracking-[0.063em] text-[#A8A8A4] mt-3">{unit.toUpperCase()}</p>
     </div>
   )
 }

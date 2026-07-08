@@ -26,6 +26,74 @@ export async function loadStyleModel(): Promise<StyleModel> {
   }
 }
 
+// ── Catalogue balance ────────────────────────────────────────────────────────
+// Distribution of the LIVE outfit collection across occasions, colours, price
+// bands and formality — so you can see where you're well-covered vs thin (a
+// gap to fill or an over-concentration).
+export interface CatalogueBalance {
+  totalOutfits: number
+  occasions: [string, number][]      // occasion tag → live-outfit count
+  colours: [string, number][]        // colour family → item count
+  priceBands: { label: string; count: number }[]
+  formality: { label: string; count: number }[]
+}
+const PRICE_BANDS: { label: string; max: number }[] = [
+  { label: 'UNDER 150', max: 150 },
+  { label: '150–400', max: 400 },
+  { label: '400–800', max: 800 },
+  { label: '800+', max: Infinity },
+]
+const FORMALITY_LABELS = ['VERY CASUAL', 'CASUAL', 'SMART', 'DRESSY', 'FORMAL']
+function parsePrice(p: unknown): number | null {
+  if (p == null) return null
+  const n = parseFloat(String(p).replace(/[^0-9.]/g, ''))
+  return isNaN(n) ? null : n
+}
+export async function loadCatalogueBalance(): Promise<CatalogueBalance | null> {
+  try {
+    const admin = createAdminClient()
+    const { data, error } = await admin
+      .from('outfit' as any)
+      .select('formality, occasion_tags, outfit_item(item(colour_family, price, item_type))')
+      .eq('status', 'live')
+      .limit(5000)
+    if (error || !data) return null
+    const outfits = data as any[]
+    const occ = new Map<string, number>()
+    const col = new Map<string, number>()
+    const bands = new Map<string, number>(PRICE_BANDS.map((b) => [b.label, 0]))
+    const form = new Map<string, number>(FORMALITY_LABELS.map((l) => [l, 0]))
+    for (const o of outfits) {
+      for (const t of (o.occasion_tags ?? []) as string[]) {
+        const k = String(t).trim().toLowerCase()
+        if (k) occ.set(k, (occ.get(k) ?? 0) + 1)
+      }
+      const fl = Math.max(1, Math.min(5, Math.round(o.formality ?? 3)))
+      const flLabel = FORMALITY_LABELS[fl - 1]
+      form.set(flLabel, (form.get(flLabel) ?? 0) + 1)
+      for (const oi of (o.outfit_item ?? []) as any[]) {
+        const it = oi.item
+        if (!it) continue
+        if (it.colour_family) col.set(it.colour_family, (col.get(it.colour_family) ?? 0) + 1)
+        const price = parsePrice(it.price)
+        if (price != null) {
+          const band = PRICE_BANDS.find((b) => price < b.max) ?? PRICE_BANDS[PRICE_BANDS.length - 1]
+          bands.set(band.label, (bands.get(band.label) ?? 0) + 1)
+        }
+      }
+    }
+    return {
+      totalOutfits: outfits.length,
+      occasions: [...occ.entries()].sort((a, b) => b[1] - a[1]),
+      colours: [...col.entries()].sort((a, b) => b[1] - a[1]),
+      priceBands: PRICE_BANDS.map((b) => ({ label: b.label, count: bands.get(b.label) ?? 0 })),
+      formality: FORMALITY_LABELS.map((l) => ({ label: l, count: form.get(l) ?? 0 })),
+    }
+  } catch {
+    return null
+  }
+}
+
 // "Is it getting smarter?" stats, computed from the decision log. As the model
 // learns your taste, the composer surfaces outfits you approve more often
 // (approval rate rises) — comparing the recent half vs the early half shows the
