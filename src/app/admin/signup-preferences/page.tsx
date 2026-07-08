@@ -372,7 +372,9 @@ ALTER TABLE public.signup_preference ENABLE ROW LEVEL SECURITY;`}</pre>
               {feedbackNotes.map((f, i) => (
                 <div key={i} className="border-b border-[#F2F2F2] pb-3 last:border-0">
                   <p className="text-[11px] tracking-[0.03em] text-[#4A4E57] leading-relaxed">{f.message}</p>
-                  <p className="text-[8px] tracking-[0.06em] text-[#A8A8A4] mt-1">{new Date(f.created_at).toLocaleDateString()}{f.email ? ` · ${f.email}` : ''}</p>
+                  <p className="text-[8px] tracking-[0.06em] text-[#A8A8A4] mt-1">
+                    {new Date(f.created_at).toLocaleDateString()} · {f.email ? <span className="text-[#6B6B6B]">{f.email}</span> : 'ANONYMOUS'}
+                  </p>
                 </div>
               ))}
             </div>

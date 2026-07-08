@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getProject, getProjectOutfits } from '@/lib/admin-queries'
+import { createAdminClient } from '@/lib/supabase-server'
 import StatusBadge from '@/components/admin/StatusBadge'
 import { updateProjectStatus, publishProject } from '@/app/admin/projects/actions'
 import EditableProjectTitle from './EditableProjectTitle'
@@ -13,6 +14,22 @@ interface PageProps {
 export default async function ProjectPage({ params }: PageProps) {
   const { id } = await params
   const [project, outfits] = await Promise.all([getProject(id), getProjectOutfits(id)])
+
+  // Catalogue tag vocabulary (most-used tags across all outfits) — powers quick-
+  // add + autocomplete, so tagging gets faster and reflects your growing set.
+  let popularTags: string[] = []
+  try {
+    const admin = createAdminClient()
+    const { data: tagRows } = await admin.from('outfit' as any).select('occasion_tags').limit(20000)
+    const freq = new Map<string, number>()
+    for (const r of (tagRows ?? []) as { occasion_tags: string[] | null }[]) {
+      for (const t of r.occasion_tags ?? []) {
+        const k = String(t).trim().toLowerCase()
+        if (k) freq.set(k, (freq.get(k) ?? 0) + 1)
+      }
+    }
+    popularTags = [...freq.entries()].sort((a, b) => b[1] - a[1]).map(([t]) => t).slice(0, 40)
+  } catch { /* non-fatal */ }
 
   if (!project) {
     notFound()
@@ -114,7 +131,7 @@ export default async function ProjectPage({ params }: PageProps) {
       </div>
 
       {/* Outfits grid — with bulk "select outfits → go live" */}
-      <ProjectOutfitsGrid projectId={id} outfits={outfits as any} />
+      <ProjectOutfitsGrid projectId={id} outfits={outfits as any} popularTags={popularTags} />
 
       {/* Project meta */}
       <div className="mt-12 pt-8 border-t border-[#E2E0DB]">

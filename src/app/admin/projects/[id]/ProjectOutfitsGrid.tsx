@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import StatusBadge from '@/components/admin/StatusBadge'
+import TagChips from '@/components/admin/TagChips'
 import { setOutfitsStatus } from '@/app/admin/projects/actions'
 
 type OutfitLite = {
@@ -12,14 +13,17 @@ type OutfitLite = {
   aesthetic_label: string
   status: string
   celebrity_name?: string | null
+  occasion_tags?: string[] | null
 }
 
 export default function ProjectOutfitsGrid({
   projectId,
   outfits,
+  popularTags = [],
 }: {
   projectId: string
   outfits: OutfitLite[]
+  popularTags?: string[]
 }) {
   const router = useRouter()
   const [selectMode, setSelectMode] = useState(false)
@@ -65,6 +69,11 @@ export default function ProjectOutfitsGrid({
 
   return (
     <div>
+      {/* Shared tag-autocomplete vocabulary for the inline tag editors */}
+      <datalist id="myra-tag-vocab">
+        {popularTags.map((t) => <option key={t} value={t} />)}
+      </datalist>
+
       {/* Selection controls */}
       <div className="flex items-center justify-between mb-4 min-h-[34px]">
         <p className="text-[10px] tracking-[0.09em] text-[#6B6B6B]">
@@ -171,12 +180,22 @@ export default function ProjectOutfitsGrid({
                     {isLive ? 'ALREADY LIVE' : isSelected ? 'SELECTED ✓' : 'TAP TO SELECT'}
                   </p>
                 ) : (
-                  <Link
-                    href={`/admin/projects/${projectId}/outfits/${outfit.outfit_id}/edit`}
-                    className="text-[9px] tracking-[0.09em] text-[#6B6B6B] group-hover:text-[#4A4E57] transition-colors duration-300"
-                  >
-                    EDIT →
-                  </Link>
+                  <>
+                    {/* Inline tag editor — delete with ×, quick-add, free-add */}
+                    <div className="mb-3">
+                      <TagChips
+                        outfitId={outfit.outfit_id}
+                        initialTags={(outfit.occasion_tags ?? []).map((t) => t.toLowerCase())}
+                        suggestions={popularTags}
+                      />
+                    </div>
+                    <Link
+                      href={`/admin/projects/${projectId}/outfits/${outfit.outfit_id}/edit`}
+                      className="text-[9px] tracking-[0.09em] text-[#6B6B6B] group-hover:text-[#4A4E57] transition-colors duration-300"
+                    >
+                      EDIT →
+                    </Link>
+                  </>
                 )}
               </div>
             </div>
