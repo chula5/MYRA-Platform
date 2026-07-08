@@ -15,7 +15,7 @@ import { revalidatePath } from 'next/cache'
 import { generateHiggsfieldShootForOutfit } from '@/app/admin/projects/higgsfield-actions'
 import { generateOccasionTags } from '@/app/admin/ai/occasion-tags'
 import { loadStyleModel, recordStyleDecision } from '@/lib/style-brain-store'
-import { blendedScore, type FeatureItem } from '@/lib/style-brain'
+import { learnedBonus, blendStrength, type FeatureItem } from '@/lib/style-brain'
 
 // Map a library item to the Style Brain's feature shape.
 function toFeature(it: ItemWithBrand): FeatureItem {
@@ -67,21 +67,20 @@ export async function composeForAnchor(
       return { error: 'Library needs at least three ready/live items to compose against' }
     }
 
-    const raw = generateCandidates({ anchor, library })
-
-    // Style Brain: re-rank candidates by Chloe's learned taste (safe no-op until
-    // there are decisions). Blends a learned bonus into each candidate's score.
+    // Style Brain closed loop: fold Chloe's learned taste INTO generation, so
+    // the composer builds & keeps the combos she'd approve (not just re-ranks).
+    // Safe no-op until there are decisions (blend ramps from 0).
     const model = await loadStyleModel()
-    const ranked = raw
-      .map((c) => {
-        const feats = [toFeature(anchor), ...c.items.map((x) => toFeature(x.item))]
-        return { c, score: Math.max(0, Math.min(1, blendedScore(model, c.score, feats))) }
-      })
-      .sort((a, b) => b.score - a.score)
+    const raw = generateCandidates({
+      anchor,
+      library,
+      learnedBlend: blendStrength(model),
+      learnedBonus: (items) => learnedBonus(model, [toFeature(anchor), ...items.map((x) => toFeature(x.item))]),
+    })
 
-    const candidates: ComposedCandidatePayload[] = ranked.map(({ c, score }, idx) => ({
+    const candidates: ComposedCandidatePayload[] = raw.map((c, idx) => ({
       candidateIndex: idx,
-      score: Number(score.toFixed(3)),
+      score: Number(c.score.toFixed(3)),
       items: c.items.map(({ item, slot }) => ({
         slot,
         item_id: item.item_id,

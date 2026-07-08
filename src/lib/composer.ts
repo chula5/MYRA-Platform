@@ -159,6 +159,11 @@ interface GenerateOpts {
   maxCandidates?: number     // how many candidate outfits to return (default 10)
   minScore?: number          // floor on overall coherence (default 0.55)
   excludeItemIds?: string[]  // never include these items as additions
+  // Style Brain hook: a learned bonus in ~[-1,1] for a candidate's items, and how
+  // strongly to weight it. Folds Chloe's learned taste INTO generation, so the
+  // composer builds/keeps combos she'd approve — not just re-ranks afterward.
+  learnedBonus?: (items: { item: ItemWithBrand; slot: Slot }[]) => number
+  learnedBlend?: number
 }
 
 export function generateCandidates(opts: GenerateOpts): ComposerCandidate[] {
@@ -169,6 +174,8 @@ export function generateCandidates(opts: GenerateOpts): ComposerCandidate[] {
     maxCandidates = 10,
     minScore = 0.55,
     excludeItemIds = [],
+    learnedBonus,
+    learnedBlend = 0,
   } = opts
 
   const anchorSlot = slotForItemType(anchor.item_type)
@@ -226,8 +233,12 @@ export function generateCandidates(opts: GenerateOpts): ComposerCandidate[] {
     const filledSlots = new Set(items.map(i => i.slot))
     if (!plan.required.every(s => filledSlots.has(s))) continue
 
-    const score = scoreCombo(anchor, items)
-    if (score < minScore) continue
+    const base = scoreCombo(anchor, items)
+    if (base < minScore) continue // coherence gate stays on the hand-tuned score
+    // Fold in Chloe's learned taste so preferred combos rank higher at generation.
+    const score = learnedBonus && learnedBlend > 0
+      ? Math.max(0, Math.min(1, base + learnedBlend * learnedBonus(items)))
+      : base
 
     scored.push({
       items,
