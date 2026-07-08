@@ -69,7 +69,7 @@ export default async function AnalyticsPage() {
 
   // ── Engagement: outfit views + style-item / similar / explore clicks ──
   let engagement: {
-    views: number; styleClicks: number; similarClicks: number; exploreClicks: number
+    views: number; styleClicks: number; similarClicks: number; exploreClicks: number; shopClicks: number
     topOutfits: { id: string; label: string; image: string | null; views: number; similar: number; explore: number }[]
     topItems: { id: string; label: string; clicks: number }[]
   } | null = null
@@ -80,8 +80,12 @@ export default async function AnalyticsPage() {
       .in('event_type', ['outfit_view', 'style_item', 'similar_looks', 'explore_styles'])
       .gte('occurred_at', since.toISOString())
       .limit(100000)
+    // Retailer shop-throughs (product clicked → went to the retailer site).
+    let shopClicks = 0
+    const { count: sc } = await admin.from('item_click' as any).select('*', { count: 'exact', head: true }).gte('clicked_at', since.toISOString())
+    shopClicks = sc ?? 0
     const rows = (ev ?? []) as { event_type: string; path: string }[]
-    if (rows.length) {
+    if (rows.length || shopClicks > 0) {
       const viewC = new Map<string, number>(), simC = new Map<string, number>(), expC = new Map<string, number>(), styleC = new Map<string, number>()
       const bump = (m: Map<string, number>, k: string) => { if (k) m.set(k, (m.get(k) ?? 0) + 1) }
       for (const e of rows) {
@@ -112,7 +116,7 @@ export default async function AnalyticsPage() {
         .sort((a, b) => b.clicks - a.clicks)
         .slice(0, 12)
       const sum = (m: Map<string, number>) => [...m.values()].reduce((s, n) => s + n, 0)
-      engagement = { views: sum(viewC), styleClicks: sum(styleC), similarClicks: sum(simC), exploreClicks: sum(expC), topOutfits, topItems }
+      engagement = { views: sum(viewC), styleClicks: sum(styleC), similarClicks: sum(simC), exploreClicks: sum(expC), shopClicks, topOutfits, topItems }
     }
   }
 
@@ -485,12 +489,13 @@ alter table site_session enable row level security;`}</pre>
       {engagement && (
         <div className="mb-10">
           <p className="text-[10px] tracking-[0.135em] text-[#6B6B6B] mb-4">ENGAGEMENT · LAST 30 DAYS</p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
             {[
               { label: 'OUTFIT VIEWS', value: engagement.views, sub: 'CLICKED INTO AN OUTFIT' },
               { label: 'STYLE-ITEM CLICKS', value: engagement.styleClicks, sub: 'TAPPED “STYLE THIS ITEM”' },
               { label: 'SIMILAR LOOKS', value: engagement.similarClicks, sub: 'CLICKS' },
               { label: 'EXPLORE STYLES', value: engagement.exploreClicks, sub: 'CLICKS' },
+              { label: 'SHOP CLICK-OUTS', value: engagement.shopClicks, sub: 'WENT TO RETAILER SITE' },
             ].map((s) => (
               <div key={s.label} className="border border-[#E2E0DB] bg-white rounded-[12px] px-5 py-4">
                 <p className="text-[9px] tracking-[0.09em] text-[#A8A8A4] mb-2">{s.label}</p>
