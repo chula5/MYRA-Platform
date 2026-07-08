@@ -96,6 +96,15 @@ export default function IngestComposeClient() {
       : await getReviewSwapOptions(block.item.item_id, swap.slot, exclude, q)
     setSwapOptions(res.options); setSwapLoading(false)
   }
+  async function removeItem(bi: number, ci: number, itemIdx: number) {
+    const block = blocks[bi]; const cand = block.candidates?.[ci]
+    if (!cand || !block.item) return
+    const items = cand.items.filter((_, i) => i !== itemIdx)
+    setItems(bi, ci, items)
+    const res: any = await rescoreCandidate(block.item.item_id, items.map((i) => ({ itemId: i.item_id, slot: i.slot as Slot })))
+    if (typeof res?.score === 'number') setItems(bi, ci, items, res.score)
+  }
+
   async function performSwap(opt: ReviewItem) {
     if (!swap) return
     const { bi, ci, itemIdx, mode } = swap
@@ -128,8 +137,8 @@ export default function IngestComposeClient() {
         </div>
         <p className="text-[9px] tracking-[0.054em] text-[#A8A8A4] mt-3 leading-relaxed">
           Each URL is scraped, AI-scored, saved as a READY item, then outfit options are composed against your
-          library. Hover a piece to SWAP it, use + ADD to add a bag/shoes/etc. YES saves a draft (Higgsfield shoot);
-          YES &amp; SKIP both train the Style Brain.
+          library. Hover a piece to SWAP or remove it (×), use + ADD to add a bag/shoes/etc. YES saves a draft
+          (Higgsfield shoot); YES &amp; SKIP both train the Style Brain.
         </p>
       </div>
 
@@ -183,6 +192,15 @@ export default function IngestComposeClient() {
                               {editable && (
                                 <button onClick={() => openSwap(bi, ci, k, item.slot)} className="absolute inset-0 bg-black/0 group-hover:bg-black/45 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                   <span className="bg-white text-[#0A0A0A] text-[8px] tracking-[0.12em] px-2 py-1 rounded">SWAP</span>
+                                </button>
+                              )}
+                              {editable && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); removeItem(bi, ci, k) }}
+                                  className="absolute top-1 right-1 z-20 w-4 h-4 rounded-full bg-black/60 text-white text-[11px] leading-none flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[#B83A3A]"
+                                  aria-label="Remove item"
+                                >
+                                  ×
                                 </button>
                               )}
                             </div>
