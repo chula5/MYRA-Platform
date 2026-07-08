@@ -10,6 +10,7 @@ import SaveHeartButton from '@/components/outfit-card/SaveHeartButton'
 import CardButton from '@/components/ui/CardButton'
 import { createClient } from '@/lib/supabase'
 import { getRelatedOutfits, getStyleItemOutfits } from './related-actions'
+import { trackEngagement } from '@/lib/track'
 import { toggleSaveItem } from '@/app/edit/save-actions'
 import type { OutfitWithItems, Item, Brand, ItemType } from '@/types/database'
 
@@ -225,6 +226,7 @@ export default function OutfitDetailClient({
 
   // ── Handlers ──────────────────────────────────────────────
   const handleStyleItem = (itemId: string, iType: ItemType) => {
+    trackEngagement('style_item', itemId)
     setActiveStyleItemId(itemId)
     setActiveItemType(iType)
     setStyleItemOutfits([])
@@ -233,6 +235,7 @@ export default function OutfitDetailClient({
 
   const handleSimilarLooks = () => {
     if (!outfit) return
+    trackEngagement('similar_looks', outfit.outfit_id)
     // Clear any active style-item view so the Similar results aren't suppressed
     // (the results section only renders when no style-item is active).
     setActiveStyleItemId(null)
@@ -243,6 +246,7 @@ export default function OutfitDetailClient({
 
   const handleExploreStyles = () => {
     if (!outfit) return
+    trackEngagement('explore_styles', outfit.outfit_id)
     setActiveStyleItemId(null)
     setActiveItemType(null)
     setStyleItemOutfits([])

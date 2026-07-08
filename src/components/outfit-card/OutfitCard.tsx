@@ -7,6 +7,7 @@ import CardButton from '@/components/ui/CardButton'
 import Hotspot from '@/components/hotspot/Hotspot'
 import ShopTheLookOverlay from '@/components/source-panel/ShopTheLookOverlay'
 import SaveHeartButton from '@/components/outfit-card/SaveHeartButton'
+import { trackEngagement } from '@/lib/track'
 import type { OutfitWithItems, Item, Brand, ItemType } from '@/types/database'
 
 type SourceItemData = Item & { brand: Brand }
@@ -89,6 +90,7 @@ export default function OutfitCard({
 
   function handleTap() {
     if (didSwipe.current) return
+    trackEngagement('outfit_view', outfit.outfit_id)
     router.push(detailHref ?? `/outfit/${outfit.outfit_id}`)
   }
 
@@ -161,9 +163,10 @@ export default function OutfitCard({
               x={pos.x}
               y={pos.y}
               variant="feed"
-              onStyleItem={(itemId, itemType) =>
+              onStyleItem={(itemId, itemType) => {
+                trackEngagement('style_item', itemId)
                 onStyleItem?.(itemId, itemType, outfit)
-              }
+              }}
             />
           )
         })}
@@ -224,14 +227,14 @@ export default function OutfitCard({
           </CardButton>
           <CardButton
             variant="filled"
-            onClick={() => onSimilarLooks?.(outfit)}
+            onClick={() => { trackEngagement('similar_looks', outfit.outfit_id); onSimilarLooks?.(outfit) }}
             className="flex-1"
           >
             SIMILAR LOOKS
           </CardButton>
           <CardButton
             variant="filled"
-            onClick={() => onExploreStyles?.(outfit)}
+            onClick={() => { trackEngagement('explore_styles', outfit.outfit_id); onExploreStyles?.(outfit) }}
             className="flex-1"
           >
             EXPLORE STYLES

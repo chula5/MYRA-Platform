@@ -12,6 +12,10 @@ export type LandingEventType =
   | 'account_signup'
   | 'occasion_click'
   | 'item_click'
+  | 'outfit_view'
+  | 'style_item'
+  | 'similar_looks'
+  | 'explore_styles'
 
 function cleanRef(ref?: string | null): string | null {
   return ref ? ref.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40) || null : null

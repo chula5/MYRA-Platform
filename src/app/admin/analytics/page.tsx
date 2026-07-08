@@ -67,6 +67,55 @@ export default async function AnalyticsPage() {
     /* listUsers may be unavailable in some environments */
   }
 
+  // ── Engagement: outfit views + style-item / similar / explore clicks ──
+  let engagement: {
+    views: number; styleClicks: number; similarClicks: number; exploreClicks: number
+    topOutfits: { id: string; label: string; image: string | null; views: number; similar: number; explore: number }[]
+    topItems: { id: string; label: string; clicks: number }[]
+  } | null = null
+  {
+    const { data: ev } = await admin
+      .from('landing_event' as any)
+      .select('event_type, path')
+      .in('event_type', ['outfit_view', 'style_item', 'similar_looks', 'explore_styles'])
+      .gte('occurred_at', since.toISOString())
+      .limit(100000)
+    const rows = (ev ?? []) as { event_type: string; path: string }[]
+    if (rows.length) {
+      const viewC = new Map<string, number>(), simC = new Map<string, number>(), expC = new Map<string, number>(), styleC = new Map<string, number>()
+      const bump = (m: Map<string, number>, k: string) => { if (k) m.set(k, (m.get(k) ?? 0) + 1) }
+      for (const e of rows) {
+        if (e.event_type === 'outfit_view') bump(viewC, e.path)
+        else if (e.event_type === 'similar_looks') bump(simC, e.path)
+        else if (e.event_type === 'explore_styles') bump(expC, e.path)
+        else if (e.event_type === 'style_item') bump(styleC, e.path)
+      }
+      const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
+      const outfitIds = [...new Set([...viewC.keys(), ...simC.keys(), ...expC.keys()])].filter(isUuid)
+      const itemIds = [...styleC.keys()].filter(isUuid)
+      const outfitMap = new Map<string, { label: string; image: string | null }>()
+      if (outfitIds.length) {
+        const { data: outs } = await admin.from('outfit' as any).select('outfit_id, aesthetic_label, image_url, occasion_tags').in('outfit_id', outfitIds.slice(0, 300))
+        for (const o of (outs ?? []) as any[]) outfitMap.set(o.outfit_id, { label: o.aesthetic_label || (o.occasion_tags?.[0] ?? 'OUTFIT'), image: o.image_url })
+      }
+      const itemMap = new Map<string, string>()
+      if (itemIds.length) {
+        const { data: its } = await admin.from('item' as any).select('item_id, product_name, brand(name)').in('item_id', itemIds.slice(0, 300))
+        for (const it of (its ?? []) as any[]) itemMap.set(it.item_id, [it.brand?.name, it.product_name].filter(Boolean).join(' — '))
+      }
+      const topOutfits = outfitIds
+        .map((id) => ({ id, label: outfitMap.get(id)?.label ?? '—', image: outfitMap.get(id)?.image ?? null, views: viewC.get(id) ?? 0, similar: simC.get(id) ?? 0, explore: expC.get(id) ?? 0 }))
+        .sort((a, b) => (b.views + b.similar + b.explore) - (a.views + a.similar + a.explore))
+        .slice(0, 12)
+      const topItems = [...styleC.keys()].filter(isUuid)
+        .map((id) => ({ id, label: itemMap.get(id) ?? '—', clicks: styleC.get(id) ?? 0 }))
+        .sort((a, b) => b.clicks - a.clicks)
+        .slice(0, 12)
+      const sum = (m: Map<string, number>) => [...m.values()].reduce((s, n) => s + n, 0)
+      engagement = { views: sum(viewC), styleClicks: sum(styleC), similarClicks: sum(simC), exploreClicks: sum(expC), topOutfits, topItems }
+    }
+  }
+
   // Try fetching with ref — table/column might not exist yet if migration not run.
   let { data, error } = await admin
     .from('landing_event' as any)
@@ -431,6 +480,69 @@ alter table site_session enable row level security;`}</pre>
           </>
         )}
       </div>
+
+      {/* Engagement — outfit views + style/similar/explore clicks */}
+      {engagement && (
+        <div className="mb-10">
+          <p className="text-[10px] tracking-[0.135em] text-[#6B6B6B] mb-4">ENGAGEMENT · LAST 30 DAYS</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            {[
+              { label: 'OUTFIT VIEWS', value: engagement.views, sub: 'CLICKED INTO AN OUTFIT' },
+              { label: 'STYLE-ITEM CLICKS', value: engagement.styleClicks, sub: 'TAPPED “STYLE THIS ITEM”' },
+              { label: 'SIMILAR LOOKS', value: engagement.similarClicks, sub: 'CLICKS' },
+              { label: 'EXPLORE STYLES', value: engagement.exploreClicks, sub: 'CLICKS' },
+            ].map((s) => (
+              <div key={s.label} className="border border-[#E2E0DB] bg-white rounded-[12px] px-5 py-4">
+                <p className="text-[9px] tracking-[0.09em] text-[#A8A8A4] mb-2">{s.label}</p>
+                <p className="text-[28px] tracking-[0.023em] text-[#4A4E57] leading-none">{s.value.toLocaleString()}</p>
+                <p className="text-[8px] tracking-[0.072em] text-[#C4A882] mt-1">{s.sub}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Most-viewed outfits */}
+            <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6">
+              <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B] mb-1">MOST-VIEWED OUTFITS</p>
+              <p className="text-[8px] tracking-[0.063em] text-[#A8A8A4] mb-4">VIEWS · SIMILAR · EXPLORE</p>
+              {engagement.topOutfits.length === 0 ? (
+                <p className="text-[10px] tracking-[0.072em] text-[#A8A8A4] py-3">No outfit clicks yet.</p>
+              ) : (
+                <div className="space-y-2.5">
+                  {engagement.topOutfits.map((o) => (
+                    <div key={o.id} className="flex items-center gap-3">
+                      {o.image
+                        // eslint-disable-next-line @next/next/no-img-element
+                        ? <img src={o.image} alt="" className="w-8 h-10 rounded object-cover bg-[#F2F2F0] flex-shrink-0" />
+                        : <div className="w-8 h-10 rounded bg-[#F2F2F0] flex-shrink-0" />}
+                      <span className="flex-1 min-w-0 text-[10px] tracking-[0.04em] text-[#4A4E57] truncate">{o.label.toUpperCase()}</span>
+                      <span className="text-[10px] tracking-[0.045em] text-[#4A4E57] flex-shrink-0">{o.views}</span>
+                      <span className="text-[9px] tracking-[0.045em] text-[#A8A8A4] w-[52px] text-right flex-shrink-0">{o.similar} · {o.explore}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Most-styled items */}
+            <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6">
+              <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B] mb-4">MOST-STYLED ITEMS</p>
+              {engagement.topItems.length === 0 ? (
+                <p className="text-[10px] tracking-[0.072em] text-[#A8A8A4] py-3">No “style this item” clicks yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {engagement.topItems.map((it) => (
+                    <div key={it.id} className="flex items-center justify-between gap-3">
+                      <span className="text-[10px] tracking-[0.04em] text-[#4A4E57] truncate">{it.label.toUpperCase()}</span>
+                      <span className="text-[10px] tracking-[0.045em] text-[#6B6B6B] flex-shrink-0">{it.clicks}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Chart */}
       <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6 mb-8">
