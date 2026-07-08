@@ -211,6 +211,38 @@ function hasWord(hay: string | null | undefined, needle: string): boolean {
   return new RegExp(`\\b${needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(hay)
 }
 
+// Formality (1 casual … 5 black-tie) inferred from the ACTUAL items, because the
+// outfit-level `formality` column is unreliable (new outfits default to 3). Item
+// type is the base signal; material_formality and product-name cues refine it.
+// The result leans toward the dressiest piece — a gown makes a look formal even
+// with flat sandals — while very casual staples pull it back down.
+const TYPE_FORMALITY: Record<string, number> = {
+  't-shirt': 1, shorts: 1, sneaker: 1, jeans: 2, sandal: 2, gilet: 2, knitwear: 2, flat: 2,
+  shirt: 3, blouse: 3, bodysuit: 3, skirt: 3, trousers: 3, mini_dress: 3, shirt_dress: 3,
+  jacket: 3, trench: 3, coat: 3, tote: 3, crossbody: 3, shoulder_bag: 3, mule: 3, boot: 3,
+  scarf: 3, hat: 3, belt: 3,
+  blazer: 4, midi_dress: 4, slip_dress: 4, corset: 4, heel: 4, structured_bag: 4, cape: 4,
+  clutch: 4, maxi_dress: 4,
+}
+const FORMAL_WORDS = ['gown', 'tuxedo', 'sequin', 'sequined', 'satin', 'silk', 'velvet', 'tulle', 'beaded', 'embellished', 'evening', 'cocktail', 'floor-length', 'floor length', 'ball', 'chiffon', 'lace', 'crystal']
+const CASUAL_WORDS = ['denim', 'jersey', 'sweat', 'hoodie', 'beach', 'cargo', 'athletic', 'sport', 'flip-flop', 'fleece', 'terry']
+
+function estimateFormality(items: any[]): number | null {
+  const vals: number[] = []
+  for (const it of items) {
+    let v = TYPE_FORMALITY[String(it.item_type)] ?? null
+    if (typeof it.material_formality === 'number') v = v == null ? it.material_formality : (v + it.material_formality) / 2
+    if (v == null) continue
+    const name = String(it.product_name ?? '').toLowerCase()
+    if (FORMAL_WORDS.some((w) => name.includes(w))) v = Math.min(5, v + 1)
+    if (CASUAL_WORDS.some((w) => name.includes(w))) v = Math.max(1, v - 1)
+    vals.push(v)
+  }
+  if (!vals.length) return null
+  const avg = vals.reduce((a, b) => a + b, 0) / vals.length
+  return (avg + Math.max(...vals)) / 2
+}
+
 // Score one outfit against a parsed query, 0..1. Only facets PRESENT in the
 // query contribute (their weights are normalised), so "mint" is judged on colour
 // while "relaxed summer wedding" is judged on occasion + season + formality.
@@ -233,9 +265,12 @@ export function scoreOutfit(outfit: OutfitWithItems, p: ParsedQuery): number {
   }
   if (p.formalityRange) {
     const [lo, hi] = p.formalityRange
-    const f = outfit.formality ?? 3
+    // Prefer the item-derived estimate — the outfit column defaults to 3 and
+    // doesn't discriminate. Smooth gradient (dist/3) so the closest looks for
+    // e.g. "black tie" rank dressiest-first instead of tying at the default.
+    const f = estimateFormality(items) ?? outfit.formality ?? 3
     const dist = f < lo ? lo - f : f > hi ? f - hi : 0
-    part(0.12, Math.max(0, 1 - dist / 2))
+    part(0.16, Math.max(0, 1 - dist / 3))
   }
   if (p.timeOfDay != null) {
     const dist = Math.abs((outfit.time_of_day ?? 3) - p.timeOfDay)
@@ -274,9 +309,11 @@ export function searchOutfits(
   const matched = scored.filter((x) => x.s >= STRONG)
   if (matched.length > 0) return { outfits: matched.map((x) => x.o), relaxed: false, matchCount: matched.length }
 
-  // Nothing genuinely matched → NEVER empty: show the closest partial matches,
-  // else the default feed. matchCount stays 0 so admin sees the content gap.
-  const partial = scored.filter((x) => x.s > 0).slice(0, MIN_SHOWN).map((x) => x.o)
-  const closest = partial.length > 0 ? partial : fallbackOrder(outfits).slice(0, MIN_SHOWN)
+  // Nothing genuinely matched → NEVER empty, but the "closest" must still be
+  // ranked BY THE QUERY, not by the default feed. Sorting by scoreOutfit means a
+  // "black tie" search surfaces the most formal/elevated looks first (long gowns
+  // before day dresses) instead of random casual outfits from the general feed.
+  // matchCount stays 0 so admin still sees the genuine content gap.
+  const closest = scored.slice(0, MIN_SHOWN).map((x) => x.o)
   return { outfits: closest, relaxed: true, matchCount: 0 }
 }

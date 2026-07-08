@@ -892,7 +892,7 @@ export default function FeedClient({
 
         {!searchLoading && searchRelaxed && searchResults.length > 0 && (
           <p className="text-[11px] tracking-[0.06em] text-[#6B6B6B] mb-6 -mt-2">
-            We don&rsquo;t have an exact match for &ldquo;{searchQuery.trim().toUpperCase()}&rdquo; yet — here are the closest looks.
+            Here are the closest looks.
           </p>
         )}
 

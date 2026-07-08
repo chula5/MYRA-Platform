@@ -33,6 +33,25 @@ export default function ProjectOutfitsGrid({
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Per-card status while a single toggle is in flight (optimistic override).
+  const [statusOverride, setStatusOverride] = useState<Record<string, string>>({})
+  const [toggling, setToggling] = useState<string | null>(null)
+
+  async function toggleStatus(outfitId: string, current: string) {
+    if (toggling) return
+    const next = current === 'live' ? 'draft' : 'live'
+    setToggling(outfitId)
+    setStatusOverride((prev) => ({ ...prev, [outfitId]: next }))
+    const res = await setOutfitsStatus(projectId, [outfitId], next as 'live' | 'draft')
+    setToggling(null)
+    if (res.error) {
+      // Roll back the optimistic change.
+      setStatusOverride((prev) => ({ ...prev, [outfitId]: current }))
+      setError(res.error)
+      return
+    }
+    router.refresh()
+  }
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -132,7 +151,8 @@ export default function ProjectOutfitsGrid({
       <div className="grid grid-cols-3 gap-6">
         {outfits.map((outfit) => {
           const isSelected = selected.has(outfit.outfit_id)
-          const isLive = outfit.status === 'live'
+          const effectiveStatus = statusOverride[outfit.outfit_id] ?? outfit.status
+          const isLive = effectiveStatus === 'live'
           return (
             <div
               key={outfit.outfit_id}
@@ -176,7 +196,25 @@ export default function ProjectOutfitsGrid({
                   <p className="text-[11px] tracking-[0.068em] text-[#4A4E57] truncate">
                     {(outfit.celebrity_name || outfit.aesthetic_label).toUpperCase()}
                   </p>
-                  <StatusBadge status={outfit.status} />
+                  {selectMode ? (
+                    <StatusBadge status={effectiveStatus} />
+                  ) : (
+                    // Click to flip DRAFT ↔ LIVE instantly. Green = live, grey = draft.
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); e.preventDefault(); toggleStatus(outfit.outfit_id, effectiveStatus) }}
+                      disabled={toggling === outfit.outfit_id}
+                      title={isLive ? 'Click to move back to draft' : 'Click to send live'}
+                      className={`inline-flex items-center gap-1 rounded-full pl-2 pr-2.5 py-1 text-[9px] tracking-[0.09em] border transition-colors duration-200 disabled:opacity-50 ${
+                        isLive
+                          ? 'bg-[#EAF3EC] border-[#BBD9C2] text-[#3D7A50] hover:bg-[#DCEDE1]'
+                          : 'bg-[#FAFAF8] border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57]'
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-[#3D7A50]' : 'bg-[#C9C7C2]'}`} />
+                      {toggling === outfit.outfit_id ? '…' : isLive ? 'LIVE' : 'DRAFT'}
+                    </button>
+                  )}
                 </div>
                 {selectMode ? (
                   <p className="text-[9px] tracking-[0.09em] text-[#A8A8A4]">
