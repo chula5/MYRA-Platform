@@ -11,6 +11,7 @@ import CardButton from '@/components/ui/CardButton'
 import { createClient } from '@/lib/supabase'
 import { getRelatedOutfits, getStyleItemOutfits } from './related-actions'
 import { trackEngagement } from '@/lib/track'
+import { thumbUrl } from '@/lib/image-utils'
 import { toggleSaveItem } from '@/app/edit/save-actions'
 import type { OutfitWithItems, Item, Brand, ItemType } from '@/types/database'
 
@@ -390,8 +391,9 @@ export default function OutfitDetailClient({
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={prevImage}
+                  src={thumbUrl(prevImage, 500)}
                   alt=""
+                  loading="lazy"
                   className="w-full aspect-[3/4] object-cover rounded-[10px]"
                   style={{ filter: 'blur(1px)', opacity: 0.7 }}
                 />
@@ -408,8 +410,9 @@ export default function OutfitDetailClient({
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={nextImage}
+                  src={thumbUrl(nextImage, 500)}
                   alt=""
+                  loading="lazy"
                   className="w-full aspect-[3/4] object-cover rounded-[10px]"
                   style={{ filter: 'blur(1px)', opacity: 0.7 }}
                 />
@@ -421,7 +424,7 @@ export default function OutfitDetailClient({
               <ImageWithHotspots
                 key={currentImageUrl}
                 outfit={outfit}
-                imageUrl={currentImageUrl}
+                imageUrl={thumbUrl(currentImageUrl, 1100)}
                 activeItemLabel={safeIndex === 0 ? activeItemLabel : null}
                 onStyleItem={handleStyleItem}
                 showHotspots={safeIndex === 0}
@@ -517,7 +520,7 @@ export default function OutfitDetailClient({
                 aria-label={`View photo ${idx + 1}`}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={url} alt={`Photo ${idx + 1}`} className="w-full h-full object-cover" />
+                <img src={thumbUrl(url, 160)} alt={`Photo ${idx + 1}`} loading="lazy" className="w-full h-full object-cover" />
               </button>
             ))}
           </div>
