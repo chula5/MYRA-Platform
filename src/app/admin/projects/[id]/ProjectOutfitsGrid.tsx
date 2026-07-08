@@ -7,6 +7,7 @@ import StatusBadge from '@/components/admin/StatusBadge'
 import TagChips from '@/components/admin/TagChips'
 import { thumbUrl } from '@/lib/image-utils'
 import { setOutfitsStatus } from '@/app/admin/projects/actions'
+import { generateHiggsfieldShootForOutfit } from '@/app/admin/projects/higgsfield-actions'
 
 type OutfitLite = {
   outfit_id: string
@@ -36,6 +37,30 @@ export default function ProjectOutfitsGrid({
   // Per-card status while a single toggle is in flight (optimistic override).
   const [statusOverride, setStatusOverride] = useState<Record<string, string>>({})
   const [toggling, setToggling] = useState<string | null>(null)
+  // Refined Higgsfield shoot state (long-running) — which outfit is generating,
+  // the new image once done, and any error.
+  const [refining, setRefining] = useState<string | null>(null)
+  const [imageOverride, setImageOverride] = useState<Record<string, string>>({})
+  const [refineError, setRefineError] = useState<Record<string, string>>({})
+
+  async function refine(outfitId: string) {
+    if (refining) return
+    setRefining(outfitId)
+    setRefineError((prev) => { const next = { ...prev }; delete next[outfitId]; return next })
+    try {
+      const res = await generateHiggsfieldShootForOutfit(outfitId, 'E5')
+      if (res.error) {
+        setRefineError((prev) => ({ ...prev, [outfitId]: res.error! }))
+      } else if (res.imageUrl) {
+        setImageOverride((prev) => ({ ...prev, [outfitId]: res.imageUrl! }))
+        router.refresh()
+      }
+    } catch (err) {
+      setRefineError((prev) => ({ ...prev, [outfitId]: err instanceof Error ? err.message : 'Refine failed' }))
+    } finally {
+      setRefining(null)
+    }
+  }
 
   async function toggleStatus(outfitId: string, current: string) {
     if (toggling) return
@@ -167,12 +192,21 @@ export default function ProjectOutfitsGrid({
             >
               {/* Image */}
               <div className="bg-[#F2F2F0] overflow-hidden relative" style={{ aspectRatio: '3/4' }}>
-                {outfit.image_url ? (
+                {(imageOverride[outfit.outfit_id] ?? outfit.image_url) ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={thumbUrl(outfit.image_url, 600)} alt={outfit.aesthetic_label} loading="lazy" className="w-full h-full object-cover" />
+                  <img src={thumbUrl(imageOverride[outfit.outfit_id] ?? outfit.image_url!, 600)} alt={outfit.aesthetic_label} loading="lazy" className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
                     <span className="text-[9px] tracking-[0.068em] text-[#A8A8A4]">NO IMAGE</span>
+                  </div>
+                )}
+
+                {/* Refining overlay — Higgsfield shoot in progress */}
+                {refining === outfit.outfit_id && (
+                  <div className="absolute inset-0 bg-white/75 backdrop-blur-[1px] flex flex-col items-center justify-center gap-2">
+                    <div className="w-6 h-6 border-2 border-[#C4A882] border-t-transparent rounded-full animate-spin" />
+                    <span className="text-[9px] tracking-[0.12em] text-[#4A4E57]">REFINING…</span>
+                    <span className="text-[8px] tracking-[0.06em] text-[#A8A8A4] px-4 text-center">this can take a minute</span>
                   </div>
                 )}
 
@@ -231,12 +265,27 @@ export default function ProjectOutfitsGrid({
                         coTags={coTags}
                       />
                     </div>
-                    <Link
-                      href={`/admin/projects/${projectId}/outfits/${outfit.outfit_id}/edit`}
-                      className="text-[9px] tracking-[0.09em] text-[#6B6B6B] group-hover:text-[#4A4E57] transition-colors duration-300"
-                    >
-                      EDIT →
-                    </Link>
+                    <div className="flex items-center justify-between">
+                      <Link
+                        href={`/admin/projects/${projectId}/outfits/${outfit.outfit_id}/edit`}
+                        className="text-[9px] tracking-[0.09em] text-[#6B6B6B] group-hover:text-[#4A4E57] transition-colors duration-300"
+                      >
+                        EDIT →
+                      </Link>
+                      {/* Trigger a Refined Higgsfield shoot; replaces the display image. */}
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); e.preventDefault(); refine(outfit.outfit_id) }}
+                        disabled={!!refining}
+                        title="Generate a refined model shoot and use it as the display image"
+                        className="inline-flex items-center gap-1 border border-[#C4A882] text-[#8A7A4E] rounded-full px-2.5 py-1 text-[9px] tracking-[0.09em] hover:bg-[#FBF6EA] transition-colors duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {refining === outfit.outfit_id ? 'REFINING…' : '✦ REFINE'}
+                      </button>
+                    </div>
+                    {refineError[outfit.outfit_id] && refining !== outfit.outfit_id && (
+                      <p className="mt-1.5 text-[8px] tracking-[0.05em] text-[#B83A3A]">{refineError[outfit.outfit_id].toUpperCase()}</p>
+                    )}
                   </>
                 )}
               </div>
