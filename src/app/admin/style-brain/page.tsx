@@ -1,4 +1,5 @@
 import { loadStyleModel, loadHouseStyle, loadDecisionStats, loadCatalogueBalance, loadTasteSpread, loadRecentSwaps, loadSiteTasteProfile } from '@/lib/style-brain-store'
+import { buildHouseStyle } from '@/lib/style-brain'
 import RecomputeButton from './RecomputeButton'
 import TasteRadar from '@/components/admin/TasteRadar'
 
@@ -90,7 +91,7 @@ export default async function StyleBrainPage() {
             high and low — appears here, and starts steering the composer.
           </p>
         ) : (
-          <MarkdownLite md={house.md} />
+          <MarkdownLite md={buildHouseStyle(model)} />
         )}
       </div>
 
@@ -103,6 +104,39 @@ export default async function StyleBrainPage() {
             {taste.hasPeople ? ' dashed = what visitors actually view (weighted by clicks). Where the dashed shape bulges past the gold, demand is pulling toward a style you have less of.' : ' the view-weighted “what people lean to” shape appears once outfits get views.'}
           </p>
           <TasteRadar axes={taste.axes} hasPeople={taste.hasPeople} />
+
+          {/* Distribution: % of outfits low / mid / high on each axis */}
+          <div className="mt-8 border-t border-[#F2F2F2] pt-6">
+            <div className="flex items-baseline justify-between mb-1">
+              <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B]">TASTE DISTRIBUTION</p>
+              <p className="text-[8px] tracking-[0.072em] text-[#A8A8A4]">LOW · MID · HIGH SCORE</p>
+            </div>
+            <p className="text-[8px] tracking-[0.063em] text-[#A8A8A4] mb-4">
+              Share of your {taste.n} live outfits scoring low, mid or high on each style axis — e.g. how much of the
+              collection is genuinely dressy vs casual.
+            </p>
+            <div className="space-y-2.5">
+              {taste.axes.map((a) => {
+                const lo = Math.round(a.low * 100), mid = Math.round(a.mid * 100), hi = Math.round(a.high * 100)
+                return (
+                  <div key={a.label} className="flex items-center gap-3">
+                    <span className="text-[10px] tracking-[0.045em] text-[#4A4E57] w-[150px] flex-shrink-0 truncate">{a.label}</span>
+                    <div className="flex-1 h-[14px] rounded-full overflow-hidden flex bg-[#F2F2F2]" title={`low ${lo}% · mid ${mid}% · high ${hi}%`}>
+                      {a.low > 0 && <div className="h-full bg-[#E4E1DA] flex items-center justify-center" style={{ width: `${a.low * 100}%` }}>{lo >= 12 && <span className="text-[7px] text-[#8A8A86]">{lo}%</span>}</div>}
+                      {a.mid > 0 && <div className="h-full bg-[#D8C39A] flex items-center justify-center" style={{ width: `${a.mid * 100}%` }}>{mid >= 12 && <span className="text-[7px] text-[#6B5A34]">{mid}%</span>}</div>}
+                      {a.high > 0 && <div className="h-full bg-[#B7924F] flex items-center justify-center" style={{ width: `${a.high * 100}%` }}>{hi >= 12 && <span className="text-[7px] text-white">{hi}%</span>}</div>}
+                    </div>
+                    <span className="text-[9px] tracking-[0.045em] text-[#4A4E57] w-[42px] text-right flex-shrink-0">{hi}% hi</span>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="flex items-center gap-4 mt-4">
+              <span className="flex items-center gap-1.5 text-[8px] tracking-[0.08em] text-[#A8A8A4]"><span className="w-3 h-[8px] bg-[#E4E1DA] rounded-sm inline-block" /> LOW</span>
+              <span className="flex items-center gap-1.5 text-[8px] tracking-[0.08em] text-[#A8A8A4]"><span className="w-3 h-[8px] bg-[#D8C39A] rounded-sm inline-block" /> MID</span>
+              <span className="flex items-center gap-1.5 text-[8px] tracking-[0.08em] text-[#A8A8A4]"><span className="w-3 h-[8px] bg-[#B7924F] rounded-sm inline-block" /> HIGH</span>
+            </div>
+          </div>
         </div>
       )}
 

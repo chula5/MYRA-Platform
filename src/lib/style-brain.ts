@@ -188,6 +188,25 @@ export function buildHouseStyle(model: StyleModel): string {
     L.push('')
   }
 
+  // Most-approved colours + piece types (what shows up in looks you keep).
+  const topSingles = (prefix: string) => Object.entries(model.singles)
+    .filter(([k]) => k.startsWith(prefix))
+    .map(([k, v]) => ({ name: prettySingleValue(k), a: v[0] }))
+    .sort((x, y) => y.a - x.a)
+    .slice(0, 10)
+  const colours = topSingles('colour:')
+  if (colours.length) {
+    L.push('## Colours in your outfits')
+    colours.forEach((c) => L.push(`- **${c.name}** — ${Math.round(c.a)} approvals`))
+    L.push('')
+  }
+  const types = topSingles('type:')
+  if (types.length) {
+    L.push('## Pieces you build around')
+    types.forEach((t) => L.push(`- **${t.name.replace(/_/g, ' ')}** — ${Math.round(t.a)} approvals`))
+    L.push('')
+  }
+
   const brandPairs = topByAffinity(model.pairs, 'brand:', 2, 1, 10)
   if (brandPairs.length) {
     L.push('## Brand pairings that work')

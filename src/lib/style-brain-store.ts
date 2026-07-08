@@ -71,7 +71,15 @@ const TASTE_AXES: { label: string; dims: number[] }[] = [
   { label: 'LAYERED', dims: [2, 25] },
   { label: 'STATEMENT ACCESS.', dims: [28, 27] },
 ]
-export interface TasteAxis { label: string; catalogue: number; people: number }
+export interface TasteAxis {
+  label: string
+  catalogue: number
+  people: number
+  // Share of live outfits scoring low (<0.33) / mid / high (≥0.66) on this axis.
+  low: number
+  mid: number
+  high: number
+}
 export async function loadSiteTasteProfile(): Promise<{ axes: TasteAxis[]; n: number; hasPeople: boolean } | null> {
   try {
     const admin = createAdminClient()
@@ -103,8 +111,28 @@ export async function loadSiteTasteProfile(): Promise<{ axes: TasteAxis[]; n: nu
     const hasPeople = peoW > 0
     const peoVec = hasPeople ? peoAcc.map((x) => x / peoW) : catVec
     const axisVal = (vec: number[], dims: number[]) => dims.reduce((s, d) => s + (vec[d] ?? 0), 0) / dims.length
-    const axes = TASTE_AXES.map((a) => ({ label: a.label, catalogue: axisVal(catVec, a.dims), people: axisVal(peoVec, a.dims) }))
-    return { axes, n: outfits.length, hasPeople }
+
+    // Per-axis distribution: what share of individual outfits land low/mid/high.
+    const dist = TASTE_AXES.map(() => ({ low: 0, mid: 0, high: 0 }))
+    for (const o of outfits) {
+      const v = buildOutfitVector(o)
+      TASTE_AXES.forEach((a, ai) => {
+        const val = axisVal(v, a.dims)
+        if (val < 0.33) dist[ai].low++
+        else if (val < 0.66) dist[ai].mid++
+        else dist[ai].high++
+      })
+    }
+    const n = outfits.length
+    const axes = TASTE_AXES.map((a, ai) => ({
+      label: a.label,
+      catalogue: axisVal(catVec, a.dims),
+      people: axisVal(peoVec, a.dims),
+      low: dist[ai].low / n,
+      mid: dist[ai].mid / n,
+      high: dist[ai].high / n,
+    }))
+    return { axes, n, hasPeople }
   } catch {
     return null
   }
