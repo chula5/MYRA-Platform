@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { thumbUrl } from '@/lib/image-utils'
 import { createAdminClient } from '@/lib/supabase-server'
 import DiscoveryActions from './DiscoveryActions'
 import BulkDiscoverButton from './BulkDiscoverButton'
@@ -85,7 +86,7 @@ export default async function DiscoveriesPage({ searchParams }: PageProps) {
               <div className="aspect-[3/4] bg-[#F2F2F0] overflow-hidden">
                 {d.image_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={d.image_url} alt={d.title} className="w-full h-full object-cover" />
+                  <img src={thumbUrl(d.image_url, 600)} alt={d.title} className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
                     <span className="text-[9px] tracking-[0.068em] text-[#A8A8A4]">NO IMAGE</span>

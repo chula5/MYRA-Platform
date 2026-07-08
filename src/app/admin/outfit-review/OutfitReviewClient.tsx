@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { thumbUrl } from '@/lib/image-utils'
 import {
   composeForReview,
   getReviewSwapOptions,
@@ -223,7 +224,7 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
       <div className="flex items-center gap-4 p-4 border-b border-[#E2E0DB] bg-[#FAFAF8]">
         <div className="w-16 h-20 flex-shrink-0 rounded-[8px] overflow-hidden bg-[#F2F2F0]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={anchor.image_url} alt="" className="w-full h-full object-cover" />
+          <img src={thumbUrl(anchor.image_url, 600)} alt="" className="w-full h-full object-cover" />
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-[9px] tracking-[0.18em] text-[#A8A8A4] mb-0.5">ANCHOR · {anchor.item_type.replace(/_/g, ' ').toUpperCase()}</p>
@@ -265,7 +266,7 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
                   <div className="relative">
                     <div className="aspect-[3/4] rounded-[6px] overflow-hidden bg-[#F2F2F0]">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={anchor.image_url} alt="" className="w-full h-full object-cover" />
+                      <img src={thumbUrl(anchor.image_url, 600)} alt="" className="w-full h-full object-cover" />
                     </div>
                     <span className="absolute top-1 left-1 bg-[#0A0A0A] text-white text-[7px] tracking-[0.10em] px-1 py-0.5 rounded">ANCHOR</span>
                     {anchor.price && <p className="text-[7px] tracking-[0.04em] text-[#4A4E57] mt-0.5">{anchor.price}</p>}
@@ -275,7 +276,7 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
                     <div key={`${item.item_id}-${itemIdx}`} className="relative group">
                       <div className="aspect-[3/4] rounded-[6px] overflow-hidden bg-[#F2F2F0]">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={item.image_url} alt="" className="w-full h-full object-cover" />
+                        <img src={thumbUrl(item.image_url, 600)} alt="" className="w-full h-full object-cover" />
                         {editable && (
                           <button
                             onClick={() => openSwap(idx, itemIdx, item.slot)}
@@ -357,7 +358,7 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
                   <button key={opt.item_id} onClick={() => performSwap(opt)} className="group text-left">
                     <div className="aspect-[3/4] rounded-[6px] overflow-hidden bg-[#F2F2F0]">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={opt.image_url} alt="" className="w-full h-full object-cover group-hover:opacity-90" />
+                      <img src={thumbUrl(opt.image_url, 600)} alt="" className="w-full h-full object-cover group-hover:opacity-90" />
                     </div>
                     <p className="text-[8px] tracking-[0.08em] text-[#6B6B6B] mt-1 truncate">{(opt.brand_name ?? '').toUpperCase()}</p>
                     <p className="text-[9px] tracking-[0.04em] text-[#4A4E57] truncate">{opt.product_name}</p>

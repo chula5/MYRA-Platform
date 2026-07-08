@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { thumbUrl } from '@/lib/image-utils'
 import { useRouter } from 'next/navigation'
 import type { OutfitWithItems } from '@/types/database'
 import ScoreInput from '@/components/admin/ScoreInput'
@@ -1260,7 +1261,7 @@ INSTRUCTIONS:
                               </div>
                               {oi.item?.image_url ? (
                                 <img
-                                  src={oi.item.image_url}
+                                  src={thumbUrl(oi.item.image_url, 600)}
                                   alt={oi.item.product_name}
                                   className="w-[64px] h-[80px] object-cover border border-[#E2E0DB] shrink-0 bg-white"
                                 />
@@ -1789,7 +1790,7 @@ INSTRUCTIONS:
                         <div className="aspect-square bg-[#F8F8F6] overflow-hidden">
                           {it.image_url ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={it.image_url} alt={it.product_name} className="w-full h-full object-cover" />
+                            <img src={thumbUrl(it.image_url, 600)} alt={it.product_name} className="w-full h-full object-cover" />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-[9px] tracking-[0.068em] text-[#A8A8A4]">NO IMAGE</div>
                           )}

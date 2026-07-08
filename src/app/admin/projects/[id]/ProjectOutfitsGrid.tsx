@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import StatusBadge from '@/components/admin/StatusBadge'
 import TagChips from '@/components/admin/TagChips'
+import { thumbUrl } from '@/lib/image-utils'
 import { setOutfitsStatus } from '@/app/admin/projects/actions'
 
 type OutfitLite = {
@@ -146,7 +147,7 @@ export default function ProjectOutfitsGrid({
               <div className="bg-[#F2F2F0] overflow-hidden relative" style={{ aspectRatio: '3/4' }}>
                 {outfit.image_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={outfit.image_url} alt={outfit.aesthetic_label} className="w-full h-full object-cover" />
+                  <img src={thumbUrl(outfit.image_url, 600)} alt={outfit.aesthetic_label} loading="lazy" className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
                     <span className="text-[9px] tracking-[0.068em] text-[#A8A8A4]">NO IMAGE</span>

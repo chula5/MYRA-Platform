@@ -1,4 +1,24 @@
 /**
+ * Lightweight thumbnail transform for Cloudinary URLs: modern format (f_auto),
+ * auto quality (q_auto) and downscale-only to `width` (c_limit — preserves the
+ * full-length aspect, no cropping). Massively cuts payload for grid thumbnails.
+ * Non-Cloudinary URLs (and already-transformed ones) pass through unchanged.
+ */
+export function thumbUrl(url: string, width = 600): string {
+  if (!url) return url
+  try {
+    if (!url.includes('res.cloudinary.com')) return url
+    const i = url.indexOf('/upload/')
+    if (i === -1) return url
+    const after = url.slice(i + 8)
+    if (/(^|\/)(f_auto|q_auto|w_\d)/.test(after.split('/')[0])) return url // already transformed
+    return `${url.slice(0, i + 8)}f_auto,q_auto,w_${width},c_limit/${after}`
+  } catch {
+    return url
+  }
+}
+
+/**
  * Transforms a Cloudinary image URL to use AI subject-aware cropping.
  * Uses Cloudinary's `g_auto:subject` gravity which detects the main subject
  * (e.g. a bag, shoe, garment) and crops tightly around it.

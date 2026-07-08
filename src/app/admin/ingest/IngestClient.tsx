@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { thumbUrl } from '@/lib/image-utils'
 import {
   batchAnalyseUrls,
   bulkApproveCandidates,
@@ -252,7 +253,7 @@ export default function IngestClient() {
                       <span className="text-[8px] tracking-[0.068em] text-[#A8A8A4]">…</span>
                     </div>
                   ) : q.image_url ? (
-                    <img src={q.image_url} alt={q.parsed?.product_name ?? ''} className="w-full h-full object-cover" />
+                    <img src={thumbUrl(q.image_url, 600)} alt={q.parsed?.product_name ?? ''} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       <span className="text-[8px] tracking-[0.068em] text-[#A8A8A4]">NO IMG</span>

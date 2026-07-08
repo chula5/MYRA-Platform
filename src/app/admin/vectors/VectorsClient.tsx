@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { thumbUrl } from '@/lib/image-utils'
 import type { OutfitWithItems } from '@/types/database'
 import { buildOutfitVector, cosine } from '@/lib/taste-vector'
 import { rescoreOutfitFromImage } from './actions'
@@ -150,7 +151,7 @@ export default function VectorsClient({
             <div>
               <div className="aspect-[3/4] rounded-[10px] overflow-hidden bg-[#EDEDED] ring-2 ring-[#C4A882]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={selectedOutfit.image_url || '/placeholder-outfit.jpg'} alt="" className="w-full h-full object-cover" />
+                <img src={thumbUrl(selectedOutfit.image_url || '/placeholder-outfit.jpg', 600)} alt="" className="w-full h-full object-cover" />
               </div>
               <p className="text-[8px] tracking-[0.14em] text-[#C4A882] mt-1.5">THIS OUTFIT</p>
               <Scores o={selectedOutfit as any} />
@@ -159,7 +160,7 @@ export default function VectorsClient({
               <button key={outfit.outfit_id} onClick={() => setSelected(outfit.outfit_id)} className="text-left group">
                 <div className="aspect-[3/4] rounded-[10px] overflow-hidden bg-[#EDEDED]">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={outfit.image_url || '/placeholder-outfit.jpg'} alt="" className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500" />
+                  <img src={thumbUrl(outfit.image_url || '/placeholder-outfit.jpg', 600)} alt="" className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500" />
                 </div>
                 <p className="text-[9px] tracking-[0.1em] text-[#4A4E57] mt-1.5">{(score * 100).toFixed(1)}% MATCH</p>
                 <Scores o={outfit as any} />
@@ -172,7 +173,7 @@ export default function VectorsClient({
                 <button key={outfit.outfit_id} onClick={() => setSelected(outfit.outfit_id)} className="text-left group">
                   <div className="aspect-[3/4] rounded-[10px] overflow-hidden bg-[#EDEDED]">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={outfit.image_url || '/placeholder-outfit.jpg'} alt="" className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500" />
+                    <img src={thumbUrl(outfit.image_url || '/placeholder-outfit.jpg', 600)} alt="" className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500" />
                   </div>
                   <p className="text-[9px] tracking-[0.1em] text-[#4A4E57] mt-1.5">{(score * 100).toFixed(1)}% MATCH</p>
                   <Scores o={outfit as any} />
@@ -193,7 +194,7 @@ export default function VectorsClient({
           >
             <div className="relative aspect-[3/4] rounded-[10px] overflow-hidden bg-[#EDEDED]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={o.image_url || '/placeholder-outfit.jpg'} alt="" className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500" />
+              <img src={thumbUrl(o.image_url || '/placeholder-outfit.jpg', 600)} alt="" className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500" />
               {isUnscored(o) && (
                 <span className="absolute top-1.5 left-1.5 bg-[#B83A3A] text-white text-[7px] tracking-[0.1em] px-1.5 py-0.5 rounded">UNSCORED</span>
               )}

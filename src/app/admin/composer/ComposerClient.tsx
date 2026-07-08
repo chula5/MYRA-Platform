@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition, useEffect, useRef } from 'react'
+import { thumbUrl } from '@/lib/image-utils'
 import {
   composeForAnchor,
   searchAnchorItems,
@@ -320,7 +321,7 @@ export default function ComposerClient({
       <div className="bg-white border border-[#E2E0DB] mb-8 p-6 flex items-start gap-6">
         <div className="w-32 h-40 flex-shrink-0 bg-[#F2F2F0] overflow-hidden">
           {anchor ? (
-            <img src={anchor.image_url} alt={anchor.product_name} className="w-full h-full object-cover" />
+            <img src={thumbUrl(anchor.image_url, 600)} alt={anchor.product_name} className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
               <span className="text-[9px] tracking-[0.09em] text-[#A8A8A4]">NO ANCHOR</span>
@@ -411,7 +412,7 @@ export default function ComposerClient({
               >
                 <div className="aspect-[3/4] bg-[#F2F2F0] overflow-hidden mb-2 group-hover:opacity-85 transition-opacity">
                   {item.image_url ? (
-                    <img src={item.image_url} alt={item.product_name} className="w-full h-full object-cover" />
+                    <img src={thumbUrl(item.image_url, 600)} alt={item.product_name} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       <span className="text-[9px] tracking-[0.068em] text-[#A8A8A4]">NO IMAGE</span>
@@ -493,7 +494,7 @@ export default function ComposerClient({
                     {anchor && (
                       <div className="relative">
                         <div className="aspect-[3/4] bg-[#F2F2F0] overflow-hidden">
-                          <img src={anchor.image_url} alt={anchor.product_name} className="w-full h-full object-cover" />
+                          <img src={thumbUrl(anchor.image_url, 600)} alt={anchor.product_name} className="w-full h-full object-cover" />
                         </div>
                         <div className="absolute top-1 left-1 bg-[#0A0A0A] text-white px-1.5 py-0.5 text-[8px] tracking-[0.068em]">
                           ANCHOR
@@ -509,7 +510,7 @@ export default function ComposerClient({
                         <div key={`${item.item_id}-${itemIdx}`} className="relative group">
                           <div className="aspect-[3/4] bg-[#F2F2F0] overflow-hidden">
                             {item.image_url ? (
-                              <img src={item.image_url} alt={item.product_name} className="w-full h-full object-cover" />
+                              <img src={thumbUrl(item.image_url, 600)} alt={item.product_name} className="w-full h-full object-cover" />
                             ) : (
                               <div className="w-full h-full" />
                             )}
@@ -673,7 +674,7 @@ export default function ComposerClient({
                   >
                     <div className="aspect-[3/4] bg-[#F2F2F0] overflow-hidden mb-2 group-hover:opacity-85 transition-opacity">
                       {opt.image_url ? (
-                        <img src={opt.image_url} alt={opt.product_name} className="w-full h-full object-cover" />
+                        <img src={thumbUrl(opt.image_url, 600)} alt={opt.product_name} className="w-full h-full object-cover" />
                       ) : (
                         <div className="w-full h-full" />
                       )}

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { thumbUrl } from '@/lib/image-utils'
 import { ingestAndComposeUrl, type IngestComposeResult } from './actions'
 import { approveCandidate, rescoreCandidate, recordSkipDecision, recordSwap } from '@/app/admin/composer/actions'
 import { getReviewSwapOptions, getReviewAddOptions, type ReviewItem } from '@/app/admin/outfit-review/actions'
@@ -155,7 +156,7 @@ export default function IngestComposeClient() {
             <div className="flex items-center gap-4 p-4 border-b border-[#E2E0DB] bg-[#FAFAF8]">
               {block.item?.image_url
                 // eslint-disable-next-line @next/next/no-img-element
-                ? <img src={block.item.image_url} alt="" className="w-16 h-20 flex-shrink-0 rounded-[8px] object-cover bg-[#F2F2F0]" />
+                ? <img src={thumbUrl(block.item.image_url, 600)} alt="" className="w-16 h-20 flex-shrink-0 rounded-[8px] object-cover bg-[#F2F2F0]" />
                 : <div className="w-16 h-20 flex-shrink-0 rounded-[8px] bg-[#F2F2F0]" />}
               <div className="flex-1 min-w-0">
                 <p className="text-[9px] tracking-[0.18em] text-[#A8A8A4] mb-0.5">NEW ITEM{block.item?.item_type ? ` · ${block.item.item_type.replace(/_/g, ' ').toUpperCase()}` : ''}</p>
@@ -186,7 +187,7 @@ export default function IngestComposeClient() {
                         <div className="relative">
                           <div className="aspect-[3/4] rounded-[6px] overflow-hidden bg-[#F2F2F0]">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            {block.item?.image_url && <img src={block.item.image_url} alt="" className="w-full h-full object-cover" />}
+                            {block.item?.image_url && <img src={thumbUrl(block.item.image_url, 600)} alt="" className="w-full h-full object-cover" />}
                           </div>
                           <span className="absolute top-1 left-1 bg-[#0A0A0A] text-white text-[7px] tracking-[0.10em] px-1 py-0.5 rounded">NEW</span>
                         </div>
@@ -194,7 +195,7 @@ export default function IngestComposeClient() {
                           <div key={`${item.item_id}-${k}`} className="relative group">
                             <div className="aspect-[3/4] rounded-[6px] overflow-hidden bg-[#F2F2F0]">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={item.image_url} alt="" className="w-full h-full object-cover" />
+                              <img src={thumbUrl(item.image_url, 600)} alt="" className="w-full h-full object-cover" />
                               {editable && (
                                 <button onClick={() => openSwap(bi, ci, k, item.slot)} className="absolute inset-0 bg-black/0 group-hover:bg-black/45 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                   <span className="bg-white text-[#0A0A0A] text-[8px] tracking-[0.12em] px-2 py-1 rounded">SWAP</span>
@@ -260,7 +261,7 @@ export default function IngestComposeClient() {
                   <button key={opt.item_id} onClick={() => performSwap(opt)} className="group text-left">
                     <div className="aspect-[3/4] rounded-[6px] overflow-hidden bg-[#F2F2F0]">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={opt.image_url} alt="" className="w-full h-full object-cover group-hover:opacity-90" />
+                      <img src={thumbUrl(opt.image_url, 600)} alt="" className="w-full h-full object-cover group-hover:opacity-90" />
                     </div>
                     <p className="text-[8px] tracking-[0.08em] text-[#6B6B6B] mt-1 truncate">{(opt.brand_name ?? '').toUpperCase()}</p>
                     <p className="text-[9px] tracking-[0.04em] text-[#4A4E57] truncate">{opt.product_name}</p>
