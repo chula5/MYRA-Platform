@@ -16,8 +16,20 @@ interface PrefRow {
 
 const GROUP_NAME = new Map(BRAND_GROUPS.map((g) => [g.key, g.name]))
 
-export default async function SignupPreferencesPage() {
+const RETAILER_WINDOWS: Record<string, { label: string; days: number | null }> = {
+  '7d': { label: '7 DAYS', days: 7 },
+  '30d': { label: '30 DAYS', days: 30 },
+  all: { label: 'ALL TIME', days: null },
+}
+
+export default async function SignupPreferencesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ traffic?: string }>
+}) {
   const admin = createAdminClient()
+  const trafficKey = (await searchParams).traffic ?? '30d'
+  const trafficWin = RETAILER_WINDOWS[trafficKey] ?? RETAILER_WINDOWS['30d']
 
   const { data, error } = await admin
     .from('signup_preference' as any)
@@ -102,18 +114,32 @@ export default async function SignupPreferencesPage() {
   }
   const totalClicks = [...clickCounts.values()].reduce((s, n) => s + n, 0)
 
-  // ── Traffic driven to each retailer (aggregate shop-throughs by domain) ──
+  // ── Traffic driven to each retailer (shop-throughs by domain, windowed) ──
+  const windowClicks = new Map<string, number>()
+  let windowTotal = 0
+  if (itemClicksReady) {
+    let q = admin.from('item_click' as any).select('item_id, clicked_at').limit(50000)
+    if (trafficWin.days != null) {
+      const since = new Date(); since.setDate(since.getDate() - trafficWin.days)
+      q = q.gte('clicked_at', since.toISOString())
+    }
+    const { data: wc } = await q
+    for (const c of (wc ?? []) as { item_id: string }[]) {
+      windowClicks.set(c.item_id, (windowClicks.get(c.item_id) ?? 0) + 1)
+      windowTotal++
+    }
+  }
   const retailerClicks = new Map<string, number>()
-  if (clickCounts.size > 0) {
+  if (windowClicks.size > 0) {
     const { data: urls } = await admin
       .from('item')
       .select('item_id, retailer_url')
-      .in('item_id', [...clickCounts.keys()].slice(0, 1000))
+      .in('item_id', [...windowClicks.keys()].slice(0, 1000))
     for (const it of (urls ?? []) as any[]) {
       if (!it.retailer_url) continue
       let host = ''
       try { host = new URL(it.retailer_url).hostname.replace(/^www\./, '') } catch { continue }
-      if (host) retailerClicks.set(host, (retailerClicks.get(host) ?? 0) + (clickCounts.get(it.item_id) ?? 0))
+      if (host) retailerClicks.set(host, (retailerClicks.get(host) ?? 0) + (windowClicks.get(it.item_id) ?? 0))
     }
   }
   const topRetailers = [...retailerClicks.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20)
@@ -415,13 +441,28 @@ ALTER TABLE public.signup_preference ENABLE ROW LEVEL SECURITY;`}</pre>
       )}
 
       {/* ── Traffic driven to each retailer ── */}
-      {itemClicksReady && topRetailers.length > 0 && (
+      {itemClicksReady && (
         <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6 mb-8">
-          <div className="flex items-baseline justify-between mb-1">
+          <div className="flex items-baseline justify-between mb-1 gap-4 flex-wrap">
             <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B]">TRAFFIC DRIVEN · BY RETAILER</p>
-            <p className="text-[9px] tracking-[0.072em] text-[#A8A8A4]">{totalClicks.toLocaleString()} CLICK-OUTS</p>
+            <div className="flex items-center gap-2">
+              {Object.entries(RETAILER_WINDOWS).map(([key, w]) => (
+                <a
+                  key={key}
+                  href={`/admin/signup-preferences?traffic=${key}`}
+                  className={`text-[9px] tracking-[0.09em] px-2.5 py-1 rounded-full border transition-colors ${key === trafficKey ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'text-[#6B6B6B] border-[#E2E0DB] hover:border-[#0A0A0A]'}`}
+                >
+                  {w.label}
+                </a>
+              ))}
+            </div>
           </div>
-          <p className="text-[8px] tracking-[0.063em] text-[#A8A8A4] mb-4">SHOP-THROUGHS SENT TO EACH RETAILER — YOUR PROOF OF TRAFFIC</p>
+          <p className="text-[8px] tracking-[0.063em] text-[#A8A8A4] mb-4">
+            SHOP-THROUGHS SENT TO EACH RETAILER · {trafficWin.label} · {windowTotal.toLocaleString()} CLICK-OUT{windowTotal === 1 ? '' : 'S'}
+          </p>
+          {topRetailers.length === 0 ? (
+            <p className="text-[10px] tracking-[0.072em] text-[#A8A8A4] py-4 text-center">NO CLICK-OUTS IN THIS PERIOD.</p>
+          ) : (
           <div className="space-y-2.5">
             {topRetailers.map(([domain, count]) => (
               <div key={domain} className="flex items-center gap-3">
@@ -433,6 +474,7 @@ ALTER TABLE public.signup_preference ENABLE ROW LEVEL SECURITY;`}</pre>
               </div>
             ))}
           </div>
+          )}
         </div>
       )}
 
