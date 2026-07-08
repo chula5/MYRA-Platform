@@ -4,8 +4,6 @@ import { useEffect, useState } from 'react'
 import { thumbUrl } from '@/lib/image-utils'
 import {
   composeForReview,
-  getReviewSwapOptions,
-  getReviewAddOptions,
   getReviewQueue,
   type ReviewAnchor,
   type ReviewCandidate,
@@ -14,6 +12,33 @@ import {
 import { approveCandidate, rescoreCandidate, recordSkipDecision, recordSwap } from '@/app/admin/composer/actions'
 import { generateHiggsfieldShootForOutfit } from '@/app/admin/projects/higgsfield-actions'
 import type { Slot } from '@/lib/composer'
+
+// Swap/add item search via a ROUTE HANDLER rather than a server action. Server
+// actions run sequentially in Next, so a long-running Higgsfield shoot (kicked
+// off by YES) would otherwise freeze the search. A plain fetch runs concurrently.
+async function fetchReviewOptions(params: {
+  mode: 'swap' | 'add'
+  anchor: string
+  slot?: string
+  present?: string[]
+  exclude: string[]
+  q: string
+}): Promise<{ options: ReviewItem[]; missingSlots?: string[] }> {
+  const sp = new URLSearchParams()
+  sp.set('mode', params.mode)
+  sp.set('anchor', params.anchor)
+  sp.set('q', params.q)
+  sp.set('exclude', params.exclude.join(','))
+  if (params.slot) sp.set('slot', params.slot)
+  if (params.present) sp.set('present', params.present.join(','))
+  try {
+    const r = await fetch(`/api/admin/review-options?${sp.toString()}`, { cache: 'no-store' })
+    if (!r.ok) return { options: [] }
+    return await r.json()
+  } catch {
+    return { options: [] }
+  }
+}
 
 const SLOT_LABEL: Record<string, string> = {
   outerwear: 'OUTERWEAR', top: 'TOP', bottom: 'BOTTOM', dress: 'DRESS',
@@ -160,7 +185,7 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
     setSwapQuery('')
     setSwapLoading(true)
     const exclude = [anchor.item_id, ...cands[candIdx].items.map((i) => i.item_id)]
-    const res = await getReviewSwapOptions(anchor.item_id, slot, exclude, '')
+    const res = await fetchReviewOptions({ mode: 'swap', anchor: anchor.item_id, slot, exclude, q: '' })
     setSwapOptions(res.options)
     setSwapLoading(false)
   }
@@ -173,7 +198,7 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
     setSwapLoading(true)
     const exclude = [anchor.item_id, ...cands[candIdx].items.map((i) => i.item_id)]
     const present = cands[candIdx].items.map((i) => i.slot)
-    const res = await getReviewAddOptions(anchor.item_id, present, exclude, '')
+    const res = await fetchReviewOptions({ mode: 'add', anchor: anchor.item_id, present, exclude, q: '' })
     setSwapOptions(res.options)
     setSwapLoading(false)
   }
@@ -185,8 +210,8 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
     const exclude = [anchor.item_id, ...cands[swap.candIdx].items.map((i) => i.item_id)]
     const res =
       swap.mode === 'add'
-        ? await getReviewAddOptions(anchor.item_id, cands[swap.candIdx].items.map((i) => i.slot), exclude, q)
-        : await getReviewSwapOptions(anchor.item_id, swap.slot, exclude, q)
+        ? await fetchReviewOptions({ mode: 'add', anchor: anchor.item_id, present: cands[swap.candIdx].items.map((i) => i.slot), exclude, q })
+        : await fetchReviewOptions({ mode: 'swap', anchor: anchor.item_id, slot: swap.slot, exclude, q })
     setSwapOptions(res.options)
     setSwapLoading(false)
   }
