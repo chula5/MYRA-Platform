@@ -45,11 +45,13 @@ export async function loadDecisionStats(): Promise<DecisionStats | null> {
     const admin = createAdminClient()
     const { data, error } = await admin
       .from('style_decision' as any)
-      .select('decision, base_score, created_at')
+      .select('decision, source, base_score, created_at')
       .order('created_at', { ascending: true })
       .limit(100000)
     if (error || !data) return null
-    const rows = data as { decision: string; base_score: number | null }[]
+    // Exclude swap-rejects (source='swap') — they train the model but aren't a
+    // deliberate approve/skip, so they shouldn't move the approval-rate metric.
+    const rows = (data as { decision: string; source: string | null; base_score: number | null }[]).filter((r) => r.source !== 'swap')
     const total = rows.length
     const approves = rows.filter((r) => r.decision === 'approve').length
     const rateOf = (arr: typeof rows) => (arr.length ? arr.filter((r) => r.decision === 'approve').length / arr.length : 0)
@@ -97,7 +99,7 @@ async function saveStyleModel(model: StyleModel): Promise<void> {
 export async function recordStyleDecision(opts: {
   items: FeatureItem[]
   decision: 'approve' | 'skip'
-  source: 'composer' | 'review'
+  source: 'composer' | 'review' | 'swap'
   anchorItemId?: string | null
   itemIds?: string[]
   baseScore?: number | null

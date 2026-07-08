@@ -193,6 +193,8 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
   async function performSwap(opt: ReviewItem) {
     if (!swap) return
     const { candIdx, itemIdx, mode } = swap
+    // Swapping out a piece is a "not this one here" signal for the Style Brain.
+    if (mode === 'swap' && cands[candIdx].items[itemIdx]) void recordSkipDecision(anchor.item_id, [cands[candIdx].items[itemIdx].item_id], 'swap')
     // Compute the new item list (append in add mode, replace in swap mode).
     const items =
       mode === 'add'

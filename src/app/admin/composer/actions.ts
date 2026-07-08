@@ -415,7 +415,7 @@ export async function approveCandidate(
 export async function recordSkipDecision(
   anchorItemId: string,
   itemIds: string[],
-  source: 'composer' | 'review' = 'review',
+  source: 'composer' | 'review' | 'swap' = 'review',
   score?: number,
 ): Promise<{ ok: true }> {
   try {
