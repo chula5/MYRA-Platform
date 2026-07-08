@@ -2,7 +2,8 @@
 // the composer and the admin page can both call them. Uses the admin client.
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase-server'
-import { cosine } from '@/lib/taste-vector'
+import { cosine, buildOutfitVector } from '@/lib/taste-vector'
+import type { OutfitWithItems } from '@/types/database'
 import {
   type StyleModel,
   type FeatureItem,
@@ -49,6 +50,61 @@ export async function loadRecentSwaps(limit = 20): Promise<{ recent: SwapRecord[
       changed: Array.isArray(r.swap.changed) ? r.swap.changed : [], different: !!r.swap.different, at: r.at,
     }))
     return { recent, total: all.length, differentCount: all.filter((r) => r.swap.different).length }
+  } catch {
+    return null
+  }
+}
+
+// ── Site taste profile (radar) ───────────────────────────────────────────────
+// The 34-dim outfit vector grouped into interpretable axes. We show two shapes:
+// CATALOGUE = the average of every live outfit (what you've built), and PEOPLE =
+// the view-weighted average (what visitors gravitate to). Comparing the two
+// shows where demand pulls away from supply.
+const TASTE_AXES: { label: string; dims: number[] }[] = [
+  { label: 'STRUCTURED', dims: [0, 4] },
+  { label: 'VOLUME', dims: [6] },
+  { label: 'PRINT / SURFACE', dims: [1, 5] },
+  { label: 'DRESSY', dims: [3, 30, 33, 29] },
+  { label: 'ELEVATED BRANDS', dims: [9, 11, 12, 13] },
+  { label: 'NEUTRAL PALETTE', dims: [14] },
+  { label: 'BOLD COLOUR', dims: [20, 21] },
+  { label: 'LAYERED', dims: [2, 25] },
+  { label: 'STATEMENT ACCESS.', dims: [28, 27] },
+]
+export interface TasteAxis { label: string; catalogue: number; people: number }
+export async function loadSiteTasteProfile(): Promise<{ axes: TasteAxis[]; n: number; hasPeople: boolean } | null> {
+  try {
+    const admin = createAdminClient()
+    const { data, error } = await admin
+      .from('outfit' as any)
+      .select('*, outfit_item(*, item(*, brand(*)))')
+      .eq('status', 'live')
+      .limit(2000)
+    if (error || !data) return null
+    const outfits = data as unknown as OutfitWithItems[]
+    if (!outfits.length) return { axes: [], n: 0, hasPeople: false }
+
+    // View weights (what people gravitate to).
+    const viewC = new Map<string, number>()
+    const { data: ev } = await admin.from('landing_event' as any).select('path').eq('event_type', 'outfit_view').limit(100000)
+    for (const e of (ev ?? []) as { path: string }[]) viewC.set(e.path, (viewC.get(e.path) ?? 0) + 1)
+
+    const DIM = 34
+    const catAcc = new Array(DIM).fill(0)
+    const peoAcc = new Array(DIM).fill(0)
+    let peoW = 0
+    for (const o of outfits) {
+      const v = buildOutfitVector(o)
+      for (let i = 0; i < DIM; i++) catAcc[i] += v[i] ?? 0
+      const w = viewC.get((o as any).outfit_id) ?? 0
+      if (w > 0) { for (let i = 0; i < DIM; i++) peoAcc[i] += (v[i] ?? 0) * w; peoW += w }
+    }
+    const catVec = catAcc.map((x) => x / outfits.length)
+    const hasPeople = peoW > 0
+    const peoVec = hasPeople ? peoAcc.map((x) => x / peoW) : catVec
+    const axisVal = (vec: number[], dims: number[]) => dims.reduce((s, d) => s + (vec[d] ?? 0), 0) / dims.length
+    const axes = TASTE_AXES.map((a) => ({ label: a.label, catalogue: axisVal(catVec, a.dims), people: axisVal(peoVec, a.dims) }))
+    return { axes, n: outfits.length, hasPeople }
   } catch {
     return null
   }

@@ -1,11 +1,12 @@
-import { loadStyleModel, loadHouseStyle, loadDecisionStats, loadCatalogueBalance, loadTasteSpread, loadRecentSwaps } from '@/lib/style-brain-store'
+import { loadStyleModel, loadHouseStyle, loadDecisionStats, loadCatalogueBalance, loadTasteSpread, loadRecentSwaps, loadSiteTasteProfile } from '@/lib/style-brain-store'
 import RecomputeButton from './RecomputeButton'
+import TasteRadar from '@/components/admin/TasteRadar'
 
 export const dynamic = 'force-dynamic'
 
 export default async function StyleBrainPage() {
-  const [model, house, stats, balance, spread, swaps] = await Promise.all([
-    loadStyleModel(), loadHouseStyle(), loadDecisionStats(), loadCatalogueBalance(), loadTasteSpread(), loadRecentSwaps(),
+  const [model, house, stats, balance, spread, swaps, taste] = await Promise.all([
+    loadStyleModel(), loadHouseStyle(), loadDecisionStats(), loadCatalogueBalance(), loadTasteSpread(), loadRecentSwaps(), loadSiteTasteProfile(),
   ])
   const learnedPairs = Object.keys(model.pairs).length
   const tableReady = house.ready
@@ -92,6 +93,18 @@ export default async function StyleBrainPage() {
           <MarkdownLite md={house.md} />
         )}
       </div>
+
+      {/* Site taste profile — the vector, graphed across labelled axes */}
+      {taste && taste.axes.length > 0 && (
+        <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6 mb-6">
+          <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B] mb-1">SITE TASTE PROFILE · {taste.n} LIVE OUTFITS</p>
+          <p className="text-[9px] tracking-[0.06em] text-[#A8A8A4] mb-4 max-w-[720px] leading-relaxed">
+            The outfit taste-vector graphed across style axes. Gold = your catalogue (what you&rsquo;ve built);
+            {taste.hasPeople ? ' dashed = what visitors actually view (weighted by clicks). Where the dashed shape bulges past the gold, demand is pulling toward a style you have less of.' : ' the view-weighted “what people lean to” shape appears once outfits get views.'}
+          </p>
+          <TasteRadar axes={taste.axes} hasPeople={taste.hasPeople} />
+        </div>
+      )}
 
       {/* Recent swaps — what got swapped out, for what, how different */}
       {swaps && swaps.total > 0 && (

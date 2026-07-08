@@ -102,6 +102,23 @@ export default async function SignupPreferencesPage() {
   }
   const totalClicks = [...clickCounts.values()].reduce((s, n) => s + n, 0)
 
+  // ── Traffic driven to each retailer (aggregate shop-throughs by domain) ──
+  const retailerClicks = new Map<string, number>()
+  if (clickCounts.size > 0) {
+    const { data: urls } = await admin
+      .from('item')
+      .select('item_id, retailer_url')
+      .in('item_id', [...clickCounts.keys()].slice(0, 1000))
+    for (const it of (urls ?? []) as any[]) {
+      if (!it.retailer_url) continue
+      let host = ''
+      try { host = new URL(it.retailer_url).hostname.replace(/^www\./, '') } catch { continue }
+      if (host) retailerClicks.set(host, (retailerClicks.get(host) ?? 0) + (clickCounts.get(it.item_id) ?? 0))
+    }
+  }
+  const topRetailers = [...retailerClicks.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20)
+  const maxRetailer = Math.max(1, ...topRetailers.map(([, c]) => c))
+
   // ── Most-saved outfits ──
   let savesReady = true
   const saveCounts = new Map<string, number>()
@@ -394,6 +411,28 @@ ALTER TABLE public.signup_preference ENABLE ROW LEVEL SECURITY;`}</pre>
         <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6 mb-8">
           <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B] mb-5">MOST-PASSED OUTFITS</p>
           {renderOutfitGrid(topDislikedIds, 'dislike')}
+        </div>
+      )}
+
+      {/* ── Traffic driven to each retailer ── */}
+      {itemClicksReady && topRetailers.length > 0 && (
+        <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6 mb-8">
+          <div className="flex items-baseline justify-between mb-1">
+            <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B]">TRAFFIC DRIVEN · BY RETAILER</p>
+            <p className="text-[9px] tracking-[0.072em] text-[#A8A8A4]">{totalClicks.toLocaleString()} CLICK-OUTS</p>
+          </div>
+          <p className="text-[8px] tracking-[0.063em] text-[#A8A8A4] mb-4">SHOP-THROUGHS SENT TO EACH RETAILER — YOUR PROOF OF TRAFFIC</p>
+          <div className="space-y-2.5">
+            {topRetailers.map(([domain, count]) => (
+              <div key={domain} className="flex items-center gap-3">
+                <span className="text-[10px] tracking-[0.045em] text-[#4A4E57] w-[190px] flex-shrink-0 truncate">{domain}</span>
+                <div className="flex-1 h-[6px] bg-[#F2F2F2] rounded-full overflow-hidden">
+                  <div className="h-full bg-[#C4A882] rounded-full" style={{ width: `${(count / maxRetailer) * 100}%` }} />
+                </div>
+                <span className="text-[10px] tracking-[0.045em] text-[#4A4E57] w-[54px] text-right flex-shrink-0">{count.toLocaleString()}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
