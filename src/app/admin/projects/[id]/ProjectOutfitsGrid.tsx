@@ -39,13 +39,14 @@ export default function ProjectOutfitsGrid({
   const [toggling, setToggling] = useState<string | null>(null)
   // Refined Higgsfield shoot state (long-running) — which outfit is generating,
   // the new image once done, and any error.
-  const [refining, setRefining] = useState<string | null>(null)
+  // Multiple shoots can run at once — each card tracks its own state.
+  const [refining, setRefining] = useState<Set<string>>(new Set())
   const [imageOverride, setImageOverride] = useState<Record<string, string>>({})
   const [refineError, setRefineError] = useState<Record<string, string>>({})
 
   async function refine(outfitId: string) {
-    if (refining) return
-    setRefining(outfitId)
+    if (refining.has(outfitId)) return
+    setRefining((prev) => new Set(prev).add(outfitId))
     setRefineError((prev) => { const next = { ...prev }; delete next[outfitId]; return next })
     try {
       const res = await generateHiggsfieldShootForOutfit(outfitId, 'E5')
@@ -58,7 +59,7 @@ export default function ProjectOutfitsGrid({
     } catch (err) {
       setRefineError((prev) => ({ ...prev, [outfitId]: err instanceof Error ? err.message : 'Refine failed' }))
     } finally {
-      setRefining(null)
+      setRefining((prev) => { const next = new Set(prev); next.delete(outfitId); return next })
     }
   }
 
@@ -202,7 +203,7 @@ export default function ProjectOutfitsGrid({
                 )}
 
                 {/* Refining overlay — Higgsfield shoot in progress */}
-                {refining === outfit.outfit_id && (
+                {refining.has(outfit.outfit_id) && (
                   <div className="absolute inset-0 bg-white/75 backdrop-blur-[1px] flex flex-col items-center justify-center gap-2">
                     <div className="w-6 h-6 border-2 border-[#C4A882] border-t-transparent rounded-full animate-spin" />
                     <span className="text-[9px] tracking-[0.12em] text-[#4A4E57]">REFINING…</span>
@@ -276,14 +277,14 @@ export default function ProjectOutfitsGrid({
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); e.preventDefault(); refine(outfit.outfit_id) }}
-                        disabled={!!refining}
+                        disabled={refining.has(outfit.outfit_id)}
                         title="Generate a refined model shoot and use it as the display image"
                         className="inline-flex items-center gap-1 border border-[#C4A882] text-[#8A7A4E] rounded-full px-2.5 py-1 text-[9px] tracking-[0.09em] hover:bg-[#FBF6EA] transition-colors duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
-                        {refining === outfit.outfit_id ? 'REFINING…' : '✦ REFINE'}
+                        {refining.has(outfit.outfit_id) ? 'REFINING…' : '✦ REFINE'}
                       </button>
                     </div>
-                    {refineError[outfit.outfit_id] && refining !== outfit.outfit_id && (
+                    {refineError[outfit.outfit_id] && !refining.has(outfit.outfit_id) && (
                       <p className="mt-1.5 text-[8px] tracking-[0.05em] text-[#B83A3A]">{refineError[outfit.outfit_id].toUpperCase()}</p>
                     )}
                   </>
