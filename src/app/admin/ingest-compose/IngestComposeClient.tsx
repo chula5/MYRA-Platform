@@ -57,7 +57,7 @@ export default function IngestComposeClient() {
     if (!cand || !block.item) return
     setState(bi, ci, { approving: true, error: undefined })
     // approveCandidate records the YES into the Style Brain automatically.
-    const r: any = await approveCandidate(block.item.item_id, cand.items.map((x) => x.item_id), cand.items.map((x) => x.slot as Slot))
+    const r: any = await approveCandidate(block.item.item_id, cand.items.map((x) => x.item_id), cand.items.map((x) => x.slot as Slot), { score: cand.score })
     if (r?.error) setState(bi, ci, { approving: false, error: r.error })
     else setState(bi, ci, { approved: true, outfitId: r.outfitId, projectId: r.projectId })
   }

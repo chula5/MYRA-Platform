@@ -1,12 +1,19 @@
-import { loadStyleModel, loadHouseStyle } from '@/lib/style-brain-store'
+import { loadStyleModel, loadHouseStyle, loadDecisionStats } from '@/lib/style-brain-store'
 import RecomputeButton from './RecomputeButton'
 
 export const dynamic = 'force-dynamic'
 
 export default async function StyleBrainPage() {
-  const [model, house] = await Promise.all([loadStyleModel(), loadHouseStyle()])
+  const [model, house, stats] = await Promise.all([loadStyleModel(), loadHouseStyle(), loadDecisionStats()])
   const learnedPairs = Object.keys(model.pairs).length
   const tableReady = house.ready
+
+  // "Getting smarter" signals.
+  const pct = (n: number) => `${Math.round(n * 100)}%`
+  const enoughForTrend = (stats?.total ?? 0) >= 10
+  const trendDelta = stats ? Math.round((stats.recentRate - stats.earlyRate) * 100) : 0
+  // How much the learned model now steers the composer (ramps to full at 40).
+  const learningStrength = Math.min(100, Math.round((model.decisions / 40) * 100))
 
   return (
     <div>
@@ -35,6 +42,36 @@ export default async function StyleBrainPage() {
           </div>
         ))}
       </div>
+
+      {/* Is it getting smarter? */}
+      {stats && stats.total > 0 && (
+        <div className="mb-10">
+          <p className="text-[10px] tracking-[0.135em] text-[#6B6B6B] mb-1">IS IT GETTING SMARTER?</p>
+          <p className="text-[9px] tracking-[0.06em] text-[#A8A8A4] mb-4 max-w-[720px] leading-relaxed">
+            As it learns your taste, the composer surfaces outfits you approve more often. These rise over time —
+            they need ~20+ decisions to settle.
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { label: 'APPROVAL RATE', value: pct(stats.approvalRate), sub: 'SHARE OF OPTIONS YOU APPROVE' },
+              {
+                label: 'TREND',
+                value: enoughForTrend ? `${trendDelta >= 0 ? '↑' : '↓'} ${Math.abs(trendDelta)} PTS` : '—',
+                sub: enoughForTrend ? `RECENT ${pct(stats.recentRate)} VS ${pct(stats.earlyRate)} EARLY` : 'NEEDS ~10+ DECISIONS',
+                good: trendDelta >= 0,
+              },
+              { label: 'OUTFIT QUALITY', value: stats.avgApprovedScore != null ? pct(stats.avgApprovedScore) : '—', sub: 'AVG COHERENCE OF KEPT OUTFITS' },
+              { label: 'LEARNING STRENGTH', value: `${learningStrength}%`, sub: 'HOW MUCH IT STEERS THE COMPOSER' },
+            ].map((s: any) => (
+              <div key={s.label} className="border border-[#E2E0DB] bg-white rounded-[12px] px-5 py-4">
+                <p className="text-[9px] tracking-[0.09em] text-[#A8A8A4] mb-2">{s.label}</p>
+                <p className={`text-[28px] tracking-[0.023em] leading-none ${s.good === false ? 'text-[#B83A3A]' : 'text-[#4A4E57]'}`}>{s.value}</p>
+                <p className="text-[8px] tracking-[0.072em] text-[#C4A882] mt-1">{s.sub}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* House Style doc */}
       <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-7 mb-6">

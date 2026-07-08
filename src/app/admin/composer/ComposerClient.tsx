@@ -291,6 +291,7 @@ export default function ComposerClient({
       anchor.item_id,
       items.map(i => i.item_id),
       items.map(i => i.slot),
+      { score: candidate.score },
     )
     if (res.error) {
       setApprovalState(s => ({ ...s, [candidateIdx]: { approving: false, approved: false } }))

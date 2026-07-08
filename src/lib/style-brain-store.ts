@@ -26,6 +26,49 @@ export async function loadStyleModel(): Promise<StyleModel> {
   }
 }
 
+// "Is it getting smarter?" stats, computed from the decision log. As the model
+// learns your taste, the composer surfaces outfits you approve more often
+// (approval rate rises) — comparing the recent half vs the early half shows the
+// trend. avgApprovedScore = the composer's own coherence score on outfits you
+// kept (quality of what it proposes).
+export interface DecisionStats {
+  total: number
+  approves: number
+  skips: number
+  approvalRate: number         // 0..1
+  earlyRate: number            // 0..1, first half
+  recentRate: number           // 0..1, second half
+  avgApprovedScore: number | null // 0..1
+}
+export async function loadDecisionStats(): Promise<DecisionStats | null> {
+  try {
+    const admin = createAdminClient()
+    const { data, error } = await admin
+      .from('style_decision' as any)
+      .select('decision, base_score, created_at')
+      .order('created_at', { ascending: true })
+      .limit(100000)
+    if (error || !data) return null
+    const rows = data as { decision: string; base_score: number | null }[]
+    const total = rows.length
+    const approves = rows.filter((r) => r.decision === 'approve').length
+    const rateOf = (arr: typeof rows) => (arr.length ? arr.filter((r) => r.decision === 'approve').length / arr.length : 0)
+    const half = Math.floor(total / 2)
+    const appScores = rows.filter((r) => r.decision === 'approve' && typeof r.base_score === 'number') as { base_score: number }[]
+    return {
+      total,
+      approves,
+      skips: total - approves,
+      approvalRate: total ? approves / total : 0,
+      earlyRate: rateOf(rows.slice(0, half)),
+      recentRate: rateOf(rows.slice(half)),
+      avgApprovedScore: appScores.length ? appScores.reduce((s, r) => s + Number(r.base_score), 0) / appScores.length : null,
+    }
+  } catch {
+    return null
+  }
+}
+
 export async function loadHouseStyle(): Promise<{ md: string; decisions: number; ready: boolean }> {
   try {
     const admin = createAdminClient()
