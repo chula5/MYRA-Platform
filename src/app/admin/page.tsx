@@ -85,6 +85,11 @@ export default async function AdminDashboard() {
           description="Paste a list of product URLs or a single collection page. Each item is scraped, pre-scored against the MYRA taxonomy, and queued for one-click bulk approval into the library."
           href="/admin/ingest"
         />
+        <StudioCard
+          title="ADD & COMPOSE"
+          description="Paste product URLs — each is scraped, scored, saved, and instantly composed into outfit options anchored on the new piece (like the Composer). Approve looks straight to drafts."
+          href="/admin/ingest-compose"
+        />
       </div>
 
       {/* Studio areas */}
