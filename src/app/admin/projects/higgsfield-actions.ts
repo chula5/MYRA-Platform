@@ -83,12 +83,24 @@ export async function generateHiggsfieldShoot(
 
   const bin = path.join(process.cwd(), 'node_modules', '.bin', 'higgsfield')
 
-  // 1. Confirm the CLI is authenticated, with a friendly message if not.
+  // The CLI is a Node script with a `#!/usr/bin/env node` shebang. When the dev
+  // server's PATH lacks node's dir (common for GUI-launched processes), spawning
+  // the shebang fails with "env: node: No such file or directory" — which used
+  // to be mislabelled as "not logged in". So invoke it via THIS process's node
+  // binary and add node's dir to PATH for any subprocess the CLI itself spawns.
+  const nodeBin = process.execPath
+  const cliEnv = { ...process.env, PATH: `${path.dirname(nodeBin)}:${process.env.PATH ?? ''}` }
+  const runCli = (args: string[], opts: Record<string, unknown> = {}) =>
+    execFileP(nodeBin, [bin, ...args], { env: cliEnv, cwd: process.cwd(), ...opts })
+
+  // 1. Confirm the CLI is authenticated, surfacing the REAL error if it's not.
   try {
-    await execFileP(bin, ['auth', 'token'], { timeout: 15_000 })
-  } catch {
+    await runCli(['auth', 'token'], { timeout: 15_000 })
+  } catch (err: any) {
+    const detail = (err?.stderr || err?.message || '').toString().slice(0, 200)
+    console.error('[higgsfield] auth check failed:', detail)
     return {
-      error: 'Higgsfield CLI is not logged in. In the project folder run:  ./node_modules/.bin/higgsfield auth login',
+      error: `Higgsfield CLI is not logged in. In the project folder run:  ./node_modules/.bin/higgsfield auth login${detail ? `  (${detail})` : ''}`,
     }
   }
 
@@ -125,11 +137,9 @@ export async function generateHiggsfieldShoot(
 
     let stdout = ''
     try {
-      const res = await execFileP(bin, args, {
+      const res = await runCli(args, {
         timeout: 6 * 60_000,
         maxBuffer: 20 * 1024 * 1024,
-        cwd: process.cwd(),
-        env: process.env,
       })
       stdout = res.stdout
     } catch (err: any) {
