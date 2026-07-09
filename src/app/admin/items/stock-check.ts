@@ -163,6 +163,20 @@ async function extractSizes(url: string): Promise<string[]> {
   }
 }
 
+// Stock check for a raw product URL (not yet an item) — used by Batch Ingest to
+// flag out-of-stock / low-stock pieces before they're added.
+export async function checkStockForUrl(
+  url: string,
+): Promise<{ status: StockStatus; sizes: string[] }> {
+  try {
+    if (!/^https?:\/\//i.test(url)) return { status: 'unknown', sizes: [] }
+    const [result, sizes] = await Promise.all([detectStock(url), extractSizes(url)])
+    return { status: result.status, sizes }
+  } catch {
+    return { status: 'unknown', sizes: [] }
+  }
+}
+
 export async function listItemsForStockSweep(): Promise<
   { itemId: string; productName: string }[]
 > {

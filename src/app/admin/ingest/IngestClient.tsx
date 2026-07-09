@@ -5,17 +5,21 @@ import { thumbUrl } from '@/lib/image-utils'
 import {
   batchAnalyseUrls,
   bulkApproveCandidates,
-  scrapeProductImage,
+  getIngestPreview,
   type ParsedCandidate,
 } from './actions'
 
 type Mode = 'list' | 'collection'
+type Stock = 'in_stock' | 'low_stock' | 'out_of_stock' | 'unknown'
 
 interface QueueItem extends ParsedCandidate {
   id: string
   selected: boolean
   image_url: string | null
   imageLoading: boolean
+  stock?: Stock
+  stockSizes?: string[]
+  stockLoading?: boolean
 }
 
 export default function IngestClient() {
@@ -46,16 +50,28 @@ export default function IngestClient() {
         selected: c.ok, // auto-select successful parses
         image_url: null,
         imageLoading: c.ok,
+        stockLoading: c.ok,
       }))
       setQueue(initialQueue)
 
-      // Fetch og:images in parallel (best-effort, non-blocking)
+      // Fetch image + stock together (one call each, best-effort, non-blocking).
+      // Out-of-stock pieces are auto-deselected so they aren't added.
       initialQueue.forEach(async (item) => {
         if (!item.ok) return
-        const res = await scrapeProductImage(item.source_url)
+        const p = await getIngestPreview(item.source_url)
         setQueue((prev) =>
           prev.map((q) =>
-            q.id === item.id ? { ...q, image_url: res.image_url ?? null, imageLoading: false } : q,
+            q.id === item.id
+              ? {
+                  ...q,
+                  image_url: p.image_url,
+                  imageLoading: false,
+                  stock: p.stock,
+                  stockSizes: p.sizes,
+                  stockLoading: false,
+                  selected: p.stock === 'out_of_stock' ? false : q.selected,
+                }
+              : q,
           ),
         )
       })
@@ -67,7 +83,8 @@ export default function IngestClient() {
   }
 
   function selectAll(value: boolean) {
-    setQueue((prev) => prev.map((q) => ({ ...q, selected: value && q.ok })))
+    // Never bulk-select out-of-stock pieces.
+    setQueue((prev) => prev.map((q) => ({ ...q, selected: value && q.ok && q.stock !== 'out_of_stock' })))
   }
 
   function discard(id: string) {
@@ -250,24 +267,47 @@ export default function IngestClient() {
                     </div>
                   )}
 
-                  {/* Full-cover select overlay (ok items only) */}
+                  {/* Full-cover select overlay (ok items only; out-of-stock can't be selected) */}
                   {q.ok && (
                     <button
                       type="button"
-                      onClick={() => toggleSelect(q.id)}
+                      onClick={() => q.stock !== 'out_of_stock' && toggleSelect(q.id)}
+                      disabled={q.stock === 'out_of_stock'}
                       aria-label={q.selected ? 'Deselect' : 'Select'}
-                      className="absolute inset-0 z-0"
+                      className="absolute inset-0 z-0 disabled:cursor-not-allowed"
                     >
                       <span
                         className={`absolute top-2 left-2 w-6 h-6 rounded-full border flex items-center justify-center text-[12px] ${
-                          q.selected
-                            ? 'bg-[#0A0A0A] border-[#0A0A0A] text-white'
-                            : 'bg-white/90 border-[#0A0A0A] text-transparent'
+                          q.stock === 'out_of_stock'
+                            ? 'bg-[#F2F2F0] border-[#D8D6D1] text-transparent'
+                            : q.selected
+                              ? 'bg-[#0A0A0A] border-[#0A0A0A] text-white'
+                              : 'bg-white/90 border-[#0A0A0A] text-transparent'
                         }`}
                       >
                         ✓
                       </span>
                     </button>
+                  )}
+
+                  {/* Stock badge */}
+                  {q.ok && q.stockLoading && (
+                    <span className="absolute bottom-2 left-2 z-10 text-[8px] tracking-[0.1em] px-2 py-0.5 rounded-full bg-white/85 text-[#A8A8A4]">STOCK…</span>
+                  )}
+                  {q.ok && !q.stockLoading && q.stock && q.stock !== 'unknown' && (
+                    <span
+                      className={`absolute bottom-2 left-2 z-10 text-[8px] tracking-[0.1em] px-2 py-0.5 rounded-full ${
+                        q.stock === 'out_of_stock' ? 'bg-[#B83A3A] text-white'
+                          : q.stock === 'low_stock' ? 'bg-[#F3E9CF] text-[#8B5E00]'
+                          : 'bg-[#EAF3EC] text-[#3D7A50]'
+                      }`}
+                    >
+                      {q.stock === 'out_of_stock'
+                        ? 'OUT OF STOCK'
+                        : q.stock === 'low_stock'
+                          ? (q.stockSizes?.length ? `LOW · ${q.stockSizes.join('·')}` : 'LOW STOCK')
+                          : (q.stockSizes?.length ? q.stockSizes.join('·') : 'IN STOCK')}
+                    </span>
                   )}
 
                   {/* Discard */}

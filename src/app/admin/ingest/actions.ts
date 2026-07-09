@@ -4,6 +4,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createAdminClient } from '@/lib/supabase-server'
 import { analyseProductUrl, type AnalysedProduct } from '@/app/admin/items/analyse-url'
 import { scrapeAndUploadToCloudinary } from '@/app/admin/items/cloudinary-upload'
+import { checkStockForUrl } from '@/app/admin/items/stock-check'
 import { revalidatePath } from 'next/cache'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -405,6 +406,40 @@ export async function bulkApproveCandidates(
 // Quick OG-image scrape — used to populate the image preview in the queue
 // before the admin commits. Kept separate so the analyse step stays fast.
 
+// Shopify product image straight from the store's product JSON (<url>.js). More
+// reliable than og:image scraping when a brand site blocks bot fetches or renders
+// client-side (e.g. Anine Bing). Returns an absolute https URL.
+async function shopifyProductImage(url: string): Promise<string | null> {
+  try {
+    const clean = url.split('#')[0].split('?')[0].replace(/\/$/, '')
+    if (!/\/products\//.test(clean)) return null
+    const res = await fetch(`${clean}.js`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
+        Accept: 'application/json',
+      },
+      redirect: 'follow',
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    const raw: string | null = data?.featured_image ?? (Array.isArray(data?.images) ? data.images[0] : null) ?? null
+    if (!raw) return null
+    return raw.startsWith('//') ? `https:${raw}` : raw
+  } catch {
+    return null
+  }
+}
+
+// One round-trip that returns BOTH the product image and its stock, so the
+// review queue fills in with a single server action per item (server actions are
+// serialised by Next, so halving the calls halves the wait).
+export async function getIngestPreview(
+  url: string,
+): Promise<{ image_url: string | null; stock: 'in_stock' | 'low_stock' | 'out_of_stock' | 'unknown'; sizes: string[] }> {
+  const [img, stock] = await Promise.all([scrapeProductImage(url), checkStockForUrl(url)])
+  return { image_url: img.image_url ?? null, stock: (stock.status ?? 'unknown') as any, sizes: stock.sizes }
+}
+
 export async function scrapeProductImage(url: string): Promise<{ image_url?: string | null; error?: string }> {
   try {
     const res = await fetch(url, {
@@ -413,14 +448,17 @@ export async function scrapeProductImage(url: string): Promise<{ image_url?: str
           'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       },
     })
-    if (!res.ok) return { image_url: null }
-    const html = await res.text()
-    const ogMatch =
-      html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
-      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i) ||
-      html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i)
-    return { image_url: ogMatch?.[1] ?? null }
+    if (res.ok) {
+      const html = await res.text()
+      const ogMatch =
+        html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
+        html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i) ||
+        html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i)
+      if (ogMatch?.[1]) return { image_url: ogMatch[1] }
+    }
+    // og:image missing or the page blocked us — try the Shopify product JSON.
+    return { image_url: await shopifyProductImage(url) }
   } catch {
-    return { image_url: null }
+    return { image_url: await shopifyProductImage(url) }
   }
 }
