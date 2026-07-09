@@ -77,7 +77,14 @@ export interface ReviewCandidate {
   items: ReviewItem[]
 }
 
-export async function getReviewQueue(limit = 60, shuffle = false): Promise<{ anchors: ReviewAnchor[]; error?: string }> {
+// mode 'needs-more' → anchors with fewer than TARGET outfits (default Review).
+// mode 'exactly-one' → anchors styled into exactly ONE outfit so far (the "Extra
+// Style Outfits" area: give already-started pieces more looks).
+export async function getReviewQueue(
+  limit = 60,
+  shuffle = false,
+  mode: 'needs-more' | 'exactly-one' = 'needs-more',
+): Promise<{ anchors: ReviewAnchor[]; error?: string }> {
   try {
     const admin = createAdminClient()
     const library = await getReadyAndLiveItems()
@@ -108,7 +115,7 @@ export async function getReviewQueue(limit = 60, shuffle = false): Promise<{ anc
         stock_status: it.stock_status ?? null,
         stock_sizes: it.stock_sizes ?? null,
       }))
-      .filter((a) => a.existingCount < TARGET)
+      .filter((a) => (mode === 'exactly-one' ? a.existingCount === 1 : a.existingCount < TARGET))
 
     // Refresh = reshuffle so different anchors surface each time. We still keep
     // most-needed (fewest existing outfits) first; the shuffle randomises ties,

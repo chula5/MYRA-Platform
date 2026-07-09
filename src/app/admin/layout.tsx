@@ -59,6 +59,12 @@ export default async function AdminLayout({
             OUTFIT REVIEW
           </a>
           <a
+            href="/admin/extra-styles"
+            className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
+          >
+            EXTRA STYLES
+          </a>
+          <a
             href="/admin/vectors"
             className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
           >

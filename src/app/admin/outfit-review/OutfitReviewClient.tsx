@@ -72,7 +72,7 @@ interface CandState {
   shootError?: string
 }
 
-export default function OutfitReviewClient({ anchors }: { anchors: ReviewAnchor[] }) {
+export default function OutfitReviewClient({ anchors, mode = 'needs-more' }: { anchors: ReviewAnchor[]; mode?: 'needs-more' | 'exactly-one' }) {
   const [queue, setQueue] = useState(anchors)
   const [visible, setVisible] = useState(8)
   const [refreshKey, setRefreshKey] = useState(0)  // remount cards on refresh
@@ -81,7 +81,7 @@ export default function OutfitReviewClient({ anchors }: { anchors: ReviewAnchor[
   // Reshuffle which anchors appear (they're the same on every page load otherwise).
   async function refresh() {
     setRefreshing(true)
-    const res = await getReviewQueue(60, true)
+    const res = await getReviewQueue(60, true, mode)
     setRefreshing(false)
     if (res.anchors?.length) {
       setQueue(res.anchors)

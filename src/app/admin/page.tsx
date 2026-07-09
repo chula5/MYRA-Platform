@@ -156,6 +156,11 @@ export default async function AdminDashboard() {
           href="/admin/outfit-review"
         />
         <StudioCard
+          title="EXTRA STYLE OUTFITS"
+          description="Pieces styled into just one outfit so far. Propose fresh looks for each — swap/add, approve to a draft with a Higgsfield shoot, and train the Style Brain."
+          href="/admin/extra-styles"
+        />
+        <StudioCard
           title="VECTORS"
           description="Inspect and backfill the AI taste vectors that score and rank every outfit."
           href="/admin/vectors"
