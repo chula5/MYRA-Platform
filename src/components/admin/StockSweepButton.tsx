@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { listItemsForStockSweep, checkItemStock } from '@/app/admin/items/stock-check'
 
@@ -89,12 +90,19 @@ export default function StockSweepButton() {
       )}
 
       {tally && !running && (
-        <div className="mt-4 flex flex-wrap gap-3 text-[10px] tracking-[0.068em]">
-          <span className="text-[#3A6B3A]">{tally.in_stock} IN STOCK</span>
-          {tally.low_stock > 0 && <span className="text-[#8B5E00]">· {tally.low_stock} LOW</span>}
-          {tally.out_of_stock > 0 && <span className="text-[#B83A3A]">· {tally.out_of_stock} OUT</span>}
-          {tally.unknown > 0 && <span className="text-[#6B6B6B]">· {tally.unknown} UNKNOWN</span>}
-          {tally.failed > 0 && <span className="text-[#A8A8A4]">· {tally.failed} FAILED</span>}
+        <div className="mt-4">
+          <div className="flex flex-wrap gap-3 text-[10px] tracking-[0.068em]">
+            <span className="text-[#3A6B3A]">{tally.in_stock} IN STOCK</span>
+            {tally.low_stock > 0 && <span className="text-[#8B5E00]">· {tally.low_stock} LOW</span>}
+            {tally.out_of_stock > 0 && <span className="text-[#B83A3A]">· {tally.out_of_stock} OUT</span>}
+            {tally.unknown > 0 && <span className="text-[#6B6B6B]">· {tally.unknown} UNKNOWN</span>}
+            {tally.failed > 0 && <span className="text-[#A8A8A4]">· {tally.failed} FAILED</span>}
+          </div>
+          {(tally.low_stock > 0 || tally.out_of_stock > 0) && (
+            <Link href="/admin/stock-impact" className="inline-block mt-3 bg-[#0A0A0A] text-white px-5 py-2.5 text-[10px] tracking-[0.09em] hover:bg-[#333] transition-colors">
+              REVIEW AFFECTED OUTFITS →
+            </Link>
+          )}
         </div>
       )}
 
