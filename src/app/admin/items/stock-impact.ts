@@ -92,6 +92,30 @@ export async function getStockFlaggedOutfits(): Promise<{ outfits: StockOutfit[]
   }
 }
 
+// Add a new item to an EXISTING outfit (e.g. add a bag). Returns the new
+// outfit_item_id so the client can track/swap it immediately.
+export async function addItemToOutfitForStock(
+  outfitId: string,
+  itemId: string,
+  slot: string,
+): Promise<{ outfitItemId?: string; error?: string }> {
+  const admin = createAdminClient()
+  try {
+    const { data, error } = await (admin.from('outfit_item') as any)
+      .insert([{ outfit_id: outfitId, item_id: itemId, slot }])
+      .select('outfit_item_id')
+      .single()
+    if (error) throw error
+    revalidatePath('/admin/stock-impact')
+    revalidatePath('/admin/projects')
+    revalidatePath('/')
+    return { outfitItemId: (data as any)?.outfit_item_id }
+  } catch (err) {
+    console.error('[addItemToOutfitForStock]', err)
+    return { error: err instanceof Error ? err.message : 'Add failed' }
+  }
+}
+
 // Swap one item out of an EXISTING outfit for another (same slot). Persists the
 // change (delete the old outfit_item row, insert the replacement).
 export async function swapOutfitItemForStock(

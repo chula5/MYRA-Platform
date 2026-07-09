@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { thumbUrl } from '@/lib/image-utils'
-import { swapOutfitItemForStock, type StockOutfit, type StockOutfitItem } from './stock-impact'
+import { swapOutfitItemForStock, addItemToOutfitForStock, type StockOutfit, type StockOutfitItem } from './stock-impact'
 import { generateHiggsfieldShootForOutfit } from '@/app/admin/projects/higgsfield-actions'
 import type { ReviewItem } from '@/app/admin/outfit-review/actions'
 
@@ -23,8 +23,16 @@ async function postStatus(projectId: string, outfitIds: string[], status: 'live'
     return await r.json() as { error?: string }
   } catch (err) { return { error: err instanceof Error ? err.message : 'Failed' } }
 }
-async function fetchSwapOptions(anchor: string, slot: string, exclude: string[], q: string): Promise<ReviewItem[]> {
-  const sp = new URLSearchParams({ mode: 'swap', anchor, slot, q, exclude: exclude.join(',') })
+async function fetchOptions(
+  mode: 'swap' | 'add',
+  anchor: string,
+  exclude: string[],
+  q: string,
+  opts: { slot?: string; present?: string[] } = {},
+): Promise<ReviewItem[]> {
+  const sp = new URLSearchParams({ mode, anchor, q, exclude: exclude.join(',') })
+  if (opts.slot) sp.set('slot', opts.slot)
+  if (opts.present) sp.set('present', opts.present.join(','))
   try {
     const r = await fetch(`/api/admin/review-options?${sp.toString()}`, { cache: 'no-store' })
     if (!r.ok) return []
@@ -39,7 +47,15 @@ function StockBadge({ status }: { status: StockOutfitItem['stock_status'] }) {
   return <span className="text-[7px] tracking-[0.08em] text-[#A8A8A4]">UNCHECKED</span>
 }
 
-type SwapTarget = { outfitId: string; outfitItemId: string; slot: string; anchor: string; exclude: string[] }
+type SwapTarget = {
+  mode: 'swap' | 'add'
+  outfitId: string
+  outfitItemId?: string   // swap only
+  slot?: string           // swap only
+  anchor: string
+  exclude: string[]
+  present?: string[]      // add only
+}
 
 export default function StockImpactClient({ outfits: initial }: { outfits: StockOutfit[] }) {
   const [outfits, setOutfits] = useState<StockOutfit[]>(initial)
@@ -71,27 +87,52 @@ export default function StockImpactClient({ outfits: initial }: { outfits: Stock
     if (res.error) { setStatusOverride((p) => ({ ...p, [o.outfit_id]: current })); setMsg((m) => ({ ...m, [o.outfit_id]: res.error! })) }
   }
 
+  function anchorFor(o: StockOutfit, excludeItemId?: string): string {
+    return o.items.find((it) => it.stock_status === 'in_stock' && it.item_id !== excludeItemId)?.item_id
+      ?? o.items.find((it) => it.item_id !== excludeItemId)?.item_id
+      ?? o.items[0]?.item_id
+      ?? ''
+  }
+
   async function openSwap(o: StockOutfit, item: StockOutfitItem) {
-    const anchor = o.items.find((it) => it.stock_status === 'in_stock' && it.item_id !== item.item_id)?.item_id
-      ?? o.items.find((it) => it.item_id !== item.item_id)?.item_id
-      ?? item.item_id
+    const anchor = anchorFor(o, item.item_id)
     const exclude = o.items.map((it) => it.item_id)
-    setSwap({ outfitId: o.outfit_id, outfitItemId: item.outfit_item_id, slot: item.slot, anchor, exclude })
+    setSwap({ mode: 'swap', outfitId: o.outfit_id, outfitItemId: item.outfit_item_id, slot: item.slot, anchor, exclude })
     setSwapQuery(''); setSwapLoading(true)
-    setSwapOptions(await fetchSwapOptions(anchor, item.slot, exclude, ''))
+    setSwapOptions(await fetchOptions('swap', anchor, exclude, '', { slot: item.slot }))
+    setSwapLoading(false)
+  }
+  async function openAdd(o: StockOutfit) {
+    const anchor = anchorFor(o)
+    const exclude = o.items.map((it) => it.item_id)
+    const present = o.items.map((it) => it.slot)
+    setSwap({ mode: 'add', outfitId: o.outfit_id, anchor, exclude, present })
+    setSwapQuery(''); setSwapLoading(true)
+    setSwapOptions(await fetchOptions('add', anchor, exclude, '', { present }))
     setSwapLoading(false)
   }
   async function runSwapQuery(q: string) {
     setSwapQuery(q); if (!swap) return
     setSwapLoading(true)
-    setSwapOptions(await fetchSwapOptions(swap.anchor, swap.slot, swap.exclude, q))
+    setSwapOptions(await fetchOptions(swap.mode, swap.anchor, swap.exclude, q, { slot: swap.slot, present: swap.present }))
     setSwapLoading(false)
   }
-  async function performSwap(opt: ReviewItem) {
+  async function performSelect(opt: ReviewItem) {
     if (!swap) return
     const target = swap
     setSwap(null)
-    const res = await swapOutfitItemForStock(target.outfitId, target.outfitItemId, opt.item_id, target.slot)
+    if (target.mode === 'add') {
+      const res = await addItemToOutfitForStock(target.outfitId, opt.item_id, opt.slot)
+      if (res.error) { setMsg((m) => ({ ...m, [target.outfitId]: res.error! })); return }
+      setOutfits((prev) => prev.map((o) => {
+        if (o.outfit_id !== target.outfitId) return o
+        const newItem: StockOutfitItem = { outfit_item_id: res.outfitItemId ?? `added:${opt.item_id}`, item_id: opt.item_id, slot: opt.slot, product_name: opt.product_name, brand_name: opt.brand_name, image_url: opt.image_url, stock_status: 'in_stock' }
+        return recompute({ ...o, items: [...o.items, newItem] })
+      }))
+      setChanged((s) => new Set(s).add(target.outfitId))
+      return
+    }
+    const res = await swapOutfitItemForStock(target.outfitId, target.outfitItemId!, opt.item_id, target.slot!)
     if (res.error) { setMsg((m) => ({ ...m, [target.outfitId]: res.error! })); return }
     // Replace the item in local state; the swapped-in piece is assumed in stock.
     setOutfits((prev) => prev.map((o) => {
@@ -202,6 +243,14 @@ export default function StockImpactClient({ outfits: initial }: { outfits: Stock
                       </div>
                     )
                   })}
+                  {/* Add a piece (e.g. a bag) */}
+                  <button
+                    onClick={() => openAdd(o)}
+                    className="aspect-[3/4] rounded-[6px] border border-dashed border-[#C9C7C2] flex flex-col items-center justify-center text-[#A8A8A4] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors self-start"
+                  >
+                    <span className="text-[16px] leading-none">+</span>
+                    <span className="text-[7px] tracking-[0.12em] mt-1">ADD</span>
+                  </button>
                 </div>
 
                 {/* Actions */}
@@ -232,7 +281,7 @@ export default function StockImpactClient({ outfits: initial }: { outfits: Stock
         <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center pt-16 px-4" onClick={() => setSwap(null)}>
           <div className="bg-white border border-[#E2E0DB] rounded-[12px] w-full max-w-3xl max-h-[80vh] overflow-y-auto p-5" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-baseline justify-between mb-4 pb-3 border-b border-[#E2E0DB]">
-              <p className="text-[10px] tracking-[0.16em] text-[#6B6B6B]">SWAP · {SLOT_LABEL[swap.slot] ?? swap.slot}</p>
+              <p className="text-[10px] tracking-[0.16em] text-[#6B6B6B]">{swap.mode === 'add' ? 'ADD ITEM' : `SWAP · ${SLOT_LABEL[swap.slot ?? ''] ?? swap.slot}`}</p>
               <button onClick={() => setSwap(null)} className="text-[#A8A8A4] hover:text-[#0A0A0A] text-[18px] leading-none">×</button>
             </div>
             <input value={swapQuery} onChange={(e) => runSwapQuery(e.target.value)} placeholder="SEARCH ANY ITEM BY NAME, BRAND OR TYPE…" className="w-full border border-[#E2E0DB] rounded-[10px] px-4 py-2.5 text-[11px] tracking-[0.08em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] mb-4" />
@@ -241,7 +290,7 @@ export default function StockImpactClient({ outfits: initial }: { outfits: Stock
             ) : (
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
                 {swapOptions.map((opt) => (
-                  <button key={opt.item_id} onClick={() => performSwap(opt)} className="group text-left">
+                  <button key={opt.item_id} onClick={() => performSelect(opt)} className="group text-left">
                     <div className="aspect-[3/4] rounded-[6px] overflow-hidden bg-[#F2F2F0]">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={thumbUrl(opt.image_url, 600)} alt="" className="w-full h-full object-cover group-hover:opacity-90" />
