@@ -55,6 +55,8 @@ export interface ReviewAnchor {
   item_type: string
   price: string
   existingCount: number
+  stock_status?: 'in_stock' | 'low_stock' | 'out_of_stock' | 'unknown' | null
+  stock_sizes?: string[] | null
 }
 
 export interface ReviewItem {
@@ -65,6 +67,8 @@ export interface ReviewItem {
   image_url: string
   price: string
   compat: number
+  stock_status?: 'in_stock' | 'low_stock' | 'out_of_stock' | 'unknown' | null
+  stock_sizes?: string[] | null
 }
 
 export interface ReviewCandidate {
@@ -101,6 +105,8 @@ export async function getReviewQueue(limit = 60, shuffle = false): Promise<{ anc
         item_type: String(it.item_type),
         price: fmtPrice(it.price, it.currency),
         existingCount: count.get(it.item_id) ?? 0,
+        stock_status: it.stock_status ?? null,
+        stock_sizes: it.stock_sizes ?? null,
       }))
       .filter((a) => a.existingCount < TARGET)
 
@@ -138,7 +144,7 @@ function styleLibrary(library: any[], anchor: any): any[] {
 }
 
 export async function composeForReview(anchorItemId: string): Promise<{
-  anchor?: { item_id: string; product_name: string; brand_name: string | null; image_url: string; item_type: string; price: string }
+  anchor?: { item_id: string; product_name: string; brand_name: string | null; image_url: string; item_type: string; price: string; stock_status?: string | null; stock_sizes?: string[] | null }
   candidates?: ReviewCandidate[]
   error?: string
 }> {
@@ -223,6 +229,8 @@ export async function composeForReview(anchorItemId: string): Promise<{
         image_url: it.image_url,
         price: fmtPrice(it.price, it.currency),
         compat: Number(pairCompat(anchor, it).total.toFixed(3)),
+        stock_status: it.stock_status ?? null,
+        stock_sizes: it.stock_sizes ?? null,
       })),
     }))
 
@@ -241,6 +249,8 @@ function anchorPayload(anchor: any) {
     image_url: anchor.image_url,
     item_type: String(anchor.item_type),
     price: fmtPrice(anchor.price, anchor.currency),
+    stock_status: anchor.stock_status ?? null,
+    stock_sizes: anchor.stock_sizes ?? null,
   }
 }
 
@@ -285,6 +295,8 @@ export async function getReviewAddOptions(
         image_url: it.image_url,
         price: fmtPrice(it.price, it.currency),
         compat: Number(pairCompat(anchor, it).total.toFixed(3)),
+        stock_status: it.stock_status ?? null,
+        stock_sizes: it.stock_sizes ?? null,
       }))
       .sort((a, b) => b.compat - a.compat)
       .slice(0, 30)
@@ -330,6 +342,8 @@ export async function getReviewSwapOptions(
         image_url: it.image_url,
         price: fmtPrice(it.price, it.currency),
         compat: Number(pairCompat(anchor, it).total.toFixed(3)),
+        stock_status: it.stock_status ?? null,
+        stock_sizes: it.stock_sizes ?? null,
       }))
       .sort((a, b) => b.compat - a.compat)
       .slice(0, 30)

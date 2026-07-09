@@ -45,6 +45,22 @@ const SLOT_LABEL: Record<string, string> = {
   shoe: 'SHOES', bag: 'BAG', jewellery: 'JEWELLERY', accessory: 'ACCESSORY',
 }
 
+// Compact stock indicator from the last stock check. In-stock sizes are the
+// available sizes; otherwise the coarse status. Empty when never checked.
+function StockTag({ item }: { item: { stock_status?: string | null; stock_sizes?: string[] | null } }) {
+  const sizes = item.stock_sizes ?? []
+  const out = item.stock_status === 'out_of_stock'
+  const low = item.stock_status === 'low_stock'
+  let text = ''
+  if (sizes.length > 0) text = sizes.join('·')
+  else if (out) text = 'OUT OF STOCK'
+  else if (low) text = 'LOW STOCK'
+  else if (item.stock_status === 'in_stock') text = 'IN STOCK'
+  if (!text) return null
+  const tone = out ? 'text-[#B83A3A]' : low ? 'text-[#8B5E00]' : 'text-[#3D7A50]'
+  return <p className={`text-[7px] tracking-[0.06em] ${tone} truncate`}>{text}</p>
+}
+
 interface CandState {
   approving?: boolean
   approved?: boolean
@@ -255,7 +271,10 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
           <p className="text-[9px] tracking-[0.18em] text-[#A8A8A4] mb-0.5">ANCHOR · {anchor.item_type.replace(/_/g, ' ').toUpperCase()}</p>
           <p className="text-[10px] tracking-[0.10em] text-[#6B6B6B]">{(anchor.brand_name ?? '').toUpperCase()}</p>
           <p className="text-[13px] tracking-[0.04em] text-[#4A4E57] truncate">{anchor.product_name.toUpperCase()}</p>
-          {anchor.price && <p className="text-[10px] tracking-[0.06em] text-[#6B6B6B] mt-0.5">{anchor.price}</p>}
+          <div className="flex items-center gap-2 mt-0.5">
+            {anchor.price && <p className="text-[10px] tracking-[0.06em] text-[#6B6B6B]">{anchor.price}</p>}
+            <StockTag item={anchor} />
+          </div>
         </div>
         <div className="text-right flex-shrink-0">
           <p className="text-[18px] tracking-[0.04em] text-[#4A4E57] leading-none">{anchor.existingCount + built}<span className="text-[#A8A8A4]"> / 3</span></p>
@@ -299,7 +318,7 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
                   {/* Additions */}
                   {c.items.map((item, itemIdx) => (
                     <div key={`${item.item_id}-${itemIdx}`} className="relative group">
-                      <div className="aspect-[3/4] rounded-[6px] overflow-hidden bg-[#F2F2F0]">
+                      <div className={`aspect-[3/4] rounded-[6px] overflow-hidden bg-[#F2F2F0] ${item.stock_status === 'out_of_stock' ? 'ring-1 ring-[#E8B4B4]' : ''}`}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={thumbUrl(item.image_url, 600)} alt="" className="w-full h-full object-cover" />
                         {editable && (
@@ -314,6 +333,7 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
                       <p className="text-[7px] tracking-[0.10em] text-[#A8A8A4] mt-0.5 truncate">{SLOT_LABEL[item.slot] ?? item.slot}</p>
                       <p className="text-[7px] tracking-[0.06em] text-[#6B6B6B] truncate">{(item.brand_name ?? '').toUpperCase()}</p>
                       {item.price && <p className="text-[7px] tracking-[0.04em] text-[#4A4E57]">{item.price}</p>}
+                      <StockTag item={item} />
                     </div>
                   ))}
                   {editable && (
