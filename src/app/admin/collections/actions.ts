@@ -75,7 +75,11 @@ async function ogImage(url: string): Promise<string | null> {
 
 const SCAN_SYSTEM = `You are a fashion buyer for a high-taste wardrobe assistant called MYRA. Your job is to check whether a given brand has recently launched a NEW collection (or fresh new-arrivals drop) and, if so, surface the standout new pieces.
 
-Use web search to find the brand's official site or major stockists (Net-a-Porter, MatchesFashion, SSENSE, Farfetch, MyTheresa, etc.). Identify the most recent collection / newest arrivals available to buy right now.
+Use web search to find the most recent collection / newest arrivals available to buy right now.
+
+CRITICAL — the retailer_url for each piece MUST be a SPECIFIC PRODUCT DETAIL PAGE (a single product), NOT a collection, category, campaign, lookbook, or homepage URL. Every candidate must have its OWN distinct product URL — never reuse the same URL for multiple pieces.
+- Strongly prefer product pages on major multi-brand stockists — Net-a-Porter, MyTheresa, FWRD, Moda Operandi, Shopbop, SSENSE, Farfetch, MatchesFashion — because each of their product pages has a distinct product image. Use the brand's own site only if you can find a genuine per-product page.
+- Verify each URL is real and resolvable via your search results. If you cannot find a real distinct product page for a piece, omit that piece rather than guessing.
 
 Taste bar: editorial, directional, well-made. Pick the pieces a discerning stylist would actually build outfits around — not the entire catalogue.
 
@@ -88,7 +92,7 @@ Return ONLY valid JSON, no markdown, no code fences:
     {
       "title": "product name",
       "brand_name": "the brand",
-      "retailer_url": "a real, verified product URL",
+      "retailer_url": "a real, verified, DISTINCT product-detail URL (one product)",
       "image_url": "a direct product image URL if findable, else null",
       "price": "number-only string e.g. 480",
       "currency": "GBP | USD | EUR",
@@ -97,7 +101,7 @@ Return ONLY valid JSON, no markdown, no code fences:
   ]
 }
 
-Return up to 8 candidates. If you genuinely cannot find a recent collection, set is_new=false and return an empty candidates array.`
+Return up to 8 candidates, each with a unique product URL. If you genuinely cannot find a recent collection, set is_new=false and return an empty candidates array.`
 
 // Web-search agent: does this brand have a new collection? Returns the new
 // pieces. NOT persisted — the caller holds them in session and the user accepts
@@ -149,12 +153,19 @@ export async function scanBrandCollection(brandName: string): Promise<Collection
       return img ? { ...c, image_url: img } : c
     }))
 
+    // Guard against campaign heroes: if the SAME image resolves for more than one
+    // piece, it's a shared collection/lookbook image (not the product), so null
+    // those out rather than showing the same photo on every card.
+    const imgCounts = new Map<string, number>()
+    for (const c of enriched) if (c.image_url) imgCounts.set(c.image_url, (imgCounts.get(c.image_url) ?? 0) + 1)
+    const deduped = enriched.map((c) => (c.image_url && (imgCounts.get(c.image_url) ?? 0) > 1 ? { ...c, image_url: null } : c))
+
     return {
       brand: name,
       collection_name: parsed.collection_name ?? null,
-      is_new: parsed.is_new ?? enriched.length > 0,
+      is_new: parsed.is_new ?? deduped.length > 0,
       note: parsed.note ?? null,
-      candidates: enriched,
+      candidates: deduped,
     }
   } catch (err) {
     console.error('[scanBrandCollection]', err)
