@@ -122,6 +122,18 @@ function findAvailability(node: unknown): string | null {
 // variants with an `available` flag and size in `option1`/`title`. Returns e.g.
 // ['S','M','L'] or ['37','39']; empty when sizes can't be parsed (non-Shopify,
 // no variants, or a fetch error) — the coarse stock_status still applies.
+// True size labels only — S/M/L family, one-size, or numeric (incl. UK/US/EU
+// shoe sizes). Rejects colours and other variant option values.
+const SIZE_RE = /^(x{0,3}s|x{0,3}l|xl|m|o\/?s|one[\s-]?size|onesize|free[\s-]?size|\d{1,3}(\.\d)?|(uk|us|eu|it|fr)[\s-]?\d{1,3}|\d{1,3}[\s-]?(uk|us|eu|it|fr))$/i
+
+function sizeFromVariant(v: any): string | null {
+  for (const key of ['option1', 'option2', 'option3']) {
+    const val = String(v?.[key] ?? '').trim()
+    if (val && val.toLowerCase() !== 'default title' && SIZE_RE.test(val)) return val.toUpperCase()
+  }
+  return null
+}
+
 async function extractSizes(url: string): Promise<string[]> {
   try {
     const clean = url.split('#')[0].split('?')[0].replace(/\/$/, '')
@@ -137,10 +149,14 @@ async function extractSizes(url: string): Promise<string[]> {
     if (!res.ok) return []
     const data = await res.json()
     const variants: any[] = Array.isArray(data?.variants) ? data.variants : []
+
+    // A variant's options can be colour, size, or both in any order (e.g.
+    // option1="Luwak" colour, option2="M"). Only keep values that actually LOOK
+    // like a size, so we never mislabel a colour ("Luwak") as a size.
     const sizes: string[] = variants
       .filter((v: any) => v && v.available)
-      .map((v: any) => String(v.option1 ?? v.title ?? '').trim())
-      .filter((s: string) => s && s.toLowerCase() !== 'default title')
+      .map((v: any) => sizeFromVariant(v))
+      .filter((s: string | null): s is string => !!s)
     return Array.from(new Set<string>(sizes)).slice(0, 16)
   } catch {
     return []

@@ -39,15 +39,16 @@ type OutfitLite = {
 
 type ItemStock = { type: string; sizes: string[]; status: string | null }
 
-// Compact size/stock label for one item: "DRESS (S·M·L)", or the status when no
-// sizes were captured ("SHOE — OUT"). Short slug for the item type.
+// Compact size/stock label for one item. When sizes were captured they ARE the
+// in-stock sizes: "DRESS (S·M·L)". Otherwise fall back to the coarse status —
+// "· IN STOCK" (not a per-size guarantee), "· LOW", "· OUT".
 function stockLabel(it: ItemStock): { text: string; out: boolean } {
-  const type = it.type.replace(/_/g, ' ').replace(/dress$/i, 'dress').toUpperCase()
+  const type = it.type.replace(/_/g, ' ').toUpperCase()
   const out = it.status === 'out_of_stock'
   if (it.sizes.length > 0) return { text: `${type} (${it.sizes.join('·')})`, out }
-  if (it.status === 'out_of_stock') return { text: `${type} — OUT`, out: true }
-  if (it.status === 'low_stock') return { text: `${type} — LOW`, out: false }
-  if (it.status === 'in_stock') return { text: `${type} ✓`, out: false }
+  if (it.status === 'out_of_stock') return { text: `${type} · OUT`, out: true }
+  if (it.status === 'low_stock') return { text: `${type} · LOW`, out: false }
+  if (it.status === 'in_stock') return { text: `${type} · IN STOCK`, out: false }
   return { text: type, out: false }
 }
 
