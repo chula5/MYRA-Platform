@@ -69,6 +69,7 @@ export interface Database {
           stock_checked_at: string | null
           stock_signal: string | null
           stock_notes: string | null
+          stock_sizes: string[] | null
         }
         Insert: Omit<Database['public']['Tables']['item']['Row'], 'item_id'> & { item_id?: string }
         Update: Partial<Database['public']['Tables']['item']['Row']>

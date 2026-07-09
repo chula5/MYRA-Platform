@@ -37,16 +37,32 @@ type OutfitLite = {
   occasion_tags?: string[] | null
 }
 
+type ItemStock = { type: string; sizes: string[]; status: string | null }
+
+// Compact size/stock label for one item: "DRESS (S·M·L)", or the status when no
+// sizes were captured ("SHOE — OUT"). Short slug for the item type.
+function stockLabel(it: ItemStock): { text: string; out: boolean } {
+  const type = it.type.replace(/_/g, ' ').replace(/dress$/i, 'dress').toUpperCase()
+  const out = it.status === 'out_of_stock'
+  if (it.sizes.length > 0) return { text: `${type} (${it.sizes.join('·')})`, out }
+  if (it.status === 'out_of_stock') return { text: `${type} — OUT`, out: true }
+  if (it.status === 'low_stock') return { text: `${type} — LOW`, out: false }
+  if (it.status === 'in_stock') return { text: `${type} ✓`, out: false }
+  return { text: type, out: false }
+}
+
 export default function ProjectOutfitsGrid({
   projectId,
   outfits,
   popularTags = [],
   coTags = {},
+  stockByOutfit = {},
 }: {
   projectId: string
   outfits: OutfitLite[]
   popularTags?: string[]
   coTags?: Record<string, string[]>
+  stockByOutfit?: Record<string, ItemStock[]>
 }) {
   const router = useRouter()
   const [selectMode, setSelectMode] = useState(false)
@@ -285,6 +301,20 @@ export default function ProjectOutfitsGrid({
                         coTags={coTags}
                       />
                     </div>
+
+                    {/* Latest stock holding per item (from the last stock check) */}
+                    {(stockByOutfit[outfit.outfit_id]?.length ?? 0) > 0 && (
+                      <div className="mb-3 flex flex-wrap gap-x-2 gap-y-0.5">
+                        {stockByOutfit[outfit.outfit_id].map((it, i) => {
+                          const { text, out } = stockLabel(it)
+                          return (
+                            <span key={i} className={`text-[8px] tracking-[0.04em] ${out ? 'text-[#B83A3A]' : 'text-[#8A8A86]'}`}>
+                              {text}
+                            </span>
+                          )
+                        })}
+                      </div>
+                    )}
                     <div className="flex items-center justify-between">
                       <Link
                         href={`/admin/projects/${projectId}/outfits/${outfit.outfit_id}/edit`}

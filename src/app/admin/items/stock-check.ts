@@ -117,6 +117,36 @@ function findAvailability(node: unknown): string | null {
   return null
 }
 
+// Best-effort extraction of the IN-STOCK size labels from a product page.
+// Most of the brands here run Shopify, whose product JSON (`<url>.js`) lists
+// variants with an `available` flag and size in `option1`/`title`. Returns e.g.
+// ['S','M','L'] or ['37','39']; empty when sizes can't be parsed (non-Shopify,
+// no variants, or a fetch error) — the coarse stock_status still applies.
+async function extractSizes(url: string): Promise<string[]> {
+  try {
+    const clean = url.split('#')[0].split('?')[0].replace(/\/$/, '')
+    if (!/\/products\//.test(clean)) return []
+    const res = await fetch(`${clean}.js`, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
+        Accept: 'application/json',
+      },
+      redirect: 'follow',
+    })
+    if (!res.ok) return []
+    const data = await res.json()
+    const variants: any[] = Array.isArray(data?.variants) ? data.variants : []
+    const sizes: string[] = variants
+      .filter((v: any) => v && v.available)
+      .map((v: any) => String(v.option1 ?? v.title ?? '').trim())
+      .filter((s: string) => s && s.toLowerCase() !== 'default title')
+    return Array.from(new Set<string>(sizes)).slice(0, 16)
+  } catch {
+    return []
+  }
+}
+
 export async function listItemsForStockSweep(): Promise<
   { itemId: string; productName: string }[]
 > {
@@ -153,15 +183,15 @@ export async function checkItemStock(
     const retailerUrl = (item as { retailer_url: string } | null)?.retailer_url
     if (!retailerUrl) return { error: 'Item has no retailer URL' }
 
-    const result = await detectStock(retailerUrl)
+    const [result, sizes] = await Promise.all([detectStock(retailerUrl), extractSizes(retailerUrl)])
 
-    const { error: updateErr } = await supabase
-      .from('item')
+    const { error: updateErr } = await (supabase.from('item') as any)
       .update({
         stock_status: result.status,
         stock_checked_at: new Date().toISOString(),
         stock_signal: result.signal,
         stock_notes: result.notes,
+        stock_sizes: sizes,
       })
       .eq('item_id', itemId)
     if (updateErr) throw updateErr

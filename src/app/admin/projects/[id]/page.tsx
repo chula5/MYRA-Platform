@@ -42,6 +42,29 @@ export default async function ProjectPage({ params }: PageProps) {
     for (const [a, m] of cooc) coTags[a] = [...m.entries()].sort((x, y) => y[1] - x[1]).map(([t]) => t).slice(0, 10)
   } catch { /* non-fatal */ }
 
+  // Per-item stock holding from the last stock check, keyed by outfit — shown as
+  // a compact line under each card (e.g. DRESS (S·M·L) · SHOE (37·39)).
+  const stockByOutfit: Record<string, { type: string; sizes: string[]; status: string | null }[]> = {}
+  try {
+    const admin = createAdminClient()
+    const outfitIds = (outfits as any[]).map((o) => o.outfit_id)
+    if (outfitIds.length) {
+      const { data: oiRows } = await admin
+        .from('outfit_item')
+        .select('outfit_id, slot, item(item_type, stock_status, stock_sizes)')
+        .in('outfit_id', outfitIds)
+        .limit(20000)
+      for (const r of (oiRows ?? []) as any[]) {
+        if (!r.item) continue
+        ;(stockByOutfit[r.outfit_id] ??= []).push({
+          type: (r.item.item_type ?? r.slot ?? '').toString(),
+          sizes: (r.item.stock_sizes ?? []) as string[],
+          status: r.item.stock_status ?? null,
+        })
+      }
+    }
+  } catch { /* non-fatal */ }
+
   if (!project) {
     notFound()
   }
@@ -142,7 +165,7 @@ export default async function ProjectPage({ params }: PageProps) {
       </div>
 
       {/* Outfits grid — with bulk "select outfits → go live" */}
-      <ProjectOutfitsGrid projectId={id} outfits={outfits as any} popularTags={popularTags} coTags={coTags} />
+      <ProjectOutfitsGrid projectId={id} outfits={outfits as any} popularTags={popularTags} coTags={coTags} stockByOutfit={stockByOutfit} />
 
       {/* Project meta */}
       <div className="mt-12 pt-8 border-t border-[#E2E0DB]">
