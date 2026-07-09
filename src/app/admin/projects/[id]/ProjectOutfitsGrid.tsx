@@ -6,8 +6,27 @@ import Link from 'next/link'
 import StatusBadge from '@/components/admin/StatusBadge'
 import TagChips from '@/components/admin/TagChips'
 import { thumbUrl } from '@/lib/image-utils'
-import { setOutfitsStatus } from '@/app/admin/projects/actions'
 import { generateHiggsfieldShootForOutfit } from '@/app/admin/projects/higgsfield-actions'
+
+// Status changes go through a route handler (not a server action) so they aren't
+// queued behind a long-running Higgsfield shoot — server actions run one-at-a-time.
+async function postStatus(
+  projectId: string,
+  outfitIds: string[],
+  status: 'live' | 'draft' | 'archived',
+): Promise<{ error?: string; count?: number }> {
+  try {
+    const r = await fetch('/api/admin/set-outfit-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId, outfitIds, status }),
+    })
+    if (!r.ok) return { error: `Failed (${r.status})` }
+    return await r.json()
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Request failed' }
+  }
+}
 
 type OutfitLite = {
   outfit_id: string
@@ -68,7 +87,7 @@ export default function ProjectOutfitsGrid({
     const next = current === 'live' ? 'draft' : 'live'
     setToggling(outfitId)
     setStatusOverride((prev) => ({ ...prev, [outfitId]: next }))
-    const res = await setOutfitsStatus(projectId, [outfitId], next as 'live' | 'draft')
+    const res = await postStatus(projectId, [outfitId], next as 'live' | 'draft')
     setToggling(null)
     if (res.error) {
       // Roll back the optimistic change.
@@ -105,7 +124,7 @@ export default function ProjectOutfitsGrid({
     if (selected.size === 0 || busy) return
     setBusy(true)
     setError(null)
-    const res = await setOutfitsStatus(projectId, Array.from(selected), 'live')
+    const res = await postStatus(projectId, Array.from(selected), 'live')
     setBusy(false)
     if (res.error) {
       setError(res.error)
