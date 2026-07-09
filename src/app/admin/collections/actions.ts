@@ -73,6 +73,39 @@ async function ogImage(url: string): Promise<string | null> {
   }
 }
 
+// Robustly pull the JSON object out of the model's reply. With web_search the
+// reply can span several text blocks and include prose around the JSON, so we
+// scan for the balanced {...} object that actually parses and has our shape.
+function extractScanJson(text: string): any | null {
+  const cleaned = text.replace(/```[a-z]*\n?/gi, '')
+  // Fast path: first "{" to last "}".
+  const first = cleaned.indexOf('{')
+  const last = cleaned.lastIndexOf('}')
+  if (first !== -1 && last > first) {
+    try {
+      const p = JSON.parse(cleaned.slice(first, last + 1))
+      if (p && (Array.isArray(p.candidates) || p.collection_name !== undefined || p.is_new !== undefined)) return p
+    } catch { /* fall through to balanced scan */ }
+  }
+  // Balanced-brace scan: return the first top-level object that parses and looks like ours.
+  let depth = 0, start = -1
+  for (let i = 0; i < cleaned.length; i++) {
+    const ch = cleaned[i]
+    if (ch === '{') { if (depth === 0) start = i; depth++ }
+    else if (ch === '}') {
+      depth--
+      if (depth === 0 && start !== -1) {
+        try {
+          const p = JSON.parse(cleaned.slice(start, i + 1))
+          if (p && (Array.isArray(p.candidates) || p.collection_name !== undefined)) return p
+        } catch { /* keep scanning */ }
+        start = -1
+      }
+    }
+  }
+  return null
+}
+
 const SCAN_SYSTEM = `You are a fashion buyer for a high-taste wardrobe assistant called MYRA. Your job is to check whether a given brand has recently launched a NEW collection (or fresh new-arrivals drop) and, if so, surface the standout new pieces.
 
 Use web search to find the most recent collection / newest arrivals available to buy right now.
@@ -117,7 +150,7 @@ export async function scanBrandCollection(brandName: string): Promise<Collection
     const client = new Anthropic({ apiKey })
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
+      max_tokens: 8000,
       system: SCAN_SYSTEM,
       tools: [
         { type: 'web_search_20250305', name: 'web_search', max_uses: 6 } as unknown as Anthropic.Messages.Tool,
@@ -132,15 +165,16 @@ export async function scanBrandCollection(brandName: string): Promise<Collection
 
     const textBlocks = response.content.filter((b) => b.type === 'text') as Array<{ type: 'text'; text: string }>
     if (textBlocks.length === 0) return { brand: name, collection_name: null, is_new: false, note: null, candidates: [], error: 'No response' }
-    const raw = textBlocks[textBlocks.length - 1].text.replace(/```[a-z]*\n?/g, '').trim()
-    const match = raw.match(/\{[\s\S]*\}/)
-    if (!match) return { brand: name, collection_name: null, is_new: false, note: null, candidates: [], error: 'Invalid response' }
-
-    const parsed = JSON.parse(match[0]) as {
+    const raw = textBlocks.map((b) => b.text).join('\n')
+    const parsed = extractScanJson(raw) as {
       collection_name?: string | null
       is_new?: boolean
       note?: string | null
       candidates?: CollectionCandidate[]
+    } | null
+    if (!parsed) {
+      console.error('[scanBrandCollection] could not parse JSON for', name, '— raw head:', raw.slice(0, 300))
+      return { brand: name, collection_name: null, is_new: false, note: null, candidates: [], error: 'Could not read the collection results — try re-scan' }
     }
     const candidates = (parsed.candidates ?? []).filter((c) => c && c.title)
 

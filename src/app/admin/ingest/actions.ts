@@ -25,13 +25,48 @@ function parseUrlList(input: string): string[] {
     .filter((s) => s.length > 0 && /^https?:\/\//i.test(s))
 }
 
-// Resolve a collection URL to a curated list of product URLs using Claude
-// web search. This handles JS-rendered SPAs (Toteme, Khaite, brand-direct sites)
-// that a raw HTML fetch can't see into, and filters results against the user's
-// aggregated taste profile so we don't waste analysis cycles on junk.
+// Shopify stores expose a collection's products as paginated JSON at
+// /collections/<handle>/products.json?page=N — the real, complete product list
+// for that page (not a ~10-item web-search sample). Most of these brands run
+// Shopify, so try this first. Honours the ?page= in the pasted URL.
+async function shopifyCollectionUrls(collectionUrl: string): Promise<string[]> {
+  try {
+    const u = new URL(collectionUrl)
+    const m = u.pathname.match(/\/collections\/([^/]+)/i)
+    if (!m) return []
+    const handle = m[1]
+    const page = u.searchParams.get('page') ?? '1'
+    const endpoint = `${u.origin}/collections/${handle}/products.json?limit=60&page=${page}`
+    const res = await fetch(endpoint, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
+        Accept: 'application/json',
+      },
+      redirect: 'follow',
+    })
+    if (!res.ok) return []
+    const data = await res.json()
+    const products = Array.isArray(data?.products) ? data.products : []
+    return products
+      .map((p: any) => (p?.handle ? `${u.origin}/products/${p.handle}` : null))
+      .filter((x: unknown): x is string => typeof x === 'string')
+      .slice(0, 60)
+  } catch {
+    return []
+  }
+}
+
+// Resolve a collection URL to a curated list of product URLs. Tries the Shopify
+// products.json fast-path first (complete, paginated), then falls back to Claude
+// web search for JS-rendered SPAs (Toteme, Khaite, brand-direct sites) that a
+// raw fetch can't see into, filtering against the user's aggregated taste profile.
 async function findCollectionUrlsViaClaude(
   collectionUrl: string,
 ): Promise<{ urls: string[]; usedTasteFilter: boolean; error?: string }> {
+  // Shopify fast-path — real, complete product list for the page.
+  const shopify = await shopifyCollectionUrls(collectionUrl)
+  if (shopify.length >= 6) return { urls: shopify, usedTasteFilter: false }
+
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return { urls: [], usedTasteFilter: false, error: 'ANTHROPIC_API_KEY not configured' }
 
