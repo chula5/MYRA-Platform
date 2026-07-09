@@ -90,6 +90,11 @@ export default async function AdminDashboard() {
           description="Paste product URLs — each is scraped, scored, saved, and instantly composed into outfit options anchored on the new piece (like the Composer). Approve looks straight to drafts."
           href="/admin/ingest-compose"
         />
+        <StudioCard
+          title="DRAFT COLLECTIONS"
+          description="Click a brand you've added and an agent checks its site for a new collection (or Scan All). Accept the pieces you like — each is added and composed into outfits; YES fires the refined shoot and trains the Style Brain."
+          href="/admin/collections"
+        />
       </div>
 
       {/* Studio areas */}

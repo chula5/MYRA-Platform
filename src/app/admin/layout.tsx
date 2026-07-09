@@ -95,6 +95,12 @@ export default async function AdminLayout({
             ADD &amp; COMPOSE
           </a>
           <a
+            href="/admin/collections"
+            className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
+          >
+            COLLECTIONS
+          </a>
+          <a
             href="/admin/runway-search"
             className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
           >
