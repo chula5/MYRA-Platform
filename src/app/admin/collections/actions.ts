@@ -50,6 +50,29 @@ export async function listBrandsForScan(): Promise<{ brands: ScannableBrand[]; e
   }
 }
 
+// Scrape a product page's og:image (the web-search agent rarely returns a
+// usable direct image URL, so we fall back to the retailer page's preview image).
+async function ogImage(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+    })
+    if (!res.ok) return null
+    const html = await res.text()
+    const m =
+      html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
+      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i) ||
+      html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i)
+    const found = m?.[1] ?? null
+    return found && /^https?:\/\//i.test(found) ? found : null
+  } catch {
+    return null
+  }
+}
+
 const SCAN_SYSTEM = `You are a fashion buyer for a high-taste wardrobe assistant called MYRA. Your job is to check whether a given brand has recently launched a NEW collection (or fresh new-arrivals drop) and, if so, surface the standout new pieces.
 
 Use web search to find the brand's official site or major stockists (Net-a-Porter, MatchesFashion, SSENSE, Farfetch, MyTheresa, etc.). Identify the most recent collection / newest arrivals available to buy right now.
@@ -116,12 +139,22 @@ export async function scanBrandCollection(brandName: string): Promise<Collection
       candidates?: CollectionCandidate[]
     }
     const candidates = (parsed.candidates ?? []).filter((c) => c && c.title)
+
+    // Backfill missing images from each retailer page's og:image (concurrently).
+    const enriched = await Promise.all(candidates.map(async (c) => {
+      if (c.image_url && /^https?:\/\//i.test(c.image_url)) return c
+      const url = (c.retailer_url ?? '').trim()
+      if (!/^https?:\/\//i.test(url)) return c
+      const img = await ogImage(url)
+      return img ? { ...c, image_url: img } : c
+    }))
+
     return {
       brand: name,
       collection_name: parsed.collection_name ?? null,
-      is_new: parsed.is_new ?? candidates.length > 0,
+      is_new: parsed.is_new ?? enriched.length > 0,
       note: parsed.note ?? null,
-      candidates,
+      candidates: enriched,
     }
   } catch (err) {
     console.error('[scanBrandCollection]', err)
