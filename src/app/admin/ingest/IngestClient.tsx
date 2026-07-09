@@ -223,58 +223,77 @@ export default function IngestClient() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {queue.map((q) => (
               <div
                 key={q.id}
-                className={`bg-white border p-4 flex items-start gap-4 transition-colors ${
+                className={`bg-white border rounded-[10px] overflow-hidden flex flex-col transition-colors ${
                   q.ok
                     ? q.selected
-                      ? 'border-[#0A0A0A]'
+                      ? 'border-[#0A0A0A] ring-1 ring-[#0A0A0A]'
                       : 'border-[#E2E0DB]'
                     : 'border-[#E8B4B4] bg-[#FDECEC]'
                 }`}
               >
-                {/* Checkbox */}
-                <div className="pt-1">
-                  <input
-                    type="checkbox"
-                    checked={q.selected}
-                    disabled={!q.ok}
-                    onChange={() => toggleSelect(q.id)}
-                    className="accent-[#0A0A0A]"
-                  />
-                </div>
-
-                {/* Image */}
-                <div className="w-20 h-24 flex-shrink-0 bg-[#F2F2F0] overflow-hidden">
+                {/* Image with select + discard overlays */}
+                <div className="relative aspect-[3/4] bg-[#F2F2F0] overflow-hidden">
                   {q.imageLoading ? (
                     <div className="w-full h-full flex items-center justify-center">
-                      <span className="text-[8px] tracking-[0.068em] text-[#A8A8A4]">…</span>
+                      <span className="text-[10px] tracking-[0.068em] text-[#A8A8A4]">…</span>
                     </div>
                   ) : q.image_url ? (
-                    <img src={thumbUrl(q.image_url, 600)} alt={q.parsed?.product_name ?? ''} className="w-full h-full object-cover" />
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={thumbUrl(q.image_url, 600)} alt={q.parsed?.product_name ?? ''} loading="lazy" className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
-                      <span className="text-[8px] tracking-[0.068em] text-[#A8A8A4]">NO IMG</span>
+                      <span className="text-[10px] tracking-[0.068em] text-[#A8A8A4]">NO IMG</span>
                     </div>
                   )}
+
+                  {/* Full-cover select overlay (ok items only) */}
+                  {q.ok && (
+                    <button
+                      type="button"
+                      onClick={() => toggleSelect(q.id)}
+                      aria-label={q.selected ? 'Deselect' : 'Select'}
+                      className="absolute inset-0 z-0"
+                    >
+                      <span
+                        className={`absolute top-2 left-2 w-6 h-6 rounded-full border flex items-center justify-center text-[12px] ${
+                          q.selected
+                            ? 'bg-[#0A0A0A] border-[#0A0A0A] text-white'
+                            : 'bg-white/90 border-[#0A0A0A] text-transparent'
+                        }`}
+                      >
+                        ✓
+                      </span>
+                    </button>
+                  )}
+
+                  {/* Discard */}
+                  <button
+                    type="button"
+                    onClick={() => discard(q.id)}
+                    aria-label="Discard"
+                    className="absolute top-2 right-2 z-10 w-6 h-6 rounded-full bg-white/85 text-[#6B6B6B] hover:bg-[#B83A3A] hover:text-white text-[13px] leading-none flex items-center justify-center transition-colors"
+                  >
+                    ×
+                  </button>
                 </div>
 
                 {/* Info */}
-                <div className="flex-1 min-w-0">
+                <div className="p-3 flex-1 flex flex-col">
                   {q.ok && q.parsed ? (
                     <>
-                      <p className="text-[10px] tracking-[0.09em] text-[#A8A8A4] mb-1 truncate">
+                      <p className="text-[9px] tracking-[0.09em] text-[#A8A8A4] mb-0.5 truncate">
                         {(q.parsed.brand_name ?? 'UNKNOWN BRAND').toUpperCase()}
                       </p>
-                      <p className="text-[13px] tracking-[0.023em] text-[#4A4E57] mb-2 truncate">
+                      <p className="text-[11px] tracking-[0.023em] text-[#4A4E57] mb-1.5 leading-snug line-clamp-2">
                         {(q.parsed.product_name ?? 'UNTITLED').toUpperCase()}
                       </p>
-                      <div className="flex items-center gap-3 flex-wrap text-[10px] tracking-[0.068em] text-[#6B6B6B]">
+                      <div className="flex items-center gap-1.5 flex-wrap text-[9px] tracking-[0.05em] text-[#6B6B6B]">
                         {q.parsed.item_type && <span>{q.parsed.item_type.replace(/_/g, ' ').toUpperCase()}</span>}
                         {q.parsed.colour_family && <span>· {q.parsed.colour_family.toUpperCase()}</span>}
-                        {q.parsed.material_primary && <span>· {q.parsed.material_primary.toUpperCase()}</span>}
                         {q.parsed.price && (
                           <span>· {q.parsed.currency ?? ''} {q.parsed.price}</span>
                         )}
@@ -283,23 +302,14 @@ export default function IngestClient() {
                     </>
                   ) : (
                     <>
-                      <p className="text-[11px] tracking-[0.09em] text-[#B83A3A] mb-1">FAILED TO ANALYSE</p>
-                      <p className="text-[10px] tracking-[0.045em] text-[#6B6B6B]">{q.error}</p>
+                      <p className="text-[10px] tracking-[0.09em] text-[#B83A3A] mb-1">FAILED TO ANALYSE</p>
+                      <p className="text-[9px] tracking-[0.045em] text-[#6B6B6B] break-words">{q.error}</p>
                     </>
                   )}
-                  <p className="text-[9px] tracking-[0.045em] text-[#A8A8A4] mt-2 truncate font-mono">
+                  <p className="text-[8px] tracking-[0.03em] text-[#A8A8A4] mt-2 truncate font-mono">
                     {q.source_url}
                   </p>
                 </div>
-
-                {/* Discard */}
-                <button
-                  type="button"
-                  onClick={() => discard(q.id)}
-                  className="text-[10px] tracking-[0.09em] text-[#A8A8A4] hover:text-[#4A4E57] transition-colors mt-1"
-                >
-                  ×
-                </button>
               </div>
             ))}
           </div>
