@@ -247,14 +247,13 @@ export default function StockImpactClient({ outfits: initial }: { outfits: Stock
                             // eslint-disable-next-line @next/next/no-img-element
                             ? <img src={thumbUrl(it.image_url, 400)} alt="" loading="lazy" className="w-full h-full object-cover" />
                             : <div className="w-full h-full" />}
-                          {flagged && (
-                            <button
-                              onClick={() => openSwap(o, it)}
-                              className="absolute inset-0 bg-black/0 hover:bg-black/45 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
-                            >
-                              <span className="bg-white text-[#0A0A0A] text-[8px] tracking-[0.12em] px-2 py-1 rounded">SWAP</span>
-                            </button>
-                          )}
+                          {/* Any item can be swapped — incl. one you just swapped in. */}
+                          <button
+                            onClick={() => openSwap(o, it)}
+                            className="absolute inset-0 bg-black/0 hover:bg-black/45 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
+                          >
+                            <span className="bg-white text-[#0A0A0A] text-[8px] tracking-[0.12em] px-2 py-1 rounded">SWAP</span>
+                          </button>
                         </div>
                         <p className="text-[7px] tracking-[0.08em] text-[#A8A8A4] mt-1 truncate">{SLOT_LABEL[it.slot] ?? it.slot}</p>
                         <StockBadge status={it.stock_status} />
