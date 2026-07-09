@@ -123,20 +123,21 @@ export async function swapOutfitItemForStock(
   outfitItemId: string,
   newItemId: string,
   slot: string,
-): Promise<{ error?: string }> {
+): Promise<{ outfitItemId?: string; error?: string }> {
   const admin = createAdminClient()
   try {
     const { error: delErr } = await admin.from('outfit_item').delete().eq('outfit_item_id', outfitItemId)
     if (delErr) throw delErr
-    const { error: insErr } = await (admin.from('outfit_item') as any).insert([
-      { outfit_id: outfitId, item_id: newItemId, slot },
-    ])
+    const { data, error: insErr } = await (admin.from('outfit_item') as any)
+      .insert([{ outfit_id: outfitId, item_id: newItemId, slot }])
+      .select('outfit_item_id')
+      .single()
     if (insErr) throw insErr
 
     revalidatePath('/admin/stock-impact')
     revalidatePath('/admin/projects')
     revalidatePath('/')
-    return {}
+    return { outfitItemId: (data as any)?.outfit_item_id }
   } catch (err) {
     console.error('[swapOutfitItemForStock]', err)
     return { error: err instanceof Error ? err.message : 'Swap failed' }

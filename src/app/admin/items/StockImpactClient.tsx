@@ -117,32 +117,50 @@ export default function StockImpactClient({ outfits: initial }: { outfits: Stock
     setSwapOptions(await fetchOptions(swap.mode, swap.anchor, swap.exclude, q, { slot: swap.slot, present: swap.present }))
     setSwapLoading(false)
   }
+  // Optimistic: update the UI immediately, persist in the background, roll back
+  // only if the server rejects it. Keeps the swap/add feeling instant instead of
+  // waiting on the round-trip (which can queue behind a running shoot).
+  function replaceOutfitItemId(outfitId: string, fromId: string, toId: string) {
+    setOutfits((prev) => prev.map((o) => o.outfit_id !== outfitId ? o
+      : { ...o, items: o.items.map((it) => it.outfit_item_id === fromId ? { ...it, outfit_item_id: toId } : it) }))
+  }
+
   async function performSelect(opt: ReviewItem) {
     if (!swap) return
     const target = swap
     setSwap(null)
+    const swapped: StockOutfitItem = { outfit_item_id: '', item_id: opt.item_id, slot: opt.slot, product_name: opt.product_name, brand_name: opt.brand_name, image_url: opt.image_url, stock_status: 'in_stock' }
+
     if (target.mode === 'add') {
-      const res = await addItemToOutfitForStock(target.outfitId, opt.item_id, opt.slot)
-      if (res.error) { setMsg((m) => ({ ...m, [target.outfitId]: res.error! })); return }
-      setOutfits((prev) => prev.map((o) => {
-        if (o.outfit_id !== target.outfitId) return o
-        const newItem: StockOutfitItem = { outfit_item_id: res.outfitItemId ?? `added:${opt.item_id}`, item_id: opt.item_id, slot: opt.slot, product_name: opt.product_name, brand_name: opt.brand_name, image_url: opt.image_url, stock_status: 'in_stock' }
-        return recompute({ ...o, items: [...o.items, newItem] })
-      }))
+      const tempId = `pending:${opt.item_id}`
+      setOutfits((prev) => prev.map((o) => o.outfit_id !== target.outfitId ? o
+        : recompute({ ...o, items: [...o.items, { ...swapped, outfit_item_id: tempId }] })))
       setChanged((s) => new Set(s).add(target.outfitId))
+      const res = await addItemToOutfitForStock(target.outfitId, opt.item_id, opt.slot)
+      if (res.error) {
+        setOutfits((prev) => prev.map((o) => o.outfit_id !== target.outfitId ? o
+          : recompute({ ...o, items: o.items.filter((it) => it.outfit_item_id !== tempId) })))
+        setMsg((m) => ({ ...m, [target.outfitId]: res.error! }))
+      } else if (res.outfitItemId) {
+        replaceOutfitItemId(target.outfitId, tempId, res.outfitItemId)
+      }
       return
     }
-    const res = await swapOutfitItemForStock(target.outfitId, target.outfitItemId!, opt.item_id, target.slot!)
-    if (res.error) { setMsg((m) => ({ ...m, [target.outfitId]: res.error! })); return }
-    // Replace the item in local state; the swapped-in piece is assumed in stock.
-    setOutfits((prev) => prev.map((o) => {
-      if (o.outfit_id !== target.outfitId) return o
-      const items = o.items.map((it) => it.outfit_item_id === target.outfitItemId
-        ? { outfit_item_id: it.outfit_item_id, item_id: opt.item_id, slot: opt.slot, product_name: opt.product_name, brand_name: opt.brand_name, image_url: opt.image_url, stock_status: 'in_stock' as const }
-        : it)
-      return recompute({ ...o, items })
-    }))
+
+    // Swap — capture the original for rollback, replace optimistically.
+    const original = outfits.find((o) => o.outfit_id === target.outfitId)?.items.find((it) => it.outfit_item_id === target.outfitItemId)
+    setOutfits((prev) => prev.map((o) => o.outfit_id !== target.outfitId ? o
+      : recompute({ ...o, items: o.items.map((it) => it.outfit_item_id === target.outfitItemId ? { ...swapped, outfit_item_id: it.outfit_item_id } : it) })))
     setChanged((s) => new Set(s).add(target.outfitId))
+    const res = await swapOutfitItemForStock(target.outfitId, target.outfitItemId!, opt.item_id, target.slot!)
+    if (res.error) {
+      if (original) setOutfits((prev) => prev.map((o) => o.outfit_id !== target.outfitId ? o
+        : recompute({ ...o, items: o.items.map((it) => it.outfit_item_id === target.outfitItemId ? original : it) })))
+      setMsg((m) => ({ ...m, [target.outfitId]: res.error! }))
+    } else if (res.outfitItemId) {
+      // The DB row was replaced — track the new id so a repeat swap stays correct.
+      replaceOutfitItemId(target.outfitId, target.outfitItemId!, res.outfitItemId)
+    }
   }
 
   async function refine(outfitId: string) {
