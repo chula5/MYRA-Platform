@@ -1,18 +1,34 @@
+// Widths the Next image optimizer accepts (deviceSizes ∪ imageSizes defaults).
+const NEXT_IMAGE_WIDTHS = [16, 32, 48, 64, 96, 128, 256, 384, 640, 750, 828, 1080, 1200, 1920]
+function snapWidth(w: number): number {
+  return NEXT_IMAGE_WIDTHS.find((s) => s >= w) ?? 1920
+}
+
 /**
- * Lightweight thumbnail transform for Cloudinary URLs: modern format (f_auto),
- * auto quality (q_auto) and downscale-only to `width` (c_limit — preserves the
- * full-length aspect, no cropping). Massively cuts payload for grid thumbnails.
- * Non-Cloudinary URLs (and already-transformed ones) pass through unchanged.
+ * Lightweight thumbnail transform: modern format, auto quality, downscale-only
+ * to `width` (preserves aspect, no crop). Massively cuts payload for grids.
+ *
+ * - Cloudinary URLs → inject an f_auto,q_auto,w,c_limit transform after /upload/.
+ * - ANY other remote http(s) image (e.g. Higgsfield's CloudFront CDN, where the
+ *   originals are ~20MB PNGs) → route it through Next's own image optimizer
+ *   (/_next/image), which resizes to the displayed size and serves WebP/AVIF,
+ *   cached after the first hit. This is what makes the 85% of outfits hosted
+ *   off-Cloudinary load fast too. Works through every existing call site.
  */
 export function thumbUrl(url: string, width = 600): string {
   if (!url) return url
   try {
-    if (!url.includes('res.cloudinary.com')) return url
-    const i = url.indexOf('/upload/')
-    if (i === -1) return url
-    const after = url.slice(i + 8)
-    if (/(^|\/)(f_auto|q_auto|w_\d)/.test(after.split('/')[0])) return url // already transformed
-    return `${url.slice(0, i + 8)}f_auto,q_auto,w_${width},c_limit/${after}`
+    if (url.includes('res.cloudinary.com')) {
+      const i = url.indexOf('/upload/')
+      if (i === -1) return url
+      const after = url.slice(i + 8)
+      if (/(^|\/)(f_auto|q_auto|w_\d)/.test(after.split('/')[0])) return url // already transformed
+      return `${url.slice(0, i + 8)}f_auto,q_auto,w_${width},c_limit/${after}`
+    }
+    if (/^https?:\/\//i.test(url)) {
+      return `/_next/image?url=${encodeURIComponent(url)}&w=${snapWidth(width)}&q=72`
+    }
+    return url
   } catch {
     return url
   }
