@@ -27,31 +27,44 @@ function parseUrlList(input: string): string[] {
 }
 
 // Shopify stores expose a collection's products as paginated JSON at
-// /collections/<handle>/products.json?page=N — the real, complete product list
-// for that page (not a ~10-item web-search sample). Most of these brands run
-// Shopify, so try this first. Honours the ?page= in the pasted URL.
+// /collections/<handle>/products.json?limit=250&page=N — the real, complete
+// product list (not a ~10-item web-search sample). Most of these brands run
+// Shopify, so try this first. If the pasted URL has an explicit ?page=, fetch
+// just that page; otherwise page through the WHOLE collection (up to a cap) so
+// big new-in pages (e.g. Khaite's 166 items) come through in full.
+const SHOPIFY_PAGE_SIZE = 250 // Shopify products.json max
+const SHOPIFY_MAX_ITEMS = 400 // cap total to bound analysis cost
 async function shopifyCollectionUrls(collectionUrl: string): Promise<string[]> {
   try {
     const u = new URL(collectionUrl)
     const m = u.pathname.match(/\/collections\/([^/]+)/i)
     if (!m) return []
     const handle = m[1]
-    const page = u.searchParams.get('page') ?? '1'
-    const endpoint = `${u.origin}/collections/${handle}/products.json?limit=60&page=${page}`
-    const res = await fetch(endpoint, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
-        Accept: 'application/json',
-      },
-      redirect: 'follow',
-    })
-    if (!res.ok) return []
-    const data = await res.json()
-    const products = Array.isArray(data?.products) ? data.products : []
-    return products
-      .map((p: any) => (p?.handle ? `${u.origin}/products/${p.handle}` : null))
-      .filter((x: unknown): x is string => typeof x === 'string')
-      .slice(0, 60)
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
+      Accept: 'application/json',
+    }
+    const fetchPage = async (page: number): Promise<string[]> => {
+      const res = await fetch(`${u.origin}/collections/${handle}/products.json?limit=${SHOPIFY_PAGE_SIZE}&page=${page}`, { headers, redirect: 'follow' })
+      if (!res.ok) return []
+      const data = await res.json()
+      const products = Array.isArray(data?.products) ? data.products : []
+      return products.map((p: any) => (p?.handle ? `${u.origin}/products/${p.handle}` : null)).filter((x: unknown): x is string => typeof x === 'string')
+    }
+
+    // Explicit page → just that page.
+    const explicit = u.searchParams.get('page')
+    if (explicit) return (await fetchPage(Number(explicit) || 1)).slice(0, SHOPIFY_MAX_ITEMS)
+
+    // No page → walk the whole collection until a short page or the cap.
+    const all: string[] = []
+    for (let page = 1; page <= 10 && all.length < SHOPIFY_MAX_ITEMS; page++) {
+      const batch = await fetchPage(page)
+      if (batch.length === 0) break
+      all.push(...batch)
+      if (batch.length < SHOPIFY_PAGE_SIZE) break // last page
+    }
+    return Array.from(new Set(all)).slice(0, SHOPIFY_MAX_ITEMS)
   } catch {
     return []
   }
