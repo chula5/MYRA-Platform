@@ -134,10 +134,16 @@ function sizeFromVariant(v: any): string | null {
   return null
 }
 
-async function extractSizes(url: string): Promise<string[]> {
+// AUTHORITATIVE stock from a Shopify store's product JSON (`<url>.js`). The
+// per-variant `available` flag is the source of truth — far more reliable than
+// scanning page text for "sold out" (which false-positives on related-product
+// carousels or template labels, e.g. Simon Miller marking an in-stock top OOS).
+// Returns null when it's not a resolvable Shopify product (caller falls back to
+// the HTML heuristic).
+async function shopifyStock(url: string): Promise<{ status: StockStatus; sizes: string[] } | null> {
   try {
     const clean = url.split('#')[0].split('?')[0].replace(/\/$/, '')
-    if (!/\/products\//.test(clean)) return []
+    if (!/\/products\//.test(clean)) return null
     const res = await fetch(`${clean}.js`, {
       headers: {
         'User-Agent':
@@ -146,21 +152,34 @@ async function extractSizes(url: string): Promise<string[]> {
       },
       redirect: 'follow',
     })
-    if (!res.ok) return []
+    if (!res.ok) return null
     const data = await res.json()
     const variants: any[] = Array.isArray(data?.variants) ? data.variants : []
+    if (variants.length === 0) return null
 
-    // A variant's options can be colour, size, or both in any order (e.g.
-    // option1="Luwak" colour, option2="M"). Only keep values that actually LOOK
-    // like a size, so we never mislabel a colour ("Luwak") as a size.
-    const sizes: string[] = variants
-      .filter((v: any) => v && v.available)
-      .map((v: any) => sizeFromVariant(v))
-      .filter((s: string | null): s is string => !!s)
-    return Array.from(new Set<string>(sizes)).slice(0, 16)
+    const available = variants.filter((v: any) => v && v.available)
+    // In-stock size labels (reject colours like "Luwak"; keep true sizes only).
+    const sizes = Array.from(new Set<string>(
+      available.map((v: any) => sizeFromVariant(v)).filter((s: string | null): s is string => !!s),
+    )).slice(0, 16)
+
+    let status: StockStatus
+    if (available.length === 0) status = 'out_of_stock'
+    else if (variants.length >= 4 && available.length <= 2) status = 'low_stock' // only a size or two left
+    else status = 'in_stock'
+    return { status, sizes }
   } catch {
-    return []
+    return null
   }
+}
+
+// Resolve stock: Shopify variant data first (authoritative), else the HTML
+// heuristic (JSON-LD → text regex). Sizes only come from the Shopify path.
+async function resolveStock(url: string): Promise<{ status: StockStatus; sizes: string[] }> {
+  const shop = await shopifyStock(url)
+  if (shop) return shop
+  const r = await detectStock(url)
+  return { status: r.status, sizes: [] }
 }
 
 // Stock check for a raw product URL (not yet an item) — used by Batch Ingest to
@@ -170,8 +189,7 @@ export async function checkStockForUrl(
 ): Promise<{ status: StockStatus; sizes: string[] }> {
   try {
     if (!/^https?:\/\//i.test(url)) return { status: 'unknown', sizes: [] }
-    const [result, sizes] = await Promise.all([detectStock(url), extractSizes(url)])
-    return { status: result.status, sizes }
+    return await resolveStock(url)
   } catch {
     return { status: 'unknown', sizes: [] }
   }
@@ -213,14 +231,22 @@ export async function checkItemStock(
     const retailerUrl = (item as { retailer_url: string } | null)?.retailer_url
     if (!retailerUrl) return { error: 'Item has no retailer URL' }
 
-    const [result, sizes] = await Promise.all([detectStock(retailerUrl), extractSizes(retailerUrl)])
+    // Shopify variant data is authoritative; fall back to the HTML heuristic.
+    const shop = await shopifyStock(retailerUrl)
+    let status: StockStatus, sizes: string[], signal: string, notes: string | null
+    if (shop) {
+      status = shop.status; sizes = shop.sizes; signal = `shopify:${shop.status}`; notes = null
+    } else {
+      const r = await detectStock(retailerUrl)
+      status = r.status; sizes = []; signal = r.signal; notes = r.notes
+    }
 
     const { error: updateErr } = await (supabase.from('item') as any)
       .update({
-        stock_status: result.status,
+        stock_status: status,
         stock_checked_at: new Date().toISOString(),
-        stock_signal: result.signal,
-        stock_notes: result.notes,
+        stock_signal: signal,
+        stock_notes: notes,
         stock_sizes: sizes,
       })
       .eq('item_id', itemId)
@@ -230,7 +256,7 @@ export async function checkItemStock(
     revalidatePath(`/admin/items/${itemId}/edit`)
     revalidatePath('/admin/projects')
     revalidatePath('/admin')
-    return { status: result.status, signal: result.signal }
+    return { status, signal }
   } catch (err: unknown) {
     console.error('[checkItemStock]', err)
     return { error: err instanceof Error ? err.message : 'Stock check failed' }
