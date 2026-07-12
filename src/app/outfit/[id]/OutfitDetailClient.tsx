@@ -7,7 +7,6 @@ import Hotspot from '@/components/hotspot/Hotspot'
 import ShopTheLookOverlay from '@/components/source-panel/ShopTheLookOverlay'
 import OutfitCard from '@/components/outfit-card/OutfitCard'
 import SaveHeartButton from '@/components/outfit-card/SaveHeartButton'
-import CardButton from '@/components/ui/CardButton'
 import CoachTip from '@/components/CoachTip'
 import { createClient } from '@/lib/supabase'
 import { getRelatedOutfits, getStyleItemOutfits } from './related-actions'
@@ -21,6 +20,9 @@ import type { OutfitWithItems, Item, Brand, ItemType } from '@/types/database'
 // Flip to `true` to re-expose both buttons (all handlers + result grids
 // stay in place, so nothing else needs to change).
 const SHOW_BROWSE_BUTTONS = true
+
+// White overlaid action text (matches the editorial feed cards).
+const ACTION_CLS = 'pointer-events-auto text-white text-[10px] sm:text-[11px] tracking-[0.14em] uppercase font-light hover:opacity-70 transition-opacity'
 
 type SourceItemData = Item & { brand: Brand }
 
@@ -440,7 +442,7 @@ export default function OutfitDetailClient({
                   id="outfit-tap-to-style"
                   text="Tap any piece on the outfit to style it a different way."
                   arrow="up"
-                  className="left-1/2 -translate-x-1/2 bottom-5"
+                  className="left-1/2 -translate-x-1/2 bottom-24"
                   delayMs={1100}
                 />
               )}
@@ -497,6 +499,30 @@ export default function OutfitDetailClient({
                   </div>
                 </>
               )}
+
+              {/* Browse actions overlaid on the image (editorial, matches the feed).
+                  Source Items + Similar Looks on one row, Explore Styles centred below. */}
+              {!sourcePanelOpen && (
+                <div className="absolute inset-x-0 bottom-0 z-20 pt-12 pb-4 px-4 bg-gradient-to-t from-black/55 via-black/20 to-transparent pointer-events-none">
+                  <div className="flex items-center justify-center gap-6">
+                    <button onClick={openSourcePanel} className={ACTION_CLS}>Source Items</button>
+                    {showBrowse && (
+                      <span className="relative">
+                        <button onClick={handleSimilarLooks} className={ACTION_CLS}>Similar Looks</button>
+                        <CoachTip id="outfit-similar-looks" text="More outfits with the same shape and feel." arrow="down" className="bottom-full mb-2 left-1/2 -translate-x-1/2" delayMs={1600} />
+                      </span>
+                    )}
+                  </div>
+                  {showBrowse && (
+                    <div className="flex justify-center mt-2">
+                      <span className="relative">
+                        <button onClick={handleExploreStyles} className={ACTION_CLS}>Explore Styles</button>
+                        <CoachTip id="outfit-explore-styles" text="Different looks styled for the same occasion." arrow="down" className="bottom-full mb-2 left-1/2 -translate-x-1/2" delayMs={2300} />
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -544,45 +570,13 @@ export default function OutfitDetailClient({
 
         {/* Occasion tags are internal (search/curation) — not shown to visitors. */}
 
-        {/* Action buttons — centred.
-            SIMILAR LOOKS and EXPLORE STYLES are hidden via SHOW_BROWSE_BUTTONS
-            while the corresponding edit/occasions sections aren't live yet.
-            Flip the flag back to `true` to re-expose them — all downstream
-            code (handlers, fetch logic, result grids) is untouched. */}
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          {canSave && <SaveHeartButton outfitId={outfitId} initialSaved={initialSaved} variant="detail" />}
-          <CardButton variant="filled" onClick={openSourcePanel}>
-            SOURCE ITEMS
-          </CardButton>
-          {showBrowse && (
-            <>
-              <span className="relative inline-flex">
-                <CardButton variant="filled" onClick={handleSimilarLooks}>
-                  SIMILAR LOOKS
-                </CardButton>
-                <CoachTip
-                  id="outfit-similar-looks"
-                  text="More outfits with the same shape and feel."
-                  arrow="up"
-                  className="top-full mt-2.5 right-0"
-                  delayMs={1600}
-                />
-              </span>
-              <span className="relative inline-flex">
-                <CardButton variant="filled" onClick={handleExploreStyles}>
-                  EXPLORE STYLES
-                </CardButton>
-                <CoachTip
-                  id="outfit-explore-styles"
-                  text="Different looks styled for the same occasion."
-                  arrow="up"
-                  className="top-full mt-2.5 left-0"
-                  delayMs={2300}
-                />
-              </span>
-            </>
-          )}
-        </div>
+        {/* Source Items / Similar Looks / Explore Styles are now overlaid on the
+            image above (editorial). Only SAVE remains here for signed-in users. */}
+        {canSave && (
+          <div className="flex items-center justify-center">
+            <SaveHeartButton outfitId={outfitId} initialSaved={initialSaved} variant="detail" />
+          </div>
+        )}
         </div>
       </div>
 
