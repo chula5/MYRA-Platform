@@ -3,7 +3,7 @@
 // taste vector, so the page rearranges itself per person.
 export const OCCASION_LABELS: Record<string, string> = {
   'weekend away': 'WEEKEND AWAY',
-  'wimbledon': 'WIMBLEDON',
+  'summer office': 'SUMMER OFFICE ATTIRE',
   'wedding guest': 'WEDDING GUEST',
   'date night': 'DATE NIGHT',
   'city summer evening': 'CITY SUMMER EVENING',
@@ -20,7 +20,7 @@ export const OCCASION_LABELS: Record<string, string> = {
 // The six always-on occasions (default order when there's no taste signal).
 export const BASE_OCCASIONS = [
   'weekend away',
-  'wimbledon',
+  'summer office',
   'wedding guest',
   'date night',
   'city summer evening',

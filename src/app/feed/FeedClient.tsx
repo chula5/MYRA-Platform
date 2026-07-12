@@ -19,7 +19,7 @@ const SEARCH_EXAMPLES = [
   'A GIRLS HOLIDAY IN MYKONOS',
   'A SUMMER WEDDING IN ITALY',
   'DINNER ON A ROOFTOP',
-  'WIMBLEDON IN JULY',
+  'SUMMER OFFICE ATTIRE',
   'BRUNCH WITH THE GIRLS',
   'A FIRST DATE',
   'A WEEKEND IN THE COUNTRYSIDE',
@@ -29,7 +29,7 @@ const SEARCH_EXAMPLES = [
 // ── Preset occasions ──────────────────────────────────────────
 const PRESET_OCCASIONS = [
   { label: 'WEEKEND AWAY', tag: 'weekend away' },
-  { label: 'WIMBLEDON', tag: 'wimbledon' },
+  { label: 'SUMMER OFFICE ATTIRE', tag: 'summer office' },
   { label: 'WEDDING GUEST', tag: 'wedding guest' },
   { label: 'DATE NIGHT', tag: 'date night' },
   { label: 'CITY SUMMER EVENING', tag: 'city summer evening' },
