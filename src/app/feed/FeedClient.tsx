@@ -834,7 +834,7 @@ export default function FeedClient({
             CLOSE
           </button>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-0.5 -mx-6 sm:-mx-10">
           {brandView.outfits.map((outfit) => (
             <OutfitCard
               key={outfit.outfit_id}
@@ -871,7 +871,7 @@ export default function FeedClient({
         </div>
 
         {searchLoading && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-0.5 -mx-6 sm:-mx-10">
             {[1, 2, 3, 4, 5, 6].map((n) => (
               <div key={n} className="aspect-[3/4] bg-[#F2F2F2] animate-pulse rounded-[10px]" />
             ))}
@@ -897,7 +897,7 @@ export default function FeedClient({
         )}
 
         {!searchLoading && searchResults.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-0.5 -mx-6 sm:-mx-10">
             {searchResults.map((outfit) => (
               <OutfitCard
                 key={outfit.outfit_id}
@@ -936,7 +936,7 @@ export default function FeedClient({
       </div>
 
       {loading && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-0.5 -mx-6 sm:-mx-10">
           {[1, 2, 3, 4, 5, 6].map((n) => (
             <div key={n} className="aspect-[3/4] bg-[#F2F2F2] animate-pulse rounded-[10px]" />
           ))}
@@ -957,7 +957,7 @@ export default function FeedClient({
 
       {!loading && outfits.length > 0 && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-0.5 -mx-6 sm:-mx-10">
             {outfits.map((outfit) => (
               <OutfitCard
                 key={outfit.outfit_id}

@@ -3,7 +3,6 @@
 import { useRef, useState } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
-import CardButton from '@/components/ui/CardButton'
 import Hotspot from '@/components/hotspot/Hotspot'
 import ShopTheLookOverlay from '@/components/source-panel/ShopTheLookOverlay'
 import SaveHeartButton from '@/components/outfit-card/SaveHeartButton'
@@ -98,11 +97,13 @@ export default function OutfitCard({
   const dotsCount = Math.min(total, MAX_DOTS)
   const dotOffset = total > MAX_DOTS ? Math.max(0, Math.min(current - Math.floor(MAX_DOTS / 2), total - MAX_DOTS)) : 0
 
+  const actionClass = 'pointer-events-auto text-white text-[9px] sm:text-[10px] tracking-[0.14em] uppercase drop-shadow-[0_1px_4px_rgba(0,0,0,0.65)] hover:opacity-80 transition-opacity'
+
   return (
     <article className="relative flex flex-col">
-      {/* Image carousel — 3:4 portrait */}
+      {/* Full-bleed image carousel — 3:4 portrait, actions overlaid */}
       <div
-        className="relative aspect-[3/4] w-full overflow-hidden cursor-pointer rounded-[16px]"
+        className="relative aspect-[3/4] w-full overflow-hidden cursor-pointer"
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
         onClick={handleTap}
@@ -113,7 +114,7 @@ export default function OutfitCard({
             alt="Outfit"
             fill
             className="object-cover"
-            sizes="(max-width: 768px) 100vw, 33vw"
+            sizes="(max-width: 768px) 50vw, 33vw"
           />
         ) : (
           slides.map((slide, i) => (
@@ -123,7 +124,7 @@ export default function OutfitCard({
               alt={slide.alt}
               fill
               className={`object-cover transition-opacity duration-300 ${i === current ? 'opacity-100' : 'opacity-0'}`}
-              sizes="(max-width: 768px) 100vw, 33vw"
+              sizes="(max-width: 768px) 50vw, 33vw"
               priority={i === 0}
             />
           ))
@@ -186,62 +187,32 @@ export default function OutfitCard({
             />
           </div>
         )}
-      </div>
 
-      {/* Card footer */}
-      <div className="pt-3 pb-4 px-1">
-        {/* Carousel dots */}
-        {total > 1 && (
-          <div className="flex items-center gap-1.5 mb-3">
+        {/* Carousel position dots (subtle, on the image) */}
+        {total > 1 && !sourcePanelOpen && (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1">
             {Array.from({ length: dotsCount }).map((_, di) => {
               const slideI = dotOffset + di
               return (
-                <button
-                  key={di}
-                  aria-label={`Go to slide ${slideI + 1}`}
-                  onClick={() => setSlideIdx(slideI)}
-                  className={`w-1.5 h-1.5 rounded-full transition-colors ${
-                    slideI === current
-                      ? 'bg-[#0A0A0A]'
-                      : 'border border-[#A8A8A4]'
-                  }`}
-                />
+                <span key={di} className={`w-1.5 h-1.5 rounded-full ${slideI === current ? 'bg-white' : 'bg-white/45'}`} />
               )
             })}
           </div>
         )}
-        {total <= 1 && (
-          <div className="flex items-center gap-1.5 mb-3">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#0A0A0A]" />
+
+        {/* Actions — white text overlaid on the photo (editorial). */}
+        {!sourcePanelOpen && (
+          <div className="absolute inset-x-0 bottom-0 z-20 pt-10 pb-3 px-3 bg-gradient-to-t from-black/60 via-black/25 to-transparent pointer-events-none">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <button onClick={(e) => { e.stopPropagation(); setSourcePanelOpen(true) }} className={actionClass}>Source Items</button>
+              <span className="text-white/40 text-[9px] pointer-events-none">·</span>
+              <button onClick={(e) => { e.stopPropagation(); trackEngagement('similar_looks', outfit.outfit_id); onSimilarLooks?.(outfit) }} className={actionClass}>Similar Looks</button>
+              <span className="text-white/40 text-[9px] pointer-events-none">·</span>
+              <button onClick={(e) => { e.stopPropagation(); trackEngagement('explore_styles', outfit.outfit_id); onExploreStyles?.(outfit) }} className={actionClass}>Explore Styles</button>
+            </div>
           </div>
         )}
-
-        {/* Action buttons */}
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          <CardButton
-            variant="filled"
-            onClick={() => setSourcePanelOpen((v) => !v)}
-            className="flex-1"
-          >
-            SOURCE ITEMS
-          </CardButton>
-          <CardButton
-            variant="filled"
-            onClick={() => { trackEngagement('similar_looks', outfit.outfit_id); onSimilarLooks?.(outfit) }}
-            className="flex-1"
-          >
-            SIMILAR LOOKS
-          </CardButton>
-          <CardButton
-            variant="filled"
-            onClick={() => { trackEngagement('explore_styles', outfit.outfit_id); onExploreStyles?.(outfit) }}
-            className="flex-1"
-          >
-            EXPLORE STYLES
-          </CardButton>
-        </div>
       </div>
-
     </article>
   )
 }
