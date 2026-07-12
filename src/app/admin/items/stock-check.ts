@@ -27,34 +27,35 @@ async function detectStock(url: string): Promise<StockResult> {
   }
   const html = await res.text()
 
-  // 1. JSON-LD Product.availability — the gold standard.
+  // 1. JSON-LD Product.availability — the gold standard. A product can have MANY
+  // offers (one per size/colour) with MIXED availability (e.g. Tory Burch: size M
+  // in stock, S sold out). Aggregate ALL of them: in stock if ANY variant is
+  // available; only out of stock when EVERY variant is unavailable.
   const jsonLdMatches = Array.from(
     html.matchAll(
       /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi,
     ),
   )
+  const avails: string[] = []
   for (const match of jsonLdMatches) {
     try {
       const parsed = JSON.parse(match[1].trim())
       const nodes = Array.isArray(parsed) ? parsed : [parsed]
-      for (const node of nodes) {
-        const availability = findAvailability(node)
-        if (availability) {
-          const normalised = availability.toLowerCase()
-          if (normalised.includes('outofstock') || normalised.includes('soldout') || normalised.includes('discontinued')) {
-            return { status: 'out_of_stock', signal: `jsonld:${availability}`, notes: null }
-          }
-          if (normalised.includes('limitedavailability') || normalised.includes('lowstock') || normalised.includes('presale')) {
-            return { status: 'low_stock', signal: `jsonld:${availability}`, notes: null }
-          }
-          if (normalised.includes('instock') || normalised.includes('onlineonly') || normalised.includes('preorder')) {
-            return { status: 'in_stock', signal: `jsonld:${availability}`, notes: null }
-          }
-        }
-      }
+      for (const node of nodes) collectAvailabilities(node, avails)
     } catch {
       // ignore malformed JSON-LD blocks
     }
+  }
+  if (avails.length) {
+    const norm = avails.map((a) => a.toLowerCase())
+    const inCount = norm.filter((a) => /instock|onlineonly|preorder|instoreonly|limitedavailability|lowstock|presale|backorder/.test(a)).length
+    const outCount = norm.filter((a) => /outofstock|soldout|discontinued/.test(a)).length
+    if (inCount > 0) {
+      // Only a single variant left of many → low stock.
+      const status: StockResult['status'] = inCount === 1 && norm.length >= 4 ? 'low_stock' : 'in_stock'
+      return { status, signal: `jsonld:${inCount}/${norm.length} available`, notes: null }
+    }
+    if (outCount > 0) return { status: 'out_of_stock', signal: 'jsonld:all-out', notes: null }
   }
 
   // 2. Text regex fallback.
@@ -89,32 +90,17 @@ async function detectStock(url: string): Promise<StockResult> {
   return { status: 'in_stock', signal: 'fallback:no-oos-signal', notes: null }
 }
 
-function findAvailability(node: unknown): string | null {
-  if (!node || typeof node !== 'object') return null
+// Collect EVERY `availability` string anywhere in a JSON-LD node (across all
+// offers / nested nodes), so mixed per-variant availability can be aggregated.
+function collectAvailabilities(node: unknown, out: string[]): void {
+  if (!node || typeof node !== 'object') return
+  if (Array.isArray(node)) { for (const n of node) collectAvailabilities(n, out); return }
   const obj = node as Record<string, unknown>
-
-  // Direct hit on a Product node
-  if (obj['@type'] === 'Product' || (Array.isArray(obj['@type']) && (obj['@type'] as string[]).includes('Product'))) {
-    const offers = obj.offers
-    if (offers) {
-      const offerNodes = Array.isArray(offers) ? offers : [offers]
-      for (const offer of offerNodes) {
-        if (offer && typeof offer === 'object') {
-          const av = (offer as Record<string, unknown>).availability
-          if (typeof av === 'string') return av
-        }
-      }
-    }
-  }
-
-  // Recurse into children
+  const av = obj.availability
+  if (typeof av === 'string') out.push(av)
   for (const value of Object.values(obj)) {
-    if (value && typeof value === 'object') {
-      const found = findAvailability(value)
-      if (found) return found
-    }
+    if (value && typeof value === 'object') collectAvailabilities(value, out)
   }
-  return null
 }
 
 // Best-effort extraction of the IN-STOCK size labels from a product page.
