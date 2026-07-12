@@ -45,6 +45,8 @@ export default async function ProjectPage({ params }: PageProps) {
   // Per-item stock holding from the last stock check, keyed by outfit — shown as
   // a compact line under each card (e.g. DRESS (S·M·L) · SHOE (37·39)).
   const stockByOutfit: Record<string, { type: string; sizes: string[]; status: string | null }[]> = {}
+  // Anchor item type per outfit (the lead garment) — powers the anchor filter.
+  const anchorByOutfit: Record<string, string> = {}
   try {
     const admin = createAdminClient()
     const outfitIds = (outfits as any[]).map((o) => o.outfit_id)
@@ -54,6 +56,7 @@ export default async function ProjectPage({ params }: PageProps) {
         .select('outfit_id, slot, item(item_type, stock_status, stock_sizes)')
         .in('outfit_id', outfitIds)
         .limit(20000)
+      const bySlot: Record<string, Record<string, string>> = {} // outfit → slot → item_type
       for (const r of (oiRows ?? []) as any[]) {
         if (!r.item) continue
         ;(stockByOutfit[r.outfit_id] ??= []).push({
@@ -61,6 +64,12 @@ export default async function ProjectPage({ params }: PageProps) {
           sizes: (r.item.stock_sizes ?? []) as string[],
           status: r.item.stock_status ?? null,
         })
+        ;(bySlot[r.outfit_id] ??= {})[r.slot] = String(r.item.item_type ?? '')
+      }
+      // Anchor = the lead garment: dress > top > bottom > outerwear, else first.
+      for (const [oid, slots] of Object.entries(bySlot)) {
+        const t = slots['dress'] || slots['top'] || slots['bottom'] || slots['outerwear'] || Object.values(slots)[0]
+        if (t) anchorByOutfit[oid] = t
       }
     }
   } catch { /* non-fatal */ }
@@ -165,7 +174,7 @@ export default async function ProjectPage({ params }: PageProps) {
       </div>
 
       {/* Outfits grid — with bulk "select outfits → go live" */}
-      <ProjectOutfitsGrid projectId={id} outfits={outfits as any} popularTags={popularTags} coTags={coTags} stockByOutfit={stockByOutfit} />
+      <ProjectOutfitsGrid projectId={id} outfits={outfits as any} popularTags={popularTags} coTags={coTags} stockByOutfit={stockByOutfit} anchorByOutfit={anchorByOutfit} />
 
       {/* Project meta */}
       <div className="mt-12 pt-8 border-t border-[#E2E0DB]">

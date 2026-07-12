@@ -52,18 +52,33 @@ function stockLabel(it: ItemStock): { text: string; out: boolean } {
   return { text: type, out: false }
 }
 
+// Group a raw anchor item_type into a friendly filter category (DRESS, TROUSERS…).
+function anchorGroup(itemType: string): string {
+  const t = (itemType || '').toLowerCase()
+  if (t.includes('dress')) return 'DRESS'
+  if (t === 'trousers' || t === 'pants') return 'TROUSERS'
+  if (t === 'jeans') return 'JEANS'
+  if (t === 'skirt') return 'SKIRT'
+  if (t === 'shorts') return 'SHORTS'
+  if (['shirt', 'blouse', 't-shirt', 'knitwear', 'corset', 'bodysuit', 'top'].includes(t)) return 'TOP'
+  if (['coat', 'trench', 'jacket', 'blazer', 'gilet', 'cape'].includes(t)) return 'OUTERWEAR'
+  return t ? t.replace(/_/g, ' ').toUpperCase() : 'OTHER'
+}
+
 export default function ProjectOutfitsGrid({
   projectId,
   outfits,
   popularTags = [],
   coTags = {},
   stockByOutfit = {},
+  anchorByOutfit = {},
 }: {
   projectId: string
   outfits: OutfitLite[]
   popularTags?: string[]
   coTags?: Record<string, string[]>
   stockByOutfit?: Record<string, ItemStock[]>
+  anchorByOutfit?: Record<string, string>
 }) {
   const router = useRouter()
   const [selectMode, setSelectMode] = useState(false)
@@ -79,6 +94,29 @@ export default function ProjectOutfitsGrid({
   const [refining, setRefining] = useState<Set<string>>(new Set())
   const [imageOverride, setImageOverride] = useState<Record<string, string>>({})
   const [refineError, setRefineError] = useState<Record<string, string>>({})
+
+  // Filters
+  const [fStatus, setFStatus] = useState<'all' | 'draft' | 'live'>('all')
+  const [fOccasion, setFOccasion] = useState<string>('all')
+  const [fAnchor, setFAnchor] = useState<string>('all')
+
+  // Distinct filter options from this project's outfits.
+  const occasionOptions = Array.from(new Set(
+    outfits.flatMap((o) => (o.occasion_tags ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean)),
+  )).sort()
+  const anchorOptions = Array.from(new Set(
+    outfits.map((o) => anchorGroup(anchorByOutfit[o.outfit_id] ?? '')).filter((g) => g && g !== 'OTHER'),
+  )).sort()
+
+  // Apply filters (status uses the optimistic override so it reacts to toggles).
+  const filtered = outfits.filter((o) => {
+    const status = statusOverride[o.outfit_id] ?? o.status
+    if (fStatus !== 'all' && status !== fStatus) return false
+    if (fOccasion !== 'all' && !(o.occasion_tags ?? []).map((t) => t.toLowerCase()).includes(fOccasion)) return false
+    if (fAnchor !== 'all' && anchorGroup(anchorByOutfit[o.outfit_id] ?? '') !== fAnchor) return false
+    return true
+  })
+  const filtersActive = fStatus !== 'all' || fOccasion !== 'all' || fAnchor !== 'all'
 
   async function refine(outfitId: string) {
     if (refining.has(outfitId)) return
@@ -130,7 +168,8 @@ export default function ProjectOutfitsGrid({
     setError(null)
   }
 
-  const liveable = outfits.filter((o) => o.status !== 'live')
+  // Bulk actions operate on the currently-visible (filtered) outfits.
+  const liveable = filtered.filter((o) => (statusOverride[o.outfit_id] ?? o.status) !== 'live')
   const allLiveableSelected = liveable.length > 0 && liveable.every((o) => selected.has(o.outfit_id))
 
   function selectAllLiveable() {
@@ -158,6 +197,54 @@ export default function ProjectOutfitsGrid({
         {popularTags.map((t) => <option key={t} value={t} />)}
       </datalist>
 
+      {/* Filters — status / occasion / anchor type */}
+      {!selectMode && (
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <div className="inline-flex rounded-full border border-[#E2E0DB] overflow-hidden">
+            {(['all', 'draft', 'live'] as const).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setFStatus(s)}
+                className={`px-3.5 py-1.5 text-[9px] tracking-[0.1em] transition-colors ${
+                  fStatus === s ? 'bg-[#0A0A0A] text-white' : 'text-[#6B6B6B] hover:bg-[#FAFAF8]'
+                }`}
+              >
+                {s.toUpperCase()}
+              </button>
+            ))}
+          </div>
+
+          <select
+            value={fOccasion}
+            onChange={(e) => setFOccasion(e.target.value)}
+            className="border border-[#E2E0DB] rounded-full px-3 py-1.5 text-[9px] tracking-[0.08em] text-[#4A4E57] bg-white focus:outline-none focus:border-[#0A0A0A]"
+          >
+            <option value="all">ALL OCCASIONS</option>
+            {occasionOptions.map((o) => <option key={o} value={o}>{o.toUpperCase()}</option>)}
+          </select>
+
+          <select
+            value={fAnchor}
+            onChange={(e) => setFAnchor(e.target.value)}
+            className="border border-[#E2E0DB] rounded-full px-3 py-1.5 text-[9px] tracking-[0.08em] text-[#4A4E57] bg-white focus:outline-none focus:border-[#0A0A0A]"
+          >
+            <option value="all">ALL ANCHOR TYPES</option>
+            {anchorOptions.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+
+          {filtersActive && (
+            <button
+              type="button"
+              onClick={() => { setFStatus('all'); setFOccasion('all'); setFAnchor('all') }}
+              className="text-[9px] tracking-[0.1em] text-[#B83A3A] hover:underline px-1"
+            >
+              CLEAR ×
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Selection controls */}
       <div className="flex items-center justify-between mb-4 min-h-[34px]">
         <p className="text-[10px] tracking-[0.09em] text-[#6B6B6B]">
@@ -165,7 +252,7 @@ export default function ProjectOutfitsGrid({
             ? selected.size > 0
               ? `${selected.size} SELECTED`
               : 'SELECT OUTFITS TO SEND LIVE'
-            : `${outfits.length} OUTFIT${outfits.length !== 1 ? 'S' : ''}`}
+            : `${filtered.length}${filtersActive ? ` / ${outfits.length}` : ''} OUTFIT${filtered.length !== 1 ? 'S' : ''}`}
         </p>
 
         {!selectMode ? (
@@ -211,7 +298,10 @@ export default function ProjectOutfitsGrid({
 
       {/* Outfits grid */}
       <div className="grid grid-cols-3 gap-6">
-        {outfits.map((outfit) => {
+        {filtered.length === 0 && (
+          <p className="col-span-3 text-[10px] tracking-[0.1em] text-[#A8A8A4] py-10 text-center">NO OUTFITS MATCH THESE FILTERS.</p>
+        )}
+        {filtered.map((outfit) => {
           const isSelected = selected.has(outfit.outfit_id)
           const effectiveStatus = statusOverride[outfit.outfit_id] ?? outfit.status
           const isLive = effectiveStatus === 'live'
