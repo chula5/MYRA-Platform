@@ -65,7 +65,10 @@ export default function OutfitDetailClient({
   const openSourcePanel = () => {
     const next = !sourcePanelOpen
     setSourcePanelOpen(next)
-    if (next) requestAnimationFrame(() => heroRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+    if (next) {
+      if (outfit) trackEngagement('source_items', outfit.outfit_id)
+      requestAnimationFrame(() => heroRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+    }
   }
 
   // Saved items live here (lifted) so the Shop-the-look hearts and the image

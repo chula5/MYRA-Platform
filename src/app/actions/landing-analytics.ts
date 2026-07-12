@@ -14,6 +14,7 @@ export type LandingEventType =
   | 'item_click'
   | 'outfit_view'
   | 'style_item'
+  | 'source_items'
   | 'similar_looks'
   | 'explore_styles'
 

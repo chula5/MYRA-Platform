@@ -69,15 +69,17 @@ export default async function AnalyticsPage() {
 
   // ── Engagement: outfit views + style-item / similar / explore clicks ──
   let engagement: {
-    views: number; styleClicks: number; similarClicks: number; exploreClicks: number; shopClicks: number
+    views: number; styleClicks: number; similarClicks: number; exploreClicks: number; shopClicks: number; sourceClicks: number
     topOutfits: { id: string; label: string; image: string | null; views: number; similar: number; explore: number }[]
     topItems: { id: string; label: string; clicks: number }[]
+    topSourceOutfits: { id: string; label: string; image: string | null; clicks: number }[]
+    topOccasions: { name: string; clicks: number }[]
   } | null = null
   {
     const { data: ev } = await admin
       .from('landing_event' as any)
       .select('event_type, path')
-      .in('event_type', ['outfit_view', 'style_item', 'similar_looks', 'explore_styles'])
+      .in('event_type', ['outfit_view', 'style_item', 'similar_looks', 'explore_styles', 'source_items', 'occasion_click'])
       .gte('occurred_at', since.toISOString())
       .limit(100000)
     // Retailer shop-throughs (product clicked → went to the retailer site).
@@ -86,16 +88,18 @@ export default async function AnalyticsPage() {
     shopClicks = sc ?? 0
     const rows = (ev ?? []) as { event_type: string; path: string }[]
     if (rows.length || shopClicks > 0) {
-      const viewC = new Map<string, number>(), simC = new Map<string, number>(), expC = new Map<string, number>(), styleC = new Map<string, number>()
+      const viewC = new Map<string, number>(), simC = new Map<string, number>(), expC = new Map<string, number>(), styleC = new Map<string, number>(), srcC = new Map<string, number>(), occC = new Map<string, number>()
       const bump = (m: Map<string, number>, k: string) => { if (k) m.set(k, (m.get(k) ?? 0) + 1) }
       for (const e of rows) {
         if (e.event_type === 'outfit_view') bump(viewC, e.path)
         else if (e.event_type === 'similar_looks') bump(simC, e.path)
         else if (e.event_type === 'explore_styles') bump(expC, e.path)
         else if (e.event_type === 'style_item') bump(styleC, e.path)
+        else if (e.event_type === 'source_items') bump(srcC, e.path)
+        else if (e.event_type === 'occasion_click') bump(occC, (e.path || '').trim().toLowerCase())
       }
       const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
-      const outfitIds = [...new Set([...viewC.keys(), ...simC.keys(), ...expC.keys()])].filter(isUuid)
+      const outfitIds = [...new Set([...viewC.keys(), ...simC.keys(), ...expC.keys(), ...srcC.keys()])].filter(isUuid)
       const itemIds = [...styleC.keys()].filter(isUuid)
       const outfitMap = new Map<string, { label: string; image: string | null }>()
       if (outfitIds.length) {
@@ -115,8 +119,16 @@ export default async function AnalyticsPage() {
         .map((id) => ({ id, label: itemMap.get(id) ?? '—', clicks: styleC.get(id) ?? 0 }))
         .sort((a, b) => b.clicks - a.clicks)
         .slice(0, 12)
+      const topSourceOutfits = [...srcC.keys()].filter(isUuid)
+        .map((id) => ({ id, label: outfitMap.get(id)?.label ?? '—', image: outfitMap.get(id)?.image ?? null, clicks: srcC.get(id) ?? 0 }))
+        .sort((a, b) => b.clicks - a.clicks)
+        .slice(0, 12)
+      const topOccasions = [...occC.entries()]
+        .map(([name, clicks]) => ({ name, clicks }))
+        .sort((a, b) => b.clicks - a.clicks)
+        .slice(0, 20)
       const sum = (m: Map<string, number>) => [...m.values()].reduce((s, n) => s + n, 0)
-      engagement = { views: sum(viewC), styleClicks: sum(styleC), similarClicks: sum(simC), exploreClicks: sum(expC), shopClicks, topOutfits, topItems }
+      engagement = { views: sum(viewC), styleClicks: sum(styleC), similarClicks: sum(simC), exploreClicks: sum(expC), shopClicks, sourceClicks: sum(srcC), topOutfits, topItems, topSourceOutfits, topOccasions }
     }
   }
 
@@ -489,9 +501,10 @@ alter table site_session enable row level security;`}</pre>
       {engagement && (
         <div className="mb-10">
           <p className="text-[10px] tracking-[0.135em] text-[#6B6B6B] mb-4">ENGAGEMENT · LAST 30 DAYS</p>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
             {[
               { label: 'OUTFIT VIEWS', value: engagement.views, sub: 'CLICKED INTO AN OUTFIT' },
+              { label: 'SOURCE ITEMS', value: engagement.sourceClicks, sub: 'OPENED SHOP-THE-LOOK' },
               { label: 'STYLE-ITEM CLICKS', value: engagement.styleClicks, sub: 'TAPPED “STYLE THIS ITEM”' },
               { label: 'SIMILAR LOOKS', value: engagement.similarClicks, sub: 'CLICKS' },
               { label: 'EXPLORE STYLES', value: engagement.exploreClicks, sub: 'CLICKS' },
@@ -540,6 +553,48 @@ alter table site_session enable row level security;`}</pre>
                     <div key={it.id} className="flex items-center justify-between gap-3">
                       <span className="text-[10px] tracking-[0.04em] text-[#4A4E57] truncate">{it.label.toUpperCase()}</span>
                       <span className="text-[10px] tracking-[0.045em] text-[#6B6B6B] flex-shrink-0">{it.clicks}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+            {/* Occasions clicked the most */}
+            <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6">
+              <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B] mb-1">OCCASIONS CLICKED · MOST POPULAR</p>
+              <p className="text-[8px] tracking-[0.063em] text-[#A8A8A4] mb-4">FROM THE OCCASION CHIPS ON THE EDIT</p>
+              {engagement.topOccasions.length === 0 ? (
+                <p className="text-[10px] tracking-[0.072em] text-[#A8A8A4] py-3">No occasion clicks yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {engagement.topOccasions.map((o) => (
+                    <div key={o.name} className="flex items-center justify-between gap-3">
+                      <span className="text-[10px] tracking-[0.04em] text-[#4A4E57] truncate">{o.name.toUpperCase()}</span>
+                      <span className="text-[10px] tracking-[0.045em] text-[#6B6B6B] flex-shrink-0">{o.clicks}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Source-items clicks by outfit */}
+            <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6">
+              <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B] mb-1">SOURCE ITEMS · BY OUTFIT</p>
+              <p className="text-[8px] tracking-[0.063em] text-[#A8A8A4] mb-4">{engagement.sourceClicks.toLocaleString()} TOTAL “SOURCE ITEMS” CLICKS</p>
+              {engagement.topSourceOutfits.length === 0 ? (
+                <p className="text-[10px] tracking-[0.072em] text-[#A8A8A4] py-3">No source-items clicks yet.</p>
+              ) : (
+                <div className="space-y-2.5">
+                  {engagement.topSourceOutfits.map((o) => (
+                    <div key={o.id} className="flex items-center gap-3">
+                      {o.image
+                        // eslint-disable-next-line @next/next/no-img-element
+                        ? <img src={o.image} alt="" className="w-8 h-10 rounded object-cover bg-[#F2F2F0] flex-shrink-0" />
+                        : <div className="w-8 h-10 rounded bg-[#F2F2F0] flex-shrink-0" />}
+                      <span className="flex-1 min-w-0 text-[10px] tracking-[0.04em] text-[#4A4E57] truncate">{o.label.toUpperCase()}</span>
+                      <span className="text-[10px] tracking-[0.045em] text-[#6B6B6B] flex-shrink-0">{o.clicks}</span>
                     </div>
                   ))}
                 </div>
