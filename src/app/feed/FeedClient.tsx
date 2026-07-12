@@ -10,7 +10,7 @@ import { recordTasteInteraction } from '@/app/edit/save-actions'
 import { recordSearchQuery, recordLandingEvent } from '@/app/actions/landing-analytics'
 import { getStoredRef } from '@/lib/ref'
 import { parseQuery, searchOutfits } from '@/lib/search-taxonomy'
-import { occasionLabel, BASE_OCCASIONS } from '@/lib/occasions'
+import { occasionLabel, BASE_OCCASIONS, occasionMatchTags } from '@/lib/occasions'
 import type { BrandRow } from '@/lib/taste-profile'
 import type { OutfitWithItems, ItemType, ColourFamily } from '@/types/database'
 
@@ -389,8 +389,9 @@ export default function FeedClient({
     if (injectedOutfits) {
       // Compute the full ordered list once (at offset 0); paginate from the ref.
       if (currentOffset === 0) {
+        const matchTags = occasionMatchTags(tag)
         const filtered = tag && tag !== 'all'
-          ? injectedOutfits.filter((o) => (o.occasion_tags ?? []).includes(tag))
+          ? injectedOutfits.filter((o) => (o.occasion_tags ?? []).some((t) => matchTags.includes(t)))
           : injectedOutfits
         // One outfit per anchor — variants stay in Similar/Explore — taste-ranked
         // inside the occasion gate, then rotated by visit count so each RETURN
@@ -419,7 +420,8 @@ export default function FeedClient({
       .range(currentOffset, currentOffset + LIMIT - 1)
 
     if (tag && tag !== 'all') {
-      query = query.contains('occasion_tags', [tag])
+      // Match any of the occasion's alias tags (e.g. "summer office" also matches "office").
+      query = query.overlaps('occasion_tags', occasionMatchTags(tag))
     }
 
     const { data, error } = await query

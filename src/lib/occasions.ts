@@ -36,3 +36,13 @@ export const OCCASION_TILE_COUNT = 9
 export function occasionLabel(tag: string): string {
   return OCCASION_LABELS[tag] ?? tag.toUpperCase()
 }
+
+// Some occasion chips should match MORE than their own tag — e.g. an outfit
+// tagged just "office" should still surface under "summer office". Maps a chip
+// tag → the set of occasion_tags that satisfy it.
+const OCCASION_ALIASES: Record<string, string[]> = {
+  'summer office': ['summer office', 'office'],
+}
+export function occasionMatchTags(tag: string): string[] {
+  return OCCASION_ALIASES[tag] ?? [tag]
+}
