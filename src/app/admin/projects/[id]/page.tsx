@@ -45,18 +45,19 @@ export default async function ProjectPage({ params }: PageProps) {
   // Per-item stock holding from the last stock check, keyed by outfit — shown as
   // a compact line under each card (e.g. DRESS (S·M·L) · SHOE (37·39)).
   const stockByOutfit: Record<string, { type: string; sizes: string[]; status: string | null }[]> = {}
-  // Anchor item type per outfit (the lead garment) — powers the anchor filter.
+  // Anchor item type + colour per outfit (the lead garment) — powers the filters.
   const anchorByOutfit: Record<string, string> = {}
+  const colourByOutfit: Record<string, string> = {}
   try {
     const admin = createAdminClient()
     const outfitIds = (outfits as any[]).map((o) => o.outfit_id)
     if (outfitIds.length) {
       const { data: oiRows } = await admin
         .from('outfit_item')
-        .select('outfit_id, slot, item(item_type, stock_status, stock_sizes)')
+        .select('outfit_id, slot, item(item_type, colour_family, stock_status, stock_sizes)')
         .in('outfit_id', outfitIds)
         .limit(20000)
-      const bySlot: Record<string, Record<string, string>> = {} // outfit → slot → item_type
+      const bySlot: Record<string, Record<string, { type: string; colour: string }>> = {} // outfit → slot → {type,colour}
       for (const r of (oiRows ?? []) as any[]) {
         if (!r.item) continue
         ;(stockByOutfit[r.outfit_id] ??= []).push({
@@ -64,12 +65,13 @@ export default async function ProjectPage({ params }: PageProps) {
           sizes: (r.item.stock_sizes ?? []) as string[],
           status: r.item.stock_status ?? null,
         })
-        ;(bySlot[r.outfit_id] ??= {})[r.slot] = String(r.item.item_type ?? '')
+        ;(bySlot[r.outfit_id] ??= {})[r.slot] = { type: String(r.item.item_type ?? ''), colour: String(r.item.colour_family ?? '') }
       }
       // Anchor = the lead garment: dress > top > bottom > outerwear, else first.
       for (const [oid, slots] of Object.entries(bySlot)) {
-        const t = slots['dress'] || slots['top'] || slots['bottom'] || slots['outerwear'] || Object.values(slots)[0]
-        if (t) anchorByOutfit[oid] = t
+        const a = slots['dress'] || slots['top'] || slots['bottom'] || slots['outerwear'] || Object.values(slots)[0]
+        if (a?.type) anchorByOutfit[oid] = a.type
+        if (a?.colour) colourByOutfit[oid] = a.colour
       }
     }
   } catch { /* non-fatal */ }
@@ -174,7 +176,7 @@ export default async function ProjectPage({ params }: PageProps) {
       </div>
 
       {/* Outfits grid — with bulk "select outfits → go live" */}
-      <ProjectOutfitsGrid projectId={id} outfits={outfits as any} popularTags={popularTags} coTags={coTags} stockByOutfit={stockByOutfit} anchorByOutfit={anchorByOutfit} />
+      <ProjectOutfitsGrid projectId={id} outfits={outfits as any} popularTags={popularTags} coTags={coTags} stockByOutfit={stockByOutfit} anchorByOutfit={anchorByOutfit} colourByOutfit={colourByOutfit} />
 
       {/* Project meta */}
       <div className="mt-12 pt-8 border-t border-[#E2E0DB]">

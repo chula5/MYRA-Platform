@@ -72,6 +72,7 @@ export default function ProjectOutfitsGrid({
   coTags = {},
   stockByOutfit = {},
   anchorByOutfit = {},
+  colourByOutfit = {},
 }: {
   projectId: string
   outfits: OutfitLite[]
@@ -79,6 +80,7 @@ export default function ProjectOutfitsGrid({
   coTags?: Record<string, string[]>
   stockByOutfit?: Record<string, ItemStock[]>
   anchorByOutfit?: Record<string, string>
+  colourByOutfit?: Record<string, string>
 }) {
   const router = useRouter()
   const [selectMode, setSelectMode] = useState(false)
@@ -99,6 +101,7 @@ export default function ProjectOutfitsGrid({
   const [fStatus, setFStatus] = useState<'all' | 'draft' | 'live'>('all')
   const [fOccasion, setFOccasion] = useState<string>('all')
   const [fAnchor, setFAnchor] = useState<string>('all')
+  const [fColour, setFColour] = useState<string>('all')
 
   // Distinct filter options from this project's outfits.
   const occasionOptions = Array.from(new Set(
@@ -107,6 +110,9 @@ export default function ProjectOutfitsGrid({
   const anchorOptions = Array.from(new Set(
     outfits.map((o) => anchorGroup(anchorByOutfit[o.outfit_id] ?? '')).filter((g) => g && g !== 'OTHER'),
   )).sort()
+  const colourOptions = Array.from(new Set(
+    outfits.map((o) => (colourByOutfit[o.outfit_id] ?? '').trim().toLowerCase()).filter(Boolean),
+  )).sort()
 
   // Apply filters (status uses the optimistic override so it reacts to toggles).
   const filtered = outfits.filter((o) => {
@@ -114,9 +120,10 @@ export default function ProjectOutfitsGrid({
     if (fStatus !== 'all' && status !== fStatus) return false
     if (fOccasion !== 'all' && !(o.occasion_tags ?? []).map((t) => t.toLowerCase()).includes(fOccasion)) return false
     if (fAnchor !== 'all' && anchorGroup(anchorByOutfit[o.outfit_id] ?? '') !== fAnchor) return false
+    if (fColour !== 'all' && (colourByOutfit[o.outfit_id] ?? '').toLowerCase() !== fColour) return false
     return true
   })
-  const filtersActive = fStatus !== 'all' || fOccasion !== 'all' || fAnchor !== 'all'
+  const filtersActive = fStatus !== 'all' || fOccasion !== 'all' || fAnchor !== 'all' || fColour !== 'all'
 
   async function refine(outfitId: string) {
     if (refining.has(outfitId)) return
@@ -233,10 +240,19 @@ export default function ProjectOutfitsGrid({
             {anchorOptions.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
 
+          <select
+            value={fColour}
+            onChange={(e) => setFColour(e.target.value)}
+            className="border border-[#E2E0DB] rounded-full px-3 py-1.5 text-[9px] tracking-[0.08em] text-[#4A4E57] bg-white focus:outline-none focus:border-[#0A0A0A]"
+          >
+            <option value="all">ALL COLOURS</option>
+            {colourOptions.map((c) => <option key={c} value={c}>{c.toUpperCase()}</option>)}
+          </select>
+
           {filtersActive && (
             <button
               type="button"
-              onClick={() => { setFStatus('all'); setFOccasion('all'); setFAnchor('all') }}
+              onClick={() => { setFStatus('all'); setFOccasion('all'); setFAnchor('all'); setFColour('all') }}
               className="text-[9px] tracking-[0.1em] text-[#B83A3A] hover:underline px-1"
             >
               CLEAR ×
