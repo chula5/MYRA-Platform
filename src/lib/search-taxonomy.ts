@@ -62,7 +62,8 @@ const OCCASION: Record<string, string[]> = {
   date: ['date'], 'date night': ['date'], 'casual date': ['date'],
   dinner: ['dinner'], lunch: ['lunch', 'brunch'], brunch: ['brunch', 'lunch'],
   drinks: ['drinks', 'cocktail'], cocktail: ['cocktail', 'drinks'], party: ['party'],
-  'black tie': ['black tie', 'gala', 'formal'], gala: ['gala', 'black tie'], ball: ['ball', 'gala'],
+  // NB: black tie / gala / formal are handled purely as FORMALITY (below) — no
+  // outfit is tagged "black tie", so adding a tag group here only dilutes the score.
   holiday: ['holiday', 'vacation', 'getaway', 'break'], vacation: ['holiday', 'vacation'], 'girls holiday': ['holiday', 'getaway'], 'girls trip': ['holiday', 'getaway'],
   'weekend away': ['weekend'], weekend: ['weekend'], 'city break': ['city', 'break'], city: ['city'],
   'fashion week': ['fashion'], 'fashion event': ['fashion'], fashion: ['fashion'],
@@ -87,7 +88,44 @@ const SEASON = ['spring', 'summer', 'autumn', 'fall', 'winter', 'transitional']
 const FORMALITY: Record<string, [number, number]> = {
   casual: [1, 2], relaxed: [1, 2], easy: [1, 2], laidback: [1, 2], 'laid-back': [1, 2], everyday: [1, 2], comfy: [1, 2],
   smart: [3, 3], elevated: [3, 3], polished: [3, 4], 'smart casual': [2, 3],
-  professional: [3, 3], formal: [4, 5], 'black tie': [4, 5], gala: [4, 5], dressy: [3, 4],
+  professional: [3, 3], formal: [4, 5], 'black tie': [4, 5], 'black-tie': [4, 5], blacktie: [4, 5], gala: [4, 5], ball: [4, 5], dressy: [3, 4], 'white tie': [5, 5],
+}
+
+// Named OCCASIONS that imply formality / season / a tag concept all at once.
+// These carry the real intent of a search: an outfit doesn't need a matching
+// occasion TAG — matching the implied formality + season is enough to surface
+// the right looks (e.g. "beach wedding guest" → summer, formal-ish dresses).
+interface OccasionRule { groups?: string[][]; formality?: [number, number]; seasons?: string[]; time?: number }
+const OCCASION_RULES: Record<string, OccasionRule> = {
+  // Weddings — formal, wedding-leaning; "beach" adds summer.
+  wedding: { groups: [['wedding']], formality: [3, 4] },
+  'wedding guest': { groups: [['wedding']], formality: [3, 4] },
+  'beach wedding': { groups: [['wedding']], formality: [3, 4], seasons: ['summer'] },
+  'beach wedding guest': { groups: [['wedding']], formality: [3, 4], seasons: ['summer'] },
+  'boho beach wedding guest': { groups: [['wedding']], formality: [3, 4], seasons: ['summer'] },
+  'black tie wedding': { groups: [['wedding']], formality: [4, 5] },
+  'summer wedding': { groups: [['wedding']], formality: [3, 4], seasons: ['summer'] },
+  'mother of the bride': { groups: [['wedding']], formality: [4, 5] },
+  'mother of the groom': { groups: [['wedding']], formality: [4, 5] },
+  'wedding reception': { groups: [['wedding']], formality: [4, 5] },
+  // Formal life events — dressy, summer-leaning.
+  graduation: { formality: [3, 4], seasons: ['summer'] },
+  'police graduation': { formality: [3, 4], seasons: ['summer'] },
+  christening: { groups: [['christening', 'wedding']], formality: [3, 4], seasons: ['summer'] },
+  communion: { groups: [['christening']], formality: [3, 4], seasons: ['summer'] },
+  // Summer events / festivals — relaxed, warm-weather.
+  coachella: { formality: [1, 2], seasons: ['summer'] },
+  festival: { formality: [1, 2], seasons: ['summer'] },
+  'boat day': { formality: [2, 3], seasons: ['summer'] },
+  cruise: { formality: [2, 3], seasons: ['summer'] },
+  // Sporting / social — smart daywear.
+  wimbledon: { groups: [['wimbledon', 'tennis', 'garden']], formality: [3, 4], seasons: ['summer'] },
+  'cricket match': { formality: [3, 4], seasons: ['summer'] },
+  'race day': { groups: [['race', 'ascot', 'races']], formality: [4, 5] },
+  'polo match': { formality: [3, 4], seasons: ['summer'] },
+  concert: { formality: [2, 3], time: 4 },
+  'airport look': { formality: [1, 2] },
+  'airport outfit': { formality: [1, 2] },
 }
 
 // Time-of-day cue → value on the 1..5 axis (1 morning … 5 night).
@@ -158,8 +196,10 @@ export function parseQuery(raw: string, knownBrands: string[] = []): ParsedQuery
   const addGroup = (vals: string[]) => { const k = vals.join('|'); if (!p.occasionGroups.some((g) => g.join('|') === k)) p.occasionGroups.push(vals) }
 
   // 1. Multi-word phrases first (longest first), across all phrase dictionaries.
-  const phraseDicts: Array<[Record<string, any>, 'colour' | 'occasion' | 'setting' | 'formality' | 'time']> = [
-    [COLOUR, 'colour'], [OCCASION, 'occasion'], [SETTING, 'setting'], [FORMALITY, 'formality'], [TIME, 'time'],
+  // OCCASION_RULES go first so a full occasion ("beach wedding guest") is matched
+  // and consumed before its sub-phrases ("wedding guest", "beach").
+  const phraseDicts: Array<[Record<string, any>, 'colour' | 'occasion' | 'setting' | 'formality' | 'time' | 'rule']> = [
+    [OCCASION_RULES, 'rule'], [COLOUR, 'colour'], [OCCASION, 'occasion'], [SETTING, 'setting'], [FORMALITY, 'formality'], [TIME, 'time'],
   ]
   const phrases: Array<{ phrase: string; dict: Record<string, any>; kind: string }> = []
   for (const [dict, kind] of phraseDicts) for (const key of Object.keys(dict)) if (key.includes(' ')) phrases.push({ phrase: key, dict, kind })
@@ -182,6 +222,7 @@ export function parseQuery(raw: string, knownBrands: string[] = []): ParsedQuery
     const c = fuzzyGet(COLOUR, tok); if (c) { add(p.colourFamilies, [c]); continue }
     const t = fuzzyGet(TYPE, tok); if (t) { add(p.itemTypes, t); continue }
     const m = fuzzyGet(MATERIAL, tok); if (m) { add(p.materials, [m]); continue }
+    const rule = fuzzyGet(OCCASION_RULES, tok); if (rule) { applyRule(p, addGroup, rule); continue }
     const o = fuzzyGet(OCCASION, tok); if (o) { addGroup(o); continue }
     const s = fuzzyGet(SETTING, tok); if (s) { addGroup(s); continue }
     if (SEASON.includes(tok)) { addGroup([tok === 'fall' ? 'autumn' : tok]); continue }
@@ -197,6 +238,16 @@ function applyHit(p: ParsedQuery, add: (a: string[], v: string[]) => void, addGr
   else if (kind === 'occasion' || kind === 'setting') addGroup(val)
   else if (kind === 'formality') p.formalityRange = mergeRange(p.formalityRange, val)
   else if (kind === 'time') p.timeOfDay = val
+  else if (kind === 'rule') applyRule(p, addGroup, val as OccasionRule)
+}
+
+// Apply a named-occasion rule: its tag concepts + implied season (as a group) +
+// formality range + time-of-day.
+function applyRule(p: ParsedQuery, addGroup: (v: string[]) => void, rule: OccasionRule) {
+  if (rule.groups) for (const g of rule.groups) addGroup(g)
+  if (rule.seasons) for (const s of rule.seasons) addGroup([s])
+  if (rule.formality) p.formalityRange = mergeRange(p.formalityRange, rule.formality)
+  if (rule.time != null) p.timeOfDay = rule.time
 }
 
 function mergeRange(a: [number, number] | null, b: [number, number]): [number, number] {
@@ -266,11 +317,11 @@ export function scoreOutfit(outfit: OutfitWithItems, p: ParsedQuery): number {
   if (p.formalityRange) {
     const [lo, hi] = p.formalityRange
     // Prefer the item-derived estimate — the outfit column defaults to 3 and
-    // doesn't discriminate. Smooth gradient (dist/3) so the closest looks for
-    // e.g. "black tie" rank dressiest-first instead of tying at the default.
+    // doesn't discriminate. dist/2 keeps formal searches STRICT (a casual look is
+    // ~0 for "black tie") while still ranking the dressiest first among fallbacks.
     const f = estimateFormality(items) ?? outfit.formality ?? 3
     const dist = f < lo ? lo - f : f > hi ? f - hi : 0
-    part(0.16, Math.max(0, 1 - dist / 3))
+    part(0.16, Math.max(0, 1 - dist / 2))
   }
   if (p.timeOfDay != null) {
     const dist = Math.abs((outfit.time_of_day ?? 3) - p.timeOfDay)
