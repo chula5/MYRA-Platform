@@ -42,9 +42,9 @@ export default function SaveHeartButton({
             try { window.dispatchEvent(new CustomEvent('myra:engage')) } catch { /* ignore */ }
           }}
           aria-label="Sign in to save"
-          className="w-9 h-9 rounded-full bg-white/90 hover:bg-white shadow-sm flex items-center justify-center cursor-pointer transition-colors"
+          className="w-7 h-7 rounded-full bg-white/90 hover:bg-white shadow-sm flex items-center justify-center cursor-pointer transition-colors"
         >
-          <span className="text-[16px] leading-none text-[#6B6B6B]">♡</span>
+          <span className="text-[13px] leading-none text-[#6B6B6B]">♡</span>
         </button>
         <span className="pointer-events-none absolute right-0 top-full mt-1.5 whitespace-nowrap bg-[#0A0A0A] text-white text-[8px] tracking-[0.09em] px-2 py-1 rounded-md opacity-0 group-hover/heart:opacity-100 transition-opacity duration-200">
           SIGN IN TO SAVE
@@ -72,9 +72,9 @@ export default function SaveHeartButton({
       onClick={toggle}
       disabled={busy}
       aria-label={saved ? 'Remove from saved' : 'Save outfit'}
-      className="absolute top-3 right-3 z-20 w-9 h-9 rounded-full bg-white/90 hover:bg-white shadow-sm flex items-center justify-center transition-colors"
+      className="absolute top-2 right-2 z-20 w-7 h-7 rounded-full bg-white/90 hover:bg-white shadow-sm flex items-center justify-center transition-colors"
     >
-      <span className={`text-[16px] leading-none ${saved ? 'text-[#4A4E57]' : 'text-[#6B6B6B]'}`}>
+      <span className={`text-[13px] leading-none ${saved ? 'text-[#4A4E57]' : 'text-[#6B6B6B]'}`}>
         {saved ? '♥' : '♡'}
       </span>
     </button>

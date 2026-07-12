@@ -29,8 +29,6 @@ interface OutfitCardProps {
   lockedSave?: boolean
 }
 
-const MAX_DOTS = 7
-
 export default function OutfitCard({
   outfit,
   onSimilarLooks,
@@ -93,11 +91,7 @@ export default function OutfitCard({
     router.push(detailHref ?? `/outfit/${outfit.outfit_id}`)
   }
 
-  // Dots — cap display at MAX_DOTS
-  const dotsCount = Math.min(total, MAX_DOTS)
-  const dotOffset = total > MAX_DOTS ? Math.max(0, Math.min(current - Math.floor(MAX_DOTS / 2), total - MAX_DOTS)) : 0
-
-  const actionClass = 'pointer-events-auto text-white text-[9px] sm:text-[10px] tracking-[0.14em] uppercase drop-shadow-[0_1px_4px_rgba(0,0,0,0.65)] hover:opacity-80 transition-opacity'
+  const actionClass = 'pointer-events-auto text-white text-[8px] tracking-[0.12em] uppercase font-light hover:opacity-70 transition-opacity'
 
   return (
     <article className="relative flex flex-col">
@@ -188,26 +182,15 @@ export default function OutfitCard({
           </div>
         )}
 
-        {/* Carousel position dots (subtle, on the image) */}
-        {total > 1 && !sourcePanelOpen && (
-          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1">
-            {Array.from({ length: dotsCount }).map((_, di) => {
-              const slideI = dotOffset + di
-              return (
-                <span key={di} className={`w-1.5 h-1.5 rounded-full ${slideI === current ? 'bg-white' : 'bg-white/45'}`} />
-              )
-            })}
-          </div>
-        )}
-
-        {/* Actions — white text overlaid on the photo (editorial). */}
+        {/* Actions — white text overlaid on the photo (editorial). Source Items +
+            Similar Looks on one row, Explore Styles centred underneath. */}
         {!sourcePanelOpen && (
-          <div className="absolute inset-x-0 bottom-0 z-20 pt-10 pb-3 px-3 bg-gradient-to-t from-black/60 via-black/25 to-transparent pointer-events-none">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <div className="absolute inset-x-0 bottom-0 z-20 pt-10 pb-3 px-3 bg-gradient-to-t from-black/55 via-black/20 to-transparent pointer-events-none">
+            <div className="flex items-center justify-center gap-5">
               <button onClick={(e) => { e.stopPropagation(); setSourcePanelOpen(true) }} className={actionClass}>Source Items</button>
-              <span className="text-white/40 text-[9px] pointer-events-none">·</span>
               <button onClick={(e) => { e.stopPropagation(); trackEngagement('similar_looks', outfit.outfit_id); onSimilarLooks?.(outfit) }} className={actionClass}>Similar Looks</button>
-              <span className="text-white/40 text-[9px] pointer-events-none">·</span>
+            </div>
+            <div className="flex justify-center mt-1.5">
               <button onClick={(e) => { e.stopPropagation(); trackEngagement('explore_styles', outfit.outfit_id); onExploreStyles?.(outfit) }} className={actionClass}>Explore Styles</button>
             </div>
           </div>
