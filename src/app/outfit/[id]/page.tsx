@@ -1,7 +1,6 @@
 import Navigation from '@/components/navigation/Navigation'
 import { getOutfit } from '@/lib/admin-queries'
 import OutfitDetailClient from './OutfitDetailClient'
-import HelpPopover from '@/components/HelpPopover'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,18 +34,6 @@ export default async function OutfitDetailPage({ params, searchParams }: PagePro
           />
         )}
       </main>
-      {outfit && (
-        <HelpPopover
-          id="outfit-actions"
-          title="MAKE THIS OUTFIT YOURS"
-          points={[
-            { label: 'STYLE ITEM', text: 'tap a piece on the photo to see other outfits built around it.' },
-            { label: 'SIMILAR LOOKS', text: 'more outfits with the same shape and feel.' },
-            { label: 'EXPLORE STYLES', text: 'different looks for the same occasion.' },
-            { label: 'SOURCE ITEMS', text: 'shop each piece at the retailer.' },
-          ]}
-        />
-      )}
     </>
   )
 }

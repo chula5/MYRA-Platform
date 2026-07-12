@@ -8,6 +8,7 @@ import ShopTheLookOverlay from '@/components/source-panel/ShopTheLookOverlay'
 import OutfitCard from '@/components/outfit-card/OutfitCard'
 import SaveHeartButton from '@/components/outfit-card/SaveHeartButton'
 import CardButton from '@/components/ui/CardButton'
+import CoachTip from '@/components/CoachTip'
 import { createClient } from '@/lib/supabase'
 import { getRelatedOutfits, getStyleItemOutfits } from './related-actions'
 import { trackEngagement } from '@/lib/track'
@@ -433,6 +434,17 @@ export default function OutfitDetailClient({
                 showHotspots={safeIndex === 0}
               />
 
+              {/* Coach-mark on the image — tap a piece to restyle it */}
+              {!sourcePanelOpen && !activeStyleItemId && (
+                <CoachTip
+                  id="outfit-tap-to-style"
+                  text="Tap any piece on the outfit to style it a different way."
+                  arrow="up"
+                  className="left-1/2 -translate-x-1/2 bottom-5"
+                  delayMs={1100}
+                />
+              )}
+
               {/* Save heart on an ITEM photo — appears on hover, top-right */}
               {canSave && currentItem && !sourcePanelOpen && (
                 <button
@@ -544,12 +556,30 @@ export default function OutfitDetailClient({
           </CardButton>
           {showBrowse && (
             <>
-              <CardButton variant="filled" onClick={handleSimilarLooks}>
-                SIMILAR LOOKS
-              </CardButton>
-              <CardButton variant="filled" onClick={handleExploreStyles}>
-                EXPLORE STYLES
-              </CardButton>
+              <span className="relative inline-flex">
+                <CardButton variant="filled" onClick={handleSimilarLooks}>
+                  SIMILAR LOOKS
+                </CardButton>
+                <CoachTip
+                  id="outfit-similar-looks"
+                  text="More outfits with the same shape and feel."
+                  arrow="up"
+                  className="top-full mt-2.5 right-0"
+                  delayMs={1600}
+                />
+              </span>
+              <span className="relative inline-flex">
+                <CardButton variant="filled" onClick={handleExploreStyles}>
+                  EXPLORE STYLES
+                </CardButton>
+                <CoachTip
+                  id="outfit-explore-styles"
+                  text="Different looks styled for the same occasion."
+                  arrow="up"
+                  className="top-full mt-2.5 left-0"
+                  delayMs={2300}
+                />
+              </span>
             </>
           )}
         </div>
