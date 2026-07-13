@@ -705,25 +705,18 @@ export default function FeedClient({
             </div>
           )}
 
-          {/* Search input */}
+          {/* Search — subtle underlined text field, no box, no button (Enter to search) */}
           <form
             onSubmit={(e) => { e.preventDefault(); executeSearch() }}
-            className="flex gap-3 mb-4 w-full"
+            className="mb-5 w-full"
           >
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={typedHint ? `${typedHint}▌` : 'SEARCH BY STYLE, COLOUR, BRAND, MATERIAL…'}
-              className="glass-input flex-1 w-full min-w-0 px-5 py-3.5 rounded-full text-[11px] tracking-[0.054em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none"
+              className="w-full bg-transparent border-0 border-b border-[#DEDCD7] focus:border-[#0A0A0A] px-1 py-2.5 text-center text-[11px] tracking-[0.09em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none transition-colors"
             />
-            <button
-              type="submit"
-              disabled={!hasActiveSearch}
-              className="glass-dark text-[#4A4E57] px-7 py-3.5 rounded-full text-[11px] tracking-[0.09em] flex-shrink-0 disabled:opacity-30"
-            >
-              FIND
-            </button>
           </form>
 
           {/* Filter pills */}
