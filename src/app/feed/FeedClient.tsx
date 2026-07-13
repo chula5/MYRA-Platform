@@ -11,6 +11,8 @@ import { recordSearchQuery, recordLandingEvent } from '@/app/actions/landing-ana
 import { getStoredRef } from '@/lib/ref'
 import { parseQuery, searchOutfits } from '@/lib/search-taxonomy'
 import { thumbUrl } from '@/lib/image-utils'
+import { brandLogo } from '@/lib/brand-logos'
+import BrandLogoTile from '@/components/BrandLogoTile'
 import { occasionLabel, BASE_OCCASIONS, occasionMatchTags } from '@/lib/occasions'
 import type { BrandRow } from '@/lib/taste-profile'
 import type { OutfitWithItems, ItemType, ColourFamily } from '@/types/database'
@@ -631,12 +633,8 @@ export default function FeedClient({
                   onClick={() => { setBrandView(row); window.scrollTo({ top: 0 }) }}
                   className="group shrink-0 w-[150px] sm:w-[170px] text-left"
                 >
-                  {/* Brand wordmark tile (replaces the outfit collage) */}
-                  <div className="aspect-square w-full overflow-hidden rounded-[14px] bg-[#F4F3F1] border border-[#E8E6E1] group-hover:border-[#C4A882] transition-colors duration-300 flex items-center justify-center px-4">
-                    <span className="text-[14px] sm:text-[16px] tracking-[0.14em] text-[#4A4E57] text-center leading-[1.25] uppercase">
-                      {row.brand}
-                    </span>
-                  </div>
+                  {/* Brand logo (falls back to a wordmark) */}
+                  <BrandLogoTile brand={row.brand} logoUrl={brandLogo(row.brand)} />
                   <p className="text-[8px] tracking-[0.09em] text-[#A8A8A4] mt-2">{row.outfits.length} LOOKS →</p>
                 </button>
               ))}
