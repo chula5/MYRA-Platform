@@ -598,7 +598,7 @@ export default function FeedClient({
                   onClick={() => router.push(`${detailHrefBase}/${o.outfit_id}`)}
                   className="group relative shrink-0 w-[150px] sm:w-[170px]"
                 >
-                  <div className="relative aspect-[3/4] w-full overflow-hidden rounded-[12px] bg-[#EDEDED]">
+                  <div className="relative aspect-[3/4] w-full overflow-hidden bg-[#EDEDED]">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={o.image_url ? thumbUrl(o.image_url, 400) : '/placeholder-outfit.jpg'}

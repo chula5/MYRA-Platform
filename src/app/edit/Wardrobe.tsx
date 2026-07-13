@@ -44,6 +44,12 @@ export default function Wardrobe() {
 
   useEffect(() => { load() }, [])
   useEffect(() => { if (open) load() }, [open])
+  // Open from the header "MY WARDROBE" button (or anywhere).
+  useEffect(() => {
+    const openIt = () => setOpen(true)
+    window.addEventListener('myra:open-wardrobe', openIt)
+    return () => window.removeEventListener('myra:open-wardrobe', openIt)
+  }, [])
 
   const count = outfits.length + items.length
 
@@ -63,7 +69,7 @@ export default function Wardrobe() {
         <button
           onClick={() => setOpen(true)}
           aria-label="Open my wardrobe"
-          className="fixed right-0 top-1/2 -translate-y-1/2 z-40 flex flex-col items-center gap-2 bg-white border border-r-0 border-[#E2E0DB] rounded-l-[16px] px-2.5 py-4 shadow-[-4px_0_14px_rgba(0,0,0,0.07)] hover:pr-3.5 transition-all duration-300"
+          className="fixed right-0 top-1/2 -translate-y-1/2 z-[55] flex flex-col items-center gap-2 bg-white border border-r-0 border-[#E2E0DB] rounded-l-[16px] px-2.5 py-4 shadow-[-4px_0_14px_rgba(0,0,0,0.07)] hover:pr-3.5 transition-all duration-300"
         >
           <HangerIcon className="w-4 h-4 text-[#4A4E57]" />
           <span className="text-[8px] tracking-[0.16em] text-[#4A4E57] [writing-mode:vertical-rl] rotate-180">WARDROBE</span>
@@ -122,7 +128,7 @@ export default function Wardrobe() {
                             <div className="w-[1px] h-2.5 bg-[#B89A6E] mx-auto" />
                             <button
                               onClick={() => { setOpen(false); router.push(`/edit/${o.outfit_id}`) }}
-                              className="block w-full aspect-[3/4] rounded-[9px] overflow-hidden bg-[#EDEDED] border border-[#E2E0DB]"
+                              className="block w-full aspect-[3/4] overflow-hidden bg-[#EDEDED] border border-[#E2E0DB]"
                             >
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img src={o.image_url || '/placeholder-outfit.jpg'} alt="" className="w-full h-full object-cover" />

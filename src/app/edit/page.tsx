@@ -5,6 +5,7 @@ import { earlyAccessSignOut } from '@/app/earlyaccess/actions'
 import { recordEarlyAccessVisit } from '@/app/earlyaccess/activity'
 import { getSavedOutfitIds } from './save-actions'
 import Wardrobe from './Wardrobe'
+import OpenWardrobeButton from './OpenWardrobeButton'
 import HelpPopover from '@/components/HelpPopover'
 import { getTasteRecommendations, getUserTasteVector, getBrandAffinityRows, getOccasionOrder } from '@/lib/taste-profile'
 import type { OutfitWithItems } from '@/types/database'
@@ -65,14 +66,17 @@ export default async function EditPage() {
             BETA
           </span>
         </div>
-        <form action={earlyAccessSignOut}>
-          <button
-            type="submit"
-            className="text-[9px] tracking-[0.09em] text-[#6B6B6B] hover:text-[#4A4E57] border border-[#E2E0DB] hover:border-[#0A0A0A] px-3 py-1.5 rounded-full transition-colors duration-300"
-          >
-            SIGN OUT
-          </button>
-        </form>
+        <div className="flex items-center gap-5">
+          <OpenWardrobeButton />
+          <form action={earlyAccessSignOut}>
+            <button
+              type="submit"
+              className="text-[9px] tracking-[0.09em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300"
+            >
+              SIGN OUT
+            </button>
+          </form>
+        </div>
       </header>
 
       {/* The Edit — occasion search + browse (read-only). Items come with the

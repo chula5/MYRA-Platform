@@ -263,7 +263,7 @@ export default function OutfitDetailClient({
   if (loading) {
     return (
       <div className="max-w-[800px] mx-auto px-10 py-12">
-        <div className="aspect-[3/4] bg-[#F2F2F2] animate-pulse rounded-[10px]" />
+        <div className="aspect-[3/4] bg-[#F2F2F2] animate-pulse" />
       </div>
     )
   }
@@ -400,7 +400,7 @@ export default function OutfitDetailClient({
                   src={thumbUrl(prevImage, 500)}
                   alt=""
                   loading="lazy"
-                  className="w-full aspect-[3/4] object-cover rounded-[10px]"
+                  className="w-full aspect-[3/4] object-cover"
                   style={{ filter: 'blur(1px)', opacity: 0.7 }}
                 />
               </button>
@@ -419,14 +419,14 @@ export default function OutfitDetailClient({
                   src={thumbUrl(nextImage, 500)}
                   alt=""
                   loading="lazy"
-                  className="w-full aspect-[3/4] object-cover rounded-[10px]"
+                  className="w-full aspect-[3/4] object-cover"
                   style={{ filter: 'blur(1px)', opacity: 0.7 }}
                 />
               </button>
             )}
 
             {/* Current look */}
-            <div ref={heroRef} className="relative z-10 bg-white rounded-[16px] overflow-hidden group scroll-mt-20">
+            <div ref={heroRef} className="relative z-10 bg-white overflow-hidden group scroll-mt-20">
               <ImageWithHotspots
                 key={currentImageUrl}
                 outfit={outfit}
