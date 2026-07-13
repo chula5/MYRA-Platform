@@ -15,7 +15,7 @@ type RakutenMerchant = { brandMatch: RegExp; hostMatch: RegExp; mid?: number; of
 const RAKUTEN_MERCHANTS: RakutenMerchant[] = [
   { brandMatch: /isabel\s*marant/i, hostMatch: /(^|\.)isabelmarant\.com$/i, mid: 49987 },
   { brandMatch: /twinset/i, hostMatch: /(^|\.)twinset\.com$/i, offerid: '1689731.5326911308714139715961488' },
-  // Diesel → awaiting Rakuten offerid/mid.
+  { brandMatch: /diesel/i, hostMatch: /(^|\.)diesel\.com$/i, offerid: '1115076.481509956965097842525975' },
 ]
 
 // u1 is a CONTENT / placement identifier only (e.g. an item or outfit id). It

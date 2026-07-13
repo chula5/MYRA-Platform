@@ -631,26 +631,13 @@ export default function FeedClient({
                   onClick={() => { setBrandView(row); window.scrollTo({ top: 0 }) }}
                   className="group shrink-0 w-[150px] sm:w-[170px] text-left"
                 >
-                  <div className="grid grid-cols-2 grid-rows-2 gap-[2px] aspect-square w-full overflow-hidden rounded-[14px] bg-[#EDEDED]">
-                    {Array.from({ length: 4 }).map((_, i) => {
-                      const o = row.outfits[i]
-                      return (
-                        <div key={i} className="relative w-full h-full overflow-hidden bg-[#EDEDED]">
-                          {o && (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={o.image_url ? thumbUrl(o.image_url, 300) : '/placeholder-outfit.jpg'}
-                              alt=""
-                              loading="lazy"
-                              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
-                            />
-                          )}
-                        </div>
-                      )
-                    })}
+                  {/* Brand wordmark tile (replaces the outfit collage) */}
+                  <div className="aspect-square w-full overflow-hidden rounded-[14px] bg-[#F4F3F1] border border-[#E8E6E1] group-hover:border-[#C4A882] transition-colors duration-300 flex items-center justify-center px-4">
+                    <span className="text-[14px] sm:text-[16px] tracking-[0.14em] text-[#4A4E57] text-center leading-[1.25] uppercase">
+                      {row.brand}
+                    </span>
                   </div>
-                  <p className="text-[11px] tracking-[0.06em] text-[#4A4E57] mt-2 truncate">{row.brand.toUpperCase()}</p>
-                  <p className="text-[8px] tracking-[0.09em] text-[#A8A8A4]">{row.outfits.length} LOOKS →</p>
+                  <p className="text-[8px] tracking-[0.09em] text-[#A8A8A4] mt-2">{row.outfits.length} LOOKS →</p>
                 </button>
               ))}
             </div>
