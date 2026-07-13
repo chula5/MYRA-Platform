@@ -665,13 +665,13 @@ export default function FeedClient({
           </div>
         )}
 
-        {/* Occasion grid — order personalised by the user's taste vector. */}
-        <div className="order-6 grid grid-cols-2 md:grid-cols-3 gap-3 max-w-[900px] mx-auto mb-10">
+        {/* Occasions — plain underlined text (no boxes). */}
+        <div className="order-6 grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4 max-w-[760px] mx-auto mb-10">
           {(occasionOrder && occasionOrder.length ? occasionOrder : BASE_OCCASIONS).map((tag) => (
             <button
               key={tag}
               onClick={() => setOccasion(tag)}
-              className="glass-light px-4 py-6 text-[11px] tracking-[0.09em] text-[#4A4E57] text-center rounded-[16px] active:scale-[0.99]"
+              className="py-2 text-[11px] tracking-[0.12em] text-[#4A4E57] text-center underline underline-offset-[6px] decoration-[#D8D6D1] hover:decoration-[#0A0A0A] transition-colors"
             >
               {occasionLabel(tag)}
             </button>
