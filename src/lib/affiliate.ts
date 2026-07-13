@@ -6,9 +6,16 @@
 
 const RAKUTEN_PUBLISHER_ID = 'UvSzxGwCHE0'
 
-// One entry per approved Rakuten merchant. Matched by brand name and/or URL host.
-const RAKUTEN_MERCHANTS: { mid: number; brandMatch: RegExp; hostMatch: RegExp }[] = [
-  { mid: 49987, brandMatch: /isabel\s*marant/i, hostMatch: /(^|\.)isabelmarant\.com$/i },
+// One entry per approved Rakuten merchant, matched by brand name and/or URL host.
+// Provide EITHER `mid` (Deep Link API → click.linksynergy.com/deeplink) OR
+// `offerid` (text-link/deep-link → click.linksynergy.com/link, the value Rakuten
+// gives in its copy-link tool as offerid=...). Both deep-link to any product URL
+// on that merchant's domain; offerid is what you get by pasting a Rakuten link.
+type RakutenMerchant = { brandMatch: RegExp; hostMatch: RegExp; mid?: number; offerid?: string }
+const RAKUTEN_MERCHANTS: RakutenMerchant[] = [
+  { brandMatch: /isabel\s*marant/i, hostMatch: /(^|\.)isabelmarant\.com$/i, mid: 49987 },
+  { brandMatch: /twinset/i, hostMatch: /(^|\.)twinset\.com$/i, offerid: '1689731.5326911308714139715961488' },
+  // Diesel → awaiting Rakuten offerid/mid.
 ]
 
 // u1 is a CONTENT / placement identifier only (e.g. an item or outfit id). It
@@ -39,5 +46,11 @@ export function affiliateUrl(
 
   const murl = encodeURIComponent(url) // & → %26, ? → %3F, : → %3A, / → %2F …
   const u1 = sanitiseU1(opts.contentId)
-  return `https://click.linksynergy.com/deeplink?id=${RAKUTEN_PUBLISHER_ID}&mid=${merchant.mid}&murl=${murl}&u1=${u1}`
+  if (merchant.mid != null) {
+    return `https://click.linksynergy.com/deeplink?id=${RAKUTEN_PUBLISHER_ID}&mid=${merchant.mid}&murl=${murl}&u1=${u1}`
+  }
+  if (merchant.offerid) {
+    return `https://click.linksynergy.com/link?id=${RAKUTEN_PUBLISHER_ID}&offerid=${merchant.offerid}&type=2&murl=${murl}&u1=${u1}`
+  }
+  return url
 }
