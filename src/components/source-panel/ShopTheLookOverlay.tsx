@@ -42,7 +42,7 @@ export default function ShopTheLookOverlay({
   }
 
   return (
-    <div className="absolute top-2.5 left-2.5 z-30 w-[clamp(118px,33%,176px)] max-h-[calc(100%-1.25rem)] overflow-y-auto pr-1">
+    <div className="absolute top-2.5 left-2.5 z-30 w-[clamp(140px,40%,208px)] max-h-[calc(100%-1.25rem)] overflow-y-auto pr-1">
       {/* Header */}
       <div className="flex items-center gap-1.5 mb-2">
         <span className="text-white text-[8px] sm:text-[9px] tracking-[0.081em] drop-shadow-[0_1px_3px_rgba(0,0,0,0.55)]">
@@ -60,8 +60,8 @@ export default function ShopTheLookOverlay({
         </button>
       </div>
 
-      {/* Cards */}
-      <div className="space-y-1.5">
+      {/* Item rectangles — brand/name/price bottom-left, SHOP bottom-right (text) */}
+      <div className="space-y-2">
         {items.map((item) => (
           <ItemCard
             key={item.item_id}
@@ -95,55 +95,51 @@ function ItemCard({
   const price = formatPrice(item.price ?? null, item.currency ?? null)
 
   return (
-    <div className="relative bg-white rounded-[14px] shadow-[0_3px_10px_rgba(0,0,0,0.14)] p-1.5 flex gap-1.5 items-stretch">
-      {/* Save heart — top-right corner of the card */}
+    <div className="relative w-full aspect-[3/4] overflow-hidden bg-[#EDEDED]">
+      {/* Item photo (rectangle) */}
+      {item.image_url && !imgFailed ? (
+        <Image
+          src={item.image_url}
+          alt={item.product_name}
+          fill
+          className="object-cover"
+          sizes="208px"
+          onError={() => setImgFailed(true)}
+        />
+      ) : (
+        <div className="w-full h-full bg-[#E2E0DB] flex items-center justify-center">
+          <span className="text-[16px] text-[#6B6B6B]">{brandInitial}</span>
+        </div>
+      )}
+
+      {/* Save heart — top-right */}
       {canSave && (
         <button
           onClick={(e) => { e.stopPropagation(); onToggle() }}
           aria-label={saved ? 'Remove item from wardrobe' : 'Save item to wardrobe'}
-          className="absolute top-1 right-1 z-10 w-4 h-4 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.18)] flex items-center justify-center"
+          className="absolute top-1.5 right-1.5 z-10 w-5 h-5 rounded-full bg-white/85 flex items-center justify-center"
         >
-          <span className={`text-[9px] leading-none ${saved ? 'text-[#C8302A]' : 'text-[#6B6B6B]'}`}>{saved ? '♥' : '♡'}</span>
+          <span className={`text-[10px] leading-none ${saved ? 'text-[#C8302A]' : 'text-[#6B6B6B]'}`}>{saved ? '♥' : '♡'}</span>
         </button>
       )}
 
-      {/* Thumbnail */}
-      <div className="relative w-[28px] h-[38px] flex-shrink-0 rounded-[10px] overflow-hidden bg-[#F2F2F2]">
-        {item.image_url && !imgFailed ? (
-          <Image
-            src={item.image_url}
-            alt={item.product_name}
-            fill
-            className="object-cover"
-            sizes="28px"
-            onError={() => setImgFailed(true)}
-          />
-        ) : (
-          <div className="w-full h-full bg-[#E2E0DB] flex items-center justify-center">
-            <span className="text-[9px] text-[#6B6B6B]">{brandInitial}</span>
+      {/* Text overlay — brand/name/price bottom-left, SHOP bottom-right */}
+      <div className="absolute inset-x-0 bottom-0 z-10 pt-10 pb-2 px-2 bg-gradient-to-t from-black/70 via-black/25 to-transparent">
+        <div className="flex items-end justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-white/75 text-[7px] tracking-[0.08em] uppercase truncate">{item.brand?.name ?? 'BRAND'}</p>
+            <p className="text-white text-[9px] leading-[1.15] line-clamp-2 mt-0.5">{item.product_name}</p>
+            {price && <p className="text-white/90 text-[8px] tracking-[0.03em] mt-0.5">{price}</p>}
           </div>
-        )}
-      </div>
-
-      {/* Info — leave room on the right for the heart */}
-      <div className="flex-1 min-w-0 flex flex-col pr-3">
-        <p className="text-[6px] sm:text-[7px] tracking-[0.054em] text-[#6B6B6B] uppercase truncate">
-          {item.brand?.name ?? 'BRAND'}
-        </p>
-        <p className="text-[8px] sm:text-[9px] leading-[1.15] text-[#4A4E57] font-semibold line-clamp-2">
-          {item.product_name}
-        </p>
-        <div className="mt-auto flex items-center justify-between gap-1 pt-0.5">
-          <span className="text-[8px] sm:text-[9px] text-[#4A4E57]">{price}</span>
           {item.retailer_url && (
             <a
               href={item.retailer_url}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => { e.stopPropagation(); onShop() }}
-              className="bg-[#0A0A0A] text-white text-[6px] sm:text-[7px] tracking-[0.045em] px-1.5 py-0.5 rounded hover:opacity-85 transition-opacity flex-shrink-0"
+              className="flex-shrink-0 text-white text-[8px] tracking-[0.14em] uppercase underline underline-offset-2 hover:opacity-70 transition-opacity pb-0.5"
             >
-              SHOP
+              Shop
             </a>
           )}
         </div>
