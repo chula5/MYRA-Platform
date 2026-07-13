@@ -11,9 +11,10 @@ type SourceItem = Item & { brand: Brand }
 function formatPrice(price: string | null, currency: string | null): string {
   if (!price) return ''
   const sym: Record<string, string> = { GBP: '£', USD: '$', EUR: '€', AUD: 'A$', CAD: 'C$', JPY: '¥' }
-  const symbol = sym[currency ?? 'GBP'] ?? ''
+  const cur = currency ?? 'GBP'
+  const symbol = sym[cur]
   const clean = String(price).replace(/\.00$/, '')
-  return symbol ? `${symbol}${clean}` : clean
+  return symbol ? `${symbol}${clean}` : `${clean} ${cur}`
 }
 
 // "Shop the look" cards overlaid on the outfit image (top-left), replacing the
