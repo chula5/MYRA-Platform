@@ -655,10 +655,10 @@ export default function FeedClient({
         )}
 
         {showAllOption && (
-          <div className="order-5 max-w-[900px] mx-auto mb-6">
+          <div className="order-5 mx-auto mb-6 text-center">
             <button
               onClick={() => setOccasion('all')}
-              className="glass-dark w-full text-[#4A4E57] px-4 py-4 text-[11px] tracking-[0.09em] rounded-full"
+              className="py-2 text-[11px] tracking-[0.12em] text-[#4A4E57] underline underline-offset-[6px] decoration-[#D8D6D1] hover:decoration-[#0A0A0A] transition-colors"
             >
               ↓ VIEW EVERYTHING LIVE
             </button>
@@ -728,12 +728,10 @@ export default function FeedClient({
                 <button
                   key={type}
                   onClick={() => setFilterPanel(isActive ? null : type)}
-                  className={`px-4 py-2 text-[9px] tracking-[0.081em] rounded-[12px] border transition-colors duration-200 ${
-                    hasValue
-                      ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]'
-                      : isActive
-                        ? 'bg-[#FAFAF8] text-[#4A4E57] border-[#0A0A0A]'
-                        : 'bg-white text-[#6B6B6B] border-[#E2E0DB] hover:border-[#0A0A0A] hover:text-[#4A4E57]'
+                  className={`px-1 py-1.5 text-[9px] tracking-[0.1em] underline underline-offset-[5px] transition-colors duration-200 ${
+                    hasValue || isActive
+                      ? 'text-[#0A0A0A] decoration-[#0A0A0A]'
+                      : 'text-[#6B6B6B] decoration-[#D8D6D1] hover:text-[#4A4E57] hover:decoration-[#4A4E57]'
                   }`}
                 >
                   {type === 'colour' ? 'COLOUR' : type === 'item' ? 'ITEM TYPE' : 'BRAND'} {isActive ? '▲' : '▾'}
