@@ -42,7 +42,7 @@ export default function ShopTheLookOverlay({
   }
 
   return (
-    <div className="absolute top-2.5 left-2.5 z-30 w-[clamp(140px,40%,208px)] max-h-[calc(100%-1.25rem)] overflow-y-auto pr-1">
+    <div className="absolute top-2.5 left-2.5 z-30 w-[27%] max-w-[100px] sm:w-[34%] sm:max-w-[176px] max-h-[calc(100%-1.25rem)] overflow-y-auto pr-1">
       {/* Header */}
       <div className="flex items-center gap-1.5 mb-2">
         <span className="text-white text-[8px] sm:text-[9px] tracking-[0.081em] drop-shadow-[0_1px_3px_rgba(0,0,0,0.55)]">
@@ -103,7 +103,7 @@ function ItemCard({
           alt={item.product_name}
           fill
           className="object-cover"
-          sizes="208px"
+          sizes="176px"
           onError={() => setImgFailed(true)}
         />
       ) : (
@@ -124,12 +124,12 @@ function ItemCard({
       )}
 
       {/* Text overlay — brand/name/price bottom-left, SHOP bottom-right */}
-      <div className="absolute inset-x-0 bottom-0 z-10 pt-10 pb-2 px-2 bg-gradient-to-t from-black/70 via-black/25 to-transparent">
-        <div className="flex items-end justify-between gap-2">
+      <div className="absolute inset-x-0 bottom-0 z-10 pt-8 pb-1.5 px-1.5 sm:pt-10 sm:pb-2 sm:px-2 bg-gradient-to-t from-black/70 via-black/25 to-transparent">
+        <div className="flex items-end justify-between gap-1.5">
           <div className="min-w-0">
-            <p className="text-white/75 text-[7px] tracking-[0.08em] uppercase truncate">{item.brand?.name ?? 'BRAND'}</p>
-            <p className="text-white text-[9px] leading-[1.15] line-clamp-2 mt-0.5">{item.product_name}</p>
-            {price && <p className="text-white/90 text-[8px] tracking-[0.03em] mt-0.5">{price}</p>}
+            <p className="text-white/75 text-[6px] sm:text-[7px] tracking-[0.06em] uppercase truncate">{item.brand?.name ?? 'BRAND'}</p>
+            <p className="text-white text-[7px] sm:text-[9px] leading-[1.15] line-clamp-2 mt-0.5">{item.product_name}</p>
+            <p className="text-white/90 text-[7px] sm:text-[8px] tracking-[0.03em] mt-0.5">{price || '—'}</p>
           </div>
           {item.retailer_url && (
             <a
@@ -137,7 +137,7 @@ function ItemCard({
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => { e.stopPropagation(); onShop() }}
-              className="flex-shrink-0 text-white text-[8px] tracking-[0.14em] uppercase underline underline-offset-2 hover:opacity-70 transition-opacity pb-0.5"
+              className="flex-shrink-0 text-white text-[7px] sm:text-[8px] tracking-[0.12em] uppercase underline underline-offset-2 hover:opacity-70 transition-opacity pb-0.5"
             >
               Shop
             </a>
