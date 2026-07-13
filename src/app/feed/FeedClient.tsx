@@ -10,6 +10,7 @@ import { recordTasteInteraction } from '@/app/edit/save-actions'
 import { recordSearchQuery, recordLandingEvent } from '@/app/actions/landing-analytics'
 import { getStoredRef } from '@/lib/ref'
 import { parseQuery, searchOutfits } from '@/lib/search-taxonomy'
+import { thumbUrl } from '@/lib/image-utils'
 import { occasionLabel, BASE_OCCASIONS, occasionMatchTags } from '@/lib/occasions'
 import type { BrandRow } from '@/lib/taste-profile'
 import type { OutfitWithItems, ItemType, ColourFamily } from '@/types/database'
@@ -600,8 +601,9 @@ export default function FeedClient({
                   <div className="relative aspect-[3/4] w-full overflow-hidden rounded-[12px] bg-[#EDEDED]">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={o.image_url || '/placeholder-outfit.jpg'}
+                      src={o.image_url ? thumbUrl(o.image_url, 400) : '/placeholder-outfit.jpg'}
                       alt=""
+                      loading="lazy"
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
                     />
                     {canSave && (
@@ -637,8 +639,9 @@ export default function FeedClient({
                           {o && (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
-                              src={o.image_url || '/placeholder-outfit.jpg'}
+                              src={o.image_url ? thumbUrl(o.image_url, 300) : '/placeholder-outfit.jpg'}
                               alt=""
+                              loading="lazy"
                               className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
                             />
                           )}
