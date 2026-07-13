@@ -9,6 +9,7 @@ import {
   type WardrobeOutfit,
   type WardrobeItem,
 } from './save-actions'
+import { affiliateUrl } from '@/lib/affiliate'
 
 function fmtPrice(price: string | null, currency: string | null): string {
   if (!price) return ''
@@ -166,7 +167,7 @@ export default function Wardrobe() {
                               <span className="text-[10px] text-[#4A4E57]">{fmtPrice(it.price, it.currency)}</span>
                               {it.retailer_url && (
                                 <a
-                                  href={it.retailer_url}
+                                  href={affiliateUrl(it.retailer_url, { brandName: it.brand_name, contentId: it.item_id })}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="bg-[#0A0A0A] text-white text-[8px] tracking-[0.06em] px-2 py-0.5 rounded hover:opacity-85 transition-opacity"

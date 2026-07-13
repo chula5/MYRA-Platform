@@ -5,6 +5,7 @@ import Image from 'next/image'
 import type { Item, Brand } from '@/types/database'
 import { recordItemClick } from '@/app/actions/item-click'
 import { getStoredRef } from '@/lib/ref'
+import { affiliateUrl } from '@/lib/affiliate'
 
 type SourceItem = Item & { brand: Brand }
 
@@ -119,7 +120,7 @@ export default function SourcePanel({ items, onClose, isOpen, outfitId }: Source
               const firstItem = items[0]
               if (firstItem?.retailer_url) {
                 recordItemClick(firstItem.item_id, outfitId, getStoredRef(), itemLabel(firstItem))
-                window.open(firstItem.retailer_url, '_blank', 'noopener,noreferrer')
+                window.open(affiliateUrl(firstItem.retailer_url, { brandName: firstItem.brand?.name, contentId: firstItem.item_id }), '_blank', 'noopener,noreferrer')
               }
             }}
             className="
@@ -146,7 +147,7 @@ function SourceItemRow({ item, outfitId }: { item: SourceItem; outfitId?: string
   const handleClick = () => {
     if (item.retailer_url) {
       recordItemClick(item.item_id, outfitId, getStoredRef(), itemLabel(item))
-      window.open(item.retailer_url, '_blank', 'noopener,noreferrer')
+      window.open(affiliateUrl(item.retailer_url, { brandName: item.brand?.name, contentId: item.item_id }), '_blank', 'noopener,noreferrer')
     }
   }
 

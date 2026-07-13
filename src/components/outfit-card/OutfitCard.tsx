@@ -131,20 +131,14 @@ export default function OutfitCard({
           <SaveHeartButton outfitId={outfit.outfit_id} locked />
         ) : null}
 
-        {/* Desktop prev/next tap zones */}
+        {/* Right-side tap zone flicks to the next image; tapping anywhere else
+            opens the outfit detail (handleTap). Left/centre fall through. */}
         {total > 1 && (
-          <>
-            <button
-              aria-label="Previous"
-              className="absolute left-0 top-0 h-full w-1/3 z-10"
-              onClick={(e) => { e.stopPropagation(); prev() }}
-            />
-            <button
-              aria-label="Next"
-              className="absolute right-0 top-0 h-full w-1/3 z-10"
-              onClick={(e) => { e.stopPropagation(); next() }}
-            />
-          </>
+          <button
+            aria-label="Next image"
+            className="absolute right-0 top-0 h-full w-1/3 z-10"
+            onClick={(e) => { e.stopPropagation(); next() }}
+          />
         )}
 
         {/* Hotspots — only on slide 0 (the outfit hero) */}

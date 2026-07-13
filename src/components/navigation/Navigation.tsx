@@ -75,14 +75,10 @@ export default function Navigation({ transparent = false, authed = false }: { tr
           >
             <TikTokIcon />
           </a>
-          {/* Constant auth button */}
+          {/* Constant auth link — plain text */}
           <Link
             href={authed ? '/edit' : '/signin'}
-            className={`whitespace-nowrap rounded-full border px-3 sm:px-4 py-1.5 text-[9px] sm:text-[10px] tracking-[0.09em] transition-colors duration-300 ${
-              isTransparent
-                ? 'border-white/70 text-white hover:bg-white/15'
-                : 'border-[#0A0A0A] text-[#4A4E57] hover:bg-[#0A0A0A] hover:text-white'
-            }`}
+            className={`whitespace-nowrap text-[9px] sm:text-[10px] tracking-[0.09em] hover:opacity-60 transition-colors duration-500 ${textColor}`}
           >
             {authed ? 'MY EDIT' : 'LOG IN / SIGN UP'}
           </Link>

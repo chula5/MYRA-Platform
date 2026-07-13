@@ -4,6 +4,7 @@ import Image from 'next/image'
 import { useState } from 'react'
 import { recordItemClick } from '@/app/actions/item-click'
 import { getStoredRef } from '@/lib/ref'
+import { affiliateUrl } from '@/lib/affiliate'
 import type { Item, Brand } from '@/types/database'
 
 type SourceItem = Item & { brand: Brand }
@@ -134,7 +135,7 @@ function ItemCard({
           </div>
           {item.retailer_url && (
             <a
-              href={item.retailer_url}
+              href={affiliateUrl(item.retailer_url, { brandName: item.brand?.name, contentId: item.item_id })}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => { e.stopPropagation(); onShop() }}
