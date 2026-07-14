@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase-server'
+import { thumbUrl } from '@/lib/image-utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,8 +48,9 @@ export default async function SocialPostsPage() {
                   {o.image_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={o.image_url}
+                      src={thumbUrl(o.image_url, 500)}
                       alt=""
+                      loading="lazy"
                       className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500"
                     />
                   ) : (

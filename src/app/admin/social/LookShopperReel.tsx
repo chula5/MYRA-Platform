@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { thumbUrl } from '@/lib/image-utils'
 
 export interface ReelProduct {
   id: string
@@ -156,7 +157,7 @@ export default function LookShopperReel({
               <div className="look-figure">
                 {heroImage ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img className="look-img" src={heroImage} alt="" draggable={false} />
+                  <img className="look-img" src={thumbUrl(heroImage, 900)} alt="" draggable={false} />
                 ) : (
                   <div className="look-img look-empty">NO DISPLAY IMAGE</div>
                 )}
@@ -189,7 +190,7 @@ export default function LookShopperReel({
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         className="card-photo"
-                        src={p.image}
+                        src={thumbUrl(p.image, 400)}
                         alt=""
                         draggable={false}
                         onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
