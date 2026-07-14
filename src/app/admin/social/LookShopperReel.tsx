@@ -35,9 +35,12 @@ export default function LookShopperReel({
   const [recording, setRecording] = useState(false)
   const [recError, setRecError] = useState<string | null>(null)
 
-  // Rectangle item photos, sized so they all fit the stage below the logo/header
-  // and above the CTA (≈640px available). Fewer items → taller cards (capped).
-  const cardH = Math.max(96, Math.min(168, Math.floor((640 - (products.length - 1) * 8) / Math.max(products.length, 1))))
+  // Portrait (3:4) item photos sized to fit the stack below the logo/header and
+  // above the CTA (≈610px available). Height is derived from the item count;
+  // width follows the 3:4 ratio, which keeps the cards narrow so they stay in
+  // the left column and never overlap the model.
+  const cardH = Math.max(96, Math.min(200, Math.floor((610 - (products.length - 1) * 8) / Math.max(products.length, 1))))
+  const cardW = Math.round(cardH * 0.75)
 
   const cascadeMs = products.length * STAGE_STAGGER + 200
   const recordMs = 250 + 600 + cascadeMs + 2200 // settle + closed intro + cascade + tail
@@ -173,7 +176,7 @@ export default function LookShopperReel({
             )}
 
             {/* Shop-the-look panel */}
-            <aside className={`product-panel ${open ? 'is-open' : ''} ${logoUrl ? 'has-logo' : ''}`}>
+            <aside className={`product-panel ${open ? 'is-open' : ''} ${logoUrl ? 'has-logo' : ''}`} style={{ width: `${cardW}px` }}>
               {!logoUrl && <div className="panel-logo">MYRA</div>}
               <div className="panel-header">
                 <span className="panel-title">Shop the look</span>
@@ -184,7 +187,7 @@ export default function LookShopperReel({
                   <article
                     key={p.id}
                     className={`product-card ${open ? 'is-in' : ''}`}
-                    style={{ transitionDelay: `${open ? i * STAGE_STAGGER : (products.length - 1 - i) * 30}ms`, height: `${cardH}px` }}
+                    style={{ transitionDelay: `${open ? i * STAGE_STAGGER : (products.length - 1 - i) * 30}ms`, width: `${cardW}px`, height: `${cardH}px` }}
                   >
                     {p.image && (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -304,7 +307,6 @@ const SCOPED_CSS = `
 
 .looksh .product-panel {
   position: absolute; top: 54px; left: 20px;
-  width: 178px;
   display: flex; flex-direction: column; gap: 7px;
   z-index: 5; pointer-events: none;
 }
@@ -346,7 +348,6 @@ const SCOPED_CSS = `
    bottom-left in white and the action as text bottom-right (matches the site). */
 .looksh .product-card {
   position: relative;
-  width: 178px;
   border-radius: 3px; overflow: hidden;
   background: #ece5d8;
   opacity: 0; transform: translateX(-80px) scale(0.96);
