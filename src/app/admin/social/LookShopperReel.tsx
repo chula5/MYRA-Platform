@@ -200,18 +200,18 @@ export default function LookShopperReel({
                       />
                     )}
                     <div className="card-overlay">
-                      <div className="card-info">
-                        <div className="card-brand">{p.brand}</div>
-                        <div className="card-name">{p.name}</div>
-                        <div className="card-price">{p.price}</div>
+                      <div className="card-brand">{p.brand}</div>
+                      <div className="card-name">{p.name}</div>
+                      <div className="card-price-row">
+                        <span className="card-price">{p.price}</span>
+                        <button
+                          type="button"
+                          className={`card-shop ${added[p.id] ? 'is-added' : ''}`}
+                          onClick={() => setAdded((s) => ({ ...s, [p.id]: !s[p.id] }))}
+                        >
+                          {added[p.id] ? '✓ Added' : 'Shop'}
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        className={`card-shop ${added[p.id] ? 'is-added' : ''}`}
-                        onClick={() => setAdded((s) => ({ ...s, [p.id]: !s[p.id] }))}
-                      >
-                        {added[p.id] ? '✓ Added' : 'Shop'}
-                      </button>
                     </div>
                   </article>
                 ))}
@@ -359,25 +359,25 @@ const SCOPED_CSS = `
 .looksh .card-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 22%; }
 .looksh .card-overlay {
   position: absolute; inset: 0;
-  display: flex; align-items: flex-end; justify-content: space-between; gap: 6px;
+  display: flex; flex-direction: column; justify-content: flex-end;
   padding: 26px 8px 7px;
   background: linear-gradient(to top, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.16) 46%, transparent 72%);
 }
-.looksh .card-info { min-width: 0; }
 .looksh .card-brand {
   font-weight: 700; font-size: 7px; letter-spacing: 0.1em; color: rgba(255,255,255,0.82); text-transform: uppercase;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .looksh .card-name {
   font-weight: 700; font-size: 8.5px; letter-spacing: 0.02em; line-height: 1.18; color: #fff; text-transform: uppercase; margin-top: 2px;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
 }
-.looksh .card-price { font-size: 8px; font-weight: 700; letter-spacing: 0.03em; color: rgba(255,255,255,0.95); margin-top: 2px; text-transform: none; }
+.looksh .card-price-row { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; margin-top: 3px; }
+.looksh .card-price { font-size: 8px; font-weight: 700; letter-spacing: 0.03em; color: rgba(255,255,255,0.95); text-transform: none; }
 .looksh .card-shop {
-  flex-shrink: 0; align-self: flex-end;
+  flex-shrink: 0;
   font-weight: 700; font-size: 7.5px; letter-spacing: 0.12em; text-transform: uppercase;
   color: #fff; background: none; border: none; cursor: pointer; white-space: nowrap;
-  text-decoration: underline; text-underline-offset: 2px; padding: 0 0 2px;
+  text-decoration: underline; text-underline-offset: 2px; padding: 0;
 }
 .looksh .card-shop.is-added { color: #9fe0ac; text-decoration: none; }
 
