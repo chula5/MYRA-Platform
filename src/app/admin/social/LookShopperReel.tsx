@@ -365,17 +365,17 @@ const SCOPED_CSS = `
 }
 .looksh .card-info { min-width: 0; }
 .looksh .card-brand {
-  font-weight: 700; font-size: 6.5px; letter-spacing: 0.1em; color: rgba(255,255,255,0.8); text-transform: uppercase;
+  font-weight: 700; font-size: 7px; letter-spacing: 0.1em; color: rgba(255,255,255,0.82); text-transform: uppercase;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .looksh .card-name {
-  font-weight: 600; font-size: 8px; letter-spacing: 0.01em; line-height: 1.15; color: #fff; text-transform: none; margin-top: 1px;
+  font-weight: 700; font-size: 8.5px; letter-spacing: 0.02em; line-height: 1.18; color: #fff; text-transform: uppercase; margin-top: 2px;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
-.looksh .card-price { font-size: 7.5px; font-weight: 600; letter-spacing: 0.03em; color: rgba(255,255,255,0.92); margin-top: 1px; text-transform: none; }
+.looksh .card-price { font-size: 8px; font-weight: 700; letter-spacing: 0.03em; color: rgba(255,255,255,0.95); margin-top: 2px; text-transform: none; }
 .looksh .card-shop {
   flex-shrink: 0; align-self: flex-end;
-  font-weight: 600; font-size: 7px; letter-spacing: 0.12em; text-transform: uppercase;
+  font-weight: 700; font-size: 7.5px; letter-spacing: 0.12em; text-transform: uppercase;
   color: #fff; background: none; border: none; cursor: pointer; white-space: nowrap;
   text-decoration: underline; text-underline-offset: 2px; padding: 0 0 2px;
 }
