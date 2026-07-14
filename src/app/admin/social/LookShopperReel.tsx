@@ -34,6 +34,10 @@ export default function LookShopperReel({
   const [recording, setRecording] = useState(false)
   const [recError, setRecError] = useState<string | null>(null)
 
+  // Rectangle item photos, sized so they all fit the stage below the logo/header
+  // and above the CTA (≈640px available). Fewer items → taller cards (capped).
+  const cardH = Math.max(96, Math.min(168, Math.floor((640 - (products.length - 1) * 8) / Math.max(products.length, 1))))
+
   const cascadeMs = products.length * STAGE_STAGGER + 200
   const recordMs = 250 + 600 + cascadeMs + 2200 // settle + closed intro + cascade + tail
 
@@ -179,33 +183,31 @@ export default function LookShopperReel({
                   <article
                     key={p.id}
                     className={`product-card ${open ? 'is-in' : ''}`}
-                    style={{ transitionDelay: `${open ? i * STAGE_STAGGER : (products.length - 1 - i) * 30}ms` }}
+                    style={{ transitionDelay: `${open ? i * STAGE_STAGGER : (products.length - 1 - i) * 30}ms`, height: `${cardH}px` }}
                   >
-                    <div className="card-swatch">
-                      {p.image && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          className="card-swatch-img"
-                          src={p.image}
-                          alt=""
-                          draggable={false}
-                          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
-                        />
-                      )}
-                    </div>
-                    <div className="card-meta">
-                      <div className="card-brand">{p.brand}</div>
-                      <div className="card-name">{p.name}</div>
-                      <div className="card-row">
-                        <span className="card-price">{p.price}</span>
-                        <button
-                          type="button"
-                          className={`card-add ${added[p.id] ? 'is-added' : ''}`}
-                          onClick={() => setAdded((s) => ({ ...s, [p.id]: !s[p.id] }))}
-                        >
-                          {added[p.id] ? '✓ Added' : '+ Add'}
-                        </button>
+                    {p.image && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        className="card-photo"
+                        src={p.image}
+                        alt=""
+                        draggable={false}
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                      />
+                    )}
+                    <div className="card-overlay">
+                      <div className="card-info">
+                        <div className="card-brand">{p.brand}</div>
+                        <div className="card-name">{p.name}</div>
+                        <div className="card-price">{p.price}</div>
                       </div>
+                      <button
+                        type="button"
+                        className={`card-shop ${added[p.id] ? 'is-added' : ''}`}
+                        onClick={() => setAdded((s) => ({ ...s, [p.id]: !s[p.id] }))}
+                      >
+                        {added[p.id] ? '✓ Added' : 'Shop'}
+                      </button>
                     </div>
                   </article>
                 ))}
@@ -337,37 +339,45 @@ const SCOPED_CSS = `
   background: rgba(255,255,255,0.18); padding: 1px 6px; border-radius: 999px;
   letter-spacing: 0.06em;
 }
-.looksh .panel-cards { display: flex; flex-direction: column; gap: 6px; }
+.looksh .panel-cards { display: flex; flex-direction: column; gap: 8px; }
 
+/* Editorial item card — a rectangle photo with brand/name/price overlaid
+   bottom-left in white and the action as text bottom-right (matches the site). */
 .looksh .product-card {
-  background: #fff; border-radius: 4px; padding: 7px;
-  display: grid; grid-template-columns: 38px 1fr; gap: 8px; align-items: center;
-  height: 62px;
+  position: relative;
+  width: 178px;
+  border-radius: 3px; overflow: hidden;
+  background: #ece5d8;
   opacity: 0; transform: translateX(-80px) scale(0.96);
   transition: opacity 0.5s cubic-bezier(.2,.8,.2,1), transform 0.55s cubic-bezier(.2,.8,.2,1);
-  box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.22);
   pointer-events: auto;
 }
 .looksh .product-card.is-in { opacity: 1; transform: translateX(0) scale(1); }
-.looksh .card-swatch { width: 38px; height: 38px; border-radius: 3px; position: relative; overflow: hidden; background: #ece5d8; }
-.looksh .card-swatch-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.looksh .card-meta { display: flex; flex-direction: column; gap: 0; min-width: 0; }
+.looksh .card-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 22%; }
+.looksh .card-overlay {
+  position: absolute; inset: 0;
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 6px;
+  padding: 26px 8px 7px;
+  background: linear-gradient(to top, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.16) 46%, transparent 72%);
+}
+.looksh .card-info { min-width: 0; }
 .looksh .card-brand {
-  font-weight: 800; font-size: 6.5px; letter-spacing: 0.1em; color: #6a655c;
+  font-weight: 700; font-size: 6.5px; letter-spacing: 0.1em; color: rgba(255,255,255,0.8); text-transform: uppercase;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .looksh .card-name {
-  font-weight: 700; font-size: 8.5px; letter-spacing: 0.01em; line-height: 1.1; color: #14110e;
+  font-weight: 600; font-size: 8px; letter-spacing: 0.01em; line-height: 1.15; color: #fff; text-transform: none; margin-top: 1px;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
-.looksh .card-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 3px; }
-.looksh .card-price { font-size: 8.5px; font-weight: 800; letter-spacing: 0.03em; }
-.looksh .card-add {
-  font-weight: 800; font-size: 6.5px; letter-spacing: 0.08em; text-transform: uppercase;
-  background: var(--accent); color: #fff; border: none; border-radius: 2px;
-  padding: 4px 8px; cursor: pointer; transition: background 0.2s ease; white-space: nowrap;
+.looksh .card-price { font-size: 7.5px; font-weight: 600; letter-spacing: 0.03em; color: rgba(255,255,255,0.92); margin-top: 1px; text-transform: none; }
+.looksh .card-shop {
+  flex-shrink: 0; align-self: flex-end;
+  font-weight: 600; font-size: 7px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: #fff; background: none; border: none; cursor: pointer; white-space: nowrap;
+  text-decoration: underline; text-underline-offset: 2px; padding: 0 0 2px;
 }
-.looksh .card-add.is-added { background: #2f6a3a; }
+.looksh .card-shop.is-added { color: #9fe0ac; text-decoration: none; }
 
 /* Add-to-cart centered along the bottom. */
 .looksh .add-look-cta {
