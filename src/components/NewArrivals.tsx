@@ -47,14 +47,14 @@ function rotatingWindow(outfits: OutfitWithItems[], count: number): OutfitWithIt
   return picks
 }
 
-// Per-column shape (desktop only): differing widths + vertical offsets give the
-// staggered, different-sized editorial rhythm. Mobile falls back to an even
-// horizontal-scroll rail.
+// Per-column width (desktop only): differing widths give the varied,
+// different-sized editorial rhythm; all images align to the top (no vertical
+// offset). Mobile falls back to an even horizontal-scroll rail.
 const SHAPES = [
-  'sm:w-[17%] sm:mt-0',
-  'sm:w-[22%] sm:mt-24',
-  'sm:w-[30%] sm:mt-6',
-  'sm:w-[20%] sm:mt-32',
+  'sm:w-[17%]',
+  'sm:w-[22%]',
+  'sm:w-[30%]',
+  'sm:w-[20%]',
 ]
 
 export default function NewArrivals({
@@ -74,9 +74,9 @@ export default function NewArrivals({
 
   return (
     <div className={className}>
-      {/* Section label — matches the neighbouring recommendation/brand rows */}
-      <div className="flex items-baseline justify-between mb-4">
-        <p className="text-[11px] tracking-[0.099em] text-[#4A4E57]">NEW ARRIVALS</p>
+      {/* Section heading */}
+      <div className="flex items-end justify-between mb-6">
+        <p className="text-[clamp(18px,2.2vw,26px)] tracking-[0.05em] text-[#1A1A1A] leading-none">NEW ARRIVALS</p>
         {onExplore ? (
           <button
             onClick={onExplore}
