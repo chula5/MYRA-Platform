@@ -13,6 +13,7 @@ import { parseQuery, searchOutfits } from '@/lib/search-taxonomy'
 import { thumbUrl } from '@/lib/image-utils'
 import { brandLogo } from '@/lib/brand-logos'
 import BrandLogoTile from '@/components/BrandLogoTile'
+import NewArrivals from '@/components/NewArrivals'
 import { occasionLabel, BASE_OCCASIONS, occasionMatchTags } from '@/lib/occasions'
 import type { BrandRow } from '@/lib/taste-profile'
 import type { OutfitWithItems, ItemType, ColourFamily } from '@/types/database'
@@ -618,10 +619,20 @@ export default function FeedClient({
           </div>
         )}
 
+        {/* New Arrivals — rotating live looks at varied sizes. Sits directly
+            beneath the occasions for everyone, and beneath the taste
+            recommendations (order-7) for signed-in users. */}
+        <NewArrivals
+          outfits={injectedOutfits ?? []}
+          hrefBase={detailHrefBase}
+          onExplore={() => { setOccasion('all'); window.scrollTo({ top: 0 }) }}
+          className="order-8 w-full max-w-[1100px] mx-auto mb-12"
+        />
+
         {/* Discover more from the houses she loves — a row of brand tiles, each a
             2×2 collage; tap one to open that brand's scrolling feed. */}
         {brandRows.length > 0 && (
-          <div className="order-8 max-w-[1100px] mx-auto mb-12">
+          <div className="order-9 max-w-[1100px] mx-auto mb-12">
             <div className="flex items-baseline justify-between mb-4">
               <p className="text-[11px] tracking-[0.099em] text-[#4A4E57]">DISCOVER MORE FROM BRANDS YOU LIKE</p>
               <p className="text-[9px] tracking-[0.072em] text-[#A8A8A4]">HOUSES YOU LOVE</p>

@@ -1,0 +1,115 @@
+import Link from 'next/link'
+import type { OutfitWithItems } from '@/types/database'
+import { thumbUrl } from '@/lib/image-utils'
+
+/**
+ * NEW ARRIVALS — an editorial row of live looks at deliberately varied sizes,
+ * embedded in the landing feed beneath the occasions (and, for signed-in users,
+ * beneath their taste recommendations).
+ *
+ * The set of looks rotates on a fixed 2-day cadence: a new window of outfits
+ * surfaces every two days, stepping through the full live catalogue, so the row
+ * always feels fresh without any cron job or manual curation. It's a pure
+ * function of the date, so it stays stable within each 2-day window (and matches
+ * between server render and client hydration).
+ */
+
+const DAY_MS = 86_400_000
+const COUNT = 4
+
+/** Strip the auto-generated "COMPOSED · " prefix so captions read as clean labels. */
+function cleanLabel(label?: string | null): string {
+  if (!label) return ''
+  return label.replace(/^COMPOSED\s*·\s*/i, '').trim()
+}
+
+/**
+ * Deterministic window that advances every 2 days. Walks forward from the
+ * date-derived start index, skipping looks whose caption or image would repeat,
+ * so the four shown are always visually distinct (adjacent catalogue outfits
+ * are often composed around the same product and share a label).
+ */
+function rotatingWindow(outfits: OutfitWithItems[], count: number): OutfitWithItems[] {
+  if (outfits.length === 0) return []
+  const bucket = Math.floor(Date.now() / DAY_MS / 2) // increments once every 2 days
+  const start = (bucket * count) % outfits.length
+  const picks: OutfitWithItems[] = []
+  const seenLabels = new Set<string>()
+  const seenImages = new Set<string>()
+  for (let i = 0; i < outfits.length && picks.length < count; i++) {
+    const o = outfits[(start + i) % outfits.length]
+    const label = cleanLabel(o.aesthetic_label).toUpperCase()
+    if (seenLabels.has(label) || seenImages.has(o.image_url)) continue
+    seenLabels.add(label)
+    seenImages.add(o.image_url)
+    picks.push(o)
+  }
+  return picks
+}
+
+// Per-column shape (desktop only): differing widths + vertical offsets give the
+// staggered, different-sized editorial rhythm. Mobile falls back to an even
+// horizontal-scroll rail.
+const SHAPES = [
+  'sm:w-[17%] sm:mt-0',
+  'sm:w-[22%] sm:mt-24',
+  'sm:w-[30%] sm:mt-6',
+  'sm:w-[20%] sm:mt-32',
+]
+
+export default function NewArrivals({
+  outfits,
+  hrefBase,
+  onExplore,
+  className = '',
+}: {
+  outfits: OutfitWithItems[]
+  hrefBase: string
+  /** Optional — when provided, the EXPLORE control opens the full live feed. */
+  onExplore?: () => void
+  className?: string
+}) {
+  const picks = rotatingWindow(outfits.filter((o) => o.image_url), COUNT)
+  if (picks.length === 0) return null
+
+  return (
+    <div className={className}>
+      {/* Section label — matches the neighbouring recommendation/brand rows */}
+      <div className="flex items-baseline justify-between mb-4">
+        <p className="text-[11px] tracking-[0.099em] text-[#4A4E57]">NEW ARRIVALS</p>
+        {onExplore ? (
+          <button
+            onClick={onExplore}
+            className="text-[9px] tracking-[0.072em] text-[#A8A8A4] hover:text-[#4A4E57] transition-colors"
+          >
+            EXPLORE →
+          </button>
+        ) : (
+          <span className="text-[9px] tracking-[0.072em] text-[#A8A8A4]">UPDATED EVERY 2 DAYS</span>
+        )}
+      </div>
+
+      {/* Varied-size image row: horizontal scroll on mobile, staggered on desktop */}
+      <div className="flex gap-4 sm:gap-6 sm:items-start overflow-x-auto sm:overflow-visible snap-x sm:snap-none -mx-1 px-1 sm:mx-0 sm:px-0 pb-2">
+        {picks.map((o, i) => (
+          <Link
+            key={o.outfit_id}
+            href={`${hrefBase}/${o.outfit_id}`}
+            className={`group shrink-0 snap-start w-[70%] ${SHAPES[i % SHAPES.length]}`}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={thumbUrl(o.image_url, 700)}
+              alt=""
+              loading="lazy"
+              className="w-full h-auto block group-hover:opacity-85 transition-opacity duration-500"
+            />
+            <p className="mt-3 text-[10px] sm:text-[11px] tracking-[0.14em] text-[#6B6B6B] leading-[1.4]">
+              {cleanLabel(o.aesthetic_label)}
+            </p>
+          </Link>
+        ))}
+      </div>
+    </div>
+  )
+}
