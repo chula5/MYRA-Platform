@@ -76,7 +76,7 @@ export default function NewArrivals({
     <div className={className}>
       {/* Section heading */}
       <div className="flex items-end justify-between mb-6">
-        <p className="text-[clamp(18px,2.2vw,26px)] tracking-[0.05em] text-[#1A1A1A] leading-none">NEW ARRIVALS</p>
+        <p className="text-[clamp(18px,2.2vw,26px)] tracking-[0.05em] text-[#4A4E57] leading-none">NEW OUTFITS</p>
         {onExplore ? (
           <button
             onClick={onExplore}
@@ -104,9 +104,6 @@ export default function NewArrivals({
               loading="lazy"
               className="w-full h-auto block group-hover:opacity-85 transition-opacity duration-500"
             />
-            <p className="mt-3 text-[10px] sm:text-[11px] tracking-[0.14em] text-[#6B6B6B] leading-[1.4]">
-              {cleanLabel(o.aesthetic_label)}
-            </p>
           </Link>
         ))}
       </div>
