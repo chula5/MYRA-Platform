@@ -45,10 +45,12 @@ export default function RootLayout({
           {children}
         </FeedProvider>
         <SessionTracker />
-        {/* Skimlinks — rewrites outbound retailer links to affiliate-tracked
-            ones so click-throughs and purchases are monetised + tracked. */}
+        {/* Awin Publisher MasterTag (pub 2988015) — powers Awin affiliate
+            tracking + Convert-a-Link, which auto-converts outbound merchant
+            links (e.g. Da Luna) into trackable affiliate links. Rakuten still
+            handles Isabel Marant / Diesel / Twinset via affiliateUrl(). */}
         <Script
-          src="https://s.skimresources.com/js/305335X1793531.skimlinks.js"
+          src="https://www.dwin2.com/pub.2988015.min.js"
           strategy="afterInteractive"
         />
         {/* Google Analytics (gtag.js) */}
