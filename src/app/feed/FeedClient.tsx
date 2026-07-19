@@ -286,6 +286,11 @@ function matchesSearch(
 }
 
 // ── Component ────────────────────────────────────────────────
+// EXPLORE from the NEW OUTFITS row opens this pseudo-occasion: the most
+// recently added live looks, in pure recency order (no taste rotation).
+const NEW_TAG = '__new__'
+const LATEST_COUNT = 24
+
 export default function FeedClient({
   showAllOption = false,
   injectedOutfits,
@@ -393,15 +398,21 @@ export default function FeedClient({
     if (injectedOutfits) {
       // Compute the full ordered list once (at offset 0); paginate from the ref.
       if (currentOffset === 0) {
-        const matchTags = occasionMatchTags(tag)
-        const filtered = tag && tag !== 'all'
-          ? injectedOutfits.filter((o) => (o.occasion_tags ?? []).some((t) => matchTags.includes(t)))
-          : injectedOutfits
-        // One outfit per anchor — variants stay in Similar/Explore — taste-ranked
-        // inside the occasion gate, then rotated by visit count so each RETURN
-        // leads with different looks (the "feels alive" effect).
-        const ranked = orderForFeed(dedupeByAnchor(filtered))
-        occOrderedRef.current = rotateByVisit(ranked, tag)
+        if (tag === NEW_TAG) {
+          // NEW OUTFITS → the latest additions in pure recency order (injected
+          // outfits arrive newest-first), a fixed selection, no taste rotation.
+          occOrderedRef.current = dedupeByAnchor(injectedOutfits).slice(0, LATEST_COUNT)
+        } else {
+          const matchTags = occasionMatchTags(tag)
+          const filtered = tag && tag !== 'all'
+            ? injectedOutfits.filter((o) => (o.occasion_tags ?? []).some((t) => matchTags.includes(t)))
+            : injectedOutfits
+          // One outfit per anchor — variants stay in Similar/Explore — taste-ranked
+          // inside the occasion gate, then rotated by visit count so each RETURN
+          // leads with different looks (the "feels alive" effect).
+          const ranked = orderForFeed(dedupeByAnchor(filtered))
+          occOrderedRef.current = rotateByVisit(ranked, tag)
+        }
       }
       const ordered = occOrderedRef.current
       const end = currentOffset + LIMIT
@@ -625,7 +636,7 @@ export default function FeedClient({
         <NewArrivals
           outfits={injectedOutfits ?? []}
           hrefBase={detailHrefBase}
-          onExplore={() => { setOccasion('all'); window.scrollTo({ top: 0 }) }}
+          onExplore={() => { setOccasion(NEW_TAG); window.scrollTo({ top: 0 }) }}
           className="order-8 w-full max-w-[1100px] mx-auto mb-12"
         />
 
@@ -914,9 +925,15 @@ export default function FeedClient({
     <div className="max-w-[1440px] mx-auto px-6 sm:px-10 py-10">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-1">YOUR OCCASION</p>
+          <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-1">
+            {occasion === NEW_TAG ? 'LATEST' : 'YOUR OCCASION'}
+          </p>
           <h2 className="text-[22px] tracking-[0.045em] text-[#4A4E57]">
-            {occasion === 'all' ? 'EVERYTHING LIVE' : occasion!.toUpperCase()}
+            {occasion === 'all'
+              ? 'EVERYTHING LIVE'
+              : occasion === NEW_TAG
+                ? 'NEW OUTFITS'
+                : occasion!.toUpperCase()}
           </h2>
         </div>
         <button
