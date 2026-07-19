@@ -13,7 +13,7 @@ import { parseQuery, searchOutfits } from '@/lib/search-taxonomy'
 import { thumbUrl } from '@/lib/image-utils'
 import { brandLogo } from '@/lib/brand-logos'
 import BrandLogoTile from '@/components/BrandLogoTile'
-import NewArrivals from '@/components/NewArrivals'
+import NewArrivals, { byNewest } from '@/components/NewArrivals'
 import { occasionLabel, BASE_OCCASIONS, occasionMatchTags } from '@/lib/occasions'
 import type { BrandRow } from '@/lib/taste-profile'
 import type { OutfitWithItems, ItemType, ColourFamily } from '@/types/database'
@@ -399,9 +399,10 @@ export default function FeedClient({
       // Compute the full ordered list once (at offset 0); paginate from the ref.
       if (currentOffset === 0) {
         if (tag === NEW_TAG) {
-          // NEW OUTFITS → the latest additions in pure recency order (injected
-          // outfits arrive newest-first), a fixed selection, no taste rotation.
-          occOrderedRef.current = dedupeByAnchor(injectedOutfits).slice(0, LATEST_COUNT)
+          // NEW OUTFITS → the latest additions, newest first by created_at
+          // (published_at can be null / bulk-set, so it isn't reliable here).
+          const newestFirst = [...injectedOutfits].sort(byNewest)
+          occOrderedRef.current = dedupeByAnchor(newestFirst).slice(0, LATEST_COUNT)
         } else {
           const matchTags = occasionMatchTags(tag)
           const filtered = tag && tag !== 'all'

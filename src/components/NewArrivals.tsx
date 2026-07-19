@@ -16,11 +16,19 @@ import { thumbUrl } from '@/lib/image-utils'
 
 const DAY_MS = 86_400_000
 const COUNT = 4
+// Rotate the shown looks through the most-recently-added pool, so the row always
+// features genuinely new outfits while still changing every 2 days.
+const RECENT_POOL = 20
 
 /** Strip the auto-generated "COMPOSED · " prefix so captions read as clean labels. */
 function cleanLabel(label?: string | null): string {
   if (!label) return ''
   return label.replace(/^COMPOSED\s*·\s*/i, '').trim()
+}
+
+/** Newest-added first. Uses created_at (published_at can be null / bulk-set). */
+export function byNewest(a: OutfitWithItems, b: OutfitWithItems): number {
+  return (b.created_at ?? '').localeCompare(a.created_at ?? '')
 }
 
 /**
@@ -69,7 +77,14 @@ export default function NewArrivals({
   onExplore?: () => void
   className?: string
 }) {
-  const picks = rotatingWindow(outfits.filter((o) => o.image_url), COUNT)
+  // Draw from the most-recently-added outfits, then rotate a 2-day window
+  // within that recent pool so the row is always new yet still changes.
+  const newestRecent = outfits
+    .filter((o) => o.image_url)
+    .slice()
+    .sort(byNewest)
+    .slice(0, RECENT_POOL)
+  const picks = rotatingWindow(newestRecent, COUNT)
   if (picks.length === 0) return null
 
   return (
