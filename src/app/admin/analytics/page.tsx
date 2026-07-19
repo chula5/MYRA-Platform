@@ -305,6 +305,9 @@ export default async function AnalyticsPage() {
     CH: 'Switzerland', SE: 'Sweden', DK: 'Denmark', PT: 'Portugal', BE: 'Belgium', '—': 'Unknown',
   }
   const countryCodes = new Set<string>([...viewsByCountry.keys(), ...signupsByCountry.keys(), ...sessionsByCountry.keys()])
+  // Denominator for the location % is total views across ALL countries (not just
+  // the top 12), so the shares are accurate even when the tail is truncated.
+  const totalCountryViews = [...viewsByCountry.values()].reduce((sum, n) => sum + n, 0)
   const countryRows = [...countryCodes]
     .map((code) => ({
       code,
@@ -312,6 +315,7 @@ export default async function AnalyticsPage() {
       views: viewsByCountry.get(code) ?? 0,
       signups: signupsByCountry.get(code) ?? 0,
       sessions: sessionsByCountry.get(code) ?? 0,
+      pct: totalCountryViews ? ((viewsByCountry.get(code) ?? 0) / totalCountryViews) * 100 : 0,
     }))
     .sort((a, b) => b.views + b.sessions - (a.views + a.sessions))
     .slice(0, 12)
@@ -469,7 +473,7 @@ alter table site_session enable row level security;`}</pre>
       <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6 mb-10">
         <div className="flex items-baseline justify-between mb-5">
           <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B]">BY LOCATION · LAST 30 DAYS</p>
-          <p className="text-[8px] tracking-[0.072em] text-[#A8A8A4]">VIEWS · SIGN-UPS</p>
+          <p className="text-[8px] tracking-[0.072em] text-[#A8A8A4]">% OF VIEWS · VIEWS · SIGN-UPS</p>
         </div>
         {countryRows.length === 0 ? (
           <p className="text-[10px] tracking-[0.072em] text-[#A8A8A4] py-4 text-center">NO LOCATION DATA YET.</p>
@@ -482,8 +486,13 @@ alter table site_session enable row level security;`}</pre>
                   <div className="flex-1 h-[6px] bg-[#F2F2F2] rounded-full overflow-hidden">
                     <div className="h-full bg-[#C4A882] rounded-full" style={{ width: `${((c.views + c.sessions) / maxCountry) * 100}%` }} />
                   </div>
-                  <span className="text-[9px] tracking-[0.045em] text-[#6B6B6B] w-[70px] text-right flex-shrink-0">
-                    {c.views} · {c.signups}
+                  <span className="w-[64px] text-right flex-shrink-0 leading-tight">
+                    <span className="block text-[11px] tracking-[0.02em] text-[#4A4E57]">
+                      {c.pct < 10 ? c.pct.toFixed(1) : Math.round(c.pct)}%
+                    </span>
+                    <span className="block text-[8px] tracking-[0.045em] text-[#A8A8A4]">
+                      {c.views} · {c.signups}
+                    </span>
                   </span>
                 </div>
               ))}
