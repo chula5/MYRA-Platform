@@ -305,9 +305,12 @@ export default async function AnalyticsPage() {
     CH: 'Switzerland', SE: 'Sweden', DK: 'Denmark', PT: 'Portugal', BE: 'Belgium', '—': 'Unknown',
   }
   const countryCodes = new Set<string>([...viewsByCountry.keys(), ...signupsByCountry.keys(), ...sessionsByCountry.keys()])
-  // Denominator for the location % is total views across ALL countries (not just
-  // the top 12), so the shares are accurate even when the tail is truncated.
-  const totalCountryViews = [...viewsByCountry.values()].reduce((sum, n) => sum + n, 0)
+  // Denominator for the location % is total views across all KNOWN countries
+  // (excludes "Unknown"/— and the top-12 truncation), so shares reflect real
+  // geography. The Unknown row itself gets no percentage.
+  const knownCountryViews = [...viewsByCountry.entries()]
+    .filter(([code]) => code !== '—')
+    .reduce((sum, [, n]) => sum + n, 0)
   const countryRows = [...countryCodes]
     .map((code) => ({
       code,
@@ -315,7 +318,9 @@ export default async function AnalyticsPage() {
       views: viewsByCountry.get(code) ?? 0,
       signups: signupsByCountry.get(code) ?? 0,
       sessions: sessionsByCountry.get(code) ?? 0,
-      pct: totalCountryViews ? ((viewsByCountry.get(code) ?? 0) / totalCountryViews) * 100 : 0,
+      pct: code === '—' || !knownCountryViews
+        ? null
+        : ((viewsByCountry.get(code) ?? 0) / knownCountryViews) * 100,
     }))
     .sort((a, b) => b.views + b.sessions - (a.views + a.sessions))
     .slice(0, 12)
@@ -488,7 +493,7 @@ alter table site_session enable row level security;`}</pre>
                   </div>
                   <span className="w-[64px] text-right flex-shrink-0 leading-tight">
                     <span className="block text-[11px] tracking-[0.02em] text-[#4A4E57]">
-                      {c.pct < 10 ? c.pct.toFixed(1) : Math.round(c.pct)}%
+                      {c.pct === null ? '—' : `${c.pct < 10 ? c.pct.toFixed(1) : Math.round(c.pct)}%`}
                     </span>
                     <span className="block text-[8px] tracking-[0.045em] text-[#A8A8A4]">
                       {c.views} · {c.signups}
