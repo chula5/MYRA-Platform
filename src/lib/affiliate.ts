@@ -16,6 +16,8 @@ const RAKUTEN_MERCHANTS: RakutenMerchant[] = [
   { brandMatch: /isabel\s*marant/i, hostMatch: /(^|\.)isabelmarant\.com$/i, mid: 49987 },
   { brandMatch: /twinset/i, hostMatch: /(^|\.)twinset\.com$/i, offerid: '1689731.5326911308714139715961488' },
   { brandMatch: /diesel/i, hostMatch: /(^|\.)diesel\.com$/i, offerid: '1115076.481509956965097842525975' },
+  // DeMellier London (MID 39618) — accepted on Rakuten.
+  { brandMatch: /de\s*mellier/i, hostMatch: /(^|\.)demellierlondon\.com$/i, offerid: '344160.396182093209805' },
 ]
 
 // u1 is a CONTENT / placement identifier only (e.g. an item or outfit id). It
