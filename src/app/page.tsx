@@ -152,6 +152,25 @@ export default async function LandingPage({
         </div>
       </section>
 
+      {/* ── Our Partners ──────────────────────────────────────── */}
+      <section className="bg-[#FAFAF8] pb-24 sm:pb-32 px-6 sm:px-10">
+        <div className="max-w-5xl mx-auto text-center">
+          <p className="text-[10px] sm:text-[11px] tracking-[0.135em] text-[#6B6B6B] mb-10 sm:mb-14">
+            OUR PARTNERS
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-7 sm:gap-x-16">
+            {['ISABEL MARANT', 'DIESEL', 'TWINSET', 'DEMELLIER LONDON', 'DA LUNA'].map((name) => (
+              <span
+                key={name}
+                className="text-[13px] sm:text-[15px] tracking-[0.16em] text-[#4A4E57] whitespace-nowrap"
+              >
+                {name}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Brand suggestions + feedback + contact */}
       <LandingFeedback />
 
