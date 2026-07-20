@@ -556,6 +556,45 @@ export default function FeedClient({
     setFilterPanel(null)
   }
 
+  // ── Restore the feed view from the URL, and keep the URL in sync ──────────
+  // So that when you open an outfit and press BACK, you land back on the
+  // occasion / new-outfits / search you were in — not the landing page.
+  const restoredRef = useRef(false)
+  const [restoreSearchPending, setRestoreSearchPending] = useState(false)
+
+  // On mount: rebuild the view the URL describes (?occasion= / ?view=new / ?q=).
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search)
+    const view = p.get('view')
+    const occ = p.get('occasion')
+    const q = p.get('q')
+    if (view === 'new') setOccasion(NEW_TAG)
+    else if (occ) setOccasion(occ)
+    else if (q) { setSearchQuery(q); setRestoreSearchPending(true) }
+    restoredRef.current = true
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Run the restored text search once its query has landed in state.
+  useEffect(() => {
+    if (restoreSearchPending && searchQuery) {
+      setRestoreSearchPending(false)
+      void executeSearch()
+    }
+  }, [restoreSearchPending, searchQuery, executeSearch])
+
+  // Reflect the current view in the URL (shallow — no server round-trip), so the
+  // browser restores it on BACK. Occasion picker / brand view → clean path.
+  useEffect(() => {
+    if (!restoredRef.current) return
+    const params = new URLSearchParams()
+    if (searchMode && searchQuery.trim()) params.set('q', searchQuery.trim())
+    else if (occasion === NEW_TAG) params.set('view', 'new')
+    else if (occasion) params.set('occasion', occasion)
+    const qs = params.toString()
+    window.history.replaceState(window.history.state, '', qs ? `?${qs}` : window.location.pathname)
+  }, [occasion, searchMode, searchQuery, brandView])
+
   // ── Handlers ───────────────────────────────────────────────
   // Soft taste signals (+1) — fire-and-forget when the user is signed in.
   const signal = (outfitId: string, type: 'style_tap' | 'similar_tap' | 'explore_tap') => {
