@@ -31,6 +31,10 @@ export const metadata: Metadata = {
     description: 'Outfit-first fashion discovery.',
     type: 'website',
   },
+  // FlexOffers site-ownership verification.
+  other: {
+    'fo-verify': '6fbaefff-4b83-4e34-8e14-2ec6650c31ee',
+  },
 }
 
 export default function RootLayout({
