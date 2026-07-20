@@ -72,16 +72,28 @@ interface CandState {
   shootError?: string
 }
 
-export default function OutfitReviewClient({ anchors, mode = 'needs-more' }: { anchors: ReviewAnchor[]; mode?: 'needs-more' | 'exactly-one' }) {
+export default function OutfitReviewClient({
+  anchors,
+  brands = [],
+  mode = 'needs-more',
+}: {
+  anchors: ReviewAnchor[]
+  brands?: { name: string; count: number }[]
+  mode?: 'needs-more' | 'exactly-one'
+}) {
   const [queue, setQueue] = useState(anchors)
   const [visible, setVisible] = useState(8)
   const [refreshKey, setRefreshKey] = useState(0)  // remount cards on refresh
   const [refreshing, setRefreshing] = useState(false)
+  // Brand filter: null = all brands. A selected brand loads ALL of that brand's
+  // anchors still needing outfits (not just the shuffled 60).
+  const [brandFilter, setBrandFilter] = useState<string | null>(null)
+  const [brandLoading, setBrandLoading] = useState(false)
 
   // Reshuffle which anchors appear (they're the same on every page load otherwise).
   async function refresh() {
     setRefreshing(true)
-    const res = await getReviewQueue(60, true, mode)
+    const res = await getReviewQueue(brandFilter ? 300 : 60, true, mode, brandFilter)
     setRefreshing(false)
     if (res.anchors?.length) {
       setQueue(res.anchors)
@@ -90,11 +102,24 @@ export default function OutfitReviewClient({ anchors, mode = 'needs-more' }: { a
     }
   }
 
+  // Filter the queue to a single brand's under-3-outfit items (or all).
+  async function selectBrand(name: string | null) {
+    if (brandLoading) return
+    setBrandFilter(name)
+    setBrandLoading(true)
+    const res = await getReviewQueue(name ? 300 : 60, false, mode, name)
+    setBrandLoading(false)
+    setQueue(res.anchors ?? [])
+    setVisible(8)
+    setRefreshKey((k) => k + 1)
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <p className="text-[10px] tracking-[0.14em] text-[#A8A8A4]">
           {queue.length} ANCHOR{queue.length === 1 ? '' : 'S'} IN QUEUE
+          {brandFilter && <span className="text-[#4A4E57]"> · {brandFilter.toUpperCase()}</span>}
         </p>
         <button
           onClick={refresh}
@@ -104,6 +129,33 @@ export default function OutfitReviewClient({ anchors, mode = 'needs-more' }: { a
           {refreshing ? 'SHUFFLING…' : '↻ REFRESH ANCHORS'}
         </button>
       </div>
+
+      {/* Brand filter — tap a brand to see only its items still needing outfits */}
+      {brands.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => selectBrand(null)}
+            disabled={brandLoading}
+            className={`px-3 py-1.5 text-[9px] tracking-[0.1em] rounded-full border transition-colors disabled:opacity-50 ${
+              brandFilter === null ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'text-[#6B6B6B] border-[#E2E0DB] hover:border-[#0A0A0A]'
+            }`}
+          >
+            ALL BRANDS
+          </button>
+          {brands.map((b) => (
+            <button
+              key={b.name}
+              onClick={() => selectBrand(b.name)}
+              disabled={brandLoading}
+              className={`px-3 py-1.5 text-[9px] tracking-[0.1em] rounded-full border transition-colors disabled:opacity-50 ${
+                brandFilter === b.name ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'text-[#6B6B6B] border-[#E2E0DB] hover:border-[#0A0A0A]'
+              }`}
+            >
+              {b.name.toUpperCase()} <span className="opacity-50">{b.count}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {queue.length === 0 ? (
         <p className="text-[12px] tracking-[0.09em] text-[#A8A8A4] py-20 text-center">

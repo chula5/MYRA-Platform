@@ -84,7 +84,8 @@ export async function getReviewQueue(
   limit = 60,
   shuffle = false,
   mode: 'needs-more' | 'exactly-one' = 'needs-more',
-): Promise<{ anchors: ReviewAnchor[]; error?: string }> {
+  brand: string | null = null,
+): Promise<{ anchors: ReviewAnchor[]; brands: { name: string; count: number }[]; error?: string }> {
   try {
     const admin = createAdminClient()
     const library = await getReadyAndLiveItems()
@@ -117,23 +118,37 @@ export async function getReviewQueue(
       }))
       .filter((a) => (mode === 'exactly-one' ? a.existingCount === 1 : a.existingCount < TARGET))
 
+    // Brand list (with counts) across ALL anchors that still need outfits —
+    // computed before the brand filter + limit so the chips + counts are complete.
+    const brandCounts = new Map<string, number>()
+    for (const a of mapped) {
+      const name = a.brand_name?.trim()
+      if (name) brandCounts.set(name, (brandCounts.get(name) ?? 0) + 1)
+    }
+    const brands = [...brandCounts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+
+    // Narrow to a single brand's items when a brand is selected.
+    const pool = brand ? mapped.filter((a) => (a.brand_name ?? '') === brand) : mapped
+
     // Refresh = reshuffle so different anchors surface each time. We still keep
     // most-needed (fewest existing outfits) first; the shuffle randomises ties,
     // and Array.sort is stable so that random order is preserved within a band.
     if (shuffle) {
-      for (let i = mapped.length - 1; i > 0; i--) {
+      for (let i = pool.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1))
-        ;[mapped[i], mapped[j]] = [mapped[j], mapped[i]]
+        ;[pool[i], pool[j]] = [pool[j], pool[i]]
       }
     }
-    const anchors = mapped
+    const anchors = pool
       .sort((a, b) => a.existingCount - b.existingCount || (shuffle ? 0 : a.product_name.localeCompare(b.product_name)))
       .slice(0, limit)
 
-    return { anchors }
+    return { anchors, brands }
   } catch (err) {
     console.error('[getReviewQueue]', err)
-    return { anchors: [], error: err instanceof Error ? err.message : 'Failed to load queue' }
+    return { anchors: [], brands: [], error: err instanceof Error ? err.message : 'Failed to load queue' }
   }
 }
 

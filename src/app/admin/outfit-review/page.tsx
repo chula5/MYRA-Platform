@@ -4,7 +4,7 @@ import OutfitReviewClient from './OutfitReviewClient'
 export const dynamic = 'force-dynamic'
 
 export default async function OutfitReviewPage() {
-  const { anchors, error } = await getReviewQueue()
+  const { anchors, brands, error } = await getReviewQueue()
 
   return (
     <div>
@@ -25,7 +25,7 @@ export default async function OutfitReviewPage() {
         )}
       </div>
 
-      <OutfitReviewClient anchors={anchors} />
+      <OutfitReviewClient anchors={anchors} brands={brands} />
     </div>
   )
 }

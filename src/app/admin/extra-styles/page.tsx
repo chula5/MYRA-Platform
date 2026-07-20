@@ -4,7 +4,7 @@ import OutfitReviewClient from '@/app/admin/outfit-review/OutfitReviewClient'
 export const dynamic = 'force-dynamic'
 
 export default async function ExtraStylesPage() {
-  const { anchors, error } = await getReviewQueue(60, false, 'exactly-one')
+  const { anchors, brands, error } = await getReviewQueue(60, false, 'exactly-one')
 
   return (
     <div>
@@ -25,7 +25,7 @@ export default async function ExtraStylesPage() {
         )}
       </div>
 
-      <OutfitReviewClient anchors={anchors} mode="exactly-one" />
+      <OutfitReviewClient anchors={anchors} brands={brands} mode="exactly-one" />
     </div>
   )
 }
