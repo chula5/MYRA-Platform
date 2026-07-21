@@ -14,6 +14,8 @@ import { thumbUrl } from '@/lib/image-utils'
 import { brandLogo } from '@/lib/brand-logos'
 import BrandLogoTile from '@/components/BrandLogoTile'
 import NewArrivals, { byNewest } from '@/components/NewArrivals'
+import SizeFilter from './SizeFilter'
+import { outfitFitsClothingUk } from '@/lib/sizing'
 import { occasionLabel, BASE_OCCASIONS, occasionMatchTags } from '@/lib/occasions'
 import type { BrandRow } from '@/lib/taste-profile'
 import type { OutfitWithItems, ItemType, ColourFamily } from '@/types/database'
@@ -302,6 +304,7 @@ export default function FeedClient({
   brandRows = [],
   occasionOrder,
   signupHref,
+  defaultSizeUk = null,
 }: {
   showAllOption?: boolean
   injectedOutfits?: OutfitWithItems[]
@@ -319,6 +322,9 @@ export default function FeedClient({
   // When set (anonymous visitors), a sign-up prompt appears after the first
   // occasion tap or search. Links here ("/earlyaccess").
   signupHref?: string
+  // Signed-in shopper's saved clothing size (canonical UK) — pre-fills the size
+  // filter so the feed defaults to their size (with a "show all" escape).
+  defaultSizeUk?: number | null
 }) {
   const hasTaste = !!tasteVector && !isZero(tasteVector)
   // Signed-out on the public site: show greyed "sign in to save" hearts.
@@ -328,6 +334,24 @@ export default function FeedClient({
   const orderForFeed = (list: OutfitWithItems[]): OutfitWithItems[] =>
     hasTaste ? rankByTaste(tasteVector!, list).map((r) => r.outfit) : antiRepeatOrder(list)
   const savedSet = new Set(savedOutfitIds)
+  // Clothing size filter (canonical UK). Pre-filled from the signed-in shopper's
+  // saved size; anonymous choices persist for the session. null = all sizes.
+  const [sizeUk, setSizeUk] = useState<number | null>(defaultSizeUk)
+  useEffect(() => {
+    if (defaultSizeUk == null) {
+      const s = sessionStorage.getItem('myra_size_uk')
+      if (s) setSizeUk(Number(s) || null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useEffect(() => {
+    if (sizeUk == null) sessionStorage.removeItem('myra_size_uk')
+    else sessionStorage.setItem('myra_size_uk', String(sizeUk))
+  }, [sizeUk])
+  const fitsSize = useCallback(
+    (o: OutfitWithItems) => sizeUk == null || outfitFitsClothingUk(o, sizeUk),
+    [sizeUk],
+  )
   // Occasion mode
   const [occasion, setOccasion]           = useState<string | null>(null)
   // A brand the user tapped to "discover more" — shows that brand's outfits.
@@ -788,6 +812,7 @@ export default function FeedClient({
                 </button>
               )
             })}
+            <SizeFilter value={sizeUk} onChange={setSizeUk} />
           </div>
 
           {/* Colour panel */}
@@ -878,7 +903,7 @@ export default function FeedClient({
           </button>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-0 -mx-6 sm:-mx-10">
-          {brandView.outfits.map((outfit) => (
+          {brandView.outfits.filter(fitsSize).map((outfit) => (
             <OutfitCard
               key={outfit.outfit_id}
               outfit={outfit}
@@ -905,12 +930,15 @@ export default function FeedClient({
             <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-1">SEARCH</p>
             <h2 className="text-[22px] tracking-[0.045em] text-[#4A4E57]">{activeFilterLabel()}</h2>
           </div>
-          <button
-            onClick={clearSearch}
-            className="text-[11px] tracking-[0.09em] text-[#6B6B6B] border border-[#E2E0DB] px-5 py-2.5 rounded-[12px] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-all duration-300"
-          >
-            CLEAR
-          </button>
+          <div className="flex items-center gap-2">
+            <SizeFilter value={sizeUk} onChange={setSizeUk} compact />
+            <button
+              onClick={clearSearch}
+              className="text-[11px] tracking-[0.09em] text-[#6B6B6B] border border-[#E2E0DB] px-5 py-2.5 rounded-full hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-all duration-300"
+            >
+              CLEAR
+            </button>
+          </div>
         </div>
 
         {searchLoading && (
@@ -941,7 +969,7 @@ export default function FeedClient({
 
         {!searchLoading && searchResults.length > 0 && (
           <div className="grid grid-cols-2 md:grid-cols-3 gap-0 -mx-6 sm:-mx-10">
-            {searchResults.map((outfit) => (
+            {searchResults.filter(fitsSize).map((outfit) => (
               <OutfitCard
                 key={outfit.outfit_id}
                 outfit={outfit}
@@ -976,12 +1004,15 @@ export default function FeedClient({
                 : occasion!.toUpperCase()}
           </h2>
         </div>
-        <button
-          onClick={() => setOccasion(null)}
-          className="text-[11px] tracking-[0.09em] text-[#6B6B6B] border border-[#E2E0DB] px-5 py-2.5 rounded-[12px] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-all duration-300"
-        >
-          CHANGE
-        </button>
+        <div className="flex items-center gap-2">
+          <SizeFilter value={sizeUk} onChange={setSizeUk} compact />
+          <button
+            onClick={() => setOccasion(null)}
+            className="text-[11px] tracking-[0.09em] text-[#6B6B6B] border border-[#E2E0DB] px-5 py-2.5 rounded-full hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-all duration-300"
+          >
+            CHANGE
+          </button>
+        </div>
       </div>
 
       {loading && (
@@ -1007,7 +1038,7 @@ export default function FeedClient({
       {!loading && outfits.length > 0 && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-0 -mx-6 sm:-mx-10">
-            {outfits.map((outfit) => (
+            {outfits.filter(fitsSize).map((outfit) => (
               <OutfitCard
                 key={outfit.outfit_id}
                 outfit={outfit}

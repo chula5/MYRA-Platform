@@ -90,6 +90,7 @@ export default async function EditPage() {
         tasteVector={tasteVector}
         brandRows={brandRows}
         occasionOrder={occasionOrder}
+        defaultSizeUk={(user.user_metadata?.clothing_uk as number | undefined) ?? null}
       />
 
       {/* Slide-out wardrobe of saved outfits + items */}

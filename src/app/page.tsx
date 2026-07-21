@@ -71,6 +71,7 @@ export default async function LandingPage({
           brandRows={brandRows}
           occasionOrder={occasionOrder}
           signupHref={user ? undefined : '/signin'}
+          defaultSizeUk={(user?.user_metadata?.clothing_uk as number | undefined) ?? null}
         />
       </main>
       {!user && <SignupPrompt href="/signin" />}
