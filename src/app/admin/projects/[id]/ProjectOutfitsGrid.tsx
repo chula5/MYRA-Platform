@@ -125,12 +125,13 @@ export default function ProjectOutfitsGrid({
   })
   const filtersActive = fStatus !== 'all' || fOccasion !== 'all' || fAnchor !== 'all' || fColour !== 'all'
 
-  async function refine(outfitId: string) {
+  // poseKey: 'E5' = Refined (warm tonal), 'F6' = Refined · Light (bright white).
+  async function refine(outfitId: string, poseKey: 'E5' | 'F6' = 'E5') {
     if (refining.has(outfitId)) return
     setRefining((prev) => new Set(prev).add(outfitId))
     setRefineError((prev) => { const next = { ...prev }; delete next[outfitId]; return next })
     try {
-      const res = await generateHiggsfieldShootForOutfit(outfitId, 'E5')
+      const res = await generateHiggsfieldShootForOutfit(outfitId, poseKey)
       if (res.error) {
         setRefineError((prev) => ({ ...prev, [outfitId]: res.error! }))
       } else if (res.imageUrl) {
@@ -429,16 +430,28 @@ export default function ProjectOutfitsGrid({
                       >
                         EDIT →
                       </Link>
-                      {/* Trigger a Refined Higgsfield shoot; replaces the display image. */}
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); e.preventDefault(); refine(outfit.outfit_id) }}
-                        disabled={refining.has(outfit.outfit_id)}
-                        title="Generate a refined model shoot and use it as the display image"
-                        className="inline-flex items-center gap-1 border border-[#C4A882] text-[#8A7A4E] rounded-full px-2.5 py-1 text-[9px] tracking-[0.09em] hover:bg-[#FBF6EA] transition-colors duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        {refining.has(outfit.outfit_id) ? 'REFINING…' : '✦ REFINE'}
-                      </button>
+                      {/* Trigger a Refined Higgsfield shoot; replaces the display image.
+                          REFINE = warm tonal (E5); REFINE · LIGHT = bright white (F6). */}
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); e.preventDefault(); refine(outfit.outfit_id, 'E5') }}
+                          disabled={refining.has(outfit.outfit_id)}
+                          title="Generate a refined model shoot (warm tonal) and use it as the display image"
+                          className="inline-flex items-center gap-1 border border-[#C4A882] text-[#8A7A4E] rounded-full px-2.5 py-1 text-[9px] tracking-[0.09em] hover:bg-[#FBF6EA] transition-colors duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          {refining.has(outfit.outfit_id) ? 'REFINING…' : '✦ REFINE'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); e.preventDefault(); refine(outfit.outfit_id, 'F6') }}
+                          disabled={refining.has(outfit.outfit_id)}
+                          title="Generate a refined model shoot (bright white / light) and use it as the display image"
+                          className="inline-flex items-center gap-1 border border-[#C4A882] text-[#8A7A4E] rounded-full px-2.5 py-1 text-[9px] tracking-[0.09em] hover:bg-[#FBF6EA] transition-colors duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          ✦ REFINE · LIGHT
+                        </button>
+                      </div>
                     </div>
                     {refineError[outfit.outfit_id] && !refining.has(outfit.outfit_id) && (
                       <p className="mt-1.5 text-[8px] tracking-[0.05em] text-[#B83A3A]">{refineError[outfit.outfit_id].toUpperCase()}</p>

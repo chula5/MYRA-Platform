@@ -100,7 +100,7 @@ export default function OutfitComposePanel({
     if (r?.error) { setState(ci, { approving: false, error: r.error }); return }
     setState(ci, { approved: true, outfitId: r.outfitId, projectId: r.projectId, shoot: 'running' })
     try {
-      const shot: any = await generateHiggsfieldShootForOutfit(r.outfitId, 'E5')
+      const shot: any = await generateHiggsfieldShootForOutfit(r.outfitId, 'F6')
       setState(ci, { shoot: shot?.imageUrl ? 'done' : 'failed', shootError: shot?.error })
     } catch (err: any) {
       setState(ci, { shoot: 'failed', shootError: err?.message })

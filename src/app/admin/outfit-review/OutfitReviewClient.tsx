@@ -231,7 +231,7 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
     // Coordinate the Refined Higgsfield shoot now, awaiting the result so the
     // card reflects whether it actually generated. ~30–90s.
     try {
-      const shot: any = await generateHiggsfieldShootForOutfit(res.outfitId, 'E5')
+      const shot: any = await generateHiggsfieldShootForOutfit(res.outfitId, 'F6')
       setStates((s) => ({
         ...s,
         [idx]: { ...s[idx], shoot: shot?.imageUrl ? 'done' : 'failed', shootError: shot?.error },

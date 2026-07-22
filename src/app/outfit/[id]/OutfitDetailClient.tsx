@@ -13,6 +13,9 @@ import { getRelatedOutfits, getStyleItemOutfits } from './related-actions'
 import { trackEngagement } from '@/lib/track'
 import { thumbUrl } from '@/lib/image-utils'
 import { toggleSaveItem } from '@/app/edit/save-actions'
+import { affiliateUrl } from '@/lib/affiliate'
+import { recordItemClick } from '@/app/actions/item-click'
+import { getStoredRef } from '@/lib/ref'
 import type { OutfitWithItems, Item, Brand, ItemType } from '@/types/database'
 
 // Feature flag — hide the SIMILAR LOOKS / EXPLORE STYLES buttons on the
@@ -346,10 +349,10 @@ export default function OutfitDetailClient({
   }
 
   return (
-    <div className="max-w-[1440px] mx-auto px-10 py-8">
+    <div className="max-w-[1440px] mx-auto px-4 sm:px-10 py-4 sm:py-8">
 
-      {/* ── Back + Nav ─────────────────────────────────────── */}
-      <div className="flex items-center justify-between mb-8">
+      {/* ── Back + Nav (desktop; on mobile these overlay the image) ─────── */}
+      <div className="hidden sm:flex items-center justify-between mb-8">
         <button
           onClick={() => router.back()}
           className="text-[11px] tracking-[0.09em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300 flex items-center gap-2"
@@ -378,55 +381,30 @@ export default function OutfitDetailClient({
 
       {/* ── Main outfit detail ────────────────────────────── */}
       <div className="mb-12">
-        {/* Look carousel — current look sharp & centred, neighbours peek behind.
-            Swipe horizontally (or use the arrows / dots) to move between looks. */}
-        <div className="relative overflow-hidden">
-          <div
-            className="relative mx-auto max-w-[440px]"
-            onTouchStart={onLookTouchStart}
-            onTouchEnd={onLookTouchEnd}
-          >
-            {/* Previous look — peeking, blurred */}
-            {prevImage && (
-              <button
-                type="button"
-                onClick={() => goToSibling(-1)}
-                aria-label="Previous look"
-                className="absolute top-1/2 right-full w-full z-0 hidden sm:block cursor-pointer"
-                style={{ transform: 'translateY(-50%) translateX(56%) scale(0.9)' }}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={thumbUrl(prevImage, 500)}
-                  alt=""
-                  loading="lazy"
-                  className="w-full aspect-[3/4] object-cover"
-                  style={{ filter: 'blur(1px)', opacity: 0.7 }}
-                />
-              </button>
-            )}
-            {/* Next look — peeking, blurred */}
-            {nextImage && (
-              <button
-                type="button"
-                onClick={() => goToSibling(1)}
-                aria-label="Next look"
-                className="absolute top-1/2 left-full w-full z-0 hidden sm:block cursor-pointer"
-                style={{ transform: 'translateY(-50%) translateX(-56%) scale(0.9)' }}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={thumbUrl(nextImage, 500)}
-                  alt=""
-                  loading="lazy"
-                  className="w-full aspect-[3/4] object-cover"
-                  style={{ filter: 'blur(1px)', opacity: 0.7 }}
-                />
-              </button>
-            )}
-
-            {/* Current look */}
-            <div ref={heroRef} className="relative z-10 bg-white overflow-hidden group scroll-mt-20">
+        {/* When the shown photo is a product ITEM, present it Cult-Gaia style:
+            detail on the left, image on the right (desktop) — detail under the
+            image (mobile). The outfit carousel shows only for the look itself. */}
+        {currentItem ? (
+          <ItemDetailView
+            item={currentItem}
+            total={allImages.length}
+            onPrev={() => setCurrentImageIndex((i) => (i - 1 + allImages.length) % allImages.length)}
+            onNext={() => setCurrentImageIndex((i) => (i + 1) % allImages.length)}
+            onBackToOutfit={() => setCurrentImageIndex(0)}
+            outfitId={outfitId}
+            outfitImage={outfit.image_url}
+            linkBase={linkBase}
+          />
+        ) : (
+        // Single look — full-bleed on mobile, large & centred on desktop. Looks
+        // are flash-cards: swipe or use the top arrows to move between them.
+        <div className="relative">
+            <div
+              ref={heroRef}
+              className="relative z-10 bg-white overflow-hidden group scroll-mt-20 aspect-[3/4] -mx-4 sm:mx-auto sm:w-full sm:max-w-[820px]"
+              onTouchStart={onLookTouchStart}
+              onTouchEnd={onLookTouchEnd}
+            >
               <ImageWithHotspots
                 key={currentImageUrl}
                 outfit={outfit}
@@ -435,6 +413,35 @@ export default function OutfitDetailClient({
                 onStyleItem={handleStyleItem}
                 showHotspots={safeIndex === 0}
               />
+
+              {/* Mobile-only overlay header: BACK + look arrows in white, on the
+                  image, so the photo can run full width edge-to-edge. */}
+              <div className="sm:hidden absolute inset-x-0 top-0 z-30 flex items-center justify-between px-4 pt-3 pointer-events-none">
+                <button
+                  onClick={() => router.back()}
+                  className="pointer-events-auto text-white text-[11px] tracking-[0.09em] drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)]"
+                >
+                  ← BACK
+                </button>
+                <div className="flex items-center gap-5 pointer-events-auto">
+                  <button
+                    onClick={() => goToSibling(-1)}
+                    disabled={!hasPrevLook}
+                    aria-label="Previous look"
+                    className="text-white text-[24px] leading-none drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)] disabled:opacity-30"
+                  >
+                    ‹
+                  </button>
+                  <button
+                    onClick={() => goToSibling(1)}
+                    disabled={!hasNextLook}
+                    aria-label="Next look"
+                    className="text-white text-[24px] leading-none drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)] disabled:opacity-30"
+                  >
+                    ›
+                  </button>
+                </div>
+              </div>
 
               {/* Coach-mark on the image — tap a piece to restyle it */}
               {!sourcePanelOpen && !activeStyleItemId && (
@@ -474,27 +481,27 @@ export default function OutfitDetailClient({
 
               {allImages.length > 1 && (
                 <>
-                  {/* Prev photo */}
+                  {/* Prev photo — bare arrow, no circle */}
                   <button
                     type="button"
                     onClick={() => setCurrentImageIndex((i) => (i - 1 + allImages.length) % allImages.length)}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center bg-white/85 hover:bg-white text-[#4A4E57] text-[22px] leading-none rounded-full shadow-sm transition-colors duration-200 z-20"
+                    className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 w-9 flex items-center justify-center text-white text-[34px] leading-none drop-shadow-[0_1px_4px_rgba(0,0,0,0.7)] hover:opacity-70 transition-opacity duration-200 z-20"
                     aria-label="Previous photo"
                   >
                     ‹
                   </button>
-                  {/* Next photo */}
+                  {/* Next photo — bare arrow, no circle */}
                   <button
                     type="button"
                     onClick={() => setCurrentImageIndex((i) => (i + 1) % allImages.length)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center bg-white/85 hover:bg-white text-[#4A4E57] text-[22px] leading-none rounded-full shadow-sm transition-colors duration-200 z-20"
+                    className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 w-9 flex items-center justify-center text-white text-[34px] leading-none drop-shadow-[0_1px_4px_rgba(0,0,0,0.7)] hover:opacity-70 transition-opacity duration-200 z-20"
                     aria-label="Next photo"
                   >
                     ›
                   </button>
 
-                  {/* Counter */}
-                  <div className="absolute top-3 right-3 bg-black/60 text-white text-[10px] tracking-[0.068em] px-2.5 py-1 rounded-full z-20">
+                  {/* Counter — top-centre on mobile (BACK/arrows flank it), top-right on desktop */}
+                  <div className="absolute top-3 left-1/2 -translate-x-1/2 sm:left-auto sm:translate-x-0 sm:right-3 bg-black/60 text-white text-[10px] tracking-[0.068em] px-2.5 py-1 rounded-full z-20">
                     {safeIndex + 1} / {allImages.length}
                   </div>
                 </>
@@ -524,11 +531,11 @@ export default function OutfitDetailClient({
                 </div>
               )}
             </div>
-          </div>
         </div>
+        )}
 
-        {/* Look position dots */}
-        {siblings.length > 1 && (
+        {/* Look position dots — only while browsing looks, not an item photo */}
+        {siblings.length > 1 && !currentItem && (
           <div className="flex items-center justify-center gap-1.5 mt-5 mb-1">
             {dotIndices.map((di) => (
               <button
@@ -672,6 +679,249 @@ function ImageWithHotspots({
           />
         )
       })}
+    </div>
+  )
+}
+
+// ── Product item view (Cult-Gaia style) ─────────────────────
+// Shown when the current photo belongs to a specific item. Desktop: detail on
+// the left, the image glides in to the right. Mobile: image on top, then name /
+// price / retailer button underneath.
+function formatPrice(price: string | null, currency: string | null): string {
+  if (!price) return ''
+  const sym: Record<string, string> = { GBP: '£', USD: '$', EUR: '€', AUD: 'A$', CAD: 'C$', JPY: '¥' }
+  const cur = currency ?? 'GBP'
+  const symbol = sym[cur]
+  const clean = String(price).replace(/\.00$/, '')
+  return symbol ? `${symbol}${clean}` : `${clean} ${cur}`
+}
+
+function ItemDetailView({
+  item,
+  total,
+  onPrev,
+  onNext,
+  onBackToOutfit,
+  outfitId,
+  outfitImage,
+  linkBase,
+}: {
+  item: SourceItemData
+  total: number
+  onPrev: () => void
+  onNext: () => void
+  onBackToOutfit: () => void
+  outfitId: string
+  outfitImage: string | null
+  linkBase: string
+}) {
+  const router = useRouter()
+  const nextImg = item.image_url ? thumbUrl(item.image_url, 1000) : ''
+  // Re-trigger the soft cross-fade each time the shown item changes.
+  const [entered, setEntered] = useState(false)
+  // Two stacked layers so the previous product stays visible underneath while
+  // the new one fades in over it — a cross-dissolve, not a hard swap.
+  const [front, setFront] = useState(nextImg)
+  const [back, setBack] = useState<string | null>(null)
+  const prevImg = useRef(nextImg)
+  // Other live looks that feature this exact piece ("styled with this piece").
+  const [tagged, setTagged] = useState<OutfitWithItems[]>([])
+  const touchX = useRef<number | null>(null)
+  useEffect(() => {
+    if (prevImg.current && prevImg.current !== nextImg) setBack(prevImg.current)
+    setFront(nextImg)
+    prevImg.current = nextImg
+    setEntered(false)
+    const r = requestAnimationFrame(() => setEntered(true))
+    // Drop the old layer once the fade has completed.
+    const t = setTimeout(() => setBack(null), 780)
+    return () => { cancelAnimationFrame(r); clearTimeout(t) }
+  }, [item.item_id, nextImg])
+  useEffect(() => {
+    let live = true
+    setTagged([])
+    getStyleItemOutfits(outfitId, item.item_id).then((res) => {
+      if (live) setTagged(res.outfits ?? [])
+    })
+    return () => { live = false }
+  }, [item.item_id, outfitId])
+
+  const price = formatPrice(item.price ?? null, item.currency ?? null)
+  const descriptors = [
+    item.item_type ? String(item.item_type).replace(/_/g, ' ') : null,
+    item.material_primary,
+    item.colour_family,
+  ].filter(Boolean) as string[]
+
+  const href = affiliateUrl(item.retailer_url, { brandName: item.brand?.name, contentId: item.item_id })
+  function onShop() {
+    const label = [item.brand?.name, item.product_name].filter(Boolean).join(' — ')
+    recordItemClick(item.item_id, outfitId, getStoredRef(), label)
+  }
+  function onTouchStart(e: React.TouchEvent) { touchX.current = e.touches[0].clientX }
+  function onTouchEnd(e: React.TouchEvent) {
+    if (touchX.current === null) return
+    const dx = e.changedTouches[0].clientX - touchX.current
+    touchX.current = null
+    if (Math.abs(dx) > 40) (dx < 0 ? onNext() : onPrev())
+  }
+
+  // The image cross-dissolves between products (two stacked layers) and the
+  // detail column softly fades in alongside it — no slide, matching the ref.
+  return (
+    <div className="overflow-x-hidden">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-12 items-center sm:min-h-[68vh]">
+      {/* Detail — left on desktop, under the image on mobile */}
+      <div
+        className="order-2 sm:order-1 sm:pr-8 will-change-transform"
+        style={{
+          transition: entered ? 'opacity 640ms ease-out, transform 900ms cubic-bezier(0.22, 1, 0.36, 1)' : 'none',
+          transform: entered ? 'translateY(0)' : 'translateY(8px)',
+          opacity: entered ? 1 : 0,
+        }}
+      >
+        <button
+          onClick={onBackToOutfit}
+          className="text-[10px] tracking-[0.12em] text-[#A8A8A4] hover:text-[#4A4E57] transition-colors duration-300"
+        >
+          ← BACK TO LOOK
+        </button>
+        <p className="mt-6 text-[10px] tracking-[0.16em] uppercase text-[#A8A8A4]">{item.brand?.name ?? 'MYRA'}</p>
+        <h2 className="mt-3 text-[22px] sm:text-[32px] leading-[1.08] tracking-[0.01em] text-[#0A0A0A] font-light uppercase">
+          {item.product_name}
+        </h2>
+        {price && <p className="mt-4 text-[15px] sm:text-[16px] tracking-[0.04em] text-[#0A0A0A]">{price}</p>}
+
+        {descriptors.length > 0 && (
+          <div className="mt-6 space-y-1.5 hidden sm:block">
+            {descriptors.map((d, i) => (
+              <p key={i} className="text-[12px] tracking-[0.02em] text-[#4A4E57]">
+                — {d.charAt(0).toUpperCase() + d.slice(1)}
+              </p>
+            ))}
+          </div>
+        )}
+
+        {item.retailer_url && (
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={onShop}
+            className="mt-8 inline-flex items-center justify-center w-full sm:w-auto sm:min-w-[300px] border border-[#0A0A0A] text-[#0A0A0A] px-8 py-4 text-[11px] tracking-[0.16em] uppercase hover:bg-[#0A0A0A] hover:text-white transition-colors duration-300"
+          >
+            Go to retailer website →
+          </a>
+        )}
+      </div>
+
+      {/* Image — right on desktop, top on mobile. Two stacked layers cross-fade
+          from the previous product to the new one, with a slow scale settle. */}
+      <div className="order-1 sm:order-2">
+        <div className="relative" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+          <div className="relative aspect-[3/4] w-full bg-[#F7F7F5] overflow-hidden">
+            {/* Outgoing product — sits underneath, faded out by the new one. */}
+            {back && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={back}
+                src={back}
+                alt=""
+                aria-hidden
+                className="absolute inset-0 w-full h-full object-contain"
+              />
+            )}
+            {/* Incoming product — fades in over the old one and settles in scale. */}
+            {front && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={front}
+                src={front}
+                alt={item.product_name}
+                className="absolute inset-0 w-full h-full object-contain will-change-transform"
+                style={{
+                  transition: entered ? 'opacity 620ms ease-out, transform 1200ms cubic-bezier(0.22, 1, 0.36, 1)' : 'none',
+                  opacity: entered ? 1 : 0,
+                  transform: entered ? 'scale(1)' : 'scale(1.045)',
+                }}
+              />
+            )}
+
+            {/* The full look, shown small at the top-right for context — tap to
+                return to the outfit. */}
+            {outfitImage && (
+              <button
+                type="button"
+                onClick={onBackToOutfit}
+                aria-label="Back to the full look"
+                className="absolute top-3 right-3 z-20 w-[58px] sm:w-[76px] aspect-[3/4] rounded-md overflow-hidden border border-white shadow-[0_2px_10px_rgba(0,0,0,0.18)] hover:shadow-[0_3px_14px_rgba(0,0,0,0.28)] transition-shadow duration-300"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={thumbUrl(outfitImage, 240)} alt="" loading="lazy" className="w-full h-full object-cover" />
+              </button>
+            )}
+          </div>
+          {total > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={onPrev}
+                aria-label="Previous photo"
+                className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 w-8 flex items-center justify-center text-[#0A0A0A]/55 text-[32px] leading-none drop-shadow-[0_1px_3px_rgba(255,255,255,0.8)] hover:text-[#0A0A0A] transition-colors duration-200 z-20"
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                onClick={onNext}
+                aria-label="Next photo"
+                className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 w-8 flex items-center justify-center text-[#0A0A0A]/55 text-[32px] leading-none drop-shadow-[0_1px_3px_rgba(255,255,255,0.8)] hover:text-[#0A0A0A] transition-colors duration-200 z-20"
+              >
+                ›
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Mini looks tagged to this product — other live outfits styled with it.
+            Fades/lifts in just after the main slide for a smooth cascade. */}
+        {tagged.length > 0 && (
+          <div
+            className="mt-5"
+            style={{
+              transition: entered ? 'transform 900ms cubic-bezier(0.22, 1, 0.36, 1) 220ms, opacity 700ms ease-out 220ms' : 'none',
+              transform: entered ? 'translateY(0)' : 'translateY(14px)',
+              opacity: entered ? 1 : 0,
+            }}
+          >
+            <p className="text-[9px] tracking-[0.16em] uppercase text-[#A8A8A4] mb-2.5">Styled with this piece</p>
+            <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-1 px-1">
+              {tagged.map((o) => (
+                <button
+                  key={o.outfit_id}
+                  type="button"
+                  onClick={() => router.push(`${linkBase}/${o.outfit_id}`)}
+                  className="group flex-shrink-0 w-[66px] sm:w-[80px]"
+                  aria-label="Open this look"
+                >
+                  <div className="relative aspect-[3/4] overflow-hidden rounded-md bg-[#F2F2F0]">
+                    {o.image_url && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={thumbUrl(o.image_url, 240)}
+                        alt={o.aesthetic_label ?? 'Look'}
+                        loading="lazy"
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+                      />
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
     </div>
   )
 }

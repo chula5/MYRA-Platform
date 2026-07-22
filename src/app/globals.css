@@ -234,6 +234,33 @@ html {
   animation: hotspotPulse 2.5s ease-in-out infinite;
 }
 
+/* Beacon: the dot itself breathes in and out so users notice it's tappable.
+   Never fully disappears (stays >= 0.5) so it remains hittable on touch. */
+@keyframes hotspotBeacon {
+  0%, 100% { opacity: 0.45; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1); }
+}
+.hotspot-beacon {
+  animation: hotspotBeacon 2.6s ease-in-out infinite;
+}
+.hotspot-beacon:hover {
+  animation-play-state: paused;
+  opacity: 1;
+}
+/* Ring that expands and fades — the "appear then disappear" attention pulse. */
+@keyframes hotspotRing {
+  0% { opacity: 0.6; transform: scale(0.55); }
+  70%, 100% { opacity: 0; transform: scale(1.9); }
+}
+.hotspot-ring {
+  animation: hotspotRing 2.6s ease-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hotspot-beacon, .hotspot-ring { animation: none; }
+  .hotspot-beacon { opacity: 0.85; }
+  .hotspot-ring { display: none; }
+}
+
 /* ── Image hover dim ─────────────────────────────────────────── */
 .image-hover-dim {
   transition: opacity 400ms ease;

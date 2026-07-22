@@ -381,7 +381,7 @@ export async function approveCandidate(
     // themselves (e.g. Outfit Review, which awaits it for live status) pass
     // autoShoot:false so it isn't generated twice.
     if (opts?.autoShoot !== false) {
-      void generateHiggsfieldShootForOutfit(outfitId, 'E5').catch((err) =>
+      void generateHiggsfieldShootForOutfit(outfitId, 'F6').catch((err) =>
         console.error('[approveCandidate→higgsfield]', err),
       )
     }

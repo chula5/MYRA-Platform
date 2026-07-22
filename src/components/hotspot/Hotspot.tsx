@@ -131,19 +131,27 @@ export default function Hotspot({
           </div>
         </div>
       ) : (
-        // ── Detail — dot appears when image is hovered, pill on click ──
+        // ── Detail — dot gently beacons (appears/disappears) so it's discoverable
+        //    on desktop AND mobile without a hover; pill opens on click/tap. ──
         <div className="relative group">
+          {/* Expanding ring — the attention pulse */}
+          <span
+            aria-hidden
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-7 h-7 rounded-full border border-white/80 hotspot-ring pointer-events-none z-0"
+            style={{ animationDelay: `${(x % 3) * 0.6}s` }}
+          />
           <button
             type="button"
             aria-label={`Style ${label}`}
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleClick() }}
-            className={`
+            style={{ animationDelay: `${(x % 3) * 0.6}s` }}
+            className="
               relative z-10 block w-7 h-7 rounded-full
-              bg-white/40 backdrop-blur-sm border border-white/60
-              transition-all duration-300 cursor-pointer
-              ${imageHovered ? 'opacity-100 scale-100' : 'opacity-0 scale-75 pointer-events-none'}
-              hover:bg-white/70
-            `}
+              bg-white/40 backdrop-blur-sm border border-white/70
+              shadow-[0_1px_4px_rgba(0,0,0,0.18)]
+              hotspot-beacon hover:bg-white/80 hover:scale-110
+              transition-[background-color,transform] duration-300 cursor-pointer
+            "
           />
           {/* Pill — appears on click */}
           {active && (
