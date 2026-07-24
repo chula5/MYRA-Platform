@@ -508,9 +508,10 @@ export default function OutfitDetailClient({
               )}
 
               {/* Browse actions overlaid on the image (editorial, matches the feed).
-                  Source Items + Similar Looks on one row, Explore Styles centred below. */}
-              {!sourcePanelOpen && (
-                <div className="absolute inset-x-0 bottom-0 z-20 pt-12 pb-4 px-4 bg-gradient-to-t from-black/55 via-black/20 to-transparent pointer-events-none">
+                  Kept visible even when the Source panel is open, so the user can
+                  still reach Similar Looks / Explore Styles or toggle Source off.
+                  z-40 sits above the Source overlay so the buttons stay clickable. */}
+                <div className="absolute inset-x-0 bottom-0 z-40 pt-12 pb-4 px-4 bg-gradient-to-t from-black/55 via-black/20 to-transparent pointer-events-none">
                   <div className="flex items-center justify-center gap-6">
                     <button onClick={openSourcePanel} className={ACTION_CLS}>Source Items</button>
                     {showBrowse && (
@@ -529,7 +530,6 @@ export default function OutfitDetailClient({
                     </div>
                   )}
                 </div>
-              )}
             </div>
         </div>
         )}
