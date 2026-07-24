@@ -25,7 +25,7 @@ import type { OutfitWithItems, Item, Brand, ItemType } from '@/types/database'
 const SHOW_BROWSE_BUTTONS = true
 
 // White overlaid action text (matches the editorial feed cards).
-const ACTION_CLS = 'pointer-events-auto text-white text-[10px] sm:text-[11px] tracking-[0.14em] uppercase font-light hover:opacity-70 transition-opacity'
+const ACTION_CLS = 'pointer-events-auto text-white text-[12px] sm:text-[13px] tracking-[0.12em] uppercase font-light hover:opacity-70 transition-opacity'
 
 type SourceItemData = Item & { brand: Brand }
 
@@ -476,6 +476,7 @@ export default function OutfitDetailClient({
                   canSave={canSave}
                   savedItemIds={[...savedItemSet]}
                   onToggleItem={toggleItem}
+                  offsetTop
                 />
               )}
 
@@ -500,8 +501,9 @@ export default function OutfitDetailClient({
                     ›
                   </button>
 
-                  {/* Counter — top-centre on mobile (BACK/arrows flank it), top-right on desktop */}
-                  <div className="absolute top-3 left-1/2 -translate-x-1/2 sm:left-auto sm:translate-x-0 sm:right-3 bg-black/60 text-white text-[10px] tracking-[0.068em] px-2.5 py-1 rounded-full z-20">
+                  {/* Counter — mobile: plain white text at the very top (no pill),
+                      flanked by BACK/arrows. Desktop: subtle pill, top-right. */}
+                  <div className="absolute top-2 left-1/2 -translate-x-1/2 sm:top-3 sm:left-auto sm:translate-x-0 sm:right-3 z-30 text-white text-[11px] sm:text-[10px] tracking-[0.1em] drop-shadow-[0_1px_3px_rgba(0,0,0,0.65)] sm:drop-shadow-none sm:bg-black/60 sm:px-2.5 sm:py-1 sm:rounded-full">
                     {safeIndex + 1} / {allImages.length}
                   </div>
                 </>
@@ -511,8 +513,9 @@ export default function OutfitDetailClient({
                   Kept visible even when the Source panel is open, so the user can
                   still reach Similar Looks / Explore Styles or toggle Source off.
                   z-40 sits above the Source overlay so the buttons stay clickable. */}
-                <div className="absolute inset-x-0 bottom-0 z-40 pt-12 pb-4 px-4 bg-gradient-to-t from-black/55 via-black/20 to-transparent pointer-events-none">
-                  <div className="flex items-center justify-center gap-6">
+                <div className="absolute inset-x-0 bottom-0 z-40 pt-12 pb-5 px-4 bg-gradient-to-t from-black/55 via-black/20 to-transparent pointer-events-none">
+                  {/* All three on one row (the hero is wide enough on both). */}
+                  <div className="flex flex-wrap items-center justify-center gap-x-5 sm:gap-x-8 gap-y-1.5">
                     <button onClick={openSourcePanel} className={ACTION_CLS}>Source Items</button>
                     {showBrowse && (
                       <span className="relative">
@@ -520,15 +523,13 @@ export default function OutfitDetailClient({
                         <CoachTip id="outfit-similar-looks" text="More outfits with the same shape and feel." arrow="down" className="bottom-full mb-2 left-1/2 -translate-x-1/2" delayMs={1600} />
                       </span>
                     )}
-                  </div>
-                  {showBrowse && (
-                    <div className="flex justify-center mt-2">
+                    {showBrowse && (
                       <span className="relative">
                         <button onClick={handleExploreStyles} className={ACTION_CLS}>Explore Styles</button>
                         <CoachTip id="outfit-explore-styles" text="Different looks styled for the same occasion." arrow="down" className="bottom-full mb-2 left-1/2 -translate-x-1/2" delayMs={2300} />
                       </span>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
             </div>
         </div>

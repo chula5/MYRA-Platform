@@ -91,7 +91,7 @@ export default function OutfitCard({
     router.push(detailHref ?? `/outfit/${outfit.outfit_id}`)
   }
 
-  const actionClass = 'pointer-events-auto text-white text-[8px] tracking-[0.12em] uppercase font-light hover:opacity-70 transition-opacity'
+  const actionClass = 'pointer-events-auto text-white text-[10px] sm:text-[11px] tracking-[0.1em] uppercase font-light hover:opacity-70 transition-opacity'
 
   return (
     <article className="relative flex flex-col">
@@ -180,12 +180,10 @@ export default function OutfitCard({
             Similar Looks on one row, Explore Styles centred underneath. Kept
             visible even with the Source panel open so the user can still reach the
             other two (or toggle Source off); z-40 sits above the overlay. */}
-        <div className="absolute inset-x-0 bottom-0 z-40 pt-10 pb-3 px-3 bg-gradient-to-t from-black/55 via-black/20 to-transparent pointer-events-none">
-            <div className="flex items-center justify-center gap-5">
+        <div className="absolute inset-x-0 bottom-0 z-40 pt-10 pb-3.5 px-3 bg-gradient-to-t from-black/55 via-black/20 to-transparent pointer-events-none">
+            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
               <button onClick={(e) => { e.stopPropagation(); setSourcePanelOpen((v) => !v) }} className={actionClass}>Source Items</button>
               <button onClick={(e) => { e.stopPropagation(); trackEngagement('similar_looks', outfit.outfit_id); onSimilarLooks?.(outfit) }} className={actionClass}>Similar Looks</button>
-            </div>
-            <div className="flex justify-center mt-1.5">
               <button onClick={(e) => { e.stopPropagation(); trackEngagement('explore_styles', outfit.outfit_id); onExploreStyles?.(outfit) }} className={actionClass}>Explore Styles</button>
             </div>
           </div>

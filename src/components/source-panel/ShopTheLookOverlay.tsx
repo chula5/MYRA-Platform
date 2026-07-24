@@ -27,6 +27,7 @@ export default function ShopTheLookOverlay({
   canSave = false,
   savedItemIds = [],
   onToggleItem,
+  offsetTop = false,
 }: {
   items: SourceItem[]
   outfitId?: string
@@ -34,6 +35,9 @@ export default function ShopTheLookOverlay({
   canSave?: boolean
   savedItemIds?: string[]
   onToggleItem?: (itemId: string) => void
+  // On the detail view the mobile header (BACK + arrows) overlays the image top,
+  // so push the panel down on mobile to clear it (desktop has no such header).
+  offsetTop?: boolean
 }) {
   const savedSet = new Set(savedItemIds)
   // Just record the click — navigation is handled by the real <a> link so
@@ -44,7 +48,11 @@ export default function ShopTheLookOverlay({
   }
 
   return (
-    <div className="absolute top-2.5 left-2.5 z-30 w-[27%] max-w-[100px] sm:w-[34%] sm:max-w-[176px] max-h-[calc(100%-1.25rem)] overflow-y-auto pr-1">
+    <div className={`absolute left-2.5 z-30 w-[27%] max-w-[100px] sm:w-[34%] sm:max-w-[176px] overflow-y-auto pr-1 ${
+      offsetTop
+        ? 'top-12 sm:top-2.5 max-h-[calc(100%-3.75rem)] sm:max-h-[calc(100%-1.25rem)]'
+        : 'top-2.5 max-h-[calc(100%-1.25rem)]'
+    }`}>
       {/* Header */}
       <div className="flex items-center gap-1.5 mb-2">
         <span className="text-white text-[8px] sm:text-[9px] tracking-[0.081em] drop-shadow-[0_1px_3px_rgba(0,0,0,0.55)]">
