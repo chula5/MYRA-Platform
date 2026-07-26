@@ -103,6 +103,10 @@ export default function OutfitDetailClient({
   const [activeItemType, setActiveItemType] = useState<ItemType | null>(itemType as ItemType ?? null)
   const [loading, setLoading] = useState(!initialOutfit)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
+  // Onboarding coach-tips shown ONE AT A TIME (0=tap-to-style, 1=source,
+  // 2=similar, 3=explore) so they never stack on top of each other.
+  const [coachStep, setCoachStep] = useState(0)
+  const advanceCoach = (n: number) => setCoachStep((s) => Math.max(s, n + 1))
 
   // Ordered list of sibling outfits so the user can swipe/arrow between looks.
   const [siblings, setSiblings] = useState<{ id: string; image: string }[]>([])
@@ -443,14 +447,18 @@ export default function OutfitDetailClient({
                 </div>
               </div>
 
-              {/* Coach-mark on the image — tap a piece to restyle it */}
+              {/* Coach-mark high on the image so it doesn't collide with the
+                  action-button tips along the bottom. */}
               {!sourcePanelOpen && !activeStyleItemId && (
                 <CoachTip
                   id="outfit-tap-to-style"
-                  text="Tap any piece on the outfit to style it a different way."
+                  text="Tap any piece to restyle it."
                   arrow="up"
-                  className="left-1/2 -translate-x-1/2 bottom-24"
-                  delayMs={1100}
+                  widthClass="w-[168px]"
+                  className="left-1/2 -translate-x-1/2 top-[22%]"
+                  delayMs={1000}
+                  active={coachStep === 0}
+                  onResolved={() => advanceCoach(0)}
                 />
               )}
 
@@ -514,19 +522,24 @@ export default function OutfitDetailClient({
                   still reach Similar Looks / Explore Styles or toggle Source off.
                   z-40 sits above the Source overlay so the buttons stay clickable. */}
                 <div className="absolute inset-x-0 bottom-0 z-40 pt-12 pb-5 px-4 bg-gradient-to-t from-black/55 via-black/20 to-transparent pointer-events-none">
-                  {/* All three on one row (the hero is wide enough on both). */}
+                  {/* All three on one row (the hero is wide enough on both).
+                      Coach-tips are slim and staggered — Similar sits higher, the
+                      outer two anchor to their edges — so they don't overlap. */}
                   <div className="flex flex-wrap items-center justify-center gap-x-5 sm:gap-x-8 gap-y-1.5">
-                    <button onClick={openSourcePanel} className={ACTION_CLS}>Source Items</button>
+                    <span className="relative">
+                      <button onClick={openSourcePanel} className={ACTION_CLS}>Source Items</button>
+                      <CoachTip id="outfit-source-items" text="Shop direct from the retailer." arrow="down" widthClass="w-[164px]" className="bottom-full mb-2.5 left-0" delayMs={300} active={coachStep === 1} onResolved={() => advanceCoach(1)} />
+                    </span>
                     {showBrowse && (
                       <span className="relative">
                         <button onClick={handleSimilarLooks} className={ACTION_CLS}>Similar Looks</button>
-                        <CoachTip id="outfit-similar-looks" text="More outfits with the same shape and feel." arrow="down" className="bottom-full mb-2 left-1/2 -translate-x-1/2" delayMs={1600} />
+                        <CoachTip id="outfit-similar-looks" text="More outfits with the same shape." arrow="down" widthClass="w-[164px]" className="bottom-full mb-2.5 left-1/2 -translate-x-1/2" delayMs={300} active={coachStep === 2} onResolved={() => advanceCoach(2)} />
                       </span>
                     )}
                     {showBrowse && (
                       <span className="relative">
                         <button onClick={handleExploreStyles} className={ACTION_CLS}>Explore Styles</button>
-                        <CoachTip id="outfit-explore-styles" text="Different looks styled for the same occasion." arrow="down" className="bottom-full mb-2 left-1/2 -translate-x-1/2" delayMs={2300} />
+                        <CoachTip id="outfit-explore-styles" text="Other looks for this occasion." arrow="down" widthClass="w-[164px]" className="bottom-full mb-2.5 right-0" delayMs={300} active={coachStep === 3} onResolved={() => advanceCoach(3)} />
                       </span>
                     )}
                   </div>

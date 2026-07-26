@@ -181,9 +181,13 @@ export default function OutfitCard({
             visible even with the Source panel open so the user can still reach the
             other two (or toggle Source off); z-40 sits above the overlay. */}
         <div className="absolute inset-x-0 bottom-0 z-40 pt-10 pb-3.5 px-3 bg-gradient-to-t from-black/55 via-black/20 to-transparent pointer-events-none">
-            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+            {/* Source Items + Similar Looks on one line, Explore Styles below —
+                the cards are too narrow to fit all three on a single row. */}
+            <div className="flex items-center justify-center gap-x-4">
               <button onClick={(e) => { e.stopPropagation(); setSourcePanelOpen((v) => !v) }} className={actionClass}>Source Items</button>
               <button onClick={(e) => { e.stopPropagation(); trackEngagement('similar_looks', outfit.outfit_id); onSimilarLooks?.(outfit) }} className={actionClass}>Similar Looks</button>
+            </div>
+            <div className="flex justify-center mt-1.5">
               <button onClick={(e) => { e.stopPropagation(); trackEngagement('explore_styles', outfit.outfit_id); onExploreStyles?.(outfit) }} className={actionClass}>Explore Styles</button>
             </div>
           </div>
