@@ -1,6 +1,6 @@
 'use client'
 
-import Image from 'next/image'
+import { thumbUrl } from '@/lib/image-utils'
 import { useState } from 'react'
 import { recordItemClick } from '@/app/actions/item-click'
 import { getStoredRef } from '@/lib/ref'
@@ -101,12 +101,12 @@ function ItemCard({
     <div className="relative w-full aspect-[3/4] overflow-hidden bg-[#EDEDED]">
       {/* Item photo (rectangle) */}
       {item.image_url && !imgFailed ? (
-        <Image
-          src={item.image_url}
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={thumbUrl(item.image_url, 500)}
           alt={item.product_name}
-          fill
-          className="object-cover"
-          sizes="176px"
+          loading="lazy"
+          className="absolute inset-0 w-full h-full object-cover"
           onError={() => setImgFailed(true)}
         />
       ) : (
