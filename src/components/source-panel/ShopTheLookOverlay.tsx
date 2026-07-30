@@ -5,18 +5,10 @@ import { useState } from 'react'
 import { recordItemClick } from '@/app/actions/item-click'
 import { getStoredRef } from '@/lib/ref'
 import { affiliateUrl } from '@/lib/affiliate'
+import { formatGbp } from '@/lib/currency'
 import type { Item, Brand } from '@/types/database'
 
 type SourceItem = Item & { brand: Brand }
-
-function formatPrice(price: string | null, currency: string | null): string {
-  if (!price) return ''
-  const sym: Record<string, string> = { GBP: '£', USD: '$', EUR: '€', AUD: 'A$', CAD: 'C$', JPY: '¥' }
-  const cur = currency ?? 'GBP'
-  const symbol = sym[cur]
-  const clean = String(price).replace(/\.00$/, '')
-  return symbol ? `${symbol}${clean}` : `${clean} ${cur}`
-}
 
 // "Shop the look" cards overlaid on the outfit image (top-left), replacing the
 // old side drawer. Each card opens the retailer and records the click.
@@ -102,7 +94,8 @@ function ItemCard({
 }) {
   const [imgFailed, setImgFailed] = useState(false)
   const brandInitial = (item.brand?.name ?? 'M').trim().charAt(0).toUpperCase()
-  const price = formatPrice(item.price ?? null, item.currency ?? null)
+  // Source Items shows GBP only (no bracketed original — that's the big view).
+  const price = formatGbp(item.price ?? null, item.currency ?? null)
 
   return (
     <div className="relative w-full aspect-[3/4] overflow-hidden bg-[#EDEDED]">

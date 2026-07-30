@@ -14,6 +14,7 @@ import { trackEngagement } from '@/lib/track'
 import { thumbUrl } from '@/lib/image-utils'
 import { toggleSaveItem } from '@/app/edit/save-actions'
 import { affiliateUrl } from '@/lib/affiliate'
+import { formatGbp } from '@/lib/currency'
 import { recordItemClick } from '@/app/actions/item-click'
 import { getStoredRef } from '@/lib/ref'
 import type { OutfitWithItems, Item, Brand, ItemType } from '@/types/database'
@@ -701,14 +702,6 @@ function ImageWithHotspots({
 // Shown when the current photo belongs to a specific item. Desktop: detail on
 // the left, the image glides in to the right. Mobile: image on top, then name /
 // price / retailer button underneath.
-function formatPrice(price: string | null, currency: string | null): string {
-  if (!price) return ''
-  const sym: Record<string, string> = { GBP: '£', USD: '$', EUR: '€', AUD: 'A$', CAD: 'C$', JPY: '¥' }
-  const cur = currency ?? 'GBP'
-  const symbol = sym[cur]
-  const clean = String(price).replace(/\.00$/, '')
-  return symbol ? `${symbol}${clean}` : `${clean} ${cur}`
-}
 
 function ItemDetailView({
   item,
@@ -760,7 +753,8 @@ function ItemDetailView({
     return () => { live = false }
   }, [item.item_id, outfitId])
 
-  const price = formatPrice(item.price ?? null, item.currency ?? null)
+  // Big item view: GBP with the original currency in brackets, e.g. "£335 (€390)".
+  const price = formatGbp(item.price ?? null, item.currency ?? null, { showOriginal: true })
   const descriptors = [
     item.item_type ? String(item.item_type).replace(/_/g, ' ') : null,
     item.material_primary,
