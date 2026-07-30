@@ -14,8 +14,11 @@ export default function AnalyticsChart({ days }: { days: DayData[] }) {
 
   const maxVal = Math.max(...days.map(d => d.views), 1)
 
-  // Show every 7th label on x-axis
+  // Space labels out, but anchor them to the END so the most recent day is
+  // always labelled (otherwise the last few days sit past the final label and
+  // the chart looks like it stops days early).
   const labelEvery = Math.ceil(days.length / 5)
+  const showLabel = (i: number) => (days.length - 1 - i) % labelEvery === 0
 
   return (
     <div className="relative select-none">
@@ -75,7 +78,7 @@ export default function AnalyticsChart({ days }: { days: DayData[] }) {
       <div className="flex mt-2">
         {days.map((d, i) => (
           <div key={d.isoDate} className="flex-1 text-center">
-            {i % labelEvery === 0 && (
+            {showLabel(i) && (
               <span className="text-[8px] tracking-[0.036em] text-[#A8A8A4]">{d.date}</span>
             )}
           </div>

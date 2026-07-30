@@ -56,6 +56,24 @@ export default async function AnalyticsPage() {
   const since = new Date()
   since.setDate(since.getDate() - DAYS)
 
+  // Supabase caps a single response at 1000 rows. Every "last 30 days" query
+  // here can exceed that, and they're ordered oldest-first, so without paging
+  // the most RECENT days were being silently dropped (the chart looked like it
+  // stopped days ago). Page through with .range() until a short page comes back.
+  async function fetchAllPages<T = any>(
+    buildPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: any }>,
+  ): Promise<{ data: T[]; error: any }> {
+    const PAGE = 1000
+    const all: T[] = []
+    for (let from = 0; from < 200000; from += PAGE) {
+      const { data, error } = await buildPage(from, from + PAGE - 1)
+      if (error) return { data: all, error }
+      all.push(...((data as T[]) ?? []))
+      if (!data || data.length < PAGE) break
+    }
+    return { data: all, error: null }
+  }
+
   // Account sign-ups (auth users) — emails so we can see exactly who joined.
   let signupUsers: { email: string; created_at: string }[] = []
   try {
@@ -76,12 +94,15 @@ export default async function AnalyticsPage() {
     topOccasions: { name: string; clicks: number }[]
   } | null = null
   {
-    const { data: ev } = await admin
-      .from('landing_event' as any)
-      .select('event_type, path')
-      .in('event_type', ['outfit_view', 'style_item', 'similar_looks', 'explore_styles', 'source_items', 'occasion_click'])
-      .gte('occurred_at', since.toISOString())
-      .limit(100000)
+    const { data: ev } = await fetchAllPages((from, to) =>
+      admin
+        .from('landing_event' as any)
+        .select('event_type, path')
+        .in('event_type', ['outfit_view', 'style_item', 'similar_looks', 'explore_styles', 'source_items', 'occasion_click'])
+        .gte('occurred_at', since.toISOString())
+        .order('occurred_at', { ascending: true })
+        .range(from, to),
+    )
     // Retailer shop-throughs (product clicked → went to the retailer site).
     let shopClicks = 0
     const { count: sc } = await admin.from('item_click' as any).select('*', { count: 'exact', head: true }).gte('clicked_at', since.toISOString())
@@ -133,22 +154,30 @@ export default async function AnalyticsPage() {
   }
 
   // Try fetching with ref — table/column might not exist yet if migration not run.
-  let { data, error } = await admin
-    .from('landing_event' as any)
-    .select('event_type, occurred_at, ref, country')
-    .eq('path', '/')
-    .gte('occurred_at', since.toISOString())
-    .order('occurred_at', { ascending: true })
+  // Paginated: without this, once there are >1000 landing events the most recent
+  // days fall off the end and the chart looks like it stopped days ago.
+  let { data, error } = await fetchAllPages((from, to) =>
+    admin
+      .from('landing_event' as any)
+      .select('event_type, occurred_at, ref, country')
+      .eq('path', '/')
+      .gte('occurred_at', since.toISOString())
+      .order('occurred_at', { ascending: true })
+      .range(from, to),
+  )
 
   let refColumnReady = !error
   // Fall back to fetching without the ref column.
   if (error) {
-    const retry = await admin
-      .from('landing_event' as any)
-      .select('event_type, occurred_at')
-      .eq('path', '/')
-      .gte('occurred_at', since.toISOString())
-      .order('occurred_at', { ascending: true })
+    const retry = await fetchAllPages((from, to) =>
+      admin
+        .from('landing_event' as any)
+        .select('event_type, occurred_at')
+        .eq('path', '/')
+        .gte('occurred_at', since.toISOString())
+        .order('occurred_at', { ascending: true })
+        .range(from, to),
+    )
     data = retry.data
     error = retry.error
   }
@@ -171,11 +200,14 @@ export default async function AnalyticsPage() {
   const visitDist = { once: 0, twice: 0, three: 0, power: 0 }  // 1 / 2 / 3 / 4+ visits
   const sessionsByCountry = new Map<string, number>()
   {
-    const { data: sessions, error: sErr } = await admin
-      .from('site_session' as any)
-      .select('visitor_id, is_returning, started_at, last_seen_at, country')
-      .gte('started_at', since.toISOString())
-      .limit(50000)
+    const { data: sessions, error: sErr } = await fetchAllPages((from, to) =>
+      admin
+        .from('site_session' as any)
+        .select('visitor_id, is_returning, started_at, last_seen_at, country')
+        .gte('started_at', since.toISOString())
+        .order('started_at', { ascending: true })
+        .range(from, to),
+    )
     if (sErr) {
       retentionReady = false
     } else {
@@ -255,13 +287,16 @@ export default async function AnalyticsPage() {
   // ── Per-referral behaviour: what each referred visitor actually did ──
   const refDetail = new Map<string, { occasions: Map<string, number>; items: Map<string, number>; searches: Map<string, number> }>()
   {
-    const { data: refEvents } = await admin
-      .from('landing_event' as any)
-      .select('event_type, path, ref')
-      .not('ref', 'is', null)
-      .in('event_type', ['occasion_click', 'item_click', 'search'])
-      .gte('occurred_at', since.toISOString())
-      .limit(50000)
+    const { data: refEvents } = await fetchAllPages((from, to) =>
+      admin
+        .from('landing_event' as any)
+        .select('event_type, path, ref')
+        .not('ref', 'is', null)
+        .in('event_type', ['occasion_click', 'item_click', 'search'])
+        .gte('occurred_at', since.toISOString())
+        .order('occurred_at', { ascending: true })
+        .range(from, to),
+    )
     const bump = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1)
     for (const e of (refEvents ?? []) as { event_type: string; path: string; ref: string }[]) {
       if (!refDetail.has(e.ref)) refDetail.set(e.ref, { occasions: new Map(), items: new Map(), searches: new Map() })
