@@ -123,7 +123,7 @@ export default async function LandingPage({
               FROM KNOWING WHAT TO WEAR.
             </p>
             <p>
-              MYRA IS BEING BUILT FOR THE WAY PEOPLE ACTUALLY GET DRESSED —
+              MYRA IS BEING BUILT FOR THE WAY PEOPLE ACTUALLY GET DRESSED:
               IN OUTFITS, FOR OCCASIONS, WITH INTENTION. A CURATED OUTFIT
               GENERATOR BUILT ON A CONSIDERED SET OF BRANDS, DESIGNED TO
               GIVE YOU CONFIDENCE IN WHAT YOU BUY AND HOW YOU WEAR IT.
@@ -156,17 +156,30 @@ export default async function LandingPage({
       {/* ── Our Partners ──────────────────────────────────────── */}
       <section className="bg-[#FAFAF8] pb-24 sm:pb-32 px-6 sm:px-10">
         <div className="max-w-5xl mx-auto text-center">
-          <p className="text-[10px] sm:text-[11px] tracking-[0.135em] text-[#6B6B6B] mb-10 sm:mb-14">
+          <p className="text-[10px] sm:text-[11px] tracking-[0.135em] text-[#6B6B6B] mb-4">
             OUR PARTNERS
           </p>
-          <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-7 sm:gap-x-16">
-            {['ISABEL MARANT', 'DIESEL', 'TWINSET', 'DEMELLIER LONDON', 'DA LUNA'].map((name) => (
-              <span
-                key={name}
-                className="text-[13px] sm:text-[15px] tracking-[0.16em] text-[#4A4E57] whitespace-nowrap"
-              >
-                {name}
-              </span>
+          <p className="text-[#4A4E57] tracking-[0.04em] sm:tracking-[0.045em] leading-[1.75] text-[clamp(12px,1.45vw,16px)] max-w-[640px] mx-auto mb-12 sm:mb-14">
+            WE HAND-SELECT BRANDS THAT VARY ACROSS PRICE POINTS BUT ULTIMATELY
+            COMPLEMENT ONE ANOTHER, OFFERING ENOUGH RANGE FOR CONTINUOUS DISCOVERY.
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-8 sm:gap-x-16">
+            {[
+              { name: 'Isabel Marant', src: '/partners/isabel-marant.svg', h: 'h-4 sm:h-6' },
+              { name: 'Diesel', src: '/partners/diesel.svg', h: 'h-8 sm:h-10' },
+              { name: 'Twinset', src: '/partners/twinset.png', h: 'h-4 sm:h-[22px]' },
+              { name: 'DeMellier London', src: '/partners/demellier.svg', h: 'h-3.5 sm:h-5' },
+              { name: 'Da Luna', src: '/partners/da-luna.png', h: 'h-5 sm:h-7' },
+              { name: 'Vivere London', src: '/partners/vivere.png', h: 'h-6 sm:h-8' },
+            ].map((b) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={b.name}
+                src={b.src}
+                alt={b.name}
+                loading="lazy"
+                className={`${b.h} w-auto object-contain opacity-90 hover:opacity-100 transition-opacity duration-300`}
+              />
             ))}
           </div>
         </div>
