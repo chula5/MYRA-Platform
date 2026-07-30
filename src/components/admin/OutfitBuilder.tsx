@@ -10,7 +10,7 @@ import StockBadge from '@/components/admin/StockBadge'
 import { analyseOutfit, type OutfitAnalysis, type DetectedItem } from '@/app/admin/ai/analyse-outfit'
 import { scrapeProductInfo } from '@/app/admin/ai/scrape-product'
 import { scrapeAndUploadToCloudinary } from '@/app/admin/items/cloudinary-upload'
-import { quickAddItemToOutfit, updateQuickItem, reorderOutfitItems, addItemToOutfit, searchItemInventory, updateOutfitTags } from '@/app/admin/projects/actions'
+import { quickAddItemToOutfit, updateQuickItem, reorderOutfitItems, addItemToOutfit, searchItemInventory, getInventoryFilterOptions, updateOutfitTags } from '@/app/admin/projects/actions'
 import { generateCanvaDeck } from '@/app/admin/projects/canva-actions'
 import { generateHiggsfieldShoot } from '@/app/admin/projects/higgsfield-actions'
 import { generateOccasionTags } from '@/app/admin/ai/occasion-tags'
@@ -559,21 +559,37 @@ INSTRUCTIONS:
   const [invSelectedSlot, setInvSelectedSlot] = useState<string>('top')
   const [invAddingIds, setInvAddingIds] = useState<Set<string>>(new Set())
   const [invError, setInvError] = useState<string | null>(null)
+  // Filters
+  const [invBrand, setInvBrand] = useState('')
+  const [invType, setInvType] = useState('')
+  const [invColour, setInvColour] = useState('')
+  const [invOptions, setInvOptions] = useState<{ brands: string[]; itemTypes: string[]; colours: string[] }>({ brands: [], itemTypes: [], colours: [] })
 
-  async function runInventorySearch(q: string) {
+  async function runInventorySearch() {
     setInvLoading(true)
-    const res = await searchItemInventory(q)
+    const res = await searchItemInventory({ query: invQuery, brand: invBrand, itemType: invType, colour: invColour })
     setInvLoading(false)
     if (res.error) { setInvError(res.error); return }
     setInvResults(res.data ?? [])
   }
 
-  // Load all items on open + re-search as user types (debounced)
+  // Load all items on open + re-search as query/filters change (debounced)
   useEffect(() => {
     if (!invOpen) return
-    const t = setTimeout(() => { runInventorySearch(invQuery) }, 200)
+    const t = setTimeout(() => { runInventorySearch() }, 200)
     return () => clearTimeout(t)
-  }, [invOpen, invQuery])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invOpen, invQuery, invBrand, invType, invColour])
+
+  // Load the filter dropdown options once when the picker first opens.
+  useEffect(() => {
+    if (!invOpen) return
+    if (invOptions.brands.length || invOptions.itemTypes.length || invOptions.colours.length) return
+    getInventoryFilterOptions().then((o) => {
+      if (!o.error) setInvOptions({ brands: o.brands, itemTypes: o.itemTypes, colours: o.colours })
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invOpen])
 
   // Map DB item_type to outfit slot so imported items dock into the right spot
   function slotForItemType(itemType: string): string {
@@ -1758,6 +1774,48 @@ INSTRUCTIONS:
                 onChange={(e) => setInvQuery(e.target.value)}
                 className={inputClass}
               />
+              {/* Brand / product type / colour filters */}
+              <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <select
+                  value={invBrand}
+                  onChange={(e) => setInvBrand(e.target.value)}
+                  className="border border-[#E2E0DB] rounded-[8px] px-3 py-2 text-[10px] tracking-[0.08em] text-[#4A4E57] bg-white focus:outline-none focus:border-[#0A0A0A]"
+                >
+                  <option value="">ALL BRANDS</option>
+                  {invOptions.brands.map((b) => (
+                    <option key={b} value={b}>{b.toUpperCase()}</option>
+                  ))}
+                </select>
+                <select
+                  value={invType}
+                  onChange={(e) => setInvType(e.target.value)}
+                  className="border border-[#E2E0DB] rounded-[8px] px-3 py-2 text-[10px] tracking-[0.08em] text-[#4A4E57] bg-white focus:outline-none focus:border-[#0A0A0A]"
+                >
+                  <option value="">ALL TYPES</option>
+                  {invOptions.itemTypes.map((t) => (
+                    <option key={t} value={t}>{t.replace(/_/g, ' ').toUpperCase()}</option>
+                  ))}
+                </select>
+                <select
+                  value={invColour}
+                  onChange={(e) => setInvColour(e.target.value)}
+                  className="border border-[#E2E0DB] rounded-[8px] px-3 py-2 text-[10px] tracking-[0.08em] text-[#4A4E57] bg-white focus:outline-none focus:border-[#0A0A0A]"
+                >
+                  <option value="">ALL COLOURS</option>
+                  {invOptions.colours.map((c) => (
+                    <option key={c} value={c}>{c.replace(/_/g, ' ').toUpperCase()}</option>
+                  ))}
+                </select>
+              </div>
+              {(invBrand || invType || invColour) && (
+                <button
+                  type="button"
+                  onClick={() => { setInvBrand(''); setInvType(''); setInvColour('') }}
+                  className="mt-2 text-[9px] tracking-[0.1em] text-[#B83A3A] hover:underline"
+                >
+                  CLEAR FILTERS ×
+                </button>
+              )}
               {invError && (
                 <p className="mt-2 text-[9px] tracking-[0.054em] text-red-500">{invError}</p>
               )}
@@ -1768,7 +1826,7 @@ INSTRUCTIONS:
                 <p className="text-[10px] tracking-[0.068em] text-[#A8A8A4] py-6 text-center">LOADING…</p>
               ) : invResults.length === 0 ? (
                 <p className="text-[10px] tracking-[0.068em] text-[#A8A8A4] py-6 text-center">
-                  {invQuery.trim() ? 'NO ITEMS FOUND.' : 'NO ITEMS IN INVENTORY YET.'}
+                  {invQuery.trim() || invBrand || invType || invColour ? 'NO ITEMS MATCH THESE FILTERS.' : 'NO ITEMS IN INVENTORY YET.'}
                 </p>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">

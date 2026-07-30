@@ -23,7 +23,8 @@ async function fetchReviewOptions(params: {
   present?: string[]
   exclude: string[]
   q: string
-}): Promise<{ options: ReviewItem[]; missingSlots?: string[] }> {
+  brand?: string
+}): Promise<{ options: ReviewItem[]; missingSlots?: string[]; brands?: { name: string; count: number }[] }> {
   const sp = new URLSearchParams()
   sp.set('mode', params.mode)
   sp.set('anchor', params.anchor)
@@ -31,6 +32,7 @@ async function fetchReviewOptions(params: {
   sp.set('exclude', params.exclude.join(','))
   if (params.slot) sp.set('slot', params.slot)
   if (params.present) sp.set('present', params.present.join(','))
+  if (params.brand) sp.set('brand', params.brand)
   try {
     const r = await fetch(`/api/admin/review-options?${sp.toString()}`, { cache: 'no-store' })
     if (!r.ok) return { options: [] }
@@ -196,6 +198,8 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
   const [swap, setSwap] = useState<SwapTarget | null>(null)
   const [swapOptions, setSwapOptions] = useState<ReviewItem[]>([])
   const [swapQuery, setSwapQuery] = useState('')
+  const [swapBrand, setSwapBrand] = useState('')
+  const [swapBrands, setSwapBrands] = useState<{ name: string; count: number }[]>([])
   const [swapLoading, setSwapLoading] = useState(false)
 
   useEffect(() => {
@@ -251,10 +255,12 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
   async function openSwap(candIdx: number, itemIdx: number, slot: string) {
     setSwap({ candIdx, itemIdx, slot, mode: 'swap' })
     setSwapQuery('')
+    setSwapBrand('')
     setSwapLoading(true)
     const exclude = [anchor.item_id, ...cands[candIdx].items.map((i) => i.item_id)]
     const res = await fetchReviewOptions({ mode: 'swap', anchor: anchor.item_id, slot, exclude, q: '' })
     setSwapOptions(res.options)
+    setSwapBrands(res.brands ?? [])
     setSwapLoading(false)
   }
 
@@ -263,25 +269,40 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
   async function openAdd(candIdx: number) {
     setSwap({ candIdx, itemIdx: -1, slot: '', mode: 'add' })
     setSwapQuery('')
+    setSwapBrand('')
     setSwapLoading(true)
     const exclude = [anchor.item_id, ...cands[candIdx].items.map((i) => i.item_id)]
     const present = cands[candIdx].items.map((i) => i.slot)
     const res = await fetchReviewOptions({ mode: 'add', anchor: anchor.item_id, present, exclude, q: '' })
     setSwapOptions(res.options)
+    setSwapBrands(res.brands ?? [])
     setSwapLoading(false)
   }
 
-  async function runSwapQuery(q: string) {
-    setSwapQuery(q)
+  // Re-run the current swap/add search with the given text query + brand filter.
+  async function runSwapSearch(q: string, brand: string) {
     if (!swap) return
     setSwapLoading(true)
     const exclude = [anchor.item_id, ...cands[swap.candIdx].items.map((i) => i.item_id)]
     const res =
       swap.mode === 'add'
-        ? await fetchReviewOptions({ mode: 'add', anchor: anchor.item_id, present: cands[swap.candIdx].items.map((i) => i.slot), exclude, q })
-        : await fetchReviewOptions({ mode: 'swap', anchor: anchor.item_id, slot: swap.slot, exclude, q })
+        ? await fetchReviewOptions({ mode: 'add', anchor: anchor.item_id, present: cands[swap.candIdx].items.map((i) => i.slot), exclude, q, brand })
+        : await fetchReviewOptions({ mode: 'swap', anchor: anchor.item_id, slot: swap.slot, exclude, q, brand })
     setSwapOptions(res.options)
+    // Keep the brand list in sync with the current text query (but not the
+    // brand filter itself — the server computes it before applying the filter).
+    setSwapBrands(res.brands ?? [])
     setSwapLoading(false)
+  }
+
+  function runSwapQuery(q: string) {
+    setSwapQuery(q)
+    void runSwapSearch(q, swapBrand)
+  }
+
+  function runSwapBrand(brand: string) {
+    setSwapBrand(brand)
+    void runSwapSearch(swapQuery, brand)
   }
 
   async function performSwap(opt: ReviewItem) {
@@ -441,12 +462,24 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
               </p>
               <button onClick={() => setSwap(null)} className="text-[#A8A8A4] hover:text-[#0A0A0A] text-[18px] leading-none">×</button>
             </div>
-            <input
-              value={swapQuery}
-              onChange={(e) => runSwapQuery(e.target.value)}
-              placeholder="SEARCH ANY ITEM BY NAME, BRAND OR TYPE…"
-              className="w-full border border-[#E2E0DB] rounded-[10px] px-4 py-2.5 text-[11px] tracking-[0.08em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] mb-4"
-            />
+            <div className="flex flex-col sm:flex-row gap-2 mb-4">
+              <input
+                value={swapQuery}
+                onChange={(e) => runSwapQuery(e.target.value)}
+                placeholder="SEARCH ANY ITEM BY NAME, BRAND OR TYPE…"
+                className="flex-1 border border-[#E2E0DB] rounded-[10px] px-4 py-2.5 text-[11px] tracking-[0.08em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A]"
+              />
+              <select
+                value={swapBrand}
+                onChange={(e) => runSwapBrand(e.target.value)}
+                className="sm:w-[200px] border border-[#E2E0DB] rounded-[10px] px-3 py-2.5 text-[11px] tracking-[0.08em] text-[#4A4E57] bg-white focus:outline-none focus:border-[#0A0A0A]"
+              >
+                <option value="">ALL BRANDS</option>
+                {swapBrands.map((b) => (
+                  <option key={b.name} value={b.name}>{b.name.toUpperCase()} ({b.count})</option>
+                ))}
+              </select>
+            </div>
             {swapLoading ? (
               <p className="text-[10px] tracking-[0.16em] text-[#A8A8A4] py-8 text-center">LOADING…</p>
             ) : (

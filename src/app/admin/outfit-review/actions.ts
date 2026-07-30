@@ -285,10 +285,11 @@ export async function getReviewAddOptions(
   presentSlots: string[],
   excludeItemIds: string[],
   query: string,
-): Promise<{ options: ReviewItem[]; missingSlots: string[] }> {
+  brand: string | null = null,
+): Promise<{ options: ReviewItem[]; missingSlots: string[]; brands: { name: string; count: number }[] }> {
   try {
     const anchor: any = await getItem(anchorItemId)
-    if (!anchor) return { options: [], missingSlots: [] }
+    if (!anchor) return { options: [], missingSlots: [], brands: [] }
     const anchorTier = anchor.brand?.price_tier ?? null
     const exclude = new Set(excludeItemIds)
     const q = query.trim().toLowerCase()
@@ -308,7 +309,11 @@ export async function getReviewAddOptions(
     }
     pool = pool.filter((it: any) => !tierBandViolation([anchorTier, it.brand?.price_tier ?? null]))
 
-    const options: ReviewItem[] = pool
+    const brands = brandsFromPool(pool)
+    const bf = (brand ?? '').trim().toLowerCase()
+    const filtered = bf ? pool.filter((it: any) => (it.brand?.name ?? '').trim().toLowerCase() === bf) : pool
+
+    const options: ReviewItem[] = filtered
       .map((it: any) => ({
         slot: slotForItemType(it.item_type),
         item_id: it.item_id,
@@ -323,11 +328,24 @@ export async function getReviewAddOptions(
       .sort((a, b) => b.compat - a.compat)
       .slice(0, 30)
 
-    return { options, missingSlots: missing }
+    return { options, missingSlots: missing, brands }
   } catch (err) {
     console.error('[getReviewAddOptions]', err)
-    return { options: [], missingSlots: [] }
+    return { options: [], missingSlots: [], brands: [] }
   }
+}
+
+// Distinct brands present in a pool, with counts, alphabetically. Used to
+// populate the swap/add brand filter dropdown.
+function brandsFromPool(pool: any[]): { name: string; count: number }[] {
+  const counts = new Map<string, number>()
+  for (const it of pool) {
+    const b = (it.brand?.name ?? '').trim()
+    if (b) counts.set(b, (counts.get(b) ?? 0) + 1)
+  }
+  return [...counts.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => a.name.localeCompare(b.name))
 }
 
 export async function getReviewSwapOptions(
@@ -335,10 +353,11 @@ export async function getReviewSwapOptions(
   slot: string,
   excludeItemIds: string[],
   query: string,
-): Promise<{ options: ReviewItem[] }> {
+  brand: string | null = null,
+): Promise<{ options: ReviewItem[]; brands: { name: string; count: number }[] }> {
   try {
     const anchor: any = await getItem(anchorItemId)
-    if (!anchor) return { options: [] }
+    if (!anchor) return { options: [], brands: [] }
     const exclude = new Set(excludeItemIds)
     const anchorTier = anchor.brand?.price_tier ?? null
     const q = query.trim().toLowerCase()
@@ -355,7 +374,13 @@ export async function getReviewSwapOptions(
 
     pool = pool.filter((it: any) => !tierBandViolation([anchorTier, it.brand?.price_tier ?? null]))
 
-    const options: ReviewItem[] = pool
+    // Brand list from the full (pre brand-filter) pool, so every brand stays
+    // selectable; then narrow to the chosen brand if one is set.
+    const brands = brandsFromPool(pool)
+    const bf = (brand ?? '').trim().toLowerCase()
+    const filtered = bf ? pool.filter((it: any) => (it.brand?.name ?? '').trim().toLowerCase() === bf) : pool
+
+    const options: ReviewItem[] = filtered
       .map((it: any) => ({
         slot: slotForItemType(it.item_type),
         item_id: it.item_id,
@@ -370,9 +395,9 @@ export async function getReviewSwapOptions(
       .sort((a, b) => b.compat - a.compat)
       .slice(0, 30)
 
-    return { options }
+    return { options, brands }
   } catch (err) {
     console.error('[getReviewSwapOptions]', err)
-    return { options: [] }
+    return { options: [], brands: [] }
   }
 }

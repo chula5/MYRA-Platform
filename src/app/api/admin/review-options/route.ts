@@ -21,15 +21,16 @@ export async function GET(req: NextRequest) {
   const mode = sp.get('mode') ?? 'swap'
   const anchor = sp.get('anchor') ?? ''
   const query = sp.get('q') ?? ''
+  const brand = sp.get('brand') ?? ''
   const exclude = (sp.get('exclude') ?? '').split(',').filter(Boolean)
 
   if (mode === 'add') {
     const present = (sp.get('present') ?? '').split(',').filter(Boolean)
-    const res = await getReviewAddOptions(anchor, present, exclude, query)
+    const res = await getReviewAddOptions(anchor, present, exclude, query, brand)
     return NextResponse.json(res)
   }
 
   const slot = sp.get('slot') ?? ''
-  const res = await getReviewSwapOptions(anchor, slot, exclude, query)
+  const res = await getReviewSwapOptions(anchor, slot, exclude, query, brand)
   return NextResponse.json(res)
 }

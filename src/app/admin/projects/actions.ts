@@ -365,7 +365,12 @@ export async function updateOutfitAgeRanges(
   }
 }
 
-export async function searchItemInventory(query: string): Promise<{
+export async function searchItemInventory(params: string | {
+  query?: string
+  brand?: string
+  itemType?: string
+  colour?: string
+}): Promise<{
   data?: Array<{
     item_id: string
     product_name: string
@@ -377,18 +382,31 @@ export async function searchItemInventory(query: string): Promise<{
   }>
   error?: string
 }> {
+  // Back-compat: a bare string is treated as the text query.
+  const p = typeof params === 'string' ? { query: params } : params
+  const query = (p.query ?? '').trim()
+  const brand = (p.brand ?? '').trim()
+  const itemType = (p.itemType ?? '').trim()
+  const colour = (p.colour ?? '').trim()
+
   const supabase = createAdminClient()
   try {
+    // An inner join on brand lets us filter items by brand name; without a brand
+    // filter we keep the regular (nullable) join so brand-less items still show.
+    const sel = brand
+      ? 'item_id, product_name, image_url, item_type, colour_family, price, currency, brand:brand_id!inner(name)'
+      : 'item_id, product_name, image_url, item_type, colour_family, price, currency, brand:brand_id(name)'
+
     let req = supabase
       .from('item')
-      .select('item_id, product_name, image_url, item_type, price, currency, brand:brand_id(name)')
+      .select(sel)
       .order('product_name', { ascending: true })
       .limit(50)
 
-    const q = query.trim()
-    if (q) {
-      req = req.ilike('product_name', `%${q}%`)
-    }
+    if (query) req = req.ilike('product_name', `%${query}%`)
+    if (itemType) req = req.eq('item_type', itemType)
+    if (colour) req = req.eq('colour_family', colour)
+    if (brand) req = req.eq('brand.name', brand)
 
     const { data, error } = await req
     if (error) throw error
@@ -407,6 +425,44 @@ export async function searchItemInventory(query: string): Promise<{
   } catch (err: unknown) {
     console.error('[searchItemInventory]', err)
     return { error: err instanceof Error ? err.message : 'Search failed' }
+  }
+}
+
+// Distinct brands / item types / colours across the whole item library, for the
+// inventory-picker filter dropdowns. Paged, since Supabase caps a response at 1000.
+export async function getInventoryFilterOptions(): Promise<{
+  brands: string[]
+  itemTypes: string[]
+  colours: string[]
+  error?: string
+}> {
+  const supabase = createAdminClient()
+  try {
+    const brands = new Set<string>()
+    const itemTypes = new Set<string>()
+    const colours = new Set<string>()
+    const PAGE = 1000
+    for (let from = 0; from < 50000; from += PAGE) {
+      const { data, error } = await supabase
+        .from('item')
+        .select('item_type, colour_family, brand:brand_id(name)')
+        .range(from, from + PAGE - 1)
+      if (error) throw error
+      for (const r of (data ?? []) as any[]) {
+        if (r.item_type) itemTypes.add(r.item_type)
+        if (r.colour_family) colours.add(r.colour_family)
+        if (r.brand?.name) brands.add(r.brand.name)
+      }
+      if (!data || data.length < PAGE) break
+    }
+    return {
+      brands: [...brands].sort((a, b) => a.localeCompare(b)),
+      itemTypes: [...itemTypes].sort((a, b) => a.localeCompare(b)),
+      colours: [...colours].sort((a, b) => a.localeCompare(b)),
+    }
+  } catch (err: unknown) {
+    console.error('[getInventoryFilterOptions]', err)
+    return { brands: [], itemTypes: [], colours: [], error: err instanceof Error ? err.message : 'Failed' }
   }
 }
 
