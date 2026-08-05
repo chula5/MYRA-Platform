@@ -1,8 +1,8 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import Image from 'next/image'
 import { useRouter } from 'next/navigation'
+import FallbackImage from '@/components/FallbackImage'
 import Hotspot from '@/components/hotspot/Hotspot'
 import ShopTheLookOverlay from '@/components/source-panel/ShopTheLookOverlay'
 import SaveHeartButton from '@/components/outfit-card/SaveHeartButton'
@@ -103,23 +103,21 @@ export default function OutfitCard({
         onClick={handleTap}
       >
         {slides.length === 0 ? (
-          <Image
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
             src="/placeholder-outfit.jpg"
             alt="Outfit"
-            fill
-            className="object-cover"
-            sizes="(max-width: 768px) 50vw, 33vw"
+            className="absolute inset-0 w-full h-full object-cover"
           />
         ) : (
           slides.map((slide, i) => (
-            <Image
+            <FallbackImage
               key={i}
               src={slide.src}
+              thumbWidth={640}
               alt={slide.alt}
-              fill
-              className={`object-cover transition-opacity duration-300 ${i === current ? 'opacity-100' : 'opacity-0'}`}
-              sizes="(max-width: 768px) 50vw, 33vw"
-              priority={i === 0}
+              loading={i === 0 ? 'eager' : 'lazy'}
+              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${i === current ? 'opacity-100' : 'opacity-0'}`}
             />
           ))
         )}

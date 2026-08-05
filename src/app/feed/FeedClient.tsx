@@ -10,7 +10,7 @@ import { recordTasteInteraction } from '@/app/edit/save-actions'
 import { recordSearchQuery, recordLandingEvent } from '@/app/actions/landing-analytics'
 import { getStoredRef } from '@/lib/ref'
 import { parseQuery, searchOutfits } from '@/lib/search-taxonomy'
-import { thumbUrl } from '@/lib/image-utils'
+import FallbackImage from '@/components/FallbackImage'
 import { brandLogo } from '@/lib/brand-logos'
 import BrandLogoTile from '@/components/BrandLogoTile'
 import NewArrivals, { byNewest } from '@/components/NewArrivals'
@@ -677,9 +677,9 @@ export default function FeedClient({
                   className="group relative shrink-0 w-[150px] sm:w-[170px]"
                 >
                   <div className="relative aspect-[3/4] w-full overflow-hidden bg-[#EDEDED]">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={o.image_url ? thumbUrl(o.image_url, 400) : '/placeholder-outfit.jpg'}
+                    <FallbackImage
+                      src={o.image_url}
+                      thumbWidth={400}
                       alt=""
                       loading="lazy"
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"

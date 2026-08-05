@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import type { OutfitWithItems } from '@/types/database'
-import { thumbUrl } from '@/lib/image-utils'
+import FallbackImage from '@/components/FallbackImage'
 
 /**
  * NEW ARRIVALS — an editorial row of live looks at deliberately varied sizes,
@@ -112,9 +112,9 @@ export default function NewArrivals({
             href={`${hrefBase}/${o.outfit_id}`}
             className={`group shrink-0 snap-start w-[70%] ${SHAPES[i % SHAPES.length]}`}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={thumbUrl(o.image_url, 700)}
+            <FallbackImage
+              src={o.image_url}
+              thumbWidth={700}
               alt=""
               loading="lazy"
               className="w-full h-auto block group-hover:opacity-85 transition-opacity duration-500"
