@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import Image from 'next/image'
+import FallbackImage from '@/components/FallbackImage'
 import { useRouter } from 'next/navigation'
 import Hotspot from '@/components/hotspot/Hotspot'
 import ShopTheLookOverlay from '@/components/source-panel/ShopTheLookOverlay'
@@ -11,7 +11,6 @@ import CoachTip from '@/components/CoachTip'
 import { createClient } from '@/lib/supabase'
 import { getRelatedOutfits, getStyleItemOutfits } from './related-actions'
 import { trackEngagement } from '@/lib/track'
-import { thumbUrl } from '@/lib/image-utils'
 import { toggleSaveItem } from '@/app/edit/save-actions'
 import ShopLink from '@/components/ShopLink'
 import { formatGbp } from '@/lib/currency'
@@ -411,7 +410,7 @@ export default function OutfitDetailClient({
               <ImageWithHotspots
                 key={currentImageUrl}
                 outfit={outfit}
-                imageUrl={thumbUrl(currentImageUrl, 1100)}
+                imageUrl={currentImageUrl}
                 activeItemLabel={safeIndex === 0 ? activeItemLabel : null}
                 onStyleItem={handleStyleItem}
                 showHotspots={safeIndex === 0}
@@ -580,8 +579,7 @@ export default function OutfitDetailClient({
                 }`}
                 aria-label={`View photo ${idx + 1}`}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={thumbUrl(url, 160)} alt={`Photo ${idx + 1}`} loading="lazy" className="w-full h-full object-cover" />
+                <FallbackImage src={url} thumbWidth={160} alt={`Photo ${idx + 1}`} loading="lazy" className="w-full h-full object-cover" />
               </button>
             ))}
           </div>
@@ -668,13 +666,11 @@ function ImageWithHotspots({
       onMouseEnter={() => setImageHovered(true)}
       onMouseLeave={() => setImageHovered(false)}
     >
-      <Image
+      <FallbackImage
         src={src}
+        thumbWidth={1100}
         alt={outfit.aesthetic_label}
-        fill
-        priority
-        className="object-contain"
-        sizes="(max-width: 768px) 100vw, 560px"
+        className="absolute inset-0 w-full h-full object-contain"
       />
 
       {showHotspots && (outfit.outfit_item ?? []).filter((oi) => oi.item != null).map((oi) => {
@@ -721,7 +717,7 @@ function ItemDetailView({
   linkBase: string
 }) {
   const router = useRouter()
-  const nextImg = item.image_url ? thumbUrl(item.image_url, 1000) : ''
+  const nextImg = item.image_url ?? ''
   // Re-trigger the soft cross-fade each time the shown item changes.
   const [entered, setEntered] = useState(false)
   // Two stacked layers so the previous product stays visible underneath while
@@ -821,10 +817,10 @@ function ItemDetailView({
           <div className="relative aspect-[3/4] w-full bg-[#F7F7F5] overflow-hidden">
             {/* Outgoing product — sits underneath, faded out by the new one. */}
             {back && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <FallbackImage
                 key={back}
                 src={back}
+                thumbWidth={1000}
                 alt=""
                 aria-hidden
                 className="absolute inset-0 w-full h-full object-contain"
@@ -832,10 +828,10 @@ function ItemDetailView({
             )}
             {/* Incoming product — fades in over the old one and settles in scale. */}
             {front && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <FallbackImage
                 key={front}
                 src={front}
+                thumbWidth={1000}
                 alt={item.product_name}
                 className="absolute inset-0 w-full h-full object-contain will-change-transform"
                 style={{
@@ -855,8 +851,7 @@ function ItemDetailView({
                 aria-label="Back to the full look"
                 className="absolute top-3 right-3 z-20 w-[58px] sm:w-[76px] aspect-[3/4] rounded-md overflow-hidden border border-white shadow-[0_2px_10px_rgba(0,0,0,0.18)] hover:shadow-[0_3px_14px_rgba(0,0,0,0.28)] transition-shadow duration-300"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={thumbUrl(outfitImage, 240)} alt="" loading="lazy" className="w-full h-full object-cover" />
+                <FallbackImage src={outfitImage} thumbWidth={240} alt="" loading="lazy" className="w-full h-full object-cover" />
               </button>
             )}
           </div>
@@ -905,9 +900,9 @@ function ItemDetailView({
                 >
                   <div className="relative aspect-[3/4] overflow-hidden rounded-md bg-[#F2F2F0]">
                     {o.image_url && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={thumbUrl(o.image_url, 240)}
+                      <FallbackImage
+                        src={o.image_url}
+                        thumbWidth={240}
                         alt={o.aesthetic_label ?? 'Look'}
                         loading="lazy"
                         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"

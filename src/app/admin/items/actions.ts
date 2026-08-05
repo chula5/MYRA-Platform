@@ -9,6 +9,7 @@ import {
   type Slot,
 } from '@/lib/composer'
 import type { ItemWithBrand } from '@/lib/admin-queries'
+import { isCloudinaryUrl, persistImageToCloudinary } from '@/lib/cloudinary-persist'
 
 // Supabase PostgrestError objects aren't Error instances, so the default
 // `err instanceof Error ? err.message : ...` pattern silently buries them as
@@ -320,11 +321,22 @@ export async function createOutfitFromSelectedItems(
 
     const aestheticLabel = `LIBRARY BUILD · ${cover.item.product_name.toUpperCase()}`
 
+    // Persist a non-Cloudinary cover photo (e.g. a raw retailer URL) to
+    // Cloudinary so the outfit's hero image survives hotlink/bot protection.
+    let displayImageUrl = cover.item.image_url
+    if (displayImageUrl && !isCloudinaryUrl(displayImageUrl)) {
+      const stable = await persistImageToCloudinary(displayImageUrl, {
+        folder: 'outfit-saves',
+        publicId: `anchor-${cover.item.item_id}`,
+      })
+      if (stable) displayImageUrl = stable
+    }
+
     // Create the outfit
     const { data: outfit, error: outfitErr } = await supabase
       .from('outfit')
       .insert([{
-        image_url: cover.item.image_url,
+        image_url: displayImageUrl,
         aesthetic_label: aestheticLabel,
         occasion_tags: [],
         source_brand_ids: allBrandIds,

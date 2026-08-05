@@ -1,7 +1,7 @@
 'use client'
 
-import { thumbUrl } from '@/lib/image-utils'
 import { useState } from 'react'
+import FallbackImage from '@/components/FallbackImage'
 import ShopLink from '@/components/ShopLink'
 import { formatGbp } from '@/lib/currency'
 import type { Item, Brand } from '@/types/database'
@@ -95,13 +95,13 @@ function ItemCard({
     <div className="relative w-full aspect-[3/4] overflow-hidden bg-[#EDEDED]">
       {/* Item photo (rectangle) */}
       {item.image_url && !imgFailed ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={thumbUrl(item.image_url, 500)}
+        <FallbackImage
+          src={item.image_url}
+          thumbWidth={500}
           alt={item.product_name}
           loading="lazy"
           className="absolute inset-0 w-full h-full object-cover"
-          onError={() => setImgFailed(true)}
+          onExhausted={() => setImgFailed(true)}
         />
       ) : (
         <div className="w-full h-full bg-[#E2E0DB] flex items-center justify-center">

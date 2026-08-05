@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useRef, useState } from 'react'
-import Image from 'next/image'
+import FallbackImage from '@/components/FallbackImage'
 import { useRouter } from 'next/navigation'
 import { BRAND_GROUPS, AGE_RANGES } from './brand-groups'
 import { saveOnboarding } from './actions'
@@ -308,13 +308,11 @@ export default function OnboardingFlow({
                         else { touchStartX.current = null; setDragX(0) }
                       }}
                     >
-                      <Image
-                        src={ratingOutfits[cardIdx].image || '/placeholder-outfit.jpg'}
+                      <FallbackImage
+                        src={ratingOutfits[cardIdx].image}
+                        thumbWidth={680}
                         alt={ratingOutfits[cardIdx].label}
-                        fill
-                        className="object-cover pointer-events-none"
-                        sizes="340px"
-                        priority
+                        className="absolute inset-0 w-full h-full object-cover pointer-events-none"
                       />
                       {/* Swipe hint overlays */}
                       {dragX > 30 && (
