@@ -2,9 +2,7 @@
 
 import { thumbUrl } from '@/lib/image-utils'
 import { useState } from 'react'
-import { recordItemClick } from '@/app/actions/item-click'
-import { getStoredRef } from '@/lib/ref'
-import { affiliateUrl } from '@/lib/affiliate'
+import ShopLink from '@/components/ShopLink'
 import { formatGbp } from '@/lib/currency'
 import type { Item, Brand } from '@/types/database'
 
@@ -32,12 +30,8 @@ export default function ShopTheLookOverlay({
   offsetTop?: boolean
 }) {
   const savedSet = new Set(savedItemIds)
-  // Just record the click — navigation is handled by the real <a> link so
-  // Skimlinks can rewrite it to an affiliate-tracked URL.
-  function shop(item: SourceItem) {
-    const label = [item.brand?.name, item.product_name].filter(Boolean).join(' — ')
-    recordItemClick(item.item_id, outfitId, getStoredRef(), label)
-  }
+  // Click logging + affiliate routing is handled entirely by ShopLink
+  // (redirect via /go/ for most merchants, beacon for Awin ones).
 
   return (
     <div className={`absolute left-2.5 z-30 w-[27%] max-w-[100px] sm:w-[34%] sm:max-w-[176px] overflow-y-auto pr-1 ${
@@ -68,7 +62,7 @@ export default function ShopTheLookOverlay({
           <ItemCard
             key={item.item_id}
             item={item}
-            onShop={() => shop(item)}
+            outfitId={outfitId}
             canSave={canSave}
             saved={savedSet.has(item.item_id)}
             onToggle={() => onToggleItem?.(item.item_id)}
@@ -81,13 +75,13 @@ export default function ShopTheLookOverlay({
 
 function ItemCard({
   item,
-  onShop,
+  outfitId,
   canSave,
   saved,
   onToggle,
 }: {
   item: SourceItem
-  onShop: () => void
+  outfitId?: string
   canSave: boolean
   saved: boolean
   onToggle: () => void
@@ -135,15 +129,13 @@ function ItemCard({
             <p className="text-white/90 text-[7px] sm:text-[8px] tracking-[0.03em] mt-0.5">{price || '—'}</p>
           </div>
           {item.retailer_url && (
-            <a
-              href={affiliateUrl(item.retailer_url, { brandName: item.brand?.name, contentId: item.item_id })}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => { e.stopPropagation(); onShop() }}
+            <ShopLink
+              item={item}
+              outfitId={outfitId}
               className="flex-shrink-0 text-white text-[7px] sm:text-[8px] tracking-[0.12em] uppercase underline underline-offset-2 hover:opacity-70 transition-opacity pb-0.5"
             >
               Shop
-            </a>
+            </ShopLink>
           )}
         </div>
       </div>

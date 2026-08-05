@@ -9,7 +9,7 @@ import {
   type WardrobeOutfit,
   type WardrobeItem,
 } from './save-actions'
-import { affiliateUrl } from '@/lib/affiliate'
+import ShopLink from '@/components/ShopLink'
 
 function fmtPrice(price: string | null, currency: string | null): string {
   if (!price) return ''
@@ -172,14 +172,12 @@ export default function Wardrobe() {
                             <div className="mt-auto flex items-center justify-between gap-2 pt-1">
                               <span className="text-[10px] text-[#4A4E57]">{fmtPrice(it.price, it.currency)}</span>
                               {it.retailer_url && (
-                                <a
-                                  href={affiliateUrl(it.retailer_url, { brandName: it.brand_name, contentId: it.item_id })}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
+                                <ShopLink
+                                  item={{ item_id: it.item_id, retailer_url: it.retailer_url, product_name: it.product_name, brand: { name: it.brand_name } }}
                                   className="bg-[#0A0A0A] text-white text-[8px] tracking-[0.06em] px-2 py-0.5 rounded hover:opacity-85 transition-opacity"
                                 >
                                   SHOP
-                                </a>
+                                </ShopLink>
                               )}
                             </div>
                           </div>

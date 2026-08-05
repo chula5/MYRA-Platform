@@ -13,10 +13,8 @@ import { getRelatedOutfits, getStyleItemOutfits } from './related-actions'
 import { trackEngagement } from '@/lib/track'
 import { thumbUrl } from '@/lib/image-utils'
 import { toggleSaveItem } from '@/app/edit/save-actions'
-import { affiliateUrl } from '@/lib/affiliate'
+import ShopLink from '@/components/ShopLink'
 import { formatGbp } from '@/lib/currency'
-import { recordItemClick } from '@/app/actions/item-click'
-import { getStoredRef } from '@/lib/ref'
 import type { OutfitWithItems, Item, Brand, ItemType } from '@/types/database'
 
 // Feature flag — hide the SIMILAR LOOKS / EXPLORE STYLES buttons on the
@@ -761,11 +759,6 @@ function ItemDetailView({
     item.colour_family,
   ].filter(Boolean) as string[]
 
-  const href = affiliateUrl(item.retailer_url, { brandName: item.brand?.name, contentId: item.item_id })
-  function onShop() {
-    const label = [item.brand?.name, item.product_name].filter(Boolean).join(' — ')
-    recordItemClick(item.item_id, outfitId, getStoredRef(), label)
-  }
   function onTouchStart(e: React.TouchEvent) { touchX.current = e.touches[0].clientX }
   function onTouchEnd(e: React.TouchEvent) {
     if (touchX.current === null) return
@@ -811,15 +804,13 @@ function ItemDetailView({
         )}
 
         {item.retailer_url && (
-          <a
-            href={href}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={onShop}
+          <ShopLink
+            item={item}
+            outfitId={outfitId}
             className="mt-8 inline-flex items-center justify-center w-full sm:w-auto sm:min-w-[300px] border border-[#0A0A0A] text-[#0A0A0A] px-8 py-4 text-[11px] tracking-[0.16em] uppercase hover:bg-[#0A0A0A] hover:text-white transition-colors duration-300"
           >
             Go to retailer website →
-          </a>
+          </ShopLink>
         )}
       </div>
 
