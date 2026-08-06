@@ -137,8 +137,17 @@ export default function OnboardingFlow({
           </button>
         </div>
       )}
-      <header className="flex items-center justify-center px-8 h-14 border-b border-[#E2E0DB]">
+      <header className="relative flex items-center justify-center px-8 h-14 border-b border-[#E2E0DB]">
         <p className="text-[13px] tracking-[0.135em] text-[#4A4E57]">MYRA</p>
+        {/* The quiz is optional — let users leave at any point and browse. */}
+        {!preview && (
+          <button
+            onClick={() => router.push('/edit')}
+            className="absolute right-6 sm:right-8 text-[9px] tracking-[0.09em] text-[#A8A8A4] hover:text-[#4A4E57] transition-colors"
+          >
+            SKIP FOR NOW →
+          </button>
+        )}
       </header>
 
       <div className="max-w-[760px] mx-auto px-6 py-12 sm:py-16">
