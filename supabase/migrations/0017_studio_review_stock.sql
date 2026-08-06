@@ -12,28 +12,63 @@
 --  · audit_log: every automated action (auto-swap, pause, archive, render).
 --  · stock_swap: swap history for undo / restock-restore links in emails.
 --  · email_log: sent-digest ledger (caps review digests at 2/day).
+--
+-- status columns may be Postgres ENUM types (outfit_status_enum et al.) or
+-- plain text with a CHECK constraint depending on how the base schema was
+-- created — the DO blocks below detect which and extend accordingly.
 
--- ── Outfit: new statuses + review/render bookkeeping ─────────────────────────
-alter table public.outfit drop constraint if exists outfit_status_check;
-alter table public.outfit
-  add constraint outfit_status_check check (status in (
-    'draft', 'in_review', 'live', 'archived',
-    'approved_rendering', 'render_failed', 'needs_desktop', 'paused'
-  ));
+-- ── Outfit: allow the new statuses ───────────────────────────────────────────
+do $$
+declare
+  t text;
+  v text;
+begin
+  select udt_name into t
+  from information_schema.columns
+  where table_schema = 'public' and table_name = 'outfit' and column_name = 'status';
 
+  if t is not null and exists (select 1 from pg_type where typname = t and typtype = 'e') then
+    -- Enum column → extend the enum type.
+    foreach v in array array['approved_rendering', 'render_failed', 'needs_desktop', 'paused'] loop
+      execute format('alter type public.%I add value if not exists %L', t, v);
+    end loop;
+  else
+    -- Text column → widen the check constraint.
+    execute 'alter table public.outfit drop constraint if exists outfit_status_check';
+    execute $c$alter table public.outfit add constraint outfit_status_check check (status in (
+      'draft', 'in_review', 'live', 'archived',
+      'approved_rendering', 'render_failed', 'needs_desktop', 'paused'
+    ))$c$;
+  end if;
+end $$;
+
+-- ── Item: allow out_of_stock ─────────────────────────────────────────────────
+do $$
+declare
+  t text;
+begin
+  select udt_name into t
+  from information_schema.columns
+  where table_schema = 'public' and table_name = 'item' and column_name = 'status';
+
+  if t is not null and exists (select 1 from pg_type where typname = t and typtype = 'e') then
+    execute format('alter type public.%I add value if not exists %L', t, 'out_of_stock');
+  else
+    execute 'alter table public.item drop constraint if exists item_status_check';
+    execute $c$alter table public.item add constraint item_status_check check (status in (
+      'draft', 'ready', 'live', 'archived', 'out_of_stock'
+    ))$c$;
+  end if;
+end $$;
+
+-- ── Outfit: review/render bookkeeping columns ────────────────────────────────
 alter table public.outfit
   add column if not exists composed_group_url text,          -- cached composed item-group image (review cards)
   add column if not exists review_confidence numeric,        -- cached composer coherence score at queue time
   add column if not exists paused_reason text,               -- e.g. 'item_out_of_stock:<item_id>'
   add column if not exists last_render_error text;
 
--- ── Item: out_of_stock status + strike tracking ──────────────────────────────
-alter table public.item drop constraint if exists item_status_check;
-alter table public.item
-  add constraint item_status_check check (status in (
-    'draft', 'ready', 'live', 'archived', 'out_of_stock'
-  ));
-
+-- ── Item: strike tracking ────────────────────────────────────────────────────
 alter table public.item
   add column if not exists oos_strikes int not null default 0,  -- consecutive OOS-indicating checks
   add column if not exists oos_since timestamptz,               -- when status flipped to out_of_stock
