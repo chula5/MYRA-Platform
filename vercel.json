@@ -2,5 +2,12 @@
   "framework": "nextjs",
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
-  "installCommand": "npm install"
+  "installCommand": "npm install",
+  "crons": [
+    { "path": "/api/cron/review-digest", "schedule": "0 7 * * *" },
+    { "path": "/api/cron/review-digest", "schedule": "0 12 * * *" },
+    { "path": "/api/cron/stock-sentinel", "schedule": "30 5 * * *" },
+    { "path": "/api/cron/stock-sentinel", "schedule": "30 17 * * *" },
+    { "path": "/api/cron/render-queue", "schedule": "*/15 * * * *" }
+  ]
 }
