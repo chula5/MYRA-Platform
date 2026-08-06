@@ -13,46 +13,37 @@
 --  · stock_swap: swap history for undo / restock-restore links in emails.
 --  · email_log: sent-digest ledger (caps review digests at 2/day).
 --
--- status columns may be Postgres ENUM types (outfit_status_enum et al.) or
--- plain text with a CHECK constraint depending on how the base schema was
--- created — the DO blocks below detect which and extend accordingly.
-
 -- ── Outfit: allow the new statuses ───────────────────────────────────────────
-do $$
-declare
-  t text;
-  v text;
-begin
-  select udt_name into t
-  from information_schema.columns
-  where table_schema = 'public' and table_name = 'outfit' and column_name = 'status';
-
-  if t is not null and exists (select 1 from pg_type where typname = t and typtype = 'e') then
-    -- Enum column → extend the enum type.
-    foreach v in array array['approved_rendering', 'render_failed', 'needs_desktop', 'paused'] loop
-      execute format('alter type public.%I add value if not exists %L', t, v);
-    end loop;
-  else
-    -- Text column → widen the check constraint.
-    execute 'alter table public.outfit drop constraint if exists outfit_status_check';
-    execute $c$alter table public.outfit add constraint outfit_status_check check (status in (
-      'draft', 'in_review', 'live', 'archived',
-      'approved_rendering', 'render_failed', 'needs_desktop', 'paused'
-    ))$c$;
-  end if;
-end $$;
+-- outfit.status is the enum type outfit_status_enum in the live database (the
+-- exact name Postgres reports in its error messages), so extend it directly —
+-- no detection, no CHECK constraints on an enum column.
+alter type outfit_status_enum add value if not exists 'approved_rendering';
+alter type outfit_status_enum add value if not exists 'render_failed';
+alter type outfit_status_enum add value if not exists 'needs_desktop';
+alter type outfit_status_enum add value if not exists 'paused';
 
 -- ── Item: allow out_of_stock ─────────────────────────────────────────────────
+-- item.status's type name isn't known for certain, so resolve the column's
+-- REAL type from the catalogs (unwrapping any domain) and extend it; fall back
+-- to a CHECK constraint only if the column is genuinely plain text.
 do $$
 declare
-  t text;
+  tid oid;
 begin
-  select udt_name into t
-  from information_schema.columns
-  where table_schema = 'public' and table_name = 'item' and column_name = 'status';
+  select a.atttypid into tid
+  from pg_attribute a
+  join pg_class c on c.oid = a.attrelid
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and c.relname = 'item' and a.attname = 'status'
+    and a.attnum > 0 and not a.attisdropped;
 
-  if t is not null and exists (select 1 from pg_type where typname = t and typtype = 'e') then
-    execute format('alter type public.%I add value if not exists %L', t, 'out_of_stock');
+  -- Unwrap domains to their base type.
+  while exists (select 1 from pg_type where oid = tid and typtype = 'd') loop
+    select typbasetype into tid from pg_type where oid = tid;
+  end loop;
+
+  if exists (select 1 from pg_type where oid = tid and typtype = 'e') then
+    execute format('alter type %s add value if not exists %L', tid::regtype, 'out_of_stock');
   else
     execute 'alter table public.item drop constraint if exists item_status_check';
     execute $c$alter table public.item add constraint item_status_check check (status in (
