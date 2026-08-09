@@ -156,12 +156,8 @@ export default async function LandingPage({
       {/* ── Our Partners ──────────────────────────────────────── */}
       <section className="bg-[#FAFAF8] pb-24 sm:pb-32 px-6 sm:px-10">
         <div className="max-w-5xl mx-auto text-center">
-          <p className="text-[10px] sm:text-[11px] tracking-[0.135em] text-[#6B6B6B] mb-4">
+          <p className="text-[10px] sm:text-[11px] tracking-[0.135em] text-[#6B6B6B] mb-12 sm:mb-14">
             OUR PARTNERS
-          </p>
-          <p className="text-[#4A4E57] tracking-[0.04em] sm:tracking-[0.045em] leading-[1.75] text-[clamp(12px,1.45vw,16px)] max-w-[640px] mx-auto mb-12 sm:mb-14">
-            WE HAND-SELECT BRANDS THAT VARY ACROSS PRICE POINTS BUT ULTIMATELY
-            COMPLEMENT ONE ANOTHER, OFFERING ENOUGH RANGE FOR CONTINUOUS DISCOVERY.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-8 sm:gap-x-16">
             {[
