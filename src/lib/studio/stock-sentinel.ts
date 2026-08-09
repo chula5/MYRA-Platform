@@ -33,6 +33,15 @@ import { writeAudit } from './audit'
 const OOS_STRIKES_REQUIRED = 2
 const ARCHIVE_AFTER_DAYS = 30
 
+// Circuit breaker. Pausing is the correct response to a dead item — a customer
+// must never click through to a sold-out product — but this runs unattended on
+// a cron, and a backlog (or a retailer-wide sale) can take down enough items to
+// empty most of the feed in a single pass. Once this many outfits have been
+// paused in one run, remaining down-items keep their strikes and are confirmed
+// on the next run instead, so the catalogue drains gradually and every run
+// reports what it deferred. Raise it if you'd rather it clear faster.
+const MAX_PAUSES_PER_RUN = 25
+
 export interface AutoSwapReport {
   outfitId: string
   outfitLabel: string
@@ -58,6 +67,8 @@ export interface SentinelReport {
   needsPick: NeedsPickReport[]
   backInStock: { id: string; name: string; restoreToken: string | null }[]
   archived: number
+  /** Confirmed-down items held back by the per-run pause cap; handled next run. */
+  deferred: number
 }
 
 // Supabase caps a single response at 1000 rows, so both queries below MUST be
@@ -83,8 +94,18 @@ async function fetchAllPages<T = any>(
   return all
 }
 
-// Items to check this run: LIVE items in ≥1 live outfit, plus every
-// out_of_stock item still inside its 30-day restock window. Stalest first.
+// Items to check this run: every item that appears in ≥1 LIVE outfit, plus
+// every out_of_stock item still inside its 30-day restock window. Stalest
+// first, so repeated runs rotate through the whole catalogue.
+//
+// Scope is defined by LIVE-OUTFIT MEMBERSHIP, not item.status. The spec said
+// "every item with status live", but MYRA's library keeps almost everything at
+// draft (1575 draft / 3 ready / 32 live) while 305 outfits are live — so
+// item.status reflects the admin's editing workflow, not what's publicly
+// shoppable. Filtering on it would have checked ~32 items instead of the
+// ~1500 actually reachable from live outfit pages, which is exactly the set
+// that matters: a dead link there is a customer hitting a sold-out product.
+// Archived items are still skipped.
 async function listItemsToCheck(maxItems: number): Promise<any[]> {
   const admin = createAdminClient()
 
@@ -101,7 +122,7 @@ async function listItemsToCheck(maxItems: number): Promise<any[]> {
     admin
       .from('item' as any)
       .select('item_id, product_name, retailer_url, status, stock_status, stock_checked_at, oos_strikes, oos_since, status_before_oos, image_url')
-      .in('status', ['live', 'out_of_stock'])
+      .neq('status', 'archived')
       .not('retailer_url', 'is', null)
       .neq('retailer_url', '')
       .order('stock_checked_at', { ascending: true, nullsFirst: true })
@@ -123,7 +144,7 @@ export async function runStockSentinel(
 
   const report: SentinelReport = {
     itemsChecked: 0, itemsDown: [], outfitsPaused: 0,
-    autoSwapped: [], needsPick: [], backInStock: [], archived: 0,
+    autoSwapped: [], needsPick: [], backInStock: [], archived: 0, deferred: 0,
   }
 
   const items = await listItemsToCheck(maxItems)
@@ -192,7 +213,17 @@ export async function runStockSentinel(
       continue
     }
 
-    // Two consecutive strikes — the item is genuinely down.
+    // Two consecutive strikes — the item is genuinely down. Unless the pause
+    // budget for this run is spent: bank the strike and confirm it next run,
+    // so a big backlog can't empty the feed in one pass.
+    if (report.outfitsPaused >= MAX_PAUSES_PER_RUN) {
+      await (admin.from('item') as any)
+        .update({ stock_status: 'out_of_stock', stock_checked_at: now, stock_signal: 'sentinel:oos-deferred', oos_strikes: strikes })
+        .eq('item_id', item.item_id)
+      report.deferred++
+      continue
+    }
+
     await (admin.from('item') as any)
       .update({
         status: 'out_of_stock',

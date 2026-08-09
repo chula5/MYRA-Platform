@@ -4,8 +4,17 @@
 //   2. never offer a quarantined item (ejection rules)
 //   3. never offer an item that creates a learned skip-combination with the
 //      rest of the outfit
-//   4. only status ready/live, and in stock (out_of_stock always excluded;
+//   4. usable status, and in stock (out_of_stock always excluded;
 //      unknown/never-checked passes — the sentinel keeps stock fresh)
+//
+// On "usable status": the spec said ready/live, but MYRA's real library keeps
+// almost everything at draft (1575 draft / 3 ready / 32 live) even when the
+// item is published inside a live outfit — item.status tracks the admin's
+// editing workflow, not public visibility. Allow-listing ready/live therefore
+// collapsed the candidate pool from ~1600 items to ~35 and made the swap sheet
+// return nothing. We exclude what's genuinely unusable instead (archived and
+// out_of_stock), which matches getReadyAndLiveItems() — the pool the composer
+// itself composes from.
 
 import 'server-only'
 import { getReadyAndLiveItems, type ItemWithBrand } from '@/lib/admin-queries'
@@ -33,9 +42,12 @@ export interface SwapCandidateOpts {
   library?: ItemWithBrand[]
 }
 
-function inStock(item: ItemWithBrand): boolean {
-  const s = (item as any).stock_status as string | null
-  return s !== 'out_of_stock' && (item as any).status !== 'out_of_stock'
+const UNUSABLE_STATUSES = new Set(['archived', 'out_of_stock'])
+
+function usable(item: ItemWithBrand): boolean {
+  const status = String((item as any).status ?? '')
+  const stock = (item as any).stock_status as string | null
+  return !UNUSABLE_STATUSES.has(status) && stock !== 'out_of_stock'
 }
 
 export async function getSwapCandidates(opts: SwapCandidateOpts): Promise<SwapCandidate[]> {
@@ -51,8 +63,7 @@ export async function getSwapCandidates(opts: SwapCandidateOpts): Promise<SwapCa
     .filter((it) =>
       !usedIds.has(it.item_id) &&
       slotForItemType(it.item_type) === slot &&
-      ['ready', 'live'].includes(String((it as any).status)) &&
-      inStock(it) &&
+      usable(it) &&
       !isQuarantined(guards, it.item_id, anchorItemId) &&
       !createsSkipCombination(guards, it, remaining),
     )
