@@ -12,6 +12,7 @@
 
 import { NextResponse } from 'next/server'
 import { createServerClient, createAdminClient } from '@/lib/supabase-server'
+import { rendererAvailable } from '@/lib/studio/render-queue'
 
 export const dynamic = 'force-dynamic'
 
@@ -120,6 +121,10 @@ export async function GET() {
       .order('finished_at', { ascending: false })
       .limit(5)
     renders = {
+      // False on Vercel by design: the Higgsfield CLI isn't in the serverless
+      // bundle, so jobs wait here and are drained from a machine where it's
+      // logged in (localhost:3000/api/cron/render-queue).
+      rendererAvailableHere: rendererAvailable(),
       queued: await countOf('render_job', (q) => q.eq('status', 'queued')),
       running: await countOf('render_job', (q) => q.eq('status', 'running')),
       done: await countOf('render_job', (q) => q.eq('status', 'done')),
