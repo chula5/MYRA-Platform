@@ -171,6 +171,7 @@ export default async function LandingPage({
               { name: 'DeMellier London', src: '/partners/demellier.svg', h: 'h-3.5 sm:h-5' },
               { name: 'Da Luna', src: '/partners/da-luna.png', h: 'h-5 sm:h-7' },
               { name: 'Vivere London', src: '/partners/vivere.png', h: 'h-6 sm:h-8' },
+              { name: 'Cami NYC', src: '/partners/cami-nyc.png', h: 'h-4 sm:h-6' },
             ].map((b) => (
               // eslint-disable-next-line @next/next/no-img-element
               <img
