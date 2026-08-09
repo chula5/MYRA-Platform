@@ -164,6 +164,11 @@ interface GenerateOpts {
   // composer builds/keeps combos she'd approve — not just re-ranks afterward.
   learnedBonus?: (items: { item: ItemWithBrand; slot: Slot }[]) => number
   learnedBlend?: number
+  // HOUSE STYLE CONSTITUTION hook. Runs BEFORE any scoring — a candidate that
+  // breaks a hard constraint (statement budget, echo rule, silhouette balance,
+  // colour cap, price integrity…) is discarded, never ranked. Written rules
+  // override learned statistics, so this gate sits ahead of learnedBonus.
+  houseGate?: (items: { item: ItemWithBrand; slot: Slot }[]) => boolean
 }
 
 export function generateCandidates(opts: GenerateOpts): ComposerCandidate[] {
@@ -176,6 +181,7 @@ export function generateCandidates(opts: GenerateOpts): ComposerCandidate[] {
     excludeItemIds = [],
     learnedBonus,
     learnedBlend = 0,
+    houseGate,
   } = opts
 
   const anchorSlot = slotForItemType(anchor.item_type)
@@ -232,6 +238,10 @@ export function generateCandidates(opts: GenerateOpts): ComposerCandidate[] {
     // Coverage gate — every required slot must be filled.
     const filledSlots = new Set(items.map(i => i.slot))
     if (!plan.required.every(s => filledSlots.has(s))) continue
+
+    // House Style Constitution FIRST — before coherence, before learned taste.
+    // A candidate that breaks a hard rule is never scored at all.
+    if (houseGate && !houseGate(items)) continue
 
     const base = scoreCombo(anchor, items)
     if (base < minScore) continue // coherence gate stays on the hand-tuned score

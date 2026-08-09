@@ -78,6 +78,9 @@ export async function getLookbookOutfits(limit = 9): Promise<Outfit[]> {
 }
 
 // ── Style Item: outfits containing a specific item ────────────
+// STYLING SETS FIRST: the other live variants from the same styling set are the
+// most faithful "same piece, styled differently" — surfaced before any
+// vector-similar outfits from elsewhere.
 export async function getOutfitsForItem(
   itemId: string,
   excludeOutfitId: string,
@@ -85,7 +88,27 @@ export async function getOutfitsForItem(
 ): Promise<Outfit[]> {
   const supabase = createClient()
 
-  // Join via outfit_item to find outfits containing this item
+  const { data: currentOutfit } = await supabase
+    .from('outfit')
+    .select('styling_set_id' as any)
+    .eq('outfit_id', excludeOutfitId)
+    .maybeSingle()
+  const setId = (currentOutfit as any)?.styling_set_id as string | null
+
+  let setVariants: Outfit[] = []
+  if (setId) {
+    const { data: sameSet } = await supabase
+      .from('outfit')
+      .select('*')
+      .eq('styling_set_id' as any, setId)
+      .eq('status', 'live')
+      .neq('outfit_id', excludeOutfitId)
+      .limit(limit)
+    setVariants = ((sameSet ?? []) as unknown) as Outfit[]
+  }
+  if (setVariants.length >= limit) return setVariants.slice(0, limit)
+
+  // Then: other live outfits containing this item.
   const { data: outfitItems, error: joinError } = await supabase
     .from('outfit_item')
     .select('outfit_id')
@@ -93,9 +116,11 @@ export async function getOutfitsForItem(
     .neq('outfit_id', excludeOutfitId)
     .limit(limit * 2)
 
-  if (joinError || !outfitItems?.length) return []
+  if (joinError || !outfitItems?.length) return setVariants
 
-  const outfitIds = outfitItems.map((oi) => oi.outfit_id)
+  const seen = new Set(setVariants.map((o) => o.outfit_id))
+  const outfitIds = outfitItems.map((oi) => oi.outfit_id).filter((id) => !seen.has(id))
+  if (!outfitIds.length) return setVariants
 
   const { data, error } = await supabase
     .from('outfit')
@@ -106,10 +131,42 @@ export async function getOutfitsForItem(
 
   if (error) {
     console.error('getOutfitsForItem error:', error)
-    return []
+    return setVariants
   }
 
-  return data ?? []
+  return [...setVariants, ...(((data ?? []) as unknown) as Outfit[])].slice(0, limit)
+}
+
+// ── "Styled N ways" ───────────────────────────────────────────
+// Count of LIVE outfits each item appears in — the sourcing panel's
+// "styled N ways" tag. One round trip for a whole panel of items.
+export async function getStyledWaysCounts(itemIds: string[]): Promise<Record<string, number>> {
+  if (!itemIds.length) return {}
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('outfit_item')
+    .select('item_id, outfit:outfit_id(status)')
+    .in('item_id', itemIds)
+    .limit(2000)
+  if (error) return {}
+  const counts: Record<string, number> = {}
+  for (const r of (data ?? []) as any[]) {
+    if (r.outfit?.status !== 'live') continue
+    counts[r.item_id] = (counts[r.item_id] ?? 0) + 1
+  }
+  return counts
+}
+
+// ── Live stylists (the feed's stylist-lens selector) ──────────
+export async function getLiveStylists(): Promise<{ stylist_id: string; name: string; slug: string }[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('stylist' as any)
+    .select('stylist_id, name, slug')
+    .eq('status', 'live')
+    .order('created_at', { ascending: true })
+  if (error) return []
+  return ((data ?? []) as unknown) as { stylist_id: string; name: string; slug: string }[]
 }
 
 // ── Similar looks ─────────────────────────────────────────────

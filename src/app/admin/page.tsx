@@ -1,6 +1,8 @@
 import { getAdminStats } from '@/lib/admin-queries'
 import { createServerClient } from '@/lib/supabase-server'
 import StockSweepButton from '@/components/admin/StockSweepButton'
+import { getStylistBySlug, loadAutonomy } from '@/lib/stylist-store'
+import { autonomyProgress } from '@/lib/autonomy'
 
 export default async function AdminDashboard() {
   const stats = await getAdminStats()
@@ -10,6 +12,10 @@ export default async function AdminDashboard() {
     .from('waitlist')
     .select('*', { count: 'exact', head: true })
 
+  // Autonomy graduation — shown prominently: the current publishing stage.
+  const chloe = await getStylistBySlug('chloe')
+  const autonomy = chloe ? autonomyProgress(await loadAutonomy(chloe.stylist_id)) : null
+
   return (
     <div>
       {/* Header */}
@@ -17,6 +23,45 @@ export default async function AdminDashboard() {
         <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-2">MYRA ADMIN STUDIO</p>
         <h1 className="text-[28px] tracking-[0.045em] text-[#4A4E57]">DASHBOARD</h1>
       </div>
+
+      {/* Autonomy graduation tracker */}
+      {autonomy && (
+        <div className="mb-8 border border-[#0A0A0A] bg-white rounded-[14px] p-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="text-[9px] tracking-[0.2em] text-[#C4A882] mb-1">AUTONOMY · STAGE {autonomy.stage} OF 3</p>
+              <p className="text-[20px] tracking-[0.06em] text-[#0A0A0A]">{autonomy.stageLabel}</p>
+              <p className="text-[10px] tracking-[0.05em] text-[#6B6B6B] mt-1 max-w-xl leading-relaxed">{autonomy.nextTrigger}</p>
+            </div>
+            <div className="flex items-center gap-6">
+              <div className="text-center">
+                <p className="text-[24px] tracking-[0.03em] text-[#4A4E57] leading-none">
+                  {autonomy.streak}<span className="text-[#A8A8A4]">/{autonomy.streakTarget}</span>
+                </p>
+                <p className="text-[8px] tracking-[0.14em] text-[#A8A8A4] mt-1">CLEAN STREAK</p>
+              </div>
+              <div className="text-center">
+                <p className={`text-[24px] tracking-[0.03em] leading-none ${autonomy.swapRate >= autonomy.swapRateCeiling ? 'text-[#B83A3A]' : 'text-[#4A4E57]'}`}>
+                  {Math.round(autonomy.swapRate * 100)}%
+                </p>
+                <p className="text-[8px] tracking-[0.14em] text-[#A8A8A4] mt-1">TRAILING SWAP RATE</p>
+              </div>
+              {autonomy.stage >= 2 && (
+                <a href="/admin/audit" className="bg-[#0A0A0A] text-white px-5 py-2.5 text-[10px] tracking-[0.14em] rounded-full hover:opacity-85 transition-opacity">
+                  OPEN AUDIT →
+                </a>
+              )}
+            </div>
+          </div>
+          {/* Streak progress bar */}
+          <div className="mt-4 h-[5px] bg-[#F2F2F0] rounded-full overflow-hidden">
+            <div
+              className="h-full bg-[#C4A882] rounded-full transition-all"
+              style={{ width: `${Math.min(100, (autonomy.streak / autonomy.streakTarget) * 100)}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Stock alert — only shown when there's something to fix */}
       {stats.outOfStockItems + stats.lowStockItems > 0 && (
@@ -154,6 +199,11 @@ export default async function AdminDashboard() {
           title="OUTFIT REVIEW"
           description="Review composed outfits before they go live — approve, adjust, or reject each look."
           href="/admin/outfit-review"
+        />
+        <StudioCard
+          title="PIPELINE"
+          description="Self-critiquing composer queue — outfits are vector-scored and confidence-gated before review. Fast lane for one-tap approvals, standard lane with reasons."
+          href="/admin/pipeline"
         />
         <StudioCard
           title="EXTRA STYLE OUTFITS"

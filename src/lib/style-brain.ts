@@ -30,11 +30,15 @@ export interface StyleModel {
   skips: number
   singles: Record<string, [number, number]>  // key -> [approve, skip]
   pairs: Record<string, [number, number]>
+  // Times each feature was OFFERED (shown as a candidate), so house-style stats
+  // can be approval RATES (approvals / times offered), not raw counts.
+  offers: Record<string, number>
+  offerCount: number
   updatedAt?: string
 }
 
 export function emptyModel(): StyleModel {
-  return { version: 1, decisions: 0, approves: 0, skips: 0, singles: {}, pairs: {} }
+  return { version: 1, decisions: 0, approves: 0, skips: 0, singles: {}, pairs: {}, offers: {}, offerCount: 0 }
 }
 
 const norm = (s: unknown) =>
@@ -100,6 +104,28 @@ export function applyDecision(
   if (decision === 'approve') model.approves += weight
   else model.skips += weight
   return model
+}
+
+// Fold one OFFER (a candidate shown to Chloe) into the model. Every offered
+// candidate bumps its features' offered counts; approvals divided by these
+// give true approval rates.
+export function applyOffer(model: StyleModel, items: FeatureItem[]): StyleModel {
+  const { singles, pairs } = extractFeatures(items)
+  if (!model.offers) model.offers = {}
+  for (const k of [...singles, ...pairs]) model.offers[k] = (model.offers[k] ?? 0) + 1
+  model.offerCount = (model.offerCount ?? 0) + 1
+  return model
+}
+
+// Approval rate for a feature: approvals / times offered. Falls back to
+// approvals / (approvals + skips) when offer tracking predates the feature.
+export function approvalRate(model: StyleModel, key: string): { rate: number; approvals: number; offered: number } | null {
+  const cell = model.singles[key] ?? model.pairs[key]
+  if (!cell) return null
+  const [a, s] = cell
+  const offered = Math.max(model.offers?.[key] ?? 0, a + s)
+  if (offered <= 0) return null
+  return { rate: a / offered, approvals: a, offered }
 }
 
 // Smoothed affinity in (-1, 1): positive = approved more than skipped.
@@ -176,48 +202,52 @@ export function buildHouseStyle(model: StyleModel): string {
   L.push(`_Learned from ${Math.round(model.approves)} approvals and ${Math.round(model.skips)} skips._`)
   L.push('')
 
-  // Most-approved brands
-  const brands = Object.entries(model.singles)
-    .filter(([k]) => k.startsWith('brand:'))
-    .map(([k, v]) => ({ name: prettySingleValue(k), a: v[0], s: v[1] }))
-    .sort((x, y) => y.a - x.a)
-    .slice(0, 12)
+  // All stats are approval RATES — approvals / times offered — so a brand that
+  // is offered constantly but rarely kept ranks below one you keep every time.
+  const rateLine = (key: string) => {
+    const r = approvalRate(model, key)
+    if (!r) return null
+    return `${Math.round(r.rate * 100)}% approval (${Math.round(r.approvals)} of ${Math.round(r.offered)} offered)`
+  }
+  const topByRate = (prefix: string, minOffered: number, limit: number) =>
+    Object.keys(model.singles)
+      .filter((k) => k.startsWith(prefix))
+      .map((k) => ({ k, r: approvalRate(model, k) }))
+      .filter((x): x is { k: string; r: NonNullable<ReturnType<typeof approvalRate>> } => !!x.r && x.r.offered >= minOffered)
+      .sort((x, y) => y.r.rate - x.r.rate || y.r.approvals - x.r.approvals)
+      .slice(0, limit)
+
+  const brands = topByRate('brand:', 2, 12)
   if (brands.length) {
     L.push('## Brands you reach for')
-    brands.forEach((b) => L.push(`- **${b.name}** — ${Math.round(b.a)} approvals`))
+    brands.forEach((b) => L.push(`- **${prettySingleValue(b.k)}** — ${rateLine(b.k)}`))
     L.push('')
   }
 
-  // Most-approved colours + piece types (what shows up in looks you keep).
-  const topSingles = (prefix: string) => Object.entries(model.singles)
-    .filter(([k]) => k.startsWith(prefix))
-    .map(([k, v]) => ({ name: prettySingleValue(k), a: v[0] }))
-    .sort((x, y) => y.a - x.a)
-    .slice(0, 10)
-  const colours = topSingles('colour:')
+  const colours = topByRate('colour:', 2, 10)
   if (colours.length) {
     L.push('## Colours in your outfits')
-    colours.forEach((c) => L.push(`- **${c.name}** — ${Math.round(c.a)} approvals`))
+    colours.forEach((c) => L.push(`- **${prettySingleValue(c.k)}** — ${rateLine(c.k)}`))
     L.push('')
   }
-  const types = topSingles('type:')
+  const types = topByRate('type:', 2, 10)
   if (types.length) {
     L.push('## Pieces you build around')
-    types.forEach((t) => L.push(`- **${t.name.replace(/_/g, ' ')}** — ${Math.round(t.a)} approvals`))
+    types.forEach((t) => L.push(`- **${prettySingleValue(t.k).replace(/_/g, ' ')}** — ${rateLine(t.k)}`))
     L.push('')
   }
 
   const brandPairs = topByAffinity(model.pairs, 'brand:', 2, 1, 10)
   if (brandPairs.length) {
     L.push('## Brand pairings that work')
-    brandPairs.forEach((p) => L.push(`- ${prettyPairValue(p.k)}`))
+    brandPairs.forEach((p) => L.push(`- ${prettyPairValue(p.k)}${rateLine(p.k) ? ` — ${rateLine(p.k)}` : ''}`))
     L.push('')
   }
 
   const colourPairs = topByAffinity(model.pairs, 'colour:', 2, 1, 10)
   if (colourPairs.length) {
     L.push('## Colour combinations you favour')
-    colourPairs.forEach((p) => L.push(`- ${prettyPairValue(p.k)}`))
+    colourPairs.forEach((p) => L.push(`- ${prettyPairValue(p.k)}${rateLine(p.k) ? ` — ${rateLine(p.k)}` : ''}`))
     L.push('')
   }
 
@@ -241,6 +271,7 @@ export function buildHouseStyle(model: StyleModel): string {
   const avoid = [...topByAffinity(model.pairs, 'colour:', 2, -1, 5), ...topByAffinity(model.pairs, 'type:', 2, -1, 5)]
   if (avoid.length) {
     L.push('## Combinations you tend to skip')
+    L.push('_Enforced as hard constraints — the composer never proposes an outfit containing one._')
     avoid.forEach((p) => L.push(`- ${prettyPairValue(p.k)}`))
     L.push('')
   }

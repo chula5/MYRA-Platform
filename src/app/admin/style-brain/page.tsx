@@ -1,13 +1,21 @@
 import { loadStyleModel, loadHouseStyle, loadDecisionStats, loadCatalogueBalance, loadTasteSpread, loadRecentSwaps, loadSiteTasteProfile } from '@/lib/style-brain-store'
 import { buildHouseStyle } from '@/lib/style-brain'
+import { loadQuarantinedItems, loadSwapRules, loadPipelineConfig } from '@/lib/pipeline-store'
+import { loadLatestCalibrationReport } from '@/lib/calibration'
+import { CONSTITUTION_ARTICLES } from '@/lib/house-style'
+import { loadHouseRejectionStats, loadMaterialPairTable, loadSelectionStats } from '@/lib/house-style-store'
+import { loadFlaggedRenders } from '@/app/admin/ai/render-fidelity'
 import RecomputeButton from './RecomputeButton'
+import { QuarantinePanel, ReportButton } from './QuarantinePanel'
 import TasteRadar from '@/components/admin/TasteRadar'
 
 export const dynamic = 'force-dynamic'
 
 export default async function StyleBrainPage() {
-  const [model, house, stats, balance, spread, swaps, taste] = await Promise.all([
+  const [model, house, stats, balance, spread, swaps, taste, quarantine, swapRules, pipelineCfg, calibration, houseRejects, pairTable, flaggedRenders, selectionStats] = await Promise.all([
     loadStyleModel(), loadHouseStyle(), loadDecisionStats(), loadCatalogueBalance(), loadTasteSpread(), loadRecentSwaps(), loadSiteTasteProfile(),
+    loadQuarantinedItems(), loadSwapRules(12), loadPipelineConfig(), loadLatestCalibrationReport(),
+    loadHouseRejectionStats(30), loadMaterialPairTable(20), loadFlaggedRenders(8), loadSelectionStats(),
   ])
   const learnedPairs = Object.keys(model.pairs).length
   const tableReady = house.ready
@@ -140,6 +148,139 @@ export default async function StyleBrainPage() {
         </div>
       )}
 
+      {/* ── HOUSE STYLE CONSTITUTION ── */}
+      <div className="border border-[#0A0A0A] bg-white rounded-[12px] p-7 mb-6">
+        <p className="text-[10px] tracking-[0.113em] text-[#6B6B6B] mb-1">HOUSE STYLE CONSTITUTION</p>
+        <p className="text-[9px] tracking-[0.06em] text-[#A8A8A4] mb-5 max-w-[720px] leading-relaxed">
+          Generative principles and hard constraints applied BEFORE vector scoring — the composer builds from
+          these, then the confidence gate scores the result. Written rules override learned statistics.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
+          {CONSTITUTION_ARTICLES.map((a) => (
+            <div key={a.title}>
+              <p className="text-[10px] tracking-[0.12em] text-[#4A4E57] mb-1.5">{a.title.toUpperCase()}</p>
+              {a.rules.map((r, i) => (
+                <p key={i} className="text-[10px] tracking-[0.03em] text-[#6B6B6B] leading-relaxed pl-3">· {r}</p>
+              ))}
+            </div>
+          ))}
+        </div>
+
+        {/* Why candidates were rejected before scoring (last 30 days) */}
+        {houseRejects.length > 0 && (
+          <div className="mt-6 border-t border-[#F2F2F2] pt-5">
+            <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B] mb-3">RULES DOING THE MOST WORK · LAST 30 DAYS</p>
+            <div className="flex flex-wrap gap-2">
+              {houseRejects.slice(0, 10).map((r) => (
+                <span key={r.code} className="border border-[#E2E0DB] rounded-full px-3 py-1 text-[9px] tracking-[0.06em] text-[#6B6B6B]">
+                  {(r.rule ?? r.code).toUpperCase()} <span className="text-[#C4A882]">×{r.count}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Learned material pairing table */}
+        {pairTable.length > 0 && (
+          <div className="mt-6 border-t border-[#F2F2F2] pt-5">
+            <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B] mb-3">MATERIAL PAIRINGS LEARNED FROM YOUR DECISIONS</p>
+            <div className="space-y-1">
+              {pairTable.map((p) => (
+                <div key={p.pair_key} className="flex items-center gap-3 text-[10px] tracking-[0.04em]">
+                  <span className="text-[#4A4E57] w-[180px] truncate">{p.family_a} + {p.family_b}</span>
+                  <span className="text-[#3D7A50]">{p.approvals} kept</span>
+                  <span className="text-[#B83A3A]">{p.rejections} swapped out</span>
+                  {p.verdict && <span className="text-[8px] tracking-[0.1em] text-[#C4A882]">{p.verdict.toUpperCase()}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Collection selection signal */}
+        {selectionStats && selectionStats.total > 0 && (
+          <div className="mt-6 border-t border-[#F2F2F2] pt-5">
+            <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B] mb-1">COLLECTION SELECTION SIGNAL</p>
+            <p className="text-[9px] tracking-[0.06em] text-[#A8A8A4] mb-3">
+              WHAT YOU INGEST VS PASS OVER WHEN SCANNING COLLECTIONS — {selectionStats.selected} OF {selectionStats.total} CANDIDATES TAKEN ({Math.round(selectionStats.rate * 100)}%)
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {selectionStats.byBrand.slice(0, 8).map((b) => (
+                <span key={b.brand} className="border border-[#E2E0DB] rounded-full px-3 py-1 text-[9px] tracking-[0.06em] text-[#6B6B6B]">
+                  {b.brand.toUpperCase()} {b.taken}/{b.offered}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Renders that failed the fidelity check twice */}
+      {flaggedRenders.length > 0 && (
+        <div className="border border-[#E8B4B4] bg-[#FBF0F0] rounded-[12px] p-6 mb-6">
+          <p className="text-[10px] tracking-[0.099em] text-[#9A4A4A] mb-1">RENDERS FLAGGED — FAILED THE FIDELITY CHECK TWICE</p>
+          <p className="text-[9px] tracking-[0.06em] text-[#9A4A4A]/75 mb-4 max-w-[720px] leading-relaxed">
+            These Higgsfield renders misrepresented the clothes (colour, silhouette, cut or length) on both
+            attempts, so they were NOT promoted to the outfit&rsquo;s display image. Open the outfit to re-shoot or fix manually.
+          </p>
+          <div className="space-y-2">
+            {flaggedRenders.map((r) => (
+              <div key={r.image_url} className="text-[10px] tracking-[0.04em] text-[#6B6B6B]">
+                <a href={`/outfit/${r.outfit_id}`} className="text-[#4A4E57] underline">OUTFIT {r.outfit_id.slice(0, 8)}</a>
+                {r.issues.slice(0, 2).map((iss, i) => (
+                  <span key={i}> · {iss.item}: {iss.field} — expected {iss.expected}, saw {iss.seen}</span>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Quarantine — the "retire or keep?" list */}
+      <QuarantinePanel items={quarantine} />
+
+      {/* Directional swap rules learned from ejection deltas */}
+      {swapRules.length > 0 && (
+        <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6 mb-6">
+          <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B] mb-1">SWAP RULES LEARNED</p>
+          <p className="text-[8px] tracking-[0.063em] text-[#A8A8A4] mb-4">
+            THE DIRECTION YOUR SWAPS KEEP MOVING IN, PER SLOT AND FORMALITY — E.G. COLOUR: CREAM → BLACK IN DRESSY LOOKS
+          </p>
+          <div className="space-y-1.5">
+            {swapRules.map((r, i) => (
+              <div key={i} className="flex items-center gap-2 text-[10px] tracking-[0.03em]">
+                <span className="text-[9px] tracking-[0.08em] text-[#A8A8A4] w-[130px] flex-shrink-0 truncate">
+                  {r.slot.toUpperCase()} · {r.formality_band.toUpperCase()}
+                </span>
+                <span className="text-[#6B6B6B]">{r.dimension.replace(/_/g, ' ').toUpperCase()}</span>
+                <span className="text-[#6B6B6B] line-through truncate">{String(r.from_value).toUpperCase()}</span>
+                <span className="text-[#A8A8A4]">→</span>
+                <span className="text-[#4A4E57] truncate">{String(r.to_value).toUpperCase()}</span>
+                <span className="text-[8px] tracking-[0.06em] text-[#C4A882] flex-shrink-0">×{r.count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Weekly calibration report */}
+      <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6 mb-6">
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B]">WEEKLY CALIBRATION REPORT</p>
+          <ReportButton />
+        </div>
+        <p className="text-[8px] tracking-[0.063em] text-[#A8A8A4] mb-4">
+          RUNS EVERY MONDAY 07:00 — FAST-LANE SHARE, OVERRIDE RATE (THRESHOLD {Math.round(pipelineCfg.fast_lane_threshold * 100)}), NEW QUARANTINES, TOP SWAP RULES, CATALOGUE GAPS
+        </p>
+        {calibration ? (
+          <MarkdownLite md={calibration.report_md} />
+        ) : (
+          <p className="text-[10px] tracking-[0.072em] text-[#A8A8A4] py-2">
+            No report yet — generate one now or wait for Monday&rsquo;s run.
+          </p>
+        )}
+      </div>
+
       {/* Recent swaps — what got swapped out, for what, how different */}
       {swaps && swaps.total > 0 && (
         <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-6 mb-6">
@@ -195,8 +336,9 @@ export default async function StyleBrainPage() {
         <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[12px] p-5 max-w-[640px]">
           <p className="text-[11px] tracking-[0.081em] text-[#8A7A4E] mb-2">RUN MIGRATION TO ENABLE LEARNING</p>
           <p className="text-[10px] tracking-[0.054em] text-[#8A7A4E] leading-relaxed">
-            Run <span className="font-mono">0016_style_brain.sql</span> in Supabase. Until then the composer
-            still works — it just isn&rsquo;t learning yet.
+            Run <span className="font-mono">0016_style_brain.sql</span> and{' '}
+            <span className="font-mono">0020_self_critique_pipeline.sql</span> in Supabase. Until then the
+            composer still works — it just isn&rsquo;t learning yet.
           </p>
         </div>
       )}

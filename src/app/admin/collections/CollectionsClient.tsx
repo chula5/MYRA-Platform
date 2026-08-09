@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { thumbUrl } from '@/lib/image-utils'
-import { scanBrandCollection, type ScannableBrand, type CollectionScan, type CollectionCandidate } from './actions'
+import { scanBrandCollection, markCollectionCandidateSelected, type ScannableBrand, type CollectionScan, type CollectionCandidate } from './actions'
 import { ingestAndComposeUrl } from '@/app/admin/ingest-compose/actions'
 import OutfitComposePanel, { type ComposeAnchor, type ComposeCandidate } from '@/components/admin/OutfitComposePanel'
 
@@ -52,6 +52,8 @@ export default function CollectionsClient({ brands }: { brands: ScannableBrand[]
     setKeyCounter((k) => k + 1)
     try {
       const res = await ingestAndComposeUrl(url)
+      // Learning mandate: mark this candidate as SELECTED (vs passed over).
+      if (!res.error) void markCollectionCandidateSelected(url, (res.item as any)?.item_id ?? null)
       setAccepted((prev) => [
         ...prev,
         {

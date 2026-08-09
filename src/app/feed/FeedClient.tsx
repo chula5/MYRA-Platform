@@ -305,6 +305,7 @@ export default function FeedClient({
   occasionOrder,
   signupHref,
   defaultSizeUk = null,
+  stylists = [],
 }: {
   showAllOption?: boolean
   injectedOutfits?: OutfitWithItems[]
@@ -325,6 +326,10 @@ export default function FeedClient({
   // Signed-in shopper's saved clothing size (canonical UK) — pre-fills the size
   // filter so the feed defaults to their size (with a "show all" escape).
   defaultSizeUk?: number | null
+  // Live stylists — the feed can be browsed through one stylist's lens.
+  // Switching is free and instant: a FILTER, not an account setting. The
+  // viewer's own taste vector keeps learning regardless of the active lens.
+  stylists?: { stylist_id: string; name: string; slug: string }[]
 }) {
   const hasTaste = !!tasteVector && !isZero(tasteVector)
   // Signed-out on the public site: show greyed "sign in to save" hearts.
@@ -348,9 +353,22 @@ export default function FeedClient({
     if (sizeUk == null) sessionStorage.removeItem('myra_size_uk')
     else sessionStorage.setItem('myra_size_uk', String(sizeUk))
   }, [sizeUk])
+  // Stylist lens — free, instant filter; persists for the session only.
+  const [stylistFilter, setStylistFilter] = useState<string | null>(null)
+  useEffect(() => {
+    const s = sessionStorage.getItem('myra_stylist_lens')
+    if (s) setStylistFilter(s)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useEffect(() => {
+    if (!stylistFilter) sessionStorage.removeItem('myra_stylist_lens')
+    else sessionStorage.setItem('myra_stylist_lens', stylistFilter)
+  }, [stylistFilter])
   const fitsSize = useCallback(
-    (o: OutfitWithItems) => sizeUk == null || outfitFitsClothingUk(o, sizeUk),
-    [sizeUk],
+    (o: OutfitWithItems) =>
+      (sizeUk == null || outfitFitsClothingUk(o, sizeUk)) &&
+      (stylistFilter == null || ((o as any).stylist_id ?? null) === stylistFilter),
+    [sizeUk, stylistFilter],
   )
   // Occasion mode
   const [occasion, setOccasion]           = useState<string | null>(null)
@@ -657,6 +675,31 @@ export default function FeedClient({
           <h1 className="text-[clamp(28px,3vw,40px)] tracking-[0.045em] text-[#4A4E57] leading-tight">
             WHAT ARE YOU DRESSING FOR?
           </h1>
+          {/* Stylist lens — a free, instant filter over the shared catalogue.
+              Hidden until there's more than one live stylist. */}
+          {stylists.length > 1 && (
+            <div className="flex flex-wrap items-center justify-center gap-2 mt-5">
+              <button
+                onClick={() => setStylistFilter(null)}
+                className={`px-4 py-1.5 text-[9px] tracking-[0.12em] rounded-full border transition-colors ${
+                  stylistFilter === null ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'text-[#6B6B6B] border-[#E2E0DB] hover:border-[#0A0A0A]'
+                }`}
+              >
+                ALL STYLISTS
+              </button>
+              {stylists.map((s) => (
+                <button
+                  key={s.stylist_id}
+                  onClick={() => setStylistFilter(stylistFilter === s.stylist_id ? null : s.stylist_id)}
+                  className={`px-4 py-1.5 text-[9px] tracking-[0.12em] rounded-full border transition-colors ${
+                    stylistFilter === s.stylist_id ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'text-[#6B6B6B] border-[#E2E0DB] hover:border-[#0A0A0A]'
+                  }`}
+                >
+                  STYLED BY {s.name.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Cosine taste recommendations — ranked by the user's taste vector.

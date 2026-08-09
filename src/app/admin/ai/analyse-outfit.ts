@@ -50,6 +50,8 @@ export interface OutfitAnalysis {
 
 const PROMPT = `You are a fashion analyst for MYRA, a fashion discovery app. Analyse this outfit image and return a JSON object with the following scores.
 
+MYRA's register (write labels in this voice): the mood is shopping around Rue de Rivoli / Saint-Honoré — unhurried, dressed for a client lunch. Permanent references: Jacquemus, Chanel (Blazy collections), current Chloé. Every MYRA look is one deliberate surprise over a quiet base — labels should capture tension and cultural register, never describe garments literally, never use trend internet language.
+
 REQUIRED FIELDS:
 - aesthetic_label: A 2-4 word aesthetic description in ALL CAPS (e.g. "CLEAN COASTAL EASE", "MINIMAL LUXURY", "QUIET POWER DRESSING")
 - occasion_tags: Array of 2-4 lowercase occasion strings (e.g. ["dinner", "weekend", "gallery opening"])

@@ -221,7 +221,43 @@ export async function generateHiggsfieldShootForOutfit(
 
   const prompt = buildGenerationPrompt(combo, items)
   const refs = buildReferenceUrls(combo, items)
-  const res = await generateHiggsfieldShoot(outfitId, prompt, refs)
+  let res = await generateHiggsfieldShoot(outfitId, prompt, refs)
+
+  // RENDER FIDELITY CHECK (mandatory before the render can become the display
+  // image). Vision-compares the render against the source item photos — colour,
+  // silhouette, cut, length. Fail → retry ONCE with corrective notes; second
+  // failure → flag for review and keep the previous display image. A published
+  // image that misrepresents the clothes is brand-damaging.
+  if (res.imageUrl) {
+    try {
+      const { checkRenderFidelity, logRenderCheck } = await import('@/app/admin/ai/render-fidelity')
+      const fidelityItems = items
+        .filter((i): i is typeof i & { image_url: string } => !!i.image_url)
+        .map((i) => ({ label: [i.brand_name, i.product_name].filter(Boolean).join(' — ') || String(i.item_type), image_url: i.image_url }))
+      const first = await checkRenderFidelity(res.imageUrl, fidelityItems)
+      await logRenderCheck({ outfitId, imageUrl: res.imageUrl, attempt: 1, result: first })
+      if (!first.passed) {
+        const retryPrompt = first.correctiveNotes
+          ? `${prompt}\n\nMANDATORY CORRECTIONS — the previous render misrepresented the clothes: ${first.correctiveNotes}`
+          : prompt
+        const retry = await generateHiggsfieldShoot(outfitId, retryPrompt, refs)
+        if (retry.imageUrl) {
+          const second = await checkRenderFidelity(retry.imageUrl, fidelityItems)
+          await logRenderCheck({ outfitId, imageUrl: retry.imageUrl, attempt: 2, result: second, needsReview: !second.passed })
+          if (second.passed) {
+            res = retry
+          } else {
+            return { error: 'Render misrepresented the clothes twice — flagged for your review (previous display image kept)' }
+          }
+        } else {
+          await logRenderCheck({ outfitId, imageUrl: res.imageUrl, attempt: 2, result: first, needsReview: true })
+          return { error: 'Render failed the fidelity check and the retry did not generate — flagged for your review' }
+        }
+      }
+    } catch (err) {
+      console.error('[generateHiggsfieldShootForOutfit] fidelity check errored — continuing unchecked', err)
+    }
+  }
 
   // Promote the generated shoot to the outfit's DISPLAY image. It's already saved
   // to Cloudinary (and appended to additional_images) by generateHiggsfieldShoot;

@@ -194,6 +194,25 @@ export async function scanBrandCollection(brandName: string): Promise<Collection
     for (const c of enriched) if (c.image_url) imgCounts.set(c.image_url, (imgCounts.get(c.image_url) ?? 0) + 1)
     const deduped = enriched.map((c) => (c.image_url && (imgCounts.get(c.image_url) ?? 0) > 1 ? { ...c, image_url: null } : c))
 
+    // LEARNING MANDATE: selection itself is taste signal. Every scanned
+    // candidate is logged as passed-over now; accepting one flips it to
+    // selected. Over time this teaches "which items belong on MYRA".
+    void (async () => {
+      try {
+        const { recordCollectionSelection } = await import('@/lib/house-style-store')
+        await recordCollectionSelection(
+          deduped.map((c) => ({
+            brandName: name,
+            collection: parsed.collection_name ?? null,
+            candidate: c as unknown as Record<string, unknown>,
+            selected: false,
+          })),
+        )
+      } catch (err) {
+        console.error('[scanBrandCollection→selection log]', err)
+      }
+    })()
+
     return {
       brand: name,
       collection_name: parsed.collection_name ?? null,
@@ -205,4 +224,31 @@ export async function scanBrandCollection(brandName: string): Promise<Collection
     console.error('[scanBrandCollection]', err)
     return { brand: name, collection_name: null, is_new: false, note: null, candidates: [], error: err instanceof Error ? err.message : 'Scan failed' }
   }
+}
+
+// Accepting a scanned candidate flips its selection row to selected=true and
+// pins the created item id — the positive half of the selection signal.
+export async function markCollectionCandidateSelected(
+  retailerUrl: string,
+  itemId?: string | null,
+): Promise<{ ok: true }> {
+  try {
+    const admin = createAdminClient()
+    const { data } = await admin
+      .from('collection_selection' as any)
+      .select('id')
+      .eq('selected', false)
+      .filter('candidate->>retailer_url', 'eq', retailerUrl)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (data) {
+      await (admin.from('collection_selection') as any)
+        .update({ selected: true, item_id: itemId ?? null })
+        .eq('id', (data as any).id)
+    }
+  } catch (err) {
+    console.error('[markCollectionCandidateSelected]', err)
+  }
+  return { ok: true }
 }

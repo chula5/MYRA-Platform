@@ -139,10 +139,31 @@ async function scrapeProductImage(productUrl: string): Promise<string | null> {
       return true
     })
 
+    // Code-like tokens from the product URL slug (e.g. "261lm2mdd", "13584").
+    // An image URL containing one is almost certainly THIS product's image,
+    // not a site-wide banner shared by every page.
+    const productTokens = (() => {
+      try {
+        const slug = decodeURIComponent(new URL(productUrl).pathname).toLowerCase()
+        return [...new Set((slug.match(/[a-z0-9]{5,}/g) ?? []).filter((t) => /\d/.test(t)))]
+      } catch {
+        return [] as string[]
+      }
+    })()
+
     // ── Score: strongly prefer flat/packshot images over model photos ──
     const score = (url: string) => {
       const u = url.toLowerCase()
       let s = 0
+
+      // ── Decisive boost: contains this product's code/slug tokens ──
+      if (productTokens.some((t) => u.includes(t))) s += 60
+      // ── Decisive penalty: site chrome (nav menus, banners, category tiles).
+      // These appear on EVERY page, so without this they can outscore the real
+      // product image when it lives on a different CDN domain (e.g. Twinset →
+      // Thron), which is exactly how a whole ingest batch ends up sharing one
+      // campaign image.
+      if (/\/menu[-_/]|menu-fw|menu-ss|\/nav[-_/]|banner|navigation|\/header\/|\/footer\/|homepage|hero-/i.test(u)) s -= 60
 
       // ── Strong boost: dedicated packshot folder/path ──
       if (/\/packshot\//i.test(url)) s += 50
@@ -184,7 +205,18 @@ async function scrapeProductImage(productUrl: string): Promise<string | null> {
     }
 
     unique.sort((a, b) => score(b) - score(a))
-    return unique[0] ?? null
+    const winner = unique[0] ?? null
+
+    // Thron CDN (Twinset etc.) encodes size in the path — og:image is often a
+    // 200x200 thumb, but the same asset serves full-res at /std/1500x0/.
+    if (winner && /\.thron\.com\/.+\/std\/\d+x\d+\//i.test(winner)) {
+      const big = winner.replace(/\/std\/\d+x\d+\//i, '/std/1500x0/')
+      try {
+        const head = await fetch(big, { method: 'HEAD' })
+        if (head.ok) return big
+      } catch { /* keep the original size */ }
+    }
+    return winner
 
   } catch {
     clearTimeout(timeout)

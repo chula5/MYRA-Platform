@@ -9,20 +9,33 @@ import {
   type FeatureItem,
   emptyModel,
   applyDecision,
+  applyOffer,
   extractFeatures,
   buildHouseStyle,
 } from '@/lib/style-brain'
 
-// Load the live learned model (returns an empty model if the table/row is absent
-// so the composer keeps working before the migration is run).
-export async function loadStyleModel(): Promise<StyleModel> {
+// Load the live learned model for a stylist (default: Chloe). Every stylist has
+// an independent learning state. Falls back to the legacy singleton row, then to
+// an empty model, so the composer keeps working before migrations are run.
+export async function loadStyleModel(stylistId?: string | null): Promise<StyleModel> {
+  const parse = (raw: unknown): StyleModel | null => {
+    const m = raw as Partial<StyleModel> | null
+    if (!m || typeof m !== 'object' || !m.version) return null
+    return { ...emptyModel(), ...m, singles: m.singles ?? {}, pairs: m.pairs ?? {}, offers: (m as any).offers ?? {}, offerCount: (m as any).offerCount ?? 0 } as StyleModel
+  }
   try {
     const admin = createAdminClient()
+    const { resolveStylistId } = await import('@/lib/stylist-store')
+    const sid = await resolveStylistId(stylistId)
+    if (sid) {
+      const { data } = await admin.from('stylist_model' as any).select('model').eq('stylist_id', sid).maybeSingle()
+      const m = parse((data as any)?.model)
+      if (m) return m
+    }
+    // Legacy singleton (pre-0022) — Chloe's original model.
     const { data, error } = await admin.from('style_model' as any).select('model').eq('id', 1).maybeSingle()
     if (error || !data) return emptyModel()
-    const m = (data as any).model as Partial<StyleModel> | null
-    if (!m || typeof m !== 'object' || !m.version) return emptyModel()
-    return { ...emptyModel(), ...m, singles: m.singles ?? {}, pairs: m.pairs ?? {} } as StyleModel
+    return parse((data as any).model) ?? emptyModel()
   } catch {
     return emptyModel()
   }
@@ -296,10 +309,21 @@ export async function loadHouseStyle(): Promise<{ md: string; decisions: number;
   }
 }
 
-async function saveStyleModel(model: StyleModel): Promise<void> {
+async function saveStyleModel(model: StyleModel, stylistId?: string | null): Promise<void> {
   const admin = createAdminClient()
   model.updatedAt = new Date().toISOString()
   const house = buildHouseStyle(model)
+  const { resolveStylistId, getStylistBySlug } = await import('@/lib/stylist-store')
+  const sid = await resolveStylistId(stylistId)
+  if (sid) {
+    await (admin.from('stylist_model') as any).upsert(
+      { stylist_id: sid, model, house_style_md: house, decisions: Math.round(model.decisions), updated_at: model.updatedAt },
+      { onConflict: 'stylist_id' },
+    )
+    // Mirror Chloe's model into the legacy singleton so pre-0022 readers agree.
+    const chloe = await getStylistBySlug('chloe')
+    if (chloe?.stylist_id !== sid) return
+  }
   // Upsert (not update) so the singleton row is created if the migration's seed
   // insert didn't run — otherwise an UPDATE on a missing row silently no-ops and
   // decisions are lost.
@@ -318,9 +342,12 @@ export async function recordStyleDecision(opts: {
   baseScore?: number | null
   weight?: number
   extraFeatures?: Record<string, unknown>
+  stylistId?: string | null
 }): Promise<void> {
   try {
     const admin = createAdminClient()
+    const { resolveStylistId } = await import('@/lib/stylist-store')
+    const sid = await resolveStylistId(opts.stylistId)
     const features = { ...extractFeatures(opts.items), ...(opts.extraFeatures ?? {}) }
     // 1. Append to the immutable training log.
     await (admin.from('style_decision') as any).insert({
@@ -330,13 +357,44 @@ export async function recordStyleDecision(opts: {
       item_ids: opts.itemIds ?? [],
       features,
       base_score: opts.baseScore ?? null,
+      stylist_id: sid,
     })
-    // 2. Fold into the live model.
-    const model = await loadStyleModel()
+    // 2. Fold into that stylist's live model.
+    const model = await loadStyleModel(sid)
     applyDecision(model, opts.items, opts.decision, opts.weight ?? 1)
-    await saveStyleModel(model)
+    await saveStyleModel(model, sid)
   } catch (err) {
     console.error('[recordStyleDecision]', err)
+  }
+}
+
+// Record OFFERS: every candidate shown to Chloe counts as one offer of its
+// features, so house-style stats can be true approval rates. Batched (one model
+// write per call). Fire-and-forget safe — never throws into the caller.
+export async function recordStyleOffers(
+  offers: { items: FeatureItem[]; anchorItemId?: string | null; itemIds?: string[] }[],
+  source: 'composer' | 'review' | 'pipeline',
+  stylistId?: string | null,
+): Promise<void> {
+  if (!offers.length) return
+  try {
+    const admin = createAdminClient()
+    const { resolveStylistId } = await import('@/lib/stylist-store')
+    const sid = await resolveStylistId(stylistId)
+    await (admin.from('style_offer') as any).insert(
+      offers.map((o) => ({
+        anchor_item_id: o.anchorItemId ?? null,
+        item_ids: o.itemIds ?? [],
+        features: extractFeatures(o.items),
+        source,
+        stylist_id: sid,
+      })),
+    )
+    const model = await loadStyleModel(sid)
+    for (const o of offers) applyOffer(model, o.items)
+    await saveStyleModel(model, sid)
+  } catch (err) {
+    console.error('[recordStyleOffers]', err)
   }
 }
 
@@ -364,6 +422,19 @@ export async function recomputeStyleModel(): Promise<number> {
     if (r.decision === 'approve') model.approves += 1
     else model.skips += 1
   }
+  // Rebuild offer counts from the offer log too (rates need both sides).
+  try {
+    const { data: offerRows } = await admin
+      .from('style_offer' as any)
+      .select('features')
+      .limit(100000)
+    for (const o of (offerRows ?? []) as { features: { singles?: string[]; pairs?: string[] } }[]) {
+      for (const k of [...(o.features?.singles ?? []), ...(o.features?.pairs ?? [])]) {
+        model.offers[k] = (model.offers[k] ?? 0) + 1
+      }
+      model.offerCount += 1
+    }
+  } catch { /* style_offer table not there yet — rates fall back to acted-on counts */ }
   await saveStyleModel(model)
   return rows.length
 }

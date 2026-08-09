@@ -46,7 +46,11 @@ export async function generateOccasionTags(
   if (items.length === 0) return { error: 'Outfit has no items to read' }
 
   const o = outfit as any
+  const { houseStyleBriefForPrompts } = await import('@/lib/house-style')
   const prompt = `You are a fashion stylist tagging an outfit with the real-world occasions, settings and seasons someone would actually wear it for.
+
+${houseStyleBriefForPrompts()}
+Occasion notes: Wimbledon reads as polished summer daytime, not literal whites. Date night skews dress- or skirt-led; dinner can go trouser-led.
 
 OUTFIT SCORES (1-5):
 - formality: ${o.formality ?? 3} (1=casual, 3=smart casual, 5=black tie)
