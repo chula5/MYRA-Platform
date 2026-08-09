@@ -60,29 +60,57 @@ export interface SentinelReport {
   archived: number
 }
 
+// Supabase caps a single response at 1000 rows, so both queries below MUST be
+// paged: a truncated link list would silently exclude items from the sweep
+// permanently (they'd look like they aren't in any live outfit), leaving a
+// blind spot no number of re-runs could clear.
+async function fetchAllPages<T = any>(
+  buildPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: any }>,
+  hardCap = 100_000,
+): Promise<T[]> {
+  const PAGE = 1000
+  const all: T[] = []
+  for (let from = 0; from < hardCap; from += PAGE) {
+    const { data, error } = await buildPage(from, from + PAGE - 1)
+    if (error) {
+      console.error('[stock-sentinel] page fetch failed', error)
+      break
+    }
+    const rows = data ?? []
+    all.push(...rows)
+    if (rows.length < PAGE) break
+  }
+  return all
+}
+
 // Items to check this run: LIVE items in ≥1 live outfit, plus every
 // out_of_stock item still inside its 30-day restock window. Stalest first.
 async function listItemsToCheck(maxItems: number): Promise<any[]> {
   const admin = createAdminClient()
 
-  const { data: liveLinks } = await admin
-    .from('outfit_item' as any)
-    .select('item_id, outfit!inner(status)')
-    .eq('outfit.status', 'live')
-    .limit(20000)
-  const liveItemIds = Array.from(new Set(((liveLinks ?? []) as any[]).map((r) => r.item_id)))
+  const liveLinks = await fetchAllPages<{ item_id: string }>((from, to) =>
+    admin
+      .from('outfit_item' as any)
+      .select('item_id, outfit!inner(status)')
+      .eq('outfit.status', 'live')
+      .range(from, to) as any,
+  )
+  const liveItemIds = new Set(liveLinks.map((r) => r.item_id))
 
-  const { data: items } = await admin
-    .from('item' as any)
-    .select('item_id, product_name, retailer_url, status, stock_status, stock_checked_at, oos_strikes, oos_since, status_before_oos, image_url')
-    .in('status', ['live', 'out_of_stock'])
-    .not('retailer_url', 'is', null)
-    .neq('retailer_url', '')
-    .order('stock_checked_at', { ascending: true, nullsFirst: true })
-    .limit(2000)
+  const items = await fetchAllPages<any>((from, to) =>
+    admin
+      .from('item' as any)
+      .select('item_id, product_name, retailer_url, status, stock_status, stock_checked_at, oos_strikes, oos_since, status_before_oos, image_url')
+      .in('status', ['live', 'out_of_stock'])
+      .not('retailer_url', 'is', null)
+      .neq('retailer_url', '')
+      .order('stock_checked_at', { ascending: true, nullsFirst: true })
+      .order('item_id', { ascending: true }) // stable tiebreak so paging can't repeat/skip rows
+      .range(from, to) as any,
+  )
 
-  return ((items ?? []) as any[])
-    .filter((it) => it.status === 'out_of_stock' || liveItemIds.includes(it.item_id))
+  return items
+    .filter((it) => it.status === 'out_of_stock' || liveItemIds.has(it.item_id))
     .slice(0, maxItems)
 }
 
