@@ -10,7 +10,7 @@ import type { SentinelReport } from './stock-sentinel'
 
 export function stockEmailNeeded(r: SentinelReport): boolean {
   return r.itemsDown.length > 0 || r.autoSwapped.length > 0 || r.needsPick.length > 0 ||
-    r.backInStock.length > 0 || r.archived > 0
+    r.backInStock.length > 0 || r.archived > 0 || r.deferred > 0
 }
 
 export async function sendStockEmail(r: SentinelReport): Promise<void> {
@@ -66,7 +66,8 @@ export async function sendStockEmail(r: SentinelReport): Promise<void> {
   const summary =
     `${r.itemsChecked} items checked · ${r.itemsDown.length} down · ` +
     `${r.outfitsPaused} outfits paused · ${r.autoSwapped.length} auto-recovered` +
-    (r.archived ? ` · ${r.archived} archived (30d dead)` : '')
+    (r.archived ? ` · ${r.archived} archived (30d dead)` : '') +
+    (r.deferred ? ` · ${r.deferred} held back by the per-run pause cap (next run)` : '')
   sections.push(`<p style="margin:24px 0 0 0;padding-top:14px;border-top:1px solid #e2e0db;font-size:11px;color:#a8a8a4;letter-spacing:0.04em;">${summary}</p>`)
 
   const subjectBits: string[] = []

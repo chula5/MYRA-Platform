@@ -296,7 +296,8 @@ export async function runSentinelNowAction(): Promise<{
     return {
       summary:
         `${report.itemsChecked} checked · ${report.itemsDown.length} down · ` +
-        `${report.autoSwapped.length} auto-swapped · ${report.needsPick.length} need you`,
+        `${report.autoSwapped.length} auto-swapped · ${report.needsPick.length} need you` +
+        (report.deferred ? ` · ${report.deferred} held for next run` : ''),
     }
   } catch (err) {
     console.error('[runSentinelNowAction]', err)
