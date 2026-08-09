@@ -39,6 +39,7 @@ import {
   ensureItemsScored,
   vectorForCandidate,
 } from '@/lib/pipeline-store'
+import { isCloudinaryUrl, persistImageToCloudinary } from '@/lib/cloudinary-persist'
 
 // Map a library item to the Style Brain's feature shape.
 function toFeature(it: ItemWithBrand): FeatureItem {
@@ -501,10 +502,23 @@ export async function approveCandidate(
 
     const aestheticLabel = `COMPOSED · ${anchor.product_name.toUpperCase()}`
 
+    // The outfit's display image starts as the anchor's photo. When that photo
+    // isn't already on Cloudinary (e.g. a raw retailer URL captured at ingest),
+    // persist it now — retailer CDNs reject the image optimizer's server-side
+    // fetch, which left new outfits with broken hero images on the public feed.
+    let displayImageUrl = anchor.image_url
+    if (displayImageUrl && !isCloudinaryUrl(displayImageUrl)) {
+      const stable = await persistImageToCloudinary(displayImageUrl, {
+        folder: 'outfit-saves',
+        publicId: `anchor-${anchor.item_id}`,
+      })
+      if (stable) displayImageUrl = stable
+    }
+
     const { data: outfit, error: outfitErr } = await supabase
       .from('outfit')
       .insert([{
-        image_url: anchor.image_url,
+        image_url: displayImageUrl,
         aesthetic_label: aestheticLabel,
         occasion_tags: [],
         source_brand_ids: allBrandIds,

@@ -121,3 +121,29 @@ $$;
 - [ ] Outfit detail page opens on card click
 - [ ] Admin route at /admin redirects to / if not logged in as admin
 - [ ] Deployed to Vercel
+
+## MYRA Studio (review queue + stock sentinel)
+
+Added in migration `0017_studio_review_stock.sql` — run it in the Supabase SQL
+editor before using these features.
+
+**Routes**
+- `/studio/review` — mobile swipe review queue (admin-gated, same rule as `/admin`)
+- `/api/cron/review-digest` — review digest email (7am + 12pm, ×2/day cap)
+- `/api/cron/stock-sentinel` — 12-hourly availability sweep
+- `/api/cron/render-queue` — drains the sequential Higgsfield render queue
+- `/api/studio/undo-swap` / `/api/studio/restore` — token links from stock emails
+
+**Environment variables (Vercel → Project Settings → Environment Variables)**
+- `RESEND_API_KEY` — required for the review/stock emails (resend.com; verify
+  myraassistant.co.uk as a sending domain)
+- `STUDIO_EMAIL_TO` — defaults to `chloe@myraassistant.co.uk`
+- `STUDIO_EMAIL_FROM` — defaults to `MYRA Studio <studio@myraassistant.co.uk>`
+- `CRON_SECRET` — optional; when set, Vercel sends it as a Bearer token to the
+  cron routes and manual calls must supply it
+- `CLOUDINARY_BG_REMOVAL=1` — optional; runs Cloudinary's background-removal
+  add-on on each tile of the composed review-card images
+
+**Crons** (`vercel.json`) — requires the Vercel Pro plan (Hobby is daily-only):
+digest at 07:00 & 12:00 UTC, sentinel at 05:30 & 17:30 UTC, render-queue
+drainer every 15 minutes. UK local time drifts +1h during BST.

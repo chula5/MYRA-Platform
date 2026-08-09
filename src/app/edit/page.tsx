@@ -7,6 +7,7 @@ import { getSavedOutfitIds } from './save-actions'
 import Wardrobe from './Wardrobe'
 import OpenWardrobeButton from './OpenWardrobeButton'
 import HelpPopover from '@/components/HelpPopover'
+import OnboardingPrompt from '@/components/OnboardingPrompt'
 import { getTasteRecommendations, getUserTasteVector, getBrandAffinityRows, getOccasionOrder } from '@/lib/taste-profile'
 import { getLiveStylists } from '@/lib/queries'
 import type { OutfitWithItems } from '@/types/database'
@@ -20,10 +21,11 @@ export default async function EditPage() {
   // Early-access (or admin) sign-in required.
   if (!user) redirect('/signin')
 
-  // First-time users complete the taste onboarding before browsing.
-  // The admin account is exempt (it previews the live edit directly).
+  // The taste onboarding is OPTIONAL: instead of forcing first-time users
+  // through the quiz, The Edit shows a dismissible invitation at the top
+  // (OnboardingPrompt below) until they complete it.
   const isAdmin = user.id === process.env.ADMIN_USER_ID
-  if (!isAdmin && !user.user_metadata?.onboarded) redirect('/onboarding')
+  const showQuizPrompt = !isAdmin && !user.user_metadata?.onboarded
 
   // Track that this early-access person opened the site (throttled to ~sessions).
   await recordEarlyAccessVisit(user.id)
@@ -79,6 +81,9 @@ export default async function EditPage() {
           </form>
         </div>
       </header>
+
+      {/* Optional style-quiz invitation for users who haven't onboarded yet */}
+      {showQuizPrompt && <OnboardingPrompt />}
 
       {/* The Edit — occasion search + browse (read-only). Items come with the
           server-fetched outfits, so Source Items / hotspots work. */}

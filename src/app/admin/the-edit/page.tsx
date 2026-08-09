@@ -1,5 +1,6 @@
 import FeedClient from '@/app/feed/FeedClient'
 import GoLiveButton from './GoLiveButton'
+import RepairImagesButton from './RepairImagesButton'
 import { createAdminClient } from '@/lib/supabase-server'
 import type { OutfitWithItems } from '@/types/database'
 
@@ -50,6 +51,7 @@ export default async function TheEditPreviewPage() {
           >
             ⊕ AGE-TAG OUTFITS
           </a>
+          <RepairImagesButton />
         </div>
       </div>
 

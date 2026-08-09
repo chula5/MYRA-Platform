@@ -16,12 +16,28 @@ export default async function AdminDashboard() {
   const chloe = await getStylistBySlug('chloe')
   const autonomy = chloe ? autonomyProgress(await loadAutonomy(chloe.stylist_id)) : null
 
+  // Outfits kicked back from the mobile review queue ("none of these").
+  const { count: needsDesktopCount } = await supabase
+    .from('outfit')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'needs_desktop' as any)
+
   return (
     <div>
       {/* Header */}
       <div className="mb-10">
-        <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-2">MYRA ADMIN STUDIO</p>
-        <h1 className="text-[28px] tracking-[0.045em] text-[#4A4E57]">DASHBOARD</h1>
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-2">MYRA ADMIN STUDIO</p>
+            <h1 className="text-[28px] tracking-[0.045em] text-[#4A4E57]">DASHBOARD</h1>
+          </div>
+          <a
+            href="/studio/review"
+            className="inline-flex items-center gap-2 bg-[#0A0A0A] text-white px-5 py-2.5 rounded-[12px] text-[10px] tracking-[0.09em] hover:opacity-85 transition-opacity"
+          >
+            ▶ MOBILE REVIEW QUEUE
+          </a>
+        </div>
       </div>
 
       {/* Autonomy graduation tracker */}
@@ -61,6 +77,17 @@ export default async function AdminDashboard() {
             />
           </div>
         </div>
+=======
+      {/* Kicked back from mobile — needs the desktop studio */}
+      {(needsDesktopCount ?? 0) > 0 && (
+        <a
+          href="/admin/outfit-review"
+          className="block mb-6 p-4 border border-[#E2D6B8] bg-[#FBF6E9] rounded-[12px] hover:border-[#C4A882] transition-colors duration-300"
+        >
+          <p className="text-[10px] tracking-[0.09em] text-[#8A6D3B]">
+            {needsDesktopCount} OUTFIT{(needsDesktopCount ?? 0) === 1 ? '' : 'S'} FLAGGED “NEEDS DESKTOP” FROM MOBILE REVIEW · OPEN →
+          </p>
+        </a>
       )}
 
       {/* Stock alert — only shown when there's something to fix */}

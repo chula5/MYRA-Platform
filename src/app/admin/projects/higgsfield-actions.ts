@@ -5,7 +5,6 @@ import { promisify } from 'util'
 import { writeFile, mkdtemp, rm } from 'fs/promises'
 import os from 'os'
 import path from 'path'
-import crypto from 'crypto'
 import { createAdminClient } from '@/lib/supabase-server'
 import { getOutfit } from '@/lib/admin-queries'
 import {
@@ -14,39 +13,11 @@ import {
   buildReferenceUrls,
   type ShootItem,
 } from '@/lib/higgsfield-shoot'
+import { persistImageToCloudinary } from '@/lib/cloudinary-persist'
 
 const execFileP = promisify(execFile)
 
-// Cloudinary creds (same account used elsewhere in the app)
-const CLOUD_NAME = 'dugby2pow'
-const API_KEY = '333725823491761'
-const API_SECRET = 'xlmEKzOlLW9rLxNA6rqTQBn3dkk'
-
 const HF_MODEL = 'seedream_v4_5'
-
-/** Upload a remote image URL to Cloudinary by letting Cloudinary fetch it. */
-async function uploadRemoteToCloudinary(remoteUrl: string, publicId: string): Promise<string | null> {
-  const timestamp = String(Math.floor(Date.now() / 1000))
-  // Dedicated folder so generated shoots are grouped, away from product photos.
-  const folder = 'higgsfield-shoots'
-  const paramsToSign = `folder=${folder}&public_id=${publicId}&timestamp=${timestamp}`
-  const signature = crypto.createHash('sha1').update(paramsToSign + API_SECRET).digest('hex')
-
-  const form = new FormData()
-  form.append('file', remoteUrl)
-  form.append('api_key', API_KEY)
-  form.append('timestamp', timestamp)
-  form.append('signature', signature)
-  form.append('folder', folder)
-  form.append('public_id', publicId)
-
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
-    method: 'POST',
-    body: form,
-  })
-  const data = await res.json()
-  return data.secure_url ?? null
-}
 
 /** Extract the first JSON array/object from CLI stdout (ignores any progress lines). */
 function extractJson(stdout: string): string | null {
@@ -162,7 +133,12 @@ export async function generateHiggsfieldShoot(
     }
 
     // 4. Persist to Cloudinary so it lives in MYRA's asset pipeline (not ephemeral CDN).
-    const cloudUrl = await uploadRemoteToCloudinary(resultUrl, `shoot-${outfitId}-${Date.now()}`)
+    // Dedicated folder so generated shoots are grouped, away from product photos.
+    const cloudUrl = await persistImageToCloudinary(resultUrl, {
+      folder: 'higgsfield-shoots',
+      publicId: `shoot-${outfitId}-${Date.now()}`,
+    })
+    if (!cloudUrl) console.error('[generateHiggsfieldShoot] Cloudinary persist failed — storing ephemeral CDN URL for', outfitId)
     const finalUrl = cloudUrl ?? resultUrl
 
     // 5. Attach to the outfit's additional_images (non-destructive).
