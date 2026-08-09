@@ -15,12 +15,38 @@
 // never a placeholder or item-group collage.
 
 import 'server-only'
+import { existsSync } from 'fs'
+import path from 'path'
 import { createAdminClient } from '@/lib/supabase-server'
 import { generateHiggsfieldShootForOutfit } from '@/app/admin/projects/higgsfield-actions'
 import { writeAudit } from './audit'
 
 const MAX_ATTEMPTS = 2               // initial try + one retry
 const RUNNING_STALE_MS = 15 * 60_000 // recover a crashed 'running' job
+
+/**
+ * Is a usable Higgsfield renderer present in THIS environment?
+ *
+ * The shoot runs through the locally-authenticated Higgsfield CLI, whose Go
+ * binary is fetched by a postinstall script and is NOT traced into Vercel's
+ * serverless bundle — on Vercel the spawn dies with "Cannot find module
+ * /var/task/node_modules/.bin/higgsfield", and there'd be no auth token there
+ * anyway.
+ *
+ * This matters beyond a failed render: without the check, Vercel's cron
+ * drainer would claim each job, burn both attempts on an environment that can
+ * never succeed, and permanently mark it render_failed — destroying jobs the
+ * authenticated local machine could have rendered fine. When no renderer is
+ * available we leave the queue completely untouched so a local drain picks the
+ * work up intact.
+ */
+export function rendererAvailable(): boolean {
+  try {
+    return existsSync(path.join(process.cwd(), 'node_modules', '.bin', 'higgsfield'))
+  } catch {
+    return false
+  }
+}
 
 export async function enqueueRender(
   outfitId: string,
@@ -53,8 +79,18 @@ export async function enqueueRender(
  * Drain the queue sequentially within a time budget. Safe to call from the
  * cron route, and fire-and-forget after an approval. Returns counts.
  */
-export async function processRenderQueue(budgetMs = 240_000): Promise<{ done: number; failed: number }> {
+export async function processRenderQueue(
+  budgetMs = 240_000,
+): Promise<{ done: number; failed: number; skipped?: string }> {
   const admin = createAdminClient()
+
+  // No renderer here → leave every job queued and untouched (see
+  // rendererAvailable). This is what lets approvals made on the live site wait
+  // safely for a local drain instead of failing permanently.
+  if (!rendererAvailable()) {
+    return { done: 0, failed: 0, skipped: 'no Higgsfield renderer in this environment — jobs left queued' }
+  }
+
   const startedAt = Date.now()
   let done = 0
   let failed = 0
@@ -143,6 +179,33 @@ export async function processRenderQueue(budgetMs = 240_000): Promise<{ done: nu
   }
 
   return { done, failed }
+}
+
+/**
+ * Put failed render jobs back in the queue with their attempt counter reset,
+ * and return their outfits to approved_rendering so a successful render
+ * publishes them. Use after fixing whatever broke the render (e.g. draining
+ * from a machine where the Higgsfield CLI is logged in).
+ */
+export async function requeueFailedRenders(): Promise<{ requeued: number }> {
+  const admin = createAdminClient()
+  const { data: rows } = await (admin.from('render_job') as any)
+    .update({ status: 'queued', attempts: 0, error: null, started_at: null, finished_at: null })
+    .eq('status', 'failed')
+    .select('outfit_id')
+  const outfitIds = ((rows ?? []) as any[]).map((r) => r.outfit_id)
+
+  if (outfitIds.length > 0) {
+    await (admin.from('outfit') as any)
+      .update({ status: 'approved_rendering', last_render_error: null })
+      .in('outfit_id', outfitIds)
+      .eq('status', 'render_failed')
+    await writeAudit({
+      action: 'render_requeued', entity: 'render_job', entityId: null,
+      trigger: 'desktop', after: { count: outfitIds.length },
+    })
+  }
+  return { requeued: outfitIds.length }
 }
 
 /** Queue stats for the digest email ("rendering now: n" + failures). */
