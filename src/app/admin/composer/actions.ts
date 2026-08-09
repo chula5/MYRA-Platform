@@ -14,8 +14,31 @@ import {
 import { revalidatePath } from 'next/cache'
 import { generateHiggsfieldShootForOutfit } from '@/app/admin/projects/higgsfield-actions'
 import { generateOccasionTags } from '@/app/admin/ai/occasion-tags'
-import { loadStyleModel, recordStyleDecision } from '@/lib/style-brain-store'
+import { loadStyleModel, recordStyleDecision, recordStyleOffers } from '@/lib/style-brain-store'
 import { learnedBonus, blendStrength, type FeatureItem } from '@/lib/style-brain'
+import {
+  formalityBand,
+  deriveOccasionScores,
+  computeSwapDeltas,
+  hardSkipPairs,
+  isExcluded,
+  confidenceGate,
+} from '@/lib/pipeline'
+import { evaluateHouseStyle, type RuleHit } from '@/lib/house-style'
+import {
+  toHouseItem,
+  loadLearnedMaterialPairs,
+  recordHouseRejections,
+  recordMaterialPairings,
+} from '@/lib/house-style-store'
+import {
+  loadEjectionConstraints,
+  loadApprovedVectors,
+  loadPipelineConfig,
+  recordEjection,
+  ensureItemsScored,
+  vectorForCandidate,
+} from '@/lib/pipeline-store'
 
 // Map a library item to the Style Brain's feature shape.
 function toFeature(it: ItemWithBrand): FeatureItem {
@@ -34,6 +57,15 @@ function toFeature(it: ItemWithBrand): FeatureItem {
 export interface ComposedCandidatePayload {
   candidateIndex: number
   score: number
+  // Confidence gate: avg cosine to the nearest 5 approved outfits, minus
+  // ejection / colour / brand penalties. Routes to a fast or standard lane.
+  similarity: number
+  confidence: number
+  lane: 'fast' | 'standard'
+  reasons: string[]
+  // House Style Constitution read-out for this candidate.
+  statement: string | null      // "the one deliberate surprise"
+  echoes: string[]              // what holds the look together
   items: Array<{
     slot: Slot
     item_id: string
@@ -44,6 +76,12 @@ export interface ComposedCandidatePayload {
   }>
 }
 
+// Why candidates were discarded before scoring — so an empty pool is explainable.
+export interface HouseRejectionSummary {
+  total: number
+  byCode: { code: string; rule: string; count: number; message: string }[]
+}
+
 export interface SlotPlanPayload {
   anchorSlot: Slot
   required: Slot[]
@@ -52,10 +90,12 @@ export interface SlotPlanPayload {
 
 export async function composeForAnchor(
   anchorItemId: string,
+  occasion?: string | null,
 ): Promise<{
   anchor?: ItemWithBrand
   candidates?: ComposedCandidatePayload[]
   slotPlan?: SlotPlanPayload
+  houseRejections?: HouseRejectionSummary
   error?: string
 }> {
   try {
@@ -70,26 +110,135 @@ export async function composeForAnchor(
     // Style Brain closed loop: fold Chloe's learned taste INTO generation, so
     // the composer builds & keeps the combos she'd approve (not just re-ranks).
     // Safe no-op until there are decisions (blend ramps from 0).
-    const model = await loadStyleModel()
+    const [model, constraints, approvedVectors, config, learnedPairs] = await Promise.all([
+      loadStyleModel(),
+      loadEjectionConstraints(),
+      loadApprovedVectors(500),
+      loadPipelineConfig(),
+      loadLearnedMaterialPairs(),
+    ])
+
+    // Ejection constraints: quarantined items and items ejected 2+ times in
+    // this context never make it into the candidate pools.
+    const band = formalityBand([anchor])
+    const pool = library.filter(
+      (i) => !isExcluded(constraints, i.item_id, slotForItemType(i.item_type), band),
+    )
+
+    // HOUSE STYLE CONSTITUTION — the generative gate. Runs before vector
+    // scoring; written rules override learned statistics. The old skip-list
+    // rides along as SOFT penalties inside the evaluation.
+    const houseOpts = {
+      occasion,
+      learnedApprovedPairs: learnedPairs.approved,
+      learnedRejectedPairs: learnedPairs.rejected,
+      softSkipPairs: hardSkipPairs(model),
+    }
+    const anchorSlot0 = slotForItemType(anchor.item_type)
+    const rejectionHits: RuleHit[] = []
+    const houseVerdicts = new Map<string, ReturnType<typeof evaluateHouseStyle>>()
+    const verdictFor = (items: { item: ItemWithBrand; slot: Slot }[]) => {
+      const key = items.map((x) => x.item.item_id).sort().join('|')
+      let v = houseVerdicts.get(key)
+      if (!v) {
+        v = evaluateHouseStyle(
+          [toHouseItem(anchor, anchorSlot0), ...items.map((x) => toHouseItem(x.item, x.slot))],
+          houseOpts,
+        )
+        houseVerdicts.set(key, v)
+      }
+      return v
+    }
+
     const raw = generateCandidates({
       anchor,
-      library,
+      library: pool,
       learnedBlend: blendStrength(model),
       learnedBonus: (items) => learnedBonus(model, [toFeature(anchor), ...items.map((x) => toFeature(x.item))]),
+      houseGate: (items) => {
+        const v = verdictFor(items)
+        if (!v.pass) rejectionHits.push(...v.violations)
+        return v.pass
+      },
+    })
+    const allowed = raw
+
+    // Log why candidates never made it, and summarise for the UI.
+    void recordHouseRejections(rejectionHits, anchorItemId)
+    const rejByCode = new Map<string, { rule: string; count: number; message: string }>()
+    for (const h of rejectionHits) {
+      const cur = rejByCode.get(h.code) ?? { rule: h.rule, count: 0, message: h.message }
+      cur.count++
+      rejByCode.set(h.code, cur)
+    }
+    const houseRejections: HouseRejectionSummary = {
+      total: rejectionHits.length,
+      byCode: [...rejByCode.entries()]
+        .map(([code, v]) => ({ code, ...v }))
+        .sort((a, b) => b.count - a.count),
+    }
+
+    const candidates: ComposedCandidatePayload[] = allowed.map((c, idx) => {
+      // Full 34-dim vector at composition time — real occasion scores, no
+      // defaults — then gate against approved history.
+      const allEntries = [{ item: anchor, slot: slotForItemType(anchor.item_type) }, ...c.items]
+      const occasion = deriveOccasionScores(allEntries)
+      const vector = vectorForCandidate(
+        allEntries,
+        occasion,
+        deriveOutfitLevelScores(anchor, c.items),
+        deriveSlotScores(allEntries),
+      )
+      const candBand = formalityBand(allEntries.map((e) => e.item))
+      const gate = confidenceGate({
+        vector,
+        approvedVectors,
+        items: allEntries.map((e) => toFeature(e.item)),
+        itemIds: allEntries.map((e) => e.item.item_id),
+        itemLabels: allEntries.map((e) => [e.item.brand?.name, e.item.product_name].filter(Boolean).join(' ')),
+        slotByItemId: Object.fromEntries(allEntries.map((e) => [e.item.item_id, e.slot])),
+        band: candBand,
+        constraints,
+        model,
+      })
+      // House verdict: soft penalties (white+cream, discordant colours, occasion
+      // notes…) subtract from confidence and surface as reasons.
+      const hv = verdictFor(c.items)
+      const confidence = gate.confidence - hv.penaltyTotal
+      const statementItem = hv.statement
+        ? allEntries.find((e) => e.item.item_id === hv.statement!.itemId)
+        : null
+      return {
+        candidateIndex: idx,
+        score: Number(c.score.toFixed(3)),
+        similarity: Number(gate.similarity.toFixed(3)),
+        confidence: Number(confidence.toFixed(3)),
+        lane: confidence >= config.fast_lane_threshold ? 'fast' as const : 'standard' as const,
+        reasons: [...gate.reasons, ...hv.penalties.map((p) => p.message)],
+        statement: statementItem
+          ? `${[statementItem.item.brand?.name, statementItem.item.product_name].filter(Boolean).join(' ')} (${hv.statement!.kind})`
+          : null,
+        echoes: hv.echoes,
+        items: c.items.map(({ item, slot }) => ({
+          slot,
+          item_id: item.item_id,
+          product_name: item.product_name,
+          brand_name: item.brand?.name ?? null,
+          image_url: item.image_url,
+          compat: Number((c.breakdown.find(b => b.itemId === item.item_id)?.compatWithAnchor ?? 0).toFixed(3)),
+        })),
+      }
     })
 
-    const candidates: ComposedCandidatePayload[] = raw.map((c, idx) => ({
-      candidateIndex: idx,
-      score: Number(c.score.toFixed(3)),
-      items: c.items.map(({ item, slot }) => ({
-        slot,
-        item_id: item.item_id,
-        product_name: item.product_name,
-        brand_name: item.brand?.name ?? null,
-        image_url: item.image_url,
-        compat: Number((c.breakdown.find(b => b.itemId === item.item_id)?.compatWithAnchor ?? 0).toFixed(3)),
+    // Every shown candidate is an OFFER — the denominator of approval rates.
+    void recordStyleOffers(
+      allowed.map((c) => ({
+        items: [toFeature(anchor), ...c.items.map((x) => toFeature(x.item))],
+        anchorItemId,
+        itemIds: [anchor.item_id, ...c.items.map((x) => x.item.item_id)],
       })),
-    }))
+      'composer',
+    )
 
     const anchorSlot = slotForItemType(anchor.item_type)
     const plan = slotPlanForAnchor(anchorSlot)
@@ -99,7 +248,7 @@ export async function composeForAnchor(
       optional: plan.optional,
     }
 
-    return { anchor, candidates, slotPlan }
+    return { anchor, candidates, slotPlan, houseRejections }
   } catch (err: unknown) {
     console.error('[composeForAnchor]', err)
     return { error: err instanceof Error ? err.message : 'Compose failed' }
@@ -302,7 +451,19 @@ export async function approveCandidate(
   anchorItemId: string,
   itemIds: string[],
   slots: Slot[],
-  opts?: { autoShoot?: boolean; source?: 'composer' | 'review'; score?: number },
+  // recordDecision:false lets the pipeline pre-create a draft outfit (for
+  // overnight Higgsfield pre-rendering) WITHOUT logging an approve Chloe never
+  // made — the decision is recorded when she actually taps approve.
+  opts?: {
+    autoShoot?: boolean
+    source?: 'composer' | 'review'
+    score?: number
+    recordDecision?: boolean
+    // Styling-set membership + stylist attribution, stamped onto the outfit.
+    stylingSetId?: string | null
+    stylistId?: string | null
+    variantDirection?: string | null
+  },
 ): Promise<{ outfitId?: string; projectId?: string; error?: string }> {
   if (itemIds.length !== slots.length) return { error: 'itemIds and slots length mismatch' }
 
@@ -316,6 +477,10 @@ export async function approveCandidate(
 
     const additions = (additionItems as ItemWithBrand[]).map((item, i) => ({ item, slot: slots[i] }))
 
+    // Pipeline gate: no item enters an outfit with unscored / default
+    // dimensions — vision-score any incomplete item's image first.
+    await ensureItemsScored([anchor, ...additions.map((a) => a.item)])
+
     const projRes = await ensureComposerProject()
     if (projRes.error || !projRes.projectId) return { error: projRes.error ?? 'No project' }
     const projectId = projRes.projectId
@@ -325,6 +490,10 @@ export async function approveCandidate(
 
     const slotScores = deriveSlotScores(allEntries)
     const outfitLevel = deriveOutfitLevelScores(anchor, additions)
+    // Real occasion scores derived from the items — never the defaulted 3s.
+    const occasionScores = deriveOccasionScores(allEntries)
+    // Full 34-dim taste vector, computed at composition time.
+    const tasteVector = vectorForCandidate(allEntries, occasionScores, outfitLevel, slotScores)
 
     const allBrandIds = Array.from(new Set(
       allEntries.map(e => e.item.brand_id).filter((id): id is string => !!id),
@@ -342,9 +511,15 @@ export async function approveCandidate(
         status: 'draft',
         project_id: projectId,
         admin_notes: 'Generated by Outfit Composer. Review and refine before publishing.',
-        formality: 3, planning: 3, wearer_priority: 3, time_of_day: 3,
+        ...occasionScores,
         ...outfitLevel,
         ...slotScores,
+        taste_vector: tasteVector,
+        // Styling-set membership + stylist attribution (Part A/C). Every outfit
+        // belongs to exactly one stylist; default resolves to Chloe.
+        styling_set_id: opts?.stylingSetId ?? null,
+        stylist_id: opts?.stylistId ?? (await (await import('@/lib/stylist-store')).resolveStylistId(null)),
+        variant_direction: opts?.variantDirection ?? null,
       }])
       .select('outfit_id')
       .single()
@@ -392,14 +567,20 @@ export async function approveCandidate(
     )
 
     // Style Brain: this YES is a positive training signal — learn the combination.
-    await recordStyleDecision({
-      items: allEntries.map((e) => toFeature(e.item)),
-      decision: 'approve',
-      source: opts?.source ?? 'composer',
-      anchorItemId,
-      itemIds: allEntries.map((e) => e.item.item_id),
-      baseScore: opts?.score ?? null,
-    })
+    if (opts?.recordDecision !== false) {
+      await recordStyleDecision({
+        items: allEntries.map((e) => toFeature(e.item)),
+        decision: 'approve',
+        source: opts?.source ?? 'composer',
+        anchorItemId,
+        itemIds: allEntries.map((e) => e.item.item_id),
+        baseScore: opts?.score ?? null,
+        stylistId: opts?.stylistId ?? null,
+      })
+      // Constitution learning: every material pairing in an approved outfit
+      // grows the pairing table.
+      void recordMaterialPairings(allEntries.map((e) => toHouseItem(e.item, e.slot)), 'approve')
+    }
 
     return { outfitId, projectId }
   } catch (err: unknown) {
@@ -409,13 +590,15 @@ export async function approveCandidate(
 }
 
 // Style Brain: record a SWAP (or remove). Captures the piece swapped OUT as a
-// soft negative AND the from→to detail + how different the replacement was, so
-// admin can see what got swapped and whether it was a minor tweak or a
-// completely different piece. Fire-and-forget safe.
+// soft negative, the from→to detail, AND the full scored-dimension delta
+// (e.g. colour_family: cream→black) — the swap's "reason". Each swap is also an
+// EJECTION with context (slot + formality band + occasion), feeding the
+// candidate-pool exclusion and quarantine rules. Fire-and-forget safe.
 export async function recordSwap(
   anchorItemId: string,
   fromItemId: string,
   toItemId?: string | null,
+  context?: { candidateItemIds?: string[]; occasion?: string | null },
 ): Promise<{ ok: true }> {
   try {
     const [anchor, from, to] = await Promise.all([
@@ -433,26 +616,97 @@ export async function recordSwap(
     }
     // "completely different" = a different item type, or two+ attributes changed.
     const different = to ? (changed.includes('type') || changed.length >= 2) : true
-    await recordStyleDecision({
-      items: [toFeature(anchor), toFeature(from)],
-      decision: 'skip',
-      source: 'swap',
-      anchorItemId,
-      itemIds: [anchor.item_id, from.item_id],
-      extraFeatures: {
-        swap: {
-          action: to ? 'swap' : 'remove',
-          from: label(from),
-          to: to ? label(to) : null,
-          fromType: from.item_type,
-          toType: to?.item_type ?? null,
-          changed,
-          different,
+
+    // The scored-dimension diff of outgoing vs incoming — the swap reason.
+    const deltas = to ? computeSwapDeltas(from as any, to as any) : {}
+
+    // Ejection context: the formality band of the outfit being edited (from its
+    // candidate items when the client passes them, else anchor + ejected item).
+    const ctxItems = context?.candidateItemIds?.length
+      ? ((await Promise.all(context.candidateItemIds.map((id) => getItem(id)))).filter(Boolean) as ItemWithBrand[])
+      : [anchor, from]
+    const band = formalityBand(ctxItems as any[])
+    const slot = slotForItemType(from.item_type)
+
+    await Promise.all([
+      recordStyleDecision({
+        items: [toFeature(anchor), toFeature(from)],
+        decision: 'skip',
+        source: 'swap',
+        anchorItemId,
+        itemIds: [anchor.item_id, from.item_id],
+        extraFeatures: {
+          swap: {
+            action: to ? 'swap' : 'remove',
+            from: label(from),
+            to: to ? label(to) : null,
+            fromType: from.item_type,
+            toType: to?.item_type ?? null,
+            changed,
+            different,
+            deltas,
+            slot,
+            band,
+          },
         },
-      },
-    })
+      }),
+      recordEjection({
+        itemId: from.item_id,
+        slot,
+        band,
+        occasion: context?.occasion ?? null,
+        anchorItemId: anchor.item_id,
+        replacedBy: to?.item_id ?? null,
+        deltas,
+      }),
+    ])
+    // Constitution learning: the ejected item's material pairings (against the
+    // rest of the outfit being edited) are rejections — only pairs involving
+    // the ejected piece, not the pairs she kept.
+    const others = ctxItems.filter((i) => i.item_id !== from.item_id)
+    if (others.length) {
+      void recordMaterialPairings(
+        [toHouseItem(from), ...others.map((i) => toHouseItem(i))].slice(0, 6),
+        'reject',
+        from.item_id,
+      )
+    }
   } catch (err) {
     console.error('[recordSwap]', err)
+  }
+  return { ok: true }
+}
+
+// Fast-lane feedback: a one-tap approve with no edits is a clean approve; an
+// approve after swapping/adding anything is an OVERRIDE (the gate was wrong).
+// Overrides tighten the fast-lane threshold; a sustained clean streak relaxes
+// it. Fire-and-forget safe.
+export async function recordFastLaneOutcome(event: 'override' | 'clean_approve'): Promise<{ ok: true }> {
+  try {
+    const { applyFastLaneEvent } = await import('@/lib/pipeline-store')
+    await applyFastLaneEvent(event)
+    // Autonomy tracker: a fast-lane review outcome (variant-level).
+    const { foldAutonomyReview } = await import('@/lib/stylist-store')
+    await foldAutonomyReview(null, { lane: 'fast', swapped: event === 'override', approved: true })
+  } catch (err) {
+    console.error('[recordFastLaneOutcome]', err)
+  }
+  return { ok: true }
+}
+
+// Autonomy tracker: fold any reviewed variant (either lane, any outcome) into
+// the stylist's graduation state. Fire-and-forget safe.
+export async function recordReviewOutcome(
+  lane: 'fast' | 'standard',
+  swapped: boolean,
+  approved: boolean,
+  stylistId?: string | null,
+): Promise<{ ok: true }> {
+  try {
+    const { foldAutonomyReview } = await import('@/lib/stylist-store')
+    await foldAutonomyReview(stylistId ?? null, { lane, swapped, approved })
+  } catch (err) {
+    console.error('[recordReviewOutcome]', err)
   }
   return { ok: true }
 }

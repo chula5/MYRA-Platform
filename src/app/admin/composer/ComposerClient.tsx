@@ -8,6 +8,7 @@ import {
   approveCandidate,
   getSwapOptions,
   rescoreCandidate,
+  recordSwap,
   type ComposedCandidatePayload,
   type SlotPlanPayload,
   type SwapOption,
@@ -225,6 +226,13 @@ export default function ComposerClient({
       image_url: option.image_url,
       compat: option.compat,
     }
+    // Style Brain: a replacement is an EJECTION — record the from→to delta and
+    // context so the pipeline learns which items keep getting swapped out.
+    if (swap.itemIdx !== null && current[swap.itemIdx]) {
+      void recordSwap(anchor.item_id, current[swap.itemIdx].item_id, option.item_id, {
+        candidateItemIds: [anchor.item_id, ...current.map((i) => i.item_id)],
+      })
+    }
     const next =
       swap.itemIdx === null
         ? [...current, replacement] // adding a new slot
@@ -239,6 +247,12 @@ export default function ComposerClient({
     if (!anchor) return
     const candidate = candidates[candidateIdx]
     const current = itemsFor(candidateIdx, candidate)
+    // A removal is an ejection too (no replacement).
+    if (current[itemIdx]) {
+      void recordSwap(anchor.item_id, current[itemIdx].item_id, null, {
+        candidateItemIds: [anchor.item_id, ...current.map((i) => i.item_id)],
+      })
+    }
     const next = current.filter((_, i) => i !== itemIdx)
     setEdits((e) => ({ ...e, [candidateIdx]: next }))
     await applyRescore(candidateIdx, next)
@@ -477,17 +491,39 @@ export default function ComposerClient({
               const isRescoring = !!rescoring[idx]
               return (
                 <div key={idx} className="bg-white border border-[#E2E0DB] p-5">
-                  <div className="flex items-baseline justify-between mb-4">
+                  <div className="flex items-baseline justify-between mb-2">
                     <p className="text-[10px] tracking-[0.113em] text-[#4A4E57]">
                       COMPOSITION {String(idx + 1).padStart(2, '0')}
+                      {candidate.lane === 'fast' && (
+                        <span className="ml-2 bg-[#3D7A50] text-white text-[8px] tracking-[0.09em] px-1.5 py-0.5 rounded">FAST LANE</span>
+                      )}
                       {isEdited && (
                         <span className="ml-2 text-[9px] tracking-[0.09em] text-[#C4A882]">EDITED</span>
                       )}
                     </p>
                     <p className="text-[9px] tracking-[0.09em] text-[#A8A8A4]">
                       {isRescoring ? 'RESCORING…' : `COHERENCE ${(score * 100).toFixed(0)}`}
+                      {typeof candidate.confidence === 'number' && !isRescoring && (
+                        <span> · CONFIDENCE {(candidate.confidence * 100).toFixed(0)}</span>
+                      )}
                     </p>
                   </div>
+                  {/* House Style read-out: statement + echo */}
+                  {(candidate.statement || (candidate.echoes?.length ?? 0) > 0) && (
+                    <p className="mb-2 text-[8px] tracking-[0.06em] text-[#A8A8A4] leading-relaxed">
+                      {candidate.statement && <span className="text-[#4A4E57]">STATEMENT: {candidate.statement.toUpperCase()}</span>}
+                      {candidate.statement && (candidate.echoes?.length ?? 0) > 0 && ' · '}
+                      {(candidate.echoes?.length ?? 0) > 0 && <span>ECHO: {candidate.echoes[0].toUpperCase()}</span>}
+                    </p>
+                  )}
+                  {/* Confidence-gate penalties — why this isn't a fast-lane outfit */}
+                  {(candidate.reasons?.length ?? 0) > 0 && (
+                    <ul className="mb-3 space-y-0.5">
+                      {candidate.reasons.map((r, ri) => (
+                        <li key={ri} className="text-[8px] tracking-[0.06em] text-[#8B5E00] leading-relaxed">▲ {r.toUpperCase()}</li>
+                      ))}
+                    </ul>
+                  )}
 
                   {/* Item grid: anchor + additions */}
                   <div className="grid grid-cols-4 gap-2 mb-5">

@@ -2,9 +2,24 @@
 
 import { createAdminClient } from '@/lib/supabase-server'
 import { getItem, getReadyAndLiveItems } from '@/lib/admin-queries'
-import { pairCompat, slotForItemType, slotPlanForAnchor } from '@/lib/composer'
-import { loadStyleModel } from '@/lib/style-brain-store'
+import { pairCompat, slotForItemType, slotPlanForAnchor, deriveSlotScores, deriveOutfitLevelScores } from '@/lib/composer'
+import { loadStyleModel, recordStyleOffers } from '@/lib/style-brain-store'
 import { blendedScore } from '@/lib/style-brain'
+import {
+  formalityBand,
+  deriveOccasionScores,
+  hardSkipPairs,
+  isExcluded,
+  confidenceGate,
+} from '@/lib/pipeline'
+import { evaluateHouseStyle } from '@/lib/house-style'
+import { toHouseItem, loadLearnedMaterialPairs, recordHouseRejections } from '@/lib/house-style-store'
+import {
+  loadEjectionConstraints,
+  loadApprovedVectors,
+  loadPipelineConfig,
+  vectorForCandidate,
+} from '@/lib/pipeline-store'
 
 // Anchor garments we generate review outfits for.
 const DRESS = new Set(['mini_dress', 'midi_dress', 'maxi_dress', 'shirt_dress', 'slip_dress'])
@@ -74,6 +89,15 @@ export interface ReviewItem {
 export interface ReviewCandidate {
   candidateIndex: number
   score: number
+  // Confidence gate (see pipeline.ts): similarity to approved history minus
+  // ejection / colour / brand penalties, with the reasons it scored low.
+  similarity: number
+  confidence: number
+  lane: 'fast' | 'standard'
+  reasons: string[]
+  // House Style Constitution read-out.
+  statement: string | null
+  echoes: string[]
   items: ReviewItem[]
 }
 
@@ -173,7 +197,18 @@ export async function composeForReview(anchorItemId: string): Promise<{
   try {
     const anchor: any = await getItem(anchorItemId)
     if (!anchor) return { error: 'Anchor not found' }
-    const lib = styleLibrary(await getReadyAndLiveItems(), anchor)
+    const [constraints, approvedVectors, config, learnedPairs] = await Promise.all([
+      loadEjectionConstraints(),
+      loadApprovedVectors(500),
+      loadPipelineConfig(),
+      loadLearnedMaterialPairs(),
+    ])
+    const anchorBand = formalityBand([anchor])
+    // Ejection constraints: quarantined items and items ejected 2+ times in
+    // this context never enter the pools.
+    const lib = styleLibrary(await getReadyAndLiveItems(), anchor).filter(
+      (it: any) => !isExcluded(constraints, it.item_id, slotForItemType(it.item_type), anchorBand),
+    )
     const anchorTier = anchor.brand?.price_tier ?? null
     const cat = anchorCategory(String(anchor.item_type))
 
@@ -215,13 +250,43 @@ export async function composeForReview(anchorItemId: string): Promise<{
       material_formality: it.material_formality ?? null, brand_name: it.brand?.name ?? null,
       price_tier: it.brand?.price_tier ?? null,
     })
+    // HOUSE STYLE CONSTITUTION — the pre-vector gate. Hard rules discard the
+    // combo before it is scored; the learned skip-list is a SOFT penalty inside
+    // the verdict, not a ban. Written rules override learned statistics.
+    const houseOpts = {
+      learnedApprovedPairs: learnedPairs.approved,
+      learnedRejectedPairs: learnedPairs.rejected,
+      softSkipPairs: hardSkipPairs(styleModel),
+    }
+    const houseVerdicts = new Map<string, ReturnType<typeof evaluateHouseStyle>>()
+    const verdictFor = (items: any[]) => {
+      const key = items.map((i) => i.item_id).sort().join('|')
+      let v = houseVerdicts.get(key)
+      if (!v) {
+        v = evaluateHouseStyle(
+          [toHouseItem(anchor), ...items.map((i) => toHouseItem(i))],
+          houseOpts,
+        )
+        houseVerdicts.set(key, v)
+      }
+      return v
+    }
+    const rejectionHits: import('@/lib/house-style').RuleHit[] = []
+
     const scored = combos
       .filter((items) => !tierBandViolation([anchorTier, ...items.map((i) => i.brand?.price_tier ?? null)]))
+      .filter((items) => {
+        const v = verdictFor(items)
+        if (!v.pass) rejectionHits.push(...v.violations)
+        return v.pass
+      })
       .map((items) => ({
         items,
         score: Math.max(0, Math.min(1, blendedScore(styleModel, comboScore(anchor, items), [feat(anchor), ...items.map(feat)]))),
       }))
       .sort((a, b) => b.score - a.score)
+
+    void recordHouseRejections(rejectionHits, anchorItemId)
 
     // Diversity: no single item appears in more than 2 candidates.
     const use = new Map<string, number>()
@@ -240,21 +305,71 @@ export async function composeForReview(anchorItemId: string): Promise<{
       }
     }
 
-    const candidates: ReviewCandidate[] = picked.map((s, idx) => ({
-      candidateIndex: idx,
-      score: Number(s.score.toFixed(3)),
-      items: s.items.map((it: any) => ({
-        slot: slotForItemType(it.item_type),
-        item_id: it.item_id,
-        product_name: it.product_name,
-        brand_name: it.brand?.name ?? null,
-        image_url: it.image_url,
-        price: fmtPrice(it.price, it.currency),
-        compat: Number(pairCompat(anchor, it).total.toFixed(3)),
-        stock_status: it.stock_status ?? null,
-        stock_sizes: it.stock_sizes ?? null,
+    const candidates: ReviewCandidate[] = picked.map((s, idx) => {
+      // Vector + confidence gate at composition time.
+      const entries = [
+        { item: anchor, slot: slotForItemType(anchor.item_type) },
+        ...s.items.map((it: any) => ({ item: it, slot: slotForItemType(it.item_type) })),
+      ]
+      const occasion = deriveOccasionScores(entries)
+      const vector = vectorForCandidate(
+        entries,
+        occasion,
+        deriveOutfitLevelScores(anchor, entries.slice(1)),
+        deriveSlotScores(entries),
+      )
+      const gate = confidenceGate({
+        vector,
+        approvedVectors,
+        items: entries.map((e) => feat(e.item)),
+        itemIds: entries.map((e) => e.item.item_id),
+        itemLabels: entries.map((e) => [e.item.brand?.name, e.item.product_name].filter(Boolean).join(' ')),
+        slotByItemId: Object.fromEntries(entries.map((e) => [e.item.item_id, e.slot])),
+        band: formalityBand(entries.map((e) => e.item)),
+        constraints,
+        model: styleModel,
+      })
+      // House verdict: soft penalties fold into confidence; statement + echoes
+      // travel with the candidate for display.
+      const hv = verdictFor(s.items)
+      const confidence = gate.confidence - hv.penaltyTotal
+      const statementIt = hv.statement
+        ? [anchor, ...s.items].find((i: any) => i.item_id === hv.statement!.itemId)
+        : null
+      return {
+        candidateIndex: idx,
+        score: Number(s.score.toFixed(3)),
+        similarity: Number(gate.similarity.toFixed(3)),
+        confidence: Number(confidence.toFixed(3)),
+        lane: confidence >= config.fast_lane_threshold ? 'fast' as const : 'standard' as const,
+        reasons: [...gate.reasons, ...hv.penalties.map((p) => p.message)],
+        statement: statementIt
+          ? `${[statementIt.brand?.name, statementIt.product_name].filter(Boolean).join(' ')} (${hv.statement!.kind})`
+          : null,
+        echoes: hv.echoes,
+        items: s.items.map((it: any) => ({
+          slot: slotForItemType(it.item_type),
+          item_id: it.item_id,
+          product_name: it.product_name,
+          brand_name: it.brand?.name ?? null,
+          image_url: it.image_url,
+          price: fmtPrice(it.price, it.currency),
+          compat: Number(pairCompat(anchor, it).total.toFixed(3)),
+          stock_status: it.stock_status ?? null,
+          stock_sizes: it.stock_sizes ?? null,
+        })),
+      }
+    })
+
+    // Every shown candidate is an OFFER — the denominator of approval rates.
+    void recordStyleOffers(
+      picked.map((s) => ({
+        items: [feat(anchor), ...s.items.map(feat)],
+        anchorItemId,
+        itemIds: [anchor.item_id, ...s.items.map((it: any) => it.item_id)],
       })),
-    }))
+      'review',
+    )
 
     return { anchor: anchorPayload(anchor), candidates }
   } catch (err) {

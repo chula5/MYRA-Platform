@@ -9,7 +9,7 @@ import {
   type ReviewCandidate,
   type ReviewItem,
 } from './actions'
-import { approveCandidate, rescoreCandidate, recordSkipDecision, recordSwap } from '@/app/admin/composer/actions'
+import { approveCandidate, rescoreCandidate, recordSkipDecision, recordSwap, recordFastLaneOutcome, recordReviewOutcome } from '@/app/admin/composer/actions'
 import { generateHiggsfieldShootForOutfit } from '@/app/admin/projects/higgsfield-actions'
 import type { Slot } from '@/lib/composer'
 
@@ -67,6 +67,7 @@ interface CandState {
   approving?: boolean
   approved?: boolean
   discarded?: boolean
+  edited?: boolean   // swapped/added an item — a fast-lane approve becomes an override
   outfitId?: string
   projectId?: string
   error?: string
@@ -229,8 +230,16 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
       setStates((s) => ({ ...s, [idx]: { ...s[idx], approving: false, error: res.error } }))
       return
     }
-    setStates((s) => ({ ...s, [idx]: { approved: true, outfitId: res.outfitId, projectId: res.projectId, shoot: 'running' } }))
+    const wasEdited = !!states[idx]?.edited
+    setStates((s) => ({ ...s, [idx]: { ...s[idx], approving: false, approved: true, outfitId: res.outfitId, projectId: res.projectId, shoot: 'running' } }))
     setBuilt((b) => b + 1)
+
+    // Adaptive threshold: a fast-lane candidate approved untouched is a clean
+    // one-tap; approved after edits it's an override (tightens the gate).
+    // recordFastLaneOutcome also feeds the autonomy tracker for fast lane;
+    // standard-lane approvals feed it via recordReviewOutcome.
+    if (c.lane === 'fast') void recordFastLaneOutcome(wasEdited ? 'override' : 'clean_approve')
+    else void recordReviewOutcome('standard', wasEdited, true)
 
     // Coordinate the Refined Higgsfield shoot now, awaiting the result so the
     // card reflects whether it actually generated. ~30–90s.
@@ -247,9 +256,13 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
 
   function discard(idx: number) {
     setStates((s) => ({ ...s, [idx]: { ...s[idx], discarded: true } }))
-    // Style Brain: a SKIP is a negative training signal.
+    // Style Brain: a SKIP is a negative training signal. Also feeds the
+    // autonomy tracker (a reject resets the streak).
     const c = cands[idx]
-    if (c) void recordSkipDecision(anchor.item_id, c.items.map((i) => i.item_id), 'review', c.score)
+    if (c) {
+      void recordSkipDecision(anchor.item_id, c.items.map((i) => i.item_id), 'review', c.score)
+      void recordReviewOutcome(c.lane ?? 'standard', false, false)
+    }
   }
 
   async function openSwap(candIdx: number, itemIdx: number, slot: string) {
@@ -308,8 +321,14 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
   async function performSwap(opt: ReviewItem) {
     if (!swap) return
     const { candIdx, itemIdx, mode } = swap
-    // Swapping out a piece for `opt` — record the from→to detail for the Style Brain.
-    if (mode === 'swap' && cands[candIdx].items[itemIdx]) void recordSwap(anchor.item_id, cands[candIdx].items[itemIdx].item_id, opt.item_id)
+    // Swapping out a piece for `opt` — record the from→to detail, the scored-
+    // dimension delta, and the ejection context for the Style Brain.
+    if (mode === 'swap' && cands[candIdx].items[itemIdx]) {
+      void recordSwap(anchor.item_id, cands[candIdx].items[itemIdx].item_id, opt.item_id, {
+        candidateItemIds: [anchor.item_id, ...cands[candIdx].items.map((i) => i.item_id)],
+      })
+    }
+    setStates((s) => ({ ...s, [candIdx]: { ...s[candIdx], edited: true } }))
     // Compute the new item list (append in add mode, replace in swap mode).
     const items =
       mode === 'add'
@@ -373,10 +392,34 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
             const editable = !st?.approved
             return (
               <div key={idx} className="border border-[#E2E0DB] rounded-[10px] p-3">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[9px] tracking-[0.16em] text-[#6B6B6B]">POTENTIAL OUTFIT {String(idx + 1).padStart(2, '0')}</p>
-                  <p className="text-[9px] tracking-[0.12em] text-[#A8A8A4]">COHERENCE {(c.score * 100).toFixed(0)}</p>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[9px] tracking-[0.16em] text-[#6B6B6B]">POTENTIAL OUTFIT {String(idx + 1).padStart(2, '0')}</p>
+                    {c.lane === 'fast' && (
+                      <span className="bg-[#3D7A50] text-white text-[7px] tracking-[0.12em] px-1.5 py-0.5 rounded">FAST LANE</span>
+                    )}
+                  </div>
+                  <p className="text-[9px] tracking-[0.12em] text-[#A8A8A4]">
+                    COHERENCE {(c.score * 100).toFixed(0)}
+                    {typeof c.confidence === 'number' && <span> · CONFIDENCE {(c.confidence * 100).toFixed(0)}</span>}
+                  </p>
                 </div>
+                {/* House Style read-out: the one deliberate surprise + what echoes */}
+                {(c.statement || (c.echoes?.length ?? 0) > 0) && (
+                  <p className="mb-1.5 text-[8px] tracking-[0.06em] text-[#A8A8A4] leading-relaxed">
+                    {c.statement && <span className="text-[#4A4E57]">STATEMENT: {c.statement.toUpperCase()}</span>}
+                    {c.statement && (c.echoes?.length ?? 0) > 0 && ' · '}
+                    {(c.echoes?.length ?? 0) > 0 && <span>ECHO: {c.echoes[0].toUpperCase()}</span>}
+                  </p>
+                )}
+                {/* Why the confidence gate scored this low — shown so a skip/swap is informed */}
+                {(c.reasons?.length ?? 0) > 0 && (
+                  <ul className="mb-2 space-y-0.5">
+                    {c.reasons.map((r, ri) => (
+                      <li key={ri} className="text-[8px] tracking-[0.06em] text-[#8B5E00] leading-relaxed">▲ {r.toUpperCase()}</li>
+                    ))}
+                  </ul>
+                )}
 
                 <div className="grid grid-cols-4 gap-1.5 mb-3">
                   {/* Anchor */}
