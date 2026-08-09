@@ -40,8 +40,11 @@ export async function sendStudioEmail(opts: {
   subject: string
   html: string
   meta?: Record<string, unknown>
-}): Promise<{ sent: boolean; error?: string }> {
+  /** Override the recipient (test sends only — the digests always use TO). */
+  to?: string
+}): Promise<{ sent: boolean; error?: string; id?: string; from?: string; to?: string }> {
   const key = process.env.RESEND_API_KEY
+  const to = opts.to ?? TO
   if (!key) {
     console.error('[sendStudioEmail] RESEND_API_KEY not set — skipping:', opts.subject)
     return { sent: false, error: 'RESEND_API_KEY not set' }
@@ -50,20 +53,24 @@ export async function sendStudioEmail(opts: {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: FROM, to: [TO], subject: opts.subject, html: opts.html }),
+      body: JSON.stringify({ from: FROM, to: [to], subject: opts.subject, html: opts.html }),
     })
+    const raw = await res.text()
     if (!res.ok) {
-      const body = await res.text()
-      console.error('[sendStudioEmail]', res.status, body.slice(0, 300))
-      return { sent: false, error: `Resend ${res.status}` }
+      // Surface Resend's own words — "domain not verified", "invalid from"
+      // etc. are the usual causes and are far more useful than a bare code.
+      console.error('[sendStudioEmail]', res.status, raw.slice(0, 300))
+      return { sent: false, error: `Resend ${res.status}: ${raw.slice(0, 300)}`, from: FROM, to }
     }
+    let id: string | undefined
+    try { id = JSON.parse(raw)?.id } catch { /* id is a convenience only */ }
     try {
       const admin = createAdminClient()
       await (admin.from('email_log') as any).insert({
         kind: opts.kind, subject: opts.subject, meta: opts.meta ?? null,
       })
     } catch { /* ledger failure never blocks the send result */ }
-    return { sent: true }
+    return { sent: true, id, from: FROM, to }
   } catch (err) {
     console.error('[sendStudioEmail]', err)
     return { sent: false, error: err instanceof Error ? err.message : 'send failed' }
