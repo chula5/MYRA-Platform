@@ -8,6 +8,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import FallbackImage from '@/components/FallbackImage'
+import { stockSignal, type StockTone } from '@/lib/studio/stock-label'
 import type { ReviewCard } from '@/lib/studio/review-queue'
 import {
   approveOutfitAction,
@@ -18,6 +19,13 @@ import {
   runSentinelNowAction,
   type SwapSheetCandidate,
 } from './actions'
+
+// Stock tone → colour. Amber reads as "check this", red as "don't ship it".
+const STOCK_TONE: Record<Exclude<StockTone, 'none'>, string> = {
+  out: 'text-[#B83A3A]',
+  low: 'text-[#B07A1E]',
+  ok: 'text-[#3D7A50]',
+}
 
 interface DeepLink {
   outfitId: string
@@ -145,7 +153,7 @@ export default function ReviewClient({
                 composedGroupUrl: res.composedGroupUrl ?? c.composedGroupUrl,
                 items: c.items.map((it) =>
                   it.outfitItemId === outfitItemId
-                    ? { ...it, itemId: candidate.itemId, name: candidate.name, brand: candidate.brand, price: candidate.price, image: candidate.image, dead: false }
+                    ? { ...it, itemId: candidate.itemId, name: candidate.name, brand: candidate.brand, price: candidate.price, image: candidate.image, dead: false, stockStatus: candidate.stockStatus, stockSizes: candidate.stockSizes }
                     : it,
                 ),
                 kind: c.kind === 'restock' ? 'review' : c.kind, // dead item resolved
@@ -303,20 +311,35 @@ export default function ReviewClient({
             {/* Item chips — tap to swap */}
             <div className="absolute inset-x-0 bottom-0 px-3 pb-3 pt-10 bg-gradient-to-t from-white/95 via-white/75 to-transparent">
               <div className="flex flex-wrap gap-1.5">
-                {card.items.map((it) => (
-                  <button
-                    key={it.outfitItemId}
-                    onClick={() => openSheet(it.outfitItemId, it.name)}
-                    className={`text-left text-[9px] tracking-[0.04em] px-2.5 py-1.5 rounded-full border transition-colors max-w-full truncate ${
-                      it.dead
-                        ? 'border-[#B83A3A] text-[#B83A3A] bg-white'
-                        : 'border-[#D8D6D1] text-[#4A4E57] bg-white/90 hover:border-[#0A0A0A]'
-                    }`}
-                  >
-                    {it.dead ? '⚠ ' : ''}
-                    {(it.brand ?? '').toUpperCase()}{it.brand ? ' — ' : ''}{it.name}{it.price ? ` — ${it.price}` : ''}
-                  </button>
-                ))}
+                {card.items.map((it) => {
+                  // Stock is the deciding signal before approving into the feed:
+                  // a piece down to one size shouldn't go live unnoticed.
+                  const stock = stockSignal(it.stockStatus, it.stockSizes)
+                  const alarming = it.dead || stock.tone === 'out'
+                  return (
+                    <button
+                      key={it.outfitItemId}
+                      onClick={() => openSheet(it.outfitItemId, it.name)}
+                      className={`text-left text-[9px] tracking-[0.04em] px-2.5 py-1.5 rounded-[14px] border transition-colors max-w-full ${
+                        alarming
+                          ? 'border-[#B83A3A] text-[#B83A3A] bg-white'
+                          : stock.tone === 'low'
+                            ? 'border-[#D9A441] text-[#4A4E57] bg-white/90 hover:border-[#0A0A0A]'
+                            : 'border-[#D8D6D1] text-[#4A4E57] bg-white/90 hover:border-[#0A0A0A]'
+                      }`}
+                    >
+                      <span className="block truncate">
+                        {alarming ? '⚠ ' : ''}
+                        {(it.brand ?? '').toUpperCase()}{it.brand ? ' — ' : ''}{it.name}{it.price ? ` — ${it.price}` : ''}
+                      </span>
+                      {stock.tone !== 'none' && (
+                        <span className={`block text-[8px] tracking-[0.06em] mt-0.5 ${STOCK_TONE[stock.tone]}`}>
+                          {stock.text}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
               </div>
             </div>
           </div>
@@ -400,6 +423,12 @@ export default function ReviewClient({
                     <p className="text-[9px] text-[#6B6B6B] mt-0.5">
                       {c.price ?? ''} · {(c.similarity * 100).toFixed(0)}%
                     </p>
+                    {(() => {
+                      const s = stockSignal(c.stockStatus, c.stockSizes)
+                      return s.tone === 'none' ? null : (
+                        <p className={`text-[8px] tracking-[0.06em] mt-0.5 truncate ${STOCK_TONE[s.tone]}`}>{s.text}</p>
+                      )
+                    })()}
                   </button>
                 ))}
               </div>

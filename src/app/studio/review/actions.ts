@@ -128,6 +128,8 @@ export interface SwapSheetCandidate {
   price: string | null
   image: string | null
   similarity: number
+  stockStatus: string | null
+  stockSizes: string[] | null
 }
 
 export async function getSwapSheetAction(
@@ -161,6 +163,8 @@ export async function getSwapSheetAction(
         price: fmt((c.item as any).price),
         image: c.item.image_url ?? null,
         similarity: c.similarity,
+        stockStatus: (c.item as any).stock_status ?? null,
+        stockSizes: (c.item as any).stock_sizes ?? null,
       })),
     }
   } catch (err) {

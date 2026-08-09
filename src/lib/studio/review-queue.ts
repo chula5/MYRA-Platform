@@ -36,6 +36,8 @@ export interface ReviewCard {
     price: string | null
     image: string | null
     dead: boolean
+    stockStatus: string | null
+    stockSizes: string[] | null
   }[]
 }
 
@@ -97,6 +99,8 @@ async function toCard(
       price: fmtPrice((e.item as any).price),
       image: e.item.image_url ?? null,
       dead: e.item.item_id === deadItemId,
+      stockStatus: (e.item as any).stock_status ?? null,
+      stockSizes: (e.item as any).stock_sizes ?? null,
     })),
   }
 }
