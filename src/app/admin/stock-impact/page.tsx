@@ -1,11 +1,13 @@
 import Link from 'next/link'
 import { getStockFlaggedOutfits } from '@/app/admin/items/stock-impact'
 import StockImpactClient from '@/app/admin/items/StockImpactClient'
+import SetStockPanel from '@/app/admin/items/SetStockPanel'
+import { loadPausedSets } from '@/app/admin/items/stock-sentinel'
 
 export const dynamic = 'force-dynamic'
 
 export default async function StockImpactPage() {
-  const { outfits } = await getStockFlaggedOutfits()
+  const [{ outfits }, pausedSets] = await Promise.all([getStockFlaggedOutfits(), loadPausedSets()])
   const outCount = outfits.filter((o) => o.hasOut).length
   const lowCount = outfits.filter((o) => o.hasLow && !o.hasOut).length
 
@@ -24,6 +26,10 @@ export default async function StockImpactPage() {
           <Link href="/admin/items?stock=flagged" className="text-[#6B6B6B] hover:text-[#0A0A0A]">← FLAGGED ITEMS</Link>
         </div>
       </div>
+
+      {/* Set-aware sentinel: hero deaths pause whole sets; one replacement
+          decision applies across the set. */}
+      <SetStockPanel pausedSets={pausedSets} />
 
       <StockImpactClient outfits={outfits} />
     </div>
