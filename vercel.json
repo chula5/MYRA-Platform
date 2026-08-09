@@ -2,5 +2,10 @@
   "framework": "nextjs",
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
-  "installCommand": "npm install"
+  "installCommand": "npm install",
+  "crons": [
+    { "path": "/api/cron/weekly-calibration", "schedule": "0 7 * * 1" },
+    { "path": "/api/cron/audit-digest", "schedule": "0 17 * * *" },
+    { "path": "/api/cron/autonomous-compose", "schedule": "0 5 * * *" }
+  ]
 }
