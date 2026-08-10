@@ -13,6 +13,7 @@ import {
   getOccasionOrder,
   type BrandRow,
 } from '@/lib/taste-profile'
+import { getOurPicks } from '@/lib/our-picks'
 import type { OutfitWithItems } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -72,6 +73,7 @@ export default async function LandingPage({
           occasionOrder={occasionOrder}
           signupHref={user ? undefined : '/signin'}
           defaultSizeUk={(user?.user_metadata?.clothing_uk as number | undefined) ?? null}
+          ourPicks={await getOurPicks()}
         />
       </main>
       {!user && <SignupPrompt href="/signin" />}
@@ -102,7 +104,7 @@ export default async function LandingPage({
       {/* ── Manifesto ──── */}
       <section className="bg-[#FAFAF8] pt-20 sm:pt-28 pb-12 sm:pb-16 px-6 sm:px-10">
         <div className="max-w-5xl mx-auto text-center">
-          <p className="text-[#4A4E57] tracking-[0.045em] sm:tracking-[0.059em] leading-[1.65] text-[clamp(13px,1.7vw,18px)]">
+          <p className="text-[#4A4E57] tracking-[0.045em] sm:tracking-[0.059em] leading-[1.65] text-[clamp(15px,2vw,24px)]">
             THE FIRST OUTFIT-LED SHOPPING PLATFORM. WE CURATE THE BRANDS AND
             BUILD THE OUTFITS, SO YOU DON&apos;T HAVE&nbsp;TO.
           </p>
@@ -111,11 +113,11 @@ export default async function LandingPage({
 
       {/* ── Our Take ──────────────────────────────────────────── */}
       <section className="bg-[#FAFAF8] pb-24 sm:pb-32 px-6 sm:px-10">
-        <div className="max-w-3xl mx-auto text-center">
+        <div className="max-w-4xl mx-auto text-center">
           <p className="text-[10px] sm:text-[11px] tracking-[0.135em] text-[#6B6B6B] mb-10 sm:mb-12">
             OUR TAKE
           </p>
-          <div className="text-[#4A4E57] tracking-[0.036em] sm:tracking-[0.045em] leading-[1.85] text-[clamp(12px,1.4vw,15px)] space-y-7 sm:space-y-8">
+          <div className="text-[#4A4E57] tracking-[0.036em] sm:tracking-[0.045em] leading-[1.85] text-[clamp(14px,1.7vw,19px)] space-y-7 sm:space-y-8">
             <p>
               SHOPPING HAS BECOME EXHAUSTING. NUMEROUS TABS, ENDLESS
               SCROLLING AND ALGORITHMS THAT FEED YOU MORE OF THE SAME. WE
@@ -135,7 +137,7 @@ export default async function LandingPage({
 
       {/* ── Staggered outfit photos ──────────────────────────── */}
       <section className="bg-[#FAFAF8] pb-32 sm:pb-40 px-4 sm:px-10">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-[1500px] mx-auto">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-6">
             <div className="sm:mt-0">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -161,10 +163,10 @@ export default async function LandingPage({
           </p>
           <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-8 sm:gap-x-16">
             {[
-              { name: 'Isabel Marant', src: '/partners/isabel-marant.svg', h: 'h-4 sm:h-6' },
-              { name: 'Diesel', src: '/partners/diesel.svg', h: 'h-8 sm:h-10' },
-              { name: 'Twinset', src: '/partners/twinset.png', h: 'h-4 sm:h-[22px]' },
-              { name: 'DeMellier London', src: '/partners/demellier.svg', h: 'h-3.5 sm:h-5' },
+              { name: 'Isabel Marant', src: '/partners/isabel-marant.svg', h: 'h-5 sm:h-8' },
+              { name: 'Diesel', src: '/partners/diesel.svg', h: 'h-9 sm:h-12' },
+              { name: 'Twinset', src: '/partners/twinset.png', h: 'h-6 sm:h-9' },
+              { name: 'DeMellier London', src: '/partners/demellier.svg', h: 'h-4 sm:h-6' },
               { name: 'Da Luna', src: '/partners/da-luna.png', h: 'h-5 sm:h-7' },
               { name: 'Vivere London', src: '/partners/vivere.png', h: 'h-6 sm:h-8' },
               // Two-line lockup (CAMI over NYC) in a 1004×488 canvas, so the

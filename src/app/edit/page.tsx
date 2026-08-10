@@ -10,6 +10,7 @@ import HelpPopover from '@/components/HelpPopover'
 import OnboardingPrompt from '@/components/OnboardingPrompt'
 import { getTasteRecommendations, getUserTasteVector, getBrandAffinityRows, getOccasionOrder } from '@/lib/taste-profile'
 import { getLiveStylists } from '@/lib/queries'
+import { getOurPicks } from '@/lib/our-picks'
 import type { OutfitWithItems } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -98,6 +99,7 @@ export default async function EditPage() {
         occasionOrder={occasionOrder}
         defaultSizeUk={(user.user_metadata?.clothing_uk as number | undefined) ?? null}
         stylists={await getLiveStylists()}
+        ourPicks={await getOurPicks()}
       />
 
       {/* Slide-out wardrobe of saved outfits + items */}

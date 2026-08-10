@@ -14,6 +14,7 @@ import FallbackImage from '@/components/FallbackImage'
 import { brandLogo } from '@/lib/brand-logos'
 import BrandLogoTile from '@/components/BrandLogoTile'
 import NewArrivals, { byNewest } from '@/components/NewArrivals'
+import OurPicks from '@/components/OurPicks'
 import SizeFilter from './SizeFilter'
 import { outfitFitsClothingUk } from '@/lib/sizing'
 import { occasionLabel, BASE_OCCASIONS, occasionMatchTags } from '@/lib/occasions'
@@ -306,6 +307,7 @@ export default function FeedClient({
   signupHref,
   defaultSizeUk = null,
   stylists = [],
+  ourPicks,
 }: {
   showAllOption?: boolean
   injectedOutfits?: OutfitWithItems[]
@@ -330,6 +332,7 @@ export default function FeedClient({
   // Switching is free and instant: a FILTER, not an account setting. The
   // viewer's own taste vector keeps learning regardless of the active lens.
   stylists?: { stylist_id: string; name: string; slug: string }[]
+  ourPicks?: import('@/lib/our-picks').OurPicksData
 }) {
   const hasTaste = !!tasteVector && !isZero(tasteVector)
   // Signed-out on the public site: show greyed "sign in to save" hearts.
@@ -668,11 +671,11 @@ export default function FeedClient({
   // ── LANDING VIEW ──────────────────────────────────────────
   if (!occasion && !searchMode && !brandView) {
     return (
-      <div className="max-w-[1440px] mx-auto px-6 sm:px-10 py-16 flex flex-col">
+      <div className="w-full px-6 sm:px-10 py-16 flex flex-col">
         <div className="order-1 text-center mb-10">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/myra-mirror-transparent.png" alt="MYRA" className="h-16 w-auto mx-auto mb-5" />
-          <h1 className="text-[clamp(28px,3vw,40px)] tracking-[0.045em] text-[#4A4E57] leading-tight">
+          <h1 className="text-[clamp(36px,4.6vw,84px)] tracking-[0.045em] text-[#4A4E57] leading-tight">
             WHAT ARE YOU DRESSING FOR?
           </h1>
           {/* Stylist lens — a free, instant filter over the shared catalogue.
@@ -705,7 +708,7 @@ export default function FeedClient({
         {/* Cosine taste recommendations — ranked by the user's taste vector.
             order-7 so it sits BELOW the occasion grid. */}
         {recommendedOutfits.length > 0 && (
-          <div className="order-7 max-w-[1100px] mx-auto mt-2 mb-12">
+          <div className="order-7 w-full mt-2 mb-12">
             <div className="flex items-baseline justify-between mb-4">
               <p className="text-[11px] tracking-[0.099em] text-[#4A4E57] inline-flex items-center gap-1.5">
                 <span className="text-[#C8302A]" aria-hidden>♥</span> RECOMMENDATIONS BASED ON YOUR TASTE
@@ -717,7 +720,7 @@ export default function FeedClient({
                 <button
                   key={o.outfit_id}
                   onClick={() => router.push(`${detailHrefBase}/${o.outfit_id}`)}
-                  className="group relative shrink-0 w-[150px] sm:w-[170px]"
+                  className="group relative shrink-0 w-[15vw] min-w-[170px]"
                 >
                   <div className="relative aspect-[3/4] w-full overflow-hidden bg-[#EDEDED]">
                     <FallbackImage
@@ -744,13 +747,22 @@ export default function FeedClient({
           outfits={injectedOutfits ?? []}
           hrefBase={detailHrefBase}
           onExplore={() => { setOccasion(NEW_TAG); window.scrollTo({ top: 0 }) }}
-          className="order-8 w-full max-w-[1100px] mx-auto mb-12"
+          className="order-8 w-full mb-12"
         />
+
+        {/* OUR PICKS — landing page only, directly beneath the New Outfits row.
+            NOTE (other sessions): please keep this block + the ourPicks prop —
+            it has been removed by concurrent edits three times. */}
+        {ourPicks && (
+          <div className="order-8 w-full">
+            <OurPicks data={ourPicks} />
+          </div>
+        )}
 
         {/* Discover more from the houses she loves — a row of brand tiles, each a
             2×2 collage; tap one to open that brand's scrolling feed. */}
         {brandRows.length > 0 && (
-          <div className="order-9 max-w-[1100px] mx-auto mb-12">
+          <div className="order-9 w-full mb-12">
             <div className="flex items-baseline justify-between mb-4">
               <p className="text-[11px] tracking-[0.099em] text-[#4A4E57]">DISCOVER MORE FROM BRANDS YOU LIKE</p>
               <p className="text-[9px] tracking-[0.072em] text-[#A8A8A4]">HOUSES YOU LOVE</p>
@@ -760,7 +772,7 @@ export default function FeedClient({
                 <button
                   key={row.brand}
                   onClick={() => { setBrandView(row); window.scrollTo({ top: 0 }) }}
-                  className="group shrink-0 w-[150px] sm:w-[170px] text-left"
+                  className="group shrink-0 w-[15vw] min-w-[170px] text-left"
                 >
                   {/* Brand logo (falls back to a wordmark) */}
                   <BrandLogoTile brand={row.brand} logoUrl={brandLogo(row.brand)} />

@@ -59,10 +59,10 @@ function rotatingWindow(outfits: OutfitWithItems[], count: number): OutfitWithIt
 // different-sized editorial rhythm; all images align to the top (no vertical
 // offset). Mobile falls back to an even horizontal-scroll rail.
 const SHAPES = [
-  'sm:w-[17%]',
-  'sm:w-[22%]',
-  'sm:w-[30%]',
-  'sm:w-[20%]',
+  'sm:w-[24%]',
+  'sm:w-[31%]',
+  'sm:w-[40%]',
+  'sm:w-[28%]',
 ]
 
 export default function NewArrivals({
@@ -91,7 +91,7 @@ export default function NewArrivals({
     <div className={className}>
       {/* Section heading */}
       <div className="flex items-end justify-between mb-6">
-        <p className="text-[clamp(18px,2.2vw,26px)] tracking-[0.05em] text-[#4A4E57] leading-none">NEW OUTFITS</p>
+        <p className="text-[clamp(26px,3.2vw,44px)] tracking-[0.05em] text-[#4A4E57] leading-none">NEW OUTFITS</p>
         {onExplore ? (
           <button
             onClick={onExplore}
