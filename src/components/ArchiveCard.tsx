@@ -55,8 +55,11 @@ export function ArchiveRow({
 }) {
   return (
     <div className={`flex items-stretch ${last ? '' : 'border-b border-[#2B2B2B]'} ${className}`}>
-      <div className="shrink-0 w-[130px] md:w-[230px] border-r border-[#2B2B2B] flex items-end px-3 md:px-5 pb-3 pt-5">
-        <span className="myra-field">{label}</span>
+      {/* Narrow on mobile: at the compact size the caption needs far less room,
+          and every pixel saved here goes to the query itself — which is the
+          part that has to stay readable while you type. */}
+      <div className="shrink-0 w-[124px] md:w-[230px] border-r border-[#2B2B2B] flex items-center md:items-end px-3 md:px-5 py-3 md:pb-3 md:pt-5">
+        <span className="myra-field leading-tight whitespace-nowrap md:whitespace-normal">{label}</span>
       </div>
       <div className="flex-1 min-w-0">{children}</div>
     </div>

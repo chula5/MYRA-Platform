@@ -370,3 +370,15 @@ html {
   font-size: 14px;
   letter-spacing: 0.06em;
 }
+
+/* Same step down, but only on mobile — the search row (LOOKING FOR label, the
+   typed query, the icon) sits directly above the 2x2 filter block, so at the
+   full field size it towered over the labels beneath it and left no room for
+   the query itself. On desktop there's width to spare, so it returns to the
+   standard field size and the block stays one size throughout. */
+@media (max-width: 767px) {
+  .myra-compact-sm .myra-field {
+    font-size: 14px;
+    letter-spacing: 0.06em;
+  }
+}
