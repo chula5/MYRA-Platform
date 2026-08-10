@@ -1,9 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // The dev server compiles into its own directory so a production
-  // `next build` (which writes to .next) can never clobber the running dev
-  // server's CSS/chunks — that's what kept rendering pages as unstyled HTML.
-  distDir: process.env.NODE_ENV === 'development' ? '.next-dev' : '.next',
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -23,4 +19,13 @@ const nextConfig = {
   },
 }
 
-module.exports = nextConfig
+// The dev server compiles into its OWN directory, so a production
+// `next build` (which writes to .next) can never clobber the running dev
+// server's chunks/CSS. NODE_ENV isn't reliable when the config is loaded, so
+// key off the Next phase instead.
+const { PHASE_DEVELOPMENT_SERVER } = require('next/constants')
+
+module.exports = (phase) => ({
+  ...nextConfig,
+  distDir: phase === PHASE_DEVELOPMENT_SERVER ? '.next-dev' : '.next',
+})

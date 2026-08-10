@@ -10,7 +10,7 @@ export default function BrandLogoTile({ brand, logoUrl }: { brand: string; logoU
   const showLogo = !!logoUrl && !failed
 
   return (
-    <div className="aspect-square w-full overflow-hidden rounded-[14px] bg-[#F4F3F1] border border-[#E8E6E1] group-hover:border-[#C4A882] transition-colors duration-300 flex items-center justify-center px-5">
+    <div className="aspect-square w-full flex items-center justify-center px-5 transition-opacity duration-300 group-hover:opacity-70">
       {showLogo ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -18,7 +18,7 @@ export default function BrandLogoTile({ brand, logoUrl }: { brand: string; logoU
           alt={brand}
           loading="lazy"
           onError={() => setFailed(true)}
-          className="max-h-[40%] max-w-[80%] object-contain"
+          className="max-h-[52%] max-w-[86%] object-contain mix-blend-multiply"
         />
       ) : (
         <span className="text-[14px] sm:text-[16px] tracking-[0.14em] text-[#4A4E57] text-center leading-[1.25] uppercase">

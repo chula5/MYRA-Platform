@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import Navigation from '@/components/navigation/Navigation'
+import SplashHero from '@/components/SplashHero'
 import FeedClient from '@/app/feed/FeedClient'
 import SignupPrompt from '@/components/SignupPrompt'
 import LandingFeedback from '@/components/LandingFeedback'
@@ -58,10 +59,14 @@ export default async function LandingPage({
 
   return (
     <>
-      <Navigation authed={!!user} />
+      <Navigation transparent authed={!!user} />
 
-      {/* ── The Edit — first thing the user sees ────────────────── */}
-      <main className="bg-[#F2F2F2] pt-14">
+      {/* Arrival screen — MYRA over the silver texture; the wordmark travels
+          up into the nav as the visitor scrolls and the feed takes over. */}
+      <SplashHero />
+
+      {/* ── The Edit ────────────────────────────────────────────── */}
+      <main className="myra-texture pt-6">
         <FeedClient
           injectedOutfits={liveOutfits}
           detailHrefBase={user ? '/edit' : '/outfit'}

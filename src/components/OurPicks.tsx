@@ -12,7 +12,7 @@ export default function OurPicks({ data }: { data: OurPicksData }) {
   if (!data.artImageUrl) return null
 
   return (
-    <section className="mt-20 mb-10">
+    <section className="mt-20 mb-28 sm:mb-36">
       {/* All art offsets are in em of the headline font-size, so the bag stays
           threaded through the S at every viewport width. The bag sits BEHIND
           the letters so the S reads on top of the ring — its tail landing
@@ -54,16 +54,22 @@ export default function OurPicks({ data }: { data: OurPicksData }) {
           Picks
         </h2>
         {/* Reserve room for the bag hanging below the baseline, so the brand
-            row underneath can never collide with it. */}
-        <div style={{ height: '2.05em' }} />
-        {/* Small label sitting under the bag */}
-        <a
-          href="/picks/bags"
-          className="absolute text-[11px] tracking-[0.22em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors whitespace-nowrap"
-          style={{ left: '1.74em', top: '3.35em', width: '2.6em', textAlign: 'center' }}
-        >
-          SUMMER BAGS
-        </a>
+            row underneath can never collide with it. The bag sits at
+            top 1.2em and is ~2.6em tall, so it ends at ~3.8em; the headline
+            occupies ~1.8em, hence this spacer. */}
+        <div style={{ height: '2.08em' }} />
+        {/* The positioning box is sized in HEADLINE em (it inherits the
+            container font-size); the link sets its own smaller size inside.
+            Putting both on one element would make em resolve against the
+            label's font-size and shove it to the far left. */}
+        <div style={{ marginLeft: '1.74em', width: '2.6em' }}>
+          <a
+            href="/picks/bags"
+            className="block text-center text-[clamp(15px,1.5vw,26px)] tracking-[0.22em] text-[#4A4E57] hover:text-[#0A0A0A] transition-colors whitespace-nowrap"
+          >
+            SUMMER BAGS
+          </a>
+        </div>
       </div>
     </section>
   )

@@ -62,12 +62,23 @@ export default async function MetricDetailPage({ params }: { params: Promise<{ k
             )}
           </div>
 
-          <a
-            href={m.area.href}
-            className="bg-[#0A0A0A] text-white px-6 py-3 rounded-[12px] text-[10px] tracking-[0.14em] hover:opacity-85 transition-opacity"
-          >
-            GO TO {m.area.label} →
-          </a>
+          <div className="flex items-center gap-3">
+            {/* Clicks and saves are the two metrics with a per-person view. */}
+            {(m.key === 'retailer-clicks' || m.key === 'saves') && (
+              <a
+                href="/admin/people"
+                className="border border-[#0A0A0A] px-6 py-3 rounded-[12px] text-[10px] tracking-[0.14em] text-[#0A0A0A] hover:bg-[#F2F2F0] transition-colors duration-300"
+              >
+                WHO DID THIS →
+              </a>
+            )}
+            <a
+              href={m.area.href}
+              className="bg-[#0A0A0A] text-white px-6 py-3 rounded-[12px] text-[10px] tracking-[0.14em] hover:opacity-85 transition-opacity"
+            >
+              GO TO {m.area.label} →
+            </a>
+          </div>
         </div>
       </div>
 

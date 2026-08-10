@@ -16,6 +16,8 @@ export default async function OurStoryPage() {
     <>
       <Navigation transparent authed={!!user} />
 
+      <div className="myra-texture">
+
       {/* ── Hero ────────────────────────────────────────────── */}
       <section className="relative w-screen overflow-hidden bg-[#FAFAF8] h-screen sm:h-auto">
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -38,7 +40,7 @@ export default async function OurStoryPage() {
       </section>
 
       {/* ── Manifesto ──── */}
-      <section className="bg-[#FAFAF8] pt-20 sm:pt-28 pb-12 sm:pb-16 px-6 sm:px-10">
+      <section className="pt-20 sm:pt-28 pb-12 sm:pb-16 px-6 sm:px-10">
         <div className="max-w-5xl mx-auto text-center">
           <p className="text-[#4A4E57] tracking-[0.045em] sm:tracking-[0.059em] leading-[1.65] text-[clamp(15px,2vw,24px)]">
             THE FIRST OUTFIT-LED SHOPPING PLATFORM. WE CURATE THE BRANDS AND
@@ -48,7 +50,7 @@ export default async function OurStoryPage() {
       </section>
 
       {/* ── Our Take ──────────────────────────────────────────── */}
-      <section className="bg-[#FAFAF8] pb-24 sm:pb-32 px-6 sm:px-10">
+      <section className="pb-24 sm:pb-32 px-6 sm:px-10">
         <div className="max-w-4xl mx-auto text-center">
           <p className="text-[10px] sm:text-[11px] tracking-[0.135em] text-[#6B6B6B] mb-10 sm:mb-12">
             OUR TAKE
@@ -72,7 +74,7 @@ export default async function OurStoryPage() {
       </section>
 
       {/* ── Staggered outfit photos ──────────────────────────── */}
-      <section className="bg-[#FAFAF8] pb-32 sm:pb-40 px-4 sm:px-10">
+      <section className="pb-32 sm:pb-40 px-4 sm:px-10">
         <div className="max-w-[1500px] mx-auto">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-6">
             <div className="sm:mt-0">
@@ -92,7 +94,7 @@ export default async function OurStoryPage() {
       </section>
 
       {/* ── Our Partners ──────────────────────────────────────── */}
-      <section className="bg-[#FAFAF8] pb-24 sm:pb-32 px-6 sm:px-10">
+      <section className="pb-24 sm:pb-32 px-6 sm:px-10">
         <div className="max-w-5xl mx-auto text-center">
           <p className="text-[10px] sm:text-[11px] tracking-[0.135em] text-[#6B6B6B] mb-12 sm:mb-14">
             OUR PARTNERS
@@ -125,6 +127,7 @@ export default async function OurStoryPage() {
 
       {/* Brand suggestions + feedback + contact */}
       <LandingFeedback />
+      </div>
 
       {/* ── Footer ──── */}
       <footer className="bg-white pt-16 pb-24 px-10">

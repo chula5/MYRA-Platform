@@ -291,4 +291,17 @@ html {
 
 
 /* Never let a wide row drag the whole page sideways — rows scroll, page does not. */
-html, body { overflow-x: hidden; max-width: 100%; }
+
+/* Page texture — the grey backdrop behind The Edit and Our Story. Fixed on
+   desktop so it sits still while content scrolls; scroll-attached on touch
+   devices, where fixed backgrounds are janky. */
+.myra-texture {
+  background-image: url('/grey-bg.webp');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+@media (hover: none), (max-width: 640px) {
+  .myra-texture { background-attachment: scroll; }
+}

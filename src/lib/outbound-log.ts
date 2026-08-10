@@ -67,7 +67,9 @@ export async function logOutboundClick(input: OutboundClickInput): Promise<void>
 
     // Legacy dual-writes so existing admin analytics stay continuous:
     // item_click (top-items view) + landing_event mirror (referral breakdowns).
-    void admin.from('item_click' as any).insert({ item_id: input.itemId, outfit_id: input.outfitId ?? null } as any)
+    void admin
+      .from('item_click' as any)
+      .insert({ item_id: input.itemId, outfit_id: input.outfitId ?? null, user_id: userId } as any)
     void recordLandingEvent('item_click', (input.label || input.itemId).slice(0, 120), input.ref ?? null)
 
     // Strongest taste signal (+7) — same rule as before: needs a signed-in user

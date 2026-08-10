@@ -13,16 +13,25 @@ export async function recordItemClick(itemId: string, outfitId?: string, ref?: s
   try {
     if (!itemId) return
     const admin = createAdminClient()
-    await admin.from('item_click').insert({ item_id: itemId, outfit_id: outfitId ?? null } as any)
+
+    // Who clicked. Null for logged-out visitors — most traffic is anonymous and
+    // that is recorded honestly rather than guessed at.
+    let userId: string | null = null
+    try {
+      const supabase = await createServerClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      userId = user?.id ?? null
+      if (user && outfitId) void recordTasteEvent(user.id, outfitId, 'shop_click', { itemId })
+    } catch {
+      /* auth unavailable → anonymous click */
+    }
+
+    await admin
+      .from('item_click')
+      .insert({ item_id: itemId, outfit_id: outfitId ?? null, user_id: userId } as any)
 
     // Mirror into landing_event so referral breakdowns can show clicked items.
     void recordLandingEvent('item_click', (label || itemId).slice(0, 120), ref)
-
-    if (outfitId) {
-      const supabase = await createServerClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) void recordTasteEvent(user.id, outfitId, 'shop_click', { itemId })
-    }
   } catch {
     // swallow
   }

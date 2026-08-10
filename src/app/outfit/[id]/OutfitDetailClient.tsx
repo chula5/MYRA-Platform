@@ -57,6 +57,9 @@ export default function OutfitDetailClient({
   const showBrowse = showBrowseButtons ?? SHOW_BROWSE_BUTTONS
   const [outfit, setOutfit] = useState<OutfitWithItems | null>(initialOutfit ?? null)
   const [styleItemOutfits, setStyleItemOutfits] = useState<OutfitWithItems[]>([])
+
+  // Remember what they've opened — powers RECENTLY VIEWED on the landing page.
+  useEffect(() => { recordOutfitView(outfit.outfit_id) }, [outfit.outfit_id])
   const [relatedOutfits, setRelatedOutfits] = useState<OutfitWithItems[]>([])
   // Which related view is showing — drives the results heading (the URL `mode`
   // is only the initial value; clicking the buttons updates this).

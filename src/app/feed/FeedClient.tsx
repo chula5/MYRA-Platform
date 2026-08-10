@@ -15,6 +15,7 @@ import { brandLogo } from '@/lib/brand-logos'
 import BrandLogoTile from '@/components/BrandLogoTile'
 import NewArrivals, { byNewest } from '@/components/NewArrivals'
 import OurPicks from '@/components/OurPicks'
+import TasteDecks from '@/components/TasteDecks'
 import SizeFilter from './SizeFilter'
 import { outfitFitsClothingUk } from '@/lib/sizing'
 import { occasionLabel, BASE_OCCASIONS, occasionMatchTags } from '@/lib/occasions'
@@ -673,8 +674,6 @@ export default function FeedClient({
     return (
       <div className="w-full px-6 sm:px-10 py-16 flex flex-col">
         <div className="order-1 text-center mb-10">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/myra-mirror-transparent.png" alt="MYRA" className="h-16 w-auto mx-auto mb-5" />
           <h1 className="text-[clamp(36px,4.6vw,84px)] tracking-[0.045em] text-[#4A4E57] leading-tight">
             WHAT ARE YOU DRESSING FOR?
           </h1>
@@ -705,41 +704,6 @@ export default function FeedClient({
           )}
         </div>
 
-        {/* Cosine taste recommendations — ranked by the user's taste vector.
-            order-7 so it sits BELOW the occasion grid. */}
-        {recommendedOutfits.length > 0 && (
-          <div className="order-7 w-full mt-2 mb-12">
-            <div className="flex items-baseline justify-between mb-4">
-              <p className="text-[11px] tracking-[0.099em] text-[#4A4E57] inline-flex items-center gap-1.5">
-                <span className="text-[#C8302A]" aria-hidden>♥</span> RECOMMENDATIONS BASED ON YOUR TASTE
-              </p>
-              <p className="text-[9px] tracking-[0.072em] text-[#A8A8A4]">LEARNED FROM WHAT YOU LIKE</p>
-            </div>
-            <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
-              {recommendedOutfits.map((o) => (
-                <button
-                  key={o.outfit_id}
-                  onClick={() => router.push(`${detailHrefBase}/${o.outfit_id}`)}
-                  className="group relative shrink-0 w-[15vw] min-w-[170px]"
-                >
-                  <div className="relative aspect-[3/4] w-full overflow-hidden bg-[#EDEDED]">
-                    <FallbackImage
-                      src={o.image_url}
-                      thumbWidth={400}
-                      alt=""
-                      loading="lazy"
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
-                    />
-                    {canSave && (
-                      <SaveHeartButton outfitId={o.outfit_id} initialSaved={savedSet.has(o.outfit_id)} />
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* New Arrivals — rotating live looks at varied sizes. Sits directly
             beneath the occasions for everyone, and beneath the taste
             recommendations (order-7) for signed-in users. */}
@@ -759,10 +723,19 @@ export default function FeedClient({
           </div>
         )}
 
+        {/* Taste + history as fanning card decks, directly under OUR PICKS.
+            Recently viewed is local-only, so it works signed out. */}
+        <TasteDecks
+          recommended={recommendedOutfits}
+          catalogue={injectedOutfits ?? []}
+          detailHrefBase={detailHrefBase}
+          className="order-9 w-full mt-4 mb-16"
+        />
+
         {/* Discover more from the houses she loves — a row of brand tiles, each a
             2×2 collage; tap one to open that brand's scrolling feed. */}
         {brandRows.length > 0 && (
-          <div className="order-9 w-full mb-12">
+          <div className="order-10 w-full mb-12">
             <div className="flex items-baseline justify-between mb-4">
               <p className="text-[11px] tracking-[0.099em] text-[#4A4E57]">DISCOVER MORE FROM BRANDS YOU LIKE</p>
               <p className="text-[9px] tracking-[0.072em] text-[#A8A8A4]">HOUSES YOU LOVE</p>
