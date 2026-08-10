@@ -26,21 +26,21 @@ export default function Navigation({ transparent = false, authed = false }: { tr
           : 'bg-white border-b border-[#E2E0DB]'}
       `}
     >
-      <div className="w-full px-4 md:px-10 h-14 flex items-center justify-between gap-3">
+      <div className="w-full px-4 md:px-10 h-20 md:h-24 flex items-center justify-between gap-4">
 
         {/* Left — nav links */}
         <div className="flex items-center gap-3 sm:gap-5 md:gap-6 flex-1 min-w-0">
-          <Link href="/" className={`text-[9px] sm:text-[10px] tracking-[0.054em] sm:tracking-[0.068em] hover:opacity-60 transition-colors duration-500 whitespace-nowrap ${textColor}`}>
+          <Link href="/" className={`text-[13px] sm:text-[15px] tracking-[0.09em] sm:tracking-[0.11em] hover:opacity-60 transition-colors duration-500 whitespace-nowrap ${textColor}`}>
             THE EDIT
           </Link>
-          <Link href="/our-story" className={`text-[9px] sm:text-[10px] tracking-[0.054em] sm:tracking-[0.068em] hover:opacity-60 transition-colors duration-500 whitespace-nowrap ${textColor}`}>
+          <Link href="/our-story" className={`text-[13px] sm:text-[15px] tracking-[0.09em] sm:tracking-[0.11em] hover:opacity-60 transition-colors duration-500 whitespace-nowrap ${textColor}`}>
             OUR STORY
           </Link>
         </div>
 
         {/* Centre — logo wordmark (white over the hero, black on the white nav) */}
         <div className="flex justify-center shrink-0">
-          <Link href="/" aria-label="MYRA" className="relative block h-[20px] sm:h-[26px] hover:opacity-70 transition-opacity duration-500">
+          <Link href="/" aria-label="MYRA" className="relative block h-[38px] sm:h-[52px] hover:opacity-70 transition-opacity duration-500">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/myra-logo-white.png"
@@ -58,7 +58,7 @@ export default function Navigation({ transparent = false, authed = false }: { tr
         </div>
 
         {/* Right — social links */}
-        <div className="flex-1 flex items-center justify-end gap-4">
+        <div className="flex-1 flex items-center justify-end gap-6">
           <a
             href="https://www.instagram.com/myraassistant/"
             target="_blank"
@@ -81,7 +81,7 @@ export default function Navigation({ transparent = false, authed = false }: { tr
           {/* Constant auth link — plain text */}
           <Link
             href={authed ? '/edit' : '/signin'}
-            className={`whitespace-nowrap text-[9px] sm:text-[10px] tracking-[0.09em] hover:opacity-60 transition-colors duration-500 ${textColor}`}
+            className={`whitespace-nowrap text-[13px] sm:text-[15px] tracking-[0.11em] hover:opacity-60 transition-colors duration-500 ${textColor}`}
           >
             {authed ? 'MY EDIT' : 'LOG IN / SIGN UP'}
           </Link>
@@ -93,7 +93,7 @@ export default function Navigation({ transparent = false, authed = false }: { tr
 
 function InstagramIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
       <rect x="3" y="3" width="18" height="18" rx="4.5" />
       <circle cx="12" cy="12" r="4" />
       <circle cx="17.5" cy="6.5" r="0.9" fill="currentColor" stroke="none" />
@@ -103,7 +103,7 @@ function InstagramIcon() {
 
 function TikTokIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor">
       <path d="M19.6 6.8a5.7 5.7 0 01-3.3-1.1 5.7 5.7 0 01-2-3.2h-3.1v12.1a2.7 2.7 0 11-2-2.6V8.9a5.8 5.8 0 104.9 5.7V9.3a8.7 8.7 0 005.5 1.9z" />
     </svg>
   )

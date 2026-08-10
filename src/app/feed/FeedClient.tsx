@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import OutfitCard from '@/components/outfit-card/OutfitCard'
 import SaveHeartButton from '@/components/outfit-card/SaveHeartButton'
@@ -17,6 +17,10 @@ import NewArrivals, { byNewest } from '@/components/NewArrivals'
 import OurPicks from '@/components/OurPicks'
 import TasteDecks from '@/components/TasteDecks'
 import TornPaper from '@/components/TornPaper'
+import DrawnSearchFrame from '@/components/DrawnSearchFrame'
+import { ArchiveCard, ArchiveRow, ArchiveCell } from '@/components/ArchiveCard'
+import PolaroidOccasion, { occasionImages } from '@/components/PolaroidOccasion'
+import HangerLoader from '@/components/HangerLoader'
 import SizeFilter from './SizeFilter'
 import { outfitFitsClothingUk } from '@/lib/sizing'
 import { occasionLabel, BASE_OCCASIONS, occasionMatchTags } from '@/lib/occasions'
@@ -377,6 +381,9 @@ export default function FeedClient({
   )
   // Occasion mode
   const [occasion, setOccasion]           = useState<string | null>(null)
+  // True from the moment a search or occasion is chosen until its images are
+  // decoded. Drives the hanger loader and the one-shot reveal of the grid.
+  const [preparing, setPreparing]         = useState(false)
   // A brand the user tapped to "discover more" — shows that brand's outfits.
   const [brandView, setBrandView]         = useState<BrandRow | null>(null)
   const [outfits, setOutfits]             = useState<OutfitWithItems[]>([])
@@ -440,6 +447,26 @@ export default function FeedClient({
     window.dispatchEvent(new CustomEvent('myra:engage'))
   }, [occasion, searchMode, signupHref])
 
+    // Wait for the first screenful of images to actually decode, so the grid can
+  // be revealed complete and sharp instead of filling in tile by tile. Capped in
+  // both count and time — a slow CDN must never strand someone on the loader.
+  function preloadImages(urls: (string | null | undefined)[], cap = 9, timeoutMs = 5000) {
+    const list = urls.filter(Boolean).slice(0, cap) as string[]
+    if (list.length === 0) return Promise.resolve()
+    const all = Promise.all(
+      list.map(
+        (u) =>
+          new Promise<void>((res) => {
+            const im = new window.Image()
+            im.onload = () => res()
+            im.onerror = () => res()
+            im.src = u
+          }),
+      ),
+    ).then(() => undefined)
+    return Promise.race([all, new Promise<void>((res) => setTimeout(res, timeoutMs))])
+  }
+
   // ── Occasion fetch ─────────────────────────────────────────
   const fetchOutfits = useCallback(async (tag: string, currentOffset: number, append: boolean) => {
     if (injectedOutfits) {
@@ -464,10 +491,15 @@ export default function FeedClient({
       }
       const ordered = occOrderedRef.current
       const end = currentOffset + LIMIT
-      setOutfits(ordered.slice(0, end))
+      const page = ordered.slice(0, end)
+      setOutfits(page)
       setHasMore(ordered.length > end)
       setLoading(false)
       setLoadingMore(false)
+      if (!append) {
+        await preloadImages(page.map((o) => o.image_url))
+        setPreparing(false)
+      }
       return
     }
 
@@ -488,20 +520,27 @@ export default function FeedClient({
     }
 
     const { data, error } = await query
+    let fetched: OutfitWithItems[] = []
     if (!error && data) {
       const typed = data as OutfitWithItems[]
+      fetched = typed
       // De-dupe by anchor across pages so the same hero piece isn't repeated.
       setOutfits((prev) => dedupeByAnchor(append ? [...prev, ...typed] : typed))
       setHasMore(data.length === LIMIT)
     }
     setLoading(false)
     setLoadingMore(false)
+    if (!append) {
+      await preloadImages(fetched.map((o) => o.image_url))
+      setPreparing(false)
+    }
   }, [injectedOutfits])
 
   useEffect(() => {
     if (!occasion) return
     // Attribute the occasion view to the referral source (if any).
     void recordLandingEvent('occasion_click', occasion, getStoredRef())
+    setPreparing(true)
     setOffset(0)
     setHasMore(true)
     fetchOutfits(occasion, 0, false)
@@ -529,6 +568,7 @@ export default function FeedClient({
   const executeSearch = useCallback(async () => {
     if (!hasActiveSearch) return
     setSearchLoading(true)
+    setPreparing(true)
     setSearchMode(true)
     setFilterPanel(null)
 
@@ -590,6 +630,8 @@ export default function FeedClient({
     if (searchQuery.trim()) void recordSearchQuery(searchQuery, getStoredRef(), matchCount)
     setSearchResults(finalOutfits)
     setSearchLoading(false)
+    await preloadImages(finalOutfits.map((o) => o.image_url))
+    setPreparing(false)
   }, [hasActiveSearch, injectedOutfits, searchQuery, filterColour, filterItemGroup, filterBrand])
 
   function clearSearch() {
@@ -660,6 +702,15 @@ export default function FeedClient({
     router.push(`${detailHrefBase}/${outfit.outfit_id}?mode=explore`)
   }
 
+  // Pictures for the occasion polaroids, resolved in ONE pass so each tile
+  // claims a different look — computing this per tile restarts the used-set
+  // every time and lets the same outfit land on two tiles.
+  const occasionTags = occasionOrder && occasionOrder.length ? occasionOrder : BASE_OCCASIONS
+  const occPictures = useMemo(
+    () => occasionImages(injectedOutfits ?? [], occasionTags, occasionMatchTags),
+    [injectedOutfits, occasionTags],
+  )
+
   // ── Active filter label ────────────────────────────────────
   function activeFilterLabel(): string {
     const parts: string[] = []
@@ -675,9 +726,6 @@ export default function FeedClient({
     return (
       <div className="w-full px-6 sm:px-10 py-16 flex flex-col">
         <div className="order-1 text-center mb-10">
-          <h1 className="text-[clamp(36px,4.6vw,84px)] tracking-[0.045em] text-[#4A4E57] leading-tight">
-            WHAT ARE YOU DRESSING FOR?
-          </h1>
           {/* Stylist lens — a free, instant filter over the shared catalogue.
               Hidden until there's more than one live stylist. */}
           {stylists.length > 1 && (
@@ -685,7 +733,7 @@ export default function FeedClient({
               <button
                 onClick={() => setStylistFilter(null)}
                 className={`px-4 py-1.5 text-[9px] tracking-[0.12em] rounded-full border transition-colors ${
-                  stylistFilter === null ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'text-[#6B6B6B] border-[#E2E0DB] hover:border-[#0A0A0A]'
+                  stylistFilter === null ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'text-[#4A4E57] border-[#E2E0DB] hover:border-[#0A0A0A]'
                 }`}
               >
                 ALL STYLISTS
@@ -695,7 +743,7 @@ export default function FeedClient({
                   key={s.stylist_id}
                   onClick={() => setStylistFilter(stylistFilter === s.stylist_id ? null : s.stylist_id)}
                   className={`px-4 py-1.5 text-[9px] tracking-[0.12em] rounded-full border transition-colors ${
-                    stylistFilter === s.stylist_id ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'text-[#6B6B6B] border-[#E2E0DB] hover:border-[#0A0A0A]'
+                    stylistFilter === s.stylist_id ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'text-[#4A4E57] border-[#E2E0DB] hover:border-[#0A0A0A]'
                   }`}
                 >
                   STYLED BY {s.name.toUpperCase()}
@@ -738,8 +786,8 @@ export default function FeedClient({
         {brandRows.length > 0 && (
           <div className="order-10 w-full mb-12">
             <div className="flex items-baseline justify-between mb-4">
-              <p className="text-[11px] tracking-[0.099em] text-[#4A4E57]">DISCOVER MORE FROM BRANDS YOU LIKE</p>
-              <p className="text-[9px] tracking-[0.072em] text-[#A8A8A4]">HOUSES YOU LOVE</p>
+              <p className="myra-section-label">DISCOVER MORE FROM BRANDS YOU LIKE</p>
+              <p className="myra-section-note">HOUSES YOU LOVE</p>
             </div>
             <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
               {brandRows.map((row) => (
@@ -750,7 +798,7 @@ export default function FeedClient({
                 >
                   {/* Brand logo (falls back to a wordmark) */}
                   <BrandLogoTile brand={row.brand} logoUrl={row.logo_url ?? brandLogo(row.brand)} />
-                  <p className="text-[8px] tracking-[0.09em] text-[#A8A8A4] mt-2">{row.outfits.length} LOOKS →</p>
+                  <p className="text-[8px] tracking-[0.09em] text-[#4A4E57] mt-2">{row.outfits.length} LOOKS →</p>
                 </button>
               ))}
             </div>
@@ -768,170 +816,168 @@ export default function FeedClient({
           </div>
         )}
 
-        {/* Occasions — torn scraps of paper pinned to the grey ground, each
-            tilted a different way so the grid reads as a collage rather than a
-            row of buttons. Tilt and tear seed come from the index, so they stay
-            put across renders instead of reshuffling on every keystroke. */}
-        <div className="order-6 grid grid-cols-2 md:grid-cols-3 gap-6 md:gap-8 max-w-[1100px] mx-auto mb-16 px-1">
-          {(occasionOrder && occasionOrder.length ? occasionOrder : BASE_OCCASIONS).map((tag, i) => (
-            <TornPaper
+        {/* Occasions — instant prints, each showing a look actually tagged
+            with that occasion, caption on the polaroid's deep bottom lip.
+            Tilts come from the index so they stay put across renders. */}
+        <div className="order-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-7 md:gap-10 w-full mb-20 -mx-6 sm:-mx-10 px-6 sm:px-10">
+          {occasionTags.map((tag, i) => (
+            <PolaroidOccasion
               key={tag}
-              as="button"
+              label={occasionLabel(tag)}
+              image={occPictures[tag]}
+              tilt={[-1.7, 1.2, -0.8, 1.9, -1.3, 1.0, -2.0, 0.7][i % 8]}
               onClick={() => setOccasion(tag)}
-              seed={3 + i * 7}
-              rough={11}
-              tilt={[-1.6, 1.1, -0.7, 1.8, -1.2, 0.9][i % 6]}
-              className="group block w-full transition-transform duration-300 hover:-translate-y-[3px] hover:rotate-0"
-            >
-              <span className="flex items-center justify-center text-center min-h-[64px] md:min-h-[76px] px-5 md:px-7 py-4
-                               text-[12px] md:text-[15px] tracking-[0.16em] md:tracking-[0.2em] leading-snug text-[#0A0A0A]">
-                {occasionLabel(tag)}
-              </span>
-            </TornPaper>
+            />
           ))}
         </div>
 
         {/* Search + filter area */}
-        <div className="order-3 w-full max-w-[1100px] mx-auto mb-12">
+        <div className="order-3 w-full mb-14 -mx-6 sm:-mx-10 px-6 sm:px-10">
 
-          {/* Active filter chips */}
-          {(filterColour || filterItemGroup || filterBrand.trim()) && (
-            <div className="flex flex-wrap gap-2 mb-3">
-              {filterColour && (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0A0A0A] text-white text-[9px] tracking-[0.072em] rounded-[12px]">
-                  {COLOUR_OPTIONS.find(c => c.value === filterColour)?.label}
-                  <button onClick={() => setFilterColour(null)} className="opacity-70 hover:opacity-100 text-[11px] leading-none">×</button>
-                </span>
-              )}
-              {filterItemGroup && (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0A0A0A] text-white text-[9px] tracking-[0.072em] rounded-[12px]">
-                  {filterItemGroup}
-                  <button onClick={() => setFilterItemGroup(null)} className="opacity-70 hover:opacity-100 text-[11px] leading-none">×</button>
-                </span>
-              )}
-              {filterBrand.trim() && (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0A0A0A] text-white text-[9px] tracking-[0.072em] rounded-[12px]">
-                  {filterBrand.toUpperCase()}
-                  <button onClick={() => setFilterBrand('')} className="opacity-70 hover:opacity-100 text-[11px] leading-none">×</button>
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Search — subtle underlined text field, no box, no button (Enter to search) */}
-          <form
-            onSubmit={(e) => { e.preventDefault(); executeSearch() }}
-            className="mb-5 w-full"
+          {/* The card: the query written onto an archive index sheet. Each
+              filter writes its value into the cell beside its label, so the
+              whole search reads back as one filled-in record. */}
+          <ArchiveCard
+            className="mb-6 w-full"
+            heading={
+              <h1 className="text-center text-[clamp(30px,5vw,86px)] tracking-[0.045em] text-[#4A4E57] leading-[1.05]">
+                WHAT ARE YOU DRESSING FOR?
+              </h1>
+            }
           >
-            {/* The field itself is transparent — the torn scrap behind it is
-                the only "box", so the caret sits straight on the paper. */}
-            <TornPaper seed={11} rough={14} className="w-full">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={typedHint ? `${typedHint}▌` : 'SEARCH BY STYLE, COLOUR, BRAND, MATERIAL…'}
-                className="
-                  w-full bg-transparent border-0
-                  px-8 py-6 md:py-8
-                  text-center text-[14px] md:text-[18px] tracking-[0.12em] text-[#4A4E57]
-                  placeholder:text-[#A8A8A4]
-                  focus:outline-none
-                "
-              />
-            </TornPaper>
-          </form>
-
-          {/* Filter buttons — same outlined white square as the search field, so
-              the whole control strip reads as one thing. */}
-          <div className="flex flex-wrap gap-2 md:gap-3 mb-4 justify-center">
-            {(['colour', 'item', 'brand'] as const).map((type) => {
-              const isActive = filterPanel === type
-              const hasValue = type === 'colour' ? !!filterColour : type === 'item' ? !!filterItemGroup : !!filterBrand.trim()
-              return (
+            <ArchiveRow label="LOOKING FOR">
+              <form onSubmit={(e) => { e.preventDefault(); executeSearch() }} className="flex items-center">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={typedHint ? `${typedHint}▌` : 'A SUMMER WEDDING IN ITALY'}
+                  className="flex-1 min-w-0 bg-transparent border-0 px-4 md:px-7 py-5 md:py-7 text-[17px] md:text-[26px] tracking-[0.06em] text-[#4A4E57] placeholder:text-[#B4B4AE] focus:outline-none"
+                />
                 <button
-                  key={type}
-                  onClick={() => setFilterPanel(isActive ? null : type)}
-                  className={`
-                    px-5 md:px-7 py-3.5 md:py-4 bg-white border rounded-[3px]
-                    text-[11px] md:text-[13px] tracking-[0.16em] md:tracking-[0.2em]
-                    transition-colors duration-300
-                    ${hasValue || isActive
-                      ? 'border-[#0A0A0A] text-[#0A0A0A]'
-                      : 'border-[#E2E0DB] text-[#4A4E57] hover:bg-[#F2F2F2] hover:border-[#0A0A0A]'}
-                  `}
+                  type="submit"
+                  aria-label="Search"
+                  className="shrink-0 px-4 md:px-6 self-stretch border-l border-[#2B2B2B] hover:bg-[#F4F3F0] transition-colors"
                 >
-                  {type === 'colour' ? 'COLOUR' : type === 'item' ? 'ITEM TYPE' : 'BRAND'} {isActive ? '▲' : '▾'}
+                  <svg viewBox="0 0 40 40" className="w-[24px] md:w-[30px]" aria-hidden>
+                    <circle cx="17" cy="16" r="10" fill="none" stroke="#4A4E57" strokeWidth="3.2" />
+                    <path d="M24.5 24 L33 33" stroke="#4A4E57" strokeWidth="3.2" strokeLinecap="round" />
+                  </svg>
                 </button>
-              )
-            })}
-            <SizeFilter value={sizeUk} onChange={setSizeUk} />
-          </div>
+              </form>
+            </ArchiveRow>
 
-          {/* Colour panel */}
+            <ArchiveRow label="COLOUR">
+              <div className="flex">
+                <div className="flex-1 min-w-0 border-r border-[#2B2B2B]">
+                  <ArchiveCell
+                    open={filterPanel === 'colour'}
+                    value={filterColour ? (COLOUR_OPTIONS.find((c) => c.value === filterColour)?.label ?? null) : null}
+                    onClick={() => setFilterPanel(filterPanel === 'colour' ? null : 'colour')}
+                  />
+                </div>
+                <div className="shrink-0 w-[104px] md:w-[190px] border-r border-[#2B2B2B] flex items-end px-3 md:px-5 pb-3 pt-5">
+                  <span className="text-[10px] md:text-[13px] tracking-[0.14em] text-[#4A4E57] leading-none">ITEM TYPE</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <ArchiveCell
+                    open={filterPanel === 'item'}
+                    value={filterItemGroup}
+                    onClick={() => setFilterPanel(filterPanel === 'item' ? null : 'item')}
+                  />
+                </div>
+              </div>
+            </ArchiveRow>
+
+            <ArchiveRow label="BRAND" last>
+              <div className="flex">
+                <div className="flex-1 min-w-0 border-r border-[#2B2B2B]">
+                  <ArchiveCell
+                    open={filterPanel === 'brand'}
+                    value={filterBrand.trim() ? filterBrand.toUpperCase() : null}
+                    onClick={() => setFilterPanel(filterPanel === 'brand' ? null : 'brand')}
+                  />
+                </div>
+                <div className="shrink-0 w-[104px] md:w-[190px] border-r border-[#2B2B2B] flex items-end px-3 md:px-5 pb-3 pt-5">
+                  <span className="text-[10px] md:text-[13px] tracking-[0.14em] text-[#4A4E57] leading-none">SIZE</span>
+                </div>
+                <div className="flex-1 min-w-0 px-3 md:px-5 py-2 md:py-3 flex items-center">
+                  <SizeFilter value={sizeUk} onChange={setSizeUk} />
+                </div>
+              </div>
+            </ArchiveRow>
+          </ArchiveCard>
+
+          {/* The panels are part of the same document as the card: square
+              corners, the same hairline rule, no pills and no float. */}
           {filterPanel === 'colour' && (
-            <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-4 mb-4">
-              <div className="flex flex-wrap gap-2">
-                {COLOUR_OPTIONS.map((c) => (
-                  <button
-                    key={c.value}
-                    onClick={() => { setFilterColour(filterColour === c.value ? null : c.value); setFilterPanel(null) }}
-                    className={`flex items-center gap-2 px-3 py-2 text-[9px] tracking-[0.063em] rounded-[12px] border transition-colors ${
-                      filterColour === c.value
-                        ? 'border-[#0A0A0A] bg-[#0A0A0A] text-white'
-                        : 'border-[#E2E0DB] text-[#4A4E57] hover:border-[#0A0A0A]'
-                    }`}
-                  >
-                    <span
-                      className="w-3 h-3 rounded-full border border-[#E2E0DB] flex-shrink-0"
-                      style={{ background: c.swatch }}
-                    />
-                    {c.label}
-                  </button>
-                ))}
+            <div className="border border-[#2B2B2B] border-t-0 bg-[#FCFCFA] px-4 md:px-6 py-6 mb-6">
+              <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-16 gap-x-4 gap-y-6">
+                {COLOUR_OPTIONS.map((c) => {
+                  const on = filterColour === c.value
+                  return (
+                    <button
+                      key={c.value}
+                      onClick={() => { setFilterColour(on ? null : c.value); setFilterPanel(null) }}
+                      className="group flex flex-col items-center gap-2"
+                    >
+                      {/* The colour does the talking; the name sits under it. */}
+                      <span
+                        className={`block w-full aspect-square border transition-all ${
+                          on ? 'border-[#2B2B2B] ring-1 ring-[#2B2B2B] ring-offset-2 ring-offset-[#FCFCFA]' : 'border-[#D8D6D1] group-hover:border-[#2B2B2B]'
+                        }`}
+                        style={{ background: c.swatch }}
+                      />
+                      <span className="text-[7.5px] md:text-[9px] tracking-[0.12em] text-[#4A4E57] leading-none">
+                        {c.label}
+                      </span>
+                    </button>
+                  )
+                })}
               </div>
             </div>
           )}
 
-          {/* Item type panel */}
           {filterPanel === 'item' && (
-            <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-4 mb-4">
-              <div className="flex flex-wrap gap-2">
-                {ITEM_GROUPS.map((g) => (
-                  <button
-                    key={g.label}
-                    onClick={() => { setFilterItemGroup(filterItemGroup === g.label ? null : g.label); setFilterPanel(null) }}
-                    className={`px-3 py-2 text-[9px] tracking-[0.063em] rounded-[12px] border transition-colors ${
-                      filterItemGroup === g.label
-                        ? 'border-[#0A0A0A] bg-[#0A0A0A] text-white'
-                        : 'border-[#E2E0DB] text-[#4A4E57] hover:border-[#0A0A0A]'
-                    }`}
-                  >
-                    {g.label}
-                  </button>
-                ))}
+            <div className="border border-[#2B2B2B] border-t-0 bg-[#FCFCFA] mb-6">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+                {ITEM_GROUPS.map((g) => {
+                  const on = filterItemGroup === g.label
+                  return (
+                    <button
+                      key={g.label}
+                      onClick={() => { setFilterItemGroup(on ? null : g.label); setFilterPanel(null) }}
+                      className={`px-4 py-4 md:py-5 text-[10px] md:text-[12px] tracking-[0.16em] border-r border-b border-[#2B2B2B] transition-colors ${
+                        on ? 'bg-[#2B2B2B] text-white' : 'text-[#4A4E57] hover:bg-[#F1F0EC]'
+                      }`}
+                    >
+                      {g.label}
+                    </button>
+                  )
+                })}
               </div>
             </div>
           )}
 
-          {/* Brand panel */}
           {filterPanel === 'brand' && (
-            <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-4 mb-4">
-              <input
-                type="text"
-                value={filterBrand}
-                onChange={(e) => setFilterBrand(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); setFilterPanel(null) } }}
-                placeholder="E.G. STAUD, TOTEME, JACQUEMUS…"
-                autoFocus
-                className="w-full border border-[#E2E0DB] bg-[#FAFAF8] px-4 py-2.5 text-[11px] tracking-[0.054em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors"
-              />
-              <button
-                onClick={() => setFilterPanel(null)}
-                className="mt-3 text-[9px] tracking-[0.081em] text-[#6B6B6B] hover:text-[#4A4E57]"
-              >
-                DONE
-              </button>
+            <div className="border border-[#2B2B2B] border-t-0 bg-[#FCFCFA] px-4 md:px-6 py-6 mb-6">
+              <div className="flex items-center gap-4">
+                <input
+                  type="text"
+                  value={filterBrand}
+                  onChange={(e) => setFilterBrand(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); setFilterPanel(null) } }}
+                  placeholder="E.G. STAUD, TOTEME, JACQUEMUS…"
+                  autoFocus
+                  className="flex-1 min-w-0 border border-[#2B2B2B] bg-transparent px-4 py-3 text-[12px] md:text-[15px] tracking-[0.08em] text-[#4A4E57] placeholder:text-[#B4B4AE] focus:outline-none"
+                />
+                <button
+                  onClick={() => setFilterPanel(null)}
+                  className="shrink-0 border border-[#2B2B2B] px-6 py-3 text-[10px] md:text-[12px] tracking-[0.16em] text-[#4A4E57] hover:bg-[#2B2B2B] hover:text-white transition-colors"
+                >
+                  DONE
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -945,12 +991,12 @@ export default function FeedClient({
       <div className="max-w-[1440px] mx-auto px-6 sm:px-10 py-10">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-1">DISCOVER</p>
+            <p className="text-[11px] tracking-[0.113em] text-[#4A4E57] mb-1">DISCOVER</p>
             <h2 className="text-[22px] tracking-[0.045em] text-[#4A4E57]">{brandView.label}</h2>
           </div>
           <button
             onClick={() => setBrandView(null)}
-            className="text-[11px] tracking-[0.09em] text-[#6B6B6B] border border-[#E2E0DB] px-5 py-2.5 rounded-[12px] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-all duration-300"
+            className="text-[11px] tracking-[0.09em] text-[#4A4E57] border border-[#E2E0DB] px-5 py-2.5 rounded-[12px] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-all duration-300"
           >
             CLOSE
           </button>
@@ -980,31 +1026,42 @@ export default function FeedClient({
       <div className="max-w-[1440px] mx-auto px-6 sm:px-10 py-10">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-1">SEARCH</p>
+            <p className="text-[11px] tracking-[0.113em] text-[#4A4E57] mb-1">SEARCH</p>
             <h2 className="text-[22px] tracking-[0.045em] text-[#4A4E57]">{activeFilterLabel()}</h2>
           </div>
           <div className="flex items-center gap-2">
             <SizeFilter value={sizeUk} onChange={setSizeUk} compact />
             <button
               onClick={clearSearch}
-              className="text-[11px] tracking-[0.09em] text-[#6B6B6B] border border-[#E2E0DB] px-5 py-2.5 rounded-full hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-all duration-300"
+              className="text-[11px] tracking-[0.09em] text-[#4A4E57] border border-[#E2E0DB] px-5 py-2.5 rounded-full hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-all duration-300"
             >
               CLEAR
             </button>
           </div>
         </div>
 
-        {searchLoading && (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-0 -mx-6 sm:-mx-10">
-            {[1, 2, 3, 4, 5, 6].map((n) => (
-              <div key={n} className="aspect-[3/4] bg-[#F2F2F2] animate-pulse rounded-[10px]" />
-            ))}
-          </div>
-        )}
+        {/* The search field, docked at the foot of the screen now that results
+            are on show — it slides down here from the middle of the landing
+            page, and stays reachable without scrolling back up. */}
+        <div className="myra-search-dock">
+          <form onSubmit={(e) => { e.preventDefault(); executeSearch() }}>
+            <DrawnSearchFrame onSubmit={executeSearch}>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="SEARCH BY STYLE, COLOUR, BRAND, MATERIAL…"
+                className="w-full bg-transparent border-0 pl-6 pr-2 py-4 md:py-5 text-center text-[12px] md:text-[15px] tracking-[0.12em] text-[#4A4E57] placeholder:text-[#4A4E57] focus:outline-none"
+              />
+            </DrawnSearchFrame>
+          </form>
+        </div>
 
-        {!searchLoading && searchResults.length === 0 && (
+        {(searchLoading || preparing) && <HangerLoader />}
+
+        {!searchLoading && !preparing && searchResults.length === 0 && (
           <div className="text-center py-24">
-            <p className="text-[11px] tracking-[0.113em] text-[#A8A8A4] mb-6">NO OUTFITS FOUND</p>
+            <p className="text-[11px] tracking-[0.113em] text-[#4A4E57] mb-6">NO OUTFITS FOUND</p>
             <button
               onClick={clearSearch}
               className="border border-[#0A0A0A] text-[#4A4E57] px-8 py-3 rounded-[12px] text-[11px] tracking-[0.09em] hover:bg-[#0A0A0A] hover:text-white transition-all duration-400"
@@ -1014,13 +1071,13 @@ export default function FeedClient({
           </div>
         )}
 
-        {!searchLoading && searchRelaxed && searchResults.length > 0 && (
-          <p className="text-[11px] tracking-[0.06em] text-[#6B6B6B] mb-6 -mt-2">
+        {!searchLoading && !preparing && searchRelaxed && searchResults.length > 0 && (
+          <p className="text-[11px] tracking-[0.06em] text-[#4A4E57] mb-6 -mt-2">
             Here are the closest looks.
           </p>
         )}
 
-        {!searchLoading && searchResults.length > 0 && (
+        {!searchLoading && !preparing && searchResults.length > 0 && (
           <div className="grid grid-cols-2 md:grid-cols-3 gap-0 -mx-6 sm:-mx-10">
             {searchResults.filter(fitsSize).map((outfit) => (
               <OutfitCard
@@ -1046,7 +1103,7 @@ export default function FeedClient({
     <div className="max-w-[1440px] mx-auto px-6 sm:px-10 py-10">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-1">
+          <p className="text-[11px] tracking-[0.113em] text-[#4A4E57] mb-1">
             {occasion === NEW_TAG ? 'LATEST' : 'YOUR OCCASION'}
           </p>
           <h2 className="text-[22px] tracking-[0.045em] text-[#4A4E57]">
@@ -1061,24 +1118,35 @@ export default function FeedClient({
           <SizeFilter value={sizeUk} onChange={setSizeUk} compact />
           <button
             onClick={() => setOccasion(null)}
-            className="text-[11px] tracking-[0.09em] text-[#6B6B6B] border border-[#E2E0DB] px-5 py-2.5 rounded-full hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-all duration-300"
+            className="text-[11px] tracking-[0.09em] text-[#4A4E57] border border-[#E2E0DB] px-5 py-2.5 rounded-full hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-all duration-300"
           >
             CHANGE
           </button>
         </div>
       </div>
 
-      {loading && (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-0 -mx-6 sm:-mx-10">
-          {[1, 2, 3, 4, 5, 6].map((n) => (
-            <div key={n} className="aspect-[3/4] bg-[#F2F2F2] animate-pulse rounded-[10px]" />
-          ))}
-        </div>
-      )}
+      {/* The search field, docked at the foot of the screen now that results
+          are on show — it slides down here from the middle of the landing
+          page, and stays reachable without scrolling back up. */}
+      <div className="myra-search-dock">
+        <form onSubmit={(e) => { e.preventDefault(); executeSearch() }}>
+          <DrawnSearchFrame onSubmit={executeSearch}>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="SEARCH BY STYLE, COLOUR, BRAND, MATERIAL…"
+              className="w-full bg-transparent border-0 pl-6 pr-2 py-4 md:py-5 text-center text-[12px] md:text-[15px] tracking-[0.12em] text-[#4A4E57] placeholder:text-[#4A4E57] focus:outline-none"
+            />
+          </DrawnSearchFrame>
+        </form>
+      </div>
 
-      {!loading && outfits.length === 0 && (
+      {(loading || preparing) && <HangerLoader />}
+
+      {!loading && !preparing && outfits.length === 0 && (
         <div className="text-center py-24">
-          <p className="text-[11px] tracking-[0.113em] text-[#A8A8A4] mb-6">NO OUTFITS YET FOR THIS OCCASION</p>
+          <p className="text-[11px] tracking-[0.113em] text-[#4A4E57] mb-6">NO OUTFITS YET FOR THIS OCCASION</p>
           <button
             onClick={() => setOccasion(null)}
             className="border border-[#0A0A0A] text-[#4A4E57] px-8 py-3 rounded-[12px] text-[11px] tracking-[0.09em] hover:bg-[#0A0A0A] hover:text-white transition-all duration-400"
@@ -1088,9 +1156,9 @@ export default function FeedClient({
         </div>
       )}
 
-      {!loading && outfits.length > 0 && (
+      {!loading && !preparing && outfits.length > 0 && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-0 -mx-6 sm:-mx-10">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-0 -mx-6 sm:-mx-10 myra-reveal">
             {outfits.filter(fitsSize).map((outfit) => (
               <OutfitCard
                 key={outfit.outfit_id}
@@ -1115,7 +1183,7 @@ export default function FeedClient({
               </div>
             )}
             {!hasMore && !loadingMore && outfits.length > 0 && (
-              <p className="text-[10px] tracking-[0.113em] text-[#A8A8A4]">END OF EDIT</p>
+              <p className="text-[10px] tracking-[0.113em] text-[#4A4E57]">END OF EDIT</p>
             )}
           </div>
         </>

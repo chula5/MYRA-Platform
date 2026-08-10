@@ -63,7 +63,7 @@ export default function RecentlyViewed({
     <div className={className}>
       <div className="flex items-baseline justify-between mb-4">
         <p className="text-[11px] tracking-[0.099em] text-[#4A4E57]">RECENTLY VIEWED</p>
-        <p className="text-[9px] tracking-[0.072em] text-[#A8A8A4]">PICK UP WHERE YOU LEFT OFF</p>
+        <p className="text-[9px] tracking-[0.072em] text-[#4A4E57]">PICK UP WHERE YOU LEFT OFF</p>
       </div>
       <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
         {viewed.map((o) => (

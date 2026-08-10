@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { thumbUrl } from '@/lib/image-utils'
+import { PaperClip, BulldogClip } from './PaperClips'
 import type { OutfitWithItems } from '@/types/database'
 
 const MAX_CARDS = 6
@@ -76,16 +77,16 @@ export default function OutfitDeck({
   const mid = (n - 1) / 2
 
   // Cards are wider on touch — a 26vw card on a phone is a postage stamp.
-  const cardW = touch ? 'min(58vw, 260px)' : 'min(26vw, 220px)'
+  const cardW = touch ? 'min(64vw, 320px)' : 'min(74%, 480px)'
 
   return (
     <div className={className}>
-      <div className="flex items-baseline justify-between mb-4">
-        <p className="text-[11px] tracking-[0.099em] text-[#4A4E57] inline-flex items-center gap-1.5">
+      <div className="flex items-baseline justify-between mb-7">
+        <p className="myra-section-label inline-flex items-center gap-2">
           {accent}
           {title}
         </p>
-        {hint && <p className="text-[9px] tracking-[0.072em] text-[#A8A8A4]">{hint}</p>}
+        {hint && <p className="myra-section-note">{hint}</p>}
       </div>
 
       <div
@@ -93,8 +94,43 @@ export default function OutfitDeck({
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         // Tall enough to hold the arc without the cards clipping.
-        className="relative w-full h-[clamp(300px,34vw,520px)]"
+        className="relative w-full h-[clamp(420px,46vw,760px)]"
       >
+        {/* Loose sheets under the pile: plain paper, each turned a little and
+            sized slightly larger than the cards so their corners show past the
+            photograph on top. They belong to the pile, not to any one card, so
+            they stay put when the deck fans. */}
+        {[{ r: -3.4, x: -10, y: 6 }, { r: 2.6, x: 12, y: 10 }, { r: -1.2, x: 2, y: 15 }].map((s, i) => (
+          <div
+            key={`sheet-${i}`}
+            aria-hidden
+            className="absolute left-1/2 top-0 bg-[#F7F7F4] shadow-[0_6px_18px_rgba(0,0,0,0.14)]"
+            style={{
+              width: `calc(${cardW} + 14px)`,
+              aspectRatio: '3 / 4',
+              marginLeft: `calc((${cardW} + 14px) / -2 ${touch ? `- ${((n - 1) * 16) / 2}px` : ''})`,
+              transform: `translate(${s.x}px, ${s.y}px) rotate(${s.r}deg)`,
+              zIndex: 1 + i,
+            }}
+          />
+        ))}
+
+        {/* The stationery holding it together: a paperclip over the top-left
+            corner and a bulldog clip biting the right edge. Both are anchored
+            to the pile's own box so they stay clamped when the deck fans. */}
+        <div
+          aria-hidden
+          className="absolute left-1/2 top-0 pointer-events-none"
+          style={{
+            width: cardW,
+            marginLeft: `calc(${cardW} / -2 ${touch ? `- ${((n - 1) * 16) / 2}px` : ''})`,
+            zIndex: 60,
+          }}
+        >
+          <PaperClip className="absolute -top-4 left-[14%] -rotate-[14deg]" size={30} />
+          <BulldogClip className="absolute top-[34%] -right-5 rotate-90" size={54} />
+        </div>
+
         {cards.map((o, i) => {
           const pile = PILE[i] ?? PILE[PILE.length - 1]
           const angle = (i - mid) * SPREAD
@@ -133,14 +169,18 @@ export default function OutfitDeck({
                 transitionDelay: `${i * 35}ms`,
               }}
             >
-              <div className="relative aspect-[3/4] w-full overflow-hidden bg-[#EDEDED] shadow-[0_10px_30px_rgba(0,0,0,0.16)] ring-1 ring-black/[0.04]">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={o.image_url ? thumbUrl(o.image_url, 500) : '/placeholder-outfit.jpg'}
-                  alt=""
-                  loading="lazy"
-                  className="w-full h-full object-cover"
-                />
+              {/* Mounted on paper: a white border all round the photograph and
+                  a deeper lip at the foot, the way a print sits on a sheet. */}
+              <div className="bg-[#FBFBF9] p-[7px] pb-[18px] shadow-[0_10px_30px_rgba(0,0,0,0.18)]">
+                <div className="relative aspect-[3/4] w-full overflow-hidden bg-[#EDEDED]">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={o.image_url ? thumbUrl(o.image_url, 500) : '/placeholder-outfit.jpg'}
+                    alt=""
+                    loading="lazy"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
               </div>
             </button>
           )

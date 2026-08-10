@@ -30,11 +30,12 @@ export default function SizeFilter({
 
   const trigger = compact
     ? `text-[11px] tracking-[0.09em] px-5 py-2.5 rounded-full border transition-colors ${
-        current ? 'border-[#0A0A0A] text-[#4A4E57]' : 'border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57]'
+        current ? 'border-[#0A0A0A] text-[#4A4E57]' : 'border-[#E2E0DB] text-[#4A4E57] hover:border-[#0A0A0A] hover:text-[#4A4E57]'
       }`
-    // Matches the COLOUR / ITEM TYPE / BRAND buttons beside it exactly.
-    : `px-5 md:px-7 py-3.5 md:py-4 bg-white border rounded-[3px] text-[11px] md:text-[13px] tracking-[0.16em] md:tracking-[0.2em] transition-colors duration-300 ${
-        current ? 'border-[#0A0A0A] text-[#0A0A0A]' : 'border-[#E2E0DB] text-[#4A4E57] hover:bg-[#F2F2F2] hover:border-[#0A0A0A]'
+    // Matches the COLOUR / ITEM TYPE / BRAND buttons beside it exactly:
+    // plain text on the grey ground, no box.
+    : `py-2 bg-transparent text-[17px] md:text-[24px] tracking-[0.06em] transition-colors duration-300 ${
+        current ? 'text-[#4A4E57]' : 'text-[#4A4E57] hover:text-[#4A4E57]'
       }`
 
   return (
@@ -46,7 +47,7 @@ export default function SizeFilter({
         <div className="absolute z-30 mt-2 right-0 w-[248px] border border-[#E2E0DB] bg-white rounded-[12px] p-2 shadow-[0_6px_24px_rgba(0,0,0,0.08)] max-h-[340px] overflow-y-auto">
           <button
             onClick={() => { onChange(null); setOpen(false) }}
-            className={`w-full text-left px-3 py-2 text-[10px] tracking-[0.08em] rounded-[8px] hover:bg-[#F2F2F2] ${value == null ? 'text-[#0A0A0A]' : 'text-[#6B6B6B]'}`}
+            className={`w-full text-left px-3 py-2 text-[10px] tracking-[0.08em] rounded-[8px] hover:bg-[#F2F2F2] ${value == null ? 'text-[#4A4E57]' : 'text-[#4A4E57]'}`}
           >
             ALL SIZES
           </button>
@@ -55,7 +56,7 @@ export default function SizeFilter({
             <button
               key={r.uk}
               onClick={() => { onChange(r.uk); setOpen(false) }}
-              className={`w-full text-left px-3 py-2 text-[10px] tracking-[0.04em] rounded-[8px] hover:bg-[#F2F2F2] ${value === r.uk ? 'text-[#0A0A0A] bg-[#F2F2F2]' : 'text-[#4A4E57]'}`}
+              className={`w-full text-left px-3 py-2 text-[10px] tracking-[0.04em] rounded-[8px] hover:bg-[#F2F2F2] ${value === r.uk ? 'text-[#4A4E57] bg-[#F2F2F2]' : 'text-[#4A4E57]'}`}
             >
               {clothingLabel(r)}
             </button>

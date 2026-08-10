@@ -20,12 +20,15 @@ export default function SplashHero() {
   // Where the nav's mirror glyph actually is, measured live from the DOM.
   const [target, setTarget] = useState<{ x: number; y: number; h: number } | null>(null)
   const [vp, setVp] = useState({ w: 1440, h: 900 })
+  // The hero's rendered height, so the mirror can sit at its true centre.
+  const [heroH, setHeroH] = useState(0)
 
   useEffect(() => {
     let raf = 0
     const measure = () => {
       setVp({ w: window.innerWidth, h: window.innerHeight })
       const h = ref.current?.offsetHeight ?? window.innerHeight
+      setHeroH(h)
       setP(Math.min(1, Math.max(0, window.scrollY / (h * 0.8))))
 
       // The nav logo — target the mirror glyph inside it.
@@ -64,7 +67,10 @@ export default function SplashHero() {
     ? Math.min(340, vp.h * 0.38, vp.w * 0.72)
     : Math.min(820, vp.h * 0.72)
   const startX = vp.w / 2
-  const startY = vp.h / 2
+  // Centred on the SILVER PANEL, not the viewport. The texture is taller than
+  // one screen, and the nav sits over its top, so viewport-centre left the
+  // mirror low in the picture. Clamped so it always stays on screen.
+  const startY = Math.max(vp.h * 0.34, Math.min(heroH / 2, vp.h * 0.52))
   // …and glides to the nav's mirror glyph.
   const endX = target?.x ?? startX
   const endY = target?.y ?? 28

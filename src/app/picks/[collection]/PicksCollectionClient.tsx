@@ -32,21 +32,21 @@ export default function PicksCollectionClient({
     <div className="w-full px-6 sm:px-10 py-14">
       <a
         href="/"
-        className="inline-flex items-center gap-2.5 border border-[#0A0A0A] text-[#0A0A0A] px-6 py-3 rounded-full text-[13px] tracking-[0.16em] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-300"
+        className="inline-flex items-center gap-2.5 border border-[#0A0A0A] text-[#4A4E57] px-6 py-3 rounded-full text-[13px] tracking-[0.16em] hover:bg-[#0A0A0A] hover:text-white transition-colors duration-300"
       >
         <span className="text-[16px] leading-none">←</span> BACK TO MYRA
       </a>
       {/* Oversized display headline HANGING OVER the bag images — the grid
           tucks up underneath the letters. */}
       <h1
-        className="relative z-10 font-bold leading-[0.88] tracking-[-0.02em] text-[#0A0A0A] uppercase text-center mt-8 pointer-events-none"
+        className="relative z-10 font-bold leading-[0.88] tracking-[-0.02em] text-[#4A4E57] uppercase text-center mt-8 pointer-events-none"
         style={{ fontSize: 'clamp(64px, 12vw, 190px)', marginBottom: '-0.42em' }}
       >
         {title}
       </h1>
 
       {picks.length === 0 ? (
-        <p className="text-[11px] tracking-[0.12em] text-[#A8A8A4] py-20 text-center">NOTHING HERE YET — CHECK BACK SOON.</p>
+        <p className="text-[11px] tracking-[0.12em] text-[#4A4E57] py-20 text-center">NOTHING HERE YET — CHECK BACK SOON.</p>
       ) : (
         <div className="relative z-0 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-14 pt-[0.1em]">
           {picks.map((pick, i) => {
@@ -117,7 +117,7 @@ export default function PicksCollectionClient({
                   style={{ marginTop: pick.outfits.length ? 'clamp(46px, 5vw, 74px)' : '0.75rem' }}
                 >
                   <div className="min-w-0">
-                    <p className="text-[9px] tracking-[0.14em] text-[#6B6B6B] truncate">{(pick.brand_name ?? '').toUpperCase()}</p>
+                    <p className="text-[9px] tracking-[0.14em] text-[#4A4E57] truncate">{(pick.brand_name ?? '').toUpperCase()}</p>
                     <p className="text-[11px] tracking-[0.04em] text-[#4A4E57] truncate">{pick.product_name.toUpperCase()}</p>
                   </div>
                   {pick.price && <p className="text-[11px] tracking-[0.06em] text-[#4A4E57] flex-shrink-0">{pick.price}</p>}

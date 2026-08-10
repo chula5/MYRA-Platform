@@ -1,11 +1,16 @@
 'use client'
 
-// TORN PAPER — a scrap of white paper behind any content, with a ragged edge.
+// PAPER — a sheet of white paper behind any content, in one of two edges:
 //
-// The edge is generated, not an image: an SVG rect is pushed around by a
-// turbulence displacement map, which gives a different irregular tear for every
-// `seed` and scales to any size without going soft. The paper sits in its own
-// absolutely-positioned layer so the displacement never touches the text on top.
+//   'torn'  a scrap with a ragged edge, generated rather than drawn: an SVG
+//           rect pushed around by a turbulence displacement map, so every
+//           `seed` tears differently and it stays sharp at any size.
+//   'clean' a crisp rectangle, like a sheet under a bulldog clip — square
+//           corners, a soft shadow, and a faint grain so it reads as paper
+//           rather than a white box.
+//
+// Either way the paper sits in its own absolutely-positioned layer, so nothing
+// here can touch the text on top.
 
 import { useId } from 'react'
 
@@ -21,6 +26,7 @@ export default function TornPaper({
   tilt = 0,
   onClick,
   as = 'div',
+  edge = 'torn',
 }: {
   children: React.ReactNode
   className?: string
@@ -29,6 +35,7 @@ export default function TornPaper({
   tilt?: number
   onClick?: () => void
   as?: 'div' | 'button'
+  edge?: 'torn' | 'clean'
 }) {
   // useId is stable across server and client, so the filter reference matches
   // after hydration.
@@ -41,21 +48,44 @@ export default function TornPaper({
       className={`relative ${className}`}
       style={tilt ? { transform: `rotate(${tilt}deg)` } : undefined}
     >
-      {/* Inset by the displacement amount so the ragged edge has room to wander
-          outside the rect without being clipped by the SVG viewport. */}
+      {/* A torn edge needs room to wander outside the rect, so it is inset by
+          the displacement amount; a clean sheet fills its box exactly. */}
       <svg
         className="absolute pointer-events-none"
-        style={{ inset: `${rough}px`, width: `calc(100% - ${rough * 2}px)`, height: `calc(100% - ${rough * 2}px)`, overflow: 'visible' }}
+        style={
+          edge === 'torn'
+            ? { inset: `${rough}px`, width: `calc(100% - ${rough * 2}px)`, height: `calc(100% - ${rough * 2}px)`, overflow: 'visible' }
+            : { inset: 0, width: '100%', height: '100%', overflow: 'visible' }
+        }
         aria-hidden
       >
         <defs>
-          <filter id={fid} x="-30%" y="-60%" width="160%" height="220%">
-            {/* Slightly anisotropic noise — paper frays a little more along the
-                tear than across it, but all four edges have to look torn. */}
-            <feTurbulence type="fractalNoise" baseFrequency="0.03 0.045" numOctaves={4} seed={seed} result="noise" />
-            <feDisplacementMap in="SourceGraphic" in2="noise" scale={rough} xChannelSelector="R" yChannelSelector="G" result="torn" />
-            <feDropShadow dx="0" dy="2" stdDeviation="2.5" floodColor="#000" floodOpacity="0.16" />
-          </filter>
+          {edge === 'torn' ? (
+            <filter id={fid} x="-30%" y="-60%" width="160%" height="220%">
+              {/* Slightly anisotropic noise — paper frays a little more along
+                  the tear than across it, but all four edges have to look
+                  torn. */}
+              <feTurbulence type="fractalNoise" baseFrequency="0.03 0.045" numOctaves={4} seed={seed} result="noise" />
+              <feDisplacementMap in="SourceGraphic" in2="noise" scale={rough} xChannelSelector="R" yChannelSelector="G" />
+              <feDropShadow dx="0" dy="2" stdDeviation="2.5" floodColor="#000" floodOpacity="0.16" />
+            </filter>
+          ) : (
+            <filter id={fid} x="-15%" y="-15%" width="130%" height="130%">
+              {/* Fine grain, composited INSIDE the sheet so the noise can't
+                  spill past its edges. It has to be BARELY there — at full
+                  strength the multiply turns the paper grey. */}
+              <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves={2} seed={seed} result="grain" />
+              <feColorMatrix
+                in="grain"
+                type="matrix"
+                values="0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 0.05 0"
+                result="softGrain"
+              />
+              <feComposite in="softGrain" in2="SourceGraphic" operator="in" result="clipped" />
+              <feBlend in="SourceGraphic" in2="clipped" mode="multiply" result="sheet" />
+              <feDropShadow in="sheet" dx="0" dy="3" stdDeviation="4" floodColor="#000" floodOpacity="0.20" />
+            </filter>
+          )}
         </defs>
         <rect width="100%" height="100%" fill="#FCFCFA" filter={`url(#${fid})`} />
       </svg>

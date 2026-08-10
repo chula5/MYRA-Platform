@@ -91,16 +91,16 @@ export default function NewArrivals({
     <div className={className}>
       {/* Section heading */}
       <div className="flex items-end justify-between mb-6">
-        <p className="text-[clamp(26px,3.2vw,44px)] tracking-[0.05em] text-[#4A4E57] leading-none">NEW OUTFITS</p>
+        <p className="myra-section-label">NEW OUTFITS</p>
         {onExplore ? (
           <button
             onClick={onExplore}
-            className="text-[9px] tracking-[0.072em] text-[#A8A8A4] hover:text-[#4A4E57] transition-colors"
+            className="text-[9px] tracking-[0.072em] text-[#4A4E57] hover:text-[#4A4E57] transition-colors"
           >
             EXPLORE →
           </button>
         ) : (
-          <span className="text-[9px] tracking-[0.072em] text-[#A8A8A4]">UPDATED EVERY 2 DAYS</span>
+          <span className="text-[9px] tracking-[0.072em] text-[#4A4E57]">UPDATED EVERY 2 DAYS</span>
         )}
       </div>
 

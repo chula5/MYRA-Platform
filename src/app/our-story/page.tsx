@@ -52,7 +52,7 @@ export default async function OurStoryPage() {
       {/* ── Our Take ──────────────────────────────────────────── */}
       <section className="pb-24 sm:pb-32 px-6 sm:px-10">
         <div className="max-w-4xl mx-auto text-center">
-          <p className="text-[10px] sm:text-[11px] tracking-[0.135em] text-[#6B6B6B] mb-10 sm:mb-12">
+          <p className="text-[10px] sm:text-[11px] tracking-[0.135em] text-[#4A4E57] mb-10 sm:mb-12">
             OUR TAKE
           </p>
           <div className="text-[#4A4E57] tracking-[0.036em] sm:tracking-[0.045em] leading-[1.85] text-[clamp(14px,1.7vw,19px)] space-y-7 sm:space-y-8">
@@ -96,7 +96,7 @@ export default async function OurStoryPage() {
       {/* ── Our Partners ──────────────────────────────────────── */}
       <section className="pb-24 sm:pb-32 px-6 sm:px-10">
         <div className="max-w-5xl mx-auto text-center">
-          <p className="text-[10px] sm:text-[11px] tracking-[0.135em] text-[#6B6B6B] mb-12 sm:mb-14">
+          <p className="text-[10px] sm:text-[11px] tracking-[0.135em] text-[#4A4E57] mb-12 sm:mb-14">
             OUR PARTNERS
           </p>
           <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-8 sm:gap-x-16">
@@ -139,10 +139,10 @@ export default async function OurStoryPage() {
           </div>
           <div className="border-t border-[#E2E0DB] mb-8" />
           <div className="flex justify-end items-center flex-wrap gap-8">
-            <a href="/privacy" className="text-[11px] tracking-[0.099em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300">
+            <a href="/privacy" className="text-[11px] tracking-[0.099em] text-[#4A4E57] hover:text-[#4A4E57] transition-colors duration-300">
               PRIVACY
             </a>
-            <a href="#" className="text-[11px] tracking-[0.099em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300">
+            <a href="#" className="text-[11px] tracking-[0.099em] text-[#4A4E57] hover:text-[#4A4E57] transition-colors duration-300">
               TERMS
             </a>
           </div>

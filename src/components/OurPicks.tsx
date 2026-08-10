@@ -39,7 +39,7 @@ export default function OurPicks({ data }: { data: OurPicksData }) {
             className="w-full h-auto transition-transform duration-500 group-hover/bag:rotate-[2deg] group-hover/bag:scale-[1.02]"
           />
           <span
-            className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-[#6B6B6B] opacity-0 group-hover/bag:opacity-100 transition-opacity"
+            className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-[#4A4E57] opacity-0 group-hover/bag:opacity-100 transition-opacity"
             style={{ bottom: '-0.14em', fontSize: '10px', letterSpacing: '0.2em' }}
           >
             THE BAGS →
@@ -65,7 +65,7 @@ export default function OurPicks({ data }: { data: OurPicksData }) {
         <div style={{ marginLeft: '1.74em', width: '2.6em' }}>
           <a
             href="/picks/bags"
-            className="block text-center text-[clamp(15px,1.5vw,26px)] tracking-[0.22em] text-[#4A4E57] hover:text-[#0A0A0A] transition-colors whitespace-nowrap"
+            className="block text-center text-[clamp(15px,1.5vw,26px)] tracking-[0.22em] text-[#4A4E57] hover:text-[#4A4E57] transition-colors whitespace-nowrap"
           >
             SUMMER BAGS
           </a>

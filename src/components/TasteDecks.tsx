@@ -23,8 +23,18 @@ export default function TasteDecks({
   const viewed = useRecentlyViewed(catalogue)
   if (recommended.length === 0 && viewed.length === 0) return null
 
+  // Two halves when there are two decks — recommendations own the left,
+  // history the right. Signed out there are no recommendations, so recently
+  // viewed stands alone in the middle rather than hugging one side. Nothing
+  // viewed and nothing recommended renders nothing at all (above).
+  const both = recommended.length > 0 && viewed.length > 0
+
   return (
-    <div className={`grid grid-cols-1 lg:grid-cols-2 gap-x-10 gap-y-14 ${className}`}>
+    <div
+      className={`grid grid-cols-1 gap-x-16 gap-y-16 w-full ${
+        both ? 'lg:grid-cols-2' : 'max-w-[620px] mx-auto'
+      } ${className}`}
+    >
       <OutfitDeck
         outfits={recommended}
         title="RECOMMENDED FOR YOU"

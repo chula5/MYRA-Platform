@@ -70,3 +70,14 @@ export function formatGbp(
   const out = `£${gbp.toLocaleString('en-GB')}`
   return opts.showOriginal ? `${out} (${formatNative(n, cur)})` : out
 }
+
+// The unrounded GBP value, for LEDGER use — commission maths must not inherit
+// the display rounding above, which would drift by pounds across a month.
+// An unknown currency returns the amount untouched rather than guessing.
+export function toGbp(price: string | number | null | undefined, currency: string | null | undefined): number {
+  const n = parseAmount(price)
+  if (n == null) return 0
+  const cur = (currency || 'GBP').toUpperCase()
+  if (cur === 'GBP' || !(cur in GBP_PER)) return n
+  return n * GBP_PER[cur]
+}
