@@ -347,3 +347,16 @@ html {
   line-height: 1.35;
   color: #4A4E57;
 }
+
+/* ── One size per section ─────────────────────────────────────────
+   RULE: within a section, every word is the same size and colour —
+   labels, values, options, placeholders alike. Only the section TITLE
+   differs. Mixed sizes inside one block is the single most common thing
+   that reads as unfinished, so the size lives here, once, and components
+   reference it rather than each choosing their own. */
+.myra-field {
+  font-size: clamp(17px, 1.4vw, 22px);
+  letter-spacing: 0.08em;
+  line-height: 1.25;
+  color: #4A4E57;
+}

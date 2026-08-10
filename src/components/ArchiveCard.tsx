@@ -27,7 +27,7 @@ export function ArchiveCard({
           <span className="font-bold">archive</span>
         </p>
         <span className="w-[18px] h-[18px] md:w-[24px] md:h-[24px] rounded-full border border-[#2B2B2B]" aria-hidden />
-        <p className="text-[13px] md:text-[17px] tracking-[0.18em] text-[#4A4E57]">INVENTORY N°</p>
+        <p className="myra-field">INVENTORY N°</p>
       </div>
 
       <div className="px-5 md:px-10 pb-6 md:pb-10">
@@ -56,7 +56,7 @@ export function ArchiveRow({
   return (
     <div className={`flex items-stretch ${last ? '' : 'border-b border-[#2B2B2B]'} ${className}`}>
       <div className="shrink-0 w-[130px] md:w-[230px] border-r border-[#2B2B2B] flex items-end px-3 md:px-5 pb-3 pt-5">
-        <span className="text-[15px] md:text-[19px] tracking-[0.16em] text-[#4A4E57] leading-none">{label}</span>
+        <span className="myra-field">{label}</span>
       </div>
       <div className="flex-1 min-w-0">{children}</div>
     </div>
@@ -83,13 +83,11 @@ export function ArchiveCell({
       className="w-full h-full text-left px-4 md:px-7 py-5 md:py-7 flex items-center justify-between gap-3 hover:bg-[#F4F3F0] transition-colors"
     >
       <span
-        className={`text-[17px] md:text-[24px] tracking-[0.06em] truncate ${
-          value ? 'text-[#4A4E57]' : 'text-[#B4B4AE]'
-        }`}
+        className={`myra-field truncate ${value ? '' : 'opacity-45'}`}
       >
         {value ?? '—'}
       </span>
-      <span className="text-[13px] text-[#4A4E57] shrink-0">{open ? '▲' : '▾'}</span>
+      <span className="myra-field shrink-0">{open ? '▲' : '▾'}</span>
     </button>
   )
 }

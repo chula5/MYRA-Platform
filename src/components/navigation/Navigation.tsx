@@ -26,21 +26,21 @@ export default function Navigation({ transparent = false, authed = false }: { tr
           : 'bg-white border-b border-[#E2E0DB]'}
       `}
     >
-      <div className="w-full px-4 md:px-10 h-24 md:h-28 lg:h-32 flex items-center justify-between gap-4">
+      <div className="w-full px-4 md:px-10 h-[72px] md:h-28 lg:h-32 flex items-center justify-between gap-4">
 
         {/* Left — nav links */}
-        <div className="flex items-center gap-3 sm:gap-5 md:gap-6 flex-1 min-w-0">
-          <Link href="/" className={`text-[15px] sm:text-[18px] lg:text-[20px] tracking-[0.1em] sm:tracking-[0.13em] hover:opacity-60 transition-colors duration-500 whitespace-nowrap ${textColor}`}>
+        <div className="flex items-center gap-2 sm:gap-5 md:gap-6 flex-1 min-w-0">
+          <Link href="/" className={`text-[13px] sm:text-[17px] lg:text-[20px] tracking-[0.06em] sm:tracking-[0.12em] hover:opacity-60 transition-colors duration-500 whitespace-nowrap ${textColor}`}>
             THE EDIT
           </Link>
-          <Link href="/our-story" className={`text-[15px] sm:text-[18px] lg:text-[20px] tracking-[0.1em] sm:tracking-[0.13em] hover:opacity-60 transition-colors duration-500 whitespace-nowrap ${textColor}`}>
+          <Link href="/our-story" className={`text-[13px] sm:text-[17px] lg:text-[20px] tracking-[0.06em] sm:tracking-[0.12em] hover:opacity-60 transition-colors duration-500 whitespace-nowrap ${textColor}`}>
             OUR STORY
           </Link>
         </div>
 
         {/* Centre — logo wordmark (white over the hero, black on the white nav) */}
         <div className="flex justify-center shrink-0">
-          <Link href="/" aria-label="MYRA" className="relative block h-[46px] sm:h-[64px] lg:h-[74px] hover:opacity-70 transition-opacity duration-500">
+          <Link href="/" aria-label="MYRA" className="relative block h-[32px] sm:h-[56px] lg:h-[70px] hover:opacity-70 transition-opacity duration-500">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/myra-logo-white.png"
@@ -58,7 +58,7 @@ export default function Navigation({ transparent = false, authed = false }: { tr
         </div>
 
         {/* Right — social links */}
-        <div className="flex-1 flex items-center justify-end gap-6">
+        <div className="flex-1 flex items-center justify-end gap-3 sm:gap-5 md:gap-6">
           <a
             href="https://www.instagram.com/myraassistant/"
             target="_blank"
@@ -81,7 +81,7 @@ export default function Navigation({ transparent = false, authed = false }: { tr
           {/* Constant auth link — plain text */}
           <Link
             href={authed ? '/edit' : '/signin'}
-            className={`whitespace-nowrap text-[15px] sm:text-[18px] lg:text-[20px] tracking-[0.13em] hover:opacity-60 transition-colors duration-500 ${textColor}`}
+            className={`whitespace-nowrap text-[13px] sm:text-[17px] lg:text-[20px] tracking-[0.06em] sm:tracking-[0.12em] hover:opacity-60 transition-colors duration-500 ${textColor}`}
           >
             {authed ? 'MY EDIT' : 'LOG IN / SIGN UP'}
           </Link>

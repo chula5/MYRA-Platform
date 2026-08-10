@@ -852,7 +852,7 @@ export default function FeedClient({
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder={typedHint ? `${typedHint}▌` : 'A SUMMER WEDDING IN ITALY'}
-                  className="flex-1 min-w-0 bg-transparent border-0 px-4 md:px-7 py-5 md:py-7 text-[17px] md:text-[26px] tracking-[0.06em] text-[#4A4E57] placeholder:text-[#B4B4AE] focus:outline-none"
+                  className="myra-field flex-1 min-w-0 bg-transparent border-0 px-4 md:px-7 py-5 md:py-7 placeholder:text-[#B4B4AE] focus:outline-none"
                 />
                 <button
                   type="submit"
@@ -868,16 +868,16 @@ export default function FeedClient({
             </ArchiveRow>
 
             <ArchiveRow label="COLOUR">
-              <div className="flex">
-                <div className="flex-1 min-w-0 border-r border-[#2B2B2B]">
+              <div className="flex flex-col md:flex-row">
+                <div className="flex-1 min-w-0 border-b md:border-b-0 md:border-r border-[#2B2B2B]">
                   <ArchiveCell
                     open={filterPanel === 'colour'}
                     value={filterColour ? (COLOUR_OPTIONS.find((c) => c.value === filterColour)?.label ?? null) : null}
                     onClick={() => setFilterPanel(filterPanel === 'colour' ? null : 'colour')}
                   />
                 </div>
-                <div className="shrink-0 w-[104px] md:w-[190px] border-r border-[#2B2B2B] flex items-end px-3 md:px-5 pb-3 pt-5">
-                  <span className="text-[10px] md:text-[13px] tracking-[0.14em] text-[#4A4E57] leading-none">ITEM TYPE</span>
+                <div className="shrink-0 w-full md:w-[230px] border-b md:border-b-0 md:border-r border-[#2B2B2B] flex items-end px-4 md:px-5 pb-3 pt-4 md:pt-5">
+                  <span className="myra-field">ITEM TYPE</span>
                 </div>
                 <div className="flex-1 min-w-0">
                   <ArchiveCell
@@ -890,16 +890,16 @@ export default function FeedClient({
             </ArchiveRow>
 
             <ArchiveRow label="BRAND" last>
-              <div className="flex">
-                <div className="flex-1 min-w-0 border-r border-[#2B2B2B]">
+              <div className="flex flex-col md:flex-row">
+                <div className="flex-1 min-w-0 border-b md:border-b-0 md:border-r border-[#2B2B2B]">
                   <ArchiveCell
                     open={filterPanel === 'brand'}
                     value={filterBrand.trim() ? filterBrand.toUpperCase() : null}
                     onClick={() => setFilterPanel(filterPanel === 'brand' ? null : 'brand')}
                   />
                 </div>
-                <div className="shrink-0 w-[104px] md:w-[190px] border-r border-[#2B2B2B] flex items-end px-3 md:px-5 pb-3 pt-5">
-                  <span className="text-[10px] md:text-[13px] tracking-[0.14em] text-[#4A4E57] leading-none">SIZE</span>
+                <div className="shrink-0 w-full md:w-[230px] border-b md:border-b-0 md:border-r border-[#2B2B2B] flex items-end px-4 md:px-5 pb-3 pt-4 md:pt-5">
+                  <span className="myra-field">SIZE</span>
                 </div>
                 <div className="flex-1 min-w-0 px-3 md:px-5 py-2 md:py-3 flex items-center">
                   <SizeFilter value={sizeUk} onChange={setSizeUk} />
@@ -928,7 +928,7 @@ export default function FeedClient({
                         }`}
                         style={{ background: c.swatch }}
                       />
-                      <span className="text-[7.5px] md:text-[9px] tracking-[0.12em] text-[#4A4E57] leading-none">
+                      <span className="myra-field">
                         {c.label}
                       </span>
                     </button>
@@ -939,15 +939,15 @@ export default function FeedClient({
           )}
 
           {filterPanel === 'item' && (
-            <div className="border border-[#2B2B2B] border-t-0 bg-[#FCFCFA] mb-6">
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+            <div className="border border-[#2B2B2B] border-t-0 bg-[#FCFCFA] mb-6 overflow-hidden">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 -mr-px -mb-px">
                 {ITEM_GROUPS.map((g) => {
                   const on = filterItemGroup === g.label
                   return (
                     <button
                       key={g.label}
                       onClick={() => { setFilterItemGroup(on ? null : g.label); setFilterPanel(null) }}
-                      className={`px-4 py-4 md:py-5 text-[10px] md:text-[12px] tracking-[0.16em] border-r border-b border-[#2B2B2B] transition-colors ${
+                      className={`myra-field px-4 py-5 border-r border-b border-[#2B2B2B] transition-colors ${
                         on ? 'bg-[#2B2B2B] text-white' : 'text-[#4A4E57] hover:bg-[#F1F0EC]'
                       }`}
                     >
@@ -969,7 +969,7 @@ export default function FeedClient({
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); setFilterPanel(null) } }}
                   placeholder="E.G. STAUD, TOTEME, JACQUEMUS…"
                   autoFocus
-                  className="flex-1 min-w-0 border border-[#2B2B2B] bg-transparent px-4 py-3 text-[12px] md:text-[15px] tracking-[0.08em] text-[#4A4E57] placeholder:text-[#B4B4AE] focus:outline-none"
+                  className="myra-field flex-1 min-w-0 border border-[#2B2B2B] bg-transparent px-4 py-3 placeholder:text-[#B4B4AE] focus:outline-none"
                 />
                 <button
                   onClick={() => setFilterPanel(null)}

@@ -77,7 +77,7 @@ export default function OutfitDeck({
   const mid = (n - 1) / 2
 
   // Cards are wider on touch — a 26vw card on a phone is a postage stamp.
-  const cardW = touch ? 'min(64vw, 320px)' : 'min(74%, 480px)'
+  const cardW = touch ? 'min(72vw, 360px)' : 'min(96%, 640px)'
 
   return (
     <div className={className}>
@@ -94,7 +94,7 @@ export default function OutfitDeck({
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         // Tall enough to hold the arc without the cards clipping.
-        className="relative w-full h-[clamp(420px,46vw,760px)]"
+        className="relative w-full h-[clamp(470px,60vw,960px)]"
       >
         {/* Loose sheets under the pile: plain paper, each turned a little and
             sized slightly larger than the cards so their corners show past the

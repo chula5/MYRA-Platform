@@ -29,13 +29,13 @@ export default function SizeFilter({
   }, [open])
 
   const trigger = compact
-    ? `text-[11px] tracking-[0.09em] px-5 py-2.5 rounded-full border transition-colors ${
+    ? `text-[14px] tracking-[0.1em] px-6 py-3 rounded-full border transition-colors ${
         current ? 'border-[#0A0A0A] text-[#4A4E57]' : 'border-[#E2E0DB] text-[#4A4E57] hover:border-[#0A0A0A] hover:text-[#4A4E57]'
       }`
     // Matches the COLOUR / ITEM TYPE / BRAND buttons beside it exactly:
     // plain text on the grey ground, no box.
-    : `py-2 bg-transparent text-[17px] md:text-[24px] tracking-[0.06em] transition-colors duration-300 ${
-        current ? 'text-[#4A4E57]' : 'text-[#4A4E57] hover:text-[#4A4E57]'
+    : `myra-field py-2 bg-transparent transition-opacity duration-300 ${
+        current ? '' : 'opacity-45 hover:opacity-100'
       }`
 
   return (
