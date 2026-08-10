@@ -301,13 +301,15 @@ html {
 }
 
 
-/* The grid is held back until its images have decoded, then shown in one
-   piece — a short fade-up rather than tiles popping in as they arrive. */
-.myra-reveal {
-  animation: myra-reveal 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+/* Results are held back until their images have DECODED, then rise into place
+   from below in a short stagger. Nothing is shown while they load — no spinner
+   to watch — so the arrival reads as the looks coming in rather than as a page
+   finishing loading. */
+.myra-rise {
+  animation: myra-rise 640ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-@keyframes myra-reveal {
-  from { opacity: 0; transform: translateY(10px); }
+@keyframes myra-rise {
+  from { opacity: 0; transform: translateY(70px); }
   to   { opacity: 1; transform: none; }
 }
 
@@ -328,7 +330,7 @@ html {
   to   { opacity: 1; transform: translate(-50%, 0); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .myra-reveal, .myra-search-dock { animation: none; }
+  .myra-rise, .myra-search-dock { animation: none; }
 }
 
 

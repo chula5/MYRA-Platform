@@ -16,11 +16,8 @@ import BrandLogoTile from '@/components/BrandLogoTile'
 import NewArrivals, { byNewest } from '@/components/NewArrivals'
 import OurPicks from '@/components/OurPicks'
 import TasteDecks from '@/components/TasteDecks'
-import TornPaper from '@/components/TornPaper'
-import DrawnSearchFrame from '@/components/DrawnSearchFrame'
 import { ArchiveCard, ArchiveRow, ArchiveCell } from '@/components/ArchiveCard'
 import PolaroidOccasion, { occasionImages } from '@/components/PolaroidOccasion'
-import HangerLoader from '@/components/HangerLoader'
 import SizeFilter from './SizeFilter'
 import { outfitFitsClothingUk } from '@/lib/sizing'
 import { occasionLabel, BASE_OCCASIONS, occasionMatchTags } from '@/lib/occasions'
@@ -1089,24 +1086,36 @@ export default function FeedClient({
           </div>
         </div>
 
-        {/* The search field, docked at the foot of the screen now that results
-            are on show — it slides down here from the middle of the landing
-            page, and stays reachable without scrolling back up. */}
+        {/* Docked at the foot of the screen now that results are on show —
+            the same archive rule and label as the card on the landing page,
+            shortened to one line. */}
         <div className="myra-search-dock">
-          <form onSubmit={(e) => { e.preventDefault(); executeSearch() }}>
-            <DrawnSearchFrame onSubmit={executeSearch}>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="SEARCH BY STYLE, COLOUR, BRAND, MATERIAL…"
-                className="w-full bg-transparent border-0 pl-6 pr-2 py-4 md:py-5 text-center text-[12px] md:text-[15px] tracking-[0.12em] text-[#4A4E57] placeholder:text-[#4A4E57] focus:outline-none"
-              />
-            </DrawnSearchFrame>
+          <form
+            onSubmit={(e) => { e.preventDefault(); executeSearch() }}
+            className="flex items-stretch border border-[#2B2B2B] bg-[#FCFCFA] shadow-[0_10px_34px_rgba(0,0,0,0.16)]"
+          >
+            <div className="shrink-0 border-r border-[#2B2B2B] flex items-end px-3 md:px-5 pb-2 pt-4">
+              <span className="myra-field whitespace-nowrap">LOOKING FOR</span>
+            </div>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="A SUMMER WEDDING IN ITALY"
+              className="flex-1 min-w-0 bg-transparent border-0 px-4 md:px-6 py-4 md:py-5 myra-field placeholder:opacity-45 focus:outline-none"
+            />
+            <button
+              type="submit"
+              aria-label="Search"
+              className="shrink-0 px-5 md:px-7 border-l border-[#2B2B2B] hover:bg-[#F4F3F0] transition-colors"
+            >
+              <svg viewBox="0 0 40 40" className="w-[20px] md:w-[24px]" aria-hidden>
+                <circle cx="17" cy="16" r="10" fill="none" stroke="#4A4E57" strokeWidth="3.2" />
+                <path d="M24.5 24 L33 33" stroke="#4A4E57" strokeWidth="3.2" strokeLinecap="round" />
+              </svg>
+            </button>
           </form>
         </div>
-
-        {(searchLoading || preparing) && <HangerLoader />}
 
         {!searchLoading && !preparing && searchResults.length === 0 && (
           <div className="text-center py-24">
@@ -1128,18 +1137,24 @@ export default function FeedClient({
 
         {!searchLoading && !preparing && searchResults.length > 0 && (
           <div className="grid grid-cols-2 md:grid-cols-3 gap-0 -mx-6 sm:-mx-10">
-            {searchResults.filter(fitsSize).map((outfit) => (
-              <OutfitCard
+            {searchResults.filter(fitsSize).map((outfit, i) => (
+              <div
                 key={outfit.outfit_id}
-                outfit={outfit}
-                detailHref={`${detailHrefBase}/${outfit.outfit_id}`}
-                onSimilarLooks={handleSimilarLooks}
-                onExploreStyles={handleExploreStyles}
-                onStyleItem={handleStyleItem}
-                canSave={canSave}
-                initialSaved={savedSet.has(outfit.outfit_id)}
-                lockedSave={lockedSave}
-              />
+                className="myra-rise"
+                // Capped so the tail of a long grid isn't left waiting.
+                style={{ animationDelay: `${Math.min(i, 11) * 55}ms` }}
+              >
+                <OutfitCard
+                  outfit={outfit}
+                  detailHref={`${detailHrefBase}/${outfit.outfit_id}`}
+                  onSimilarLooks={handleSimilarLooks}
+                  onExploreStyles={handleExploreStyles}
+                  onStyleItem={handleStyleItem}
+                  canSave={canSave}
+                  initialSaved={savedSet.has(outfit.outfit_id)}
+                  lockedSave={lockedSave}
+                />
+              </div>
             ))}
           </div>
         )}
@@ -1174,24 +1189,36 @@ export default function FeedClient({
         </div>
       </div>
 
-      {/* The search field, docked at the foot of the screen now that results
-          are on show — it slides down here from the middle of the landing
-          page, and stays reachable without scrolling back up. */}
+      {/* Docked at the foot of the screen now that results are on show —
+          the same archive rule and label as the card on the landing page,
+          shortened to one line. */}
       <div className="myra-search-dock">
-        <form onSubmit={(e) => { e.preventDefault(); executeSearch() }}>
-          <DrawnSearchFrame onSubmit={executeSearch}>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="SEARCH BY STYLE, COLOUR, BRAND, MATERIAL…"
-              className="w-full bg-transparent border-0 pl-6 pr-2 py-4 md:py-5 text-center text-[12px] md:text-[15px] tracking-[0.12em] text-[#4A4E57] placeholder:text-[#4A4E57] focus:outline-none"
-            />
-          </DrawnSearchFrame>
+        <form
+          onSubmit={(e) => { e.preventDefault(); executeSearch() }}
+          className="flex items-stretch border border-[#2B2B2B] bg-[#FCFCFA] shadow-[0_10px_34px_rgba(0,0,0,0.16)]"
+        >
+          <div className="shrink-0 border-r border-[#2B2B2B] flex items-end px-3 md:px-5 pb-2 pt-4">
+            <span className="myra-field whitespace-nowrap">LOOKING FOR</span>
+          </div>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="A SUMMER WEDDING IN ITALY"
+            className="flex-1 min-w-0 bg-transparent border-0 px-4 md:px-6 py-4 md:py-5 myra-field placeholder:opacity-45 focus:outline-none"
+          />
+          <button
+            type="submit"
+            aria-label="Search"
+            className="shrink-0 px-5 md:px-7 border-l border-[#2B2B2B] hover:bg-[#F4F3F0] transition-colors"
+          >
+            <svg viewBox="0 0 40 40" className="w-[20px] md:w-[24px]" aria-hidden>
+              <circle cx="17" cy="16" r="10" fill="none" stroke="#4A4E57" strokeWidth="3.2" />
+              <path d="M24.5 24 L33 33" stroke="#4A4E57" strokeWidth="3.2" strokeLinecap="round" />
+            </svg>
+          </button>
         </form>
       </div>
-
-      {(loading || preparing) && <HangerLoader />}
 
       {!loading && !preparing && outfits.length === 0 && (
         <div className="text-center py-24">
@@ -1207,10 +1234,15 @@ export default function FeedClient({
 
       {!loading && !preparing && outfits.length > 0 && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-0 -mx-6 sm:-mx-10 myra-reveal">
-            {outfits.filter(fitsSize).map((outfit) => (
-              <OutfitCard
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-0 -mx-6 sm:-mx-10">
+            {outfits.filter(fitsSize).map((outfit, i) => (
+              <div
                 key={outfit.outfit_id}
+                className="myra-rise"
+                // Capped so the tail of a long grid isn't left waiting.
+                style={{ animationDelay: `${Math.min(i, 11) * 55}ms` }}
+              >
+              <OutfitCard
                 outfit={outfit}
                 detailHref={`${detailHrefBase}/${outfit.outfit_id}`}
                 onSimilarLooks={handleSimilarLooks}
@@ -1220,6 +1252,7 @@ export default function FeedClient({
                 initialSaved={savedSet.has(outfit.outfit_id)}
                 lockedSave={lockedSave}
               />
+              </div>
             ))}
           </div>
 
