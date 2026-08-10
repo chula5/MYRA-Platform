@@ -192,6 +192,8 @@ export interface BrandRow {
   brand: string
   label: string
   outfits: OutfitWithItems[]
+  // Canonical logo from the backend (brand.logo_url) — the tile's first choice.
+  logo_url?: string | null
 }
 
 function brandsOfOutfit(o: OutfitWithItems): Set<string> {
@@ -265,11 +267,16 @@ export async function getBrandAffinityRows(
       )
       if (matches.length < 2) continue
 
-      // Proper-cased brand name from a matching item.
+      // Proper-cased brand name + backend logo from a matching item.
       let displayName = brandLower
+      let logoUrl: string | null = null
       for (const o of matches) {
         const hit = (o.outfit_item ?? []).find((oi) => ((oi.item as any)?.brand?.name ?? '').toLowerCase() === brandLower)
-        if (hit) { displayName = (hit.item as any).brand.name; break }
+        if (hit) {
+          displayName = (hit.item as any).brand.name
+          logoUrl = (hit.item as any).brand.logo_url ?? null
+          break
+        }
       }
 
       const ordered = isZero(userVec) ? matches : rankByTaste(userVec, matches).map((r) => r.outfit)
@@ -285,7 +292,7 @@ export async function getBrandAffinityRows(
       if (deduped.length < 2) continue
 
       const label = rows.length % 2 === 0 ? `MORE FROM ${displayName.toUpperCase()}` : `${displayName.toUpperCase()}, FOR YOU`
-      rows.push({ brand: displayName, label, outfits: deduped })
+      rows.push({ brand: displayName, label, outfits: deduped, logo_url: logoUrl })
       if (rows.length >= maxRows) break
     }
 

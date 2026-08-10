@@ -105,7 +105,7 @@ export default function NewArrivals({
       </div>
 
       {/* Varied-size image row: horizontal scroll on mobile, staggered on desktop */}
-      <div className="flex gap-4 sm:gap-6 sm:items-start overflow-x-auto sm:overflow-visible snap-x sm:snap-none -mx-1 px-1 sm:mx-0 sm:px-0 pb-2">
+      <div className="flex gap-4 sm:gap-6 sm:items-start overflow-x-auto snap-x -mx-1 px-1 pb-2">
         {picks.map((o, i) => (
           <Link
             key={o.outfit_id}

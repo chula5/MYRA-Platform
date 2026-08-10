@@ -53,12 +53,18 @@ export default function OurPicks({ data }: { data: OurPicksData }) {
           <br />
           Picks
         </h2>
-        {/* Reserve room for the bag hanging below the baseline */}
-        <div style={{ height: '1.55em' }} />
+        {/* Reserve room for the bag hanging below the baseline, so the brand
+            row underneath can never collide with it. */}
+        <div style={{ height: '2.05em' }} />
+        {/* Small label sitting under the bag */}
+        <a
+          href="/picks/bags"
+          className="absolute text-[11px] tracking-[0.22em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors whitespace-nowrap"
+          style={{ left: '1.74em', top: '3.35em', width: '2.6em', textAlign: 'center' }}
+        >
+          SUMMER BAGS
+        </a>
       </div>
-      <p className="text-[10px] tracking-[0.2em] text-[#A8A8A4]">
-        THE PIECES WE KEEP REACHING FOR — TAP THE BAG
-      </p>
     </section>
   )
 }

@@ -775,7 +775,7 @@ export default function FeedClient({
                   className="group shrink-0 w-[15vw] min-w-[170px] text-left"
                 >
                   {/* Brand logo (falls back to a wordmark) */}
-                  <BrandLogoTile brand={row.brand} logoUrl={brandLogo(row.brand)} />
+                  <BrandLogoTile brand={row.brand} logoUrl={row.logo_url ?? brandLogo(row.brand)} />
                   <p className="text-[8px] tracking-[0.09em] text-[#A8A8A4] mt-2">{row.outfits.length} LOOKS →</p>
                 </button>
               ))}
@@ -795,12 +795,12 @@ export default function FeedClient({
         )}
 
         {/* Occasions — plain underlined text (no boxes). */}
-        <div className="order-6 grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4 max-w-[760px] mx-auto mb-10">
+        <div className="order-6 grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-5 max-w-[900px] mx-auto mb-12">
           {(occasionOrder && occasionOrder.length ? occasionOrder : BASE_OCCASIONS).map((tag) => (
             <button
               key={tag}
               onClick={() => setOccasion(tag)}
-              className="py-2 text-[11px] tracking-[0.12em] text-[#4A4E57] text-center underline underline-offset-[6px] decoration-[#D8D6D1] hover:decoration-[#0A0A0A] transition-colors"
+              className="py-2.5 text-[14px] tracking-[0.12em] text-[#4A4E57] text-center underline underline-offset-[6px] decoration-[#D8D6D1] hover:decoration-[#0A0A0A] transition-colors"
             >
               {occasionLabel(tag)}
             </button>
@@ -808,7 +808,7 @@ export default function FeedClient({
         </div>
 
         {/* Search + filter area */}
-        <div className="order-3 w-full max-w-[860px] mx-auto mb-10">
+        <div className="order-3 w-full max-w-[1100px] mx-auto mb-12">
 
           {/* Active filter chips */}
           {(filterColour || filterItemGroup || filterBrand.trim()) && (
@@ -844,7 +844,7 @@ export default function FeedClient({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={typedHint ? `${typedHint}▌` : 'SEARCH BY STYLE, COLOUR, BRAND, MATERIAL…'}
-              className="w-full bg-transparent border-0 border-b border-[#DEDCD7] focus:border-[#0A0A0A] px-1 py-2.5 text-center text-[11px] tracking-[0.09em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none transition-colors"
+              className="w-full bg-transparent border-0 border-b border-[#DEDCD7] focus:border-[#0A0A0A] px-1 py-3.5 text-center text-[15px] tracking-[0.09em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none transition-colors"
             />
           </form>
 
@@ -857,7 +857,7 @@ export default function FeedClient({
                 <button
                   key={type}
                   onClick={() => setFilterPanel(isActive ? null : type)}
-                  className={`px-1 py-1.5 text-[9px] tracking-[0.1em] underline underline-offset-[5px] transition-colors duration-200 ${
+                  className={`px-1.5 py-2 text-[12px] tracking-[0.1em] underline underline-offset-[6px] transition-colors duration-200 ${
                     hasValue || isActive
                       ? 'text-[#0A0A0A] decoration-[#0A0A0A]'
                       : 'text-[#6B6B6B] decoration-[#D8D6D1] hover:text-[#4A4E57] hover:decoration-[#4A4E57]'

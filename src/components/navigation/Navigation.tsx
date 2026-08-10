@@ -33,6 +33,9 @@ export default function Navigation({ transparent = false, authed = false }: { tr
           <Link href="/" className={`text-[9px] sm:text-[10px] tracking-[0.054em] sm:tracking-[0.068em] hover:opacity-60 transition-colors duration-500 whitespace-nowrap ${textColor}`}>
             THE EDIT
           </Link>
+          <Link href="/our-story" className={`text-[9px] sm:text-[10px] tracking-[0.054em] sm:tracking-[0.068em] hover:opacity-60 transition-colors duration-500 whitespace-nowrap ${textColor}`}>
+            OUR STORY
+          </Link>
         </div>
 
         {/* Centre — logo wordmark (white over the hero, black on the white nav) */}

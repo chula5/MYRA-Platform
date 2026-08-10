@@ -288,3 +288,7 @@ html {
 .lookbook-item:hover .lookbook-label {
   opacity: 1;
 }
+
+
+/* Never let a wide row drag the whole page sideways — rows scroll, page does not. */
+html, body { overflow-x: hidden; max-width: 100%; }

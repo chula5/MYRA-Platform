@@ -29,7 +29,7 @@ export default function PicksCollectionClient({
   const router = useRouter()
 
   return (
-    <div className="max-w-[1200px] mx-auto px-6 sm:px-10 py-14">
+    <div className="w-full px-6 sm:px-10 py-14">
       <a href="/" className="text-[10px] tracking-[0.14em] text-[#A8A8A4] hover:text-[#4A4E57] transition-colors">
         ← BACK TO MYRA
       </a>
@@ -45,7 +45,7 @@ export default function PicksCollectionClient({
       {picks.length === 0 ? (
         <p className="text-[11px] tracking-[0.12em] text-[#A8A8A4] py-20 text-center">NOTHING HERE YET — CHECK BACK SOON.</p>
       ) : (
-        <div className="relative z-0 grid grid-cols-1 sm:grid-cols-2 gap-x-16 gap-y-16 pt-[0.1em]">
+        <div className="relative z-0 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-14 pt-[0.1em]">
           {picks.map((pick, i) => {
             const s = SCATTER[i % SCATTER.length]
             return (
@@ -55,12 +55,12 @@ export default function PicksCollectionClient({
                   onClick={() => pick.retailer_url && openShop({ item_id: pick.item_id, retailer_url: pick.retailer_url, product_name: pick.product_name, brand: { name: pick.brand_name ?? '' } } as any)}
                   className="group block w-full text-left"
                 >
-                  <div className={`${s.img} bg-white overflow-hidden`}>
+                  <div className={`${s.img} bg-[#EDEDEB] overflow-hidden`}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={thumbUrl(pick.image_url, 900)}
                       alt={pick.product_name}
-                      className="w-full h-full object-contain p-6 transition-transform duration-500 group-hover:scale-[1.03]"
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
                     />
                   </div>
                   <div className="flex items-baseline justify-between gap-3 mt-3">

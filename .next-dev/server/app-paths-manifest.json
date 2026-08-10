@@ -1,7 +1,6 @@
 {
-  "/admin/outfit-review/page": "app/admin/outfit-review/page.js",
-  "/admin/items/page": "app/admin/items/page.js",
-  "/admin/page": "app/admin/page.js",
-  "/admin/picks/page": "app/admin/picks/page.js",
-  "/page": "app/page.js"
+  "/picks/[collection]/page": "app/picks/[collection]/page.js",
+  "/outfit/[id]/page": "app/outfit/[id]/page.js",
+  "/page": "app/page.js",
+  "/our-story/page": "app/our-story/page.js"
 }
