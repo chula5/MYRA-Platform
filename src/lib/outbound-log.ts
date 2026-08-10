@@ -7,6 +7,8 @@
 import { createServerClient, createAdminClient } from '@/lib/supabase-server'
 import { recordTasteEvent } from '@/lib/taste-profile'
 import { recordLandingEvent } from '@/app/actions/landing-analytics'
+import { getVisitorId } from '@/lib/visitor'
+import { linkVisitorClicks } from '@/lib/visitor-link'
 
 export interface OutboundClickInput {
   clickId: string
@@ -67,9 +69,19 @@ export async function logOutboundClick(input: OutboundClickInput): Promise<void>
 
     // Legacy dual-writes so existing admin analytics stay continuous:
     // item_click (top-items view) + landing_event mirror (referral breakdowns).
-    void admin
-      .from('item_click' as any)
-      .insert({ item_id: input.itemId, outfit_id: input.outfitId ?? null, user_id: userId } as any)
+    const visitorId = await getVisitorId()
+
+    void admin.from('item_click' as any).insert({
+      item_id: input.itemId,
+      outfit_id: input.outfitId ?? null,
+      user_id: userId,
+      visitor_id: visitorId,
+      session_id: input.sessionId ?? null,
+    } as any)
+
+    // A signed-in click tells us who this browser belongs to — so every earlier
+    // anonymous click from the same browser can be claimed retrospectively.
+    if (userId && visitorId) void linkVisitorClicks(userId, visitorId)
     void recordLandingEvent('item_click', (input.label || input.itemId).slice(0, 120), input.ref ?? null)
 
     // Strongest taste signal (+7) — same rule as before: needs a signed-in user

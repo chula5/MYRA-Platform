@@ -36,6 +36,14 @@ export default function SessionTracker() {
       sessionId = sessionStorage.getItem(SESSION_KEY) || ''
     } catch { /* storage blocked → skip tracking */ return }
 
+    // Mirror the visitor id into a cookie so SERVER-side click logging can read
+    // it. Outbound clicks are recorded server-side (the /go redirect never runs
+    // client JS at all), so localStorage alone can't reach them. Same opaque id,
+    // no personal data — and admin browsers returned above, so they're excluded.
+    try {
+      document.cookie = `${VISITOR_KEY}=${visitorId}; path=/; max-age=31536000; SameSite=Lax`
+    } catch { /* ignore */ }
+
     if (!sessionId) {
       sessionId = uuid()
       let isReturning = false

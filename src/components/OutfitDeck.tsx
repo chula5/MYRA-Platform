@@ -12,6 +12,10 @@ import { thumbUrl } from '@/lib/image-utils'
 import type { OutfitWithItems } from '@/types/database'
 
 const MAX_CARDS = 6
+// On a phone the arc was a whole hand of cards splayed across the screen —
+// unreadable and nothing like the editorial reference. Touch gets a straight
+// stack instead: one card square-on, two peeking out behind it.
+const MAX_CARDS_TOUCH = 3
 
 // Resting pile: a few degrees of scatter so it reads as real cards, not a
 // stack of divs. Indexed from the top card down.
@@ -40,7 +44,6 @@ export default function OutfitDeck({
   accent?: React.ReactNode
   className?: string
 }) {
-  const cards = outfits.slice(0, MAX_CARDS)
   const ref = useRef<HTMLDivElement>(null)
   const [hovered, setHovered] = useState(false)
   const [inView, setInView] = useState(false)
@@ -62,14 +65,18 @@ export default function OutfitDeck({
     return () => io.disconnect()
   }, [touch])
 
+  const cards = outfits.slice(0, touch ? MAX_CARDS_TOUCH : MAX_CARDS)
   if (cards.length === 0) return null
 
   const open = touch ? inView : hovered
   const n = cards.length
-  // Fanned: pivot each card about a point below the deck so the spread is an
-  // arc, the way a hand of cards actually opens.
+  // Fanned (pointer only): pivot each card about a point below the deck so the
+  // spread is an arc, the way a hand of cards actually opens.
   const SPREAD = 15 // degrees between adjacent cards
   const mid = (n - 1) / 2
+
+  // Cards are wider on touch — a 26vw card on a phone is a postage stamp.
+  const cardW = touch ? 'min(58vw, 260px)' : 'min(26vw, 220px)'
 
   return (
     <div className={className}>
@@ -91,24 +98,40 @@ export default function OutfitDeck({
         {cards.map((o, i) => {
           const pile = PILE[i] ?? PILE[PILE.length - 1]
           const angle = (i - mid) * SPREAD
-          const style: React.CSSProperties = open
-            ? {
-                transform: `rotate(${angle}deg)`,
-                transformOrigin: '50% 155%',
-                zIndex: 10 + i,
-              }
-            : {
-                transform: `translate(${pile.x}px, ${pile.y}px) rotate(${pile.r}deg)`,
-                transformOrigin: '50% 50%',
-                zIndex: 10 + (n - i),
-              }
+
+          let style: React.CSSProperties
+          if (touch) {
+            // STRAIGHT STACK. No rotation at all — the front card sits square
+            // and the ones behind step out to the right and down just far
+            // enough to read as a stack with more inside.
+            style = {
+              transform: `translate(${i * 16}px, ${i * 10}px) scale(${1 - i * 0.035})`,
+              transformOrigin: '50% 50%',
+              zIndex: 10 + (n - i),
+            }
+          } else if (open) {
+            style = { transform: `rotate(${angle}deg)`, transformOrigin: '50% 155%', zIndex: 10 + i }
+          } else {
+            style = {
+              transform: `translate(${pile.x}px, ${pile.y}px) rotate(${pile.r}deg)`,
+              transformOrigin: '50% 50%',
+              zIndex: 10 + (n - i),
+            }
+          }
+
           return (
             <button
               key={o.outfit_id}
               onClick={() => router.push(`${detailHrefBase}/${o.outfit_id}`)}
               aria-label={o.aesthetic_label ?? 'View outfit'}
-              className="group absolute left-1/2 top-0 -ml-[calc(min(26vw,220px)/2)] w-[min(26vw,220px)] transition-[transform] duration-[550ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform hover:-translate-y-2"
-              style={{ ...style, transitionDelay: `${i * 35}ms` }}
+              className="group absolute left-1/2 top-0 transition-[transform] duration-[550ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform hover:-translate-y-2"
+              style={{
+                width: cardW,
+                // Centres the stack: half the card, plus half the step-out.
+                marginLeft: `calc(${cardW} / -2 ${touch ? `- ${((n - 1) * 16) / 2}px` : ''})`,
+                ...style,
+                transitionDelay: `${i * 35}ms`,
+              }}
             >
               <div className="relative aspect-[3/4] w-full overflow-hidden bg-[#EDEDED] shadow-[0_10px_30px_rgba(0,0,0,0.16)] ring-1 ring-black/[0.04]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}

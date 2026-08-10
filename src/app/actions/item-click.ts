@@ -3,6 +3,8 @@
 import { createServerClient, createAdminClient } from '@/lib/supabase-server'
 import { recordTasteEvent } from '@/lib/taste-profile'
 import { recordLandingEvent } from '@/app/actions/landing-analytics'
+import { getVisitorId } from '@/lib/visitor'
+import { linkVisitorClicks } from '@/lib/visitor-link'
 
 // Record a retailer click-through for an item. Fire-and-forget — analytics
 // must never break the browsing experience. When a signed-in early-access user
@@ -26,9 +28,15 @@ export async function recordItemClick(itemId: string, outfitId?: string, ref?: s
       /* auth unavailable → anonymous click */
     }
 
+    // The browser behind the click, signed in or not — lets anonymous clicks be
+    // grouped as one person's browsing, and claimed later if they sign up.
+    const visitorId = await getVisitorId()
+
     await admin
       .from('item_click')
-      .insert({ item_id: itemId, outfit_id: outfitId ?? null, user_id: userId } as any)
+      .insert({ item_id: itemId, outfit_id: outfitId ?? null, user_id: userId, visitor_id: visitorId } as any)
+
+    if (userId && visitorId) void linkVisitorClicks(userId, visitorId)
 
     // Mirror into landing_event so referral breakdowns can show clicked items.
     void recordLandingEvent('item_click', (label || itemId).slice(0, 120), ref)

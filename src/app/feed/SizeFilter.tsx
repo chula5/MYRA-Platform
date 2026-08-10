@@ -32,8 +32,9 @@ export default function SizeFilter({
     ? `text-[11px] tracking-[0.09em] px-5 py-2.5 rounded-full border transition-colors ${
         current ? 'border-[#0A0A0A] text-[#4A4E57]' : 'border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57]'
       }`
-    : `px-1 py-1.5 text-[9px] tracking-[0.1em] underline underline-offset-[5px] transition-colors ${
-        current ? 'text-[#0A0A0A] decoration-[#0A0A0A]' : 'text-[#6B6B6B] decoration-[#D8D6D1] hover:text-[#4A4E57] hover:decoration-[#4A4E57]'
+    // Matches the COLOUR / ITEM TYPE / BRAND buttons beside it exactly.
+    : `px-5 md:px-7 py-3.5 md:py-4 bg-white border rounded-[3px] text-[11px] md:text-[13px] tracking-[0.16em] md:tracking-[0.2em] transition-colors duration-300 ${
+        current ? 'border-[#0A0A0A] text-[#0A0A0A]' : 'border-[#E2E0DB] text-[#4A4E57] hover:bg-[#F2F2F2] hover:border-[#0A0A0A]'
       }`
 
   return (

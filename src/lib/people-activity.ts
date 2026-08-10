@@ -39,8 +39,27 @@ export interface PersonActivity {
   totals: { saves: number; likes: number; clicks: number }
 }
 
+/**
+ * A browser that clicked through without an account. Grouped by the persistent
+ * visitor id, so a run of clicks reads as one person's browsing rather than N
+ * disconnected events. Never named — there is nothing to name it with.
+ */
+export interface AnonymousVisitor {
+  visitorId: string
+  clicks: Ref[]
+  firstSeen: string
+  lastSeen: string
+}
+
 export interface PeopleActivity {
   people: PersonActivity[]
+  anonymous: {
+    visitors: AnonymousVisitor[]
+    /** Clicks from a browser we can group but not name. */
+    identifiedBrowsers: number
+    /** Clicks with no visitor id either — logged before 0026, or storage blocked. */
+    untraceableClicks: number
+  }
   totals: {
     accounts: number
     savers: number
@@ -144,8 +163,8 @@ export async function getPeopleActivity(): Promise<PeopleActivity> {
         .select('user_id, age_range, brand_groups, liked_outfit_ids, disliked_outfit_ids')
         .limit(2000),
     ),
-    safe<{ item_id: string; clicked_at: string; user_id: string | null }>(() =>
-      admin.from('item_click' as any).select('item_id, clicked_at, user_id').limit(50000),
+    safe<{ item_id: string; clicked_at: string; user_id: string | null; visitor_id: string | null }>(() =>
+      admin.from('item_click' as any).select('item_id, clicked_at, user_id, visitor_id').limit(50000),
     ),
   ])
 
@@ -158,9 +177,12 @@ export async function getPeopleActivity(): Promise<PeopleActivity> {
     : await safe<{ item_id: string; clicked_at: string }>(() =>
         admin.from('item_click' as any).select('item_id, clicked_at').limit(50000),
       )
-  const allClicks: { item_id: string; clicked_at: string; user_id: string | null }[] = attributionReady
-    ? clicks
-    : clicksFallback.rows.map((r) => ({ ...r, user_id: null }))
+  const allClicks: {
+    item_id: string
+    clicked_at: string
+    user_id: string | null
+    visitor_id: string | null
+  }[] = attributionReady ? clicks : clicksFallback.rows.map((r) => ({ ...r, user_id: null, visitor_id: null }))
 
   // ── Labels ────────────────────────────────────────────────────────────────
   const outfitIds = [
@@ -247,8 +269,44 @@ export async function getPeopleActivity(): Promise<PeopleActivity> {
     }
   })
 
+  // ── Anonymous browsing ────────────────────────────────────────────────────
+  // Clicks with no account, grouped by browser. One visitor clicking five items
+  // is one person shopping, not five stray events — that shape is the point.
+  const byVisitor = new Map<string, typeof allClicks>()
+  let untraceableClicks = 0
+  for (const c of allClicks) {
+    if (c.user_id) continue
+    if (!c.visitor_id) {
+      untraceableClicks++
+      continue
+    }
+    const list = byVisitor.get(c.visitor_id) ?? []
+    list.push(c)
+    byVisitor.set(c.visitor_id, list)
+  }
+
+  const visitors: AnonymousVisitor[] = Array.from(byVisitor.entries())
+    .map(([visitorId, cs]) => {
+      const sorted = [...cs].sort(
+        (a, b) => new Date(b.clicked_at).getTime() - new Date(a.clicked_at).getTime(),
+      )
+      return {
+        visitorId,
+        clicks: sorted.map((c) => itemRef(c.item_id, c.clicked_at)),
+        firstSeen: sorted[sorted.length - 1].clicked_at,
+        lastSeen: sorted[0].clicked_at,
+      }
+    })
+    .sort((a, b) => b.clicks.length - a.clicks.length)
+    .slice(0, 25)
+
   return {
     people,
+    anonymous: {
+      visitors,
+      identifiedBrowsers: byVisitor.size,
+      untraceableClicks,
+    },
     totals: {
       accounts: accounts.length,
       savers: people.filter((p) => p.totals.saves > 0).length,

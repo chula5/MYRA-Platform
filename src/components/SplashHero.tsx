@@ -54,7 +54,15 @@ export default function SplashHero() {
   }, [])
 
   // Big mirror starts centred in the viewport…
-  const startH = Math.min(820, vp.h * 0.72)
+  //
+  // On a phone the old 72%-of-viewport-height made the mirror taller than the
+  // grey panel it sits on and nearly as wide as the screen. Narrow screens get a
+  // smaller mirror, bounded by WIDTH as well as height so it always sits inside
+  // the texture rather than spilling past it.
+  const narrow = vp.w < 640
+  const startH = narrow
+    ? Math.min(340, vp.h * 0.38, vp.w * 0.72)
+    : Math.min(820, vp.h * 0.72)
   const startX = vp.w / 2
   const startY = vp.h / 2
   // …and glides to the nav's mirror glyph.
@@ -101,13 +109,6 @@ export default function SplashHero() {
         />
       </div>
 
-      {/* Scroll cue */}
-      <div
-        className="absolute inset-x-0 bottom-8 flex justify-center pointer-events-none"
-        style={{ opacity: 1 - Math.min(1, p * 2.5) }}
-      >
-        <span className="text-[9px] tracking-[0.28em] text-[#3F4038]/80">SCROLL</span>
-      </div>
     </div>
   )
 }

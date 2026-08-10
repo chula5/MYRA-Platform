@@ -767,13 +767,22 @@ export default function FeedClient({
           </div>
         )}
 
-        {/* Occasions — plain underlined text (no boxes). */}
-        <div className="order-6 grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-5 max-w-[900px] mx-auto mb-12">
+        {/* Occasions — outlined white buttons (Style B), rectangular with a
+            barely-there radius. Sized to be tapped on a phone and to hold the
+            page at desktop width, where plain text read far too small. */}
+        <div className="order-6 grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4 max-w-[1100px] mx-auto mb-14 px-1">
           {(occasionOrder && occasionOrder.length ? occasionOrder : BASE_OCCASIONS).map((tag) => (
             <button
               key={tag}
               onClick={() => setOccasion(tag)}
-              className="py-2.5 text-[14px] tracking-[0.12em] text-[#4A4E57] text-center underline underline-offset-[6px] decoration-[#D8D6D1] hover:decoration-[#0A0A0A] transition-colors"
+              className="
+                flex items-center justify-center text-center
+                min-h-[64px] md:min-h-[76px] px-4 md:px-6 py-4
+                bg-white border border-[#E2E0DB] rounded-[3px]
+                text-[12px] md:text-[15px] tracking-[0.16em] md:tracking-[0.2em] leading-snug text-[#0A0A0A]
+                hover:bg-[#F2F2F2] hover:border-[#0A0A0A]
+                transition-colors duration-300
+              "
             >
               {occasionLabel(tag)}
             </button>
@@ -817,12 +826,19 @@ export default function FeedClient({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={typedHint ? `${typedHint}▌` : 'SEARCH BY STYLE, COLOUR, BRAND, MATERIAL…'}
-              className="w-full bg-transparent border-0 border-b border-[#DEDCD7] focus:border-[#0A0A0A] px-1 py-3.5 text-center text-[15px] tracking-[0.09em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none transition-colors"
+              className="
+                w-full bg-white border border-[#E2E0DB] rounded-[3px]
+                px-5 py-5 md:py-6
+                text-center text-[14px] md:text-[18px] tracking-[0.12em] text-[#4A4E57]
+                placeholder:text-[#A8A8A4]
+                focus:outline-none focus:border-[#0A0A0A] transition-colors duration-300
+              "
             />
           </form>
 
-          {/* Filter pills */}
-          <div className="flex gap-2 mb-4">
+          {/* Filter buttons — same outlined white square as the search field, so
+              the whole control strip reads as one thing. */}
+          <div className="flex flex-wrap gap-2 md:gap-3 mb-4 justify-center">
             {(['colour', 'item', 'brand'] as const).map((type) => {
               const isActive = filterPanel === type
               const hasValue = type === 'colour' ? !!filterColour : type === 'item' ? !!filterItemGroup : !!filterBrand.trim()
@@ -830,11 +846,14 @@ export default function FeedClient({
                 <button
                   key={type}
                   onClick={() => setFilterPanel(isActive ? null : type)}
-                  className={`px-1.5 py-2 text-[12px] tracking-[0.1em] underline underline-offset-[6px] transition-colors duration-200 ${
-                    hasValue || isActive
-                      ? 'text-[#0A0A0A] decoration-[#0A0A0A]'
-                      : 'text-[#6B6B6B] decoration-[#D8D6D1] hover:text-[#4A4E57] hover:decoration-[#4A4E57]'
-                  }`}
+                  className={`
+                    px-5 md:px-7 py-3.5 md:py-4 bg-white border rounded-[3px]
+                    text-[11px] md:text-[13px] tracking-[0.16em] md:tracking-[0.2em]
+                    transition-colors duration-300
+                    ${hasValue || isActive
+                      ? 'border-[#0A0A0A] text-[#0A0A0A]'
+                      : 'border-[#E2E0DB] text-[#4A4E57] hover:bg-[#F2F2F2] hover:border-[#0A0A0A]'}
+                  `}
                 >
                   {type === 'colour' ? 'COLOUR' : type === 'item' ? 'ITEM TYPE' : 'BRAND'} {isActive ? '▲' : '▾'}
                 </button>

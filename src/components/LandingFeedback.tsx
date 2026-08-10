@@ -3,9 +3,11 @@
 import { useState } from 'react'
 import { submitFeedback } from '@/app/actions/feedback'
 
+// No background of its own: both pages that use this sit inside .myra-texture,
+// and the cream fill this used to carry painted the grey texture out.
 export default function LandingFeedback() {
   return (
-    <section className="bg-[#FAFAF8] pb-28 sm:pb-36 px-6 sm:px-10">
+    <section className="pb-28 sm:pb-36 px-6 sm:px-10">
       <div className="max-w-3xl mx-auto text-center">
         <p className="text-[10px] sm:text-[11px] tracking-[0.135em] text-[#6B6B6B] mb-6">MORE OUTFITS ON THE WAY</p>
         <p className="text-[#4A4E57] tracking-[0.04em] sm:tracking-[0.045em] leading-[1.75] text-[clamp(12px,1.45vw,16px)] max-w-[640px] mx-auto mb-12">

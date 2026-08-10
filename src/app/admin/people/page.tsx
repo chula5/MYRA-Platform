@@ -1,4 +1,4 @@
-import { getPeopleActivity, type PersonActivity, type Ref } from '@/lib/people-activity'
+import { getPeopleActivity, type PersonActivity, type Ref, type AnonymousVisitor } from '@/lib/people-activity'
 import TrendChart from '@/components/admin/charts/TrendChart'
 import { SERIES, INK, STATUS } from '@/components/admin/charts/palette'
 
@@ -21,7 +21,7 @@ function ago(iso: string | null): string {
 }
 
 export default async function PeoplePage() {
-  const { people, totals, daily, attributionReady } = await getPeopleActivity()
+  const { people, totals, daily, attributionReady, anonymous } = await getPeopleActivity()
 
   const attributedShare = totals.clicks > 0 ? (totals.clicks - totals.anonymousClicks) / totals.clicks : 0
 
@@ -84,6 +84,31 @@ export default async function PeoplePage() {
         </p>
       </div>
 
+      {/* Anonymous browsing */}
+      {anonymous.visitors.length > 0 && (
+        <div className="mb-10">
+          <div className="flex items-baseline justify-between mb-4">
+            <p className="text-[10px] tracking-[0.113em] text-[#6B6B6B]">
+              ANONYMOUS BROWSING · {anonymous.identifiedBrowsers} BROWSERS
+            </p>
+            <p className="text-[9px] tracking-[0.09em] text-[#C9C7C2]">
+              NO ACCOUNT · CLAIMED AUTOMATICALLY IF THEY SIGN UP
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {anonymous.visitors.slice(0, 6).map((v) => (
+              <AnonymousCard key={v.visitorId} visitor={v} />
+            ))}
+          </div>
+          {anonymous.untraceableClicks > 0 && (
+            <p className="text-[9px] tracking-[0.054em] text-[#C9C7C2] mt-4 leading-relaxed">
+              {anonymous.untraceableClicks} FURTHER CLICK-THROUGHS CANNOT BE GROUPED AT ALL — LOGGED BEFORE VISITOR
+              TRACKING, OR FROM A BROWSER BLOCKING STORAGE. THEY STILL COUNT IN EVERY TOTAL.
+            </p>
+          )}
+        </div>
+      )}
+
       {/* People */}
       <p className="text-[10px] tracking-[0.113em] text-[#6B6B6B] mb-4">EVERY ACCOUNT · {people.length}</p>
 
@@ -142,6 +167,24 @@ function PersonCard({ person: p }: { person: PersonActivity }) {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function AnonymousCard({ visitor: v }: { visitor: AnonymousVisitor }) {
+  return (
+    <div className="bg-white border border-[#E2E0DB] rounded-[12px] p-5">
+      <div className="flex items-baseline justify-between gap-3 mb-4">
+        {/* A short prefix is enough to tell two browsers apart on screen. */}
+        <p className="font-mono text-[10px] text-[#A8A8A4]">VISITOR {v.visitorId.slice(0, 8)}</p>
+        <p className="text-[9px] tracking-[0.09em] text-[#4A4E57]">
+          {v.clicks.length} CLICK{v.clicks.length === 1 ? '' : 'S'}
+        </p>
+      </div>
+      <RefList title="CLICKED THROUGH TO RETAILER" rows={v.clicks} empty="—" withDate />
+      <p className="text-[8px] tracking-[0.09em] text-[#C9C7C2] mt-3">
+        FIRST SEEN {fmtDate(v.firstSeen)} · LAST {ago(v.lastSeen)}
+      </p>
     </div>
   )
 }
