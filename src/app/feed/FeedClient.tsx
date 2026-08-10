@@ -16,6 +16,7 @@ import BrandLogoTile from '@/components/BrandLogoTile'
 import NewArrivals, { byNewest } from '@/components/NewArrivals'
 import OurPicks from '@/components/OurPicks'
 import TasteDecks from '@/components/TasteDecks'
+import TornPaper from '@/components/TornPaper'
 import SizeFilter from './SizeFilter'
 import { outfitFitsClothingUk } from '@/lib/sizing'
 import { occasionLabel, BASE_OCCASIONS, occasionMatchTags } from '@/lib/occasions'
@@ -767,25 +768,26 @@ export default function FeedClient({
           </div>
         )}
 
-        {/* Occasions — outlined white buttons (Style B), rectangular with a
-            barely-there radius. Sized to be tapped on a phone and to hold the
-            page at desktop width, where plain text read far too small. */}
-        <div className="order-6 grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4 max-w-[1100px] mx-auto mb-14 px-1">
-          {(occasionOrder && occasionOrder.length ? occasionOrder : BASE_OCCASIONS).map((tag) => (
-            <button
+        {/* Occasions — torn scraps of paper pinned to the grey ground, each
+            tilted a different way so the grid reads as a collage rather than a
+            row of buttons. Tilt and tear seed come from the index, so they stay
+            put across renders instead of reshuffling on every keystroke. */}
+        <div className="order-6 grid grid-cols-2 md:grid-cols-3 gap-6 md:gap-8 max-w-[1100px] mx-auto mb-16 px-1">
+          {(occasionOrder && occasionOrder.length ? occasionOrder : BASE_OCCASIONS).map((tag, i) => (
+            <TornPaper
               key={tag}
+              as="button"
               onClick={() => setOccasion(tag)}
-              className="
-                flex items-center justify-center text-center
-                min-h-[64px] md:min-h-[76px] px-4 md:px-6 py-4
-                bg-white border border-[#E2E0DB] rounded-[3px]
-                text-[12px] md:text-[15px] tracking-[0.16em] md:tracking-[0.2em] leading-snug text-[#0A0A0A]
-                hover:bg-[#F2F2F2] hover:border-[#0A0A0A]
-                transition-colors duration-300
-              "
+              seed={3 + i * 7}
+              rough={11}
+              tilt={[-1.6, 1.1, -0.7, 1.8, -1.2, 0.9][i % 6]}
+              className="group block w-full transition-transform duration-300 hover:-translate-y-[3px] hover:rotate-0"
             >
-              {occasionLabel(tag)}
-            </button>
+              <span className="flex items-center justify-center text-center min-h-[64px] md:min-h-[76px] px-5 md:px-7 py-4
+                               text-[12px] md:text-[15px] tracking-[0.16em] md:tracking-[0.2em] leading-snug text-[#0A0A0A]">
+                {occasionLabel(tag)}
+              </span>
+            </TornPaper>
           ))}
         </div>
 
@@ -821,19 +823,23 @@ export default function FeedClient({
             onSubmit={(e) => { e.preventDefault(); executeSearch() }}
             className="mb-5 w-full"
           >
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={typedHint ? `${typedHint}▌` : 'SEARCH BY STYLE, COLOUR, BRAND, MATERIAL…'}
-              className="
-                w-full bg-white border border-[#E2E0DB] rounded-[3px]
-                px-5 py-5 md:py-6
-                text-center text-[14px] md:text-[18px] tracking-[0.12em] text-[#4A4E57]
-                placeholder:text-[#A8A8A4]
-                focus:outline-none focus:border-[#0A0A0A] transition-colors duration-300
-              "
-            />
+            {/* The field itself is transparent — the torn scrap behind it is
+                the only "box", so the caret sits straight on the paper. */}
+            <TornPaper seed={11} rough={14} className="w-full">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={typedHint ? `${typedHint}▌` : 'SEARCH BY STYLE, COLOUR, BRAND, MATERIAL…'}
+                className="
+                  w-full bg-transparent border-0
+                  px-8 py-6 md:py-8
+                  text-center text-[14px] md:text-[18px] tracking-[0.12em] text-[#4A4E57]
+                  placeholder:text-[#A8A8A4]
+                  focus:outline-none
+                "
+              />
+            </TornPaper>
           </form>
 
           {/* Filter buttons — same outlined white square as the search field, so
