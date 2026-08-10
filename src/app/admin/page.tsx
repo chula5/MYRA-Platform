@@ -77,7 +77,8 @@ export default async function AdminDashboard() {
             />
           </div>
         </div>
-=======
+      )}
+
       {/* Kicked back from mobile — needs the desktop studio */}
       {(needsDesktopCount ?? 0) > 0 && (
         <a
