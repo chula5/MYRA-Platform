@@ -147,14 +147,43 @@ export async function ingestCatalogue(merchant: ShopifyMerchant): Promise<Ingest
       }
       if (brandId) row.brand_id = brandId
 
-      const { data: existing } = await admin
-        .from('item' as any)
-        .select('item_id')
-        .eq('shopify_product_id', productId)
-        .maybeSingle()
+      // Match an existing item so the FIRST sync adopts a manually-added
+      // catalogue instead of duplicating it:
+      //   1. shopify_product_id — synced before
+      //   2. shopify_handle     — synced under a different product id
+      //   3. retailer_url /products/<handle> — how items were added by hand
+      //      before the app existed. This is the case that matters: J'amemme
+      //      has 35 such items, 6 of them already used in live outfits.
+      let existing: { item_id: string } | null = null
+      const q1 = await admin.from('item' as any).select('item_id').eq('shopify_product_id', productId).maybeSingle()
+      existing = (q1.data as any) ?? null
+
+      const handle = p?.handle ? String(p.handle) : ''
+      if (!existing && handle) {
+        const q2 = await admin
+          .from('item' as any)
+          .select('item_id')
+          .eq('merchant_id', merchant.merchant_id)
+          .eq('shopify_handle', handle)
+          .maybeSingle()
+        existing = (q2.data as any) ?? null
+
+        if (!existing) {
+          const q3 = await admin
+            .from('item' as any)
+            .select('item_id')
+            .eq('merchant_id', merchant.merchant_id)
+            .is('shopify_product_id', null)
+            .ilike('retailer_url', `%/products/${handle}%`)
+            .limit(1)
+          existing = ((q3.data as any[]) ?? [])[0] ?? null
+        }
+      }
 
       if (existing) {
-        // Never downgrade a curated item back to draft — only refresh the facts.
+        // Adopt it: attach Shopify ids + refresh the facts. `status` is never
+        // in `row`, so a curated/live item is never knocked back to draft and
+        // its outfit memberships stay intact.
         await admin.from('item' as any).update(row as any).eq('item_id', (existing as any).item_id)
         result.itemsUpdated++
       } else {
