@@ -825,7 +825,10 @@ export default function FeedClient({
         {/* Occasions — instant prints, each showing a look actually tagged
             with that occasion, caption on the polaroid's deep bottom lip.
             Tilts come from the index so they stay put across renders. */}
-        <div className="order-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-7 md:gap-10 w-full mb-20 -mx-6 sm:-mx-10 px-6 sm:px-10">
+        {/* No w-full here: width:100% resolves against the PARENT's content box,
+            so pairing it with -mx-6 shifts the block left without widening it,
+            leaving a gap on the right. Width auto honours both margins. */}
+        <div className="order-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-7 md:gap-10 mb-20 -mx-6 sm:-mx-10 px-6 sm:px-10">
           {occasionTags.map((tag, i) => (
             <PolaroidOccasion
               key={tag}
@@ -838,7 +841,7 @@ export default function FeedClient({
         </div>
 
         {/* Search + filter area */}
-        <div className="order-3 w-full mb-14 -mx-6 sm:-mx-10 px-3 sm:px-10">
+        <div className="order-3 mb-14 -mx-6 sm:-mx-10 px-2 sm:px-10">
 
           {/* The card: the query written onto an archive index sheet. Each
               filter writes its value into the cell beside its label, so the
@@ -851,21 +854,21 @@ export default function FeedClient({
               </h1>
             }
           >
-            <ArchiveRow label="LOOKING FOR">
+            <ArchiveRow label="LOOKING FOR" className="myra-compact-sm">
               <form onSubmit={(e) => { e.preventDefault(); executeSearch() }} className="flex items-center">
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder={typedHint ? `${typedHint}▌` : 'A SUMMER WEDDING IN ITALY'}
-                  className="myra-field flex-1 min-w-0 bg-transparent border-0 px-4 md:px-7 py-5 md:py-7 placeholder:text-[#B4B4AE] focus:outline-none"
+                  className="myra-field flex-1 min-w-0 bg-transparent border-0 px-3 md:px-7 py-4 md:py-7 placeholder:text-[#8A8A84] focus:outline-none"
                 />
                 <button
                   type="submit"
                   aria-label="Search"
-                  className="shrink-0 px-4 md:px-6 self-stretch border-l border-[#2B2B2B] hover:bg-[#F4F3F0] transition-colors"
+                  className="shrink-0 px-3 md:px-6 self-stretch border-l border-[#2B2B2B] hover:bg-[#F4F3F0] transition-colors"
                 >
-                  <svg viewBox="0 0 40 40" className="w-[24px] md:w-[30px]" aria-hidden>
+                  <svg viewBox="0 0 40 40" className="w-[17px] md:w-[26px]" aria-hidden>
                     <circle cx="17" cy="16" r="10" fill="none" stroke="#4A4E57" strokeWidth="3.2" />
                     <path d="M24.5 24 L33 33" stroke="#4A4E57" strokeWidth="3.2" strokeLinecap="round" />
                   </svg>
