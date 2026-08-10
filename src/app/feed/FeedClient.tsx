@@ -841,7 +841,7 @@ export default function FeedClient({
         </div>
 
         {/* Search + filter area */}
-        <div className="order-3 w-full mb-14 -mx-6 sm:-mx-10 px-6 sm:px-10">
+        <div className="order-3 w-full mb-14 -mx-6 sm:-mx-10 px-3 sm:px-10">
 
           {/* The card: the query written onto an archive index sheet. Each
               filter writes its value into the cell beside its label, so the
@@ -876,45 +876,85 @@ export default function FeedClient({
               </form>
             </ArchiveRow>
 
-            <ArchiveRow label="COLOUR">
-              <div className="flex flex-col md:flex-row">
-                <div className="flex-1 min-w-0 border-b md:border-b-0 md:border-r border-[#2B2B2B]">
-                  <ArchiveCell
-                    open={filterPanel === 'colour'}
-                    value={filterColour ? (COLOUR_OPTIONS.find((c) => c.value === filterColour)?.label ?? null) : null}
-                    onClick={() => setFilterPanel(filterPanel === 'colour' ? null : 'colour')}
-                  />
-                </div>
-                <div className="shrink-0 w-full md:w-[230px] border-b md:border-b-0 md:border-r border-[#2B2B2B] flex items-end px-4 md:px-5 pb-3 pt-4 md:pt-5">
-                  <span className="myra-field">ITEM TYPE</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <ArchiveCell
-                    open={filterPanel === 'item'}
-                    value={filterItemGroup}
-                    onClick={() => setFilterPanel(filterPanel === 'item' ? null : 'item')}
-                  />
-                </div>
+            {/* MOBILE — the four filters as a 2x2 block. Stacking them as
+                full-width rows made the card twice as tall as the screen; a
+                grid keeps the whole query visible at once. Text is a step
+                smaller here (.myra-compact) because the cells are narrow. */}
+            <div className="grid grid-cols-2 md:hidden myra-compact -mr-px -mb-px">
+              <div className="border-r border-b border-[#2B2B2B] flex flex-col">
+                <span className="myra-field px-3 pt-3">COLOUR</span>
+                <ArchiveCell
+                  open={filterPanel === 'colour'}
+                  value={filterColour ? (COLOUR_OPTIONS.find((c) => c.value === filterColour)?.label ?? null) : null}
+                  onClick={() => setFilterPanel(filterPanel === 'colour' ? null : 'colour')}
+                />
               </div>
-            </ArchiveRow>
-
-            <ArchiveRow label="BRAND" last>
-              <div className="flex flex-col md:flex-row">
-                <div className="flex-1 min-w-0 border-b md:border-b-0 md:border-r border-[#2B2B2B]">
-                  <ArchiveCell
-                    open={filterPanel === 'brand'}
-                    value={filterBrand.trim() ? filterBrand.toUpperCase() : null}
-                    onClick={() => setFilterPanel(filterPanel === 'brand' ? null : 'brand')}
-                  />
-                </div>
-                <div className="shrink-0 w-full md:w-[230px] border-b md:border-b-0 md:border-r border-[#2B2B2B] flex items-end px-4 md:px-5 pb-3 pt-4 md:pt-5">
-                  <span className="myra-field">SIZE</span>
-                </div>
-                <div className="flex-1 min-w-0 px-3 md:px-5 py-2 md:py-3 flex items-center">
+              <div className="border-r border-b border-[#2B2B2B] flex flex-col">
+                <span className="myra-field px-3 pt-3">ITEM TYPE</span>
+                <ArchiveCell
+                  open={filterPanel === 'item'}
+                  value={filterItemGroup}
+                  onClick={() => setFilterPanel(filterPanel === 'item' ? null : 'item')}
+                />
+              </div>
+              <div className="border-r border-b border-[#2B2B2B] flex flex-col">
+                <span className="myra-field px-3 pt-3">BRAND</span>
+                <ArchiveCell
+                  open={filterPanel === 'brand'}
+                  value={filterBrand.trim() ? filterBrand.toUpperCase() : null}
+                  onClick={() => setFilterPanel(filterPanel === 'brand' ? null : 'brand')}
+                />
+              </div>
+              <div className="border-r border-b border-[#2B2B2B] flex flex-col">
+                <span className="myra-field px-3 pt-3">SIZE</span>
+                <div className="px-3 py-4 flex items-center">
                   <SizeFilter value={sizeUk} onChange={setSizeUk} />
                 </div>
               </div>
-            </ArchiveRow>
+            </div>
+
+            {/* DESKTOP — the ruled ledger rows, where there is width for them. */}
+            <div className="hidden md:block">
+              <ArchiveRow label="COLOUR">
+                <div className="flex">
+                  <div className="flex-1 min-w-0 border-r border-[#2B2B2B]">
+                    <ArchiveCell
+                      open={filterPanel === 'colour'}
+                      value={filterColour ? (COLOUR_OPTIONS.find((c) => c.value === filterColour)?.label ?? null) : null}
+                      onClick={() => setFilterPanel(filterPanel === 'colour' ? null : 'colour')}
+                    />
+                  </div>
+                  <div className="shrink-0 w-[230px] border-r border-[#2B2B2B] flex items-end px-5 pb-3 pt-5">
+                    <span className="myra-field">ITEM TYPE</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <ArchiveCell
+                      open={filterPanel === 'item'}
+                      value={filterItemGroup}
+                      onClick={() => setFilterPanel(filterPanel === 'item' ? null : 'item')}
+                    />
+                  </div>
+                </div>
+              </ArchiveRow>
+
+              <ArchiveRow label="BRAND" last>
+                <div className="flex">
+                  <div className="flex-1 min-w-0 border-r border-[#2B2B2B]">
+                    <ArchiveCell
+                      open={filterPanel === 'brand'}
+                      value={filterBrand.trim() ? filterBrand.toUpperCase() : null}
+                      onClick={() => setFilterPanel(filterPanel === 'brand' ? null : 'brand')}
+                    />
+                  </div>
+                  <div className="shrink-0 w-[230px] border-r border-[#2B2B2B] flex items-end px-5 pb-3 pt-5">
+                    <span className="myra-field">SIZE</span>
+                  </div>
+                  <div className="flex-1 min-w-0 px-5 py-3 flex items-center">
+                    <SizeFilter value={sizeUk} onChange={setSizeUk} />
+                  </div>
+                </div>
+              </ArchiveRow>
+            </div>
           </ArchiveCard>
 
           {/* The panels are part of the same document as the card: square

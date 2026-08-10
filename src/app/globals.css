@@ -360,3 +360,11 @@ html {
   line-height: 1.25;
   color: #4A4E57;
 }
+
+/* A step down for narrow cells (the mobile 2x2 filter block). Scoped, so the
+   one-size-per-section rule still holds — the whole sub-block moves together
+   rather than one stray label shrinking. */
+.myra-compact .myra-field {
+  font-size: 14px;
+  letter-spacing: 0.06em;
+}

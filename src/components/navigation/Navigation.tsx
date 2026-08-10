@@ -26,10 +26,10 @@ export default function Navigation({ transparent = false, authed = false }: { tr
           : 'bg-white border-b border-[#E2E0DB]'}
       `}
     >
-      <div className="w-full px-4 md:px-10 h-[72px] md:h-28 lg:h-32 flex items-center justify-between gap-4">
+      <div className="w-full px-3 md:px-10 h-[72px] md:h-28 lg:h-32 flex items-center justify-between gap-2 md:gap-4">
 
         {/* Left — nav links */}
-        <div className="flex items-center gap-2 sm:gap-5 md:gap-6 flex-1 min-w-0">
+        <div className="flex flex-1 min-w-0 items-center justify-between md:justify-start gap-2 sm:gap-5 md:gap-6">
           <Link href="/" className={`text-[13px] sm:text-[17px] lg:text-[20px] tracking-[0.06em] sm:tracking-[0.12em] hover:opacity-60 transition-colors duration-500 whitespace-nowrap ${textColor}`}>
             THE EDIT
           </Link>
@@ -58,7 +58,7 @@ export default function Navigation({ transparent = false, authed = false }: { tr
         </div>
 
         {/* Right — social links */}
-        <div className="flex-1 flex items-center justify-end gap-3 sm:gap-5 md:gap-6">
+        <div className="flex-1 flex items-center justify-between md:justify-end gap-2 sm:gap-5 md:gap-6">
           <a
             href="https://www.instagram.com/myraassistant/"
             target="_blank"

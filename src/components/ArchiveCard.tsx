@@ -21,7 +21,7 @@ export function ArchiveCard({
       className={`relative bg-[#FCFCFA] border border-[#2B2B2B] shadow-[0_10px_34px_rgba(0,0,0,0.13)] ${className}`}
     >
       {/* Head: the archive's own label either side of the punch hole. */}
-      <div className="flex items-center justify-between px-5 md:px-8 pt-5 md:pt-7 pb-4">
+      <div className="flex items-center justify-between px-3 md:px-8 pt-4 md:pt-7 pb-3 md:pb-4">
         <p className="text-[20px] md:text-[30px] tracking-[0.02em] text-[#4A4E57]">
           <span className="align-super text-[11px] md:text-[15px] tracking-[0.14em] mr-1">THE</span>
           <span className="font-bold">archive</span>
@@ -30,7 +30,7 @@ export function ArchiveCard({
         <p className="myra-field">INVENTORY N°</p>
       </div>
 
-      <div className="px-5 md:px-10 pb-6 md:pb-10">
+      <div className="px-3 md:px-10 pb-4 md:pb-10">
         {heading && <div className="pb-6 md:pb-9">{heading}</div>}
         <div className="border border-[#2B2B2B]">{children}</div>
       </div>
