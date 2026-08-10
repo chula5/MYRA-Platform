@@ -113,6 +113,12 @@ export default async function AdminLayout({
             EARLY ACCESS
           </a>
           <a
+            href="/admin/brand-logos"
+            className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
+          >
+            BRAND LOGOS
+          </a>
+          <a
             href="/admin/ingest"
             className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
           >

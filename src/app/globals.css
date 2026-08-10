@@ -292,18 +292,12 @@ html {
 
 /* Never let a wide row drag the whole page sideways — rows scroll, page does not. */
 
-/* Page texture — the grey backdrop behind The Edit and Our Story. Fixed on
-   desktop so it sits still while content scrolls; scroll-attached on touch
-   devices, where fixed backgrounds are janky. */
+/* Page background behind The Edit and Our Story — plain white.
+   This was the grey-bg.webp texture; the class name is kept because several
+   pages apply it, so the backdrop changes in one place rather than in every
+   page wrapper. To bring the texture back, restore the background-image block. */
 .myra-texture {
-  background-image: url('/grey-bg.webp');
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-attachment: fixed;
-}
-@media (hover: none), (max-width: 640px) {
-  .myra-texture { background-attachment: scroll; }
+  background-color: #FFFFFF;
 }
 
 
@@ -348,7 +342,8 @@ html {
   color: #4A4E57;
 }
 .myra-section-note {
-  font-size: clamp(11px, 1.05vw, 15px);
-  letter-spacing: 0.12em;
+  font-size: clamp(14px, 1.5vw, 21px);
+  letter-spacing: 0.14em;
+  line-height: 1.35;
   color: #4A4E57;
 }
