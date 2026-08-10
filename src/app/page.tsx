@@ -167,7 +167,10 @@ export default async function LandingPage({
               { name: 'DeMellier London', src: '/partners/demellier.svg', h: 'h-3.5 sm:h-5' },
               { name: 'Da Luna', src: '/partners/da-luna.png', h: 'h-5 sm:h-7' },
               { name: 'Vivere London', src: '/partners/vivere.png', h: 'h-6 sm:h-8' },
-              { name: 'Cami NYC', src: '/partners/cami-nyc.png', h: 'h-4 sm:h-6' },
+              // Two-line lockup (CAMI over NYC) in a 1004×488 canvas, so the
+              // wordmark is only ~half the box height — it needs roughly double
+              // the height of the single-line marks to read at the same size.
+              { name: 'Cami NYC', src: '/partners/cami-nyc.png', h: 'h-8 sm:h-12' },
             ].map((b) => (
               // eslint-disable-next-line @next/next/no-img-element
               <img
