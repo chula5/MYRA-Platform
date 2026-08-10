@@ -450,7 +450,7 @@ export default function FeedClient({
     // Wait for the first screenful of images to actually decode, so the grid can
   // be revealed complete and sharp instead of filling in tile by tile. Capped in
   // both count and time — a slow CDN must never strand someone on the loader.
-  function preloadImages(urls: (string | null | undefined)[], cap = 9, timeoutMs = 5000) {
+  function preloadImages(urls: (string | null | undefined)[], cap = 6, timeoutMs = 9000) {
     const list = urls.filter(Boolean).slice(0, cap) as string[]
     if (list.length === 0) return Promise.resolve()
     const all = Promise.all(
@@ -458,12 +458,21 @@ export default function FeedClient({
         (u) =>
           new Promise<void>((res) => {
             const im = new window.Image()
-            im.onload = () => res()
-            im.onerror = () => res()
+            // onload fires when the bytes have ARRIVED, not when the browser can
+            // paint them — which is why the grid used to appear with pictures
+            // still resolving. decode() waits for paint-ready, so the reveal is
+            // genuinely complete. It rejects on a decode failure; either way the
+            // image is done being waited on.
+            const done = () => res()
+            im.onload = () => { (im.decode ? im.decode() : Promise.resolve()).then(done, done) }
+            im.onerror = done
             im.src = u
           }),
       ),
     ).then(() => undefined)
+    // The cap keeps the wait to one screenful; the timeout is the backstop so a
+    // slow CDN can never strand someone on the hanger. Longer than before —
+    // cutting off at 5s was itself revealing half-loaded grids on mobile data.
     return Promise.race([all, new Promise<void>((res) => setTimeout(res, timeoutMs))])
   }
 

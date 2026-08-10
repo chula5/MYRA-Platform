@@ -304,7 +304,7 @@ html {
 /* The grid is held back until its images have decoded, then shown in one
    piece — a short fade-up rather than tiles popping in as they arrive. */
 .myra-reveal {
-  animation: myra-reveal 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: myra-reveal 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 @keyframes myra-reveal {
   from { opacity: 0; transform: translateY(10px); }
@@ -321,7 +321,7 @@ html {
   transform: translateX(-50%);
   width: min(880px, 92vw);
   z-index: 45;
-  animation: myra-dock 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: myra-dock 680ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 @keyframes myra-dock {
   from { opacity: 0; transform: translate(-50%, 90px); }
