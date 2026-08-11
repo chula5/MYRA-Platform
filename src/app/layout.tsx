@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import Script from 'next/script'
-import { Manrope, Caveat } from 'next/font/google'
+import { Manrope } from 'next/font/google'
 import { FeedProvider } from '@/context/FeedContext'
 import SessionTracker from '@/components/analytics/SessionTracker'
 import SmoothScroll from '@/components/SmoothScroll'
@@ -11,16 +11,6 @@ const manrope = Manrope({
   subsets: ['latin'],
   weight: ['400', '500', '600', '700', '800'],
   variable: '--font-manrope',
-  display: 'swap',
-})
-
-// SECONDARY face only — the handwritten values on the run-of-show cards. It
-// must never take over anywhere else, so it is exposed as its own variable and
-// applied through a single .myra-hand class rather than any base style.
-const caveat = Caveat({
-  subsets: ['latin'],
-  weight: ['500'],
-  variable: '--font-caveat',
   display: 'swap',
 })
 
@@ -54,7 +44,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={`${manrope.variable} ${caveat.variable}`}>
+    <html lang="en" className={manrope.variable}>
       <body className="bg-background text-primary-text antialiased">
         {/* Paper grain over the whole page — above the background, below every
             piece of content, and inert to the pointer. */}

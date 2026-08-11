@@ -827,10 +827,10 @@ export default function FeedClient({
           </div>
         )}
 
-        {/* Occasions — a run-of-show board: square cards on hairlines, each
-            occasion shown through a look actually tagged with it and written
-            up with printed labels against handwritten values. */}
-        <div className="order-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-[6px] w-full mb-20">
+        {/* Occasions — a contact sheet: plain portrait tiles, each occasion
+            shown through a look actually tagged with it, captioned underneath
+            with its number and the occasion it selects. */}
+        <div className="order-6 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 gap-[6px] w-full mb-20">
           {occasionTags.map((tag, i) => (
             <OccasionLookCard
               key={tag}
@@ -838,9 +838,6 @@ export default function FeedClient({
               outfit={occLooks[tag]}
               index={i}
               onClick={() => setOccasion(tag)}
-              canSave={canSave}
-              initialSaved={occLooks[tag] ? savedSet.has(occLooks[tag]!.outfit_id) : false}
-              lockedSave={lockedSave}
             />
           ))}
         </div>

@@ -386,20 +386,6 @@ html {
   }
 }
 
-/* ── Run-of-show cards ──────────────────────────────────────────────────
-   The handwritten column on the outfit cards. Caveat is a SECONDARY face:
-   it is applied here and nowhere else — never in navigation, buttons,
-   headings or body copy. */
-.myra-hand {
-  /* The universal rule sets Manrope 800 uppercase on every element, so the
-     handwriting has to opt out of all three — otherwise the values render as
-     shouted caps and the printed/handwritten contrast disappears. */
-  font-family: var(--font-caveat), cursive;
-  font-weight: 500;
-  text-transform: none;
-  letter-spacing: 0;
-}
-
 /* Card actions are overlaid on the photograph. At six dense columns, three
    permanently-visible captions per tile drown the contact sheet, so on a
    pointer device they appear on hover. Touch has no hover, so there they
