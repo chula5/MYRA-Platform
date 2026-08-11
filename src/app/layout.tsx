@@ -3,6 +3,7 @@ import Script from 'next/script'
 import { Manrope } from 'next/font/google'
 import { FeedProvider } from '@/context/FeedContext'
 import SessionTracker from '@/components/analytics/SessionTracker'
+import SmoothScroll from '@/components/SmoothScroll'
 import './globals.css'
 
 // Site typeface — a clean, gently rounded grotesque close to Pragmatica.
@@ -45,9 +46,11 @@ export default function RootLayout({
   return (
     <html lang="en" className={manrope.variable}>
       <body className="bg-background text-primary-text antialiased">
-        <FeedProvider>
-          {children}
-        </FeedProvider>
+        <SmoothScroll>
+          <FeedProvider>
+            {children}
+          </FeedProvider>
+        </SmoothScroll>
         <SessionTracker />
         {/* Awin Publisher MasterTag (pub 2988015) — powers Awin affiliate
             tracking + Convert-a-Link, which auto-converts outbound merchant

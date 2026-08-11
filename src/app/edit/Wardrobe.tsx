@@ -98,7 +98,7 @@ export default function Wardrobe() {
             <button onClick={() => setOpen(false)} aria-label="Close" className="text-white/70 hover:text-white text-[20px] leading-none">×</button>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-5 py-5">
+          <div data-lenis-prevent className="flex-1 overflow-y-auto px-5 py-5">
             {loading ? (
               <p className="text-[10px] tracking-[0.14em] text-[#A8A8A4] py-16 text-center">OPENING YOUR WARDROBE…</p>
             ) : count === 0 ? (

@@ -1649,7 +1649,7 @@ INSTRUCTIONS:
                 ×
               </button>
             </div>
-            <div className="flex-1 overflow-auto p-6">
+            <div data-lenis-prevent className="flex-1 overflow-auto p-6">
               <p className="text-[10px] tracking-[0.068em] text-[#6B6B6B] mb-3">
                 {canvaCopied ? 'COPIED — PASTE INTO CLAUDE' : 'COPY THIS AND PASTE INTO CLAUDE'}
               </p>
@@ -1703,7 +1703,7 @@ INSTRUCTIONS:
                 ×
               </button>
             </div>
-            <div className="flex-1 overflow-auto p-6">
+            <div data-lenis-prevent className="flex-1 overflow-auto p-6">
               <p className="text-[10px] tracking-[0.068em] text-[#6B6B6B] mb-3">
                 {lookShopperCopied ? 'COPIED — PASTE INTO YOUR LOOK SHOPPER CLAUDE DESIGN' : 'COPY THIS AND PASTE INTO YOUR LOOK SHOPPER CLAUDE DESIGN'}
               </p>
@@ -1821,7 +1821,7 @@ INSTRUCTIONS:
               )}
             </div>
 
-            <div className="flex-1 overflow-auto px-6 pb-6">
+            <div data-lenis-prevent className="flex-1 overflow-auto px-6 pb-6">
               {invLoading ? (
                 <p className="text-[10px] tracking-[0.068em] text-[#A8A8A4] py-6 text-center">LOADING…</p>
               ) : invResults.length === 0 ? (

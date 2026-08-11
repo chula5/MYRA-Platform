@@ -34,7 +34,7 @@ export default function ShopTheLookOverlay({
   // (redirect via /go/ for most merchants, beacon for Awin ones).
 
   return (
-    <div className={`absolute left-2.5 z-30 w-[27%] max-w-[100px] sm:w-[34%] sm:max-w-[176px] overflow-y-auto pr-1 ${
+    <div data-lenis-prevent className={`absolute left-2.5 z-30 w-[27%] max-w-[100px] sm:w-[34%] sm:max-w-[176px] overflow-y-auto pr-1 ${
       offsetTop
         ? 'top-12 sm:top-2.5 max-h-[calc(100%-3.75rem)] sm:max-h-[calc(100%-1.25rem)]'
         : 'top-2.5 max-h-[calc(100%-1.25rem)]'

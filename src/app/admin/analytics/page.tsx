@@ -419,7 +419,7 @@ ALTER TABLE public.landing_event ENABLE ROW LEVEL SECURITY;`}</pre>
         {signupUsers.length === 0 ? (
           <p className="text-[10px] tracking-[0.072em] text-[#A8A8A4] py-3">No accounts yet.</p>
         ) : (
-          <div className="divide-y divide-[#F2F2F2] max-h-[360px] overflow-y-auto">
+          <div data-lenis-prevent className="divide-y divide-[#F2F2F2] max-h-[360px] overflow-y-auto">
             {signupUsers.map((u) => (
               <div key={u.email} className="flex items-center justify-between gap-3 py-2.5">
                 <span className="text-[11px] tracking-[0.018em] text-[#4A4E57] truncate">{u.email}</span>

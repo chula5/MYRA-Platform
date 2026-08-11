@@ -498,7 +498,7 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
       {/* Swap modal */}
       {swap && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center pt-16 px-4" onClick={() => setSwap(null)}>
-          <div className="bg-white border border-[#E2E0DB] rounded-[12px] w-full max-w-3xl max-h-[80vh] overflow-y-auto p-5" onClick={(e) => e.stopPropagation()}>
+          <div data-lenis-prevent className="bg-white border border-[#E2E0DB] rounded-[12px] w-full max-w-3xl max-h-[80vh] overflow-y-auto p-5" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-baseline justify-between mb-4 pb-3 border-b border-[#E2E0DB]">
               <p className="text-[10px] tracking-[0.16em] text-[#6B6B6B]">
                 {swap.mode === 'add' ? 'ADD ITEM' : `SWAP · ${SLOT_LABEL[swap.slot] ?? swap.slot}`}

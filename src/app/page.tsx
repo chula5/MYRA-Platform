@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import Navigation from '@/components/navigation/Navigation'
-import SplashHero from '@/components/SplashHero'
 import FeedClient from '@/app/feed/FeedClient'
 import SignupPrompt from '@/components/SignupPrompt'
 import LandingFeedback from '@/components/LandingFeedback'
@@ -59,11 +58,9 @@ export default async function LandingPage({
 
   return (
     <>
-      <Navigation transparent authed={!!user} />
-
-      {/* Arrival screen — MYRA over the silver texture; the wordmark travels
-          up into the nav as the visitor scrolls and the feed takes over. */}
-      <SplashHero />
+      {/* The nav is no longer transparent: it was only see-through so it could
+          sit over the silver arrival screen, which has been removed. */}
+      <Navigation authed={!!user} />
 
       {/* ── The Edit ────────────────────────────────────────────── */}
       <main className="myra-texture pt-6">

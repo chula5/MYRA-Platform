@@ -410,7 +410,7 @@ export default function ComposerClient({
               ))}
             </select>
           </div>
-          <div className="grid grid-cols-6 gap-3 max-h-[480px] overflow-y-auto">
+          <div data-lenis-prevent className="grid grid-cols-6 gap-3 max-h-[480px] overflow-y-auto">
             {searching && searchResults.length === 0 && (
               <p className="col-span-6 text-[10px] tracking-[0.09em] text-[#A8A8A4]">SEARCHING…</p>
             )}
@@ -660,6 +660,7 @@ export default function ComposerClient({
           onClick={() => setSwap(null)}
         >
           <div
+            data-lenis-prevent
             className="bg-white border border-[#E2E0DB] w-full max-w-3xl mx-6 p-6 max-h-[80vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >

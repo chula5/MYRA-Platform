@@ -44,7 +44,7 @@ export default function SizeFilter({
         {current ? `SIZE · UK ${current.uk}` : 'SIZE'} {open ? '▲' : '▾'}
       </button>
       {open && (
-        <div className="absolute z-30 mt-2 right-0 w-[248px] border border-[#E2E0DB] bg-white rounded-[12px] p-2 shadow-[0_6px_24px_rgba(0,0,0,0.08)] max-h-[340px] overflow-y-auto">
+        <div data-lenis-prevent className="absolute z-30 mt-2 right-0 w-[248px] border border-[#E2E0DB] bg-white rounded-[12px] p-2 shadow-[0_6px_24px_rgba(0,0,0,0.08)] max-h-[340px] overflow-y-auto">
           <button
             onClick={() => { onChange(null); setOpen(false) }}
             className={`w-full text-left px-3 py-2 text-[10px] tracking-[0.08em] rounded-[8px] hover:bg-[#F2F2F2] ${value == null ? 'text-[#4A4E57]' : 'text-[#4A4E57]'}`}

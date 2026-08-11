@@ -86,7 +86,7 @@ export default function CollectionsClient({ brands }: { brands: ScannableBrand[]
             {scanAll ? `SCANNING ${scanAll.done}/${scanAll.total}` : 'SCAN ALL'}
           </button>
         </div>
-        <div className="border border-[#E2E0DB] rounded-[10px] overflow-hidden max-h-[70vh] overflow-y-auto">
+        <div data-lenis-prevent className="border border-[#E2E0DB] rounded-[10px] overflow-hidden max-h-[70vh] overflow-y-auto">
           {brands.map((b) => {
             const sc = scans[b.name]
             const isScanning = scanning.has(b.name)

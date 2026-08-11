@@ -384,6 +384,7 @@ export default function ReviewClient({
         <div className="fixed inset-0 z-50" onClick={() => setSheet(null)}>
           <div className="absolute inset-0 bg-black/30" />
           <div
+            data-lenis-prevent
             className="absolute inset-x-0 bottom-0 bg-white rounded-t-[18px] px-5 pt-4 pb-8 max-h-[70dvh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >

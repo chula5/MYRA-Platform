@@ -368,7 +368,7 @@ ALTER TABLE public.signup_preference ENABLE ROW LEVEL SECURITY;`}</pre>
           {feedbackNotes.length === 0 ? (
             <p className="text-[10px] tracking-[0.072em] text-[#A8A8A4] py-4">No feedback yet.</p>
           ) : (
-            <div className="space-y-3 max-h-[280px] overflow-y-auto">
+            <div data-lenis-prevent className="space-y-3 max-h-[280px] overflow-y-auto">
               {feedbackNotes.map((f, i) => (
                 <div key={i} className="border-b border-[#F2F2F2] pb-3 last:border-0">
                   <p className="text-[11px] tracking-[0.03em] text-[#4A4E57] leading-relaxed">{f.message}</p>

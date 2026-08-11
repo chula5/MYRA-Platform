@@ -53,8 +53,11 @@ body {
 }
 
 /* ── Smooth scroll ───────────────────────────────────────────── */
+/* Handled by Lenis (see components/SmoothScroll.tsx). Native
+   `scroll-behavior: smooth` must stay off — it fights Lenis's own animation
+   and makes anchor / scroll-to-top jumps stutter. */
 html {
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
 }
 
 /* ── Utility: hide scrollbar visually but keep scroll ─────────── */

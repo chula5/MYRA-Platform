@@ -93,7 +93,7 @@ export default function SourcePanel({ items, onClose, isOpen, outfitId }: Source
         </div>
 
         {/* Item list — scrollable */}
-        <div className="flex-1 overflow-y-auto">
+        <div data-lenis-prevent className="flex-1 overflow-y-auto">
           {items.length === 0 ? (
             <div className="px-5 pt-8 text-center">
               <p className="text-[11px] tracking-[0.068em] text-[#A8A8A4]">
