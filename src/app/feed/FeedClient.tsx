@@ -18,7 +18,7 @@ import NewArrivals, { byNewest } from '@/components/NewArrivals'
 import OurPicks from '@/components/OurPicks'
 import TasteDecks from '@/components/TasteDecks'
 import { ArchiveCard, ArchiveRow, ArchiveCell } from '@/components/ArchiveCard'
-import PolaroidOccasion, { occasionImages } from '@/components/PolaroidOccasion'
+import OccasionLookCard, { occasionLooks } from '@/components/OccasionLookCard'
 import SizeFilter from './SizeFilter'
 import { outfitFitsClothingUk } from '@/lib/sizing'
 import { occasionLabel, BASE_OCCASIONS, occasionMatchTags } from '@/lib/occasions'
@@ -448,9 +448,10 @@ export default function FeedClient({
     window.dispatchEvent(new CustomEvent('myra:engage'))
   }, [occasion, searchMode, signupHref])
 
-    // Wait for the first screenful of images to actually decode, so the grid can
-  // be revealed complete and sharp instead of filling in tile by tile. Capped in
-  // both count and time — a slow CDN must never strand someone on the loader.
+    // Give the first row of images a moment to decode so the grid arrives sharp
+  // rather than filling in tile by tile. Deliberately SHORT: this blocks an
+  // otherwise-empty screen, so a long ceiling here reads as the page hanging.
+  // Whatever hasn't decoded in time simply loads normally after the reveal.
   function preloadImages(urls: (string | null | undefined)[], cap = 6, timeoutMs = 9000) {
     const list = urls.filter(Boolean).slice(0, cap) as string[]
     if (list.length === 0) return Promise.resolve()
@@ -716,8 +717,8 @@ export default function FeedClient({
   // claims a different look — computing this per tile restarts the used-set
   // every time and lets the same outfit land on two tiles.
   const occasionTags = occasionOrder && occasionOrder.length ? occasionOrder : BASE_OCCASIONS
-  const occPictures = useMemo(
-    () => occasionImages(injectedOutfits ?? [], occasionTags, occasionMatchTags),
+  const occLooks = useMemo(
+    () => occasionLooks(injectedOutfits ?? [], occasionTags, occasionMatchTags),
     [injectedOutfits, occasionTags],
   )
 
@@ -826,20 +827,20 @@ export default function FeedClient({
           </div>
         )}
 
-        {/* Occasions — instant prints, each showing a look actually tagged
-            with that occasion, caption on the polaroid's deep bottom lip.
-            Tilts come from the index so they stay put across renders. */}
-        {/* No w-full here: width:100% resolves against the PARENT's content box,
-            so pairing it with -mx-6 shifts the block left without widening it,
-            leaving a gap on the right. Width auto honours both margins. */}
-        <div className="order-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-7 md:gap-10 mb-20 -mx-6 sm:-mx-10 px-6 sm:px-10">
+        {/* Occasions — a run-of-show board: square cards on hairlines, each
+            occasion shown through a look actually tagged with it and written
+            up with printed labels against handwritten values. */}
+        <div className="order-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-[6px] w-full mb-20">
           {occasionTags.map((tag, i) => (
-            <PolaroidOccasion
+            <OccasionLookCard
               key={tag}
               label={occasionLabel(tag)}
-              image={occPictures[tag]}
-              tilt={[-1.7, 1.2, -0.8, 1.9, -1.3, 1.0, -2.0, 0.7][i % 8]}
+              outfit={occLooks[tag]}
+              index={i}
               onClick={() => setOccasion(tag)}
+              canSave={canSave}
+              initialSaved={occLooks[tag] ? savedSet.has(occLooks[tag]!.outfit_id) : false}
+              lockedSave={lockedSave}
             />
           ))}
         </div>
@@ -1055,7 +1056,7 @@ export default function FeedClient({
             CLOSE
           </button>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-[6px]">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-0 -mx-6 sm:-mx-10">
           {brandView.outfits.filter(fitsSize).map((outfit, i) => (
             <OutfitCard
               key={outfit.outfit_id}
@@ -1067,7 +1068,6 @@ export default function FeedClient({
               canSave={canSave}
               initialSaved={savedSet.has(outfit.outfit_id)}
               lockedSave={lockedSave}
-              index={i}
             />
           ))}
         </div>
@@ -1145,7 +1145,7 @@ export default function FeedClient({
         )}
 
         {!searchLoading && !preparing && searchResults.length > 0 && (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-[6px]">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-0 -mx-6 sm:-mx-10">
             {searchResults.filter(fitsSize).map((outfit, i) => (
               <div
                 key={outfit.outfit_id}
@@ -1162,7 +1162,6 @@ export default function FeedClient({
                   canSave={canSave}
                   initialSaved={savedSet.has(outfit.outfit_id)}
                   lockedSave={lockedSave}
-                  index={i}
                 />
               </div>
             ))}
@@ -1244,7 +1243,7 @@ export default function FeedClient({
 
       {!loading && !preparing && outfits.length > 0 && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-[6px]">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-0 -mx-6 sm:-mx-10">
             {outfits.filter(fitsSize).map((outfit, i) => (
               <div
                 key={outfit.outfit_id}
@@ -1261,7 +1260,6 @@ export default function FeedClient({
                 canSave={canSave}
                 initialSaved={savedSet.has(outfit.outfit_id)}
                 lockedSave={lockedSave}
-                index={i}
               />
               </div>
             ))}

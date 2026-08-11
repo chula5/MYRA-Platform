@@ -36,6 +36,9 @@ export default function MarkerSave({
   const [len, setLen] = useState(0)
 
   // Measure the path once so the dash offsets are exact rather than guessed.
+  // Until it IS measured the ring stays hidden: with a placeholder dash length
+  // the browser renders the path as fine dashes, which showed up as a stray
+  // arc across every unsaved card.
   useEffect(() => {
     if (pathRef.current) setLen(pathRef.current.getTotalLength())
   }, [])
@@ -76,9 +79,12 @@ export default function MarkerSave({
           strokeLinecap="round"
           vectorEffect="non-scaling-stroke"
           style={{
-            strokeDasharray: len || 1,
-            strokeDashoffset: saved ? 0 : len || 1,
-            transition: 'stroke-dashoffset 450ms ease-out',
+            strokeDasharray: len || undefined,
+            strokeDashoffset: saved ? 0 : len,
+            opacity: len ? 1 : 0,
+            // No transition on the very first application, or the ring would
+            // animate itself off as soon as the real length arrived.
+            transition: len ? 'stroke-dashoffset 450ms ease-out' : 'none',
           }}
         />
       </svg>

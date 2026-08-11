@@ -5,8 +5,7 @@ import { useRouter } from 'next/navigation'
 import FallbackImage from '@/components/FallbackImage'
 import Hotspot from '@/components/hotspot/Hotspot'
 import ShopTheLookOverlay from '@/components/source-panel/ShopTheLookOverlay'
-import MarkerSave from '@/components/outfit-card/MarkerSave'
-import { lookOccasion, lookHouse, lookColour, lookName, lookNumber } from '@/lib/look-spec'
+import SaveHeartButton from '@/components/outfit-card/SaveHeartButton'
 import { trackEngagement } from '@/lib/track'
 import type { OutfitWithItems, Item, Brand, ItemType } from '@/types/database'
 
@@ -23,13 +22,11 @@ interface OutfitCardProps {
   onExploreStyles?: (outfit: OutfitWithItems) => void
   onStyleItem?: (itemId: string, itemType: ItemType, outfit: OutfitWithItems) => void
   detailHref?: string
-  // Save — only offered to signed-in early-access users.
+  // Save (heart) — only shown for signed-in early-access users.
   canSave?: boolean
   initialSaved?: boolean
-  // Signed-out: the control nudges sign-in instead of saving.
+  // Signed-out: show a greyed heart that nudges sign-in instead.
   lockedSave?: boolean
-  // Position in the grid, for the printed look number. Omit to hide the row.
-  index?: number
 }
 
 export default function OutfitCard({
@@ -41,7 +38,6 @@ export default function OutfitCard({
   canSave = false,
   initialSaved = false,
   lockedSave = false,
-  index,
 }: OutfitCardProps) {
   const router = useRouter()
   const [sourcePanelOpen, setSourcePanelOpen] = useState(false)
@@ -95,21 +91,13 @@ export default function OutfitCard({
     router.push(detailHref ?? `/outfit/${outfit.outfit_id}`)
   }
 
-  const actionClass = 'pointer-events-auto text-white text-[9px] tracking-[0.1em] uppercase font-light hover:opacity-70 transition-opacity'
+  const actionClass = 'pointer-events-auto text-white text-[10px] sm:text-[11px] tracking-[0.1em] uppercase font-light hover:opacity-70 transition-opacity'
 
   return (
-    <article className="relative flex flex-col group/look">
-      {/* Look number and name, printed above the card. */}
-      {index !== undefined && (
-        <p className="text-[7.5px] tracking-[0.1em] text-[#111111] mb-1 truncate">
-          {lookNumber(index)} · {lookName(outfit)}
-        </p>
-      )}
-
-      <div className="border border-[#111111] bg-[#FCFCFA]">
-      {/* Image — 2:3 portrait, cropped identically on every card. */}
+    <article className="relative flex flex-col">
+      {/* Full-bleed image carousel — 3:4 portrait, actions overlaid */}
       <div
-        className="relative aspect-[2/3] w-full overflow-hidden cursor-pointer"
+        className="relative aspect-[3/4] w-full overflow-hidden cursor-pointer"
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
         onClick={handleTap}
@@ -134,6 +122,12 @@ export default function OutfitCard({
           ))
         )}
 
+        {/* Save heart (signed-in users) */}
+        {canSave ? (
+          <SaveHeartButton outfitId={outfit.outfit_id} initialSaved={initialSaved} />
+        ) : lockedSave ? (
+          <SaveHeartButton outfitId={outfit.outfit_id} locked />
+        ) : null}
 
         {/* Right-side tap zone flicks to the next image; tapping anywhere else
             opens the outfit detail (handleTap). Left/centre fall through. */}
@@ -184,44 +178,17 @@ export default function OutfitCard({
             Similar Looks on one row, Explore Styles centred underneath. Kept
             visible even with the Source panel open so the user can still reach the
             other two (or toggle Source off); z-40 sits above the overlay. */}
-        <div className="myra-look-actions absolute inset-x-0 bottom-0 z-40 pt-10 pb-3 px-2 bg-gradient-to-t from-black/55 via-black/20 to-transparent pointer-events-none">
+        <div className="absolute inset-x-0 bottom-0 z-40 pt-10 pb-3.5 px-3 bg-gradient-to-t from-black/55 via-black/20 to-transparent pointer-events-none">
             {/* Source Items + Similar Looks on one line, Explore Styles below —
                 the cards are too narrow to fit all three on a single row. */}
             <div className="flex items-center justify-center gap-x-4">
               <button onClick={(e) => { e.stopPropagation(); setSourcePanelOpen((v) => !v) }} className={actionClass}>Source Items</button>
               <button onClick={(e) => { e.stopPropagation(); trackEngagement('similar_looks', outfit.outfit_id); onSimilarLooks?.(outfit) }} className={actionClass}>Similar Looks</button>
             </div>
-            <div className="flex items-center justify-center gap-x-4 mt-1">
+            <div className="flex justify-center mt-1.5">
               <button onClick={(e) => { e.stopPropagation(); trackEngagement('explore_styles', outfit.outfit_id); onExploreStyles?.(outfit) }} className={actionClass}>Explore Styles</button>
-              {(canSave || lockedSave) && (
-                <MarkerSave
-                  outfitId={outfit.outfit_id}
-                  initialSaved={initialSaved}
-                  locked={!canSave && lockedSave}
-                  className={actionClass}
-                />
-              )}
             </div>
           </div>
-      </div>
-
-      {/* The spec block: printed labels, handwritten values. */}
-      <dl className="text-[#111111]">
-        {([
-          ['OCCASION', lookOccasion(outfit)],
-          ['HOUSE', lookHouse(outfit)],
-          ['COLOUR', lookColour(outfit)],
-        ] as const).map(([label, value], i) => (
-          <div key={label} className={`flex items-stretch border-t border-[#111111]`}>
-            <dt className="shrink-0 w-[58px] border-r border-[#111111] flex items-center px-1.5 py-1.5">
-              <span className="text-[8.5px] tracking-[0.16em] uppercase leading-none">{label}</span>
-            </dt>
-            <dd className="flex-1 min-w-0 flex items-center px-2 py-0.5">
-              <span className="myra-hand text-[19px] leading-[1.15] text-[#1a1a1a] truncate">{value}</span>
-            </dd>
-          </div>
-        ))}
-      </dl>
       </div>
     </article>
   )
