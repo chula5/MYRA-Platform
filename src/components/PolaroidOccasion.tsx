@@ -38,7 +38,7 @@ export default function PolaroidOccasion({
       </div>
       {/* The lip: taller than the other three sides, the way a polaroid is. */}
       <div className="flex items-center justify-center h-[64px] md:h-[76px] px-2">
-        <span className="text-[15px] md:text-[19px] tracking-[0.18em] text-[#4A4E57] text-center leading-snug">
+        <span className="text-[15px] md:text-[19px] tracking-[0.18em] text-[#111111] text-center leading-snug">
           {label}
         </span>
       </div>

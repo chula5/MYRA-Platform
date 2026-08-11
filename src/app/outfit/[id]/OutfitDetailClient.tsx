@@ -14,6 +14,7 @@ import { trackEngagement } from '@/lib/track'
 import { toggleSaveItem } from '@/app/edit/save-actions'
 import ShopLink from '@/components/ShopLink'
 import { formatGbp } from '@/lib/currency'
+import { useScrollTo } from '@/lib/smooth-scroll'
 import type { OutfitWithItems, Item, Brand, ItemType } from '@/types/database'
 
 // Feature flag — hide the SIMILAR LOOKS / EXPLORE STYLES buttons on the
@@ -54,6 +55,7 @@ export default function OutfitDetailClient({
   savedItemIds = [],
 }: OutfitDetailClientProps) {
   const router = useRouter()
+  const scrollTo = useScrollTo()
   const showBrowse = showBrowseButtons ?? SHOW_BROWSE_BUTTONS
   const [outfit, setOutfit] = useState<OutfitWithItems | null>(initialOutfit ?? null)
   const [styleItemOutfits, setStyleItemOutfits] = useState<OutfitWithItems[]>([])
@@ -74,7 +76,13 @@ export default function OutfitDetailClient({
     setSourcePanelOpen(next)
     if (next) {
       if (outfit) trackEngagement('source_items', outfit.outfit_id)
-      requestAnimationFrame(() => heroRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+      requestAnimationFrame(() => {
+        const hero = heroRef.current
+        if (!hero) return
+        // Lenis aligns to the element's top, so offset by half the leftover
+        // viewport to land it centred (what scrollIntoView's block:'center' did).
+        scrollTo(hero, { offset: -(window.innerHeight - hero.offsetHeight) / 2 })
+      })
     }
   }
 

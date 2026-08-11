@@ -9,6 +9,7 @@ import { rankByTaste, isZero } from '@/lib/taste-vector'
 import { recordTasteInteraction } from '@/app/edit/save-actions'
 import { recordSearchQuery, recordLandingEvent } from '@/app/actions/landing-analytics'
 import { getStoredRef } from '@/lib/ref'
+import { useScrollTo } from '@/lib/smooth-scroll'
 import { parseQuery, searchOutfits } from '@/lib/search-taxonomy'
 import FallbackImage from '@/components/FallbackImage'
 import { brandLogo } from '@/lib/brand-logos'
@@ -337,6 +338,9 @@ export default function FeedClient({
   stylists?: { stylist_id: string; name: string; slug: string }[]
   ourPicks?: import('@/lib/our-picks').OurPicksData
 }) {
+  // Lenis-aware scroll (see lib/smooth-scroll) — the feed jumps back to the top
+  // whenever the view changes underneath it.
+  const scrollTo = useScrollTo()
   const hasTaste = !!tasteVector && !isZero(tasteVector)
   // Signed-out on the public site: show greyed "sign in to save" hearts.
   const lockedSave = !canSave && !!signupHref
@@ -739,7 +743,7 @@ export default function FeedClient({
               <button
                 onClick={() => setStylistFilter(null)}
                 className={`px-4 py-1.5 text-[9px] tracking-[0.12em] rounded-full border transition-colors ${
-                  stylistFilter === null ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'text-[#4A4E57] border-[#E2E0DB] hover:border-[#0A0A0A]'
+                  stylistFilter === null ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'text-[#111111] border-[#E2E0DB] hover:border-[#0A0A0A]'
                 }`}
               >
                 ALL STYLISTS
@@ -749,7 +753,7 @@ export default function FeedClient({
                   key={s.stylist_id}
                   onClick={() => setStylistFilter(stylistFilter === s.stylist_id ? null : s.stylist_id)}
                   className={`px-4 py-1.5 text-[9px] tracking-[0.12em] rounded-full border transition-colors ${
-                    stylistFilter === s.stylist_id ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'text-[#4A4E57] border-[#E2E0DB] hover:border-[#0A0A0A]'
+                    stylistFilter === s.stylist_id ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'text-[#111111] border-[#E2E0DB] hover:border-[#0A0A0A]'
                   }`}
                 >
                   STYLED BY {s.name.toUpperCase()}
@@ -765,7 +769,7 @@ export default function FeedClient({
         <NewArrivals
           outfits={injectedOutfits ?? []}
           hrefBase={detailHrefBase}
-          onExplore={() => { setOccasion(NEW_TAG); window.scrollTo({ top: 0 }) }}
+          onExplore={() => { setOccasion(NEW_TAG); scrollTo(0, { immediate: true }) }}
           className="order-8 w-full mb-12"
         />
 
@@ -799,12 +803,12 @@ export default function FeedClient({
               {brandRows.map((row) => (
                 <button
                   key={row.brand}
-                  onClick={() => { setBrandView(row); window.scrollTo({ top: 0 }) }}
+                  onClick={() => { setBrandView(row); scrollTo(0, { immediate: true }) }}
                   className="group shrink-0 w-[15vw] min-w-[170px] text-left"
                 >
                   {/* Brand logo (falls back to a wordmark) */}
                   <BrandLogoTile brand={row.brand} logoUrl={row.logo_url ?? brandLogo(row.brand)} />
-                  <p className="text-[8px] tracking-[0.09em] text-[#4A4E57] mt-2">{row.outfits.length} LOOKS →</p>
+                  <p className="text-[8px] tracking-[0.09em] text-[#111111] mt-2">{row.outfits.length} LOOKS →</p>
                 </button>
               ))}
             </div>
@@ -815,7 +819,7 @@ export default function FeedClient({
           <div className="order-5 mx-auto mb-6 text-center">
             <button
               onClick={() => setOccasion('all')}
-              className="py-2 text-[11px] tracking-[0.12em] text-[#4A4E57] underline underline-offset-[6px] decoration-[#D8D6D1] hover:decoration-[#0A0A0A] transition-colors"
+              className="py-2 text-[11px] tracking-[0.12em] text-[#111111] underline underline-offset-[6px] decoration-[#D8D6D1] hover:decoration-[#0A0A0A] transition-colors"
             >
               ↓ VIEW EVERYTHING LIVE
             </button>
@@ -847,9 +851,10 @@ export default function FeedClient({
               filter writes its value into the cell beside its label, so the
               whole search reads back as one filled-in record. */}
           <ArchiveCard
+            inventory={(injectedOutfits ?? []).filter(fitsSize).length}
             className="mb-6 w-full"
             heading={
-              <h1 className="text-center text-[clamp(30px,5vw,86px)] tracking-[0.045em] text-[#4A4E57] leading-[1.05]">
+              <h1 className="text-center text-[clamp(30px,5vw,86px)] tracking-[0.045em] text-[#111111] leading-[1.05]">
                 WHAT ARE YOU DRESSING FOR?
               </h1>
             }
@@ -997,7 +1002,7 @@ export default function FeedClient({
                       key={g.label}
                       onClick={() => { setFilterItemGroup(on ? null : g.label); setFilterPanel(null) }}
                       className={`myra-field px-4 py-5 border-r border-b border-[#2B2B2B] transition-colors ${
-                        on ? 'bg-[#2B2B2B] text-white' : 'text-[#4A4E57] hover:bg-[#F1F0EC]'
+                        on ? 'bg-[#2B2B2B] text-white' : 'text-[#111111] hover:bg-[#F1F0EC]'
                       }`}
                     >
                       {g.label}
@@ -1022,7 +1027,7 @@ export default function FeedClient({
                 />
                 <button
                   onClick={() => setFilterPanel(null)}
-                  className="shrink-0 border border-[#2B2B2B] px-6 py-3 text-[10px] md:text-[12px] tracking-[0.16em] text-[#4A4E57] hover:bg-[#2B2B2B] hover:text-white transition-colors"
+                  className="shrink-0 border border-[#2B2B2B] px-6 py-3 text-[10px] md:text-[12px] tracking-[0.16em] text-[#111111] hover:bg-[#2B2B2B] hover:text-white transition-colors"
                 >
                   DONE
                 </button>
@@ -1040,18 +1045,18 @@ export default function FeedClient({
       <div className="max-w-[1440px] mx-auto px-6 sm:px-10 py-10">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <p className="text-[11px] tracking-[0.113em] text-[#4A4E57] mb-1">DISCOVER</p>
-            <h2 className="text-[22px] tracking-[0.045em] text-[#4A4E57]">{brandView.label}</h2>
+            <p className="text-[11px] tracking-[0.113em] text-[#111111] mb-1">DISCOVER</p>
+            <h2 className="text-[22px] tracking-[0.045em] text-[#111111]">{brandView.label}</h2>
           </div>
           <button
             onClick={() => setBrandView(null)}
-            className="text-[11px] tracking-[0.09em] text-[#4A4E57] border border-[#E2E0DB] px-5 py-2.5 rounded-[12px] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-all duration-300"
+            className="text-[11px] tracking-[0.09em] text-[#111111] border border-[#E2E0DB] px-5 py-2.5 rounded-[12px] hover:border-[#0A0A0A] hover:text-[#111111] transition-all duration-300"
           >
             CLOSE
           </button>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-0 -mx-6 sm:-mx-10">
-          {brandView.outfits.filter(fitsSize).map((outfit) => (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-[6px]">
+          {brandView.outfits.filter(fitsSize).map((outfit, i) => (
             <OutfitCard
               key={outfit.outfit_id}
               outfit={outfit}
@@ -1062,6 +1067,7 @@ export default function FeedClient({
               canSave={canSave}
               initialSaved={savedSet.has(outfit.outfit_id)}
               lockedSave={lockedSave}
+              index={i}
             />
           ))}
         </div>
@@ -1075,14 +1081,14 @@ export default function FeedClient({
       <div className="max-w-[1440px] mx-auto px-6 sm:px-10 py-10">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <p className="text-[11px] tracking-[0.113em] text-[#4A4E57] mb-1">SEARCH</p>
-            <h2 className="text-[22px] tracking-[0.045em] text-[#4A4E57]">{activeFilterLabel()}</h2>
+            <p className="text-[11px] tracking-[0.113em] text-[#111111] mb-1">SEARCH</p>
+            <h2 className="text-[22px] tracking-[0.045em] text-[#111111]">{activeFilterLabel()}</h2>
           </div>
           <div className="flex items-center gap-2">
             <SizeFilter value={sizeUk} onChange={setSizeUk} compact />
             <button
               onClick={clearSearch}
-              className="text-[11px] tracking-[0.09em] text-[#4A4E57] border border-[#E2E0DB] px-5 py-2.5 rounded-full hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-all duration-300"
+              className="text-[11px] tracking-[0.09em] text-[#111111] border border-[#E2E0DB] px-5 py-2.5 rounded-full hover:border-[#0A0A0A] hover:text-[#111111] transition-all duration-300"
             >
               CLEAR
             </button>
@@ -1122,10 +1128,10 @@ export default function FeedClient({
 
         {!searchLoading && !preparing && searchResults.length === 0 && (
           <div className="text-center py-24">
-            <p className="text-[11px] tracking-[0.113em] text-[#4A4E57] mb-6">NO OUTFITS FOUND</p>
+            <p className="text-[11px] tracking-[0.113em] text-[#111111] mb-6">NO OUTFITS FOUND</p>
             <button
               onClick={clearSearch}
-              className="border border-[#0A0A0A] text-[#4A4E57] px-8 py-3 rounded-[12px] text-[11px] tracking-[0.09em] hover:bg-[#0A0A0A] hover:text-white transition-all duration-400"
+              className="border border-[#0A0A0A] text-[#111111] px-8 py-3 rounded-[12px] text-[11px] tracking-[0.09em] hover:bg-[#0A0A0A] hover:text-white transition-all duration-400"
             >
               TRY ANOTHER SEARCH
             </button>
@@ -1133,13 +1139,13 @@ export default function FeedClient({
         )}
 
         {!searchLoading && !preparing && searchRelaxed && searchResults.length > 0 && (
-          <p className="text-[11px] tracking-[0.06em] text-[#4A4E57] mb-6 -mt-2">
+          <p className="text-[11px] tracking-[0.06em] text-[#111111] mb-6 -mt-2">
             Here are the closest looks.
           </p>
         )}
 
         {!searchLoading && !preparing && searchResults.length > 0 && (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-0 -mx-6 sm:-mx-10">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-[6px]">
             {searchResults.filter(fitsSize).map((outfit, i) => (
               <div
                 key={outfit.outfit_id}
@@ -1156,6 +1162,7 @@ export default function FeedClient({
                   canSave={canSave}
                   initialSaved={savedSet.has(outfit.outfit_id)}
                   lockedSave={lockedSave}
+                  index={i}
                 />
               </div>
             ))}
@@ -1170,10 +1177,10 @@ export default function FeedClient({
     <div className="max-w-[1440px] mx-auto px-6 sm:px-10 py-10">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <p className="text-[11px] tracking-[0.113em] text-[#4A4E57] mb-1">
+          <p className="text-[11px] tracking-[0.113em] text-[#111111] mb-1">
             {occasion === NEW_TAG ? 'LATEST' : 'YOUR OCCASION'}
           </p>
-          <h2 className="text-[22px] tracking-[0.045em] text-[#4A4E57]">
+          <h2 className="text-[22px] tracking-[0.045em] text-[#111111]">
             {occasion === 'all'
               ? 'EVERYTHING LIVE'
               : occasion === NEW_TAG
@@ -1185,7 +1192,7 @@ export default function FeedClient({
           <SizeFilter value={sizeUk} onChange={setSizeUk} compact />
           <button
             onClick={() => setOccasion(null)}
-            className="text-[11px] tracking-[0.09em] text-[#4A4E57] border border-[#E2E0DB] px-5 py-2.5 rounded-full hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-all duration-300"
+            className="text-[11px] tracking-[0.09em] text-[#111111] border border-[#E2E0DB] px-5 py-2.5 rounded-full hover:border-[#0A0A0A] hover:text-[#111111] transition-all duration-300"
           >
             CHANGE
           </button>
@@ -1225,10 +1232,10 @@ export default function FeedClient({
 
       {!loading && !preparing && outfits.length === 0 && (
         <div className="text-center py-24">
-          <p className="text-[11px] tracking-[0.113em] text-[#4A4E57] mb-6">NO OUTFITS YET FOR THIS OCCASION</p>
+          <p className="text-[11px] tracking-[0.113em] text-[#111111] mb-6">NO OUTFITS YET FOR THIS OCCASION</p>
           <button
             onClick={() => setOccasion(null)}
-            className="border border-[#0A0A0A] text-[#4A4E57] px-8 py-3 rounded-[12px] text-[11px] tracking-[0.09em] hover:bg-[#0A0A0A] hover:text-white transition-all duration-400"
+            className="border border-[#0A0A0A] text-[#111111] px-8 py-3 rounded-[12px] text-[11px] tracking-[0.09em] hover:bg-[#0A0A0A] hover:text-white transition-all duration-400"
           >
             TRY ANOTHER OCCASION
           </button>
@@ -1237,7 +1244,7 @@ export default function FeedClient({
 
       {!loading && !preparing && outfits.length > 0 && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-0 -mx-6 sm:-mx-10">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-[6px]">
             {outfits.filter(fitsSize).map((outfit, i) => (
               <div
                 key={outfit.outfit_id}
@@ -1254,6 +1261,7 @@ export default function FeedClient({
                 canSave={canSave}
                 initialSaved={savedSet.has(outfit.outfit_id)}
                 lockedSave={lockedSave}
+                index={i}
               />
               </div>
             ))}
@@ -1268,7 +1276,7 @@ export default function FeedClient({
               </div>
             )}
             {!hasMore && !loadingMore && outfits.length > 0 && (
-              <p className="text-[10px] tracking-[0.113em] text-[#4A4E57]">END OF EDIT</p>
+              <p className="text-[10px] tracking-[0.113em] text-[#111111]">END OF EDIT</p>
             )}
           </div>
         </>

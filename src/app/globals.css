@@ -344,7 +344,7 @@ html {
   font-size: clamp(22px, 2.6vw, 38px);
   letter-spacing: 0.05em;
   line-height: 1;
-  color: #4A4E57;
+  color: #111111;
 }
 .myra-section-note {
   font-size: clamp(14px, 1.5vw, 21px);
@@ -363,7 +363,7 @@ html {
   font-size: clamp(17px, 1.4vw, 22px);
   letter-spacing: 0.08em;
   line-height: 1.25;
-  color: #4A4E57;
+  color: #111111;
 }
 
 /* A step down for narrow cells (the mobile 2x2 filter block). Scoped, so the
@@ -384,4 +384,45 @@ html {
     font-size: 14px;
     letter-spacing: 0.06em;
   }
+}
+
+/* ── Run-of-show cards ──────────────────────────────────────────────────
+   The handwritten column on the outfit cards. Caveat is a SECONDARY face:
+   it is applied here and nowhere else — never in navigation, buttons,
+   headings or body copy. */
+.myra-hand {
+  /* The universal rule sets Manrope 800 uppercase on every element, so the
+     handwriting has to opt out of all three — otherwise the values render as
+     shouted caps and the printed/handwritten contrast disappears. */
+  font-family: var(--font-caveat), cursive;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Card actions are overlaid on the photograph. At six dense columns, three
+   permanently-visible captions per tile drown the contact sheet, so on a
+   pointer device they appear on hover. Touch has no hover, so there they
+   stay visible — otherwise they would be unreachable. */
+@media (hover: hover) {
+  .myra-look-actions {
+    opacity: 0;
+    transition: opacity 220ms ease-out;
+  }
+  .group\/look:hover .myra-look-actions,
+  .group\/look:focus-within .myra-look-actions {
+    opacity: 1;
+  }
+}
+
+/* Paper grain: a fixed turbulence field over the whole page, barely there.
+   Above the background, below all content, and inert to the pointer. */
+.myra-grain {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/></filter><rect width='240' height='240' filter='url(%23n)'/></svg>");
+  background-repeat: repeat;
 }

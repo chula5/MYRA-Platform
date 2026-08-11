@@ -95,12 +95,12 @@ export default function NewArrivals({
         {onExplore ? (
           <button
             onClick={onExplore}
-            className="text-[9px] tracking-[0.072em] text-[#4A4E57] hover:text-[#4A4E57] transition-colors"
+            className="text-[9px] tracking-[0.072em] text-[#111111] hover:text-[#111111] transition-colors"
           >
             EXPLORE →
           </button>
         ) : (
-          <span className="text-[9px] tracking-[0.072em] text-[#4A4E57]">UPDATED EVERY 2 DAYS</span>
+          <span className="text-[9px] tracking-[0.072em] text-[#111111]">UPDATED EVERY 2 DAYS</span>
         )}
       </div>
 

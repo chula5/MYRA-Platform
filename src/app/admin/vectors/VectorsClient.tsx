@@ -5,6 +5,7 @@ import { thumbUrl } from '@/lib/image-utils'
 import type { OutfitWithItems } from '@/types/database'
 import { buildOutfitVector, cosine } from '@/lib/taste-vector'
 import { rescoreOutfitFromImage } from './actions'
+import { useScrollTo } from '@/lib/smooth-scroll'
 
 // Human labels for each of the 34 vector dimensions (order matches
 // buildOutfitVector) — so hovering a bar tells you what it measures.
@@ -46,6 +47,7 @@ export default function VectorsClient({
   outfits: OutfitWithItems[]
   unscoredCount: number
 }) {
+  const scrollTo = useScrollTo()
   const [selected, setSelected] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
   const [done, setDone] = useState(0)
@@ -189,7 +191,7 @@ export default function VectorsClient({
         {outfits.map((o) => (
           <button
             key={o.outfit_id}
-            onClick={() => { setSelected(o.outfit_id); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+            onClick={() => { setSelected(o.outfit_id); scrollTo(0) }}
             className={`text-left group ${selected === o.outfit_id ? 'opacity-60' : ''}`}
           >
             <div className="relative aspect-[3/4] rounded-[10px] overflow-hidden bg-[#EDEDED]">
