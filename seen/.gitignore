@@ -1,7 +1,0 @@
-node_modules
-.next
-next-env.d.ts
-.env.local
-data/seen.db
-data/seen.db-journal
-data/uploads
