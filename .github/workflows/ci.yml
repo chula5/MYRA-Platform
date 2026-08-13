@@ -1,0 +1,42 @@
+name: CI
+
+# Catches the two classes of failure that have reached production silently:
+#
+#  · undefined identifiers — next.config.js sets typescript.ignoreBuildErrors,
+#    so a missing import for a function that's then called builds fine and
+#    throws ReferenceError in the browser;
+#  · unresolved merge conflict markers — these break the build outright, and a
+#    failed Vercel deploy is easy to miss, so main sat broken across several
+#    commits with none of them live.
+#
+# Deliberately fast (no `next build`) — Vercel already builds every push. This
+# is the check Vercel CANNOT do, because ignoreBuildErrors hides it there.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # --ignore-scripts: the Higgsfield CLI's postinstall downloads a Go
+      # binary from GitHub releases that nothing here needs, and it's a
+      # reliable way to hang or flake a CI run.
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Fatal type errors
+        run: npm run check:types
+
+      - name: Tests
+        run: npm test

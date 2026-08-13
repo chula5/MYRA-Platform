@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "types": "npx supabase gen types typescript --project-id $SUPABASE_PROJECT_ID > src/types/database.ts",
+    "check:types": "node scripts/check-types.mjs",
     "test": "vitest run"
   },
   "dependencies": {
