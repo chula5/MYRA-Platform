@@ -15,6 +15,7 @@ import { toggleSaveItem } from '@/app/edit/save-actions'
 import ShopLink from '@/components/ShopLink'
 import { formatGbp } from '@/lib/currency'
 import { useScrollTo } from '@/lib/smooth-scroll'
+import { recordOutfitView } from '@/components/RecentlyViewed'
 import type { OutfitWithItems, Item, Brand, ItemType } from '@/types/database'
 
 // Feature flag — hide the SIMILAR LOOKS / EXPLORE STYLES buttons on the
@@ -61,7 +62,12 @@ export default function OutfitDetailClient({
   const [styleItemOutfits, setStyleItemOutfits] = useState<OutfitWithItems[]>([])
 
   // Remember what they've opened — powers RECENTLY VIEWED on the landing page.
-  useEffect(() => { recordOutfitView(outfit.outfit_id) }, [outfit.outfit_id])
+  // `outfit` is null until the client fetch lands (the public route gets no
+  // initialOutfit), so this must be optional-chained: reading .outfit_id in the
+  // dependency array throws DURING RENDER, which React cannot recover from.
+  useEffect(() => {
+    if (outfit) recordOutfitView(outfit.outfit_id)
+  }, [outfit?.outfit_id, outfit])
   const [relatedOutfits, setRelatedOutfits] = useState<OutfitWithItems[]>([])
   // Which related view is showing — drives the results heading (the URL `mode`
   // is only the initial value; clicking the buttons updates this).
