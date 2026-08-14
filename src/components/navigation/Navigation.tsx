@@ -14,7 +14,11 @@ export default function Navigation({ transparent = false, authed = false }: { tr
   }, [])
 
   const isTransparent = transparent && !scrolled
-  const textColor = isTransparent ? 'text-white' : 'text-[#4A4E57]'
+  // On arrival the banner sits in the set-wall grey with white text and the
+  // white logo; scrolling flips it to white with black text and the black
+  // logo. Hero pages (transparent) stay see-through at the top instead.
+  const atTop = !scrolled
+  const textColor = atTop ? 'text-white' : 'text-[#4A4E57]'
 
   return (
     <nav
@@ -23,6 +27,8 @@ export default function Navigation({ transparent = false, authed = false }: { tr
         transition-all duration-500 ease-in-out
         ${isTransparent
           ? 'bg-transparent border-b border-transparent'
+          : atTop
+          ? 'myra-texture border-b border-transparent'
           : 'bg-white border-b border-[#E2E0DB]'}
       `}
     >
@@ -44,14 +50,14 @@ export default function Navigation({ transparent = false, authed = false }: { tr
             <img
               src="/myra-logo-white.png"
               alt="MYRA"
-              className={`h-full w-auto transition-opacity duration-500 ${isTransparent ? 'opacity-100' : 'opacity-0'}`}
+              className={`h-full w-auto transition-opacity duration-500 ${atTop ? 'opacity-100' : 'opacity-0'}`}
             />
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/myra-logo-black.png"
               alt=""
               aria-hidden="true"
-              className={`absolute inset-0 h-full w-auto transition-opacity duration-500 ${isTransparent ? 'opacity-0' : 'opacity-100'}`}
+              className={`absolute inset-0 h-full w-auto transition-opacity duration-500 ${atTop ? 'opacity-0' : 'opacity-100'}`}
             />
           </Link>
         </div>

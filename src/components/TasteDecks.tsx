@@ -1,8 +1,8 @@
 'use client'
 
-// The pair of card decks that sit under OUR PICKS: what MYRA thinks she'll
-// like, and what she has already opened. Side by side on laptop, stacked on
-// mobile with recommendations first.
+// The pair of outfit rails that sit under OUR PICKS: what MYRA thinks she'll
+// like, and what she has already opened. Each rail runs the full width and
+// scrolls sideways, recommendations first.
 
 import OutfitDeck from './OutfitDeck'
 import { useRecentlyViewed } from './RecentlyViewed'
@@ -23,18 +23,8 @@ export default function TasteDecks({
   const viewed = useRecentlyViewed(catalogue)
   if (recommended.length === 0 && viewed.length === 0) return null
 
-  // Two halves when there are two decks — recommendations own the left,
-  // history the right. Signed out there are no recommendations, so recently
-  // viewed stands alone in the middle rather than hugging one side. Nothing
-  // viewed and nothing recommended renders nothing at all (above).
-  const both = recommended.length > 0 && viewed.length > 0
-
   return (
-    <div
-      className={`grid grid-cols-1 gap-x-16 gap-y-16 w-full ${
-        both ? 'lg:grid-cols-2' : 'max-w-[620px] mx-auto'
-      } ${className}`}
-    >
+    <div className={`flex flex-col gap-y-12 w-full ${className}`}>
       <OutfitDeck
         outfits={recommended}
         title="RECOMMENDED FOR YOU"

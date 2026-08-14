@@ -9,36 +9,25 @@
 export function ArchiveCard({
   children,
   heading,
-  inventory,
   className = '',
 }: {
   children: React.ReactNode
-  // Sits inside the card, under the archive's own header rule.
+  // Sits under the mirror mark at the head of the card.
   heading?: React.ReactNode
-  // How many looks are currently on offer — printed as the inventory number.
-  inventory?: number
   className?: string
 }) {
   return (
-    <div
-      className={`relative bg-[#FCFCFA] border border-[#2B2B2B] shadow-[0_10px_34px_rgba(0,0,0,0.13)] ${className}`}
-    >
-      {/* Head: the archive's own label either side of the punch hole, ruled off
-          from the card below it. */}
-      <div className="flex items-center justify-between px-3 md:px-8 pt-4 md:pt-7 pb-3 md:pb-4 border-b border-[#111111]">
-        <p className="text-[20px] md:text-[30px] tracking-[0.02em] text-[#111111]">
-          <span className="align-super text-[11px] md:text-[15px] tracking-[0.14em] mr-1">THE</span>
-          <span className="font-bold">archive</span>
-        </p>
-        <span className="w-[18px] h-[18px] md:w-[24px] md:h-[24px] rounded-full border border-[#2B2B2B]" aria-hidden />
-        <p className="myra-field">
-          INVENTORY N°{inventory !== undefined ? ` ${String(inventory).padStart(4, '0')}` : ''}
-        </p>
-      </div>
-
+    // Borderless and transparent — the page's grey photoshoot texture shows
+    // straight through, so the search area reads as part of the set wall.
+    <div className={`relative ${className}`}>
       <div className="px-3 md:px-10 pb-4 md:pb-10">
-        {heading && <div className="pb-6 md:pb-9">{heading}</div>}
-        <div className="border border-[#2B2B2B]">{children}</div>
+        {/* The mirror mark, centred at the head. */}
+        <div className="pt-8 md:pt-12">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/myra-mirror-transparent.png" alt="" className="h-32 md:h-56 w-auto mx-auto" />
+        </div>
+        {heading && <div className="pt-5 md:pt-8 pb-6 md:pb-9">{heading}</div>}
+        {children}
       </div>
     </div>
   )

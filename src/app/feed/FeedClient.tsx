@@ -17,11 +17,15 @@ import BrandLogoTile from '@/components/BrandLogoTile'
 import NewArrivals, { byNewest } from '@/components/NewArrivals'
 import OurPicks from '@/components/OurPicks'
 import TasteDecks from '@/components/TasteDecks'
-import { ArchiveCard, ArchiveRow, ArchiveCell } from '@/components/ArchiveCard'
-import OccasionLookCard, { occasionLooks } from '@/components/OccasionLookCard'
+import { ArchiveCard } from '@/components/ArchiveCard'
+import { occasionLooks } from '@/components/OccasionLookCard'
+import { thumbUrl } from '@/lib/image-utils'
 import SizeFilter from './SizeFilter'
 import { outfitFitsClothingUk } from '@/lib/sizing'
-import { occasionLabel, BASE_OCCASIONS, occasionMatchTags } from '@/lib/occasions'
+import { occasionLabel, BASE_OCCASIONS, CANDIDATE_OCCASIONS, occasionMatchTags } from '@/lib/occasions'
+
+// The reference box holds a 3-across, 2-deep contact grid of occasions.
+const OCCASION_GRID_COUNT = 6
 import type { BrandRow } from '@/lib/taste-profile'
 import type { OutfitWithItems, ItemType, ColourFamily } from '@/types/database'
 
@@ -66,6 +70,37 @@ const COLOUR_OPTIONS: { label: string; value: ColourFamily; swatch: string }[] =
   { label: 'PURPLE',    value: 'purple',     swatch: '#7B4FA0' },
   { label: 'MULTI',     value: 'multicolour',swatch: 'linear-gradient(135deg,#E8A0B4 0%,#4A6FA5 50%,#3D6B4F 100%)' },
 ]
+
+// ── Filter-bar box ───────────────────────────────────────────
+// One cell of the landing filter bar: printed label on the left, a bordered
+// rectangle beside it showing the chosen value (or the muted "ALL …" state).
+function FilterBox({
+  label,
+  value,
+  placeholder,
+  open,
+  onClick,
+}: {
+  label: string
+  value: string | null
+  placeholder: string
+  open: boolean
+  onClick: () => void
+}) {
+  return (
+    <div className="flex items-center gap-3 min-w-0">
+      <span className="myra-field shrink-0 text-[#55524C]">{label}</span>
+      <button
+        type="button"
+        onClick={onClick}
+        className="myra-field flex-1 md:flex-none flex items-center justify-between gap-4 border border-[#2B2B2B] bg-transparent px-4 py-2.5 min-w-0 md:min-w-[180px] text-left hover:bg-[rgba(255,255,255,0.25)] transition-colors"
+      >
+        <span className={`truncate ${value ? '' : 'opacity-45'}`}>{value ?? placeholder}</span>
+        <span className="shrink-0">{open ? '▲' : '▾'}</span>
+      </button>
+    </div>
+  )
+}
 
 // ── Item type groups ─────────────────────────────────────────
 const ITEM_GROUPS: { label: string; types: string[] }[] = [
@@ -387,6 +422,9 @@ export default function FeedClient({
   const [preparing, setPreparing]         = useState(false)
   // A brand the user tapped to "discover more" — shows that brand's outfits.
   const [brandView, setBrandView]         = useState<BrandRow | null>(null)
+  // OUR RECOMMENDATIONS — a second tab of the landing, signed-in only: the
+  // taste-ranked picks as a 3×3 grid with the liked-brand logos beneath.
+  const [recsView, setRecsView]           = useState(false)
   const [outfits, setOutfits]             = useState<OutfitWithItems[]>([])
   const [loading, setLoading]             = useState(false)
   const [loadingMore, setLoadingMore]     = useState(false)
@@ -669,6 +707,7 @@ export default function FeedClient({
     const occ = p.get('occasion')
     const q = p.get('q')
     if (view === 'new') setOccasion(NEW_TAG)
+    else if (view === 'recs') setRecsView(true)
     else if (occ) setOccasion(occ)
     else if (q) { setSearchQuery(q); setRestoreSearchPending(true) }
     restoredRef.current = true
@@ -691,9 +730,10 @@ export default function FeedClient({
     if (searchMode && searchQuery.trim()) params.set('q', searchQuery.trim())
     else if (occasion === NEW_TAG) params.set('view', 'new')
     else if (occasion) params.set('occasion', occasion)
+    else if (recsView) params.set('view', 'recs')
     const qs = params.toString()
     window.history.replaceState(window.history.state, '', qs ? `?${qs}` : window.location.pathname)
-  }, [occasion, searchMode, searchQuery, brandView])
+  }, [occasion, searchMode, searchQuery, brandView, recsView])
 
   // ── Handlers ───────────────────────────────────────────────
   // Soft taste signals (+1) — fire-and-forget when the user is signed in.
@@ -716,7 +756,16 @@ export default function FeedClient({
   // Pictures for the occasion polaroids, resolved in ONE pass so each tile
   // claims a different look — computing this per tile restarts the used-set
   // every time and lets the same outfit land on two tiles.
-  const occasionTags = occasionOrder && occasionOrder.length ? occasionOrder : BASE_OCCASIONS
+  // Padded from the candidate pool so the reference box is always a full 3×2.
+  const occasionTags = useMemo(() => {
+    const base = occasionOrder && occasionOrder.length ? occasionOrder : BASE_OCCASIONS
+    const padded = [...base]
+    for (const tag of CANDIDATE_OCCASIONS) {
+      if (padded.length >= OCCASION_GRID_COUNT) break
+      if (!padded.includes(tag)) padded.push(tag)
+    }
+    return padded.slice(0, OCCASION_GRID_COUNT)
+  }, [occasionOrder])
   const occLooks = useMemo(
     () => occasionLooks(injectedOutfits ?? [], occasionTags, occasionMatchTags),
     [injectedOutfits, occasionTags],
@@ -732,10 +781,99 @@ export default function FeedClient({
     return parts.join(' · ') || 'SEARCH RESULTS'
   }
 
+  // ── View tabs (signed-in only): THE ARCHIVE / OUR RECOMMENDATIONS ─────────
+  const viewTabs = canSave ? (
+    <div className="flex items-center justify-center gap-8 md:gap-12">
+      {([
+        { label: 'THE ARCHIVE', active: !recsView, go: () => setRecsView(false) },
+        { label: 'OUR RECOMMENDATIONS', active: recsView, go: () => setRecsView(true) },
+      ] as const).map((t) => (
+        <button
+          key={t.label}
+          onClick={() => { t.go(); scrollTo(0, { immediate: true }) }}
+          className={`pb-2 text-[13px] md:text-[15px] tracking-[0.14em] border-b-2 transition-colors ${
+            t.active ? 'border-[#111111] text-[#4A4E57]' : 'border-transparent text-[#55524C] hover:text-[#4A4E57]'
+          }`}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  ) : null
+
+  // ── OUR RECOMMENDATIONS VIEW ──────────────────────────────
+  if (recsView && !occasion && !searchMode && !brandView) {
+    const recs = recommendedOutfits.filter(fitsSize).slice(0, 9)
+    return (
+      <div className="w-full px-6 sm:px-10 py-14">
+        <div className="mb-12">{viewTabs}</div>
+
+        <div className="max-w-[1100px] mx-auto">
+          <div className="flex items-baseline justify-between mb-4">
+            <p className="myra-section-label inline-flex items-center gap-2">
+              <span className="text-[#C8302A]" aria-hidden>♥</span>
+              OUR RECOMMENDATIONS
+            </p>
+            <p className="myra-section-note">LEARNED FROM WHAT YOU LIKE</p>
+          </div>
+
+          {/* The picks as a 3×3 contact grid — same flat treatment as the
+              occasion grid on the archive tab. */}
+          <div className="grid grid-cols-3 gap-[6px]">
+            {recs.map((o) => (
+              <button
+                key={o.outfit_id}
+                onClick={() => router.push(`${detailHrefBase}/${o.outfit_id}`)}
+                aria-label={o.aesthetic_label ?? 'View outfit'}
+                className="group relative aspect-[3/4] overflow-hidden bg-[#EDEDED]"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={o.image_url ? thumbUrl(o.image_url, 700) : '/placeholder-outfit.jpg'}
+                  alt=""
+                  loading="lazy"
+                  className="absolute inset-0 w-full h-full object-cover transition-opacity duration-500 group-hover:opacity-85"
+                />
+              </button>
+            ))}
+          </div>
+          {recs.length === 0 && (
+            <p className="myra-field py-16 text-center opacity-60">
+              LIKE A FEW LOOKS AND YOUR RECOMMENDATIONS WILL APPEAR HERE
+            </p>
+          )}
+
+          {/* The houses she engages with, beneath the picks. */}
+          {brandRows.length > 0 && (
+            <div className="mt-16">
+              <div className="flex items-baseline justify-between mb-4">
+                <p className="myra-section-label">BRANDS YOU LIKE</p>
+                <p className="myra-section-note">HOUSES YOU LOVE</p>
+              </div>
+              <div data-lenis-prevent className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
+                {brandRows.map((row) => (
+                  <button
+                    key={row.brand}
+                    onClick={() => { setRecsView(false); setBrandView(row); scrollTo(0, { immediate: true }) }}
+                    className="group shrink-0 w-[15vw] min-w-[170px] text-left"
+                  >
+                    <BrandLogoTile brand={row.brand} logoUrl={row.logo_url ?? brandLogo(row.brand)} />
+                    <p className="text-[8px] tracking-[0.09em] text-[#4A4E57] mt-2">{row.outfits.length} LOOKS →</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   // ── LANDING VIEW ──────────────────────────────────────────
   if (!occasion && !searchMode && !brandView) {
     return (
       <div className="w-full px-6 sm:px-10 py-16 flex flex-col">
+        {viewTabs && <div className="order-0 mb-10">{viewTabs}</div>}
         <div className="order-1 text-center mb-10">
           {/* Stylist lens — a free, instant filter over the shared catalogue.
               Hidden until there's more than one live stylist. */}
@@ -744,7 +882,7 @@ export default function FeedClient({
               <button
                 onClick={() => setStylistFilter(null)}
                 className={`px-4 py-1.5 text-[9px] tracking-[0.12em] rounded-full border transition-colors ${
-                  stylistFilter === null ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'text-[#111111] border-[#E2E0DB] hover:border-[#0A0A0A]'
+                  stylistFilter === null ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'text-[#4A4E57] border-[#E2E0DB] hover:border-[#0A0A0A]'
                 }`}
               >
                 ALL STYLISTS
@@ -754,7 +892,7 @@ export default function FeedClient({
                   key={s.stylist_id}
                   onClick={() => setStylistFilter(stylistFilter === s.stylist_id ? null : s.stylist_id)}
                   className={`px-4 py-1.5 text-[9px] tracking-[0.12em] rounded-full border transition-colors ${
-                    stylistFilter === s.stylist_id ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'text-[#111111] border-[#E2E0DB] hover:border-[#0A0A0A]'
+                    stylistFilter === s.stylist_id ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'text-[#4A4E57] border-[#E2E0DB] hover:border-[#0A0A0A]'
                   }`}
                 >
                   STYLED BY {s.name.toUpperCase()}
@@ -783,255 +921,212 @@ export default function FeedClient({
           </div>
         )}
 
-        {/* Taste + history as fanning card decks, directly under OUR PICKS.
-            Recently viewed is local-only, so it works signed out. */}
+        {/* Recently viewed as a rail, directly under OUR PICKS. Local-only, so
+            it works signed out. Recommendations (and the liked-brand logos)
+            live on the OUR RECOMMENDATIONS tab now, not the landing. */}
         <TasteDecks
-          recommended={recommendedOutfits}
+          recommended={[]}
           catalogue={injectedOutfits ?? []}
           detailHrefBase={detailHrefBase}
           className="order-9 w-full mt-4 mb-16"
         />
 
-        {/* Discover more from the houses she loves — a row of brand tiles, each a
-            2×2 collage; tap one to open that brand's scrolling feed. */}
-        {brandRows.length > 0 && (
-          <div className="order-10 w-full mb-12">
-            <div className="flex items-baseline justify-between mb-4">
-              <p className="myra-section-label">DISCOVER MORE FROM BRANDS YOU LIKE</p>
-              <p className="myra-section-note">HOUSES YOU LOVE</p>
-            </div>
-            <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
-              {brandRows.map((row) => (
-                <button
-                  key={row.brand}
-                  onClick={() => { setBrandView(row); scrollTo(0, { immediate: true }) }}
-                  className="group shrink-0 w-[15vw] min-w-[170px] text-left"
-                >
-                  {/* Brand logo (falls back to a wordmark) */}
-                  <BrandLogoTile brand={row.brand} logoUrl={row.logo_url ?? brandLogo(row.brand)} />
-                  <p className="text-[8px] tracking-[0.09em] text-[#111111] mt-2">{row.outfits.length} LOOKS →</p>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {showAllOption && (
           <div className="order-5 mx-auto mb-6 text-center">
             <button
               onClick={() => setOccasion('all')}
-              className="py-2 text-[11px] tracking-[0.12em] text-[#111111] underline underline-offset-[6px] decoration-[#D8D6D1] hover:decoration-[#0A0A0A] transition-colors"
+              className="py-2 text-[11px] tracking-[0.12em] text-[#4A4E57] underline underline-offset-[6px] decoration-[#D8D6D1] hover:decoration-[#0A0A0A] transition-colors"
             >
               ↓ VIEW EVERYTHING LIVE
             </button>
           </div>
         )}
 
-        {/* Occasions — a contact sheet: plain portrait tiles, each occasion
-            shown through a look actually tagged with it, captioned underneath
-            with its number and the occasion it selects. */}
-        <div className="order-6 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 gap-[6px] w-full mb-20">
-          {occasionTags.map((tag, i) => (
-            <OccasionLookCard
-              key={tag}
-              label={occasionLabel(tag)}
-              outfit={occLooks[tag]}
-              index={i}
-              onClick={() => setOccasion(tag)}
-            />
-          ))}
-        </div>
-
         {/* Search + filter area */}
         <div className="order-3 mb-14 -mx-6 sm:-mx-10 px-2 sm:px-10">
 
-          {/* The card: the query written onto an archive index sheet. Each
-              filter writes its value into the cell beside its label, so the
-              whole search reads back as one filled-in record. */}
+          {/* The card: the query written onto the set wall. Each filter writes
+              its value into the box beside its label, so the whole search
+              reads back as one filled-in record. */}
           <ArchiveCard
-            inventory={(injectedOutfits ?? []).filter(fitsSize).length}
             className="mb-6 w-full"
             heading={
-              <h1 className="text-center text-[clamp(30px,5vw,86px)] tracking-[0.045em] text-[#111111] leading-[1.05]">
+              <h1 className="text-center text-[clamp(30px,5vw,86px)] tracking-[0.045em] text-[#4A4E57] leading-[1.05]">
                 WHAT ARE YOU DRESSING FOR?
               </h1>
             }
           >
-            <ArchiveRow label="LOOKING FOR" className="myra-compact-sm">
-              <form onSubmit={(e) => { e.preventDefault(); executeSearch() }} className="flex items-center">
+            {/* Search bar — a single bordered rectangle, centred and narrower
+                than the card, with its printed label on the left the same way
+                the filter boxes carry theirs. */}
+            <div className="mx-auto w-full max-w-[760px] flex items-center justify-center gap-3 mb-5 md:mb-7">
+              <span className="myra-field shrink-0 text-[#55524C]">SEARCH A LOOK</span>
+              <form
+                onSubmit={(e) => { e.preventDefault(); executeSearch() }}
+                className="flex-1 min-w-0 max-w-[620px] border border-[#2B2B2B] flex items-center"
+              >
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder={typedHint ? `${typedHint}▌` : 'A SUMMER WEDDING IN ITALY'}
-                  className="myra-field flex-1 min-w-0 bg-transparent border-0 px-3 md:px-7 py-4 md:py-7 placeholder:text-[#8A8A84] focus:outline-none"
+                  className="myra-field flex-1 min-w-0 bg-transparent border-0 px-4 md:px-6 py-3.5 md:py-4 placeholder:text-[#6E6B65] focus:outline-none"
                 />
                 <button
                   type="submit"
                   aria-label="Search"
-                  className="shrink-0 px-3 md:px-6 self-stretch border-l border-[#2B2B2B] hover:bg-[#F4F3F0] transition-colors"
+                  className="shrink-0 px-3 md:px-5 self-stretch border-l border-[#2B2B2B] hover:bg-[rgba(255,255,255,0.25)] transition-colors"
                 >
-                  <svg viewBox="0 0 40 40" className="w-[17px] md:w-[26px]" aria-hidden>
+                  <svg viewBox="0 0 40 40" className="w-[16px] md:w-[20px]" aria-hidden>
                     <circle cx="17" cy="16" r="10" fill="none" stroke="#4A4E57" strokeWidth="3.2" />
                     <path d="M24.5 24 L33 33" stroke="#4A4E57" strokeWidth="3.2" strokeLinecap="round" />
                   </svg>
                 </button>
               </form>
-            </ArchiveRow>
+            </div>
 
-            {/* MOBILE — the four filters as a 2x2 block. Stacking them as
-                full-width rows made the card twice as tall as the screen; a
-                grid keeps the whole query visible at once. Text is a step
-                smaller here (.myra-compact) because the cells are narrow. */}
-            <div className="grid grid-cols-2 md:hidden myra-compact -mr-px -mb-px">
-              <div className="border-r border-b border-[#2B2B2B] flex flex-col">
-                <span className="myra-field px-3 pt-3">COLOUR</span>
-                <ArchiveCell
-                  open={filterPanel === 'colour'}
-                  value={filterColour ? (COLOUR_OPTIONS.find((c) => c.value === filterColour)?.label ?? null) : null}
-                  onClick={() => setFilterPanel(filterPanel === 'colour' ? null : 'colour')}
-                />
-              </div>
-              <div className="border-r border-b border-[#2B2B2B] flex flex-col">
-                <span className="myra-field px-3 pt-3">ITEM TYPE</span>
-                <ArchiveCell
-                  open={filterPanel === 'item'}
-                  value={filterItemGroup}
-                  onClick={() => setFilterPanel(filterPanel === 'item' ? null : 'item')}
-                />
-              </div>
-              <div className="border-r border-b border-[#2B2B2B] flex flex-col">
-                <span className="myra-field px-3 pt-3">BRAND</span>
-                <ArchiveCell
-                  open={filterPanel === 'brand'}
-                  value={filterBrand.trim() ? filterBrand.toUpperCase() : null}
-                  onClick={() => setFilterPanel(filterPanel === 'brand' ? null : 'brand')}
-                />
-              </div>
-              <div className="border-r border-b border-[#2B2B2B] flex flex-col">
-                <span className="myra-field px-3 pt-3">SIZE</span>
-                <div className="px-3 py-4 flex items-center">
-                  <SizeFilter value={sizeUk} onChange={setSizeUk} />
+            {/* Filter bar — printed label + bordered dropdown box per filter,
+                in one row (wrapping to a 2-col grid on mobile). */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-wrap md:items-center md:justify-center gap-x-8 gap-y-3 mb-5 md:mb-7">
+              <FilterBox
+                label="BRAND"
+                placeholder="ALL BRANDS"
+                open={filterPanel === 'brand'}
+                value={filterBrand.trim() ? filterBrand.toUpperCase() : null}
+                onClick={() => setFilterPanel(filterPanel === 'brand' ? null : 'brand')}
+              />
+              <FilterBox
+                label="COLOUR"
+                placeholder="ALL COLOURS"
+                open={filterPanel === 'colour'}
+                value={filterColour ? (COLOUR_OPTIONS.find((c) => c.value === filterColour)?.label ?? null) : null}
+                onClick={() => setFilterPanel(filterPanel === 'colour' ? null : 'colour')}
+              />
+              <FilterBox
+                label="ITEM TYPE"
+                placeholder="ALL TYPES"
+                open={filterPanel === 'item'}
+                value={filterItemGroup}
+                onClick={() => setFilterPanel(filterPanel === 'item' ? null : 'item')}
+              />
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="myra-field shrink-0 text-[#55524C]">SIZE</span>
+                <div className="flex-1 md:flex-none md:w-[180px] min-w-0">
+                  <SizeFilter value={sizeUk} onChange={setSizeUk} box />
                 </div>
               </div>
             </div>
 
-            {/* DESKTOP — the ruled ledger rows, where there is width for them. */}
-            <div className="hidden md:block">
-              <ArchiveRow label="COLOUR">
-                <div className="flex">
-                  <div className="flex-1 min-w-0 border-r border-[#2B2B2B]">
-                    <ArchiveCell
-                      open={filterPanel === 'colour'}
-                      value={filterColour ? (COLOUR_OPTIONS.find((c) => c.value === filterColour)?.label ?? null) : null}
-                      onClick={() => setFilterPanel(filterPanel === 'colour' ? null : 'colour')}
-                    />
-                  </div>
-                  <div className="shrink-0 w-[230px] border-r border-[#2B2B2B] flex items-end px-5 pb-3 pt-5">
-                    <span className="myra-field">ITEM TYPE</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <ArchiveCell
-                      open={filterPanel === 'item'}
-                      value={filterItemGroup}
-                      onClick={() => setFilterPanel(filterPanel === 'item' ? null : 'item')}
-                    />
-                  </div>
+            {/* The panels stay part of the same document as the card: square
+                corners, the same hairline rule, no pills and no float. */}
+            {filterPanel === 'colour' && (
+              <div className="border border-[#2B2B2B] bg-[#FCFCFA] px-4 md:px-6 py-5 mb-5 md:mb-7">
+                {/* Small fixed-size chips rather than a fluid grid — the panel
+                    should read as a row of paint samples, not a colour chart. */}
+                <div className="flex flex-wrap justify-center gap-x-5 gap-y-4">
+                  {COLOUR_OPTIONS.map((c) => {
+                    const on = filterColour === c.value
+                    return (
+                      <button
+                        key={c.value}
+                        onClick={() => { setFilterColour(on ? null : c.value); setFilterPanel(null) }}
+                        className="group flex flex-col items-center gap-1.5"
+                      >
+                        {/* The colour does the talking; the name sits under it. */}
+                        <span
+                          className={`block w-[38px] h-[38px] md:w-[46px] md:h-[46px] border transition-all ${
+                            on ? 'border-[#2B2B2B] ring-1 ring-[#2B2B2B] ring-offset-2 ring-offset-[#FCFCFA]' : 'border-[#D8D6D1] group-hover:border-[#2B2B2B]'
+                          }`}
+                          style={{ background: c.swatch }}
+                        />
+                        <span className="myra-field">
+                          {c.label}
+                        </span>
+                      </button>
+                    )
+                  })}
                 </div>
-              </ArchiveRow>
+              </div>
+            )}
 
-              <ArchiveRow label="BRAND" last>
-                <div className="flex">
-                  <div className="flex-1 min-w-0 border-r border-[#2B2B2B]">
-                    <ArchiveCell
-                      open={filterPanel === 'brand'}
-                      value={filterBrand.trim() ? filterBrand.toUpperCase() : null}
-                      onClick={() => setFilterPanel(filterPanel === 'brand' ? null : 'brand')}
-                    />
-                  </div>
-                  <div className="shrink-0 w-[230px] border-r border-[#2B2B2B] flex items-end px-5 pb-3 pt-5">
-                    <span className="myra-field">SIZE</span>
-                  </div>
-                  <div className="flex-1 min-w-0 px-5 py-3 flex items-center">
-                    <SizeFilter value={sizeUk} onChange={setSizeUk} />
-                  </div>
+            {filterPanel === 'item' && (
+              <div className="border border-[#2B2B2B] bg-[#FCFCFA] mb-5 md:mb-7 overflow-hidden">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 -mr-px -mb-px">
+                  {ITEM_GROUPS.map((g) => {
+                    const on = filterItemGroup === g.label
+                    return (
+                      <button
+                        key={g.label}
+                        onClick={() => { setFilterItemGroup(on ? null : g.label); setFilterPanel(null) }}
+                        className={`myra-field px-4 py-5 border-r border-b border-[#2B2B2B] transition-colors ${
+                          on ? 'bg-[#2B2B2B] text-white' : 'text-[#4A4E57] hover:bg-[#F1F0EC]'
+                        }`}
+                      >
+                        {g.label}
+                      </button>
+                    )
+                  })}
                 </div>
-              </ArchiveRow>
-            </div>
-          </ArchiveCard>
+              </div>
+            )}
 
-          {/* The panels are part of the same document as the card: square
-              corners, the same hairline rule, no pills and no float. */}
-          {filterPanel === 'colour' && (
-            <div className="border border-[#2B2B2B] border-t-0 bg-[#FCFCFA] px-4 md:px-6 py-6 mb-6">
-              <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-16 gap-x-4 gap-y-6">
-                {COLOUR_OPTIONS.map((c) => {
-                  const on = filterColour === c.value
+            {filterPanel === 'brand' && (
+              <div className="border border-[#2B2B2B] bg-[#FCFCFA] px-4 md:px-6 py-6 mb-5 md:mb-7">
+                <div className="flex items-center gap-4">
+                  <input
+                    type="text"
+                    value={filterBrand}
+                    onChange={(e) => setFilterBrand(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); setFilterPanel(null) } }}
+                    placeholder="E.G. STAUD, TOTEME, JACQUEMUS…"
+                    autoFocus
+                    className="myra-field flex-1 min-w-0 border border-[#2B2B2B] bg-transparent px-4 py-3 placeholder:text-[#B4B4AE] focus:outline-none"
+                  />
+                  <button
+                    onClick={() => setFilterPanel(null)}
+                    className="shrink-0 border border-[#2B2B2B] px-6 py-3 text-[10px] md:text-[12px] tracking-[0.16em] text-[#4A4E57] hover:bg-[#2B2B2B] hover:text-white transition-colors"
+                  >
+                    DONE
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Occasion grid — a 3-across contact grid, each occasion shown
+                through a live look with its name in white at the centre.
+                Borderless: the tiles sit straight on the set-wall grey.
+                Tapping one opens that occasion's feed. */}
+            <div>
+              <div className="grid grid-cols-3 gap-[6px]">
+                {occasionTags.slice(0, OCCASION_GRID_COUNT).map((tag) => {
+                  const look = occLooks[tag]
                   return (
                     <button
-                      key={c.value}
-                      onClick={() => { setFilterColour(on ? null : c.value); setFilterPanel(null) }}
-                      className="group flex flex-col items-center gap-2"
+                      key={tag}
+                      type="button"
+                      onClick={() => setOccasion(tag)}
+                      className="group relative w-full aspect-[3/4] overflow-hidden bg-[#E4E2DD]"
                     >
-                      {/* The colour does the talking; the name sits under it. */}
-                      <span
-                        className={`block w-full aspect-square border transition-all ${
-                          on ? 'border-[#2B2B2B] ring-1 ring-[#2B2B2B] ring-offset-2 ring-offset-[#FCFCFA]' : 'border-[#D8D6D1] group-hover:border-[#2B2B2B]'
-                        }`}
-                        style={{ background: c.swatch }}
-                      />
-                      <span className="myra-field">
-                        {c.label}
+                      {look?.image_url ? (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          src={thumbUrl(look.image_url, 700)}
+                          alt=""
+                          loading="lazy"
+                          className="absolute inset-0 w-full h-full object-cover transition-opacity duration-500 group-hover:opacity-85"
+                        />
+                      ) : null}
+                      {/* Soft scrim so the white label holds on pale looks. */}
+                      <span className="absolute inset-0 bg-[rgba(0,0,0,0.18)]" aria-hidden />
+                      <span className="absolute inset-0 flex items-center justify-center px-3 md:px-6 text-center text-white text-[19px] md:text-[34px] tracking-[0.14em] leading-[1.2] drop-shadow-[0_1px_8px_rgba(0,0,0,0.5)]">
+                        {occasionLabel(tag)}
                       </span>
                     </button>
                   )
                 })}
               </div>
             </div>
-          )}
-
-          {filterPanel === 'item' && (
-            <div className="border border-[#2B2B2B] border-t-0 bg-[#FCFCFA] mb-6 overflow-hidden">
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 -mr-px -mb-px">
-                {ITEM_GROUPS.map((g) => {
-                  const on = filterItemGroup === g.label
-                  return (
-                    <button
-                      key={g.label}
-                      onClick={() => { setFilterItemGroup(on ? null : g.label); setFilterPanel(null) }}
-                      className={`myra-field px-4 py-5 border-r border-b border-[#2B2B2B] transition-colors ${
-                        on ? 'bg-[#2B2B2B] text-white' : 'text-[#111111] hover:bg-[#F1F0EC]'
-                      }`}
-                    >
-                      {g.label}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {filterPanel === 'brand' && (
-            <div className="border border-[#2B2B2B] border-t-0 bg-[#FCFCFA] px-4 md:px-6 py-6 mb-6">
-              <div className="flex items-center gap-4">
-                <input
-                  type="text"
-                  value={filterBrand}
-                  onChange={(e) => setFilterBrand(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); setFilterPanel(null) } }}
-                  placeholder="E.G. STAUD, TOTEME, JACQUEMUS…"
-                  autoFocus
-                  className="myra-field flex-1 min-w-0 border border-[#2B2B2B] bg-transparent px-4 py-3 placeholder:text-[#B4B4AE] focus:outline-none"
-                />
-                <button
-                  onClick={() => setFilterPanel(null)}
-                  className="shrink-0 border border-[#2B2B2B] px-6 py-3 text-[10px] md:text-[12px] tracking-[0.16em] text-[#111111] hover:bg-[#2B2B2B] hover:text-white transition-colors"
-                >
-                  DONE
-                </button>
-              </div>
-            </div>
-          )}
+          </ArchiveCard>
         </div>
       </div>
     )
@@ -1043,12 +1138,12 @@ export default function FeedClient({
       <div className="max-w-[1440px] mx-auto px-6 sm:px-10 py-10">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <p className="text-[11px] tracking-[0.113em] text-[#111111] mb-1">DISCOVER</p>
-            <h2 className="text-[22px] tracking-[0.045em] text-[#111111]">{brandView.label}</h2>
+            <p className="text-[11px] tracking-[0.113em] text-[#4A4E57] mb-1">DISCOVER</p>
+            <h2 className="text-[22px] tracking-[0.045em] text-[#4A4E57]">{brandView.label}</h2>
           </div>
           <button
             onClick={() => setBrandView(null)}
-            className="text-[11px] tracking-[0.09em] text-[#111111] border border-[#E2E0DB] px-5 py-2.5 rounded-[12px] hover:border-[#0A0A0A] hover:text-[#111111] transition-all duration-300"
+            className="text-[11px] tracking-[0.09em] text-[#4A4E57] border border-[#E2E0DB] px-5 py-2.5 rounded-[12px] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-all duration-300"
           >
             CLOSE
           </button>
@@ -1078,14 +1173,14 @@ export default function FeedClient({
       <div className="max-w-[1440px] mx-auto px-6 sm:px-10 py-10">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <p className="text-[11px] tracking-[0.113em] text-[#111111] mb-1">SEARCH</p>
-            <h2 className="text-[22px] tracking-[0.045em] text-[#111111]">{activeFilterLabel()}</h2>
+            <p className="text-[11px] tracking-[0.113em] text-[#4A4E57] mb-1">SEARCH</p>
+            <h2 className="text-[22px] tracking-[0.045em] text-[#4A4E57]">{activeFilterLabel()}</h2>
           </div>
           <div className="flex items-center gap-2">
             <SizeFilter value={sizeUk} onChange={setSizeUk} compact />
             <button
               onClick={clearSearch}
-              className="text-[11px] tracking-[0.09em] text-[#111111] border border-[#E2E0DB] px-5 py-2.5 rounded-full hover:border-[#0A0A0A] hover:text-[#111111] transition-all duration-300"
+              className="text-[11px] tracking-[0.09em] text-[#4A4E57] border border-[#E2E0DB] px-5 py-2.5 rounded-full hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-all duration-300"
             >
               CLEAR
             </button>
@@ -1125,10 +1220,10 @@ export default function FeedClient({
 
         {!searchLoading && !preparing && searchResults.length === 0 && (
           <div className="text-center py-24">
-            <p className="text-[11px] tracking-[0.113em] text-[#111111] mb-6">NO OUTFITS FOUND</p>
+            <p className="text-[11px] tracking-[0.113em] text-[#4A4E57] mb-6">NO OUTFITS FOUND</p>
             <button
               onClick={clearSearch}
-              className="border border-[#0A0A0A] text-[#111111] px-8 py-3 rounded-[12px] text-[11px] tracking-[0.09em] hover:bg-[#0A0A0A] hover:text-white transition-all duration-400"
+              className="border border-[#0A0A0A] text-[#4A4E57] px-8 py-3 rounded-[12px] text-[11px] tracking-[0.09em] hover:bg-[#0A0A0A] hover:text-white transition-all duration-400"
             >
               TRY ANOTHER SEARCH
             </button>
@@ -1136,7 +1231,7 @@ export default function FeedClient({
         )}
 
         {!searchLoading && !preparing && searchRelaxed && searchResults.length > 0 && (
-          <p className="text-[11px] tracking-[0.06em] text-[#111111] mb-6 -mt-2">
+          <p className="text-[11px] tracking-[0.06em] text-[#4A4E57] mb-6 -mt-2">
             Here are the closest looks.
           </p>
         )}
@@ -1173,10 +1268,10 @@ export default function FeedClient({
     <div className="max-w-[1440px] mx-auto px-6 sm:px-10 py-10">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <p className="text-[11px] tracking-[0.113em] text-[#111111] mb-1">
+          <p className="text-[11px] tracking-[0.113em] text-[#4A4E57] mb-1">
             {occasion === NEW_TAG ? 'LATEST' : 'YOUR OCCASION'}
           </p>
-          <h2 className="text-[22px] tracking-[0.045em] text-[#111111]">
+          <h2 className="text-[22px] tracking-[0.045em] text-[#4A4E57]">
             {occasion === 'all'
               ? 'EVERYTHING LIVE'
               : occasion === NEW_TAG
@@ -1188,7 +1283,7 @@ export default function FeedClient({
           <SizeFilter value={sizeUk} onChange={setSizeUk} compact />
           <button
             onClick={() => setOccasion(null)}
-            className="text-[11px] tracking-[0.09em] text-[#111111] border border-[#E2E0DB] px-5 py-2.5 rounded-full hover:border-[#0A0A0A] hover:text-[#111111] transition-all duration-300"
+            className="text-[11px] tracking-[0.09em] text-[#4A4E57] border border-[#E2E0DB] px-5 py-2.5 rounded-full hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-all duration-300"
           >
             CHANGE
           </button>
@@ -1228,10 +1323,10 @@ export default function FeedClient({
 
       {!loading && !preparing && outfits.length === 0 && (
         <div className="text-center py-24">
-          <p className="text-[11px] tracking-[0.113em] text-[#111111] mb-6">NO OUTFITS YET FOR THIS OCCASION</p>
+          <p className="text-[11px] tracking-[0.113em] text-[#4A4E57] mb-6">NO OUTFITS YET FOR THIS OCCASION</p>
           <button
             onClick={() => setOccasion(null)}
-            className="border border-[#0A0A0A] text-[#111111] px-8 py-3 rounded-[12px] text-[11px] tracking-[0.09em] hover:bg-[#0A0A0A] hover:text-white transition-all duration-400"
+            className="border border-[#0A0A0A] text-[#4A4E57] px-8 py-3 rounded-[12px] text-[11px] tracking-[0.09em] hover:bg-[#0A0A0A] hover:text-white transition-all duration-400"
           >
             TRY ANOTHER OCCASION
           </button>
@@ -1271,7 +1366,7 @@ export default function FeedClient({
               </div>
             )}
             {!hasMore && !loadingMore && outfits.length > 0 && (
-              <p className="text-[10px] tracking-[0.113em] text-[#111111]">END OF EDIT</p>
+              <p className="text-[10px] tracking-[0.113em] text-[#4A4E57]">END OF EDIT</p>
             )}
           </div>
         </>

@@ -12,10 +12,13 @@ export default function SizeFilter({
   value,
   onChange,
   compact = false,
+  box = false,
 }: {
   value: number | null
   onChange: (uk: number | null) => void
   compact?: boolean
+  // Renders as a bordered rectangle matching the landing filter-bar boxes.
+  box?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -28,7 +31,11 @@ export default function SizeFilter({
     return () => document.removeEventListener('mousedown', onDoc)
   }, [open])
 
-  const trigger = compact
+  const trigger = box
+    // Bordered rectangle matching the BRAND / COLOUR / ITEM TYPE boxes in the
+    // landing filter bar.
+    ? 'myra-field w-full flex items-center justify-between gap-4 border border-[#2B2B2B] bg-transparent px-4 py-2.5 text-left hover:bg-[rgba(255,255,255,0.25)] transition-colors'
+    : compact
     ? `text-[14px] tracking-[0.1em] px-6 py-3 rounded-full border transition-colors ${
         current ? 'border-[#0A0A0A] text-[#4A4E57]' : 'border-[#E2E0DB] text-[#4A4E57] hover:border-[#0A0A0A] hover:text-[#4A4E57]'
       }`
@@ -39,10 +46,19 @@ export default function SizeFilter({
       }`
 
   return (
-    <div ref={ref} className="relative inline-block">
-      <button onClick={() => setOpen((o) => !o)} className={trigger}>
-        {current ? `SIZE · UK ${current.uk}` : 'SIZE'} {open ? '▲' : '▾'}
-      </button>
+    <div ref={ref} className={box ? 'relative block w-full' : 'relative inline-block'}>
+      {box ? (
+        <button onClick={() => setOpen((o) => !o)} className={trigger}>
+          <span className={`truncate ${current ? '' : 'opacity-45'}`}>
+            {current ? `UK ${current.uk}` : 'ALL SIZES'}
+          </span>
+          <span className="shrink-0">{open ? '▲' : '▾'}</span>
+        </button>
+      ) : (
+        <button onClick={() => setOpen((o) => !o)} className={trigger}>
+          {current ? `SIZE · UK ${current.uk}` : 'SIZE'} {open ? '▲' : '▾'}
+        </button>
+      )}
       {open && (
         <div data-lenis-prevent className="absolute z-30 mt-2 right-0 w-[248px] border border-[#E2E0DB] bg-white rounded-[12px] p-2 shadow-[0_6px_24px_rgba(0,0,0,0.08)] max-h-[340px] overflow-y-auto">
           <button
