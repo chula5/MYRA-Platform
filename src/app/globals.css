@@ -40,7 +40,9 @@ textarea {
 /* ── Base resets ─────────────────────────────────────────────── */
 html,
 body {
-  background-color: #ffffff;
+  /* Set-wall grey everywhere — overscroll and any uncovered edges stay in
+     the same world as the page texture. */
+  background-color: #C5C0B8;
   color: #4A4E57;
   margin: 0;
   padding: 0;

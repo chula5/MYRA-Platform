@@ -1020,7 +1020,7 @@ export default function FeedClient({
             {/* The panels stay part of the same document as the card: square
                 corners, the same hairline rule, no pills and no float. */}
             {filterPanel === 'colour' && (
-              <div className="border border-[#2B2B2B] bg-[#FCFCFA] px-4 md:px-6 py-5 mb-5 md:mb-7">
+              <div className="border border-[#2B2B2B] bg-[#C5C0B8] px-4 md:px-6 py-5 mb-5 md:mb-7">
                 {/* Small fixed-size chips rather than a fluid grid — the panel
                     should read as a row of paint samples, not a colour chart. */}
                 <div className="flex flex-wrap justify-center gap-x-5 gap-y-4">
@@ -1035,7 +1035,7 @@ export default function FeedClient({
                         {/* The colour does the talking; the name sits under it. */}
                         <span
                           className={`block w-[38px] h-[38px] md:w-[46px] md:h-[46px] border transition-all ${
-                            on ? 'border-[#2B2B2B] ring-1 ring-[#2B2B2B] ring-offset-2 ring-offset-[#FCFCFA]' : 'border-[#D8D6D1] group-hover:border-[#2B2B2B]'
+                            on ? 'border-[#2B2B2B] ring-1 ring-[#2B2B2B] ring-offset-2 ring-offset-[#C5C0B8]' : 'border-[#D8D6D1] group-hover:border-[#2B2B2B]'
                           }`}
                           style={{ background: c.swatch }}
                         />
@@ -1050,7 +1050,7 @@ export default function FeedClient({
             )}
 
             {filterPanel === 'item' && (
-              <div className="border border-[#2B2B2B] bg-[#FCFCFA] mb-5 md:mb-7 overflow-hidden">
+              <div className="border border-[#2B2B2B] bg-[#C5C0B8] mb-5 md:mb-7 overflow-hidden">
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 -mr-px -mb-px">
                   {ITEM_GROUPS.map((g) => {
                     const on = filterItemGroup === g.label
@@ -1071,7 +1071,7 @@ export default function FeedClient({
             )}
 
             {filterPanel === 'brand' && (
-              <div className="border border-[#2B2B2B] bg-[#FCFCFA] px-4 md:px-6 py-6 mb-5 md:mb-7">
+              <div className="border border-[#2B2B2B] bg-[#C5C0B8] px-4 md:px-6 py-6 mb-5 md:mb-7">
                 <div className="flex items-center gap-4">
                   <input
                     type="text"
@@ -1193,7 +1193,7 @@ export default function FeedClient({
         <div className="myra-search-dock">
           <form
             onSubmit={(e) => { e.preventDefault(); executeSearch() }}
-            className="flex items-stretch border border-[#2B2B2B] bg-[#FCFCFA] shadow-[0_10px_34px_rgba(0,0,0,0.16)]"
+            className="flex items-stretch border border-[#2B2B2B] bg-[#C5C0B8] shadow-[0_10px_34px_rgba(0,0,0,0.16)]"
           >
             <div className="shrink-0 border-r border-[#2B2B2B] flex items-end px-3 md:px-5 pb-2 pt-4">
               <span className="myra-field whitespace-nowrap">LOOKING FOR</span>
@@ -1296,7 +1296,7 @@ export default function FeedClient({
       <div className="myra-search-dock">
         <form
           onSubmit={(e) => { e.preventDefault(); executeSearch() }}
-          className="flex items-stretch border border-[#2B2B2B] bg-[#FCFCFA] shadow-[0_10px_34px_rgba(0,0,0,0.16)]"
+          className="flex items-stretch border border-[#2B2B2B] bg-[#C5C0B8] shadow-[0_10px_34px_rgba(0,0,0,0.16)]"
         >
           <div className="shrink-0 border-r border-[#2B2B2B] flex items-end px-3 md:px-5 pb-2 pt-4">
             <span className="myra-field whitespace-nowrap">LOOKING FOR</span>

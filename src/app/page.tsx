@@ -84,7 +84,7 @@ export default async function LandingPage({
       <LandingTracker initialRef={ref ?? null} />
 
       {/* ── Footer ──── */}
-      <footer className="bg-white pt-16 pb-24 px-10">
+      <footer className="myra-texture pt-16 pb-24 px-10">
         <div className="max-w-[1440px] mx-auto">
           <div className="text-center mb-10">
             <Link href="/" className="text-[20px] tracking-[0.113em] text-[#4A4E57] hover:opacity-60 transition-opacity duration-300">
