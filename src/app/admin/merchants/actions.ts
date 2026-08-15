@@ -98,3 +98,33 @@ export async function setTerms(input: {
   revalidatePath('/admin/merchants')
   return { ok: true }
 }
+
+// ── Partner invites (Part 4) ────────────────────────────────────────────────
+import crypto from 'node:crypto'
+
+export async function createPartnerInvite(input: {
+  merchantId: string
+  email: string
+  role: 'owner' | 'staff'
+}): Promise<{ ok?: true; inviteUrl?: string; error?: string }> {
+  const gate = await requireAdminUser()
+  if (!gate.ok) return { error: 'Not authorised' }
+  const email = input.email.trim().toLowerCase()
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { error: 'Valid email required' }
+
+  const token = crypto.randomBytes(24).toString('base64url')
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+  const admin = createAdminClient()
+  const { error } = await admin.from('merchant_invite' as any).insert({
+    merchant_id: input.merchantId,
+    email,
+    role: input.role,
+    token_hash: tokenHash,
+    expires_at: new Date(Date.now() + 7 * 864e5).toISOString(), // 7 days
+  } as any)
+  if (error) return { error: error.message }
+  await writeAudit({ actor: gate.userId!, action: 'partner.invite', entityType: 'merchant', entityId: input.merchantId, detail: { email, role: input.role } })
+
+  const base = (process.env.SHOPIFY_APP_URL || 'https://www.myraassistant.co.uk').replace(/\/+$/, '')
+  return { ok: true, inviteUrl: `${base}/partners/join?token=${token}` }
+}

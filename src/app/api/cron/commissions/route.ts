@@ -10,6 +10,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveJourneyAttribution, approveMaturedCommissions } from '@/lib/ledger/store'
+import { sweepApprovedCommissions } from '@/lib/billing/store'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -25,6 +26,8 @@ export async function GET(req: NextRequest) {
 
   const journey = await resolveJourneyAttribution(50)
   const approval = await approveMaturedCommissions()
+  // 3. Sweep — prefunded merchants' approved commission settles against balance.
+  const sweep = await sweepApprovedCommissions()
 
-  return NextResponse.json({ ok: true, journey, approval })
+  return NextResponse.json({ ok: true, journey, approval, sweep })
 }

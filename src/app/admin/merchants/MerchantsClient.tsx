@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { updateMerchantCommercials, createManualMerchant, setTerms } from './actions'
+import { updateMerchantCommercials, createManualMerchant, setTerms, createPartnerInvite } from './actions'
 
 export interface MerchantRow {
   merchant_id: string
@@ -107,9 +107,25 @@ export default function MerchantsClient({ merchants }: { merchants: MerchantRow[
                     : <>NO TERMS — fallback rate {pct(m.default_commission_rate)}</>}
                   {' '}· {m.return_window_days}-day return window · {m.billing_model.toUpperCase()}
                 </p>
-                <button onClick={() => setEditing(editing === m.merchant_id ? null : m.merchant_id)} className="text-[9px] tracking-[0.1em] text-[#6B6B6B] underline underline-offset-2 hover:text-[#0A0A0A]">
-                  {editing === m.merchant_id ? 'CLOSE' : 'EDIT COMMERCIALS'}
-                </button>
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={async () => {
+                      const email = window.prompt('Invite email for ' + m.name + ':')
+                      if (!email) return
+                      const role = window.confirm('Make this person the OWNER? (Cancel = staff, view-only)') ? 'owner' as const : 'staff' as const
+                      const res = await createPartnerInvite({ merchantId: m.merchant_id, email, role })
+                      if (res.error) { setError(res.error); return }
+                      try { await navigator.clipboard.writeText(res.inviteUrl!) } catch { /* ignore */ }
+                      window.alert('Invite link (valid 7 days, copied to clipboard):\n\n' + res.inviteUrl)
+                    }}
+                    className="text-[9px] tracking-[0.1em] text-[#6B6B6B] underline underline-offset-2 hover:text-[#0A0A0A]"
+                  >
+                    INVITE PARTNER
+                  </button>
+                  <button onClick={() => setEditing(editing === m.merchant_id ? null : m.merchant_id)} className="text-[9px] tracking-[0.1em] text-[#6B6B6B] underline underline-offset-2 hover:text-[#0A0A0A]">
+                    {editing === m.merchant_id ? 'CLOSE' : 'EDIT COMMERCIALS'}
+                  </button>
+                </div>
               </div>
 
               {editing === m.merchant_id && (
