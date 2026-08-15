@@ -13,6 +13,7 @@
 import { createAdminClient } from '@/lib/supabase-server'
 import { shopifyGraphql } from './client'
 import { markUninstalled, type ShopifyMerchant } from './merchant'
+import { accrueCommission, reconcileOrderUpdate } from '@/lib/ledger/store'
 
 export const WEBHOOK_TOPICS = [
   'ORDERS_CREATE',
@@ -93,8 +94,12 @@ export async function processWebhook(opts: {
 
     switch (topic) {
       case 'orders/create':
+        await handleOrder(merchantId, payload)
+        if (merchantId) await accrueCommission({ merchantId, order: payload })
+        break
       case 'orders/updated':
         await handleOrder(merchantId, payload)
+        if (merchantId) await reconcileOrderUpdate(merchantId, payload)
         break
       case 'products/update':
         await handleProductUpdate(merchantId, payload)
