@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MYRA — BRAND SCANNER</title>
+<style>
+  :root{
+    --bg:#FAFAF8; --ink:#0A0A0A; --mid:#6B6B6B; --faint:#A8A8A4;
+    --line:#E2E0DB; --card:#F2F2F2; --accent:#C4A882;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{background:var(--bg); color:var(--ink);
+    font-family:"Pragmatica","Helvetica Neue",Helvetica,Arial,sans-serif;
+    font-weight:700; text-transform:uppercase;}
+  body{padding:0 40px 120px;}
+  @media(max-width:700px){ body{padding:0 16px 80px;} }
+
+  header{padding:44px 0 26px; text-align:center;}
+  header h1{font-size:13px; letter-spacing:.28em;}
+  header .sub{margin-top:10px; font-size:10px; letter-spacing:.22em; color:var(--mid);}
+
+  .bar{display:flex; gap:12px; justify-content:center; align-items:center; flex-wrap:wrap; margin:0 auto 14px; max-width:900px;}
+  input[type=text], input[type=number], select{
+    font:inherit; letter-spacing:.1em; text-transform:uppercase;
+    background:#fff; color:var(--ink); border:1px solid var(--line);
+    padding:12px 14px; border-radius:2px; outline:none; min-width:0;
+  }
+  input[type=text]:focus{border-color:var(--ink);}
+  #url{flex:1 1 380px;}
+  .btn{
+    font:inherit; font-size:11px; letter-spacing:.2em; text-transform:uppercase;
+    padding:13px 30px; border-radius:2px; cursor:pointer; white-space:nowrap;
+    transition:opacity .4s ease, background .4s ease;
+  }
+  .btn-dark{background:var(--ink); color:#fff; border:1px solid var(--ink);}
+  .btn-dark:hover{opacity:.85;}
+  .btn-light{background:#fff; color:var(--ink); border:1px solid var(--ink);}
+  .btn-light:hover{background:var(--card);}
+  .btn-ghost{background:none; color:var(--mid); border:1px solid var(--line);}
+  .btn-ghost:hover{color:var(--ink); border-color:var(--ink);}
+  .btn[disabled]{opacity:.35; cursor:default;}
+
+  #status{text-align:center; font-size:10px; letter-spacing:.22em; color:var(--mid); min-height:16px; margin:6px 0 10px;}
+  #status.err{color:#6d1f2c;}
+
+  /* house style editor */
+  #styleWrap{max-width:900px; margin:0 auto 30px; border:1px solid var(--line); background:#fff; display:none;}
+  #styleWrap.open{display:block;}
+  #styleWrap .inner{padding:24px;}
+  #styleWrap h2{font-size:10px; letter-spacing:.26em; margin-bottom:16px;}
+  .styleGrid{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  @media(max-width:700px){ .styleGrid{grid-template-columns:1fr;} }
+  .styleGrid label{font-size:9px; letter-spacing:.2em; color:var(--mid); display:block; margin-bottom:5px;}
+  .styleGrid textarea{width:100%; height:74px; font:inherit; font-size:10px; letter-spacing:.06em;
+    text-transform:none; border:1px solid var(--line); border-radius:2px; padding:8px; resize:vertical; background:var(--bg);}
+  .weights{display:flex; gap:14px; margin:16px 0; flex-wrap:wrap;}
+  .weights label{font-size:9px; letter-spacing:.2em; color:var(--mid); display:flex; align-items:center; gap:8px;}
+  .weights input{width:64px; padding:8px;}
+  .styleBtns{display:flex; gap:12px; margin-top:6px;}
+
+  /* filters */
+  #filters{display:none; gap:10px; justify-content:center; align-items:center; flex-wrap:wrap;
+    padding:16px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); margin-bottom:8px;}
+  #filters.on{display:flex;}
+  #filters select, #filters input[type=number]{padding:9px 10px; font-size:10px; letter-spacing:.12em;}
+  #filters .f{display:flex; align-items:center; gap:7px; font-size:9px; letter-spacing:.18em; color:var(--mid);}
+  #minScore{width:110px; accent-color:var(--ink);}
+  #filters input[type=checkbox]{accent-color:var(--ink); width:14px; height:14px;}
+  #count{width:100%; text-align:center; font-size:10px; letter-spacing:.22em; color:var(--mid); padding-top:4px;}
+  #count b{color:var(--ink); font-weight:700;}
+
+  #actions{display:none; gap:12px; justify-content:center; flex-wrap:wrap; margin:18px 0 34px;}
+  #actions.on{display:flex;}
+
+  /* grid */
+  #grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(215px,1fr)); gap:8px;}
+  .cardItem{background:#fff; display:flex; flex-direction:column; transition:opacity .4s ease;
+    content-visibility:auto; contain-intrinsic-size:auto 480px;}
+  .cardItem.skipped{opacity:.3;}
+  .imgWrap{background:var(--card); aspect-ratio:3/4; cursor:zoom-in; overflow:hidden; position:relative;}
+  .imgWrap img{width:100%; height:100%; object-fit:cover; display:block;}
+  .score{position:absolute; top:8px; left:8px; font-size:10px; letter-spacing:.1em;
+    background:#fff; padding:3px 8px; border:1px solid var(--line);}
+  .score.pos{border-color:var(--ink);}
+  .score.neg{color:var(--faint);}
+  .newFlag{position:absolute; top:8px; right:8px; font-size:9px; letter-spacing:.18em;
+    background:var(--ink); color:#fff; padding:3px 7px;}
+  .meta{padding:10px 10px 12px; display:flex; flex-direction:column; gap:4px; flex:1;}
+  .meta .name{font-size:11px; letter-spacing:.04em; line-height:1.35;}
+  .meta .cat{font-size:9px; letter-spacing:.2em; color:var(--faint);}
+  .meta .price{font-size:11px; letter-spacing:.1em;}
+  .meta .why{font-size:8.5px; letter-spacing:.08em; color:var(--mid); text-transform:none;}
+  .decide{display:flex; gap:6px; padding:0 10px 12px; margin-top:auto;}
+  .decide .btn{flex:1; padding:9px 0; font-size:9.5px; letter-spacing:.18em;}
+  .cardItem.kept .keepBtn{background:var(--ink); color:#fff; border-color:var(--ink);}
+  .cardItem.kept .imgWrap::after{content:""; position:absolute; inset:0; border:2px solid var(--ink); pointer-events:none;}
+
+  /* lightbox */
+  #lightbox{position:fixed; inset:0; background:rgba(250,250,248,.97); display:none;
+    align-items:center; justify-content:center; z-index:50; cursor:zoom-out; flex-direction:column; gap:14px;}
+  #lightbox.on{display:flex;}
+  #lightbox img{max-width:92vw; max-height:82vh; object-fit:contain;}
+  #lightbox .lbMeta{font-size:11px; letter-spacing:.18em;}
+  #lightbox a{color:var(--ink);}
+
+  footer{margin-top:70px; text-align:center; font-size:9px; letter-spacing:.24em; color:var(--faint);}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>MYRA — BRAND SCANNER</h1>
+  <div class="sub" id="brandLine">PASTE A BRAND'S LANDING PAGE. GET THE WHOLE CATALOGUE.</div>
+</header>
+
+<div class="bar" id="inputBar">
+  <input type="text" id="url" placeholder="HTTPS://WWW.BRAND.COM/" spellcheck="false">
+  <button class="btn btn-dark" id="scanBtn">SCAN CATALOGUE</button>
+  <button class="btn btn-light" id="loadBtn">LOAD A SAVED SCAN</button>
+  <input type="file" id="filePick" accept=".json,application/json" style="display:none">
+  <button class="btn btn-ghost" id="styleBtn">HOUSE STYLE</button>
+</div>
+<div id="status"></div>
+
+<div id="styleWrap"><div class="inner">
+  <h2>HOUSE STYLE — ADDITIVE SCORING, NOT A GATE</h2>
+  <div class="styleGrid">
+    <div><label>HOUSE COLOURS (+)</label><textarea id="hs_house_colours"></textarea></div>
+    <div><label>OFF COLOURS (−)</label><textarea id="hs_off_colours"></textarea></div>
+    <div><label>HOUSE MATERIALS (+)</label><textarea id="hs_house_materials"></textarea></div>
+    <div><label>OFF MATERIALS (−)</label><textarea id="hs_off_materials"></textarea></div>
+    <div><label>HOUSE SILHOUETTES (+)</label><textarea id="hs_house_silhouettes"></textarea></div>
+    <div><label>OFF SILHOUETTES (−)</label><textarea id="hs_off_silhouettes"></textarea></div>
+    <div style="grid-column:1/-1"><label>SKIP CATEGORIES (SOCKS, CARE KITS, KIDS — HIDDEN BY DEFAULT)</label><textarea id="hs_skip_categories" style="height:48px"></textarea></div>
+  </div>
+  <div class="weights">
+    <label>COLOUR ± <input type="number" id="hs_w_colour" min="0" max="9"></label>
+    <label>MATERIAL ± <input type="number" id="hs_w_material" min="0" max="9"></label>
+    <label>SILHOUETTE ± <input type="number" id="hs_w_silhouette" min="0" max="9"></label>
+    <label>NEW WITHIN DAYS <input type="number" id="hs_new_days" min="1" max="365"></label>
+  </div>
+  <div class="styleBtns">
+    <button class="btn btn-dark" id="styleSave">SAVE &amp; RE-RANK</button>
+    <button class="btn btn-ghost" id="styleReset">RESET TO DEFAULTS</button>
+  </div>
+</div></div>
+
+<div id="filters">
+  <div class="f">CATEGORY <select id="fType"><option value="">ALL</option></select></div>
+  <div class="f">COLOUR <select id="fColour"><option value="">ALL</option></select></div>
+  <div class="f">MAX £ <input type="number" id="fPrice" placeholder="ANY" style="width:84px"></div>
+  <div class="f">MIN SCORE <input type="range" id="minScore" min="-9" max="9" step="1" value="-9"> <span id="minScoreVal">ALL</span></div>
+  <div class="f"><input type="checkbox" id="fNew"> NEW ONLY</div>
+  <div class="f"><input type="checkbox" id="fNonFashion"> INCLUDE NON-FASHION</div>
+  <div id="count"></div>
+</div>
+
+<div id="actions">
+  <button class="btn btn-light" id="approveAll">APPROVE ALL SHOWN</button>
+  <button class="btn btn-ghost" id="clearAll">CLEAR DECISIONS</button>
+  <button class="btn btn-dark" id="exportJson">EXPORT FOR MYRA</button>
+  <button class="btn btn-light" id="exportCsv">EXPORT CSV</button>
+</div>
+
+<div id="grid"></div>
+
+<div id="lightbox"><img src="" alt=""><div class="lbMeta" id="lbMeta"></div></div>
+
+<footer>BRAND SCANNER — RANKED, NOT GATED. OFF-BRAND SINKS, NOTHING HIDES.</footer>
+
+<script>
+"use strict";
+
+/* ---------------- house style ---------------- */
+const DEFAULT_STYLE = {
+  weights: { colour: 3, material: 2, silhouette: 2 },
+  house_colours: ["black","white","ivory","cream","ecru","bone","off white","off-white","beige","taupe","sand","camel","tan","caramel","chocolate","brown","cognac","grey","charcoal","navy","khaki","olive","burgundy","bordeaux","oxblood"],
+  off_colours: ["neon","fluo","lime","fuchsia","hot pink","bright pink","turquoise","rainbow","multicolour","multicolor","leopard","zebra","animal print","cow print","snake print","glitter","holographic","iridescent","metallic silver","metallic gold"],
+  house_materials: ["leather","suede","calf","nappa","lambskin","nubuck","shearling","wool","cashmere","merino","mohair","silk","cotton","linen","poplin","denim"],
+  off_materials: ["sequin","diamante","rhinestone","pvc","vinyl","faux fur","marabou","feather","mesh rhinestone","lurex","glitter"],
+  house_silhouettes: ["pointed","pointy","slingback","kitten heel","stiletto","ballet","ballerina","loafer","riding boot","knee boot","ankle boot","column","straight leg","wide leg","tailored","blazer","trench","slip dress","shirt dress","square toe","minimal","clean","structured","longline"],
+  off_silhouettes: ["platform","flatform","chunky","wedge sneaker","extreme crop","cut-out","cut out","ruffle","bow embellished","ultra mini","micro mini"],
+  skip_categories: ["sock","socks","hair clip","hair claw","hairband","scrunchie","kids","child","children","baby","gift card","giftcard","care kit","shoe care","cleaner","insole","laces","shoelace","protector","candle","keyring","key ring","phone case"],
+  new_days: 60
+};
+
+const LS_STYLE = "myra_house_style";
+function loadStyle(){
+  try{
+    const s = localStorage.getItem(LS_STYLE);
+    if (s) return Object.assign(JSON.parse(JSON.stringify(DEFAULT_STYLE)), JSON.parse(s));
+  }catch(e){}
+  if (window.EMBEDDED_STYLE) return Object.assign(JSON.parse(JSON.stringify(DEFAULT_STYLE)), window.EMBEDDED_STYLE);
+  return JSON.parse(JSON.stringify(DEFAULT_STYLE));
+}
+let STYLE = loadStyle();
+
+/* ---------------- taxonomy mapping (MYRA item table enums) ---------------- */
+const TYPE_RULES = [
+  [/\btrench/, "trench"], [/\bcoat|parka|puffer/, "coat"], [/\bblazer/, "blazer"],
+  [/\bgilet|waistcoat|\bvest\b/, "gilet"], [/\bcape|poncho/, "cape"],
+  [/\bboot/, "boot"], [/sneaker|trainer/, "sneaker"], [/\bmule/, "mule"],
+  [/\bsandal|\bslide\b|flip.?flop/, "sandal"],
+  [/\bpump|stiletto|\bheel|slingback/, "heel"],
+  [/ballerina|ballet|mary.?jane|loafer|\bflat\b|\bflats\b/, "flat"],
+  [/\btote/, "tote"], [/\bclutch|\bpouch/, "clutch"], [/cross.?body/, "crossbody"],
+  [/shoulder bag/, "shoulder_bag"], [/\bhandbag|\bbag\b|\bbags\b/, "structured_bag"],
+  [/shirt.?dress/, "shirt_dress"], [/slip.?dress/, "slip_dress"],
+  [/maxi.?dress|\bgown/, "maxi_dress"], [/mini.?dress/, "mini_dress"],
+  [/midi.?dress/, "midi_dress"], [/\bdress/, "midi_dress"],
+  [/\bcorset/, "corset"], [/bodysuit/, "bodysuit"],
+  [/t.?shirt|\btee\b/, "t-shirt"],
+  [/knit|sweater|jumper|cardigan|pullover|turtleneck|roll.?neck/, "knitwear"],
+  [/\bblouse|camisole|\bcami\b|\btop\b|\btops\b|\btank\b/, "blouse"], [/\bshirt/, "shirt"],
+  [/\bjeans|\bdenim\b/, "jeans"], [/trouser|\bpants|chino|legging/, "trousers"],
+  [/\bshorts/, "shorts"], [/\bskirt/, "skirt"],
+  [/\bjacket|bomber|anorak|windbreaker/, "jacket"],
+  [/\bbelt/, "belt"], [/\bscarf|shawl|bandana/, "scarf"],
+  [/necklace|pendant|choker|\bchain\b/, "necklace"], [/earring|ear cuff|\bhoop/, "earrings"],
+  [/bracelet|bangle|\bcuff\b/, "bracelet"], [/brooch/, "brooch"], [/\bring\b|\brings\b/, "ring"],
+  [/hair/, "hair_accessory"], [/\bhat\b|beanie|\bcap\b|beret/, "hat"],
+  [/glove/, "gloves"], [/sunglass|eyewear|glasses/, "sunglasses"]
+];
+
+const COLOUR_RULES = [
+  [/\bblack|onyx|noir/, "black"],
+  [/off.?white|ivory|cream|ecru|\bbone\b|eggshell|vanilla/, "cream"],
+  [/\bwhite|\bblanc/, "white"],
+  [/charcoal|\bgrey|\bgray|slate|graphite/, "grey"],
+  [/\bnavy|midnight|marine/, "navy"],
+  [/camel|\btan\b|beige|taupe|\bsand\b|\bnude\b|caramel|biscuit|latte|stone/, "camel"],
+  [/chocolate|cognac|mocha|espresso|coffee|chestnut|walnut|\bbrown/, "brown"],
+  [/olive|khaki|sage|forest|emerald|pistachio|\bgreen/, "green"],
+  [/burgundy|bordeaux|\bwine\b|oxblood|maroon|merlot|plum red/, "burgundy"],
+  [/scarlet|crimson|cherry|\bred\b/, "red"],
+  [/cobalt|royal blue|sky blue|light blue|\bblue\b/, "blue"],
+  [/blush|\brose\b|fuchsia|\bpink/, "pink"],
+  [/mustard|butter|\bgold\b|\byellow/, "yellow"],
+  [/\brust\b|terracotta|coral|apricot|\borange/, "orange"],
+  [/lilac|lavender|violet|\bplum\b|\bpurple/, "purple"],
+  [/multi|leopard|zebra|print|striped|check/, "multicolour"]
+];
+
+function mapMaterialCategory(materialStr, hay, itemType){
+  const m = (materialStr || hay || "").toLowerCase();
+  if (/leather|suede|calf|nappa|lamb\s?skin|lambskin|nubuck|shearling|goat|patent|croc/.test(m)) return "leather_suede";
+  if (/neoprene|scuba|gore|technical|nylon shell|ripstop|performance/.test(m)) return "technical";
+  const knit = itemType === "knitwear" || /knit|jersey|rib\b|ribbed/.test(m);
+  const natural = /wool|cashmere|merino|mohair|alpaca|silk|cotton|linen|viscose|lyocell|tencel|modal|hemp/.test(m);
+  const synthetic = /polyester|polyamide|nylon|acrylic|elastane|spandex|pvc|vinyl/.test(m);
+  if (natural && synthetic) return "mixed";
+  if (natural) return knit ? "natural_knit" : "natural_woven";
+  if (synthetic) return knit ? "synthetic_knit" : "synthetic_woven";
+  return null;
+}
+
+/* structured tag extraction — e.g. "Category: Heels", "Material: Polished soft calf" */
+function tagValue(p, key){
+  const k = key.toLowerCase() + ":";
+  for (const t of (p.tags || [])){
+    const tl = String(t).toLowerCase();
+    if (tl.startsWith(k)) return String(t).slice(t.indexOf(":") + 1).trim();
+  }
+  return null;
+}
+
+function classify(p){
+  const hay = [p.product_type, (p.tags || []).join(" "), p.title].join(" ").toLowerCase();
+  const catTag = (tagValue(p, "category") || tagValue(p, "main category") || "");
+  const subTag = (tagValue(p, "sub category") || tagValue(p, "subcategory") || "");
+  const typeHay = (catTag + " " + subTag + " " + p.product_type + " " + p.title).toLowerCase();
+
+  let item_type = null;
+  for (const [re, t] of TYPE_RULES){ if (re.test(typeHay)) { item_type = t; break; } }
+  if (!item_type) for (const [re, t] of TYPE_RULES){ if (re.test(hay)) { item_type = t; break; } }
+
+  const colTag = (tagValue(p, "color") || tagValue(p, "colour") || "").toLowerCase();
+  let colour_family = null;
+  for (const [re, c] of COLOUR_RULES){ if (colTag && re.test(colTag)) { colour_family = c; break; } }
+  if (!colour_family) for (const [re, c] of COLOUR_RULES){ if (re.test(p.title.toLowerCase())) { colour_family = c; break; } }
+
+  const material_primary = tagValue(p, "material");
+  const material_category = mapMaterialCategory(material_primary, hay, item_type);
+
+  const skipHit = STYLE.skip_categories.find(s => s && hay.includes(s.toLowerCase()));
+  return { item_type, colour_family, material_category, material_primary, hay, nonFashion: !!skipHit };
+}
+
+/* ---------------- scoring ----------------
+   whole-word matching so "sand" never scores a sandal and "tan" never scores natural */
+let COMPILED = null;
+function compileTerms(list){
+  return (list || []).filter(Boolean).map(t => {
+    const esc = String(t).toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return { t, re: new RegExp("\\b" + esc + "\\b") };
+  });
+}
+function compileStyle(){
+  COMPILED = [
+    [compileTerms(STYLE.house_colours), compileTerms(STYLE.off_colours), STYLE.weights.colour],
+    [compileTerms(STYLE.house_materials), compileTerms(STYLE.off_materials), STYLE.weights.material],
+    [compileTerms(STYLE.house_silhouettes), compileTerms(STYLE.off_silhouettes), STYLE.weights.silhouette]
+  ];
+}
+function scoreProduct(c){
+  const hay = c.hay;
+  let score = 0; const reasons = [];
+  for (const [pos, neg, w] of COMPILED){
+    const hp = pos.find(x => x.re.test(hay));
+    if (hp){ score += w; reasons.push("+" + w + " " + hp.t); }
+    const hn = neg.find(x => x.re.test(hay));
+    if (hn){ score -= w; reasons.push("−" + w + " " + hn.t); }
+  }
+  return { score, reasons };
+}
+
+/* ---------------- state ---------------- */
+let SCAN = null;          // {brand_name, brand_url, products:[...]}
+let ROWS = [];            // enriched products
+let decisions = {};       // id -> "keep" | "skip"
+
+function decisionsKey(){ return "myra_decisions::" + (SCAN ? (SCAN.brand_url || SCAN.brand_name || "scan") : "scan"); }
+function loadDecisions(){ try{ decisions = JSON.parse(localStorage.getItem(decisionsKey()) || "{}"); }catch(e){ decisions = {}; } }
+function saveDecisions(){ try{ localStorage.setItem(decisionsKey(), JSON.stringify(decisions)); }catch(e){} }
+
+/* ---------------- scanning ---------------- */
+const $ = id => document.getElementById(id);
+function setStatus(msg, err){ $("status").textContent = msg || ""; $("status").className = err ? "err" : ""; }
+
+function normaliseBase(url){
+  url = (url || "").trim();
+  if (!url) return null;
+  if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+  try{ const u = new URL(url); return u.origin; }catch(e){ return null; }
+}
+
+async function scanCatalogue(){
+  const base = normaliseBase($("url").value);
+  if (!base){ setStatus("THAT DOESN'T LOOK LIKE A URL", true); return; }
+  $("scanBtn").disabled = true;
+  const products = [];
+  try{
+    for (let page = 1; page <= 40; page++){
+      setStatus("READING PAGE " + page + " — " + products.length + " PRODUCTS SO FAR");
+      const r = await fetch(base + "/products.json?limit=250&page=" + page, { headers: { "Accept": "application/json" } });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const data = await r.json();
+      const batch = (data && data.products) || [];
+      if (!batch.length) break;
+      for (const p of batch) products.push(normaliseProduct(p, base));
+      if (batch.length < 250) break;
+    }
+    if (!products.length) throw new Error("EMPTY");
+    SCAN = { kind: "myra-brand-scan", brand_name: guessBrandName(products, base), brand_url: base,
+             scanned_at: new Date().toISOString(), products };
+    afterLoad();
+  }catch(e){
+    setStatus("SCAN BLOCKED OR NOT SHOPIFY — USE LOAD A SAVED SCAN, OR RUN: python3 brand_watch.py " + base, true);
+  }
+  $("scanBtn").disabled = false;
+}
+
+function normaliseProduct(p, base){
+  let price = null, available = false;
+  for (const v of (p.variants || [])){
+    const vp = parseFloat(v.price);
+    if (!isNaN(vp) && (price === null || vp < price)) price = vp;
+    if (v.available !== false) available = true;
+  }
+  return {
+    id: p.id, handle: p.handle, title: p.title || "",
+    vendor: p.vendor || "", product_type: p.product_type || "",
+    tags: Array.isArray(p.tags) ? p.tags : String(p.tags || "").split(",").map(s => s.trim()).filter(Boolean),
+    url: (base || "") + "/products/" + p.handle,
+    price, available,
+    published_at: p.published_at || p.created_at || null,
+    images: (p.images || []).map(i => i.src || i).filter(Boolean).slice(0, 8)
+  };
+}
+
+function guessBrandName(products, base){
+  const counts = {};
+  for (const p of products){ if (p.vendor) counts[p.vendor] = (counts[p.vendor] || 0) + 1; }
+  let best = null, n = 0;
+  for (const k in counts){ if (counts[k] > n){ best = k; n = counts[k]; } }
+  if (best) return best;
+  try{ return new URL(base).hostname.replace(/^www\./, "").split(".")[0]; }catch(e){ return "BRAND"; }
+}
+
+/* saved scans — either the script's shape or a raw products.json */
+function loadSavedScan(file){
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const data = JSON.parse(reader.result);
+      if (data && data.kind === "myra-brand-scan"){ SCAN = data; }
+      else if (data && Array.isArray(data.products)){
+        const base = normaliseBase($("url").value) || "";
+        const products = data.products.map(p => normaliseProduct(p, base));
+        SCAN = { kind: "myra-brand-scan", brand_name: guessBrandName(products, base), brand_url: base,
+                 scanned_at: new Date().toISOString(), products };
+      } else throw new Error("shape");
+      afterLoad();
+    }catch(e){ setStatus("COULDN'T READ THAT FILE — EXPECTED A SCAN JSON OR A RAW PRODUCTS.JSON", true); }
+  };
+  reader.readAsText(file);
+}
+
+/* ---------------- enrich + render ---------------- */
+function enrich(){
+  compileStyle();
+  ROWS = SCAN.products.map(p => {
+    const c = classify(p);
+    const s = scoreProduct(c);
+    return Object.assign({}, p, c, s);
+  });
+  ROWS.sort((a, b) => (b.score - a.score) || (Date.parse(b.published_at || 0) - Date.parse(a.published_at || 0)));
+}
+
+function isNew(p){
+  if (!p.published_at) return false;
+  return (Date.now() - Date.parse(p.published_at)) < STYLE.new_days * 864e5;
+}
+
+function thumb(src){
+  if (!src) return "";
+  return src + (src.includes("?") ? "&" : "?") + "width=500";
+}
+
+function visibleRows(){
+  const t = $("fType").value, c = $("fColour").value;
+  const maxP = parseFloat($("fPrice").value);
+  const minS = parseInt($("minScore").value, 10);
+  const newOnly = $("fNew").checked;
+  const nonFashion = $("fNonFashion").checked;
+  return ROWS.filter(p => {
+    if (p.nonFashion && !nonFashion) return false;
+    if (t && p.item_type !== t) return false;
+    if (c && p.colour_family !== c) return false;
+    if (!isNaN(maxP) && (p.price === null || p.price > maxP)) return false;
+    if (minS > -9 && p.score < minS) return false;
+    if (newOnly && !isNew(p)) return false;
+    return true;
+  });
+}
+
+function fillFilterOptions(){
+  const types = [...new Set(ROWS.filter(r => !r.nonFashion).map(r => r.item_type).filter(Boolean))].sort();
+  const cols = [...new Set(ROWS.filter(r => !r.nonFashion).map(r => r.colour_family).filter(Boolean))].sort();
+  $("fType").innerHTML = '<option value="">ALL</option>' + types.map(t => `<option>${t}</option>`).join("");
+  $("fColour").innerHTML = '<option value="">ALL</option>' + cols.map(t => `<option>${t}</option>`).join("");
+}
+
+function render(){
+  const rows = visibleRows();
+  const kept = ROWS.filter(p => decisions[p.id] === "keep").length;
+  $("count").innerHTML = `SHOWING <b>${rows.length}</b> OF ${ROWS.length} — <b>${kept}</b> KEPT`;
+  const grid = $("grid");
+  grid.innerHTML = "";
+  const frag = document.createDocumentFragment();
+  for (const p of rows){
+    const d = decisions[p.id];
+    const el = document.createElement("div");
+    el.className = "cardItem" + (d === "keep" ? " kept" : d === "skip" ? " skipped" : "");
+    el.innerHTML = `
+      <div class="imgWrap" data-id="${p.id}">
+        ${p.images[0] ? `<img loading="lazy" src="${thumb(p.images[0])}" alt="">` : ""}
+        <span class="score ${p.score > 0 ? "pos" : p.score < 0 ? "neg" : ""}">${p.score > 0 ? "+" : ""}${p.score}</span>
+        ${isNew(p) ? '<span class="newFlag">NEW</span>' : ""}
+      </div>
+      <div class="meta">
+        <div class="name">${escapeHtml(p.title)}</div>
+        <div class="cat">${[p.item_type, p.colour_family, p.material_category].filter(Boolean).join(" · ") || "UNMAPPED"}</div>
+        <div class="price">${p.price !== null ? "£" + p.price.toFixed(2).replace(/\.00$/, "") : ""}</div>
+        ${p.reasons.length ? `<div class="why">${p.reasons.join("  ")}</div>` : ""}
+      </div>
+      <div class="decide">
+        <button class="btn btn-light keepBtn" data-id="${p.id}" data-act="keep">KEEP</button>
+        <button class="btn btn-ghost" data-id="${p.id}" data-act="skip">SKIP</button>
+      </div>`;
+    frag.appendChild(el);
+  }
+  grid.appendChild(frag);
+}
+
+function escapeHtml(s){ return String(s).replace(/[&<>"]/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m])); }
+
+function afterLoad(){
+  loadDecisions();
+  enrich();
+  fillFilterOptions();
+  $("filters").classList.add("on");
+  $("actions").classList.add("on");
+  $("brandLine").textContent = (SCAN.brand_name || "").toUpperCase() + " — " + SCAN.products.length + " PRODUCTS" +
+    (SCAN.scanned_at ? " — SCANNED " + SCAN.scanned_at.slice(0, 10) : "");
+  setStatus("");
+  render();
+}
+
+/* ---------------- exports ---------------- */
+function keptRows(){ return ROWS.filter(p => decisions[p.id] === "keep"); }
+
+function toItem(p){
+  return {
+    product_name: p.title,
+    brand_name: SCAN.brand_name || p.vendor || "",
+    item_type: p.item_type,
+    colour_family: p.colour_family,
+    material_category: p.material_category,
+    material_primary: p.material_primary || null,
+    retailer_url: p.url,
+    image_url: p.cloudinary_url || p.images[0] || null,
+    image_urls: p.images.slice(0, 6),
+    price_gbp: p.price,
+    source: "retailer_api",
+    status: "draft",
+    admin_notes: "brand-scanner score " + (p.score > 0 ? "+" : "") + p.score +
+      (p.reasons.length ? " (" + p.reasons.join(", ") + ")" : "")
+  };
+}
+
+function download(name, text, type){
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type }));
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+function slug(){ return (SCAN.brand_name || "brand").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""); }
+
+function exportJson(){
+  const items = keptRows().map(toItem);
+  if (!items.length){ setStatus("NOTHING KEPT YET — KEEP SOME ITEMS FIRST", true); return; }
+  download("myra-items-" + slug() + "-" + new Date().toISOString().slice(0, 10) + ".json",
+    JSON.stringify(items, null, 2), "application/json");
+  setStatus(items.length + " ITEMS EXPORTED FOR MYRA — STATUS DRAFT, SCORE THE DIMENSIONS BEFORE READY");
+}
+
+function exportCsv(){
+  const items = keptRows().map(toItem);
+  if (!items.length){ setStatus("NOTHING KEPT YET — KEEP SOME ITEMS FIRST", true); return; }
+  const cols = ["product_name","brand_name","item_type","colour_family","material_category","material_primary","price_gbp","retailer_url","image_url","source","status","admin_notes"];
+  const esc = v => v === null || v === undefined ? "" : /[",\n]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v);
+  const csv = [cols.join(",")].concat(items.map(i => cols.map(c => esc(i[c])).join(","))).join("\n");
+  download("myra-items-" + slug() + "-" + new Date().toISOString().slice(0, 10) + ".csv", csv, "text/csv");
+  setStatus(items.length + " ITEMS EXPORTED AS CSV");
+}
+
+/* ---------------- house style editor ---------------- */
+const LIST_FIELDS = ["house_colours","off_colours","house_materials","off_materials","house_silhouettes","off_silhouettes","skip_categories"];
+function styleToForm(){
+  for (const f of LIST_FIELDS) $("hs_" + f).value = STYLE[f].join(", ");
+  $("hs_w_colour").value = STYLE.weights.colour;
+  $("hs_w_material").value = STYLE.weights.material;
+  $("hs_w_silhouette").value = STYLE.weights.silhouette;
+  $("hs_new_days").value = STYLE.new_days;
+}
+function formToStyle(){
+  for (const f of LIST_FIELDS) STYLE[f] = $("hs_" + f).value.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+  STYLE.weights = {
+    colour: parseInt($("hs_w_colour").value, 10) || 0,
+    material: parseInt($("hs_w_material").value, 10) || 0,
+    silhouette: parseInt($("hs_w_silhouette").value, 10) || 0
+  };
+  STYLE.new_days = parseInt($("hs_new_days").value, 10) || 60;
+  try{ localStorage.setItem(LS_STYLE, JSON.stringify(STYLE)); }catch(e){}
+}
+
+/* ---------------- events ---------------- */
+$("scanBtn").addEventListener("click", scanCatalogue);
+$("url").addEventListener("keydown", e => { if (e.key === "Enter") scanCatalogue(); });
+$("loadBtn").addEventListener("click", () => $("filePick").click());
+$("filePick").addEventListener("change", e => { if (e.target.files[0]) loadSavedScan(e.target.files[0]); });
+
+$("styleBtn").addEventListener("click", () => { styleToForm(); $("styleWrap").classList.toggle("open"); });
+$("styleSave").addEventListener("click", () => {
+  formToStyle();
+  if (SCAN){ enrich(); fillFilterOptions(); render(); }
+  setStatus("HOUSE STYLE SAVED — RE-RANKED");
+});
+$("styleReset").addEventListener("click", () => {
+  STYLE = JSON.parse(JSON.stringify(DEFAULT_STYLE));
+  try{ localStorage.removeItem(LS_STYLE); }catch(e){}
+  styleToForm();
+  if (SCAN){ enrich(); fillFilterOptions(); render(); }
+  setStatus("HOUSE STYLE RESET TO DEFAULTS");
+});
+
+for (const id of ["fType","fColour","fNew","fNonFashion"]) $(id).addEventListener("change", render);
+$("fPrice").addEventListener("input", render);
+$("minScore").addEventListener("input", () => {
+  const v = parseInt($("minScore").value, 10);
+  $("minScoreVal").textContent = v <= -9 ? "ALL" : (v > 0 ? "+" : "") + v;
+  render();
+});
+
+$("grid").addEventListener("click", e => {
+  const btn = e.target.closest("button[data-act]");
+  if (btn){
+    const id = btn.dataset.id, act = btn.dataset.act;
+    decisions[id] = decisions[id] === act ? undefined : act;
+    if (decisions[id] === undefined) delete decisions[id];
+    saveDecisions();
+    render();
+    return;
+  }
+  const wrap = e.target.closest(".imgWrap");
+  if (wrap){
+    const p = ROWS.find(r => String(r.id) === String(wrap.dataset.id));
+    if (p && p.images[0]){
+      $("lightbox").querySelector("img").src = p.images[0];
+      $("lbMeta").innerHTML = escapeHtml(p.title) + (p.url ? ' — <a href="' + p.url + '" target="_blank" rel="noopener">OPEN ON SITE ↗</a>' : "");
+      $("lightbox").classList.add("on");
+    }
+  }
+});
+$("lightbox").addEventListener("click", e => { if (e.target.tagName !== "A") $("lightbox").classList.remove("on"); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") $("lightbox").classList.remove("on"); });
+
+$("approveAll").addEventListener("click", () => {
+  for (const p of visibleRows()) decisions[p.id] = "keep";
+  saveDecisions(); render();
+});
+$("clearAll").addEventListener("click", () => { decisions = {}; saveDecisions(); render(); });
+$("exportJson").addEventListener("click", exportJson);
+$("exportCsv").addEventListener("click", exportCsv);
+
+/* embedded mode — review sheets generated by brand_watch.py inject their data
+   after this script, so wait for the document to finish parsing */
+document.addEventListener("DOMContentLoaded", () => {
+  if (window.EMBEDDED_SCAN && !SCAN){
+    STYLE = loadStyle();
+    SCAN = window.EMBEDDED_SCAN;
+    afterLoad();
+  }
+});
+</script>
+</body>
+</html>

@@ -43,3 +43,13 @@ next-env.d.ts
 /ios/DerivedData/
 .DS_Store
 .next-dev/
+
+# claude session worktrees
+/.claude/
+
+# brand-scanner generated artifacts (scans, sheets, images, machine state)
+/tools/brand-scanner/scans/
+/tools/brand-scanner/review/
+/tools/brand-scanner/logs/
+/tools/brand-scanner/images/
+/tools/brand-scanner/state.json

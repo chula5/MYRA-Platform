@@ -71,6 +71,12 @@ export default async function AdminLayout({
             STYLISTS
           </a>
           <a
+            href="/admin/private-stylist"
+            className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
+          >
+            PRIVATE STYLIST
+          </a>
+          <a
             href="/admin/audit"
             className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
           >
@@ -135,6 +141,12 @@ export default async function AdminLayout({
             className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
           >
             COLLECTIONS
+          </a>
+          <a
+            href="/admin/brand-watch"
+            className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
+          >
+            BRAND WATCH
           </a>
           <a
             href="/admin/runway-search"
