@@ -20,6 +20,11 @@ async function sendDecisionEmail(to: string, subject: string, body: string): Pro
         to,
         subject,
         text: body,
+        // The domain can SEND but has no inbox (no MX): without this, a brand
+        // hitting Reply would bounce. Replies land somewhere real instead.
+        ...(process.env.PARTNER_REPLY_TO || process.env.STUDIO_EMAIL_TO
+          ? { reply_to: process.env.PARTNER_REPLY_TO ?? process.env.STUDIO_EMAIL_TO }
+          : {}),
       }),
       signal: AbortSignal.timeout(10_000),
     })
