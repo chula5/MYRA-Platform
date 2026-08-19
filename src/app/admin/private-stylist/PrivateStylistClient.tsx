@@ -1019,11 +1019,11 @@ function LookRow({
             <div className="mt-2 flex gap-1.5 flex-wrap">
               {l.items.filter((it) => it.image_url).map((it, i) => (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img key={i} src={it.image_url as string} alt={it.product_name} title={`${it.brand} ${it.product_name}`} className="w-36 aspect-[3/4] object-cover border border-[#E2E0DB] bg-[#F8F8F6]" />
+                <img key={i} src={it.image_url as string} alt={it.product_name} title={`${it.brand} ${it.product_name}`} className="w-56 aspect-[3/4] object-cover border border-[#E2E0DB] bg-[#F8F8F6]" />
               ))}
               {l.image_url && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={l.image_url} alt="Higgsfield shoot" className="w-36 aspect-[3/4] object-cover border-2 border-[#C4A882]" title="Higgsfield shoot" />
+                <img src={l.image_url} alt="Higgsfield shoot" className="w-56 aspect-[3/4] object-cover border-2 border-[#C4A882]" title="Higgsfield shoot" />
               )}
             </div>
           )}
