@@ -1019,11 +1019,11 @@ function LookRow({
             <div className="mt-2 flex gap-1.5 flex-wrap">
               {l.items.filter((it) => it.image_url).map((it, i) => (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img key={i} src={it.image_url as string} alt={it.product_name} className="w-14 h-[72px] object-cover border border-[#E2E0DB]" />
+                <img key={i} src={it.image_url as string} alt={it.product_name} title={`${it.brand} ${it.product_name}`} className="w-36 aspect-[3/4] object-cover border border-[#E2E0DB] bg-[#F8F8F6]" />
               ))}
               {l.image_url && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={l.image_url} alt="Higgsfield shoot" className="w-14 h-[72px] object-cover border-2 border-[#C4A882]" title="Higgsfield shoot" />
+                <img src={l.image_url} alt="Higgsfield shoot" className="w-36 aspect-[3/4] object-cover border-2 border-[#C4A882]" title="Higgsfield shoot" />
               )}
             </div>
           )}
@@ -1056,7 +1056,7 @@ function LookRow({
               {swapBusy && <p className="text-[9px] tracking-[0.1em] text-[#A8A8A4]">FINDING ALTERNATES…</p>}
               {swapOptions && swapOptions.length === 0 && <p className="text-[9px] tracking-[0.1em] text-[#A8A8A4]">NO IN-STOCK ALTERNATES FOR THIS SLOT.</p>}
               {swapOptions && swapOptions.length > 0 && (
-                <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                   {swapOptions.map((o) => (
                     <button
                       key={o.item_id}
@@ -1073,7 +1073,7 @@ function LookRow({
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={o.image_url} alt={o.product_name} className="w-full aspect-[3/4] object-cover" />
                       )}
-                      <p className="text-[7px] tracking-[0.1em] text-[#6B6B6B] px-1 py-1 truncate">
+                      <p className="text-[9px] tracking-[0.1em] text-[#6B6B6B] px-1.5 py-1.5 truncate">
                         {(o.brand_name ?? '').toUpperCase()} {o.product_name.toUpperCase()}
                         {typeof o.price_gbp === 'number' && ` £${o.price_gbp}`}
                       </p>

@@ -40,6 +40,7 @@ import {
   rankAlternates,
   toLookItem,
   type MemberTaste,
+  type OccasionContext,
 } from '@/lib/pilot-composer'
 import { slotForItemType, type Slot } from '@/lib/composer'
 import {
@@ -868,11 +869,12 @@ async function loadMemberTaste(admin: any, member: { member_id: string; brands: 
   // rank 1 ≈ 0.9, falling away, never below 0.45.
   const ranked = (member.brands ?? []).filter((b) => b?.name)
   if (ranked.length) {
-    const names = ranked.map((b) => b.name)
-    const { data: brandRows } = await admin.from('brand').select('brand_id, name').in('name', names)
-    const byName = new Map<string, string>((brandRows ?? []).map((r: any) => [r.name.toLowerCase(), r.brand_id]))
+    // Accent/case-insensitive match — "Sessun" must find "Sessùn".
+    const fold = (n: string) => n.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+    const { data: brandRows } = await admin.from('brand').select('brand_id, name')
+    const byName = new Map<string, string>((brandRows ?? []).map((r: any) => [fold(r.name), r.brand_id]))
     for (const b of ranked) {
-      const id = byName.get(b.name.toLowerCase())
+      const id = byName.get(fold(b.name))
       if (!id) continue
       const fromRank = Math.max(0.45, 0.9 - 0.08 * ((b.rank ?? 1) - 1))
       t.affinity.set(id, Math.max(t.affinity.get(id) ?? 0, fromRank))
@@ -908,7 +910,9 @@ export async function composeDeliveryLooks(deliveryId: string): Promise<{ create
 
   const taste = await loadMemberTaste(admin, member)
   const library = await loadComposableLibrary()
-  const looks = composeMemberLooks(taste, library, 3)
+  const mix = normalise(delivery.effective_weights ?? {})
+  const occ: OccasionContext = { id: delivery.occasion ?? null, vector: lookTasteVector(mix) }
+  const looks = composeMemberLooks(taste, library, 3, occ)
   if (!looks.length) return { error: 'Could not compose — not enough compatible in-stock items in the library' }
 
   const { count } = await admin
@@ -916,7 +920,6 @@ export async function composeDeliveryLooks(deliveryId: string): Promise<{ create
     .select('look_id', { count: 'exact', head: true })
     .eq('delivery_id', deliveryId)
   const startPos = (count ?? 0) + 1
-  const mix = normalise(delivery.effective_weights ?? {})
 
   const rows = looks.map((l, i) => ({
     delivery_id: deliveryId,
@@ -948,7 +951,7 @@ export async function lookAlternates(lookId: string, itemIndex: number): Promise
   const items: LookItem[] = look.items ?? []
   const target = items[itemIndex]
   if (!target) return { error: 'No item at that position' }
-  const { data: delivery } = await admin.from('pilot_delivery').select('member_id').eq('delivery_id', look.delivery_id).single()
+  const { data: delivery } = await admin.from('pilot_delivery').select('member_id, occasion, effective_weights').eq('delivery_id', look.delivery_id).single()
   const { data: member } = await admin.from('pilot_member').select('*').eq('member_id', delivery?.member_id).single()
   if (!member) return { error: 'Member not found' }
 
@@ -961,7 +964,8 @@ export async function lookAlternates(lookId: string, itemIndex: number): Promise
   const keepItems = library.filter((i) => keepIds.includes(i.item_id))
   const exclude = new Set(items.filter((it) => it.item_id).map((it) => it.item_id as string))
 
-  const ranked = rankAlternates(taste, library, slot, keepItems, exclude, 12)
+  const occ: OccasionContext = { id: delivery?.occasion ?? null, vector: lookTasteVector(normalise(delivery?.effective_weights ?? {})) }
+  const ranked = rankAlternates(taste, library, slot, keepItems, exclude, 12, occ)
   return {
     options: ranked.map(({ item, score }) => ({
       item_id: item.item_id,

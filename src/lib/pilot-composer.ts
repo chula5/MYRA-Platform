@@ -20,6 +20,54 @@ import {
   type Slot,
 } from '@/lib/composer'
 import type { LookItem } from '@/lib/pilot-stylist'
+import { itemPseudoVector } from '@/lib/brand-affinity'
+import { cosine } from '@/lib/taste-vector'
+
+// ── Occasion fit ─────────────────────────────────────────────────────────────
+// The delivery's effective_weights already carry the occasion tilt (and the
+// work formality floor), so its room-mix vector is the occasion-shaped target.
+// On top of the vector, deterministic type priors keep the obvious rules firm:
+// no stilettos at daytime casual, no sneakers at an event.
+
+export interface OccasionContext {
+  id: string | null
+  vector: number[] | null // lookTasteVector(effective_weights)
+}
+
+const OCCASION_TYPE_PRIOR: Record<string, { favour: string[]; avoid: string[] }> = {
+  work_standard: { favour: ['blazer', 'trousers', 'shirt', 'knitwear', 'flat', 'tote'], avoid: ['mini_dress', 'slip_dress', 'shorts', 'sandal', 'corset'] },
+  work_elevated: { favour: ['blazer', 'trousers', 'shirt', 'heel', 'structured_bag'], avoid: ['mini_dress', 'slip_dress', 'shorts', 'sandal', 'sneaker', 'corset', 'jeans'] },
+  casual_day: { favour: ['jeans', 't-shirt', 'knitwear', 'sneaker', 'flat', 'tote', 'crossbody'], avoid: ['heel', 'clutch', 'maxi_dress', 'corset'] },
+  dinner_drinks: { favour: ['heel', 'slip_dress', 'midi_dress', 'clutch', 'blouse', 'shoulder_bag'], avoid: ['sneaker', 'tote', 'gilet'] },
+  event: { favour: ['maxi_dress', 'midi_dress', 'slip_dress', 'heel', 'clutch'], avoid: ['sneaker', 'jeans', 't-shirt', 'tote', 'shorts', 'gilet'] },
+  travel: { favour: ['sneaker', 'flat', 'trousers', 'jeans', 'knitwear', 'tote', 'crossbody'], avoid: ['heel', 'clutch', 'corset'] },
+}
+
+const pseudoCache = new WeakMap<object, number[]>()
+function pseudoVec(item: ItemWithBrand): number[] {
+  let v = pseudoCache.get(item as object)
+  if (!v) {
+    v = itemPseudoVector(item)
+    pseudoCache.set(item as object, v)
+  }
+  return v
+}
+
+// ~[-0.5, 0.65]: type prior dominates, room-mix vector breaks ties.
+export function occasionItemScore(occ: OccasionContext | undefined, item: ItemWithBrand): number {
+  if (!occ) return 0
+  let s = 0
+  const prior = occ.id ? OCCASION_TYPE_PRIOR[occ.id] : undefined
+  if (prior) {
+    if (prior.favour.includes(item.item_type)) s += 0.15
+    if (prior.avoid.includes(item.item_type)) s -= 0.35
+  }
+  if (occ.vector) {
+    const c = cosine(pseudoVec(item), occ.vector)
+    s += Math.max(-0.15, Math.min(0.15, (c - 0.8) * 1.5))
+  }
+  return s
+}
 
 export interface MemberTaste {
   affinity: Map<string, number> // brand_id → 0..1
@@ -139,6 +187,7 @@ export function composeMemberLooks(
   t: MemberTaste,
   library: ItemWithBrand[],
   count = 3,
+  occ?: OccasionContext,
 ): ComposedLook[] {
   const usable = library.filter(
     (i) =>
@@ -152,7 +201,7 @@ export function composeMemberLooks(
       const slot = slotForItemType(i.item_type)
       return slot === 'dress' || slot === 'top'
     })
-    .map((i) => ({ item: i, score: memberItemScore(t, i) }))
+    .map((i) => ({ item: i, score: memberItemScore(t, i) + occasionItemScore(occ, i) }))
     .sort((a, b) => b.score - a.score)
 
   const looks: ComposedLook[] = []
@@ -173,7 +222,9 @@ export function composeMemberLooks(
       maxCandidates: 5,
       minScore: 0.5,
       excludeItemIds: Array.from(usedItems),
-      learnedBonus: (items) => memberComboBonus(t, a.item, items),
+      learnedBonus: (items) =>
+        memberComboBonus(t, a.item, items) +
+        items.reduce((sum, i) => sum + occasionItemScore(occ, i.item), 0) / Math.max(1, items.length),
       learnedBlend: 0.4,
       houseGate: (items) => memberGate(t, a.item, items),
     })
@@ -194,8 +245,9 @@ export function composeMemberLooks(
           famPairs.push(`${all[i].item.brand?.name} × ${all[j].item.brand?.name}`)
 
     const affinity = memberItemScore(t, a.item)
+    const occFit = occasionItemScore(occ, a.item)
     const notes = [
-      `Anchor ${a.item.brand?.name ?? '—'} (affinity ${affinity.toFixed(2)})`,
+      `Anchor ${a.item.brand?.name ?? '—'} (affinity ${affinity.toFixed(2)}${occ?.id ? `, occasion fit ${occFit >= 0 ? '+' : ''}${occFit.toFixed(2)}` : ''})`,
       `coherence ${best.score.toFixed(2)}`,
       famPairs.length ? `family pairing: ${Array.from(new Set(famPairs)).join(', ')}` : null,
     ]
@@ -217,6 +269,7 @@ export function rankAlternates(
   keepItems: ItemWithBrand[],
   excludeIds: Set<string>,
   limit = 12,
+  occ?: OccasionContext,
 ): Array<{ item: ItemWithBrand; score: number }> {
   return library
     .filter(
@@ -232,7 +285,7 @@ export function rankAlternates(
         keepItems.length > 0
           ? keepItems.reduce((s, k) => s + pairCompat(k, i).total, 0) / keepItems.length
           : 0.7
-      return { item: i, score: 0.5 * memberItemScore(t, i) + 0.5 * compat }
+      return { item: i, score: 0.5 * memberItemScore(t, i) + 0.5 * compat + occasionItemScore(occ, i) }
     })
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
