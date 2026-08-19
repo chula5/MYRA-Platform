@@ -49,6 +49,7 @@ import {
   recordResponse,
   logActivity,
   recomputeWeights,
+  assignMemberPersona,
   composeDeliveryLooks,
   lookAlternates,
   swapComposedLookItem,
@@ -260,7 +261,7 @@ function MembersTab({ data, run, busy }: { data: PilotData; run: Run; busy: stri
       {showNew && <NewMemberForm run={run} busy={busy} done={() => setShowNew(false)} />}
 
       {data.members.map((m) => (
-        <MemberCard key={m.member_id} member={m} run={run} busy={busy} />
+        <MemberCard key={m.member_id} member={m} run={run} busy={busy} personas={data.personas} />
       ))}
 
       {data.members.length === 0 && !showNew && (
@@ -407,7 +408,17 @@ function NewMemberForm({ run, busy, done }: { run: Run; busy: string | null; don
   )
 }
 
-function MemberCard({ member: m, run, busy }: { member: PilotMember; run: Run; busy: string | null }) {
+function MemberCard({
+  member: m,
+  run,
+  busy,
+  personas = [],
+}: {
+  member: PilotMember
+  run: Run
+  busy: string | null
+  personas?: { stylist_id: string; name: string; hasEnvelope: boolean }[]
+}) {
   const [open, setOpen] = useState(false)
   const [occasions, setOccasions] = useState(m.occasions)
   const [dressCode, setDressCode] = useState(m.work_dress_code)
@@ -474,6 +485,36 @@ function MemberCard({ member: m, run, busy }: { member: PilotMember; run: Run; b
           <button className={btnTiny} onClick={() => setOpen((s) => !s)}>
             {open ? 'CLOSE' : 'OPEN'}
           </button>
+          {/* Styled THROUGH a persona: its moodboard envelope shapes her looks
+              while she is new, and fades as she responds. */}
+          <select
+            value={m.persona_id ?? ''}
+            onChange={(e) =>
+              run(`persona-${m.member_id}`, () => assignMemberPersona(m.member_id, e.target.value),
+                e.target.value ? 'PERSONA ASSIGNED — LOOKS NOW COMPOSED THROUGH ITS MOODBOARD' : 'PERSONA REMOVED')
+            }
+            className="border border-[#E2E0DB] bg-white px-2 py-1.5 text-[9px] tracking-[0.08em] text-[#4A4E57] outline-none focus:border-[#0A0A0A]"
+            title="Compose her looks through this persona's moodboard envelope"
+          >
+            <option value="">NO PERSONA</option>
+            {personas.map((p) => (
+              <option key={p.stylist_id} value={p.stylist_id}>
+                {p.name.toUpperCase()}{p.hasEnvelope ? '' : ' (NO ENVELOPE)'}
+              </option>
+            ))}
+          </select>
+          {m.persona_id && (
+            <span
+              className={`text-[9px] tracking-[0.1em] ${m.persona_has_envelope ? 'text-[#4A6FA5]' : 'text-[#B83A3A]'}`}
+              title={m.persona_has_envelope
+                ? 'Persona weight — falls as she responds, until her own taste leads'
+                : 'This persona has no envelope yet — confirm its moodboard images and compute the envelope, or it has no effect'}
+            >
+              {m.persona_has_envelope
+                ? `LENS ${(m.persona_weight ?? 0.9).toFixed(2)}`
+                : 'NO ENVELOPE — NO EFFECT'}
+            </span>
+          )}
         </div>
       </div>
 

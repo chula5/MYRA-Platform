@@ -23,6 +23,68 @@ import type { LookItem } from '@/lib/pilot-stylist'
 import { itemPseudoVector } from '@/lib/brand-affinity'
 import { cosine } from '@/lib/taste-vector'
 
+// ── Persona lens ────────────────────────────────────────────────────────────
+// A member can be assigned a stylist persona. Its envelope — the mean and
+// spread computed from that persona's CONFIRMED moodboard images — pulls her
+// looks toward that eye while she is new.
+//
+// It is a prior, not a filter: nothing is excluded for sitting outside the
+// envelope, and the pull is scaled by a weight that decays every time she says
+// yes or no. Early on the moodboard is doing the styling; by the time she has
+// responded thirty times her own history is.
+
+export interface PersonaLens {
+  name?: string | null
+  envelope: { mean: number[]; spread: number[] } | null
+  weight: number
+}
+
+/**
+ * The dimensions a SINGLE GARMENT can be compared to an outfit-level envelope
+ * on. The envelope's other axes — construction, volume, colour story, intent,
+ * shoe and bag formality — describe a whole look, and one item has no value for
+ * them, so buildOutfitVector leaves them at the neutral 0.5. Measured, those
+ * eight neutral dims swamped the real signal and pinned every item to the
+ * negative floor, making two opposite personas compose identical looks.
+ *
+ * What's left is what a garment genuinely expresses, and it maps onto exactly
+ * what the moodboard vision pass reads: structure, pattern, material formality.
+ */
+// dim → the item field that fills it, so an unscored field can be skipped
+// rather than read as the neutral 0.5 and counted as disagreement.
+export const ITEM_LENS_DIMS: { dim: number; field: 'structure' | 'pattern' | 'material_formality' }[] = [
+  { dim: 0, field: 'structure' },
+  { dim: 1, field: 'pattern' },
+  { dim: 30, field: 'material_formality' },
+]
+
+/**
+ * How much this persona wants this item, in the same ~[-0.5, 1] register as
+ * memberItemScore. Dead centre of the envelope scores +1, two sigma out scores
+ * 0, further out goes mildly negative — all multiplied by the current weight.
+ *
+ * Only dimensions the item has actually been SCORED on are compared. An
+ * unscored field sits at the neutral 0.5 in the vector, and counting that as
+ * distance made every unscored item look maximally wrong for every persona —
+ * so a piece nobody has scored gets no opinion (0), not a penalty.
+ */
+export function personaFitScore(lens: PersonaLens | undefined, item: ItemWithBrand): number {
+  if (!lens?.envelope?.mean?.length || lens.weight <= 0) return 0
+  const v = pseudoVec(item)
+  let total = 0
+  let n = 0
+  for (const { dim, field } of ITEM_LENS_DIMS) {
+    if ((item as any)[field] == null) continue // not scored — no evidence either way
+    const spread = lens.envelope.spread?.[dim] ?? 0
+    const denom = Math.max(spread, 0.125)
+    total += Math.abs(v[dim] - (lens.envelope.mean[dim] ?? 0)) / denom
+    n++
+  }
+  if (n === 0) return 0
+  const raw = Math.max(-0.5, 1 - total / n / 2)
+  return raw * lens.weight
+}
+
 // ── Occasion fit ─────────────────────────────────────────────────────────────
 // The delivery's effective_weights already carry the occasion tilt (and the
 // work formality floor), so its room-mix vector is the occasion-shaped target.
@@ -191,6 +253,7 @@ export function composeMemberLooks(
   library: ItemWithBrand[],
   count = 3,
   occ?: OccasionContext,
+  lens?: PersonaLens,
 ): ComposedLook[] {
   const usable = library.filter(
     (i) =>
@@ -204,7 +267,7 @@ export function composeMemberLooks(
       const slot = slotForItemType(i.item_type)
       return slot === 'dress' || slot === 'top'
     })
-    .map((i) => ({ item: i, score: memberItemScore(t, i) + occasionItemScore(occ, i) }))
+    .map((i) => ({ item: i, score: memberItemScore(t, i) + occasionItemScore(occ, i) + personaFitScore(lens, i) }))
     .sort((a, b) => b.score - a.score)
 
   const looks: ComposedLook[] = []
@@ -227,7 +290,8 @@ export function composeMemberLooks(
       excludeItemIds: Array.from(usedItems),
       learnedBonus: (items) =>
         memberComboBonus(t, a.item, items) +
-        items.reduce((sum, i) => sum + occasionItemScore(occ, i.item), 0) / Math.max(1, items.length),
+        items.reduce((sum, i) => sum + occasionItemScore(occ, i.item) + personaFitScore(lens, i.item), 0) /
+          Math.max(1, items.length),
       learnedBlend: 0.4,
       houseGate: (items) => memberGate(t, a.item, items),
     })
@@ -260,8 +324,12 @@ export function composeMemberLooks(
 
     const affinity = memberItemScore(t, a.item)
     const occFit = occasionItemScore(occ, a.item)
+    const lensFit = personaFitScore(lens, a.item)
     const notes = [
       `Anchor ${a.item.brand?.name ?? '—'} (affinity ${affinity.toFixed(2)}${occ?.id ? `, occasion fit ${occFit >= 0 ? '+' : ''}${occFit.toFixed(2)}` : ''})`,
+      lens?.envelope && lens.weight > 0
+        ? `through ${lens.name ?? 'persona'} at weight ${lens.weight.toFixed(2)} (lens fit ${lensFit >= 0 ? '+' : ''}${lensFit.toFixed(2)})`
+        : null,
       `coherence ${best.score.toFixed(2)}`,
       famPairs.length ? `family pairing: ${Array.from(new Set(famPairs)).join(', ')}` : null,
     ]
@@ -284,6 +352,7 @@ export function rankAlternates(
   excludeIds: Set<string>,
   limit = 12,
   occ?: OccasionContext,
+  lens?: PersonaLens,
 ): Array<{ item: ItemWithBrand; score: number }> {
   return library
     .filter(
@@ -299,7 +368,7 @@ export function rankAlternates(
         keepItems.length > 0
           ? keepItems.reduce((s, k) => s + pairCompat(k, i).total, 0) / keepItems.length
           : 0.7
-      return { item: i, score: 0.5 * memberItemScore(t, i) + 0.5 * compat + occasionItemScore(occ, i) }
+      return { item: i, score: 0.5 * memberItemScore(t, i) + 0.5 * compat + occasionItemScore(occ, i) + personaFitScore(lens, i) }
     })
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)

@@ -41,7 +41,9 @@ import {
   toLookItem,
   type MemberTaste,
   type OccasionContext,
+  type PersonaLens,
 } from '@/lib/pilot-composer'
+import { personaWeight, PERSONA_START_WEIGHT } from '@/lib/user-persona'
 import { slotForItemType, type Slot } from '@/lib/composer'
 import {
   HIGGSFIELD_COMBOS,
@@ -72,6 +74,11 @@ export interface PilotMember {
   // Σ signal_weight × look vector across her taste events — the 34-dim view
   taste_vector: number[] | null
   taste_event_counts: Record<PilotTasteEventType, number>
+  // Soft persona assignment — the lens her looks are composed through.
+  persona_id: string | null
+  persona_name: string | null
+  persona_weight: number | null
+  persona_has_envelope: boolean
   events: { event_id: string; label: string; event_date: string; done: boolean }[]
   wardrobe: {
     wardrobe_id: string
@@ -149,6 +156,8 @@ export interface PilotData {
   deliveries: PilotDelivery[]
   activity: PilotActivity[]
   artefacts: Record<string, ExitArtefact>
+  /** Live/seeding personas a member can be styled through. */
+  personas: { stylist_id: string; name: string; hasEnvelope: boolean }[]
 }
 
 // ── Load everything (pilot scale: two members, weeks of data — tiny) ────────
@@ -170,11 +179,26 @@ export async function loadPilotData(): Promise<PilotData> {
   // Table missing → migration not run. Render the section with a notice
   // instead of crashing the whole admin.
   if (membersRes.error) {
-    return { ready: false, missingMigration: '0029', members: [], deliveries: [], activity: [], artefacts: {} }
+    return { ready: false, missingMigration: '0029', members: [], deliveries: [], activity: [], artefacts: {}, personas: [] }
   }
   if (tasteRes.error) {
-    return { ready: false, missingMigration: '0030', members: [], deliveries: [], activity: [], artefacts: {} }
+    return { ready: false, missingMigration: '0030', members: [], deliveries: [], activity: [], artefacts: {}, personas: [] }
   }
+
+  // Personas a member can be styled through, and who is currently assigned.
+  // Both degrade to empty if migrations 0039/0043 haven't been run.
+  const adminAny = admin as any
+  const [personaRes, assignRes] = await Promise.all([
+    adminAny.from('stylist').select('stylist_id, name, envelope, type').eq('type', 'persona').order('name'),
+    adminAny.from('user_persona').select('user_id, persona_id, weight').eq('subject_kind', 'pilot_member'),
+  ])
+  const personas = ((personaRes?.data ?? []) as any[]).map((p) => ({
+    stylist_id: p.stylist_id,
+    name: p.name,
+    hasEnvelope: Boolean(p.envelope?.mean?.length),
+  }))
+  const personaById = new Map(personas.map((p) => [p.stylist_id, p]))
+  const assignByMember = new Map(((assignRes?.data ?? []) as any[]).map((a) => [a.user_id, a]))
 
   const events = (eventsRes.data ?? []) as any[]
   const wardrobe = (wardrobeRes.data ?? []) as any[]
@@ -193,6 +217,10 @@ export async function loadPilotData(): Promise<PilotData> {
       events: events.filter((e) => e.member_id === m.member_id),
       wardrobe: wardrobe.filter((w) => w.member_id === m.member_id),
       snapshots: snapshots.filter((s) => s.member_id === m.member_id),
+      persona_id: assignByMember.get(m.member_id)?.persona_id ?? null,
+      persona_name: personaById.get(assignByMember.get(m.member_id)?.persona_id)?.name ?? null,
+      persona_weight: assignByMember.get(m.member_id)?.weight ?? null,
+      persona_has_envelope: personaById.get(assignByMember.get(m.member_id)?.persona_id)?.hasEnvelope ?? false,
     }
   })
 
@@ -208,7 +236,7 @@ export async function loadPilotData(): Promise<PilotData> {
     artefacts[m.member_id] = buildArtefact(m, deliveries, activity)
   }
 
-  return { ready: true, missingMigration: null, members, deliveries, activity, artefacts }
+  return { ready: true, missingMigration: null, members, personas, deliveries, activity, artefacts }
 }
 
 function buildArtefact(
@@ -725,6 +753,8 @@ export async function recordResponse(
       look_id: lookId,
     })
     if (r.error) return r
+    // Her response is the thing that fades the persona.
+    await recomputeMemberPersonaWeight((delivery as any).member_id)
   }
   revalidatePath(PATH)
   return {}
@@ -901,6 +931,91 @@ async function loadComposableLibrary(): Promise<ItemWithBrand[]> {
   return [...ready, ...live]
 }
 
+// ── PERSONA LENS ────────────────────────────────────────────────────────────
+// A member can be styled THROUGH a persona: its moodboard envelope shapes her
+// looks while she is new, then fades as she responds. Assignment lives in
+// user_persona with subject_kind='pilot_member' (migration 0043) — the same
+// soft-assignment machinery the client area uses.
+
+/** Assign (or move) a member to a stylist persona at full prior strength. */
+export async function assignMemberPersona(memberId: string, personaId: string): Promise<{ error?: string }> {
+  try {
+    const admin = createAdminClient() as any
+    if (!personaId) {
+      await admin.from('user_persona').delete().eq('user_id', memberId)
+      revalidatePath(PATH)
+      return {}
+    }
+    await admin.from('user_persona').upsert(
+      {
+        user_id: memberId,
+        persona_id: personaId,
+        subject_kind: 'pilot_member',
+        weight: PERSONA_START_WEIGHT,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id' },
+    )
+    await admin.from('user_persona_weight_log').insert({
+      user_id: memberId, persona_id: personaId, subject_kind: 'pilot_member',
+      weight: PERSONA_START_WEIGHT, event_count: 0,
+    })
+    revalidatePath(PATH)
+    return {}
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Assign failed' }
+  }
+}
+
+/**
+ * The member's persona lens: the envelope computed from that persona's
+ * CONFIRMED moodboard images, plus the current weight. A persona with no
+ * confirmed images has no envelope and therefore no influence — the moodboard
+ * has to have been reviewed before it can style anyone.
+ */
+async function loadPersonaLens(admin: any, memberId: string): Promise<PersonaLens | undefined> {
+  const { data: assignment } = await admin
+    .from('user_persona').select('persona_id, weight').eq('user_id', memberId).maybeSingle()
+  if (!assignment?.persona_id) return undefined
+  const { data: persona } = await admin
+    .from('stylist').select('name, envelope').eq('stylist_id', assignment.persona_id).maybeSingle()
+  const env = persona?.envelope
+  if (!env?.mean?.length) return undefined
+  return {
+    name: persona?.name ?? null,
+    envelope: { mean: env.mean, spread: env.spread ?? [] },
+    weight: typeof assignment.weight === 'number' ? assignment.weight : PERSONA_START_WEIGHT,
+  }
+}
+
+/**
+ * Recompute the member's persona weight from how much she has responded:
+ * weight = max(0.3, 0.9 − 0.02 × responses). Every yes/no she gives moves the
+ * styling a little further from the persona and a little closer to her.
+ */
+export async function recomputeMemberPersonaWeight(memberId: string): Promise<{ weight?: number; error?: string }> {
+  try {
+    const admin = createAdminClient() as any
+    const { data: assignment } = await admin
+      .from('user_persona').select('persona_id, weight').eq('user_id', memberId).maybeSingle()
+    if (!assignment?.persona_id) return {}
+    const { count } = await admin
+      .from('pilot_taste_event').select('event_id', { count: 'exact', head: true }).eq('member_id', memberId)
+    const weight = personaWeight(count ?? 0)
+    if (weight !== assignment.weight) {
+      await admin.from('user_persona')
+        .update({ weight, updated_at: new Date().toISOString() }).eq('user_id', memberId)
+      await admin.from('user_persona_weight_log').insert({
+        user_id: memberId, persona_id: assignment.persona_id, subject_kind: 'pilot_member',
+        weight, event_count: count ?? 0,
+      })
+    }
+    return { weight }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Recompute failed' }
+  }
+}
+
 export async function composeDeliveryLooks(deliveryId: string): Promise<{ created?: number; error?: string }> {
   const admin = createAdminClient() as any
   const { data: delivery, error: derr } = await admin.from('pilot_delivery').select('*').eq('delivery_id', deliveryId).single()
@@ -913,7 +1028,8 @@ export async function composeDeliveryLooks(deliveryId: string): Promise<{ create
   const library = await loadComposableLibrary()
   const mix = normalise(delivery.effective_weights ?? {})
   const occ: OccasionContext = { id: delivery.occasion ?? null, vector: lookTasteVector(mix) }
-  const looks = composeMemberLooks(taste, library, 3, occ)
+  const lens = await loadPersonaLens(admin, delivery.member_id)
+  const looks = composeMemberLooks(taste, library, 3, occ, lens)
   if (!looks.length) return { error: 'Could not compose — not enough compatible in-stock items in the library' }
 
   const { count } = await admin
@@ -966,7 +1082,8 @@ export async function lookAlternates(lookId: string, itemIndex: number): Promise
   const exclude = new Set(items.filter((it) => it.item_id).map((it) => it.item_id as string))
 
   const occ: OccasionContext = { id: delivery?.occasion ?? null, vector: lookTasteVector(normalise(delivery?.effective_weights ?? {})) }
-  const ranked = rankAlternates(taste, library, slot, keepItems, exclude, 12, occ)
+  const lens = await loadPersonaLens(admin, delivery?.member_id)
+  const ranked = rankAlternates(taste, library, slot, keepItems, exclude, 12, occ, lens)
   return {
     options: ranked.map(({ item, score }) => ({
       item_id: item.item_id,
@@ -997,7 +1114,8 @@ export async function lookAddOptions(lookId: string, slot: string): Promise<{ op
   const exclude = new Set(keepIds)
   const occ: OccasionContext = { id: delivery?.occasion ?? null, vector: lookTasteVector(normalise(delivery?.effective_weights ?? {})) }
 
-  const ranked = rankAlternates(taste, library, slot as Slot, keepItems, exclude, 12, occ)
+  const lens = await loadPersonaLens(admin, delivery?.member_id)
+  const ranked = rankAlternates(taste, library, slot as Slot, keepItems, exclude, 12, occ, lens)
   return {
     options: ranked.map(({ item, score }) => ({
       item_id: item.item_id,
