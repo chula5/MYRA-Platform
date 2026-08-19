@@ -30,7 +30,7 @@ export const VECTOR_WEIGHT = 0.6
 export const AFFINITY_WEIGHT = 0.4
 export const HERO_WEIGHT = 2
 export const DISCOVERY_EVERY_N = 6
-export const THIN_VECTOR_ITEMS = 8
+export const THIN_VECTOR_ITEMS = 5 // 5+ scored items is enough to position a brand
 export const MIN_VECTOR_NEIGHBOUR = 0.5 // below this an unfamilied brand is an orphan
 export const WARM_START_WEIGHT = 10 // ≈ 2-3 swipes' worth; real swipes dominate by ~20 events
 export const RE_EXPANSION_THRESHOLD = 0.8
@@ -994,7 +994,7 @@ export async function runHealthChecks(adminIn?: Admin): Promise<HealthReport> {
       .eq('brand_id', b.brand_id)
       .in('status', ['ready', 'live', 'draft', 'out_of_stock'])
       .limit(500)
-    if (!items || items.length < 8) continue
+    if (!items || items.length < THIN_VECTOR_ITEMS) continue
     const reasonCounts = new Map<string, number>()
     let priced = 0
     for (const item of items) {

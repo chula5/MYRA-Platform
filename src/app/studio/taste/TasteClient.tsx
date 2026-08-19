@@ -328,7 +328,7 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                 <div className="px-4 pb-3 grid gap-1 max-h-64 overflow-y-auto" data-lenis-prevent>
                   {unpositioned.map((b) => {
                     const reasons = [
-                      b.x == null ? (b.itemCount < 8 ? 'thin vector' : 'no identity') : null,
+                      b.x == null ? (b.itemCount < 5 ? 'thin vector' : 'no identity') : null,
                       b.price_position == null ? 'no price data' : null,
                     ].filter(Boolean).join(' + ')
                     return (
@@ -416,7 +416,7 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                   <div className="border border-[#E2E0DB] rounded-[8px] p-3 bg-[#FAFAF8]">
                     <p className="text-[9px] tracking-[0.12em] text-[#B3202A]">NOT ENOUGH DATA — {sel.itemCount} SCORED ITEM{sel.itemCount === 1 ? '' : 'S'}</p>
                     <p className="mt-1 text-[8px] tracking-[0.05em] text-[#6B6B6B] normal-case leading-relaxed">
-                      Neighbour lists and similarity scores are suppressed until this brand has 8+ scored items,
+                      Neighbour lists and similarity scores are suppressed until this brand has 5+ scored items,
                       or a reference-image vector. Only curated family membership can expand from it meanwhile.
                     </p>
                     <button
@@ -644,11 +644,11 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                 rows={report.tier_violations.map((r) => `${r.family} (${r.tiers}): ${r.brands}`)} />
               <HealthCard title="PRICE OUTLIERS IN FAMILY" hint="member more than 1 band from the family's median band"
                 rows={(report.price_outliers ?? []).map((r) => `${r.family}: ${r.brand} — ${r.detail}`)} />
-              <HealthCard title="PRICE EXTRACTION FAILURES" hint="8+ items but no median — per-item reasons from the exact job logic; never silent"
+              <HealthCard title="PRICE EXTRACTION FAILURES" hint="5+ items but no median — per-item reasons from the exact job logic; never silent"
                 rows={(report.price_extraction_failures ?? []).map((r) => `${r.brand} (${r.items} items): ${r.reasons}`)} />
               <HealthCard title="CODE DRIFT — BUY VS IDENTITY" hint="stocked-item profile disagrees strongly with the authored codes on a mappable dimension. Curation intelligence — never auto-corrected."
                 rows={(report.code_drift ?? []).map((r) => r.message)} />
-              <HealthCard title="STALE / THIN VECTORS" hint="not recomputed in 14+ days, or under 8 scored items"
+              <HealthCard title="STALE / THIN VECTORS" hint="not recomputed in 14+ days, or under 5 scored items"
                 rows={report.stale_vectors.map((r) => `${r.name} — ${r.reason}`)} />
               <HealthCard title="STARVED FEEDS" hint="top-20 outfits from ≤3 brands — discovery is dead for these members"
                 rows={report.starved_feeds.map((r) => `${r.user_id.slice(0, 8)} — ${r.brands} brands`)} />
