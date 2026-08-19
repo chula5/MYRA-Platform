@@ -4,9 +4,9 @@ import { useMemo, useState, useTransition } from 'react'
 import { PICKER_COLOURS, PICKER_TYPES } from '@/components/admin/ItemPickerModal'
 import type { WatchedBrandRow } from '@/lib/brand-watch'
 import {
-  addWatchedBrand, checkAllBrandsNow, checkBrandNow, fullScanBrand, keepItems,
-  loadQueuePage, removeWatchedBrand, setWatchedBrandActive, setWatchedBrandMinScore,
-  skipItems, type QueueItemRow, type QueuePage,
+  addWatchedBrand, checkAllBrandsNow, checkBrandNow, fullScanBrand, keepAllForBrand,
+  keepItems, loadQueuePage, removeWatchedBrand, setWatchedBrandActive,
+  setWatchedBrandMinScore, skipItems, type QueueItemRow, type QueuePage,
 } from './actions'
 
 const CHIP = 'px-3 py-1.5 rounded-full text-[9px] tracking-[0.12em] border transition-colors'
@@ -76,7 +76,7 @@ export default function BrandWatchClient(props: Props) {
     setGone((g) => new Set(Array.from(g).concat(ids)))
     setSelected((s) => new Set(Array.from(s).filter((id) => !ids.includes(id))))
     act(() => (keep ? keepItems(ids) : skipItems(ids)),
-      (r) => setNotice(`${r.updated} ${keep ? 'KEPT → READY' : 'SKIPPED → ARCHIVED'} — LEARNING UPDATES ON NEXT LOAD`))
+      (r) => setNotice(`${r.updated} ${keep ? 'KEPT → ADDED TO LIBRARY AS READY' : 'SKIPPED — NEVER ENTERS THE LIBRARY'} — LEARNING UPDATES ON NEXT LOAD`))
   }
 
   const toggleSelect = (id: string) =>
@@ -280,6 +280,20 @@ export default function BrandWatchClient(props: Props) {
             >
               KEEP ALL SHOWN
             </button>
+            {fBrand && (page.brandCounts[fBrand] ?? 0) > 0 && (
+              <button
+                disabled={pending}
+                onClick={() => {
+                  const n = page.brandCounts[fBrand] ?? 0
+                  if (confirm(`Keep ALL ${n} ${fBrand} pieces in the queue — including ones not loaded on this page?`))
+                    act(() => keepAllForBrand(fBrand), (r) => { setNotice(r.error?.toUpperCase() ?? `${r.updated} ${fBrand.toUpperCase()} PIECES KEPT → READY`); reloadQueue() })
+                }}
+                className="bg-[#C4A882] text-white rounded-full px-4 py-2 text-[9px] tracking-[0.12em] hover:opacity-85 transition-opacity disabled:opacity-40"
+                title="Keep every queued draft for this brand — the whole queue, not just the loaded page"
+              >
+                KEEP ALL {fBrand.toUpperCase()} · {page.brandCounts[fBrand] ?? 0}
+              </button>
+            )}
             <button
               disabled={pending || shown.length === 0}
               onClick={() => { if (confirm(`Skip all ${shown.length} shown? They archive and never resurface.`)) decide(shown.map((q) => q.item_id), false) }}

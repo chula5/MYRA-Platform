@@ -43,11 +43,12 @@ export interface BrandWatchData extends QueuePage {
 }
 
 const QUEUE_PAGE = 200
-const QUEUE_FIELDS = 'item_id, product_name, item_type, colour_family, material_category, price, currency, image_url, retailer_url, discovery_score, discovered_at, admin_notes, status, brand:brand_id(name)'
+const QUEUE_FIELDS = 'queue_id, product_name, item_type, colour_family, material_category, material_primary, price, currency, price_gbp, image_url, retailer_url, shopify_product_id, shopify_handle, stock_status, stock_sizes, discovery_score, discovered_at, admin_notes, status, brand_id, brand:brand_id(name)'
 
+// The client keys cards by item_id — for queue rows that's the queue_id.
 function mapQueueRow(r: any): Omit<QueueItemRow, 'learned_delta' | 'learned_reasons' | 'predicted_skip' | 'adjusted'> {
   return {
-    item_id: r.item_id,
+    item_id: r.queue_id,
     product_name: r.product_name,
     brand_name: r.brand?.name ?? null,
     item_type: r.item_type,
@@ -63,16 +64,15 @@ function mapQueueRow(r: any): Omit<QueueItemRow, 'learned_delta' | 'learned_reas
   }
 }
 
-// All brand-watch rows for the given statuses (paged past PostgREST's 1,000-row cap).
+// All queue rows for the given statuses (paged past PostgREST's 1,000-row cap).
 async function fetchBrandWatchRows(admin: any, statuses: string[]): Promise<any[]> {
   const out: any[] = []
   for (let from = 0; ; from += 1000) {
     const { data, error } = await admin
-      .from('item')
+      .from('brand_watch_queue')
       .select(QUEUE_FIELDS)
-      .eq('discovery_source', 'brand_watch')
       .in('status', statuses)
-      .order('item_id')
+      .order('queue_id')
       .range(from, from + 999)
     if (error) throw new Error(error.message)
     out.push(...(data ?? []))
@@ -89,14 +89,14 @@ export async function loadQueuePage(offset: number, brandName?: string | null): 
   let drafts: any[]
   let decidedRows: any[]
   try {
-    drafts = await fetchBrandWatchRows(admin, ['draft'])
-    decidedRows = await fetchBrandWatchRows(admin, ['ready', 'archived'])
+    drafts = await fetchBrandWatchRows(admin, ['queued'])
+    decidedRows = await fetchBrandWatchRows(admin, ['kept', 'skipped'])
   } catch (e) {
     return { queue: [], queueTotal: 0, predictedSkipTotal: 0, decidedCount: 0, brandCounts: {}, error: e instanceof Error ? e.message : String(e) }
   }
 
   const decided: DecidedRow[] = decidedRows.map((r) => ({
-    kept: r.status === 'ready',
+    kept: r.status === 'kept',
     brandName: r.brand?.name ?? null,
     productName: r.product_name,
     itemType: r.item_type,
@@ -146,8 +146,14 @@ export async function loadBrandWatch(): Promise<BrandWatchData> {
   }
 
   const page = await loadQueuePage(0)
+  if (page.error && (/brand_watch_queue/.test(page.error) || /42P01/.test(page.error))) {
+    // Queue table missing → migration 0033 hasn't been run yet.
+    return { watched: (watched ?? []) as unknown as WatchedBrandRow[], ...page, migrationNeeded: true }
+  }
   return { watched: (watched ?? []) as unknown as WatchedBrandRow[], ...page }
 }
+
+
 
 // Add a brand to the watchlist. mode 'watch' queues only the last 60 days of
 // on-taste pieces; mode 'full' onboards the whole catalogue (every piece at
@@ -241,32 +247,109 @@ export async function checkAllBrandsNow(): Promise<{ results: BrandCheckResult[]
   return { results }
 }
 
-// Keep: draft → ready (the scored 1–5 dimensions still need a pass, but the
-// piece is accepted into the library). Skip: draft → archived, never resurfaces.
+// Keep: the queue row becomes a real library item (ready — the scored 1–5
+// dimensions still need a pass). Skip: the row stays in the queue table as a
+// skipped decision — it never enters the item library and never resurfaces.
+async function keepQueueRows(admin: any, queueIds: string[]): Promise<number> {
+  let created = 0
+  for (let i = 0; i < queueIds.length; i += 100) {
+    const chunk = queueIds.slice(i, i + 100)
+    const { data: rows, error } = await admin
+      .from('brand_watch_queue')
+      .select('*')
+      .in('queue_id', chunk)
+      .eq('status', 'queued')
+    if (error) throw new Error(error.message)
+    for (const q of rows ?? []) {
+      const { data: item, error: ierr } = await admin
+        .from('item')
+        .insert([{
+          brand_id: q.brand_id,
+          item_type: q.item_type ?? 'blouse',
+          product_name: q.product_name,
+          retailer_url: q.retailer_url,
+          image_url: q.image_url,
+          price: q.price,
+          currency: q.currency,
+          price_gbp: q.price_gbp,
+          colour_family: q.colour_family,
+          material_category: q.material_category,
+          material_primary: q.material_primary,
+          shopify_product_id: q.shopify_product_id,
+          shopify_handle: q.shopify_handle,
+          stock_status: q.stock_status,
+          stock_sizes: q.stock_sizes,
+          stock_checked_at: new Date().toISOString(),
+          available: q.stock_status !== 'out_of_stock',
+          status: 'ready',
+          source: 'retailer_api',
+          in_inventory: false,
+          discovery_source: 'brand_watch',
+          discovery_score: q.discovery_score,
+          discovered_at: q.discovered_at,
+          admin_notes: q.admin_notes,
+        }])
+        .select('item_id')
+        .single()
+      if (ierr) throw new Error(`item insert failed: ${ierr.message}`)
+      await admin
+        .from('brand_watch_queue')
+        .update({ status: 'kept', decided_at: new Date().toISOString(), item_id: item.item_id })
+        .eq('queue_id', q.queue_id)
+      created++
+    }
+  }
+  return created
+}
+
 export async function keepItems(itemIds: string[]): Promise<{ updated: number }> {
   if (!itemIds.length) return { updated: 0 }
-  const admin = createAdminClient()
-  const { data } = await (admin as any)
-    .from('item')
-    .update({ status: 'ready' } as any)
-    .in('item_id', itemIds)
-    .eq('discovery_source', 'brand_watch')
-    .eq('status', 'draft')
-    .select('item_id')
+  const admin = createAdminClient() as any
+  const updated = await keepQueueRows(admin, itemIds)
   revalidatePath('/admin/brand-watch')
-  return { updated: (data ?? []).length }
+  return { updated }
+}
+
+// Keep EVERY queued draft for one brand in a single stroke — the whole queue,
+// not just the page loaded in the browser. Matches items via the brand table
+// (same name shown on the queue's brand chips).
+export async function keepAllForBrand(brandName: string): Promise<{ updated: number; error?: string }> {
+  const admin = createAdminClient() as any
+  const { data: brands, error: berr } = await admin.from('brand').select('brand_id').ilike('name', brandName)
+  if (berr) return { updated: 0, error: berr.message }
+  const ids = (brands ?? []).map((b: any) => b.brand_id)
+  if (!ids.length) return { updated: 0, error: `No brand named ${brandName}` }
+  const queueIds: string[] = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await admin
+      .from('brand_watch_queue')
+      .select('queue_id')
+      .eq('status', 'queued')
+      .in('brand_id', ids)
+      .order('queue_id')
+      .range(from, from + 999)
+    if (error) return { updated: 0, error: error.message }
+    queueIds.push(...(data ?? []).map((r: any) => r.queue_id))
+    if (!data || data.length < 1000) break
+  }
+  try {
+    const updated = await keepQueueRows(admin, queueIds)
+    revalidatePath('/admin/brand-watch')
+    return { updated }
+  } catch (e) {
+    return { updated: 0, error: e instanceof Error ? e.message : String(e) }
+  }
 }
 
 export async function skipItems(itemIds: string[]): Promise<{ updated: number }> {
   if (!itemIds.length) return { updated: 0 }
   const admin = createAdminClient()
   const { data } = await (admin as any)
-    .from('item')
-    .update({ status: 'archived' } as any)
-    .in('item_id', itemIds)
-    .eq('discovery_source', 'brand_watch')
-    .eq('status', 'draft')
-    .select('item_id')
+    .from('brand_watch_queue')
+    .update({ status: 'skipped', decided_at: new Date().toISOString() } as any)
+    .in('queue_id', itemIds)
+    .eq('status', 'queued')
+    .select('queue_id')
   revalidatePath('/admin/brand-watch')
   return { updated: (data ?? []).length }
 }

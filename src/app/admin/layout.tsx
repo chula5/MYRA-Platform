@@ -19,9 +19,9 @@ export default async function AdminLayout({
   return (
     <div className="min-h-screen bg-[#FAFAF8]">
       {/* Admin navigation bar */}
-      <nav className="bg-[#0A0A0A] text-white px-10 h-14 flex items-center justify-between">
-        <a href="/admin" className="text-[11px] tracking-[0.113em] hover:text-white/70 transition-colors duration-300">MYRA ADMIN STUDIO</a>
-        <div className="flex items-center gap-6">
+      <nav className="bg-[#0A0A0A] text-white px-10 h-14 flex items-center justify-between gap-8">
+        <a href="/admin" className="text-[11px] tracking-[0.113em] hover:text-white/70 transition-colors duration-300 flex-shrink-0">MYRA ADMIN STUDIO</a>
+        <div className="flex items-center gap-5 overflow-x-auto [&>a]:flex-shrink-0">
           <a
             href="/admin"
             className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
@@ -75,6 +75,12 @@ export default async function AdminLayout({
             className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
           >
             PRIVATE STYLIST
+          </a>
+          <a
+            href="/studio/taste"
+            className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
+          >
+            TASTE INSPECTOR
           </a>
           <a
             href="/admin/audit"
@@ -159,6 +165,24 @@ export default async function AdminLayout({
             className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
           >
             SIGN UPS
+          </a>
+          <a
+            href="/admin/people"
+            className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
+          >
+            PEOPLE
+          </a>
+          <a
+            href="/admin/commissions"
+            className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
+          >
+            COMMISSIONS
+          </a>
+          <a
+            href="/admin/ad-spend"
+            className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
+          >
+            AD SPEND
           </a>
           <a
             href="/admin/analytics"

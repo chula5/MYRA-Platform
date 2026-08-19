@@ -14,8 +14,8 @@ export default async function BrandWatchPage() {
         <h1 className="text-[28px] tracking-[0.045em] text-[#4A4E57]">BRAND WATCH</h1>
         <p className="mt-2 text-[10px] tracking-[0.068em] text-[#A8A8A4] max-w-2xl leading-relaxed">
           EVERY MONDAY MYRA SCANS EACH WATCHED BRAND&rsquo;S FULL SHOPIFY CATALOGUE, SCORES NEW PIECES AGAINST THE
-          HOUSE STYLE AND QUEUES THE ON-TASTE ONES HERE AS DRAFTS. KEEP MOVES A PIECE TO READY — SKIP ARCHIVES IT
-          SO IT NEVER RESURFACES.
+          HOUSE STYLE AND QUEUES THE ON-TASTE ONES HERE FOR REVIEW. KEEP ADDS A PIECE TO THE ITEM LIBRARY AS READY — SKIPPED PIECES NEVER
+          ENTER THE LIBRARY AND NEVER RESURFACE.
         </p>
       </div>
 
@@ -23,7 +23,7 @@ export default async function BrandWatchPage() {
         <div className="border border-[#E2E0DB] rounded-[10px] p-6 max-w-xl">
           <p className="text-[11px] tracking-[0.12em] text-[#4A4E57] mb-2">MIGRATION NEEDED</p>
           <p className="text-[10px] tracking-[0.06em] text-[#6B6B6B] leading-relaxed">
-            RUN <span className="text-[#C4A882]">supabase/migrations/0031_brand_watch.sql</span> IN THE SUPABASE SQL
+            RUN <span className="text-[#C4A882]">supabase/migrations/0031_brand_watch.sql</span> AND <span className="text-[#C4A882]">0033_brand_watch_queue.sql</span> IN THE SUPABASE SQL
             EDITOR, THEN RELOAD THIS PAGE.
           </p>
         </div>

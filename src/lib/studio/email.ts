@@ -17,7 +17,7 @@ export function siteUrl(path: string): string {
   return `${SITE.replace(/\/$/, '')}${path}`
 }
 
-export type EmailKind = 'review_digest' | 'stock_report'
+export type EmailKind = 'review_digest' | 'stock_report' | 'calibration_report'
 
 export async function countEmailsToday(kind: EmailKind): Promise<number> {
   try {

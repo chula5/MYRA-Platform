@@ -170,9 +170,14 @@ function stockFromVariants(variants: any[]): { stockStatus: ScannedProduct['stoc
 function classifyAndScore(p: {
   id: unknown; handle: string; title: string; vendor: string; product_type: string
   tags: string[]; url: string; price: number | null; published_at: string | null; images: string[]
-  variants: any[]
+  variants: any[]; bodyText: string; optionColours: string[]
 }): ScannedProduct {
   const hay = [p.product_type, p.tags.join(' '), p.title].join(' ').toLowerCase()
+  // Some feeds (Isabel Marant) carry no descriptive text in title/type/tags —
+  // colour lives in the Color variant option and material/silhouette in the
+  // description. Score against the wider haystack; keep the nonFashion check
+  // and type rules on the narrow one so body prose can't misfile an item.
+  const scoreHay = [hay, p.optionColours.join(' '), p.bodyText].join(' ').toLowerCase()
   const catHay = [
     tagValue(p.tags, 'category') ?? '', tagValue(p.tags, 'main category') ?? '',
     tagValue(p.tags, 'sub category') ?? '', p.product_type, p.title,
@@ -183,19 +188,21 @@ function classifyAndScore(p: {
   if (!itemType) for (const [re, t] of TYPE_RULES) { if (re.test(hay)) { itemType = t; break } }
 
   const colTag = (tagValue(p.tags, 'color') ?? tagValue(p.tags, 'colour') ?? '').toLowerCase()
+  const optCol = p.optionColours.join(' ').toLowerCase()
   let colourFamily: string | null = null
   for (const [re, c] of COLOUR_RULES) { if (colTag && re.test(colTag)) { colourFamily = c; break } }
+  if (!colourFamily) for (const [re, c] of COLOUR_RULES) { if (optCol && re.test(optCol)) { colourFamily = c; break } }
   if (!colourFamily) for (const [re, c] of COLOUR_RULES) { if (re.test(p.title.toLowerCase())) { colourFamily = c; break } }
 
   const materialPrimary = tagValue(p.tags, 'material')
-  const materialCategory = mapMaterialCategory(materialPrimary, hay, itemType)
+  const materialCategory = mapMaterialCategory(materialPrimary, scoreHay, itemType)
 
   let score = 0
   const reasons: string[] = []
   for (const [pos, neg, w] of COMPILED) {
-    const hp = pos.find((x) => x.re.test(hay))
+    const hp = pos.find((x) => x.re.test(scoreHay))
     if (hp) { score += w; reasons.push(`+${w} ${hp.t}`) }
-    const hn = neg.find((x) => x.re.test(hay))
+    const hn = neg.find((x) => x.re.test(scoreHay))
     if (hn) { score -= w; reasons.push(`−${w} ${hn.t}`) }
   }
 
@@ -243,13 +250,17 @@ export async function fetchCatalogue(baseUrl: string): Promise<ScannedProduct[]>
         if (!isNaN(vp) && (price === null || vp < price)) price = vp
       }
       const tags: string[] = Array.isArray(p.tags) ? p.tags : String(p.tags ?? '').split(',').map((s: string) => s.trim()).filter(Boolean)
+      const bodyText = String(p.body_html ?? '').replace(/<[^>]*>/g, ' ')
+      const optionColours = ((p.options ?? []) as any[])
+        .filter((o) => /colou?r/i.test(String(o?.name ?? '')))
+        .flatMap((o) => (o?.values ?? []).map((v: unknown) => String(v)))
       out.push(classifyAndScore({
         id: p.id, handle: p.handle, title: p.title ?? '', vendor: p.vendor ?? '',
         product_type: p.product_type ?? '', tags,
         url: `${baseUrl}/products/${p.handle}`, price,
         published_at: p.published_at ?? p.created_at ?? null,
         images: (p.images ?? []).map((i: any) => i?.src).filter(Boolean).slice(0, 8),
-        variants: p.variants ?? [],
+        variants: p.variants ?? [], bodyText, optionColours,
       }))
     }
     if (batch.length < 250) break
@@ -277,8 +288,11 @@ function isGbpStore(baseUrl: string): boolean {
   return /\.uk(\/|$)/.test(baseUrl) || /\.co\.uk/.test(baseUrl)
 }
 
-// Insert scanned products as draft items in the review queue. Dedupes against
-// existing items by shopify_product_id, then retailer_url.
+// Insert scanned products into the brand_watch_queue for review. NOT the item
+// table — only a KEEP decision creates a library item; skips stay here as
+// decisions so the piece never resurfaces and never touches the library.
+// Dedupes against the queue (any status) and existing library items by
+// shopify_product_id, then retailer_url.
 async function queueProducts(
   admin: ReturnType<typeof createAdminClient>,
   watched: WatchedBrandRow,
@@ -295,16 +309,18 @@ async function queueProducts(
   const seenUrls = new Set<string>()
   for (let i = 0; i < products.length; i += 100) {
     const chunk = products.slice(i, i + 100)
-    const { data: existing } = await (admin as any)
-      .from('item')
-      .select('shopify_product_id, retailer_url')
-      .or(
-        `shopify_product_id.in.(${chunk.map((p) => p.shopifyProductId).join(',')}),` +
-        `retailer_url.in.(${chunk.map((p) => `"${p.url}"`).join(',')})`,
-      )
-    for (const r of existing ?? []) {
-      if (r.shopify_product_id != null) seenPids.add(String(r.shopify_product_id))
-      if (r.retailer_url) seenUrls.add(r.retailer_url)
+    const orFilter =
+      `shopify_product_id.in.(${chunk.map((p) => p.shopifyProductId).join(',')}),` +
+      `retailer_url.in.(${chunk.map((p) => `"${p.url}"`).join(',')})`
+    for (const table of ['item', 'brand_watch_queue']) {
+      const { data: existing } = await (admin as any)
+        .from(table)
+        .select('shopify_product_id, retailer_url')
+        .or(orFilter)
+      for (const r of existing ?? []) {
+        if (r.shopify_product_id != null) seenPids.add(String(r.shopify_product_id))
+        if (r.retailer_url) seenUrls.add(r.retailer_url)
+      }
     }
   }
 
@@ -312,35 +328,30 @@ async function queueProducts(
   const rows = products
     .filter((p) => !seenPids.has(p.shopifyProductId) && !seenUrls.has(p.url))
     .map((p) => ({
+      watched_brand_id: watched.watched_brand_id,
       brand_id: brandId,
-      item_type: p.itemType ?? 'blouse',
+      shopify_product_id: p.shopifyProductId,
+      shopify_handle: p.handle,
       product_name: p.title,
       retailer_url: p.url,
       image_url: p.images[0] ?? '',
       price: p.price != null ? String(p.price) : null,
       currency: gbp ? 'GBP' : null,
       price_gbp: gbp ? p.price : null,
+      item_type: p.itemType ?? 'blouse',
       colour_family: p.colourFamily,
       material_category: p.materialCategory,
       material_primary: p.materialPrimary,
-      shopify_product_id: p.shopifyProductId,
-      shopify_handle: p.handle,
       stock_status: p.stockStatus,
       stock_sizes: p.sizesInStock,
-      stock_checked_at: new Date().toISOString(),
-      available: p.stockStatus !== 'out_of_stock',
-      status: 'draft',
-      source: 'retailer_api',
-      in_inventory: false,
-      discovery_source: 'brand_watch',
       discovery_score: p.score,
       discovered_at: new Date().toISOString(),
       admin_notes: `Brand Watch ${p.score > 0 ? '+' : ''}${p.score}${p.reasons.length ? ` (${p.reasons.join(', ')})` : ''} — score the 1–5 dimensions before READY.`,
     }))
 
   for (let i = 0; i < rows.length; i += 100) {
-    const { error } = await (admin as any).from('item').insert(rows.slice(i, i + 100) as any)
-    if (error) throw new Error(`item insert failed: ${error.message}`)
+    const { error } = await (admin as any).from('brand_watch_queue').insert(rows.slice(i, i + 100) as any)
+    if (error) throw new Error(`queue insert failed: ${error.message}`)
   }
   return rows.length
 }

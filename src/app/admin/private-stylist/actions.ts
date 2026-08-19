@@ -13,6 +13,7 @@
 
 import { createAdminClient } from '@/lib/supabase-server'
 import { revalidatePath } from 'next/cache'
+import { applyBrandSignals, seedUserAffinities } from '@/lib/brand-affinity'
 import {
   type RoomWeights,
   type OccasionId,
@@ -280,6 +281,13 @@ export async function createMember(input: {
     source: 'intake',
     note: 'Intake — computed at onboarding',
   })
+  // Brand-affinity onboarding seed: named brands 1.0, similar brands expanded
+  // with a trace, everything else at baseline; warm-starts the taste vector.
+  // Best-effort — onboarding must not fail if 0032 hasn't run yet.
+  try {
+    const names = [...input.brands.map((b) => b.name), ...(input.brands_input_only ?? [])]
+    if (names.length) await seedUserAffinities(admin, memberId, names)
+  } catch { /* brand affinity is additive; ignore */ }
   revalidatePath(PATH)
   return { member_id: memberId }
 }
@@ -593,13 +601,22 @@ async function writeTasteEvent(input: {
   if (input.look_id) {
     const { data: look } = await admin
       .from('pilot_look' as any)
-      .select('room_mix, taste_vector, delivery_id')
+      .select('room_mix, taste_vector, delivery_id, items')
       .eq('look_id', input.look_id)
       .single()
     if (look) {
       roomMix = (look as any).room_mix
       vector = (look as any).taste_vector ?? lookTasteVector((look as any).room_mix)
       deliveryId = (look as any).delivery_id
+      // Brand-affinity learning: the look's item brands carry the signal
+      // (yes/save/click_out/purchase step up, repeated no decays). Best-effort
+      // — the taste event itself must never fail on this.
+      try {
+        const brandNames = (((look as any).items ?? []) as Array<{ brand?: string }>)
+          .map((it) => it.brand)
+          .filter(Boolean) as string[]
+        if (brandNames.length) await applyBrandSignals(admin, input.member_id, brandNames, input.event_type)
+      } catch { /* brand affinity is additive; ignore */ }
     }
   }
   if (!roomMix && deliveryId) {
