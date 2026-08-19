@@ -14,6 +14,7 @@ import {
   runBrandDemo,
   type StylistListEntry,
 } from './actions'
+import InspirationReview from './InspirationReview'
 
 const STATUS_TONE: Record<string, string> = {
   draft: 'text-[#8B5E00] border-[#E8D9B8]',
@@ -38,6 +39,7 @@ export default function StylistsClient({
   const [newMoodboard, setNewMoodboard] = useState('')
   // Constitution editor
   const [editing, setEditing] = useState<string | null>(null)
+  const [inspecting, setInspecting] = useState<string | null>(null)
   const [constitutionText, setConstitutionText] = useState('')
   const [voiceText, setVoiceText] = useState('')
   // Brand demo
@@ -111,6 +113,19 @@ export default function StylistsClient({
                 >
                   {editing === s.stylist_id ? 'CLOSE' : 'EDIT RULES'}
                 </button>
+                {s.type === 'persona' && (
+                  <button
+                    onClick={() => setInspecting(inspecting === s.stylist_id ? null : s.stylist_id)}
+                    className={`px-3 py-1.5 text-[9px] tracking-[0.1em] rounded-full border transition-colors ${
+                      s.envelope_status === 'needs_review'
+                        ? 'bg-[#C4A882] text-white border-[#C4A882]'
+                        : 'border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A]'
+                    }`}
+                    title="Ingest, vision-score and review the moodboard — only confirmed images shape the envelope"
+                  >
+                    {inspecting === s.stylist_id ? 'CLOSE INSPIRATION' : 'INSPIRATION & SCORING'}
+                  </button>
+                )}
               </div>
             </div>
 
@@ -125,6 +140,15 @@ export default function StylistsClient({
                   </div>
                 ))}
               </div>
+            )}
+
+            {/* Scoring review — the surface where the vision pass gets corrected */}
+            {inspecting === s.stylist_id && (
+              <InspirationReview
+                personaId={s.stylist_id}
+                personaName={s.name}
+                envelopeStatus={s.envelope_status ?? null}
+              />
             )}
 
             {/* Rules editor: constitution JSON + voice notes */}

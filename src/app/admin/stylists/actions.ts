@@ -22,6 +22,8 @@ import {
   type Stylist,
 } from '@/lib/stylist-store'
 import { composeStylingSet, composeBrandDemo } from '@/app/admin/pipeline/set-actions'
+import { ingestInspirationImages, confirmedImageCount } from './inspiration-actions'
+import { MIN_CONFIRMED_IMAGES } from '@/lib/inspiration'
 import { CONSTITUTION_ARTICLES } from '@/lib/house-style'
 import { autonomyProgress, type AutonomyProgress } from '@/lib/autonomy'
 
@@ -79,8 +81,14 @@ export async function createPersonaDraft(
       { stylist_id: (data as any).stylist_id, stage: 1 },
       { onConflict: 'stylist_id' },
     )
+    // Moodboard images become scored, persistent records: re-hosted on
+    // Cloudinary and queued for the vision pass. stylist.moodboard keeps the
+    // raw URLs only as provenance for personas created before 0039.
+    const stylistId = (data as any).stylist_id
+    if (urls.length) await ingestInspirationImages(stylistId, urls, 'curator_seed')
+
     revalidatePath('/admin/stylists')
-    return { stylistId: (data as any).stylist_id }
+    return { stylistId }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Create failed' }
   }
@@ -234,6 +242,15 @@ export async function setStylistLive(stylistId: string): Promise<{ ok?: true; er
     ])
     if ((pending ?? 0) > 0) return { error: `${pending} seed variants still awaiting review` }
     if ((approved ?? 0) === 0) return { error: 'No approved seed variants yet — review the seed sets first' }
+
+    // A persona is only as real as the moodboard behind it. Personas created
+    // before 0039 have no inspiration rows at all — those keep the old path.
+    const confirmed = await confirmedImageCount(stylistId)
+    const { data: hasAny } = await (admin.from('inspiration_image') as any)
+      .select('image_id').eq('persona_id', stylistId).limit(1)
+    if ((hasAny ?? []).length && confirmed < MIN_CONFIRMED_IMAGES) {
+      return { error: `${confirmed}/${MIN_CONFIRMED_IMAGES} confirmed inspiration images — confirm more before going live` }
+    }
     await (admin.from('stylist') as any).update({ status: 'live', updated_at: new Date().toISOString() }).eq('stylist_id', stylistId)
     revalidatePath('/admin/stylists')
     return { ok: true }

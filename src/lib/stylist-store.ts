@@ -33,6 +33,12 @@ export interface Stylist {
   moodboard: { url: string; vector?: number[] }[]
   centroid: number[] | null
   voice_notes: string | null
+  // 0039: envelope computed from confirmed inspiration images (mean + spread).
+  // envelope_status flips to 'needs_review' when the confirmed set changes
+  // after go-live — the persona keeps behaving as it did until rules are re-read.
+  envelope?: { mean: number[]; spread: number[]; n: number; tightness: number } | null
+  envelope_status?: 'current' | 'needs_review' | null
+  envelope_computed_at?: string | null
 }
 
 const DEFAULT_SLUG = 'chloe'
