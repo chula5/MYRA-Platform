@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { HIGGSFIELD_POSE_OPTIONS } from '@/lib/higgsfield-shoot'
 import {
   ROOMS,
   ROOM_KEYS,
@@ -56,6 +57,7 @@ import {
   addComposedLookItem,
   approveComposedLook,
   higgsfieldShootForLook,
+  restoreLookShoot,
   type SwapOption,
   type PilotData,
   type PilotMember,
@@ -1012,6 +1014,17 @@ function LookRow({
   const [swapOptions, setSwapOptions] = useState<SwapOption[] | null>(null)
   const [swapBusy, setSwapBusy] = useState(false)
   const [addSlot, setAddSlot] = useState<string | null>(null)
+  const [poseOpen, setPoseOpen] = useState(false)
+  const [shooting, setShooting] = useState(false)
+  const shootHistory = l.shoot_history ?? []
+
+  // A shoot takes minutes — keep the picker locked while one is running so a
+  // second click can't queue another generation over the top.
+  async function shoot(fn: () => Promise<any>, ok: string) {
+    setShooting(true)
+    await run(`hf-${l.look_id}`, fn, ok)
+    setShooting(false)
+  }
   const composed = l.items.some((it) => it.item_id)
   const presentSlots = new Set(l.items.map((it) => it.slot).filter(Boolean) as string[])
 
@@ -1178,6 +1191,54 @@ function LookRow({
               )}
             </div>
           )}
+          {poseOpen && !sent && (
+            <div className="mt-2 border border-[#E8D9B8] bg-[#FBF8F2] p-3">
+              <p className="text-[8px] tracking-[0.14em] text-[#8B5E00] mb-2">
+                {l.image_url ? 'SHOOT AGAIN — PICK A POSE AND LIGHTING. THE CURRENT SHOOT IS KEPT.' : 'PICK A POSE AND LIGHTING'}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {HIGGSFIELD_POSE_OPTIONS.map((c) => (
+                  <button
+                    key={c.key}
+                    disabled={shooting}
+                    className="text-left border border-[#E2E0DB] bg-white px-2.5 py-1.5 hover:border-[#0A0A0A] transition-colors disabled:opacity-40"
+                    onClick={() => {
+                      setPoseOpen(false)
+                      void shoot(() => higgsfieldShootForLook(l.look_id, c.key),
+                        `HIGGSFIELD SHOOT (${c.label}) ATTACHED — TAKES A FEW MINUTES`)
+                    }}
+                  >
+                    <span className="block text-[9px] tracking-[0.1em] text-[#0A0A0A]">{c.label}</span>
+                    <span className="block text-[8px] tracking-[0.08em] text-[#A8A8A4]">{c.sublabel}</span>
+                  </button>
+                ))}
+              </div>
+              {shootHistory.length > 1 && (
+                <>
+                  <p className="text-[8px] tracking-[0.14em] text-[#8B5E00] mt-3 mb-1.5">
+                    EARLIER SHOOTS — TAP TO PUT ONE BACK
+                  </p>
+                  <div className="flex gap-2 flex-wrap">
+                    {shootHistory.map((h) => (
+                      <button
+                        key={h.url}
+                        disabled={shooting || h.url === l.image_url}
+                        onClick={() => run(`rs-${l.look_id}`, () => restoreLookShoot(l.look_id, h.url), 'SHOOT RESTORED')}
+                        className={`border ${h.url === l.image_url ? 'border-[#C4A882]' : 'border-[#E2E0DB] hover:border-[#0A0A0A]'} transition-colors`}
+                        title={h.url === l.image_url ? 'Currently showing' : `Restore this ${h.pose ?? ''} shoot`}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={h.url} alt="" className="w-16 aspect-[3/4] object-cover" />
+                        <span className="block text-[7px] tracking-[0.1em] text-[#6B6B6B] py-0.5">
+                          {h.url === l.image_url ? 'CURRENT' : (h.pose ?? 'SHOOT')}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           {l.notes && <p className="text-[9px] tracking-[0.06em] text-[#A8A8A4] mt-1">{l.notes.toUpperCase()}</p>}
         </div>
         <div className="shrink-0 flex flex-col items-end gap-2">
@@ -1195,10 +1256,12 @@ function LookRow({
               {composed && (
                 <button
                   className="text-[9px] tracking-[0.12em] px-3 py-1.5 border border-[#C4A882] text-[#8B5E00] hover:bg-[#C4A882] hover:text-white transition-colors"
-                  title="Generate an editorial shoot of this look via the local Higgsfield CLI"
-                  onClick={() => run(`hf-${l.look_id}`, () => higgsfieldShootForLook(l.look_id), 'HIGGSFIELD SHOOT ATTACHED TO THE LOOK')}
+                  title={l.image_url
+                    ? 'Shoot it again — pick a different pose and lighting. The current shoot is kept.'
+                    : 'Generate an editorial shoot of this look via the local Higgsfield CLI'}
+                  onClick={() => setPoseOpen(!poseOpen)}
                 >
-                  ✦ HIGGSFIELD
+                  {shooting ? 'SHOOTING…' : l.image_url ? '✦ REDO SHOOT' : '✦ HIGGSFIELD'}
                 </button>
               )}
               <button className={btnTiny} onClick={onEdit}>

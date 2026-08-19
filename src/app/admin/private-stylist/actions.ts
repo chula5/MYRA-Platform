@@ -96,6 +96,7 @@ export interface PilotLook {
   response_reason: ResponseReason | null
   responded_at: string | null
   approved_at: string | null
+  shoot_history: { url: string; pose?: string; created_at?: string }[]
 }
 
 export interface PilotDelivery {
@@ -1176,6 +1177,11 @@ export async function approveComposedLook(lookId: string): Promise<{ error?: str
   return {}
 }
 
+/**
+ * Generate (or regenerate) the editorial shoot for a look. Every result is
+ * appended to shoot_history, so a redo never destroys the previous image —
+ * pick a different pose, compare the two, keep the better one.
+ */
 export async function higgsfieldShootForLook(lookId: string, poseKey = 'E5'): Promise<{ imageUrl?: string; error?: string }> {
   const admin = createAdminClient() as any
   const { data: look, error: lerr } = await admin.from('pilot_look').select('*').eq('look_id', lookId).single()
@@ -1216,7 +1222,27 @@ export async function higgsfieldShootForLook(lookId: string, poseKey = 'E5'): Pr
   const gen = await runHiggsfieldGeneration(prompt, refs, `pilot-look-${lookId}-${Date.now()}`)
   if (!gen.imageUrl) return gen
 
-  await admin.from('pilot_look').update({ image_url: gen.imageUrl }).eq('look_id', lookId)
+  // Append to history rather than replacing — the previous shoot stays reachable.
+  const history: any[] = Array.isArray(look.shoot_history) ? look.shoot_history : []
+  if (!history.some((h) => h?.url === gen.imageUrl)) {
+    history.push({ url: gen.imageUrl, pose: poseKey, created_at: new Date().toISOString() })
+  }
+  await admin.from('pilot_look')
+    .update({ image_url: gen.imageUrl, shoot_history: history.slice(-12) })
+    .eq('look_id', lookId)
   revalidatePath(PATH)
   return gen
+}
+
+/** Put a previous shoot back as the look's image. Nothing is deleted. */
+export async function restoreLookShoot(lookId: string, url: string): Promise<{ error?: string }> {
+  const admin = createAdminClient() as any
+  const { data: look, error } = await admin
+    .from('pilot_look').select('shoot_history').eq('look_id', lookId).single()
+  if (error || !look) return { error: error?.message ?? 'Look not found' }
+  const history: any[] = Array.isArray(look.shoot_history) ? look.shoot_history : []
+  if (!history.some((h) => h?.url === url)) return { error: 'That shoot is not in this look’s history' }
+  await admin.from('pilot_look').update({ image_url: url }).eq('look_id', lookId)
+  revalidatePath(PATH)
+  return {}
 }
