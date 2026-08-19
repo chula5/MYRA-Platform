@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase-server'
+import { normaliseProfile, type ClientStyleProfile } from '@/lib/style-profile'
 import type { OutfitWithItems } from '@/types/database'
 import {
   EVENT_WEIGHTS,
@@ -76,6 +77,27 @@ async function seedVectorFromHistory(userId: string): Promise<number[]> {
 
 // The user's current taste vector. Reads the stored profile; if there isn't one
 // yet, seeds it from onboarding + saves and persists it.
+/**
+ * The client's style profile — the questionnaire answers from onboarding.
+ * Returns null when there's no row or the table doesn't exist yet (migration
+ * 0038), so callers degrade to an unfiltered feed rather than an empty one.
+ */
+export async function getClientStyleProfile(userId: string): Promise<ClientStyleProfile | null> {
+  try {
+    if (!userId) return null
+    const admin = createAdminClient()
+    const { data, error } = await (admin.from('client_style_profile') as any)
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle()
+    if (error) return null
+    return normaliseProfile(data)
+  } catch (err) {
+    console.error('[getClientStyleProfile]', err)
+    return null
+  }
+}
+
 export async function getUserTasteVector(userId: string): Promise<number[]> {
   try {
     const admin = createAdminClient()

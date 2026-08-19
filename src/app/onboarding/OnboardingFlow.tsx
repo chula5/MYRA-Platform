@@ -4,7 +4,8 @@ import { useMemo, useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import { useRouter } from 'next/navigation'
 import { BRAND_GROUPS, AGE_RANGES } from './brand-groups'
-import { saveOnboarding } from './actions'
+import { saveOnboarding, saveStyleProfile } from './actions'
+import StyleQuestionnaire from './StyleQuestionnaire'
 
 export interface OnboardingOutfit {
   id: string
@@ -50,7 +51,8 @@ export default function OnboardingFlow({
   preview?: boolean
 }) {
   const router = useRouter()
-  const [step, setStep] = useState<1 | 2 | 3>(1)
+  // 1 brands → 2 age → 3 style questionnaire → 4 rating swipes
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1)
 
   const [brandGroups, setBrandGroups] = useState<string[]>([])
   const [ageRange, setAgeRange] = useState<string>('')
@@ -111,7 +113,7 @@ export default function OnboardingFlow({
   // ── Progress dots ──
   const progress = (
     <div className="flex items-center justify-center gap-2 mb-10">
-      {[1, 2, 3].map((s) => (
+      {[1, 2, 3, 4].map((s) => (
         <span
           key={s}
           className={`h-1.5 rounded-full transition-all duration-300 ${
@@ -265,8 +267,21 @@ export default function OnboardingFlow({
           </div>
         )}
 
-        {/* ── STEP 3 — RATE OUTFITS (optional) ─────────────────── */}
+        {/* ── STEP 3 — STYLE QUESTIONNAIRE ─────────────────────── */}
         {step === 3 && (
+          <StyleQuestionnaire
+            onBack={() => setStep(2)}
+            onComplete={(answers) => {
+              // Save now rather than at the end: the hard constraints should
+              // hold even if she leaves before rating a single outfit.
+              if (!preview) void saveStyleProfile(answers)
+              setStep(4)
+            }}
+          />
+        )}
+
+        {/* ── STEP 4 — RATE OUTFITS (optional) ─────────────────── */}
+        {step === 4 && (
           <div>
             <div className="text-center mb-8">
               <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-3">LAST STEP — OPTIONAL</p>

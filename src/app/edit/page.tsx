@@ -8,7 +8,8 @@ import Wardrobe from './Wardrobe'
 import OpenWardrobeButton from './OpenWardrobeButton'
 import HelpPopover from '@/components/HelpPopover'
 import OnboardingPrompt from '@/components/OnboardingPrompt'
-import { getTasteRecommendations, getUserTasteVector, getBrandAffinityRows, getOccasionOrder } from '@/lib/taste-profile'
+import { getTasteRecommendations, getUserTasteVector, getBrandAffinityRows, getOccasionOrder, getClientStyleProfile } from '@/lib/taste-profile'
+import { applyItemMask } from '@/lib/style-profile'
 import { getLiveStylists } from '@/lib/queries'
 import { getOurPicks } from '@/lib/our-picks'
 import type { OutfitWithItems } from '@/types/database'
@@ -39,7 +40,13 @@ export default async function EditPage() {
     .select('*, outfit_item(*, item(*, brand(*)))')
     .eq('status', 'live')
     .order('published_at', { ascending: false })
-  const liveOutfits = (liveRaw ?? []) as unknown as OutfitWithItems[]
+  const allLive = (liveRaw ?? []) as unknown as OutfitWithItems[]
+
+  // HARD constraints from the style questionnaire are an item mask: colours she
+  // won't wear, lengths she won't show, heels, and her spend ceiling. They filter
+  // the feed absolutely — taste ranking only ever reorders what's left.
+  const styleProfile = await getClientStyleProfile(user.id)
+  const liveOutfits = applyItemMask(styleProfile, allLive)
 
   // Saved outfits, cosine taste recommendations, and the user's taste vector
   // (so the occasion feed can re-rank by taste). Tables may not exist yet → [] .
@@ -51,6 +58,8 @@ export default async function EditPage() {
 
   // Brand-affinity discovery rows + a per-user occasion order.
   const brandRows = await getBrandAffinityRows(user.id, liveOutfits, tasteVector)
+  // Recommendations come from a different query, so they need the mask too.
+  const maskedRecommended = applyItemMask(styleProfile, recommended)
   const occasionOrder = getOccasionOrder(tasteVector, liveOutfits)
 
   return (
@@ -93,7 +102,7 @@ export default async function EditPage() {
         detailHrefBase="/edit"
         canSave
         savedOutfitIds={savedIds}
-        recommendedOutfits={recommended}
+        recommendedOutfits={maskedRecommended}
         tasteVector={tasteVector}
         brandRows={brandRows}
         occasionOrder={occasionOrder}

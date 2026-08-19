@@ -1,6 +1,15 @@
 import Image from 'next/image'
 import { createAdminClient } from '@/lib/supabase-server'
 import { BRAND_GROUPS, AGE_RANGES } from '@/app/onboarding/brand-groups'
+import {
+  normaliseProfile,
+  hasHardConstraints,
+  PRICE_BANDS,
+  HEEL_OPTIONS,
+  LENGTH_NO_GO_OPTIONS,
+  OCCASION_OPTIONS,
+  type ClientStyleProfile,
+} from '@/lib/style-profile'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +24,91 @@ interface PrefRow {
 }
 
 const GROUP_NAME = new Map(BRAND_GROUPS.map((g) => [g.key, g.name]))
+const NO_GO_LABEL = new Map(LENGTH_NO_GO_OPTIONS.map((o) => [o.value, o.label]))
+const HEEL_LABEL = new Map(HEEL_OPTIONS.map((o) => [o.value, o.label]))
+const OCCASION_LABEL = new Map(OCCASION_OPTIONS.map((o) => [o.value, o.label]))
+const FIT_WORDS = ['', 'FITTED', 'CLOSE', 'EASY', 'RELAXED', 'OVERSIZED']
+const PATTERN_WORDS = ['', 'SOLIDS ONLY', 'MOSTLY PLAIN', 'SOME PATTERN', 'HAPPY IN PRINT', 'STATEMENT PRINT']
+
+function spendLabel(range: number[] | null): string | null {
+  if (!range || range.length !== 2) return null
+  const lo = PRICE_BANDS.find((b) => b.tier === range[0])
+  const hi = PRICE_BANDS.find((b) => b.tier === range[1])
+  if (!lo || !hi) return null
+  return lo.tier === hi.tier ? lo.label : `${lo.label.replace(' +', '+')} → ${hi.label}`
+}
+
+/** Read-only style profile. HARD constraints (they mask inventory absolutely)
+ *  are set apart from SOFT preferences (which only nudge the taste vector). */
+function StyleProfileBlock({ p }: { p: ClientStyleProfile }) {
+  const hard: [string, string][] = []
+  if (p.colour_never?.length) hard.push(['NEVER WEARS', p.colour_never.join(', ').toUpperCase()])
+  if (p.length_no_go?.length) hard.push(['WON’T WEAR', p.length_no_go.map((v) => NO_GO_LABEL.get(v) ?? v).join(' · ')])
+  if (p.heel_preference && p.heel_preference !== 'any') hard.push(['HEELS', HEEL_LABEL.get(p.heel_preference) ?? p.heel_preference])
+  const spend = spendLabel(p.price_comfort as number[] | null)
+  if (spend) hard.push(['SPEND', spend])
+
+  const soft: [string, string][] = []
+  if (p.colour_loved?.length) soft.push(['GRAVITATES TO', p.colour_loved.join(', ').toUpperCase()])
+  if (p.fit_top != null) soft.push(['FIT — TOP', FIT_WORDS[p.fit_top] ?? String(p.fit_top)])
+  if (p.fit_bottom != null) soft.push(['FIT — BOTTOM', FIT_WORDS[p.fit_bottom] ?? String(p.fit_bottom)])
+  if (p.pattern_appetite != null) soft.push(['PATTERN', PATTERN_WORDS[p.pattern_appetite] ?? String(p.pattern_appetite)])
+  if (p.occasion_mix) {
+    const mix = Object.entries(p.occasion_mix)
+      .map(([k, f]) => `${(OCCASION_LABEL.get(k as any) ?? k).split(' /')[0]} ${String(f).toUpperCase()}`)
+      .join(' · ')
+    if (mix) soft.push(['WEARS FOR', mix])
+  }
+
+  if (!hard.length && !soft.length && !p.brands_missed && !p.notes) return null
+
+  return (
+    <div className="px-5 pb-4 pt-1 space-y-2">
+      {hard.length > 0 && (
+        <div className="border-l-2 border-[#B83A3A] pl-3">
+          <p className="text-[8px] tracking-[0.14em] text-[#B83A3A] mb-1.5">
+            HARD CONSTRAINTS · FILTER THE FEED ABSOLUTELY
+          </p>
+          <div className="flex flex-wrap gap-x-5 gap-y-1">
+            {hard.map(([k, v]) => (
+              <span key={k} className="text-[9px] tracking-[0.045em] text-[#4A4E57]">
+                <span className="text-[#A8A8A4]">{k}:</span> {v}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      {soft.length > 0 && (
+        <div className="border-l-2 border-[#E2E0DB] pl-3">
+          <p className="text-[8px] tracking-[0.14em] text-[#A8A8A4] mb-1.5">
+            SOFT PREFERENCES · NUDGE TASTE ONLY, RATINGS OVERRIDE
+          </p>
+          <div className="flex flex-wrap gap-x-5 gap-y-1">
+            {soft.map(([k, v]) => (
+              <span key={k} className="text-[9px] tracking-[0.045em] text-[#6B6B6B]">
+                <span className="text-[#A8A8A4]">{k}:</span> {v}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      {(p.brands_missed || p.notes) && (
+        <div className="border-l-2 border-[#E2E0DB] pl-3">
+          {p.brands_missed && (
+            <p className="text-[9px] tracking-[0.045em] text-[#6B6B6B]">
+              <span className="text-[#A8A8A4]">BRANDS WE MISSED:</span> {p.brands_missed}
+            </p>
+          )}
+          {p.notes && (
+            <p className="text-[9px] tracking-[0.045em] text-[#6B6B6B]">
+              <span className="text-[#A8A8A4]">FOR THE STYLIST:</span> {p.notes}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 const RETAILER_WINDOWS: Record<string, { label: string; days: number | null }> = {
   '7d': { label: '7 DAYS', days: 7 },
@@ -31,10 +125,16 @@ export default async function SignupPreferencesPage({
   const trafficKey = (await searchParams).traffic ?? '30d'
   const trafficWin = RETAILER_WINDOWS[trafficKey] ?? RETAILER_WINDOWS['30d']
 
-  const { data, error } = await admin
-    .from('signup_preference' as any)
-    .select('*')
-    .order('created_at', { ascending: false })
+  const [{ data, error }, profilesRes] = await Promise.all([
+    admin.from('signup_preference' as any).select('*').order('created_at', { ascending: false }),
+    (admin.from('client_style_profile' as any) as any).select('*'),
+  ])
+  // Table may not exist yet (migration 0038) — the page still renders without it.
+  const profileByUser = new Map<string, ClientStyleProfile>()
+  for (const row of (profilesRes?.data ?? []) as any[]) {
+    const p = normaliseProfile(row)
+    if (p) profileByUser.set(p.user_id, p)
+  }
 
   const tableReady = !error
   const rows = (tableReady ? (data as unknown as PrefRow[]) : []) ?? []
@@ -605,22 +705,39 @@ ALTER TABLE public.saved_outfit ENABLE ROW LEVEL SECURITY;`}</pre>
             <span className="text-[9px] tracking-[0.081em] text-[#6B6B6B]">BRAND WORLDS</span>
             <span className="text-[9px] tracking-[0.081em] text-[#6B6B6B] text-right">RATED</span>
           </div>
-          {rows.map((r, i) => (
-            <div
-              key={r.user_id}
-              className={`grid grid-cols-[1fr_90px_1fr_70px] gap-3 px-5 py-3 border-b border-[#E2E0DB] last:border-0 items-center ${i % 2 ? 'bg-[#FAFAF8]' : 'bg-white'}`}
-            >
-              <span className="text-[11px] tracking-[0.027em] text-[#4A4E57] truncate">{r.email ?? '—'}</span>
-              <span className="text-[10px] tracking-[0.045em] text-[#6B6B6B]">{r.age_range ?? '—'}</span>
-              <span className="text-[9px] tracking-[0.036em] text-[#6B6B6B] leading-relaxed">
-                {(r.brand_groups ?? []).map((g) => GROUP_NAME.get(g)?.split(' / ')[0] ?? g).join(', ') || '—'}
-              </span>
-              <span className="text-[10px] tracking-[0.045em] text-[#6B6B6B] text-right">
-                <span className="text-[#3A6B3A]">{(r.liked_outfit_ids ?? []).length}♥</span>{' '}
-                <span className="text-[#B83A3A]">{(r.disliked_outfit_ids ?? []).length}✕</span>
-              </span>
-            </div>
-          ))}
+          {rows.map((r, i) => {
+            const profile = profileByUser.get(r.user_id)
+            return (
+              <div key={r.user_id} className={`border-b border-[#E2E0DB] last:border-0 ${i % 2 ? 'bg-[#FAFAF8]' : 'bg-white'}`}>
+                <div className="grid grid-cols-[1fr_90px_1fr_70px] gap-3 px-5 py-3 items-center">
+                  <span className="text-[11px] tracking-[0.027em] text-[#4A4E57] truncate">
+                    {r.email ?? '—'}
+                    {profile && (
+                      <span
+                        className={`ml-2 text-[8px] tracking-[0.12em] border px-1.5 py-0.5 ${
+                          hasHardConstraints(profile)
+                            ? 'text-[#B83A3A] border-[#E8B4B4]'
+                            : 'text-[#A8A8A4] border-[#E2E0DB]'
+                        }`}
+                        title={hasHardConstraints(profile) ? 'Has hard constraints masking her feed' : 'Style profile completed'}
+                      >
+                        {hasHardConstraints(profile) ? 'MASKED' : 'PROFILE'}
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-[10px] tracking-[0.045em] text-[#6B6B6B]">{r.age_range ?? '—'}</span>
+                  <span className="text-[9px] tracking-[0.036em] text-[#6B6B6B] leading-relaxed">
+                    {(r.brand_groups ?? []).map((g) => GROUP_NAME.get(g)?.split(' / ')[0] ?? g).join(', ') || '—'}
+                  </span>
+                  <span className="text-[10px] tracking-[0.045em] text-[#6B6B6B] text-right">
+                    <span className="text-[#3A6B3A]">{(r.liked_outfit_ids ?? []).length}♥</span>{' '}
+                    <span className="text-[#B83A3A]">{(r.disliked_outfit_ids ?? []).length}✕</span>
+                  </span>
+                </div>
+                {profile && <StyleProfileBlock p={profile} />}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>

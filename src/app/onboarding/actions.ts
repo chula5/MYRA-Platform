@@ -1,12 +1,114 @@
 'use server'
 
 import { createServerClient, createAdminClient } from '@/lib/supabase-server'
+import {
+  normaliseProfile,
+  softPriorVector,
+  SOFT_PRIOR_WEIGHT,
+  type ClientStyleProfile,
+} from '@/lib/style-profile'
+import { accumulate, zeroVector } from '@/lib/taste-vector'
 
 export interface OnboardingPayload {
   ageRange: string
   brandGroups: string[]
   likedOutfitIds: string[]
   dislikedOutfitIds: string[]
+}
+
+// What the questionnaire screens collect. Every field optional — a skipped
+// question is null, which means "no constraint", never "unknown".
+export type StyleProfileInput = Partial<Omit<ClientStyleProfile, 'user_id'>>
+
+/**
+ * Persist the style questionnaire, then act on it:
+ *   HARD  price_comfort → user_taste_profile.price_tier_range (the item mask
+ *         reads the profile row directly; this mirrors the range for the
+ *         existing brand/price machinery)
+ *   SOFT  a one-time prior folded into the taste vector at ~3 likes' weight,
+ *         stamped with prior_applied_at so re-running can't stack it twice.
+ * Never throws: onboarding must not dead-end on a learning write.
+ */
+export async function saveStyleProfile(input: StyleProfileInput): Promise<{ error?: string }> {
+  try {
+    const supabase = await createServerClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'Not signed in' }
+    const admin = createAdminClient()
+
+    const clean = <T,>(v: T[] | null | undefined) => (Array.isArray(v) && v.length ? v : null)
+    const row = {
+      user_id: user.id,
+      colour_never: clean(input.colour_never),
+      length_no_go: clean(input.length_no_go),
+      heel_preference: input.heel_preference ?? null,
+      price_comfort: clean(input.price_comfort as number[] | null),
+      colour_loved: clean(input.colour_loved),
+      fit_top: input.fit_top ?? null,
+      fit_bottom: input.fit_bottom ?? null,
+      pattern_appetite: input.pattern_appetite ?? null,
+      occasion_mix: input.occasion_mix && Object.keys(input.occasion_mix).length ? input.occasion_mix : null,
+      brands_missed: input.brands_missed?.trim() || null,
+      notes: input.notes?.trim() || null,
+      completed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+
+    const { error: upsertErr } = await (admin.from('client_style_profile') as any)
+      .upsert(row, { onConflict: 'user_id' })
+    if (upsertErr) {
+      // Migration 0038 not run yet — log and let onboarding continue.
+      console.error('[saveStyleProfile] upsert', upsertErr)
+      return { error: 'saved_partial' }
+    }
+
+    const profile = normaliseProfile(row)
+
+    // HARD: mirror the spend range for the price-aware brand machinery.
+    if (profile?.price_comfort?.length === 2) {
+      await (admin.from('user_taste_profile') as any).upsert(
+        { user_id: user.id, price_tier_range: profile.price_comfort, updated_at: new Date().toISOString() },
+        { onConflict: 'user_id' },
+      )
+    }
+
+    // SOFT: one-time prior on the taste vector, once only.
+    const prior = softPriorVector(profile)
+    if (prior) {
+      const { data: existing } = await (admin.from('client_style_profile') as any)
+        .select('prior_applied_at').eq('user_id', user.id).maybeSingle()
+      if (!existing?.prior_applied_at) {
+        const { data: tp } = await admin
+          .from('user_taste_profile').select('taste_vector').eq('user_id', user.id).maybeSingle()
+        const current = parseStoredVector((tp as any)?.taste_vector) ?? zeroVector()
+        const next = accumulate(current, prior, SOFT_PRIOR_WEIGHT)
+        await (admin.from('user_taste_profile') as any).upsert(
+          { user_id: user.id, taste_vector: next, updated_at: new Date().toISOString() },
+          { onConflict: 'user_id' },
+        )
+        await (admin.from('client_style_profile') as any)
+          .update({ prior_applied_at: new Date().toISOString() })
+          .eq('user_id', user.id)
+      }
+    }
+
+    return {}
+  } catch (err: unknown) {
+    console.error('[saveStyleProfile]', err)
+    return { error: err instanceof Error ? err.message : 'Failed to save' }
+  }
+}
+
+// pgvector comes back from PostgREST as "[0.1,0.2,…]".
+function parseStoredVector(v: unknown): number[] | null {
+  if (Array.isArray(v)) return v as number[]
+  if (typeof v === 'string') {
+    try {
+      const parsed = JSON.parse(v)
+      return Array.isArray(parsed) ? parsed : null
+    } catch { return null }
+  }
+  return null
 }
 
 // Persist a user's onboarding answers and mark them onboarded.
