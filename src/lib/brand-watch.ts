@@ -9,6 +9,7 @@ import { createAdminClient } from '@/lib/supabase-server'
 import {
   discoverProductUrls, fetchNewProductPages, urlHash, type ParsedProduct,
 } from '@/lib/brand-watch-browser'
+import { buildLearning, type DecidedRow } from '@/lib/brand-watch-learning'
 
 // ---------------------------------------------------------------- types
 
@@ -56,6 +57,7 @@ export interface BrandCheckResult {
   queued: number
   belowScore: number
   skippedStock: number // new on-taste pieces NOT queued because low/out of stock
+  suppressedByLearning: number // predicted-skip by your keep/skip history — left unseen, re-evaluated as the model evolves
   restocked: number // existing library items that went out-of-stock → back in stock
   note?: string // e.g. browser scan chunking: "350 of 812 pages this run"
   error?: string
@@ -559,6 +561,48 @@ async function markSeen(
   }
 }
 
+// ---------------------------------------------------------------- scan-time learning
+// The same keep/skip model that re-ranks the review queue also gates what a
+// scan queues: a piece the model is confident you'd skip (delta ≤ −2, 15+
+// decisions) is suppressed at scan time. Suppressed pieces are NOT marked
+// seen — every later scan re-evaluates them against the CURRENT model, so a
+// shift in your taste lets them through. Cross-brand by design: decisions on
+// one site inform scans of every other site.
+async function loadLearnedSkipper(admin: any): Promise<(p: ScannedProduct, brandName: string) => boolean> {
+  const rows: any[] = []
+  try {
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await admin
+        .from('brand_watch_queue')
+        .select('product_name, item_type, colour_family, material_category, price, status, brand:brand_id(name)')
+        .in('status', ['kept', 'skipped'])
+        .order('queue_id')
+        .range(from, from + 999)
+      if (error) return () => false
+      rows.push(...(data ?? []))
+      if (!data || data.length < 1000) break
+    }
+  } catch { return () => false }
+  const decided: DecidedRow[] = rows.map((r) => ({
+    kept: r.status === 'kept',
+    brandName: r.brand?.name ?? null,
+    productName: r.product_name,
+    itemType: r.item_type,
+    colourFamily: r.colour_family,
+    materialCategory: r.material_category,
+    price: r.price,
+  }))
+  const learn = buildLearning(decided)
+  return (p, brandName) => learn({
+    brandName,
+    productName: p.title,
+    itemType: p.itemType,
+    colourFamily: p.colourFamily,
+    materialCategory: p.materialCategory,
+    price: p.price != null ? String(p.price) : null,
+  }).predictedSkip
+}
+
 // ---------------------------------------------------------------- stock refresh
 
 // The catalogue scan carries live availability for every product, so each run
@@ -632,17 +676,21 @@ async function scanAndQueue(
   const onTaste = fashion.filter(wanted)
   // Low or out of stock isn't worth adding — it gets another chance on a
   // later check if it restocks (queueing only marks items, not seen state).
-  const candidates = onTaste.filter((p) => p.stockStatus === 'in_stock')
+  const inStock = onTaste.filter((p) => p.stockStatus === 'in_stock')
+  const shouldSuppress = await loadLearnedSkipper(admin as any)
+  const candidates = inStock.filter((p) => !shouldSuppress(p, watched.name))
+  const suppressed = new Set(inStock.filter((p) => shouldSuppress(p, watched.name)).map((p) => p.shopifyProductId))
   const queued = await queueProducts(admin, watched, candidates)
   const restocked = await refreshBrandStock(admin, products)
-  // Stock-held on-taste pieces are NOT marked seen — and any that an earlier
-  // scan already marked are unmarked — so the week they restock, the check
-  // sees them as new and queues them.
+  // Stock-held and learning-suppressed pieces are NOT marked seen — later
+  // scans re-evaluate them (restock lets one through; a taste shift lets the
+  // other through).
   const stockHeld = new Set(
     fashion.filter((p) => p.score >= watched.min_score && p.stockStatus !== 'in_stock').map((p) => p.shopifyProductId),
   )
-  await unmarkSeen(admin, watched.watched_brand_id, Array.from(stockHeld))
-  await markSeen(admin, watched.watched_brand_id, products.filter((p) => !stockHeld.has(p.shopifyProductId)))
+  const held = new Set([...Array.from(stockHeld), ...Array.from(suppressed)])
+  await unmarkSeen(admin, watched.watched_brand_id, Array.from(held))
+  await markSeen(admin, watched.watched_brand_id, products.filter((p) => !held.has(p.shopifyProductId)))
   await (admin as any)
     .from('watched_brand')
     .update({ last_checked_at: new Date().toISOString(), last_new_count: queued } as any)
@@ -650,7 +698,7 @@ async function scanAndQueue(
   return {
     name: watched.name, scanned: products.length, newProducts: onTaste.length,
     queued, belowScore: fashion.length - onTaste.length,
-    skippedStock: stockHeld.size, restocked,
+    skippedStock: stockHeld.size, suppressedByLearning: suppressed.size, restocked,
   }
 }
 
@@ -684,7 +732,7 @@ async function browserScanAndQueue(watchedRow: WatchedBrandRow, mode: 'watch' | 
     await stamp()
     return {
       name: watchedRow.name, scanned: urls.length, newProducts: 0, queued: 0,
-      belowScore: 0, skippedStock: 0, restocked: 0,
+      belowScore: 0, skippedStock: 0, suppressedByLearning: 0, restocked: 0,
       note: `${urls.length} product pages baselined — watching from now (browser route)`,
     }
   }
@@ -709,12 +757,17 @@ async function browserScanAndQueue(watchedRow: WatchedBrandRow, mode: 'watch' | 
     const products = res.parsed.map(classifyExternalProduct)
     const fashion = products.filter((p) => !p.nonFashion)
     const onTaste = fashion.filter((p) => p.score >= watched.min_score)
-    const candidates = onTaste.filter((p) => p.stockStatus === 'in_stock')
+    const inStock = onTaste.filter((p) => p.stockStatus === 'in_stock')
+    const shouldSuppress = await loadLearnedSkipper(admin)
+    const candidates = inStock.filter((p) => !shouldSuppress(p, watched.name))
+    const suppressed = new Set(inStock.filter((p) => shouldSuppress(p, watched.name)).map((p) => p.shopifyProductId))
     const queued = await queueProducts(admin, watched, candidates)
     const restocked = await refreshBrandStock(admin, products)
-    // stock-held on-taste pieces stay unseen so a restock queues them later
+    // stock-held and learning-suppressed pieces stay unseen — restocks and
+    // taste shifts both get another chance on later scans
     const stockHeld = new Set(onTaste.filter((p) => p.stockStatus !== 'in_stock').map((p) => p.shopifyProductId))
-    await markHashes(res.processedUrls.map(urlHash).filter((h) => !stockHeld.has(h)))
+    const held = new Set([...Array.from(stockHeld), ...Array.from(suppressed)])
+    await markHashes(res.processedUrls.map(urlHash).filter((h) => !held.has(h)))
     await admin.from('watched_brand')
       .update({
         last_checked_at: new Date().toISOString(),
@@ -724,7 +777,8 @@ async function browserScanAndQueue(watchedRow: WatchedBrandRow, mode: 'watch' | 
       .eq('watched_brand_id', watched.watched_brand_id)
     return {
       name: watched.name, scanned: res.discovered, newProducts: onTaste.length, queued,
-      belowScore: fashion.length - onTaste.length, skippedStock: stockHeld.size, restocked,
+      belowScore: fashion.length - onTaste.length, skippedStock: stockHeld.size,
+      suppressedByLearning: suppressed.size, restocked,
       note: res.remaining > 0
         ? `${res.processedUrls.length} pages this run, ${res.remaining} remaining — run FULL SCAN again to continue`
         : undefined,
@@ -764,7 +818,10 @@ export async function checkWatchedBrand(watchedIn: WatchedBrandRow): Promise<Bra
   // later check queues it the moment it restocks. Stock-held is computed over
   // the WHOLE catalogue (not just unseen products) so pieces marked seen by
   // earlier scans are released from the seen list too.
-  const candidates = onTaste.filter((p) => p.stockStatus === 'in_stock')
+  const inStock = onTaste.filter((p) => p.stockStatus === 'in_stock')
+  const shouldSuppress = await loadLearnedSkipper(admin as any)
+  const candidates = inStock.filter((p) => !shouldSuppress(p, watched.name))
+  const suppressed = new Set(inStock.filter((p) => shouldSuppress(p, watched.name)).map((p) => p.shopifyProductId))
   const queued = await queueProducts(admin, watched, candidates)
   const restocked = await refreshBrandStock(admin, products)
   const stockHeld = new Set(
@@ -772,8 +829,9 @@ export async function checkWatchedBrand(watchedIn: WatchedBrandRow): Promise<Bra
       .filter((p) => !p.nonFashion && p.score >= watched.min_score && p.stockStatus !== 'in_stock')
       .map((p) => p.shopifyProductId),
   )
-  await unmarkSeen(admin, watched.watched_brand_id, Array.from(stockHeld))
-  await markSeen(admin, watched.watched_brand_id, products.filter((p) => !stockHeld.has(p.shopifyProductId)))
+  const held = new Set([...Array.from(stockHeld), ...Array.from(suppressed)])
+  await unmarkSeen(admin, watched.watched_brand_id, Array.from(held))
+  await markSeen(admin, watched.watched_brand_id, products.filter((p) => !held.has(p.shopifyProductId)))
   await (admin as any)
     .from('watched_brand')
     .update({ last_checked_at: new Date().toISOString(), last_new_count: queued } as any)
@@ -782,7 +840,7 @@ export async function checkWatchedBrand(watchedIn: WatchedBrandRow): Promise<Bra
   return {
     name: watched.name, scanned: products.length, newProducts: fresh.length,
     queued, belowScore: fresh.length - onTaste.length,
-    skippedStock: stockHeld.size, restocked,
+    skippedStock: stockHeld.size, suppressedByLearning: suppressed.size, restocked,
   }
 }
 
@@ -799,7 +857,7 @@ export async function runBrandWatch(): Promise<BrandCheckResult[]> {
     try {
       results.push(await checkWatchedBrand(w))
     } catch (e) {
-      results.push({ name: w.name, scanned: 0, newProducts: 0, queued: 0, belowScore: 0, skippedStock: 0, restocked: 0, error: e instanceof Error ? e.message : String(e) })
+      results.push({ name: w.name, scanned: 0, newProducts: 0, queued: 0, belowScore: 0, skippedStock: 0, suppressedByLearning: 0, restocked: 0, error: e instanceof Error ? e.message : String(e) })
     }
   }
   return results
