@@ -52,6 +52,8 @@ import {
   lookAlternates,
   swapComposedLookItem,
   removeComposedLookItem,
+  lookAddOptions,
+  addComposedLookItem,
   approveComposedLook,
   higgsfieldShootForLook,
   type SwapOption,
@@ -73,6 +75,18 @@ type Tab = (typeof TABS)[number]
 const OCCASION_LABEL: Record<string, string> = Object.fromEntries(
   OCCASION_TYPES.map((o) => [o.id, o.label]),
 )
+
+// Slots Chloe can add by hand. Bags/jewellery finish a look; outerwear and
+// accessories are there when the occasion calls for them.
+const ADD_SLOTS: { value: string; label: string }[] = [
+  { value: 'bag', label: 'BAG' },
+  { value: 'jewellery', label: 'JEWELLERY' },
+  { value: 'outerwear', label: 'OUTERWEAR' },
+  { value: 'accessory', label: 'ACCESSORY' },
+  { value: 'shoe', label: 'SHOES' },
+  { value: 'top', label: 'TOP' },
+  { value: 'bottom', label: 'BOTTOM' },
+]
 
 const label = 'text-[9px] tracking-[0.18em] text-[#6B6B6B]'
 const input =
@@ -997,13 +1011,26 @@ function LookRow({
   const [swapIdx, setSwapIdx] = useState<number | null>(null)
   const [swapOptions, setSwapOptions] = useState<SwapOption[] | null>(null)
   const [swapBusy, setSwapBusy] = useState(false)
+  const [addSlot, setAddSlot] = useState<string | null>(null)
   const composed = l.items.some((it) => it.item_id)
+  const presentSlots = new Set(l.items.map((it) => it.slot).filter(Boolean) as string[])
 
   async function openSwap(i: number) {
+    setAddSlot(null)
     setSwapIdx(i)
     setSwapOptions(null)
     setSwapBusy(true)
     const r = await lookAlternates(l.look_id, i)
+    setSwapBusy(false)
+    setSwapOptions(r.options ?? [])
+  }
+
+  async function openAdd(slot: string) {
+    setSwapIdx(null)
+    setAddSlot(slot)
+    setSwapOptions(null)
+    setSwapBusy(true)
+    const r = await lookAddOptions(l.look_id, slot)
     setSwapBusy(false)
     setSwapOptions(r.options ?? [])
   }
@@ -1064,6 +1091,30 @@ function LookRow({
                   </div>
                 </div>
               ))}
+              {!sent && (
+                <div className="w-56 border border-dashed border-[#D8D5CE] bg-[#FCFCFA] px-3 py-3">
+                  <p className="text-[9px] tracking-[0.14em] text-[#6B6B6B] mb-2">+ ADD TO THIS LOOK</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ADD_SLOTS.map((sl) => (
+                      <button
+                        key={sl.value}
+                        className={`text-[9px] tracking-[0.1em] px-2 py-1 border transition-colors ${
+                          addSlot === sl.value
+                            ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]'
+                            : presentSlots.has(sl.value)
+                            ? 'border-[#E2E0DB] text-[#A8A8A4] hover:border-[#0A0A0A] hover:text-[#4A4E57]'
+                            : 'border-[#C4A882] text-[#8B5E00] hover:bg-[#C4A882] hover:text-white'
+                        }`}
+                        title={presentSlots.has(sl.value) ? `Already has a ${sl.label.toLowerCase()} — adds another` : `Add a ${sl.label.toLowerCase()}`}
+                        onClick={() => (addSlot === sl.value ? setAddSlot(null) : openAdd(sl.value))}
+                      >
+                        {sl.label}
+                        {presentSlots.has(sl.value) ? ' ✓' : ''}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {l.image_url && (
                 <div className="w-56 border-2 border-[#C4A882] bg-white">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1085,13 +1136,16 @@ function LookRow({
               ))}
             </div>
           )}
-          {swapIdx !== null && (
+          {(swapIdx !== null || addSlot !== null) && (
             <div className="mt-2 border border-[#E8D9B8] bg-[#FBF8F2] p-3">
               <p className="text-[8px] tracking-[0.14em] text-[#8B5E00] mb-2">
-                SWAP {l.items[swapIdx]?.product_name?.toUpperCase()} — RANKED FOR {member?.name?.toUpperCase() ?? 'HER'} (TASTE × COHERENCE). YOUR PICK TEACHES THE SYSTEM.
+                {swapIdx !== null
+                  ? `SWAP ${l.items[swapIdx]?.product_name?.toUpperCase()}`
+                  : `ADD ${(ADD_SLOTS.find((x) => x.value === addSlot)?.label ?? addSlot ?? '').toUpperCase()}`}
+                {' '}— RANKED FOR {member?.name?.toUpperCase() ?? 'HER'} (TASTE × COHERENCE × OCCASION). YOUR PICK TEACHES THE SYSTEM.
               </p>
               {swapBusy && <p className="text-[9px] tracking-[0.1em] text-[#A8A8A4]">FINDING ALTERNATES…</p>}
-              {swapOptions && swapOptions.length === 0 && <p className="text-[9px] tracking-[0.1em] text-[#A8A8A4]">NO IN-STOCK ALTERNATES FOR THIS SLOT.</p>}
+              {swapOptions && swapOptions.length === 0 && <p className="text-[9px] tracking-[0.1em] text-[#A8A8A4]">NOTHING IN STOCK FOR THIS SLOT IN THE LIBRARY.</p>}
               {swapOptions && swapOptions.length > 0 && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                   {swapOptions.map((o) => (
@@ -1099,11 +1153,15 @@ function LookRow({
                       key={o.item_id}
                       className="text-left border border-[#E2E0DB] bg-white hover:border-[#0A0A0A] transition-colors"
                       onClick={() =>
-                        run(`swap-${l.look_id}-${o.item_id}`, async () => {
-                          const r = await swapComposedLookItem(l.look_id, swapIdx, o.item_id)
+                        run(`pick-${l.look_id}-${o.item_id}`, async () => {
+                          const r =
+                            swapIdx !== null
+                              ? await swapComposedLookItem(l.look_id, swapIdx, o.item_id)
+                              : await addComposedLookItem(l.look_id, o.item_id)
                           setSwapIdx(null)
+                          setAddSlot(null)
                           return r
-                        }, 'SWAPPED — TASTE UPDATED')
+                        }, swapIdx !== null ? 'SWAPPED — TASTE UPDATED' : 'ADDED — TASTE UPDATED')
                       }
                     >
                       {o.image_url && (

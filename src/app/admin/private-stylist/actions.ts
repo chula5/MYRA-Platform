@@ -978,6 +978,81 @@ export async function lookAlternates(lookId: string, itemIndex: number): Promise
   }
 }
 
+// Ranked options to ADD a slot the look doesn't have yet (bag, jewellery,
+// outerwear…) — same taste × coherence × occasion ranking as the swap picker.
+export async function lookAddOptions(lookId: string, slot: string): Promise<{ options?: SwapOption[]; error?: string }> {
+  const admin = createAdminClient() as any
+  const { data: look, error: lerr } = await admin.from('pilot_look').select('*').eq('look_id', lookId).single()
+  if (lerr || !look) return { error: lerr?.message ?? 'Look not found' }
+  const items: LookItem[] = look.items ?? []
+  const { data: delivery } = await admin.from('pilot_delivery').select('member_id, occasion, effective_weights').eq('delivery_id', look.delivery_id).single()
+  const { data: member } = await admin.from('pilot_member').select('*').eq('member_id', delivery?.member_id).single()
+  if (!member) return { error: 'Member not found' }
+
+  const taste = await loadMemberTaste(admin, member)
+  const library = await loadComposableLibrary()
+  const keepIds = items.filter((it) => it.item_id).map((it) => it.item_id as string)
+  const keepItems = library.filter((i) => keepIds.includes(i.item_id))
+  const exclude = new Set(keepIds)
+  const occ: OccasionContext = { id: delivery?.occasion ?? null, vector: lookTasteVector(normalise(delivery?.effective_weights ?? {})) }
+
+  const ranked = rankAlternates(taste, library, slot as Slot, keepItems, exclude, 12, occ)
+  return {
+    options: ranked.map(({ item, score }) => ({
+      item_id: item.item_id,
+      product_name: item.product_name,
+      brand_name: item.brand?.name ?? null,
+      image_url: item.image_url ?? null,
+      price_gbp: (item as any).price_gbp != null ? Number((item as any).price_gbp) : item.price != null ? Number(item.price) : null,
+      score: Math.round(score * 100) / 100,
+    })),
+  }
+}
+
+export async function addComposedLookItem(lookId: string, newItemId: string): Promise<{ error?: string }> {
+  const admin = createAdminClient() as any
+  const { data: look, error: lerr } = await admin.from('pilot_look').select('*').eq('look_id', lookId).single()
+  if (lerr || !look) return { error: lerr?.message ?? 'Look not found' }
+  const items: LookItem[] = [...(look.items ?? [])]
+  const { data: delivery } = await admin.from('pilot_delivery').select('member_id').eq('delivery_id', look.delivery_id).single()
+  if (!delivery) return { error: 'Delivery not found' }
+
+  const { data: newItem, error: ierr } = await admin.from('item').select('*, brand(*)').eq('item_id', newItemId).single()
+  if (ierr || !newItem) return { error: ierr?.message ?? 'Item not found' }
+  if (items.some((it) => it.item_id === newItemId)) return { error: 'Already in this look' }
+  const incoming = toLookItem(newItem as ItemWithBrand)
+  items.push(incoming)
+
+  const { error: uerr } = await admin.from('pilot_look').update({ items }).eq('look_id', lookId)
+  if (uerr) return { error: uerr.message }
+
+  // Chloe choosing a piece is a positive signal — same shape as an approval.
+  const fb: any[] = [{
+    member_id: delivery.member_id,
+    delivery_id: look.delivery_id,
+    look_id: lookId,
+    action: 'accept',
+    slot: incoming.slot ?? null,
+    item_in: incoming.item_id ?? null,
+    brand_in: incoming.brand_id ?? null,
+  }]
+  if (incoming.brand_id) {
+    for (const other of items) {
+      if (other === incoming || !other.brand_id || other.brand_id === incoming.brand_id) continue
+      const [a, b] = pairKeyOrdered(incoming.brand_id, other.brand_id)
+      fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action: 'accept', brand_out: a, brand_in: b })
+    }
+  }
+  await admin.from('pilot_look_feedback').insert(fb)
+
+  try {
+    if (incoming.brand) await applyBrandSignals(admin, delivery.member_id, [incoming.brand], 'yes')
+  } catch { /* best-effort */ }
+
+  revalidatePath(PATH)
+  return {}
+}
+
 export async function swapComposedLookItem(lookId: string, itemIndex: number, newItemId: string): Promise<{ error?: string }> {
   const admin = createAdminClient() as any
   const { data: look, error: lerr } = await admin.from('pilot_look').select('*').eq('look_id', lookId).single()

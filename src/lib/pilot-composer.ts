@@ -173,6 +173,9 @@ export function toLookItem(item: ItemWithBrand): LookItem {
   }
 }
 
+// Slots a composed look should always carry if the library can fill them.
+const ENSURE_SLOTS: Slot[] = ['bag']
+
 export interface ComposedLook {
   items: LookItem[]
   notes: string
@@ -235,6 +238,17 @@ export function composeMemberLooks(
       { item: a.item, slot: slotForItemType(a.item.item_type) },
       ...best.items,
     ]
+
+    // A finished look carries a bag. The shared composer treats bag as
+    // optional (it competes with omitting it), so top it up here rather than
+    // changing slot planning for the main Outfit Composer.
+    for (const need of ENSURE_SLOTS) {
+      if (all.some((x) => x.slot === need)) continue
+      const exclude = new Set([...Array.from(usedItems), ...all.map((x) => x.item.item_id)])
+      const [pick] = rankAlternates(t, usable, need, all.map((x) => x.item), exclude, 1, occ)
+      if (pick) all.push({ item: pick.item, slot: need })
+    }
+
     all.forEach(({ item }) => usedItems.add(item.item_id))
     if (brandId) usedAnchorBrands.add(brandId)
 
