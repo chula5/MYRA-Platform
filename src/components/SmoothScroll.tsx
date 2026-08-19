@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { ReactLenis } from 'lenis/react'
 import 'lenis/dist/lenis.css'
 
@@ -13,6 +14,7 @@ import 'lenis/dist/lenis.css'
  */
 export default function SmoothScroll({ children }: { children: React.ReactNode }) {
   const [reducedMotion, setReducedMotion] = useState(false)
+  const pathname = usePathname()
 
   useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -22,7 +24,9 @@ export default function SmoothScroll({ children }: { children: React.ReactNode }
     return () => mq.removeEventListener('change', update)
   }, [])
 
-  if (reducedMotion) return <>{children}</>
+  // Admin studio scrolls natively — its huge, filterable grids resize all the
+  // time and Lenis's cached bounds fall out of sync (stuck before the top).
+  if (reducedMotion || pathname?.startsWith('/admin')) return <>{children}</>
 
   return (
     <ReactLenis root options={{ duration: 1.2, anchors: true }}>

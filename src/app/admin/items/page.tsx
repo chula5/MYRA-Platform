@@ -1,19 +1,26 @@
 import Link from 'next/link'
-import { getAllItems } from '@/lib/admin-queries'
+import { getItemsPage } from '@/lib/admin-queries'
 import ItemsGrid from './ItemsGrid'
 
 const STATUS_TABS = ['all', 'draft', 'ready', 'live', 'archived'] as const
 
 interface PageProps {
-  searchParams: Promise<{ status?: string; stock?: string }>
+  searchParams: Promise<{ status?: string; stock?: string; brand?: string; type?: string; colour?: string; page?: string }>
 }
 
 export default async function ItemsPage({ searchParams }: PageProps) {
-  const { status, stock } = await searchParams
+  const { status, stock, brand, type, colour, page } = await searchParams
   const activeTab = status || 'all'
   const stockFilter =
     stock === 'flagged' || stock === 'out_of_stock' || stock === 'low_stock' ? stock : undefined
-  const items = await getAllItems(activeTab === 'all' ? undefined : activeTab, stockFilter)
+  const data = await getItemsPage({
+    status: activeTab === 'all' ? undefined : activeTab,
+    stockFilter,
+    brand: brand || undefined,
+    itemType: type || undefined,
+    colour: colour || undefined,
+    page: page ? parseInt(page, 10) || 1 : 1,
+  })
 
   return (
     <div>
@@ -61,15 +68,7 @@ export default async function ItemsPage({ searchParams }: PageProps) {
       </div>
 
       {/* Grid */}
-      {items.length === 0 ? (
-        <div className="py-20 text-center">
-          <p className="text-[11px] tracking-[0.09em] text-[#A8A8A4]">
-            NO ITEMS YET. ADD YOUR FIRST ITEM.
-          </p>
-        </div>
-      ) : (
-        <ItemsGrid items={items} />
-      )}
+      <ItemsGrid {...data} />
     </div>
   )
 }

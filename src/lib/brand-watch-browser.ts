@@ -1,0 +1,197 @@
+// Brand Watch browser route — for stores that aren't on Shopify (Sessun,
+// most French houses on custom platforms). Instead of /products.json:
+//   1. discover product URLs from the site's sitemap (robots.txt → sitemap.xml,
+//      recursing into sub-sitemaps, preferring EN/GB locales)
+//   2. fetch each product page and read its JSON-LD Product structured data
+//      (name, price, currency, images, availability — published for SEO by
+//      nearly every fashion site), falling back to og: meta tags
+// Runs fully server-side in resumable chunks: pages already evaluated are in
+// brand_watch_seen, so a re-run continues where the last one stopped, and
+// progress is written to watched_brand.scan_state as the scan walks — closing
+// the admin page never cancels anything.
+
+const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
+const HEADERS = {
+  'User-Agent': UA,
+  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'en-GB,en;q=0.9',
+}
+
+export const BROWSER_SCAN_PAGE_BUDGET = 350 // pages per run; re-run continues
+
+// Stable id for a product URL (fills the shopify_product_id slot for dedupe
+// and the seen table). Two fnv1a passes → 16 hex chars.
+export function urlHash(url: string): string {
+  const fnv = (seed: number) => {
+    let h = seed >>> 0
+    for (let i = 0; i < url.length; i++) {
+      h ^= url.charCodeAt(i)
+      h = Math.imul(h, 0x01000193) >>> 0
+    }
+    return h.toString(16).padStart(8, '0')
+  }
+  return 'u' + fnv(0x811c9dc5) + fnv(0x9747b28c)
+}
+
+async function fetchText(url: string, timeoutMs = 20000): Promise<string | null> {
+  try {
+    const res = await fetch(url, { headers: HEADERS, cache: 'no-store', signal: AbortSignal.timeout(timeoutMs) })
+    if (!res.ok) return null
+    return await res.text()
+  } catch { return null }
+}
+
+function locs(xml: string): string[] {
+  return Array.from(xml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/g)).map((m) => m[1])
+}
+
+const PRODUCT_PATH = /\/(product|products|produit|produits|catalogue|item|shop-item|p)\//i
+const NON_PRODUCT_PATH = /\/(collection|collections|category|categories|blog|journal|stories|store|stores|locations|page|pages|about|legal|care|faq|search|account|cart|lookbook|edito)\b/i
+const LOCALE_SITEMAP = /(-|_|\/)(en|gb|uk|en-gb|en-en)[-._]/i
+
+// Walk robots.txt + sitemap(.xml|index) and return product-page URLs.
+export async function discoverProductUrls(baseUrl: string): Promise<string[]> {
+  const origin = new URL(baseUrl).origin
+  const sitemapUrls = new Set<string>()
+  const robots = await fetchText(origin + '/robots.txt', 10000)
+  for (const m of Array.from((robots ?? '').matchAll(/sitemap\s*:\s*(\S+)/gi))) sitemapUrls.add(m[1])
+  if (!sitemapUrls.size) sitemapUrls.add(origin + '/sitemap.xml')
+  sitemapUrls.add(origin + '/sitemap_index.xml')
+
+  const pageUrls = new Set<string>()
+  const queue = Array.from(sitemapUrls)
+  const visited = new Set<string>()
+  while (queue.length && visited.size < 15 && pageUrls.size < 12000) {
+    const sm = queue.shift()!
+    if (visited.has(sm)) continue
+    visited.add(sm)
+    const xml = await fetchText(sm, 25000)
+    if (!xml) continue
+    if (/<sitemapindex/i.test(xml)) {
+      const subs = locs(xml)
+      // prefer EN/GB locale sub-sitemaps and anything mentioning products
+      const preferred = subs.filter((u) => LOCALE_SITEMAP.test(u) || /product/i.test(u))
+      for (const u of (preferred.length ? preferred : subs).slice(0, 10)) queue.push(u)
+    } else {
+      for (const u of locs(xml)) pageUrls.add(u)
+    }
+  }
+
+  const sameHost = Array.from(pageUrls).filter((u) => { try { return new URL(u).origin === origin } catch { return false } })
+  let products = sameHost.filter((u) => PRODUCT_PATH.test(new URL(u).pathname))
+  if (products.length < 10) {
+    // fallback: deep, non-obviously-navigational pages
+    products = sameHost.filter((u) => {
+      const path = new URL(u).pathname
+      return path.split('/').filter(Boolean).length >= 2 && !NON_PRODUCT_PATH.test(path)
+    })
+  }
+  return Array.from(new Set(products)).slice(0, 6000)
+}
+
+export interface ParsedProduct {
+  url: string
+  title: string
+  description: string
+  category: string
+  brand?: string | null // what the site calls itself: JSON-LD brand, else og:site_name
+  price: number | null
+  currency: string | null
+  images: string[]
+  available: boolean
+}
+
+function firstOffer(offers: any): any {
+  if (!offers) return {}
+  if (Array.isArray(offers)) return offers[0] ?? {}
+  if (Array.isArray(offers.offers)) return offers.offers[0] ?? {} // AggregateOffer
+  return offers
+}
+
+// JSON-LD Product (handles arrays, @graph, list types), og: fallback.
+export function parseProductPage(html: string, url: string): ParsedProduct | null {
+  const nodes: any[] = []
+  for (const m of Array.from(html.matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi))) {
+    try {
+      const d = JSON.parse(m[1].trim())
+      for (const item of Array.isArray(d) ? d : [d]) {
+        nodes.push(item)
+        if (Array.isArray(item?.['@graph'])) nodes.push(...item['@graph'])
+      }
+    } catch { /* invalid JSON-LD block — skip */ }
+  }
+  const product = nodes.find((n) => {
+    const t = n?.['@type']
+    return t === 'Product' || (Array.isArray(t) && t.includes('Product'))
+  })
+  const siteName = html.match(/<meta[^>]+property="og:site_name"[^>]+content="([^"]*)"/i)?.[1]?.trim() || null
+  if (product) {
+    const offer = firstOffer(product.offers)
+    const price = parseFloat(String(offer.price ?? offer.lowPrice ?? ''))
+    const imgs = Array.isArray(product.image) ? product.image : product.image ? [product.image] : []
+    const brandNode = product.brand
+    const brand = (typeof brandNode === 'string' ? brandNode : brandNode?.name) || siteName
+    return {
+      url,
+      brand: brand ? String(brand).trim() : null,
+      title: String(product.name ?? '').trim(),
+      description: String(product.description ?? '').slice(0, 400),
+      category: String(product.category ?? ''),
+      price: isNaN(price) ? null : price,
+      currency: offer.priceCurrency ? String(offer.priceCurrency) : null,
+      images: imgs.map((i: any) => (typeof i === 'string' ? i : i?.url)).filter(Boolean).slice(0, 6),
+      available: !/OutOfStock|SoldOut|Discontinued/i.test(String(offer.availability ?? 'InStock')),
+    }
+  }
+  // og: fallback — enough to review, no availability signal (assume in stock)
+  const og = (p: string) => html.match(new RegExp(`<meta[^>]+property="og:${p}"[^>]+content="([^"]*)"`, 'i'))?.[1] ?? ''
+  const title = og('title')
+  if (!title) return null
+  const price = parseFloat(og('price:amount') || html.match(/<meta[^>]+property="product:price:amount"[^>]+content="([^"]*)"/i)?.[1] || '')
+  return {
+    url, brand: siteName, title: title.trim(), description: og('description').slice(0, 400), category: '',
+    price: isNaN(price) ? null : price,
+    currency: og('price:currency') || html.match(/<meta[^>]+property="product:price:currency"[^>]+content="([^"]*)"/i)?.[1] || null,
+    images: [og('image')].filter(Boolean),
+    available: true,
+  }
+}
+
+export interface BrowserFetchResult {
+  parsed: ParsedProduct[]
+  failed: number
+  discovered: number
+  processedUrls: string[] // urls actually fetched this run (parsed or failed)
+  remaining: number
+}
+
+// Fetch + parse the unseen product pages, a budgeted chunk at a time.
+export async function fetchNewProductPages(
+  baseUrl: string,
+  seenHashes: Set<string>,
+  opts: { maxPages?: number; onProgress?: (done: number, total: number) => Promise<void> } = {},
+): Promise<BrowserFetchResult> {
+  const all = await discoverProductUrls(baseUrl)
+  if (!all.length) throw new Error(`${baseUrl}: no product URLs found in the sitemap — this site needs a manual browser scan`)
+  const fresh = all.filter((u) => !seenHashes.has(urlHash(u)))
+  const batch = fresh.slice(0, opts.maxPages ?? BROWSER_SCAN_PAGE_BUDGET)
+
+  const parsed: ParsedProduct[] = []
+  const processedUrls: string[] = []
+  let failed = 0
+  let done = 0
+  const CONCURRENCY = 4
+  for (let i = 0; i < batch.length; i += CONCURRENCY) {
+    const chunk = batch.slice(i, i + CONCURRENCY)
+    const results = await Promise.all(chunk.map(async (u) => ({ u, html: await fetchText(u) })))
+    for (const { u, html } of results) {
+      processedUrls.push(u)
+      const p = html ? parseProductPage(html, u) : null
+      if (p && p.title) parsed.push(p)
+      else failed++
+    }
+    done += chunk.length
+    if (opts.onProgress && (done % 24 === 0 || done === batch.length)) await opts.onProgress(done, batch.length)
+  }
+  return { parsed, failed, discovered: all.length, processedUrls, remaining: fresh.length - batch.length }
+}

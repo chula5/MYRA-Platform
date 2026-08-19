@@ -6,7 +6,7 @@ import type { WatchedBrandRow } from '@/lib/brand-watch'
 import {
   addWatchedBrand, checkAllBrandsNow, checkBrandNow, fullScanBrand, keepAllForBrand,
   keepItems, loadQueuePage, removeWatchedBrand, setWatchedBrandActive,
-  setWatchedBrandMinScore, skipItems, type QueueItemRow, type QueuePage,
+  setWatchedBrandMinScore, skipItems, undoSkip, type QueueItemRow, type QueuePage,
 } from './actions'
 
 const CHIP = 'px-3 py-1.5 rounded-full text-[9px] tracking-[0.12em] border transition-colors'
@@ -31,6 +31,7 @@ export default function BrandWatchClient(props: Props) {
   const [busyBrand, setBusyBrand] = useState<string | null>(null)
   const [gone, setGone] = useState<Set<string>>(new Set()) // optimistically hidden cards
   const [selected, setSelected] = useState<Set<string>>(new Set()) // multi-select for batch keep/skip
+  const [lastSkip, setLastSkip] = useState<string[]>([]) // most recent skip batch, for UNDO
 
   // queue state — starts from the server render, replaced when a brand is
   // selected (the learning re-trains server-side on every load)
@@ -75,8 +76,19 @@ export default function BrandWatchClient(props: Props) {
   const decide = (ids: string[], keep: boolean) => {
     setGone((g) => new Set(Array.from(g).concat(ids)))
     setSelected((s) => new Set(Array.from(s).filter((id) => !ids.includes(id))))
+    if (!keep) setLastSkip(ids)
     act(() => (keep ? keepItems(ids) : skipItems(ids)),
       (r) => setNotice(`${r.updated} ${keep ? 'KEPT → ADDED TO LIBRARY AS READY' : 'SKIPPED — NEVER ENTERS THE LIBRARY'} — LEARNING UPDATES ON NEXT LOAD`))
+  }
+
+  const undoLastSkip = () => {
+    const ids = lastSkip
+    setLastSkip([])
+    act(() => undoSkip(ids), (r) => {
+      // bring the cards straight back into view
+      setGone((g) => new Set(Array.from(g).filter((id) => !ids.includes(id))))
+      setNotice(`${r.restored} SKIP${r.restored === 1 ? '' : 'S'} UNDONE — BACK IN THE QUEUE`)
+    })
   }
 
   const toggleSelect = (id: string) =>
@@ -88,7 +100,7 @@ export default function BrandWatchClient(props: Props) {
 
   const addNotice = (r: any, label: string) => {
     setUrl('')
-    setNotice(r.error ?? `${r.result.name}: ${r.result.scanned} SCANNED, ${r.result.queued} QUEUED ${label}`)
+    setNotice(r.error ?? `${r.result.name}: ${r.result.scanned} SCANNED, ${r.result.queued} QUEUED ${label}${r.result.note ? ` — ${r.result.note.toUpperCase()}` : ''}`)
     if (!r.error) reloadQueue()
   }
 
@@ -142,6 +154,9 @@ export default function BrandWatchClient(props: Props) {
                     </span>
                     <span className="block text-[8px] tracking-[0.08em] text-[#A8A8A4]">
                       {inQueue} IN QUEUE{w.last_checked_at ? ` · CHECKED ${w.last_checked_at.slice(0, 10)}` : ' · NEVER CHECKED'}
+                      {w.platform === 'browser' && ' · BROWSER'}
+                      {w.scan_state?.running && <span className="text-[#C4A882]"> · SCANNING {w.scan_state.done ?? 0}/{w.scan_state.total ?? '?'}</span>}
+                      {!w.scan_state?.running && (w.scan_state?.remaining ?? 0) > 0 && <span className="text-[#C4A882]"> · {w.scan_state!.remaining} PAGES LEFT — FULL SCAN TO CONTINUE</span>}
                     </span>
                   </button>
                   <span className="flex gap-1.5 flex-shrink-0">
@@ -154,7 +169,7 @@ export default function BrandWatchClient(props: Props) {
                     </button>
                     <button
                       disabled={pending}
-                      onClick={() => { setBusyBrand(w.watched_brand_id); act(() => fullScanBrand(w.watched_brand_id), (r) => { setNotice(r.error ?? `${r.result.name}: ${r.result.queued} QUEUED FROM THE FULL CATALOGUE (${r.result.belowScore} BELOW MIN SCORE)`); if (!r.error) reloadQueue() }) }}
+                      onClick={() => { setBusyBrand(w.watched_brand_id); act(() => fullScanBrand(w.watched_brand_id), (r) => { setNotice(r.error ?? `${r.result.name}: ${r.result.queued} QUEUED FROM THE FULL CATALOGUE (${r.result.belowScore} BELOW MIN SCORE)${r.result.note ? ` — ${r.result.note.toUpperCase()}` : ''}`); if (!r.error) reloadQueue() }) }}
                       className="text-[8px] tracking-[0.1em] text-[#4A4E57] border border-[#E2E0DB] rounded-full px-2.5 py-1 hover:border-[#0A0A0A] transition-colors disabled:opacity-40"
                       title="Queue every on-taste piece in the whole catalogue at this brand's min score — lower the min score and run again to go deeper"
                     >
@@ -248,6 +263,15 @@ export default function BrandWatchClient(props: Props) {
           </p>
           <div className="flex items-center gap-2 flex-wrap">
             {notice && <p className="text-[9px] tracking-[0.1em] text-[#C4A882] max-w-md truncate">{notice}</p>}
+            {lastSkip.length > 0 && (
+              <button
+                disabled={pending}
+                onClick={undoLastSkip}
+                className="border border-[#C4A882] text-[#C4A882] rounded-full px-4 py-2 text-[9px] tracking-[0.12em] hover:bg-[#C4A882] hover:text-white transition-colors disabled:opacity-40"
+              >
+                UNDO SKIP · {lastSkip.length}
+              </button>
+            )}
             {selected.size > 0 && (
               <>
                 <button

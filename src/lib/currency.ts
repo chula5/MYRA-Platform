@@ -39,6 +39,20 @@ function roundGbp(v: number): number {
   return Math.round(v / 50) * 50
 }
 
+// Raw numeric GBP conversion (UNROUNDED — for medians/analytics, not display).
+// Returns null when the price is unparseable or the currency has no rate.
+export function toGbpAmount(price: string | number | null | undefined, currency: string | null | undefined): number | null {
+  const n = parseAmount(price)
+  if (n == null) return null
+  const cur = (currency || 'GBP').toUpperCase().replace('£', 'GBP')
+  const rate = GBP_PER[cur]
+  return rate == null ? null : n * rate
+}
+
+export function knownCurrency(currency: string | null | undefined): boolean {
+  return GBP_PER[(currency || 'GBP').toUpperCase()] != null
+}
+
 // The price exactly as stored, in its native symbol — e.g. "€390", "$519".
 export function formatNative(price: string | number | null | undefined, currency: string | null | undefined): string {
   const n = parseAmount(price)

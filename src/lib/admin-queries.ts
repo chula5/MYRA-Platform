@@ -256,30 +256,125 @@ export async function getAllBrands(): Promise<Brand[]> {
 
 export type ItemWithBrand = Item & { brand: Brand }
 
+export interface ItemFacet { value: string; count: number }
+export interface ItemsPage {
+  items: ItemWithBrand[]
+  total: number
+  page: number
+  pageSize: number
+  brands: ItemFacet[]
+  types: ItemFacet[]
+  colours: ItemFacet[]
+}
+
+// One page of the item library plus facet counts for the filter dropdowns.
+// Facets are scoped by status/stock (so switching brand/type/colour never
+// empties the other dropdowns); total reflects every active filter. Built to
+// stay fast at 10k+ items: the page fetch is a single ranged query and the
+// facet sweep pulls only three tiny columns per row, in parallel.
+export async function getItemsPage(opts: {
+  status?: string
+  stockFilter?: 'flagged' | 'out_of_stock' | 'low_stock'
+  brand?: string
+  itemType?: string
+  colour?: string
+  page?: number
+  pageSize?: number
+}): Promise<ItemsPage> {
+  const supabase = createAdminClient()
+  const pageSize = opts.pageSize ?? 120
+  const applyScope = (q: any) => {
+    if (opts.status && opts.status !== 'all') q = q.eq('status', opts.status)
+    if (opts.stockFilter === 'flagged') q = q.in('stock_status', ['out_of_stock', 'low_stock'])
+    else if (opts.stockFilter === 'out_of_stock' || opts.stockFilter === 'low_stock') q = q.eq('stock_status', opts.stockFilter)
+    return q
+  }
+  try {
+    // Facet sweep: brand/type/colour for every row in scope, 1,000 at a time.
+    const { count: scopeTotal, error: cerr } = await applyScope(
+      (supabase as any).from('item').select('item_id', { count: 'exact', head: true }),
+    )
+    if (cerr) throw cerr
+    const pages = Math.ceil((scopeTotal ?? 0) / 1000)
+    const facetBatches = await Promise.all(
+      Array.from({ length: pages }, (_, i) =>
+        applyScope((supabase as any).from('item').select('item_type, colour_family, brand:brand_id(name)'))
+          .order('item_id')
+          .range(i * 1000, i * 1000 + 999)
+          .then((r: any) => { if (r.error) throw r.error; return r.data ?? [] }),
+      ),
+    )
+    const facetRows: any[] = facetBatches.flat()
+
+    const tally = (rows: any[], key: (r: any) => string | null): ItemFacet[] => {
+      const m = new Map<string, number>()
+      for (const r of rows) { const v = key(r); if (v) m.set(v, (m.get(v) ?? 0) + 1) }
+      return Array.from(m, ([value, count]) => ({ value, count })).sort((a, b) => a.value.localeCompare(b.value))
+    }
+    const brands = tally(facetRows, (r) => r.brand?.name ?? null)
+    const types = tally(facetRows, (r) => r.item_type ?? null)
+    const colours = tally(facetRows, (r) => r.colour_family ?? null)
+
+    const matches = (r: any) =>
+      (!opts.brand || r.brand?.name === opts.brand) &&
+      (!opts.itemType || r.item_type === opts.itemType) &&
+      (!opts.colour || r.colour_family === opts.colour)
+    const total = facetRows.filter(matches).length
+
+    const totalPages = Math.max(1, Math.ceil(total / pageSize))
+    const page = Math.min(Math.max(1, opts.page ?? 1), totalPages)
+
+    let q = applyScope(
+      (supabase as any)
+        .from('item')
+        .select(opts.brand ? '*, brand:brand_id!inner(*)' : '*, brand(*)')
+        .order('created_at', { ascending: false })
+        .range((page - 1) * pageSize, page * pageSize - 1),
+    )
+    if (opts.brand) q = q.eq('brand.name', opts.brand)
+    if (opts.itemType) q = q.eq('item_type', opts.itemType)
+    if (opts.colour) q = q.eq('colour_family', opts.colour)
+    const { data, error } = await q
+    if (error) throw error
+
+    return { items: (data ?? []) as unknown as ItemWithBrand[], total, page, pageSize, brands, types, colours }
+  } catch (err) {
+    console.error('[getItemsPage]', err)
+    return { items: [], total: 0, page: 1, pageSize, brands: [], types: [], colours: [] }
+  }
+}
+
 export async function getAllItems(
   status?: string,
   stockFilter?: 'flagged' | 'out_of_stock' | 'low_stock',
 ): Promise<ItemWithBrand[]> {
   const supabase = createAdminClient()
   try {
-    let query = supabase
-      .from('item')
-      .select('*, brand(*)')
-      .order('created_at', { ascending: false })
+    // Page past PostgREST's 1,000-row response cap — the library is bigger.
+    const out: ItemWithBrand[] = []
+    for (let from = 0; ; from += 1000) {
+      let query = supabase
+        .from('item')
+        .select('*, brand(*)')
+        .order('created_at', { ascending: false })
+        .range(from, from + 999)
 
-    if (status && status !== 'all') {
-      query = query.eq('status', status)
+      if (status && status !== 'all') {
+        query = query.eq('status', status)
+      }
+
+      if (stockFilter === 'flagged') {
+        query = query.in('stock_status', ['out_of_stock', 'low_stock'])
+      } else if (stockFilter === 'out_of_stock' || stockFilter === 'low_stock') {
+        query = query.eq('stock_status', stockFilter)
+      }
+
+      const { data, error } = await query
+      if (error) throw error
+      out.push(...((data ?? []) as unknown as ItemWithBrand[]))
+      if (!data || data.length < 1000) break
     }
-
-    if (stockFilter === 'flagged') {
-      query = query.in('stock_status', ['out_of_stock', 'low_stock'])
-    } else if (stockFilter === 'out_of_stock' || stockFilter === 'low_stock') {
-      query = query.eq('stock_status', stockFilter)
-    }
-
-    const { data, error } = await query
-    if (error) throw error
-    return (data ?? []) as unknown as ItemWithBrand[]
+    return out
   } catch (err) {
     console.error('[getAllItems]', err)
     return []

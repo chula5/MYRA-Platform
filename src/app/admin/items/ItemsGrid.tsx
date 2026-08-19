@@ -1,15 +1,31 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import StatusBadge from '@/components/admin/StatusBadge'
 import StockBadge from '@/components/admin/StockBadge'
-import type { ItemWithBrand } from '@/lib/admin-queries'
+import { PICKER_COLOURS, PICKER_TYPES } from '@/components/admin/ItemPickerModal'
+import type { ItemFacet, ItemWithBrand } from '@/lib/admin-queries'
 import { createOutfitFromSelectedItems, deleteItems } from '@/app/admin/items/actions'
 
-export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
+const SELECT_CLS = 'text-[10px] tracking-[0.09em] uppercase px-3 py-2 border border-[#E2E0DB] rounded-[10px] bg-white text-[#4A4E57] hover:border-[#0A0A0A] focus:outline-none focus:border-[#0A0A0A] transition-colors max-w-[240px]'
+const TYPE_LABELS = new Map(PICKER_TYPES.map((t) => [t.value, t.label]))
+const COLOUR_LABELS = new Map(PICKER_COLOURS.map((c) => [c.value, c.label]))
+
+interface Props {
+  items: ItemWithBrand[]
+  total: number
+  page: number
+  pageSize: number
+  brands: ItemFacet[]
+  types: ItemFacet[]
+  colours: ItemFacet[]
+}
+
+export default function ItemsGrid({ items, total, page, pageSize, brands, types, colours }: Props) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
   const [selectMode, setSelectMode] = useState(false)
@@ -17,6 +33,24 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
   const [createError, setCreateError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
+
+  // Filters and page live in the URL — the server sends back one page of
+  // matching items plus facet counts, so this stays fast at 10k+ items.
+  const fBrand = searchParams.get('brand') ?? ''
+  const fType = searchParams.get('type') ?? ''
+  const fColour = searchParams.get('colour') ?? ''
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+
+  function setParam(key: string, value: string) {
+    const sp = new URLSearchParams(searchParams.toString())
+    if (value) sp.set(key, value)
+    else sp.delete(key)
+    if (key !== 'page') sp.delete('page') // filter change restarts at page 1
+    setSelected(new Set())
+    router.push(`/admin/items${sp.toString() ? `?${sp.toString()}` : ''}`)
+  }
+
+  const shown = items
 
   function toggle(itemId: string) {
     setSelected((prev) => {
@@ -28,7 +62,7 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
   }
 
   function selectAll() {
-    setSelected(new Set(items.map((i) => i.item_id)))
+    setSelected(new Set(shown.map((i) => i.item_id)))
   }
 
   function clearAll() {
@@ -99,6 +133,49 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
 
   return (
     <>
+      {/* Brand / type / colour filter dropdowns + pagination */}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <select value={fBrand} onChange={(e) => setParam('brand', e.target.value)} className={SELECT_CLS}>
+          <option value="">ALL BRANDS</option>
+          {brands.map((b) => (
+            <option key={b.value} value={b.value}>{b.value.toUpperCase()} · {b.count}</option>
+          ))}
+        </select>
+        <select value={fType} onChange={(e) => setParam('type', e.target.value)} className={SELECT_CLS}>
+          <option value="">ALL TYPES</option>
+          {types.map((t) => (
+            <option key={t.value} value={t.value}>{TYPE_LABELS.get(t.value) ?? t.value.replace(/_/g, ' ').toUpperCase()} · {t.count}</option>
+          ))}
+        </select>
+        <select value={fColour} onChange={(e) => setParam('colour', e.target.value)} className={SELECT_CLS}>
+          <option value="">ALL COLOURS</option>
+          {colours.map((c) => (
+            <option key={c.value} value={c.value}>{COLOUR_LABELS.get(c.value) ?? c.value.toUpperCase()} · {c.count}</option>
+          ))}
+        </select>
+        <span className="text-[10px] tracking-[0.12em] text-[#6B6B6B] ml-1">
+          {total} ITEM{total === 1 ? '' : 'S'}{totalPages > 1 ? ` · PAGE ${page} OF ${totalPages}` : ''}
+        </span>
+        {totalPages > 1 && (
+          <span className="flex items-center gap-1 ml-auto">
+            <button
+              disabled={page <= 1}
+              onClick={() => setParam('page', String(page - 1))}
+              className="text-[10px] tracking-[0.09em] px-3 py-2 border border-[#E2E0DB] rounded-[10px] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors disabled:opacity-40 disabled:hover:border-[#E2E0DB]"
+            >
+              ← PREV
+            </button>
+            <button
+              disabled={page >= totalPages}
+              onClick={() => setParam('page', String(page + 1))}
+              className="text-[10px] tracking-[0.09em] px-3 py-2 border border-[#E2E0DB] rounded-[10px] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors disabled:opacity-40 disabled:hover:border-[#E2E0DB]"
+            >
+              NEXT →
+            </button>
+          </span>
+        )}
+      </div>
+
       {/* Select-mode toolbar — DELETE lives on the far LEFT, deliberately away
           from Copy / Create on the right so it can't be hit by accident. */}
       <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
@@ -191,10 +268,10 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
           {selectMode && (
             <button
               type="button"
-              onClick={selected.size === items.length ? clearAll : selectAll}
+              onClick={selected.size === shown.length ? clearAll : selectAll}
               className="text-[10px] tracking-[0.09em] px-3 py-1.5 border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors duration-200"
             >
-              {selected.size === items.length ? 'CLEAR ALL' : 'SELECT ALL'}
+              {selected.size === shown.length ? 'CLEAR ALL' : 'SELECT ALL'}
             </button>
           )}
         </div>
@@ -207,7 +284,7 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
 
       {/* Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-        {items.map((item) => {
+        {shown.map((item) => {
           const isSelected = selected.has(item.item_id)
           const tile = (
             <>
@@ -294,6 +371,33 @@ export default function ItemsGrid({ items }: { items: ItemWithBrand[] }) {
         })}
       </div>
 
+      {shown.length === 0 && (
+        <div className="py-20 text-center">
+          <p className="text-[11px] tracking-[0.09em] text-[#A8A8A4]">
+            {total === 0 ? 'NOTHING MATCHES THESE FILTERS.' : 'NO ITEMS ON THIS PAGE.'}
+          </p>
+        </div>
+      )}
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-3 mt-8">
+          <button
+            disabled={page <= 1}
+            onClick={() => setParam('page', String(page - 1))}
+            className="text-[10px] tracking-[0.09em] px-4 py-2 border border-[#E2E0DB] rounded-[10px] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors disabled:opacity-40 disabled:hover:border-[#E2E0DB]"
+          >
+            ← PREV
+          </button>
+          <span className="text-[10px] tracking-[0.12em] text-[#6B6B6B]">PAGE {page} OF {totalPages}</span>
+          <button
+            disabled={page >= totalPages}
+            onClick={() => setParam('page', String(page + 1))}
+            className="text-[10px] tracking-[0.09em] px-4 py-2 border border-[#E2E0DB] rounded-[10px] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors disabled:opacity-40 disabled:hover:border-[#E2E0DB]"
+          >
+            NEXT →
+          </button>
+        </div>
+      )}
     </>
   )
 }

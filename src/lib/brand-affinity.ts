@@ -10,6 +10,7 @@
 
 import { createAdminClient } from '@/lib/supabase-server'
 import { buildOutfitVector, cosine, unit, isZero, VECTOR_DIM } from '@/lib/taste-vector'
+import { toGbpAmount, knownCurrency } from '@/lib/currency'
 
 // ── constants ───────────────────────────────────────────────────────────────
 
@@ -34,6 +35,29 @@ export const MIN_VECTOR_NEIGHBOUR = 0.5 // below this an unfamilied brand is an 
 export const WARM_START_WEIGHT = 10 // ≈ 2-3 swipes' worth; real swipes dominate by ~20 events
 export const RE_EXPANSION_THRESHOLD = 0.8
 export const POSITIVE_EVENTS = ['yes', 'save', 'click_out', 'purchase']
+export const PRICE_FLOOR_FACTOR = 0.3 // below this, algorithmic discovery excludes the pair (curation overrides)
+
+// Positioning bands derived from price_position (brand-level logic only —
+// outfit-level price integrity keeps the coarse item tiers).
+export const BAND_NAMES = ['HIGH STREET', 'ACCESSIBLE', 'CONTEMPORARY', 'ADV. CONTEMPORARY', 'DESIGNER', 'LUXURY']
+
+// ── BRAND CODES: authored identity dimensions (1-5, decimals). NEVER
+// recomputed from items — the admin UI is the only writer. ──
+export const CODE_DIMENSIONS = [
+  'price_positioning', 'era_orientation', 'aesthetic_output', 'cultural_legibility',
+  'creative_behaviour', 'femininity_register', 'silhouette_language', 'colour_identity',
+  'occasion_gravity', 'statement_density', 'sensuality_register',
+] as const
+export const NON_PRICE_CODE_DIMENSIONS = CODE_DIMENSIONS.filter((d) => d !== 'price_positioning')
+// price_positioning code → representative £ when item price data is thin
+export const PRICE_CODE_PSEUDO = [130, 300, 600, 1500, 4000]
+export const CODE_DRIFT_THRESHOLD = 1.5
+export const DEFAULT_CONFIG: AffinityConfig = { bandBounds: [150, 350, 700, 1200, 2500], priceK: 1.8 }
+
+export interface AffinityConfig {
+  bandBounds: number[] // 5 ascending GBP boundaries → 6 bands
+  priceK: number // price_proximity = exp(-|Δ price_position| / k)
+}
 
 // ── shared types ────────────────────────────────────────────────────────────
 
@@ -45,6 +69,11 @@ export interface BrandLite {
   status: 'stocked' | 'reference'
   brand_vector: number[] | null
   vector_item_count: number
+  median_price_overall: number | null
+  median_price_by_category: Record<string, { median: number; count: number }> | null
+  core_category: string | null
+  price_position: number | null // ln(median price of core category)
+  codes: Record<string, number> | null // authored brand codes (dimension_key → 1-5)
 }
 
 export interface FamilyRow { family_id: string; name: string; description: string | null }
@@ -57,6 +86,7 @@ export interface BrandGraph {
   families: FamilyRow[]
   memberships: MembershipRow[]
   exclusions: ExclusionRow[]
+  config: AffinityConfig
 }
 
 export interface SimilarBrand {
@@ -64,7 +94,10 @@ export interface SimilarBrand {
   name: string
   mechanism: 'core_family' | 'adjacent_family' | 'vector'
   family_name?: string
-  score?: number // cosine, for vector mechanism
+  score?: number // combined = identity similarity × price factor, for vector mechanism
+  aesthetic?: number // identity similarity: codes cosine, or item-centroid cosine when provisional
+  priceFactor?: number // exp(-|Δ price_position| / k)
+  basis?: 'codes' | 'vector' // vector = provisional fallback (codes incomplete)
 }
 
 export interface AffinityRow {
@@ -97,6 +130,154 @@ export function itemPseudoVector(item: any): number[] {
   return buildOutfitVector(pseudo as any)
 }
 
+// Brand-to-brand similarity over the dims that differentiate brands.
+// Single-item pseudo-vectors hold every outfit-only dim constant at neutral
+// (construction, volume, colour story, intent, shoe/bag formality, occasion
+// breadth…), which inflates full-vector cosine to 0.97+. Masking them out
+// gives the honest spread the map, similar_brands() and health checks need.
+const OUTFIT_ONLY_DIMS = new Set([3, 4, 5, 6, 7, 8, 27, 28, 29, 32, 33])
+export function brandCosine(a: number[], b: number[]): number {
+  const sa: number[] = []
+  const sb: number[] = []
+  for (let i = 0; i < a.length; i++) {
+    if (OUTFIT_ONLY_DIMS.has(i)) continue
+    sa.push(a[i]); sb.push(b[i])
+  }
+  return cosine(sa, sb)
+}
+
+// ── price axis (kept OUT of the aesthetic vector, combined multiplicatively) ─
+
+const PRICE_CATEGORIES: Record<string, string> = {
+  mini_dress: 'dresses', midi_dress: 'dresses', maxi_dress: 'dresses', shirt_dress: 'dresses', slip_dress: 'dresses',
+  shirt: 'tops', blouse: 'tops', 't-shirt': 'tops', knitwear: 'tops', corset: 'tops', bodysuit: 'tops',
+  trousers: 'bottoms', jeans: 'bottoms', shorts: 'bottoms', skirt: 'bottoms',
+  coat: 'outerwear', trench: 'outerwear', jacket: 'outerwear', blazer: 'outerwear', gilet: 'outerwear', cape: 'outerwear',
+  boot: 'shoes', heel: 'shoes', flat: 'shoes', sneaker: 'shoes', mule: 'shoes', sandal: 'shoes',
+  tote: 'bags', shoulder_bag: 'bags', clutch: 'bags', crossbody: 'bags', structured_bag: 'bags',
+  necklace: 'jewellery', earrings: 'jewellery', bracelet: 'jewellery', ring: 'jewellery', brooch: 'jewellery',
+}
+
+export function priceCategoryOf(itemType: string | null): string | null {
+  return itemType ? PRICE_CATEGORIES[itemType] ?? null : null
+}
+
+// One item → GBP price with an explicit reason when it can't yield one.
+// price_gbp wins; otherwise the stored native price routes through the
+// existing currency conversion (unrounded).
+export function priceOfItem(item: { price?: unknown; price_gbp?: unknown; currency?: unknown }): { gbp: number | null; reason: string | null } {
+  if (item.price_gbp != null && Number(item.price_gbp) > 0) return { gbp: Number(item.price_gbp), reason: null }
+  if (item.price == null || String(item.price).trim() === '') return { gbp: null, reason: 'no price' }
+  if (!knownCurrency(item.currency as string)) return { gbp: null, reason: `unknown currency ${String(item.currency)}` }
+  const gbp = toGbpAmount(item.price as string, item.currency as string)
+  if (gbp == null || gbp <= 0) return { gbp: null, reason: 'unparseable price' }
+  return { gbp, reason: null }
+}
+
+export function medianOf(values: number[]): number | null {
+  if (!values.length) return null
+  const s = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(s.length / 2)
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2
+}
+
+// Band index 0..5 for a price_position (ln £), from configurable boundaries.
+export function positioningBand(pricePosition: number | null, bounds: number[]): number | null {
+  if (pricePosition == null) return null
+  const price = Math.exp(pricePosition)
+  let band = 0
+  for (const b of bounds) { if (price >= b) band++ }
+  return band
+}
+
+// A brand whose centroid can't be trusted: stocked with <8 scored items, or a
+// reference brand never scored. Thin brands get no algorithmic neighbours and
+// never seed vector expansion — only curated families can expand from them.
+export function isThinBrand(b: Pick<BrandLite, 'status' | 'vector_item_count' | 'brand_vector'>): boolean {
+  return b.status === 'stocked' ? b.vector_item_count < THIN_VECTOR_ITEMS : !b.brand_vector
+}
+
+// ── brand codes maths ──
+
+export function codesComplete(b: Pick<BrandLite, 'codes'>): boolean {
+  return CODE_DIMENSIONS.every((d) => b.codes?.[d] != null)
+}
+
+export function codesVector(codes: Record<string, number>): number[] {
+  return NON_PRICE_CODE_DIMENSIONS.map((d) => Number(codes[d]))
+}
+
+// Cosine over the 10 non-price code dimensions, centred at the 3-anchor so
+// direction means something. Near-neutral profiles (everything ≈3) have no
+// direction — fall back to a distance-based similarity so two all-3 brands
+// read as identical rather than orthogonal.
+export function codesSimilarity(a: Record<string, number>, b: Record<string, number>): number {
+  const va = codesVector(a).map((v) => v - 3)
+  const vb = codesVector(b).map((v) => v - 3)
+  const mag = (v: number[]) => Math.sqrt(v.reduce((s, x) => s + x * x, 0))
+  if (mag(va) < 0.5 || mag(vb) < 0.5) {
+    const meanAbs = va.reduce((s, x, i) => s + Math.abs(x - vb[i]), 0) / va.length
+    return +(Math.max(0, 1 - meanAbs / 4)).toFixed(3)
+  }
+  return +Math.max(0, cosine(va, vb)).toFixed(3)
+}
+
+// Item-centroid mapped onto the nearest equivalent code dimension, where a
+// sensible mapping exists — the "ghost" markers in the codes matrix and the
+// weekly code-drift check. Item centroid dims are [0,1].
+export function ghostCodes(b: Pick<BrandLite, 'brand_vector' | 'price_position'>, bounds: number[]): Record<string, number> {
+  const out: Record<string, number> = {}
+  const band = positioningBand(b.price_position, bounds)
+  if (band != null) out.price_positioning = +Math.min(5, 1 + band * 0.8).toFixed(1)
+  const v = b.brand_vector
+  if (v) {
+    const to5 = (x: number) => +(1 + 4 * Math.min(1, Math.max(0, x))).toFixed(1)
+    out.aesthetic_output = to5((v[1] + v[20] + v[21]) / 3) // print + bold colour + multi
+    out.silhouette_language = to5(v[0]) // garment structure: boned → precise, unstructured → fluid
+    out.colour_identity = to5((v[1] + (1 - v[14]) + v[21]) / 3) // print + non-neutral share + multi
+    out.occasion_gravity = to5(v[30]) // material formality
+  }
+  return out
+}
+
+// One pairwise similarity for everything brand-level: codes when both brands
+// are fully coded, item-centroid cosine as the PROVISIONAL fallback.
+export function pairIdentitySimilarity(a: BrandLite, b: BrandLite): { sim: number; basis: 'codes' | 'vector' } | null {
+  if (codesComplete(a) && codesComplete(b)) return { sim: codesSimilarity(a.codes!, b.codes!), basis: 'codes' }
+  if (a.brand_vector && b.brand_vector && !isThinBrand(a) && !isThinBrand(b)) {
+    return { sim: +brandCosine(a.brand_vector, b.brand_vector).toFixed(3), basis: 'vector' }
+  }
+  return null
+}
+
+// price_proximity(A,B) = exp(-|Δ| / k). Like-for-like where possible: if both
+// brands share a populated category, that category's medians; else the
+// core-category price_positions. Null when either side has no price data
+// (treated as factor 1 — aesthetics still work for unpriced brands).
+export function priceProximity(a: BrandLite, b: BrandLite, k: number): { factor: number; basis: string } | null {
+  const catsA = a.median_price_by_category ?? {}
+  const catsB = b.median_price_by_category ?? {}
+  let best: { cat: string; d: number; support: number } | null = null
+  for (const cat of Object.keys(catsA)) {
+    const ca = catsA[cat]; const cb = catsB[cat]
+    if (!ca?.count || !cb?.count || !ca.median || !cb.median) continue
+    const support = Math.min(ca.count, cb.count)
+    if (!best || support > best.support) best = { cat, d: Math.abs(Math.log(ca.median) - Math.log(cb.median)), support }
+  }
+  const codePos = (x: BrandLite) => {
+    const c = x.codes?.price_positioning
+    return c != null ? Math.log(PRICE_CODE_PSEUDO[Math.min(4, Math.max(0, Math.round(c) - 1))]) : null
+  }
+  let d: number; let basis: string
+  if (best) { d = best.d; basis = best.cat }
+  else if (a.price_position != null && b.price_position != null) {
+    d = Math.abs(a.price_position - b.price_position); basis = 'core category'
+  } else if (codePos(a) != null && codePos(b) != null) {
+    d = Math.abs(codePos(a)! - codePos(b)!); basis = 'price positioning code'
+  } else return null
+  return { factor: +Math.exp(-d / k).toFixed(3), basis }
+}
+
 export function centroidOf(vectors: number[][]): number[] | null {
   if (!vectors.length) return null
   const c = new Array(vectors[0].length).fill(0)
@@ -127,7 +308,7 @@ function sharedFamilies(a: string, b: string, memberships: MembershipRow[]): Mem
 // curated family overrides; exclusions override everything.
 export function computeSimilarBrands(
   brandId: string,
-  graph: Pick<BrandGraph, 'brands' | 'families' | 'memberships' | 'exclusions'>,
+  graph: Pick<BrandGraph, 'brands' | 'families' | 'memberships' | 'exclusions'> & { config?: AffinityConfig },
   maxVector = 12,
 ): SimilarBrand[] {
   const self = graph.brands.find((b) => b.brand_id === brandId)
@@ -158,22 +339,31 @@ export function computeSimilarBrands(
     }
   }
 
-  // 2. vector-similar, not in a shared family
-  if (self.brand_vector) {
-    const rows: Array<{ b: BrandLite; score: number }> = []
+  // 2. identity-similar, not in a shared family: combined = identity × price.
+  // Identity = authored CODES cosine when both brands are fully coded; the
+  // item-centroid cosine is only a PROVISIONAL fallback (marked as such).
+  // Pairs with price factor below the floor are out of algorithmic discovery
+  // entirely — curated families (section 1) are the only override.
+  const k = graph.config?.priceK ?? DEFAULT_CONFIG.priceK
+  {
+    const rows: Array<{ b: BrandLite; score: number; aesthetic: number; priceFactor: number; basis: 'codes' | 'vector' }> = []
     for (const other of graph.brands) {
       if (seen.has(other.brand_id)) continue
-      if (!other.brand_vector) continue
-      // hard tier rule — only curation can cross more than 1 tier
-      if (Math.abs(other.price_tier - self.price_tier) > 1) continue
       if (excluded(brandId, other.brand_id, graph.exclusions)) continue
-      const score = cosine(self.brand_vector, other.brand_vector)
-      if (score <= 0) continue
-      rows.push({ b: other, score })
+      const id = pairIdentitySimilarity(self, other)
+      if (!id || id.sim <= 0) continue
+      const pp = priceProximity(self, other, k)
+      const priceFactor = pp?.factor ?? 1
+      if (priceFactor < PRICE_FLOOR_FACTOR) continue
+      rows.push({ b: other, score: id.sim * priceFactor, aesthetic: id.sim, priceFactor, basis: id.basis })
     }
     rows.sort((a, b) => b.score - a.score)
     for (const r of rows.slice(0, maxVector)) {
-      out.push({ brand_id: r.b.brand_id, name: r.b.name, mechanism: 'vector', score: +r.score.toFixed(3) })
+      out.push({
+        brand_id: r.b.brand_id, name: r.b.name, mechanism: 'vector',
+        score: +r.score.toFixed(3), aesthetic: +r.aesthetic.toFixed(3), priceFactor: +r.priceFactor.toFixed(3),
+        basis: r.basis,
+      })
     }
   }
   return out
@@ -330,25 +520,42 @@ type Admin = ReturnType<typeof createAdminClient>
 
 export async function loadBrandGraph(adminIn?: Admin): Promise<BrandGraph> {
   const admin = (adminIn ?? createAdminClient()) as any
-  const [{ data: brands }, { data: families }, { data: memberships }, { data: exclusions }] = await Promise.all([
-    admin.from('brand').select('brand_id, name, aliases, price_tier, status, brand_vector, vector_item_count').limit(3000),
+  const [{ data: brands }, { data: families }, { data: memberships }, { data: exclusions }, { data: configRow }] = await Promise.all([
+    admin.from('brand').select('brand_id, name, aliases, price_tier, status, brand_vector, vector_item_count, median_price_overall, median_price_by_category, core_category, price_position').limit(3000),
     admin.from('brand_family').select('*').order('name'),
     admin.from('brand_family_membership').select('family_id, brand_id, weight'),
     admin.from('brand_exclusion').select('brand_a, brand_b, note'),
+    admin.from('brand_affinity_config').select('band_bounds, price_k').eq('id', 1).maybeSingle(),
   ])
+  const { data: codeRows } = await admin.from('brand_codes').select('brand_id, dimension_key, value').limit(10000)
+  const codesByBrand = new Map<string, Record<string, number>>()
+  for (const r of codeRows ?? []) {
+    const c = codesByBrand.get(r.brand_id) ?? {}
+    c[r.dimension_key] = Number(r.value)
+    codesByBrand.set(r.brand_id, c)
+  }
   const list: BrandLite[] = (brands ?? []).map((b: any) => ({
     ...b,
     aliases: b.aliases ?? [],
     status: b.status ?? 'stocked',
     brand_vector: Array.isArray(b.brand_vector) ? b.brand_vector : null,
     vector_item_count: b.vector_item_count ?? 0,
+    median_price_overall: b.median_price_overall != null ? Number(b.median_price_overall) : null,
+    median_price_by_category: b.median_price_by_category ?? null,
+    core_category: b.core_category ?? null,
+    price_position: b.price_position != null ? Number(b.price_position) : null,
+    codes: codesByBrand.get(b.brand_id) ?? null,
   }))
+  const config: AffinityConfig = configRow
+    ? { bandBounds: (configRow.band_bounds ?? DEFAULT_CONFIG.bandBounds).map(Number), priceK: Number(configRow.price_k ?? DEFAULT_CONFIG.priceK) }
+    : DEFAULT_CONFIG
   return {
     brands: list,
     byId: new Map(list.map((b) => [b.brand_id, b])),
     families: families ?? [],
     memberships: memberships ?? [],
     exclusions: exclusions ?? [],
+    config,
   }
 }
 
@@ -379,35 +586,65 @@ export function resolveBrandNames(graph: BrandGraph, names: string[]): { matched
 export async function recomputeBrandVectors(adminIn?: Admin, onlyBrandIds?: string[]): Promise<{ updated: number }> {
   const admin = (adminIn ?? createAdminClient()) as any
   const byBrand = new Map<string, number[][]>()
+  // prices come from EVERY item with a price (scored or not); vectors only
+  // from scored items
+  const pricesByBrand = new Map<string, Map<string, number[]>>()
   for (let from = 0; ; from += 1000) {
     let q = admin
       .from('item')
-      .select('brand_id, item_type, colour_family, structure, surface, colour_depth, pattern, sheen, material_formality, material_weight, length, fit, brand:brand_id(brand_id, price_tier, era_orientation, aesthetic_output, cultural_legibility, creative_behaviour)')
-      .in('status', ['ready', 'live', 'draft'])
+      .select('brand_id, item_type, colour_family, structure, surface, colour_depth, pattern, sheen, material_formality, material_weight, length, fit, price, price_gbp, currency, brand:brand_id(brand_id, price_tier, era_orientation, aesthetic_output, cultural_legibility, creative_behaviour)')
+      .in('status', ['ready', 'live', 'draft', 'out_of_stock'])
       .order('item_id')
       .range(from, from + 999)
     if (onlyBrandIds?.length) q = q.in('brand_id', onlyBrandIds)
     const { data } = await q
     for (const item of data ?? []) {
-      if (!item.brand_id || !isScoredItem(item)) continue
-      const list = byBrand.get(item.brand_id) ?? []
-      list.push(itemPseudoVector(item))
-      byBrand.set(item.brand_id, list)
+      if (!item.brand_id) continue
+      const { gbp } = priceOfItem(item)
+      const cat = priceCategoryOf(item.item_type) ?? 'accessories'
+      if (gbp != null) {
+        const cats = pricesByBrand.get(item.brand_id) ?? new Map<string, number[]>()
+        const list = cats.get(cat) ?? []
+        list.push(gbp)
+        cats.set(cat, list)
+        pricesByBrand.set(item.brand_id, cats)
+      }
+      if (!isScoredItem(item)) continue
+      const vecs = byBrand.get(item.brand_id) ?? []
+      vecs.push(itemPseudoVector(item))
+      byBrand.set(item.brand_id, vecs)
     }
     if (!data || data.length < 1000) break
   }
   const { data: refs } = await admin.from('brand').select('brand_id').eq('status', 'reference')
   const refIds = new Set((refs ?? []).map((r: any) => r.brand_id))
   let updated = 0
-  const entries = Array.from(byBrand.entries())
-  for (const [brandId, vectors] of entries) {
-    if (refIds.has(brandId)) continue
-    const c = centroidOf(vectors)
-    if (!c) continue
-    await admin
-      .from('brand')
-      .update({ brand_vector: c, vector_item_count: vectors.length, vector_updated_at: new Date().toISOString() })
-      .eq('brand_id', brandId)
+  const brandIds = Array.from(new Set([...Array.from(byBrand.keys()), ...Array.from(pricesByBrand.keys())]))
+  for (const brandId of brandIds) {
+    if (refIds.has(brandId)) continue // reference vectors + prices are manual
+    const patch: Record<string, unknown> = { vector_updated_at: new Date().toISOString() }
+    const vectors = byBrand.get(brandId)
+    if (vectors?.length) {
+      patch.brand_vector = centroidOf(vectors)
+      patch.vector_item_count = vectors.length
+    }
+    const cats = pricesByBrand.get(brandId)
+    if (cats?.size) {
+      const byCategory: Record<string, { median: number; count: number }> = {}
+      const all: number[] = []
+      let core: { cat: string; count: number } | null = null
+      const catEntries = Array.from(cats.entries())
+      for (const [cat, prices] of catEntries) {
+        byCategory[cat] = { median: +(medianOf(prices)!.toFixed(2)), count: prices.length }
+        all.push(...prices)
+        if (!core || prices.length > core.count) core = { cat, count: prices.length }
+      }
+      patch.median_price_by_category = byCategory
+      patch.median_price_overall = +(medianOf(all)!.toFixed(2))
+      patch.core_category = core!.cat
+      patch.price_position = +Math.log(byCategory[core!.cat].median).toFixed(4)
+    }
+    await admin.from('brand').update(patch).eq('brand_id', brandId)
     updated++
   }
   await admin.from('brand_similarity_cache').delete().gte('computed_at', '1970-01-01')
@@ -652,7 +889,10 @@ export interface HealthReport {
   generated_at: string
   orphan_brands: Array<{ brand_id: string; name: string }>
   incoherent_families: Array<{ family: string; avg_similarity: number }>
-  tier_violations: Array<{ family: string; brands: string; tiers: string }>
+  tier_violations: Array<{ family: string; brands: string; tiers: string }> // now positioning BANDS
+  price_outliers: Array<{ family: string; brand: string; detail: string }>
+  price_extraction_failures: Array<{ brand: string; items: number; reasons: string }>
+  code_drift: Array<{ brand: string; dimension: string; authored: number; item_profile: number; message: string }>
   stale_vectors: Array<{ brand_id: string; name: string; reason: string }>
   starved_feeds: Array<{ user_id: string; brands: number }>
   dead_expansions: Array<{ brand: string; impressions: number }>
@@ -660,7 +900,7 @@ export interface HealthReport {
   free_text_brands: Array<{ raw_name: string; count: number }>
 }
 
-const FAMILY_COHERENCE_FLOOR = 0.55
+const FAMILY_COHERENCE_FLOOR = 0.45 // on COMBINED similarity (aesthetic × price)
 
 export async function runHealthChecks(adminIn?: Admin): Promise<HealthReport> {
   const admin = (adminIn ?? createAdminClient()) as any
@@ -670,34 +910,104 @@ export async function runHealthChecks(adminIn?: Admin): Promise<HealthReport> {
   const orphan_brands: HealthReport['orphan_brands'] = []
   const inFamily = new Set(graph.memberships.map((m) => m.brand_id))
   for (const b of graph.brands) {
-    if (b.status !== 'stocked' || inFamily.has(b.brand_id) || !b.brand_vector) continue
+    if (b.status !== 'stocked' || inFamily.has(b.brand_id)) continue
+    if (!codesComplete(b) && !b.brand_vector) continue
     const best = Math.max(0, ...graph.brands
-      .filter((o) => o.brand_id !== b.brand_id && o.brand_vector)
-      .map((o) => cosine(b.brand_vector!, o.brand_vector!)))
+      .filter((o) => o.brand_id !== b.brand_id)
+      .map((o) => pairIdentitySimilarity(b, o)?.sim ?? 0))
     if (best < MIN_VECTOR_NEIGHBOUR) orphan_brands.push({ brand_id: b.brand_id, name: b.name })
   }
 
   const incoherent_families: HealthReport['incoherent_families'] = []
   const tier_violations: HealthReport['tier_violations'] = []
+  const price_outliers: HealthReport['price_outliers'] = []
+  const k = graph.config.priceK
+  const bounds = graph.config.bandBounds
   for (const f of graph.families) {
     const members = graph.memberships.filter((m) => m.family_id === f.family_id)
       .map((m) => graph.byId.get(m.brand_id)).filter(Boolean) as BrandLite[]
-    const withVec = members.filter((m) => m.brand_vector)
-    if (withVec.length >= 2) {
+    {
+      // combined similarity (codes-first) — curation and data disagree when low
       let total = 0; let pairs = 0
-      for (let i = 0; i < withVec.length; i++) for (let j = i + 1; j < withVec.length; j++) {
-        total += cosine(withVec[i].brand_vector!, withVec[j].brand_vector!); pairs++
+      for (let i = 0; i < members.length; i++) for (let j = i + 1; j < members.length; j++) {
+        const id = pairIdentitySimilarity(members[i], members[j])
+        if (!id) continue
+        const pp = priceProximity(members[i], members[j], k)
+        total += id.sim * (pp?.factor ?? 1); pairs++
       }
-      const avg = total / pairs
-      if (avg < FAMILY_COHERENCE_FLOOR) incoherent_families.push({ family: f.name, avg_similarity: +avg.toFixed(3) })
+      if (pairs >= 1) {
+        const avg = total / pairs
+        if (avg < FAMILY_COHERENCE_FLOOR) incoherent_families.push({ family: f.name, avg_similarity: +avg.toFixed(3) })
+      }
     }
-    const tiers = members.map((m) => m.price_tier)
-    if (tiers.length && Math.max(...tiers) - Math.min(...tiers) > 1) {
-      tier_violations.push({
-        family: f.name,
-        brands: members.map((m) => m.name).join(', '),
-        tiers: `${Math.min(...tiers)}–${Math.max(...tiers)}`,
+    // band span (replaces the coarse tier check) + per-member price outliers
+    const banded = members
+      .map((m) => ({ m, band: positioningBand(m.price_position, bounds) }))
+      .filter((x) => x.band != null) as Array<{ m: BrandLite; band: number }>
+    if (banded.length >= 2) {
+      const bands = banded.map((x) => x.band)
+      const lo = Math.min(...bands); const hi = Math.max(...bands)
+      if (hi - lo >= 2) {
+        tier_violations.push({
+          family: f.name,
+          brands: banded.map((x) => `${x.m.name} (${BAND_NAMES[x.band]})`).join(', '),
+          tiers: `${BAND_NAMES[lo]}–${BAND_NAMES[hi]}`,
+        })
+      }
+      const medBand = medianOf(bands)!
+      for (const x of banded) {
+        if (Math.abs(x.band - medBand) > 1) {
+          price_outliers.push({ family: f.name, brand: x.m.name, detail: `${BAND_NAMES[x.band]} vs family median ${BAND_NAMES[Math.round(medBand)]}` })
+        }
+      }
+    }
+  }
+
+  // CODE-DRIFT CHECK: where the stocked-item profile disagrees strongly with
+  // the authored codes on a mappable dimension. Curation intelligence for the
+  // Monday email — never auto-corrected.
+  const code_drift: HealthReport['code_drift'] = []
+  for (const b of graph.brands) {
+    if (!codesComplete(b) || !b.brand_vector || b.vector_item_count < THIN_VECTOR_ITEMS) continue
+    const ghosts = ghostCodes(b, bounds)
+    for (const [dim, itemVal] of Object.entries(ghosts)) {
+      const authored = b.codes![dim]
+      if (authored == null) continue
+      const diff = itemVal - authored
+      if (Math.abs(diff) < CODE_DRIFT_THRESHOLD) continue
+      code_drift.push({
+        brand: b.name, dimension: dim, authored, item_profile: itemVal,
+        message: `your ${b.name} buy scores ${diff > 0 ? 'higher' : 'lower'} on ${dim.replace(/_/g, ' ')} (${itemVal}) than ${b.name}'s codes (${authored})`,
       })
+    }
+  }
+
+  // PRICE EXTRACTION FAILURES: 8+ items but no median — this failure mode
+  // must never be silent. Per-item reasons come from the same priceOfItem the
+  // job uses, so the diagnosis is always exact.
+  const price_extraction_failures: HealthReport['price_extraction_failures'] = []
+  const noMedian = graph.brands.filter((b) => b.status === 'stocked' && b.median_price_overall == null)
+  for (const b of noMedian) {
+    const { data: items } = await admin
+      .from('item')
+      .select('price, price_gbp, currency')
+      .eq('brand_id', b.brand_id)
+      .in('status', ['ready', 'live', 'draft', 'out_of_stock'])
+      .limit(500)
+    if (!items || items.length < 8) continue
+    const reasonCounts = new Map<string, number>()
+    let priced = 0
+    for (const item of items) {
+      const { gbp, reason } = priceOfItem(item)
+      if (gbp != null) priced++
+      else reasonCounts.set(reason!, (reasonCounts.get(reason!) ?? 0) + 1)
+    }
+    if (priced > 0) {
+      // priced items exist but the median is null → the JOB failed, not the data
+      price_extraction_failures.push({ brand: b.name, items: items.length, reasons: `job failure: ${priced} priced items but null median — rerun recompute` })
+    } else if (reasonCounts.size) {
+      const summary = Array.from(reasonCounts.entries()).map(([r, n]) => `${r} ×${n}`).join(', ')
+      price_extraction_failures.push({ brand: b.name, items: items.length, reasons: summary })
     }
   }
 
@@ -772,7 +1082,7 @@ export async function runHealthChecks(adminIn?: Admin): Promise<HealthReport> {
 
   return {
     generated_at: new Date().toISOString(),
-    orphan_brands, incoherent_families, tier_violations, stale_vectors,
+    orphan_brands, incoherent_families, tier_violations, price_outliers, price_extraction_failures, code_drift, stale_vectors,
     starved_feeds, dead_expansions, runaway_learning, free_text_brands,
   }
 }

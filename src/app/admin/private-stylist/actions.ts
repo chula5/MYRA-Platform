@@ -34,6 +34,21 @@ import {
   normalise,
 } from '@/lib/pilot-stylist'
 import { accumulate, zeroVector } from '@/lib/taste-vector'
+import { getAllItems, type ItemWithBrand } from '@/lib/admin-queries'
+import {
+  composeMemberLooks,
+  rankAlternates,
+  toLookItem,
+  type MemberTaste,
+} from '@/lib/pilot-composer'
+import { slotForItemType, type Slot } from '@/lib/composer'
+import {
+  HIGGSFIELD_COMBOS,
+  buildGenerationPrompt,
+  buildReferenceUrls,
+  type ShootItem,
+} from '@/lib/higgsfield-shoot'
+import { runHiggsfieldGeneration } from '@/app/admin/projects/higgsfield-actions'
 
 const PATH = '/admin/private-stylist'
 
@@ -79,6 +94,7 @@ export interface PilotLook {
   response: 'yes' | 'no' | null
   response_reason: ResponseReason | null
   responded_at: string | null
+  approved_at: string | null
 }
 
 export interface PilotDelivery {
@@ -802,4 +818,285 @@ export async function recomputeWeights(memberId: string): Promise<{ weights?: Ro
   })
   revalidatePath(PATH)
   return { weights }
+}
+
+
+// ── COMPOSED LOOKS — the system builds, Chloe reviews, the review teaches ───
+//
+// composeDeliveryLooks assembles looks from the item library (ready + live)
+// with the member's taste folded into generation: her brand affinities, the
+// brand families around her loved brands, and every swap Chloe has made for
+// her before. Swaps and approvals land in pilot_look_feedback:
+//   swap item row   — item_out was wrong for HER (penalised next compose)
+//   pair rows       — which brand pairings survive review (accept +1, swap −1)
+// Brand affinities also nudge through the shared applyBrandSignals learning.
+
+const pairKeyOrdered = (a: string, b: string): [string, string] => (a < b ? [a, b] : [b, a])
+
+async function loadMemberTaste(admin: any, member: { member_id: string; brands: RankedBrand[]; brands_input_only: string[] }): Promise<MemberTaste> {
+  const t: MemberTaste = {
+    affinity: new Map(),
+    families: new Map(),
+    excludedPairs: new Set(),
+    inputOnlyBrands: new Set((member.brands_input_only ?? []).map((b) => b.toLowerCase())),
+    itemSwapOut: new Map(),
+    brandSwapOut: new Map(),
+    pairNet: new Map(),
+  }
+
+  const [affRes, famRes, exclRes, fbRes] = await Promise.all([
+    admin.from('user_brand_affinity').select('brand_id, affinity, hidden').eq('user_id', member.member_id),
+    admin.from('brand_family_membership').select('family_id, brand_id'),
+    admin.from('brand_exclusion').select('brand_a, brand_b'),
+    admin.from('pilot_look_feedback').select('*').eq('member_id', member.member_id),
+  ])
+
+  for (const r of affRes.data ?? []) {
+    if (!r.hidden) t.affinity.set(r.brand_id, Number(r.affinity))
+  }
+  for (const r of famRes.data ?? []) {
+    const set = t.families.get(r.brand_id) ?? new Set<string>()
+    set.add(r.family_id)
+    t.families.set(r.brand_id, set)
+  }
+  for (const r of exclRes.data ?? []) {
+    const [a, b] = pairKeyOrdered(r.brand_a, r.brand_b)
+    t.excludedPairs.add(`${a}|${b}`)
+  }
+
+  // Ranked onboarding picks are a floor even before any learned affinity —
+  // rank 1 ≈ 0.9, falling away, never below 0.45.
+  const ranked = (member.brands ?? []).filter((b) => b?.name)
+  if (ranked.length) {
+    const names = ranked.map((b) => b.name)
+    const { data: brandRows } = await admin.from('brand').select('brand_id, name').in('name', names)
+    const byName = new Map<string, string>((brandRows ?? []).map((r: any) => [r.name.toLowerCase(), r.brand_id]))
+    for (const b of ranked) {
+      const id = byName.get(b.name.toLowerCase())
+      if (!id) continue
+      const fromRank = Math.max(0.45, 0.9 - 0.08 * ((b.rank ?? 1) - 1))
+      t.affinity.set(id, Math.max(t.affinity.get(id) ?? 0, fromRank))
+    }
+  }
+
+  for (const r of fbRes.data ?? []) {
+    const isPairRow = !r.item_out && !r.item_in
+    if (isPairRow && r.brand_out && r.brand_in) {
+      const [a, b] = pairKeyOrdered(r.brand_out, r.brand_in)
+      const k = `${a}|${b}`
+      t.pairNet.set(k, (t.pairNet.get(k) ?? 0) + (r.action === 'accept' ? 1 : -1))
+    } else if (r.action === 'swap' && r.item_out) {
+      t.itemSwapOut.set(r.item_out, (t.itemSwapOut.get(r.item_out) ?? 0) + 1)
+      if (r.brand_out) t.brandSwapOut.set(r.brand_out, (t.brandSwapOut.get(r.brand_out) ?? 0) + 1)
+    }
+  }
+  return t
+}
+
+async function loadComposableLibrary(): Promise<ItemWithBrand[]> {
+  const [ready, live] = await Promise.all([getAllItems('ready'), getAllItems('live')])
+  return [...ready, ...live]
+}
+
+export async function composeDeliveryLooks(deliveryId: string): Promise<{ created?: number; error?: string }> {
+  const admin = createAdminClient() as any
+  const { data: delivery, error: derr } = await admin.from('pilot_delivery').select('*').eq('delivery_id', deliveryId).single()
+  if (derr || !delivery) return { error: derr?.message ?? 'Delivery not found' }
+  if (delivery.status !== 'draft') return { error: 'Only draft deliveries can be composed into' }
+  const { data: member, error: merr } = await admin.from('pilot_member').select('*').eq('member_id', delivery.member_id).single()
+  if (merr || !member) return { error: merr?.message ?? 'Member not found' }
+
+  const taste = await loadMemberTaste(admin, member)
+  const library = await loadComposableLibrary()
+  const looks = composeMemberLooks(taste, library, 3)
+  if (!looks.length) return { error: 'Could not compose — not enough compatible in-stock items in the library' }
+
+  const { count } = await admin
+    .from('pilot_look')
+    .select('look_id', { count: 'exact', head: true })
+    .eq('delivery_id', deliveryId)
+  const startPos = (count ?? 0) + 1
+  const mix = normalise(delivery.effective_weights ?? {})
+
+  const rows = looks.map((l, i) => ({
+    delivery_id: deliveryId,
+    position: startPos + i,
+    room_mix: mix,
+    taste_vector: lookTasteVector(mix),
+    items: l.items,
+    notes: l.notes,
+  }))
+  const { error } = await admin.from('pilot_look').insert(rows)
+  if (error) return { error: error.message }
+  revalidatePath(PATH)
+  return { created: rows.length }
+}
+
+export interface SwapOption {
+  item_id: string
+  product_name: string
+  brand_name: string | null
+  image_url: string | null
+  price_gbp: number | null
+  score: number
+}
+
+export async function lookAlternates(lookId: string, itemIndex: number): Promise<{ options?: SwapOption[]; error?: string }> {
+  const admin = createAdminClient() as any
+  const { data: look, error: lerr } = await admin.from('pilot_look').select('*').eq('look_id', lookId).single()
+  if (lerr || !look) return { error: lerr?.message ?? 'Look not found' }
+  const items: LookItem[] = look.items ?? []
+  const target = items[itemIndex]
+  if (!target) return { error: 'No item at that position' }
+  const { data: delivery } = await admin.from('pilot_delivery').select('member_id').eq('delivery_id', look.delivery_id).single()
+  const { data: member } = await admin.from('pilot_member').select('*').eq('member_id', delivery?.member_id).single()
+  if (!member) return { error: 'Member not found' }
+
+  const slot = (target.slot as Slot | null) ?? null
+  if (!slot) return { error: 'This item was added by hand — edit the look instead' }
+
+  const taste = await loadMemberTaste(admin, member)
+  const library = await loadComposableLibrary()
+  const keepIds = items.filter((it, i) => i !== itemIndex && it.item_id).map((it) => it.item_id as string)
+  const keepItems = library.filter((i) => keepIds.includes(i.item_id))
+  const exclude = new Set(items.filter((it) => it.item_id).map((it) => it.item_id as string))
+
+  const ranked = rankAlternates(taste, library, slot, keepItems, exclude, 12)
+  return {
+    options: ranked.map(({ item, score }) => ({
+      item_id: item.item_id,
+      product_name: item.product_name,
+      brand_name: item.brand?.name ?? null,
+      image_url: item.image_url ?? null,
+      price_gbp: (item as any).price_gbp != null ? Number((item as any).price_gbp) : item.price != null ? Number(item.price) : null,
+      score: Math.round(score * 100) / 100,
+    })),
+  }
+}
+
+export async function swapComposedLookItem(lookId: string, itemIndex: number, newItemId: string): Promise<{ error?: string }> {
+  const admin = createAdminClient() as any
+  const { data: look, error: lerr } = await admin.from('pilot_look').select('*').eq('look_id', lookId).single()
+  if (lerr || !look) return { error: lerr?.message ?? 'Look not found' }
+  const items: LookItem[] = [...(look.items ?? [])]
+  const outgoing = items[itemIndex]
+  if (!outgoing) return { error: 'No item at that position' }
+  const { data: delivery } = await admin.from('pilot_delivery').select('member_id').eq('delivery_id', look.delivery_id).single()
+  if (!delivery) return { error: 'Delivery not found' }
+
+  const { data: newItem, error: ierr } = await admin.from('item').select('*, brand(*)').eq('item_id', newItemId).single()
+  if (ierr || !newItem) return { error: ierr?.message ?? 'Item not found' }
+  const incoming = toLookItem(newItem as ItemWithBrand)
+  items[itemIndex] = incoming
+
+  const { error: uerr } = await admin.from('pilot_look').update({ items }).eq('look_id', lookId)
+  if (uerr) return { error: uerr.message }
+
+  // Teach: the outgoing item was wrong for HER; its pairings take a knock.
+  const fb: any[] = [{
+    member_id: delivery.member_id,
+    delivery_id: look.delivery_id,
+    look_id: lookId,
+    action: 'swap',
+    slot: outgoing.slot ?? null,
+    item_out: outgoing.item_id ?? null,
+    item_in: incoming.item_id ?? null,
+    brand_out: outgoing.brand_id ?? null,
+    brand_in: incoming.brand_id ?? null,
+  }]
+  if (outgoing.brand_id) {
+    for (const other of items) {
+      if (other === incoming || !other.brand_id || other.brand_id === outgoing.brand_id) continue
+      const [a, b] = pairKeyOrdered(outgoing.brand_id, other.brand_id)
+      fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action: 'swap', brand_out: a, brand_in: b })
+    }
+  }
+  await admin.from('pilot_look_feedback').insert(fb)
+
+  // Brand affinity learning (member-scoped, shared machinery with the feed).
+  try {
+    if (outgoing.brand) await applyBrandSignals(admin, delivery.member_id, [outgoing.brand], 'no')
+    if (incoming.brand) await applyBrandSignals(admin, delivery.member_id, [incoming.brand], 'yes')
+  } catch { /* affinity nudge is best-effort */ }
+
+  revalidatePath(PATH)
+  return {}
+}
+
+export async function approveComposedLook(lookId: string): Promise<{ error?: string }> {
+  const admin = createAdminClient() as any
+  const { data: look, error: lerr } = await admin.from('pilot_look').select('*').eq('look_id', lookId).single()
+  if (lerr || !look) return { error: lerr?.message ?? 'Look not found' }
+  const { data: delivery } = await admin.from('pilot_delivery').select('member_id').eq('delivery_id', look.delivery_id).single()
+  if (!delivery) return { error: 'Delivery not found' }
+
+  const { error: uerr } = await admin.from('pilot_look').update({ approved_at: new Date().toISOString() }).eq('look_id', lookId)
+  if (uerr) return { error: uerr.message }
+
+  const items: LookItem[] = look.items ?? []
+  const fb: any[] = []
+  for (const it of items) {
+    if (it.item_id) fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action: 'accept', slot: it.slot ?? null, item_in: it.item_id, brand_in: it.brand_id ?? null })
+  }
+  const brandIds = Array.from(new Set(items.map((it) => it.brand_id).filter(Boolean))) as string[]
+  for (let i = 0; i < brandIds.length; i++) {
+    for (let j = i + 1; j < brandIds.length; j++) {
+      const [a, b] = pairKeyOrdered(brandIds[i], brandIds[j])
+      fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action: 'accept', brand_out: a, brand_in: b })
+    }
+  }
+  if (fb.length) await admin.from('pilot_look_feedback').insert(fb)
+
+  try {
+    const brandNames = Array.from(new Set(items.map((it) => it.brand).filter(Boolean)))
+    if (brandNames.length) await applyBrandSignals(admin, delivery.member_id, brandNames, 'yes')
+  } catch { /* best-effort */ }
+
+  revalidatePath(PATH)
+  return {}
+}
+
+export async function higgsfieldShootForLook(lookId: string, poseKey = 'E5'): Promise<{ imageUrl?: string; error?: string }> {
+  const admin = createAdminClient() as any
+  const { data: look, error: lerr } = await admin.from('pilot_look').select('*').eq('look_id', lookId).single()
+  if (lerr || !look) return { error: lerr?.message ?? 'Look not found' }
+  const items: LookItem[] = look.items ?? []
+
+  // Backfill shoot fields from the item table for anything added by hand.
+  const missing = items.filter((it) => it.item_id && (!it.image_url || !it.item_type))
+  if (missing.length) {
+    const { data: rows } = await admin.from('item').select('item_id, image_url, item_type, material_primary').in('item_id', missing.map((it) => it.item_id))
+    const byId = new Map<string, any>((rows ?? []).map((r: any) => [r.item_id, r]))
+    for (const it of missing) {
+      const r = byId.get(it.item_id as string)
+      if (r) {
+        it.image_url = it.image_url ?? r.image_url
+        it.item_type = it.item_type ?? r.item_type
+        it.material_primary = it.material_primary ?? r.material_primary
+        it.slot = it.slot ?? (r.item_type ? slotForItemType(r.item_type) : null)
+      }
+    }
+  }
+
+  const shootItems: ShootItem[] = items
+    .filter((it) => it.image_url)
+    .map((it) => ({
+      product_name: it.product_name,
+      item_type: (it.item_type ?? 'blouse') as any,
+      material_primary: it.material_primary ?? null,
+      slot: (it.slot ?? 'top') as any,
+      image_url: it.image_url as string,
+      brand_name: it.brand ?? null,
+    }))
+  if (!shootItems.length) return { error: 'No item images on this look — compose or add items with photos first' }
+
+  const combo = HIGGSFIELD_COMBOS[poseKey] ?? HIGGSFIELD_COMBOS.E5
+  const prompt = buildGenerationPrompt(combo, shootItems)
+  const refs = buildReferenceUrls(combo, shootItems)
+  const gen = await runHiggsfieldGeneration(prompt, refs, `pilot-look-${lookId}-${Date.now()}`)
+  if (!gen.imageUrl) return gen
+
+  await admin.from('pilot_look').update({ image_url: gen.imageUrl }).eq('look_id', lookId)
+  revalidatePath(PATH)
+  return gen
 }

@@ -6,6 +6,9 @@
 // tool); this is the in-app version the Monday cron runs.
 
 import { createAdminClient } from '@/lib/supabase-server'
+import {
+  discoverProductUrls, fetchNewProductPages, urlHash, type ParsedProduct,
+} from '@/lib/brand-watch-browser'
 
 // ---------------------------------------------------------------- types
 
@@ -22,6 +25,7 @@ export interface ScannedProduct {
   images: string[]
   stockStatus: 'in_stock' | 'low_stock' | 'out_of_stock'
   sizesInStock: string[]
+  currency?: string | null // browser route: from JSON-LD; shopify route: inferred from domain
   // derived
   itemType: string | null
   colourFamily: string | null
@@ -41,6 +45,8 @@ export interface WatchedBrandRow {
   min_score: number
   last_checked_at: string | null
   last_new_count: number
+  platform?: 'shopify' | 'browser'
+  scan_state?: { running?: boolean; done?: number; total?: number; remaining?: number; started_at?: string } | null
 }
 
 export interface BrandCheckResult {
@@ -51,6 +57,7 @@ export interface BrandCheckResult {
   belowScore: number
   skippedStock: number // new on-taste pieces NOT queued because low/out of stock
   restocked: number // existing library items that went out-of-stock → back in stock
+  note?: string // e.g. browser scan chunking: "350 of 812 pages this run"
   error?: string
 }
 
@@ -73,6 +80,7 @@ const HOUSE_STYLE = {
 const TYPE_RULES: Array<[RegExp, string]> = [
   [/\btrench/, 'trench'], [/\bcoat|parka|puffer/, 'coat'], [/\bblazer/, 'blazer'],
   [/\bgilet|waistcoat|\bvest\b/, 'gilet'], [/\bcape|poncho/, 'cape'],
+  [/\bouterwear/, 'jacket'], // umbrella category (Munthe et al) — jacket as the safe default
   [/\bboot/, 'boot'], [/sneaker|trainer/, 'sneaker'], [/\bmule/, 'mule'],
   [/\bsandal|\bslide\b|flip.?flop/, 'sandal'],
   [/\bpump|stiletto|\bheel|slingback/, 'heel'],
@@ -103,7 +111,7 @@ const COLOUR_RULES: Array<[RegExp, string]> = [
   [/charcoal|\bgrey|\bgray|slate|graphite/, 'grey'],
   [/\bnavy|midnight|marine/, 'navy'],
   [/camel|\btan\b|beige|taupe|\bsand\b|\bnude\b|caramel|biscuit|latte|stone/, 'camel'],
-  [/chocolate|cognac|mocha|espresso|coffee|chestnut|walnut|\bbrown/, 'brown'],
+  [/chocolate|cognac|mocha|espresso|coffee|chestnut|walnut|bronze|copper|\bbrown/, 'brown'],
   [/olive|khaki|sage|forest|emerald|pistachio|\bgreen/, 'green'],
   [/burgundy|bordeaux|\bwine\b|oxblood|maroon|merlot/, 'burgundy'],
   [/scarlet|crimson|cherry|\bred\b/, 'red'],
@@ -171,6 +179,10 @@ function classifyAndScore(p: {
   id: unknown; handle: string; title: string; vendor: string; product_type: string
   tags: string[]; url: string; price: number | null; published_at: string | null; images: string[]
   variants: any[]; bodyText: string; optionColours: string[]
+  // Ordered category texts by authority (browser route): the source's own
+  // category label first, URL path second, raw title last — so a colourway
+  // called "Ballerina" can never turn a top into a ballet flat.
+  categoryTiers?: string[]
 }): ScannedProduct {
   const hay = [p.product_type, p.tags.join(' '), p.title].join(' ').toLowerCase()
   // Some feeds (Isabel Marant) carry no descriptive text in title/type/tags —
@@ -181,10 +193,17 @@ function classifyAndScore(p: {
   const catHay = [
     tagValue(p.tags, 'category') ?? '', tagValue(p.tags, 'main category') ?? '',
     tagValue(p.tags, 'sub category') ?? '', p.product_type, p.title,
+    String(p.handle ?? '').replace(/-/g, ' '), // handles carry the category on many stores
   ].join(' ').toLowerCase()
 
   let itemType: string | null = null
-  for (const [re, t] of TYPE_RULES) { if (re.test(catHay)) { itemType = t; break } }
+  for (const tier of p.categoryTiers ?? []) {
+    const tierHay = tier.toLowerCase()
+    if (!tierHay.trim()) continue
+    for (const [re, t] of TYPE_RULES) { if (re.test(tierHay)) { itemType = t; break } }
+    if (itemType) break
+  }
+  if (!itemType) for (const [re, t] of TYPE_RULES) { if (re.test(catHay)) { itemType = t; break } }
   if (!itemType) for (const [re, t] of TYPE_RULES) { if (re.test(hay)) { itemType = t; break } }
 
   const colTag = (tagValue(p.tags, 'color') ?? tagValue(p.tags, 'colour') ?? '').toLowerCase()
@@ -215,6 +234,102 @@ function classifyAndScore(p: {
     ...stockFromVariants(p.variants),
     itemType, colourFamily, materialCategory, materialPrimary, score, reasons, nonFashion,
   }
+}
+
+// Browser-route products (sitemap + JSON-LD) into the same ScannedProduct
+// shape. No structured tags — category comes from the JSON-LD category and
+// the de-slugged URL path (e.g. /catalogue/dresses/robin-rosamuse.html), the
+// description feeds the wider scoring haystack like a Shopify body would.
+export function classifyExternalProduct(p: ParsedProduct): ScannedProduct {
+  const path = (() => { try { return new URL(p.url).pathname } catch { return '' } })()
+  const pathText = path.replace(/\.html?$/, '').split('/').filter(Boolean).map((s) => s.replace(/[-_]+/g, ' ')).join(' ')
+  const handle = path.replace(/\.html?$/, '').split('/').filter(Boolean).pop() ?? p.url
+  // JSON-LD names often carry SEO boilerplate ("ROBIN Rosamuse | Dress |
+  // SESSÙN Official website") — first segment is the name, the rest is
+  // category signal for the type rules.
+  const titleParts = p.title.split('|').map((s) => s.trim()).filter(Boolean)
+  const cleanTitle = titleParts[0] ?? p.title
+  const titleExtra = titleParts.slice(1).filter((s) => !/official|website|shop online|e-?shop/i.test(s)).join(' ')
+  const product = classifyAndScore({
+    id: urlHash(p.url),
+    handle,
+    title: cleanTitle,
+    vendor: '',
+    product_type: [p.category, titleExtra, pathText].filter(Boolean).join(' '),
+    tags: [],
+    url: p.url,
+    price: p.price,
+    published_at: null,
+    images: p.images,
+    variants: [{ available: p.available, title: 'Default Title' }],
+    bodyText: p.description ?? '',
+    optionColours: [],
+    categoryTiers: [[p.category, titleExtra].filter(Boolean).join(' '), pathText, cleanTitle],
+  })
+  product.currency = p.currency ?? null
+  return product
+}
+
+// Domain label → provisional display name, skipping locale/storefront
+// subdomains so en.munthe.com yields "Munthe", never "En". Only a placeholder
+// until the first scan adopts the site's own name.
+const GENERIC_SUBDOMAINS = new Set(['www', 'en', 'uk', 'us', 'eu', 'de', 'fr', 'es', 'it', 'nl', 'dk', 'se', 'no', 'shop', 'store', 'int', 'intl', 'global', 'world', 'row', 'com'])
+export function provisionalNameFromUrl(base: string): string {
+  const labels = new URL(base).hostname.toLowerCase().split('.')
+  const label = labels.find((l) => !GENERIC_SUBDOMAINS.has(l)) ?? labels[0]
+  return label.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+// After a scan we know what the brand calls itself (Shopify vendor mode, or
+// JSON-LD brand / og:site_name on the browser route). If the watchlist name is
+// still an auto-generated provisional, adopt the real name — and repair the
+// linked brand row: rename it if it was auto-created, or re-link to an
+// existing brand of that name (moving queue/item rows off the orphan).
+async function adoptRealBrandName(
+  admin: any, watched: WatchedBrandRow, candidate: string | null | undefined,
+): Promise<{ name: string; brand_id: string | null }> {
+  const current = { name: watched.name, brand_id: watched.brand_id }
+  const clean = (candidate ?? '').trim()
+  if (!clean || clean.toLowerCase() === watched.name.toLowerCase()) return current
+  const autoNames = new Set([
+    provisionalNameFromUrl(watched.base_url).toLowerCase(),
+    new URL(watched.base_url).hostname.replace(/^www\./, '').split('.')[0].replace(/-/g, ' ').toLowerCase(),
+  ])
+  if (!autoNames.has(watched.name.toLowerCase())) return current // hand-edited — respect it
+
+  await admin.from('watched_brand').update({ name: clean }).eq('watched_brand_id', watched.watched_brand_id)
+  if (!watched.brand_id) return { name: clean, brand_id: null }
+
+  const { data: existing } = await admin.from('brand').select('brand_id').ilike('name', clean).limit(1)
+  const target = (existing ?? [])[0]
+  if (target && target.brand_id !== watched.brand_id) {
+    // an established brand already exists — re-link and move rows off the orphan
+    await admin.from('watched_brand').update({ brand_id: target.brand_id }).eq('watched_brand_id', watched.watched_brand_id)
+    await admin.from('brand_watch_queue').update({ brand_id: target.brand_id }).eq('brand_id', watched.brand_id)
+    await admin.from('item').update({ brand_id: target.brand_id }).eq('brand_id', watched.brand_id)
+    return { name: clean, brand_id: target.brand_id }
+  }
+  const { data: linked } = await admin.from('brand').select('name').eq('brand_id', watched.brand_id).single()
+  if (linked && autoNames.has(String(linked.name).toLowerCase())) {
+    await admin.from('brand').update({ name: clean }).eq('brand_id', watched.brand_id)
+  }
+  return { name: clean, brand_id: watched.brand_id }
+}
+
+function vendorMode(products: ScannedProduct[]): string | null {
+  const counts = new Map<string, { n: number; name: string }>()
+  for (const p of products) {
+    const v = (p.vendor ?? '').trim()
+    if (!v) continue
+    const k = v.toLowerCase()
+    const c = counts.get(k) ?? { n: 0, name: v }
+    c.n++
+    counts.set(k, c)
+  }
+  let best: { n: number; name: string } | null = null
+  const all = Array.from(counts.values())
+  for (const c of all) if (!best || c.n > best.n) best = c
+  return best?.name ?? null
 }
 
 export function normaliseBaseUrl(url: string): string | null {
@@ -284,6 +399,77 @@ async function resolveBrandId(admin: ReturnType<typeof createAdminClient>, name:
   return (created as any).brand_id
 }
 
+export function urlSlug(url: string | null): string | null {
+  if (!url) return null
+  try {
+    const seg = new URL(url).pathname.split('/').filter(Boolean).pop()
+    return seg ? seg.toLowerCase() : null
+  } catch { return null }
+}
+
+export function normName(name: string | null): string | null {
+  if (!name) return null
+  const words = name.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean).sort()
+  return words.length ? words.join(' ') : null
+}
+
+// names maps a normalised product name to the colour families already owned in
+// it — so a NEW colourway of an owned piece still comes through, while the same
+// colourway under a differently-formatted name is caught as a duplicate.
+export interface KnownKeys { pids: Set<string>; urls: Set<string>; slugs: Set<string>; names: Map<string, Set<string>> }
+
+export function isKnown(
+  k: KnownKeys,
+  p: { pid?: string | null; url?: string | null; name?: string | null; colour?: string | null },
+): boolean {
+  if (p.pid && k.pids.has(String(p.pid))) return true
+  if (p.url && k.urls.has(p.url)) return true
+  const slug = urlSlug(p.url ?? null)
+  if (slug && k.slugs.has(slug)) return true
+  const n = normName(p.name ?? null)
+  if (n) {
+    const colours = k.names.get(n)
+    // Unknown colour on either side → assume duplicate rather than risk one.
+    if (colours && (!p.colour || colours.has(p.colour) || colours.has(''))) return true
+  }
+  return false
+}
+
+// All dedupe keys already present for one brand, across the item library and
+// the brand-watch queue (any status — skipped stays skipped).
+export async function fetchKnownForBrand(
+  admin: ReturnType<typeof createAdminClient>,
+  brandId: string,
+): Promise<KnownKeys> {
+  const k: KnownKeys = { pids: new Set(), urls: new Set(), slugs: new Set(), names: new Map() }
+  for (const table of ['item', 'brand_watch_queue']) {
+    for (let from = 0; ; from += 1000) {
+      const { data } = await (admin as any)
+        .from(table)
+        .select('shopify_product_id, retailer_url, product_name, colour_family')
+        .eq('brand_id', brandId)
+        .order(table === 'item' ? 'item_id' : 'queue_id')
+        .range(from, from + 999)
+      for (const r of data ?? []) {
+        if (r.shopify_product_id != null) k.pids.add(String(r.shopify_product_id))
+        if (r.retailer_url) {
+          k.urls.add(r.retailer_url)
+          const slug = urlSlug(r.retailer_url)
+          if (slug) k.slugs.add(slug)
+        }
+        const n = normName(r.product_name)
+        if (n) {
+          const set = k.names.get(n) ?? new Set<string>()
+          set.add(r.colour_family ?? '')
+          k.names.set(n, set)
+        }
+      }
+      if (!data || data.length < 1000) break
+    }
+  }
+  return k
+}
+
 function isGbpStore(baseUrl: string): boolean {
   return /\.uk(\/|$)/.test(baseUrl) || /\.co\.uk/.test(baseUrl)
 }
@@ -304,29 +490,17 @@ async function queueProducts(
     await (admin as any).from('watched_brand').update({ brand_id: brandId } as any).eq('watched_brand_id', watched.watched_brand_id)
   }
 
-  // Chunked lookups (PostgREST caps a single response at 1,000 rows).
-  const seenPids = new Set<string>()
-  const seenUrls = new Set<string>()
-  for (let i = 0; i < products.length; i += 100) {
-    const chunk = products.slice(i, i + 100)
-    const orFilter =
-      `shopify_product_id.in.(${chunk.map((p) => p.shopifyProductId).join(',')}),` +
-      `retailer_url.in.(${chunk.map((p) => `"${p.url}"`).join(',')})`
-    for (const table of ['item', 'brand_watch_queue']) {
-      const { data: existing } = await (admin as any)
-        .from(table)
-        .select('shopify_product_id, retailer_url')
-        .or(orFilter)
-      for (const r of existing ?? []) {
-        if (r.shopify_product_id != null) seenPids.add(String(r.shopify_product_id))
-        if (r.retailer_url) seenUrls.add(r.retailer_url)
-      }
-    }
-  }
+  // Everything already known for this brand — library items (manual adds
+  // included) and queue rows in any state. Matched four ways so a piece added
+  // by hand from a different storefront domain still counts as "already have":
+  // shopify_product_id, exact URL, the URL's product slug (colourway-precise,
+  // identical across Shopify domains), and the normalised product name
+  // ("TOP DOUNA" = "Douna Top" — safe because it's scoped to one brand).
+  const known = await fetchKnownForBrand(admin, brandId)
 
   const gbp = isGbpStore(watched.base_url)
   const rows = products
-    .filter((p) => !seenPids.has(p.shopifyProductId) && !seenUrls.has(p.url))
+    .filter((p) => !isKnown(known, { pid: p.shopifyProductId, url: p.url, name: p.title, colour: p.colourFamily }))
     .map((p) => ({
       watched_brand_id: watched.watched_brand_id,
       brand_id: brandId,
@@ -336,9 +510,9 @@ async function queueProducts(
       retailer_url: p.url,
       image_url: p.images[0] ?? '',
       price: p.price != null ? String(p.price) : null,
-      currency: gbp ? 'GBP' : null,
-      price_gbp: gbp ? p.price : null,
-      item_type: p.itemType ?? 'blouse',
+      currency: p.currency ?? (gbp ? 'GBP' : null),
+      price_gbp: (p.currency ?? (gbp ? 'GBP' : null)) === 'GBP' ? p.price : null,
+      item_type: p.itemType, // null = unmapped — honest in the queue; the keep flow defaults at item-creation
       colour_family: p.colourFamily,
       material_category: p.materialCategory,
       material_primary: p.materialPrimary,
@@ -434,6 +608,7 @@ function isRecent(p: ScannedProduct, days: number): boolean {
 // Add a brand: scan, queue only the last 60 days of on-taste pieces (so a
 // 2,000-product back catalogue doesn't land at once), mark everything seen.
 export async function baselineBrand(watched: WatchedBrandRow): Promise<BrandCheckResult> {
+  if (watched.platform === 'browser') return browserScanAndQueue(watched, 'watch')
   return scanAndQueue(watched, (p) => p.score >= watched.min_score && isRecent(p, HOUSE_STYLE.newDays))
 }
 
@@ -441,15 +616,18 @@ export async function baselineBrand(watched: WatchedBrandRow): Promise<BrandChec
 // publish date. The threshold is the brand's min_score — lower it and run
 // again to pull in the next band down (already-queued pieces are deduped).
 export async function onboardBrand(watched: WatchedBrandRow): Promise<BrandCheckResult> {
+  if (watched.platform === 'browser') return browserScanAndQueue(watched, 'scan')
   return scanAndQueue(watched, (p) => p.score >= watched.min_score)
 }
 
 async function scanAndQueue(
-  watched: WatchedBrandRow,
+  watchedIn: WatchedBrandRow,
   wanted: (p: ScannedProduct) => boolean,
 ): Promise<BrandCheckResult> {
   const admin = createAdminClient()
-  const products = await fetchCatalogue(watched.base_url)
+  const products = await fetchCatalogue(watchedIn.base_url)
+  const adopted = await adoptRealBrandName(admin as any, watchedIn, vendorMode(products))
+  const watched = { ...watchedIn, ...adopted }
   const fashion = products.filter((p) => !p.nonFashion)
   const onTaste = fashion.filter(wanted)
   // Low or out of stock isn't worth adding — it gets another chance on a
@@ -476,11 +654,95 @@ async function scanAndQueue(
   }
 }
 
+// ── browser route (non-Shopify stores) ──────────────────────────────────────
+// Sitemap discovery + per-page JSON-LD, in resumable chunks. Progress lives in
+// watched_brand.scan_state — the scan runs server-side to completion whether
+// or not the admin page stays open, and a re-run continues where it stopped
+// because every evaluated page is in brand_watch_seen.
+// mode 'watch': baseline only — mark every discovered product URL seen, queue
+// nothing (no publish dates exist off-Shopify, so "last 60 days" has no
+// meaning; new drops queue from the next check onward).
+// mode 'scan': fetch unseen pages, queue on-taste in-stock pieces.
+async function browserScanAndQueue(watchedRow: WatchedBrandRow, mode: 'watch' | 'scan'): Promise<BrandCheckResult> {
+  const admin = createAdminClient() as any
+  const writeState = (state: unknown) =>
+    admin.from('watched_brand').update({ scan_state: state }).eq('watched_brand_id', watchedRow.watched_brand_id)
+  const markHashes = async (hashes: string[]) => {
+    const rows = hashes.map((h) => ({ watched_brand_id: watchedRow.watched_brand_id, shopify_product_id: h }))
+    for (let i = 0; i < rows.length; i += 500) {
+      await admin.from('brand_watch_seen').upsert(rows.slice(i, i + 500), { onConflict: 'watched_brand_id,shopify_product_id', ignoreDuplicates: true })
+    }
+  }
+  const stamp = () =>
+    admin.from('watched_brand')
+      .update({ last_checked_at: new Date().toISOString() })
+      .eq('watched_brand_id', watchedRow.watched_brand_id)
+
+  if (mode === 'watch') {
+    const urls = await discoverProductUrls(watchedRow.base_url)
+    await markHashes(urls.map(urlHash))
+    await stamp()
+    return {
+      name: watchedRow.name, scanned: urls.length, newProducts: 0, queued: 0,
+      belowScore: 0, skippedStock: 0, restocked: 0,
+      note: `${urls.length} product pages baselined — watching from now (browser route)`,
+    }
+  }
+
+  const seen = new Set<string>()
+  for (let from = 0; ; from += 1000) {
+    const { data } = await admin.from('brand_watch_seen').select('shopify_product_id')
+      .eq('watched_brand_id', watchedRow.watched_brand_id).order('shopify_product_id').range(from, from + 999)
+    for (const r of data ?? []) seen.add(String(r.shopify_product_id))
+    if (!data || data.length < 1000) break
+  }
+
+  const startedAt = new Date().toISOString()
+  await writeState({ running: true, done: 0, total: null, started_at: startedAt })
+  try {
+    const res = await fetchNewProductPages(watchedRow.base_url, seen, {
+      onProgress: (done, total) => writeState({ running: true, done, total, started_at: startedAt }),
+    })
+    const brandNames = res.parsed.map((p) => p.brand).filter(Boolean) as string[]
+    const adopted = await adoptRealBrandName(admin, watchedRow, brandNames.length ? vendorMode(brandNames.map((v) => ({ vendor: v } as ScannedProduct))) : null)
+    const watched = { ...watchedRow, ...adopted }
+    const products = res.parsed.map(classifyExternalProduct)
+    const fashion = products.filter((p) => !p.nonFashion)
+    const onTaste = fashion.filter((p) => p.score >= watched.min_score)
+    const candidates = onTaste.filter((p) => p.stockStatus === 'in_stock')
+    const queued = await queueProducts(admin, watched, candidates)
+    const restocked = await refreshBrandStock(admin, products)
+    // stock-held on-taste pieces stay unseen so a restock queues them later
+    const stockHeld = new Set(onTaste.filter((p) => p.stockStatus !== 'in_stock').map((p) => p.shopifyProductId))
+    await markHashes(res.processedUrls.map(urlHash).filter((h) => !stockHeld.has(h)))
+    await admin.from('watched_brand')
+      .update({
+        last_checked_at: new Date().toISOString(),
+        last_new_count: queued,
+        scan_state: res.remaining > 0 ? { remaining: res.remaining } : null,
+      })
+      .eq('watched_brand_id', watched.watched_brand_id)
+    return {
+      name: watched.name, scanned: res.discovered, newProducts: onTaste.length, queued,
+      belowScore: fashion.length - onTaste.length, skippedStock: stockHeld.size, restocked,
+      note: res.remaining > 0
+        ? `${res.processedUrls.length} pages this run, ${res.remaining} remaining — run FULL SCAN again to continue`
+        : undefined,
+    }
+  } catch (e) {
+    await writeState(null)
+    throw e
+  }
+}
+
 // Weekly check: anything not in brand_watch_seen is new. On-taste new pieces
 // are queued as drafts; everything is marked seen either way.
-export async function checkWatchedBrand(watched: WatchedBrandRow): Promise<BrandCheckResult> {
+export async function checkWatchedBrand(watchedIn: WatchedBrandRow): Promise<BrandCheckResult> {
+  if (watchedIn.platform === 'browser') return browserScanAndQueue(watchedIn, 'scan')
   const admin = createAdminClient()
-  const products = await fetchCatalogue(watched.base_url)
+  const products = await fetchCatalogue(watchedIn.base_url)
+  const adopted = await adoptRealBrandName(admin as any, watchedIn, vendorMode(products))
+  const watched = { ...watchedIn, ...adopted }
 
   // Page through the seen ids — PostgREST caps a single response at 1,000 rows,
   // and a full catalogue is easily double that.

@@ -2,10 +2,11 @@
 
 import { createAdminClient } from '@/lib/supabase-server'
 import {
-  baselineBrand, checkWatchedBrand, onboardBrand, runBrandWatch, normaliseBaseUrl,
+  baselineBrand, checkWatchedBrand, onboardBrand, provisionalNameFromUrl, runBrandWatch, normaliseBaseUrl,
   type BrandCheckResult, type WatchedBrandRow,
 } from '@/lib/brand-watch'
 import { buildLearning, type DecidedRow } from '@/lib/brand-watch-learning'
+import { discoverProductUrls } from '@/lib/brand-watch-browser'
 import { revalidatePath } from 'next/cache'
 
 export interface QueueItemRow {
@@ -168,9 +169,10 @@ export async function addWatchedBrand(url: string, mode: 'watch' | 'full' = 'wat
     .from('watched_brand').select('watched_brand_id').eq('base_url', base).limit(1)
   if ((exists ?? []).length) return { error: 'Already on the watchlist' }
 
-  // Name from the domain until the first scan tells us the vendor name.
-  const host = new URL(base).hostname.replace(/^www\./, '')
-  const provisional = host.split('.')[0].replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+  // Placeholder only — the first scan adopts the site's own name (Shopify
+  // vendor / JSON-LD brand). Locale subdomains are skipped so en.munthe.com
+  // starts as "Munthe", never "En".
+  const provisional = provisionalNameFromUrl(base)
 
   const { data: created, error } = await (admin as any)
     .from('watched_brand')
@@ -184,10 +186,28 @@ export async function addWatchedBrand(url: string, mode: 'watch' | 'full' = 'wat
     const result = mode === 'full' ? await onboardBrand(watched) : await baselineBrand(watched)
     revalidatePath('/admin/brand-watch')
     return { result }
-  } catch (e) {
-    // Scan failed (not Shopify / blocked) — remove the row again.
+  } catch (shopifyError) {
+    // Not Shopify (no /products.json)? Try the browser route: sitemap
+    // discovery + JSON-LD product pages. Works for Sessun and most custom
+    // platforms; only sites that hard-block server fetching stay out.
+    try {
+      const urls = await discoverProductUrls(base)
+      if (urls.length >= 10) {
+        // Browser-route pages carry little scoring vocabulary (style-name
+        // titles, prose descriptions) — a GOOD item routinely scores 0 here,
+        // so the floor is 0: only genuinely negative signals (leopard, sequin,
+        // neon…) drop a piece. Tune per brand if a site scores richer.
+        await (admin as any).from('watched_brand')
+          .update({ platform: 'browser', min_score: 0 }).eq('watched_brand_id', watched.watched_brand_id)
+        const browserWatched = { ...watched, platform: 'browser' as const, min_score: 0 }
+        const result = mode === 'full' ? await onboardBrand(browserWatched) : await baselineBrand(browserWatched)
+        revalidatePath('/admin/brand-watch')
+        return { result: { ...result, note: `not Shopify — switched to the browser route (sitemap + JSON-LD). ${result.note ?? ''}`.trim() } }
+      }
+    } catch { /* fall through to the original error */ }
+    // Neither route works — remove the row again.
     await (admin as any).from('watched_brand').delete().eq('watched_brand_id', watched.watched_brand_id)
-    return { error: e instanceof Error ? e.message : String(e) }
+    return { error: shopifyError instanceof Error ? shopifyError.message : String(shopifyError) }
   }
 }
 
@@ -339,6 +359,22 @@ export async function keepAllForBrand(brandName: string): Promise<{ updated: num
   } catch (e) {
     return { updated: 0, error: e instanceof Error ? e.message : String(e) }
   }
+}
+
+// Undo a skip: skipped → queued again. Skips only — a kept piece has already
+// been written into the library as a ready item, so unkeeping is a library
+// decision, not a queue one.
+export async function undoSkip(itemIds: string[]): Promise<{ restored: number }> {
+  if (!itemIds.length) return { restored: 0 }
+  const admin = createAdminClient()
+  const { data } = await (admin as any)
+    .from('brand_watch_queue')
+    .update({ status: 'queued', decided_at: null } as any)
+    .in('queue_id', itemIds)
+    .eq('status', 'skipped')
+    .select('queue_id')
+  revalidatePath('/admin/brand-watch')
+  return { restored: (data ?? []).length }
 }
 
 export async function skipItems(itemIds: string[]): Promise<{ updated: number }> {

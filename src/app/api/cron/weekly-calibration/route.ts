@@ -24,6 +24,8 @@ function healthSection(report: Awaited<ReturnType<typeof runBrandAffinityWeekly>
     `<tr><td style="padding:6px 12px;font-size:12px;color:${rows.length ? '#B3202A' : '#3D7A50'};white-space:nowrap">${label} · ${rows.length}</td>` +
     `<td style="padding:6px 12px;font-size:12px;color:#4A4E57">${rows.slice(0, 6).join('<br>') || 'clear'}${rows.length > 6 ? `<br>+${rows.length - 6} more` : ''}</td></tr>`
   return `<table style="border-collapse:collapse;width:100%">
+    ${line('Code drift (buy vs identity)', (report.code_drift ?? []).map((r) => r.message))}
+    ${line('Price extraction failures', (report.price_extraction_failures ?? []).map((r) => `${r.brand}: ${r.reasons}`))}
     ${line('Orphan brands', report.orphan_brands.map((r) => r.name))}
     ${line('Incoherent families', report.incoherent_families.map((r) => `${r.family} (avg ${r.avg_similarity})`))}
     ${line('Tier violations', report.tier_violations.map((r) => `${r.family}: ${r.brands}`))}

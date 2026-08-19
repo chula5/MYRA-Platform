@@ -5,13 +5,14 @@
 
 import { createAdminClient, createServerClient } from '@/lib/supabase-server'
 import { analyseOutfit } from '@/app/admin/ai/analyse-outfit'
-import { buildOutfitVector, cosine } from '@/lib/taste-vector'
+import { buildOutfitVector } from '@/lib/taste-vector'
 import {
-  brandKey, centroidOf, computeSimilarBrands, expansionSeeds, getSimilarBrands,
-  invalidateSimilarityCache, loadAffinities, loadBrandGraph, pcaProject1D,
-  rankFeedForUser, recomputeBrandVectors, resolveBrandNames, runHealthChecks,
-  seedUserAffinities, THIN_VECTOR_ITEMS, SEED,
-  type BrandGraph, type FeedRow, type HealthReport, type SimilarBrand,
+  brandCosine, brandKey, centroidOf, codesComplete, codesVector, computeSimilarBrands,
+  expansionSeeds, getSimilarBrands, ghostCodes, pairIdentitySimilarity,
+  invalidateSimilarityCache, isThinBrand, loadAffinities, loadBrandGraph, pcaProject1D,
+  positioningBand, priceProximity, rankFeedForUser, recomputeBrandVectors, resolveBrandNames,
+  runHealthChecks, seedUserAffinities, SEED,
+  type AffinityConfig, type BrandGraph, type FeedRow, type HealthReport, type SimilarBrand,
 } from '@/lib/brand-affinity'
 import { revalidatePath } from 'next/cache'
 
@@ -34,6 +35,11 @@ export interface MapBrand {
   thin: boolean
   itemCount: number
   familyIds: string[]
+  price_position: number | null // ln £; null = no price data (falls back to tier pseudo-price client-side)
+  band: number | null // 0..5 positioning band
+  medianPrice: number | null
+  coreCategory: string | null
+  coded: boolean // all 11 brand codes authored — codes drive similarity + map position
 }
 
 export interface InspectorData {
@@ -44,6 +50,7 @@ export interface InspectorData {
   members: Array<{ member_id: string; name: string; is_synthetic: boolean }>
   latestReport: HealthReport | null
   badges: { orphans: number; incoherent: number; starved: number; dead: number }
+  config: AffinityConfig
   error?: string
 }
 
@@ -53,22 +60,38 @@ export async function loadTasteInspector(): Promise<InspectorData> {
   const empty: InspectorData = {
     brands: [], families: [], exclusions: [], members: [], latestReport: null,
     badges: { orphans: 0, incoherent: 0, starved: 0, dead: 0 },
+    config: { bandBounds: [150, 350, 700, 1200, 2500], priceK: 1.8 },
   }
   const { error: probe } = await admin.from('brand_family').select('family_id').limit(1)
-  if (probe) return { ...empty, migrationNeeded: true, error: probe.message }
+  if (probe) return { ...empty, migrationNeeded: true, error: `0032 missing: ${probe.message}` }
+  const { error: probe35 } = await admin.from('brand').select('price_position').limit(1)
+  if (probe35) return { ...empty, migrationNeeded: true, error: `0035 missing: ${probe35.message}` }
 
   const graph = await loadBrandGraph(admin)
-  const withVec = graph.brands.filter((b) => b.brand_vector)
-  const proj = pcaProject1D(withVec.map((b) => b.brand_vector!))
-  const xById = new Map(withVec.map((b, i) => [b.brand_id, proj[i]]))
+  // X axis: PCA over AUTHORED BRAND CODES (10 non-price dims, centred) for
+  // fully coded brands. Brands with incomplete codes fall back to the
+  // item-centroid PCA — a PROVISIONAL position (hollow dot) so the map stays
+  // navigable during the scoring campaign. No codes AND no trustworthy
+  // centroid → pinned to the left margin, price only.
+  const codedBrands = graph.brands.filter((b) => codesComplete(b))
+  const codesProj = pcaProject1D(codedBrands.map((b) => codesVector(b.codes!).map((v) => v - 3)))
+  const xById = new Map(codedBrands.map((b, i) => [b.brand_id, codesProj[i]]))
+  const provisionalBrands = graph.brands.filter((b) => !codesComplete(b) && b.brand_vector && !isThinBrand(b))
+  const vecProj = pcaProject1D(provisionalBrands.map((b) => b.brand_vector!))
+  provisionalBrands.forEach((b, i) => xById.set(b.brand_id, vecProj[i]))
 
   const brands: MapBrand[] = graph.brands
     .map((b) => ({
       brand_id: b.brand_id, name: b.name, price_tier: b.price_tier, status: b.status,
       x: xById.get(b.brand_id) ?? null,
-      thin: b.status === 'stocked' && b.vector_item_count < THIN_VECTOR_ITEMS,
+      thin: isThinBrand(b),
       itemCount: b.vector_item_count,
       familyIds: graph.memberships.filter((m) => m.brand_id === b.brand_id).map((m) => m.family_id),
+      price_position: b.price_position,
+      band: positioningBand(b.price_position, graph.config.bandBounds),
+      medianPrice: b.median_price_overall,
+      coreCategory: b.core_category,
+      coded: codesComplete(b),
     }))
     .sort((a, b) => a.name.localeCompare(b.name))
 
@@ -93,6 +116,7 @@ export async function loadTasteInspector(): Promise<InspectorData> {
     brands, families, exclusions,
     members: members ?? [],
     latestReport,
+    config: graph.config,
     badges: {
       orphans: latestReport?.orphan_brands.length ?? 0,
       incoherent: latestReport?.incoherent_families.length ?? 0,
@@ -105,7 +129,8 @@ export async function loadTasteInspector(): Promise<InspectorData> {
 // ── brand detail panel ──────────────────────────────────────────────────────
 
 export interface BrandDetail {
-  neighbours: Array<{ brand_id: string; name: string; score: number }>
+  thin: boolean // no identity yet (no complete codes, no trustworthy centroid) — lists suppressed
+  neighbours: Array<{ brand_id: string; name: string; aesthetic: number; priceFactor: number; combined: number; basis: 'codes' | 'vector' }>
   similar: SimilarBrand[]
   error?: string
 }
@@ -115,13 +140,29 @@ export async function loadBrandDetail(brandId: string): Promise<BrandDetail> {
   const admin = createAdminClient() as any
   const graph = await loadBrandGraph(admin)
   const self = graph.byId.get(brandId)
-  if (!self?.brand_vector) return { neighbours: [], similar: await getSimilarBrands(admin, brandId, graph) }
+  const similar = await getSimilarBrands(admin, brandId, graph)
+  const hasIdentity = self && (codesComplete(self) || (self.brand_vector && !isThinBrand(self)))
+  if (!self || !hasIdentity) {
+    // no identity at all: neither complete codes nor a trustworthy centroid —
+    // family memberships (curation) are all that survives until scored
+    return { thin: true, neighbours: [], similar: similar.filter((s) => s.mechanism !== 'vector') }
+  }
   const neighbours = graph.brands
-    .filter((b) => b.brand_id !== brandId && b.brand_vector)
-    .map((b) => ({ brand_id: b.brand_id, name: b.name, score: +cosine(self.brand_vector!, b.brand_vector!).toFixed(3) }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 10)
-  return { neighbours, similar: await getSimilarBrands(admin, brandId, graph) }
+    .filter((b) => b.brand_id !== brandId)
+    .map((b) => {
+      const id = pairIdentitySimilarity(self, b)
+      if (!id) return null
+      const pp = priceProximity(self, b, graph.config.priceK)
+      const priceFactor = pp?.factor ?? 1
+      return {
+        brand_id: b.brand_id, name: b.name, aesthetic: id.sim, priceFactor: +priceFactor.toFixed(3),
+        combined: +(id.sim * priceFactor).toFixed(3), basis: id.basis,
+      }
+    })
+    .filter(Boolean)
+    .sort((a: any, b: any) => b.combined - a.combined)
+    .slice(0, 10) as BrandDetail['neighbours']
+  return { thin: false, neighbours, similar }
 }
 
 // ── curation actions ────────────────────────────────────────────────────────
@@ -176,7 +217,7 @@ export async function removeExclusion(brandA: string, brandB: string): Promise<v
 // Reference brands: not stocked, named at onboarding (Rouje, Réalisation Par).
 // Vector comes from vision-scoring 5-10 reference product images.
 export async function addReferenceBrand(
-  name: string, priceTier: number, imageUrls: string[],
+  name: string, priceTier: number, imageUrls: string[], typicalPrice?: number | null,
 ): Promise<{ scored?: number; failed?: number; error?: string }> {
   await requireAdmin()
   const admin = createAdminClient() as any
@@ -196,16 +237,26 @@ export async function addReferenceBrand(
   if (!vectors.length) return { error: 'No reference image could be scored' }
   const vector = centroidOf(vectors)
 
-  const { data: existing } = await admin.from('brand').select('brand_id').ilike('name', clean).limit(1)
-  const row = {
-    status: 'reference', brand_vector: vector, vector_item_count: vectors.length,
+  const { data: existing } = await admin.from('brand').select('brand_id, status').ilike('name', clean).limit(1)
+  const row: Record<string, unknown> = {
+    brand_vector: vector, vector_item_count: vectors.length,
     vector_updated_at: new Date().toISOString(), price_tier: priceTier,
   }
+  // price_position for reference brands is manual — a typical dress/bag price
+  if (typicalPrice && typicalPrice > 0) {
+    row.price_position = +Math.log(typicalPrice).toFixed(4)
+    row.median_price_overall = typicalPrice
+    row.median_price_by_category = { dresses: { median: typicalPrice, count: 1 } }
+    row.core_category = 'dresses'
+  }
   if ((existing ?? []).length) {
-    await admin.from('brand').update(row).eq('brand_id', existing[0].brand_id)
+    // reference-scoring also works for STOCKED brands (thin-vector rescue) —
+    // never flip their status
+    await admin.from('brand').update({ ...row, status: existing[0].status ?? 'reference' }).eq('brand_id', existing[0].brand_id)
   } else {
     await admin.from('brand').insert({
       name: clean, era_orientation: 3, aesthetic_output: 3, cultural_legibility: 3, creative_behaviour: 3,
+      status: 'reference',
       ...row,
     })
   }
@@ -460,6 +511,20 @@ export async function simulateOnboarding(names: string[]): Promise<SimulationRes
 }
 
 // ── health ──────────────────────────────────────────────────────────────────
+
+// Band boundaries + price-proximity k, editable in the inspector.
+export async function saveAffinityConfig(bandBounds: number[], priceK: number): Promise<{ error?: string }> {
+  await requireAdmin()
+  const admin = createAdminClient() as any
+  const bounds = bandBounds.map(Number).filter((n) => !isNaN(n) && n > 0).sort((a, b) => a - b)
+  if (bounds.length !== 5) return { error: 'Exactly 5 ascending band boundaries required' }
+  if (!(priceK > 0.2 && priceK < 10)) return { error: 'k must be between 0.2 and 10' }
+  const { error } = await admin.from('brand_affinity_config').upsert({ id: 1, band_bounds: bounds, price_k: priceK, updated_at: new Date().toISOString() })
+  if (error) return { error: error.message }
+  await invalidateSimilarityCache(admin)
+  revalidatePath(PATH)
+  return {}
+}
 
 export async function runHealthNow(): Promise<HealthReport> {
   await requireAdmin()

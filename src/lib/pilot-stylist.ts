@@ -371,6 +371,14 @@ export interface LookItem {
   size?: string
   in_stock?: boolean
   stock_checked_at?: string | null
+  // set on composed looks — lets review swaps track library items and lets a
+  // look build its own Higgsfield shoot without an outfit
+  item_id?: string | null
+  brand_id?: string | null
+  image_url?: string | null
+  slot?: string | null
+  item_type?: string | null
+  material_primary?: string | null
 }
 
 export interface LookForValidation {

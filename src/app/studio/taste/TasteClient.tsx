@@ -9,6 +9,12 @@ import {
   type BrandDetail, type InspectorData, type MemberInspection, type SimulationResult,
 } from './actions'
 import type { HealthReport } from '@/lib/brand-affinity'
+import { saveAffinityConfig } from './actions'
+
+// Display copy of lib BAND_NAMES — brand-affinity.ts is server-only (it pulls
+// in supabase-server → next/headers), so a client component may import its
+// TYPES but never its values.
+const BAND_NAMES = ['HIGH STREET', 'ACCESSIBLE', 'CONTEMPORARY', 'ADV. CONTEMPORARY', 'DESIGNER', 'LUXURY']
 
 const CHIP = 'px-3 py-1.5 rounded-full text-[9px] tracking-[0.12em] border transition-colors'
 const CHIP_ON = `${CHIP} bg-[#0A0A0A] text-white border-[#0A0A0A]`
@@ -47,6 +53,13 @@ export default function TasteClient({ data }: { data: InspectorData }) {
   const [refUrls, setRefUrls] = useState('')
   const [famName, setFamName] = useState('')
   const [exclOther, setExclOther] = useState('')
+  const [refPrice, setRefPrice] = useState('')
+  const [railOpen, setRailOpen] = useState(false)
+  const [cfgBounds, setCfgBounds] = useState(data.config.bandBounds.join(', '))
+  const [cfgK, setCfgK] = useState(String(data.config.priceK))
+  const [zoom, setZoom] = useState(1)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [drag, setDrag] = useState<{ sx: number; sy: number; px: number; py: number } | null>(null)
 
   // users state
   const [selMember, setSelMember] = useState<string | null>(null)
@@ -78,24 +91,83 @@ export default function TasteClient({ data }: { data: InspectorData }) {
     act(() => loadMemberInspection(id, logPreview), (r) => ('error' in r ? setNotice(r.error) : setInspection(r)))
   }
 
-  // map geometry
-  const W = 1000; const H = 460
-  const px = (x: number) => 50 + x * (W - 100)
-  const py = (tier: number) => H - 60 - ((tier - 1) / 4) * (H - 120)
-  const mapped = data.brands.filter((b) => b.x != null)
-  const familyBoxes = data.families
-    .filter((f) => visibleFamilies.has(f.family_id))
-    .map((f) => {
-      const pts = f.members.map((m) => brandById.get(m.brand_id)).filter((b) => b && b.x != null) as typeof mapped
-      if (pts.length < 2) return null
-      const xs = pts.map((b) => px(b.x!)); const ys = pts.map((b) => py(b.price_tier))
-      return {
-        name: f.name,
-        x: Math.min(...xs) - 18, y: Math.min(...ys) - 18,
-        w: Math.max(...xs) - Math.min(...xs) + 36, h: Math.max(...ys) - Math.min(...ys) + 36,
+  // ── map geometry: X = PCA of brand codes, Y = continuous log price ──
+  // ONE scale drives dots, gridlines and band stripes. A brand renders ONLY
+  // with a real position: an X (codes or provisional centroid PCA) AND a
+  // computed/manual price_position — no placeholder fallbacks, ever.
+  const W = 1000; const H = 520
+  const M = { left: 118, right: 24, top: 16, bottom: 44 }
+  const bounds = data.config.bandBounds
+  const bandEdges = [40, ...bounds, 8000] // full band ladder; domain clamps below
+
+  const positioned = data.brands.filter((b) => b.x != null && b.price_position != null)
+  const unpositioned = data.brands.filter((b) => b.x == null || b.price_position == null)
+
+  // visible domain = data range padded by one band each side
+  const prices = positioned.map((b) => Math.exp(b.price_position!))
+  const minP = prices.length ? Math.min(...prices) : 100
+  const maxP = prices.length ? Math.max(...prices) : 3000
+  let loIdx = 0; let hiIdx = bandEdges.length - 1
+  for (let i = 0; i < bandEdges.length; i++) { if (bandEdges[i] <= minP) loIdx = i }
+  for (let i = bandEdges.length - 1; i >= 0; i--) { if (bandEdges[i] >= maxP) hiIdx = i }
+  loIdx = Math.max(0, loIdx - 1); hiIdx = Math.min(bandEdges.length - 1, hiIdx + 1)
+  const LN_MIN = Math.log(bandEdges[loIdx]); const LN_MAX = Math.log(bandEdges[hiIdx])
+
+  const px = (x: number) => M.left + x * (W - M.left - M.right)
+  const py = (pricePos: number) => {
+    const t = (Math.min(Math.max(pricePos, LN_MIN), LN_MAX) - LN_MIN) / (LN_MAX - LN_MIN)
+    return H - M.bottom - t * (H - M.top - M.bottom)
+  }
+
+  // beeswarm: X-ONLY separation — Y always stays true to price, so dots can
+  // never drift across a band stripe
+  const mapped = useMemo(() => {
+    const pts = positioned.map((b) => ({ b, px: px(b.x!), py: py(b.price_position!) }))
+    const MIN = 11
+    for (let iter = 0; iter < 40; iter++) {
+      let moved = false
+      for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) {
+        const dy = pts[j].py - pts[i].py
+        if (Math.abs(dy) >= MIN) continue
+        const dx = pts[j].px - pts[i].px
+        const d = Math.sqrt(dx * dx + dy * dy)
+        if (d >= MIN) continue
+        const push = (MIN - d) / 2 + 0.2
+        const dir = dx === 0 ? (i % 2 ? 1 : -1) : Math.sign(dx)
+        pts[i].px = Math.max(M.left + 6, pts[i].px - dir * push)
+        pts[j].px = Math.min(W - M.right - 6, pts[j].px + dir * push)
+        moved = true
       }
-    })
-    .filter(Boolean) as Array<{ name: string; x: number; y: number; w: number; h: number }>
+      if (!moved) break
+    }
+    return pts
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.brands, LN_MIN, LN_MAX])
+
+  const GRID_PRICES = [150, 400, 800, 1500, 3000].filter((p) => Math.log(p) >= LN_MIN && Math.log(p) <= LN_MAX)
+  const visibleBandEdges = bandEdges.filter((e) => Math.log(e) >= LN_MIN && Math.log(e) <= LN_MAX)
+
+  const familyInfo = data.families.map((f) => {
+    const pts = mapped.filter((p) => f.members.some((m) => m.brand_id === p.b.brand_id))
+    const unpos = f.members.length - pts.length
+    if (pts.length < 2) return { name: f.name, family_id: f.family_id, box: null, unpos }
+    const xs = pts.map((p) => p.px); const ys = pts.map((p) => p.py)
+    return {
+      name: f.name, family_id: f.family_id, unpos,
+      box: {
+        x: Math.min(...xs) - 16, y: Math.min(...ys) - 16,
+        w: Math.max(...xs) - Math.min(...xs) + 32, h: Math.max(...ys) - Math.min(...ys) + 32,
+      },
+    }
+  })
+  const familyBoxes = familyInfo
+    .filter((f) => f.box && visibleFamilies.has(f.family_id))
+    .map((f) => ({ name: f.name, ...f.box! }))
+
+  // zoom/pan → viewBox
+  const vw = W / zoom; const vh = H / zoom
+  const vx = Math.min(Math.max(pan.x, 0), W - vw)
+  const vy = Math.min(Math.max(pan.y, 0), H - vh)
 
   const sel = selBrand ? brandById.get(selBrand) : null
   const selFamilies = sel ? data.families.filter((f) => f.members.some((m) => m.brand_id === sel.brand_id)) : []
@@ -103,6 +175,7 @@ export default function TasteClient({ data }: { data: InspectorData }) {
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2 mb-6">
+        <a href="/studio/taste/codes" className={CHIP_OFF}>BRAND CODES →</a>
         {(['map', 'users', 'simulator', 'health'] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)} className={tab === t ? CHIP_ON : CHIP_OFF}>
             {t === 'map' ? 'BRAND MAP' : t === 'users' ? 'USER INSPECTOR' : t === 'simulator' ? 'SIMULATOR' : 'HEALTH'}
@@ -120,15 +193,20 @@ export default function TasteClient({ data }: { data: InspectorData }) {
         <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6">
           <div>
             <div className="flex flex-wrap items-center gap-2 mb-3">
-              {data.families.map((f) => (
-                <button
-                  key={f.family_id}
-                  onClick={() => setVisibleFamilies((s) => { const n = new Set(s); n.has(f.family_id) ? n.delete(f.family_id) : n.add(f.family_id); return n })}
-                  className={visibleFamilies.has(f.family_id) ? CHIP_ON : CHIP_OFF}
-                >
-                  {f.name.toUpperCase()} · {f.members.length}
-                </button>
-              ))}
+              {data.families.map((f) => {
+                const info = familyInfo.find((x) => x.family_id === f.family_id)
+                return (
+                  <button
+                    key={f.family_id}
+                    onClick={() => setVisibleFamilies((s) => { const n = new Set(s); n.has(f.family_id) ? n.delete(f.family_id) : n.add(f.family_id); return n })}
+                    className={visibleFamilies.has(f.family_id) ? CHIP_ON : CHIP_OFF}
+                    title={info?.box ? undefined : 'Fewer than 2 members positioned — no hull drawn'}
+                  >
+                    {f.name.toUpperCase()} · {f.members.length}
+                    {(info?.unpos ?? 0) > 0 && <span className="text-[#B3202A]"> · {info!.unpos} UNPOSITIONED</span>}
+                  </button>
+                )
+              })}
               <span className="mx-1 h-4 w-px bg-[#E2E0DB]" />
               <button disabled={pending} className={BTN_GHOST} onClick={() => act(() => recomputeVectorsNow(), (r) => setNotice(`${r.updated} BRAND VECTORS RECOMPUTED — RELOAD TO SEE THE MAP MOVE`))}>RECOMPUTE VECTORS</button>
               <button disabled={pending} className={BTN_GHOST} onClick={() => act(() => seedStarterFamily(), () => setNotice('FRENCH CONTEMPORARY SEEDED — RELOAD'))}>SEED STARTER FAMILY</button>
@@ -138,41 +216,139 @@ export default function TasteClient({ data }: { data: InspectorData }) {
               </span>
             </div>
 
-            <div className="border border-[#E2E0DB] rounded-[10px] bg-white overflow-x-auto">
-              <svg viewBox={`0 0 ${W} ${H}`} className="w-full min-w-[720px]">
-                {[1, 2, 3, 4, 5].map((t) => (
-                  <g key={t}>
-                    <line x1={40} x2={W - 20} y1={py(t)} y2={py(t)} stroke="#EFEDE9" strokeWidth={1} />
-                    <text x={W - 16} y={py(t) + 3} fontSize={8} fill="#A8A8A4" letterSpacing={1}>{TIER_LABELS[t]}</text>
+            <div className="flex flex-wrap items-center gap-2 mb-3 text-[8px] tracking-[0.14em] text-[#A8A8A4]">
+              BAND BOUNDS £
+              <input value={cfgBounds} onChange={(e) => setCfgBounds(e.target.value)} className={`${INPUT} w-56`} title="5 ascending GBP boundaries, comma-separated" />
+              PRICE DECAY K
+              <input value={cfgK} onChange={(e) => setCfgK(e.target.value)} className={`${INPUT} w-16`} title="price_proximity = exp(-|Δ ln price| / k) — smaller k punishes price gaps harder" />
+              <button
+                disabled={pending}
+                className={BTN_GHOST}
+                onClick={() => act(() => saveAffinityConfig(cfgBounds.split(',').map((s) => parseFloat(s.trim())), parseFloat(cfgK)), (r) => setNotice(r.error ?? 'CONFIG SAVED — RELOAD TO RE-RANK'))}
+              >
+                SAVE CONFIG
+              </button>
+            </div>
+
+            <p className="mb-1.5 text-[9px] tracking-[0.16em] text-[#6B6B6B]">
+              POSITIONED: {positioned.length} OF {data.brands.length} BRANDS
+              {unpositioned.length > 0 && <span className="text-[#A8A8A4]"> · {unpositioned.length} IN THE RAIL BELOW</span>}
+            </p>
+            <div className="border border-[#E2E0DB] rounded-[10px] bg-white overflow-hidden relative">
+              <div className="absolute top-2 right-2 flex gap-1 z-10">
+                <button className={BTN_GHOST} onClick={() => setZoom((z) => Math.min(4, z * 1.4))}>+</button>
+                <button className={BTN_GHOST} onClick={() => setZoom((z) => Math.max(1, z / 1.4))}>−</button>
+                <button className={BTN_GHOST} onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }) }}>RESET</button>
+              </div>
+              <svg
+                viewBox={`${vx} ${vy} ${vw} ${vh}`}
+                className="w-full min-w-[720px]"
+                style={{ cursor: drag ? 'grabbing' : zoom > 1 ? 'grab' : 'default', touchAction: 'none' }}
+                onPointerDown={(e) => { if (zoom > 1) { (e.target as Element).setPointerCapture?.(e.pointerId); setDrag({ sx: e.clientX, sy: e.clientY, px: vx, py: vy }) } }}
+                onPointerMove={(e) => {
+                  if (!drag) return
+                  const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect()
+                  const scale = vw / rect.width
+                  setPan({ x: drag.px - (e.clientX - drag.sx) * scale, y: drag.py - (e.clientY - drag.sy) * scale })
+                }}
+                onPointerUp={() => setDrag(null)}
+                onDoubleClick={() => setZoom((z) => Math.min(4, z * 1.6))}
+              >
+                {/* positioning bands — stripes derived from the SAME scale as
+                    dots and gridlines, clipped to the visible domain */}
+                {visibleBandEdges.slice(0, -1).map((lo, i) => {
+                  const hi = visibleBandEdges[i + 1]
+                  const yTop = py(Math.log(hi)); const yBot = py(Math.log(lo))
+                  const bandIdx = bandEdges.indexOf(lo)
+                  return (
+                    <g key={lo}>
+                      <rect x={M.left} y={yTop} width={W - M.left - M.right} height={yBot - yTop} fill={bandIdx % 2 ? '#FAFAF8' : '#FFFFFF'} />
+                      {yBot - yTop > 14 && (
+                        <text x={8} y={(yTop + yBot) / 2 + 3} fontSize={7.5} fill="#A8A8A4" letterSpacing={1.2}>{BAND_NAMES[Math.min(bandIdx, BAND_NAMES.length - 1)]}</text>
+                      )}
+                    </g>
+                  )
+                })}
+                {/* £ gridlines, labels INSIDE the plot on the left */}
+                {GRID_PRICES.map((p) => (
+                  <g key={p}>
+                    <line x1={M.left} x2={W - M.right} y1={py(Math.log(p))} y2={py(Math.log(p))} stroke="#E2E0DB" strokeWidth={0.8} />
+                    <text x={M.left + 6} y={py(Math.log(p)) - 3} fontSize={8} fill="#A8A8A4" letterSpacing={1}>£{p.toLocaleString()}</text>
                   </g>
                 ))}
-                <text x={50} y={H - 14} fontSize={8} fill="#A8A8A4" letterSpacing={2}>← AESTHETIC POSITION (PCA OF BRAND VECTORS) →</text>
+                <text x={M.left + 8} y={H - 12} fontSize={8} fill="#A8A8A4" letterSpacing={2}>← AESTHETIC POSITION (PCA OF BRAND VECTORS) →</text>
                 {familyBoxes.map((f) => (
                   <g key={f.name}>
                     <rect x={f.x} y={f.y} width={f.w} height={f.h} fill="none" stroke="#C4A882" strokeWidth={1} strokeDasharray="5 4" rx={12} />
                     <text x={f.x + 6} y={f.y - 5} fontSize={9} fill="#C4A882" letterSpacing={1.5}>{f.name.toUpperCase()}</text>
                   </g>
                 ))}
-                {mapped.map((b) => (
+                {mapped.map(({ b, px: cx, py: cy }) => (
                   <g key={b.brand_id} onClick={() => selectBrand(b.brand_id)} style={{ cursor: 'pointer' }}>
                     <circle
-                      cx={px(b.x!)} cy={py(b.price_tier)} r={selBrand === b.brand_id ? 8 : 5.5}
-                      fill={b.status === 'reference' ? 'white' : '#0A0A0A'}
-                      stroke={selBrand === b.brand_id ? '#C4A882' : '#0A0A0A'}
+                      cx={cx} cy={cy} r={5.5}
+                      fill={b.coded ? (b.status === 'reference' ? '#C4A882' : '#0A0A0A') : 'white'}
+                      stroke={selBrand === b.brand_id ? '#C4A882' : b.coded ? '#0A0A0A' : b.thin ? '#A8A8A4' : '#6B6B6B'}
                       strokeWidth={selBrand === b.brand_id ? 2.5 : 1.2}
-                      strokeDasharray={b.thin ? '2 2' : undefined}
+                      strokeDasharray={b.thin && !b.coded ? '2 2' : undefined}
                     />
-                    <title>{`${b.name} — tier ${b.price_tier}${b.thin ? ` · THIN VECTOR (${b.itemCount} items)` : ` · ${b.itemCount} items`}${b.status === 'reference' ? ' · reference' : ''}`}</title>
-                    {selBrand === b.brand_id && (
-                      <text x={px(b.x!) + 10} y={py(b.price_tier) - 8} fontSize={10} fill="#0A0A0A" letterSpacing={1}>{b.name.toUpperCase()}</text>
-                    )}
+                    <title>{`${b.name} — ${b.medianPrice != null ? `median £${Math.round(b.medianPrice)}` : `no price data (tier ${b.price_tier} assumed)`}${b.coreCategory ? ` · core: ${b.coreCategory}` : ''}${b.band != null ? ` · ${BAND_NAMES[b.band]}` : ''}${b.coded ? '' : ' · CODES INCOMPLETE (provisional position)'}${b.thin ? ` · THIN VECTOR (${b.itemCount} items)` : ` · ${b.itemCount} items`}${b.status === 'reference' ? ' · reference' : ''}`}</title>
+                    {selBrand === b.brand_id && (() => {
+                      const wEst = b.name.length * 7 + 10
+                      const flip = cx + 10 + wEst > W - M.right
+                      const lx = flip ? cx - 10 - wEst : cx + 10
+                      const ly = Math.max(M.top + 12, Math.min(H - M.bottom - 4, cy - 8))
+                      return (
+                        <g>
+                          <rect x={lx - 3} y={ly - 10} width={wEst} height={14} fill="white" opacity={0.92} rx={3} />
+                          <text x={lx} y={ly} fontSize={10} fill="#0A0A0A" letterSpacing={1}>{b.name.toUpperCase()}</text>
+                        </g>
+                      )
+                    })()}
                   </g>
                 ))}
+                {!mapped.length && (
+                  <text x={W / 2} y={H / 2} fontSize={11} fill="#A8A8A4" letterSpacing={2} textAnchor="middle">
+                    NOTHING POSITIONED YET — RECOMPUTE VECTORS, THEN RELOAD
+                  </text>
+                )}
               </svg>
             </div>
             <p className="mt-2 text-[8px] tracking-[0.12em] text-[#A8A8A4]">
-              FILLED = STOCKED · HOLLOW = REFERENCE · DASHED RING = THIN VECTOR (&lt;8 SCORED ITEMS — PLACEMENT NOT TRUSTWORTHY) · DASHED BOXES = CURATED FAMILIES
+              FILLED = FULLY CODED (X = PCA OF BRAND CODES) · HOLLOW = CODES INCOMPLETE, PROVISIONAL ITEM-CENTROID POSITION · GOLD = REFERENCE · Y = LOG MEDIAN PRICE, REAL DATA ONLY · DASHED BOXES = FAMILIES · DOUBLE-CLICK/± TO ZOOM, DRAG TO PAN
             </p>
+
+            {/* not-yet-positioned rail — brands stay OFF the map until they
+                have a real X and a real price; no placeholder positions */}
+            <div className="mt-3 border border-[#E2E0DB] rounded-[10px] bg-white">
+              <button onClick={() => setRailOpen(!railOpen)} className="w-full text-left px-4 py-2.5 text-[9px] tracking-[0.16em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors">
+                NOT YET POSITIONED ({unpositioned.length} BRANDS) {railOpen ? '▾' : '▸'}
+              </button>
+              {railOpen && (
+                <div className="px-4 pb-3 grid gap-1 max-h-64 overflow-y-auto" data-lenis-prevent>
+                  {unpositioned.map((b) => {
+                    const reasons = [
+                      b.x == null ? (b.itemCount < 8 ? 'thin vector' : 'no identity') : null,
+                      b.price_position == null ? 'no price data' : null,
+                    ].filter(Boolean).join(' + ')
+                    return (
+                      <div key={b.brand_id} className="flex items-center justify-between gap-2 py-0.5 border-b border-[#EFEDE9] last:border-b-0">
+                        <button onClick={() => selectBrand(b.brand_id)} className="text-[9px] tracking-[0.08em] text-[#4A4E57] hover:underline text-left truncate">
+                          {b.name.toUpperCase()}
+                          <span className="text-[#A8A8A4] normal-case"> — {reasons} · {b.itemCount} items</span>
+                        </button>
+                        <button
+                          className={BTN_GHOST}
+                          onClick={() => { setRefName(b.name); setRefTier(b.price_tier); setRefOpen(true); setNotice('REFERENCE-SCORING FORM OPENED BELOW — IMAGES SET THE VECTOR, TYPICAL £ SETS THE PRICE') }}
+                        >
+                          REFERENCE-SCORE
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
 
             <div className="mt-4 border border-[#E2E0DB] rounded-[10px] bg-white p-4">
               <button onClick={() => setRefOpen(!refOpen)} className={LABEL}>+ ADD REFERENCE BRAND (NOT STOCKED — VECTOR FROM 5-10 PRODUCT IMAGES)</button>
@@ -183,13 +359,14 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                     <select value={refTier} onChange={(e) => setRefTier(parseInt(e.target.value, 10))} className={INPUT}>
                       {[1, 2, 3, 4, 5].map((t) => <option key={t} value={t}>{TIER_LABELS[t]}</option>)}
                     </select>
+                    <input value={refPrice} onChange={(e) => setRefPrice(e.target.value)} placeholder="TYPICAL £ (DRESS/BAG)" className={`${INPUT} w-40 placeholder:text-[#A8A8A4]`} />
                   </div>
                   <textarea value={refUrls} onChange={(e) => setRefUrls(e.target.value)} rows={5} placeholder="ONE REFERENCE PRODUCT IMAGE URL PER LINE (5-10)" className={`${INPUT} placeholder:text-[#A8A8A4]`} />
                   <button
                     disabled={pending || !refName.trim()}
                     className={`${BTN_DARK} w-fit`}
                     onClick={() => act(
-                      () => addReferenceBrand(refName, refTier, refUrls.split('\n')),
+                      () => addReferenceBrand(refName, refTier, refUrls.split('\n'), parseFloat(refPrice) || null),
                       (r) => setNotice(r.error ?? `${refName.toUpperCase()}: ${r.scored} IMAGES SCORED${r.failed ? `, ${r.failed} FAILED` : ''} — VECTOR SET, RELOAD`),
                     )}
                   >
@@ -235,28 +412,48 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                   </div>
                 </div>
 
-                <div>
-                  <p className={H2}>NEAREST BY VECTOR</p>
-                  {(detail?.neighbours ?? []).map((n) => (
-                    <div key={n.brand_id} className="flex justify-between py-0.5 text-[9px] tracking-[0.08em] text-[#4A4E57]">
-                      <span>{n.name.toUpperCase()}</span><span className="text-[#A8A8A4]">{(n.score * 100).toFixed(0)}%</span>
+                {detail?.thin ? (
+                  <div className="border border-[#E2E0DB] rounded-[8px] p-3 bg-[#FAFAF8]">
+                    <p className="text-[9px] tracking-[0.12em] text-[#B3202A]">NOT ENOUGH DATA — {sel.itemCount} SCORED ITEM{sel.itemCount === 1 ? '' : 'S'}</p>
+                    <p className="mt-1 text-[8px] tracking-[0.05em] text-[#6B6B6B] normal-case leading-relaxed">
+                      Neighbour lists and similarity scores are suppressed until this brand has 8+ scored items,
+                      or a reference-image vector. Only curated family membership can expand from it meanwhile.
+                    </p>
+                    <button
+                      className={`${BTN_DARK} mt-2`}
+                      onClick={() => { setRefName(sel.name); setRefTier(sel.price_tier); setRefOpen(true); setNotice('REFERENCE-SCORING FORM OPENED BELOW THE MAP — PASTE 5-10 PRODUCT IMAGE URLS') }}
+                    >
+                      REFERENCE-SCORE THIS BRAND
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <p className={H2}>NEAREST — AESTHETIC × PRICE = COMBINED</p>
+                      {(detail?.neighbours ?? []).map((n) => (
+                        <div key={n.brand_id} className="flex justify-between gap-2 py-0.5 text-[9px] tracking-[0.08em] text-[#4A4E57]">
+                          <span className="truncate">{n.name.toUpperCase()}{n.basis === 'vector' && <span className="text-[#B3202A]"> · PROV.</span>}</span>
+                          <span className="text-[#A8A8A4] whitespace-nowrap">{n.aesthetic.toFixed(2)} × {n.priceFactor.toFixed(2)} = <span className="text-[#4A4E57]">{n.combined.toFixed(2)}</span></span>
+                        </div>
+                      ))}
+                      {detail && !detail.neighbours.length && <p className="text-[9px] text-[#A8A8A4] tracking-[0.08em]">NO VECTOR YET</p>}
                     </div>
-                  ))}
-                  {detail && !detail.neighbours.length && <p className="text-[9px] text-[#A8A8A4] tracking-[0.08em]">NO VECTOR YET</p>}
-                </div>
 
-                <div>
-                  <p className={H2}>WHAT A CUSTOMER NAMING THIS BRAND GETS</p>
-                  {(detail?.similar ?? []).map((s) => (
-                    <div key={s.brand_id} className="flex justify-between py-0.5 text-[9px] tracking-[0.08em]">
-                      <span className="text-[#4A4E57]">{s.name.toUpperCase()}</span>
-                      <span className="text-[#A8A8A4]">
-                        {s.mechanism === 'core_family' ? `CORE · ${s.family_name}` : s.mechanism === 'adjacent_family' ? `ADJ · ${s.family_name}` : `VECTOR ${s.score}`}
-                      </span>
+                    <div>
+                      <p className={H2}>WHAT A CUSTOMER NAMING THIS BRAND GETS</p>
+                      {(detail?.similar ?? []).map((s) => (
+                        <div key={s.brand_id} className="flex justify-between gap-2 py-0.5 text-[9px] tracking-[0.08em]">
+                          <span className="text-[#4A4E57] truncate">{s.name.toUpperCase()}</span>
+                          <span className="text-[#A8A8A4] whitespace-nowrap">
+                            {s.mechanism === 'core_family' ? `CORE · ${s.family_name}` : s.mechanism === 'adjacent_family' ? `ADJ · ${s.family_name}` :
+                              s.aesthetic != null ? `${s.basis === 'vector' ? 'PROV. ' : ''}${s.aesthetic.toFixed(2)} × ${s.priceFactor?.toFixed(2)} = ${s.score?.toFixed(2)}` : `VECTOR ${s.score}`}
+                          </span>
+                        </div>
+                      ))}
+                      {detail && !detail.similar.length && <p className="text-[9px] text-[#A8A8A4] tracking-[0.08em]">NOTHING — ORPHAN BRAND</p>}
                     </div>
-                  ))}
-                  {detail && !detail.similar.length && <p className="text-[9px] text-[#A8A8A4] tracking-[0.08em]">NOTHING — ORPHAN BRAND</p>}
-                </div>
+                  </>
+                )}
 
                 <div>
                   <p className={H2}>EXCLUSIONS</p>
@@ -443,8 +640,14 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                 rows={report.orphan_brands.map((r) => r.name)} />
               <HealthCard title="INCOHERENT FAMILIES" hint="members' pairwise similarity below 0.55 — curation and data disagree"
                 rows={report.incoherent_families.map((r) => `${r.family} — avg ${r.avg_similarity}`)} />
-              <HealthCard title="TIER VIOLATIONS" hint="family members >1 tier apart (allowed — curation overrides — but review)"
+              <HealthCard title="BAND VIOLATIONS" hint="family spanning 3+ positioning bands (allowed — curation overrides — but review)"
                 rows={report.tier_violations.map((r) => `${r.family} (${r.tiers}): ${r.brands}`)} />
+              <HealthCard title="PRICE OUTLIERS IN FAMILY" hint="member more than 1 band from the family's median band"
+                rows={(report.price_outliers ?? []).map((r) => `${r.family}: ${r.brand} — ${r.detail}`)} />
+              <HealthCard title="PRICE EXTRACTION FAILURES" hint="8+ items but no median — per-item reasons from the exact job logic; never silent"
+                rows={(report.price_extraction_failures ?? []).map((r) => `${r.brand} (${r.items} items): ${r.reasons}`)} />
+              <HealthCard title="CODE DRIFT — BUY VS IDENTITY" hint="stocked-item profile disagrees strongly with the authored codes on a mappable dimension. Curation intelligence — never auto-corrected."
+                rows={(report.code_drift ?? []).map((r) => r.message)} />
               <HealthCard title="STALE / THIN VECTORS" hint="not recomputed in 14+ days, or under 8 scored items"
                 rows={report.stale_vectors.map((r) => `${r.name} — ${r.reason}`)} />
               <HealthCard title="STARVED FEEDS" hint="top-20 outfits from ≤3 brands — discovery is dead for these members"

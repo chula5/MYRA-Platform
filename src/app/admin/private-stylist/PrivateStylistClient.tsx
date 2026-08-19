@@ -48,6 +48,12 @@ import {
   recordResponse,
   logActivity,
   recomputeWeights,
+  composeDeliveryLooks,
+  lookAlternates,
+  swapComposedLookItem,
+  approveComposedLook,
+  higgsfieldShootForLook,
+  type SwapOption,
   type PilotData,
   type PilotMember,
   type PilotDelivery,
@@ -863,9 +869,25 @@ function DeliveryCard({
             <LookEditor deliveryId={d.delivery_id} position={d.looks.length + 1} run={run} done={() => setEditingLook(null)} />
           ) : (
             d.status === 'draft' && (
-              <button className={btnTiny} onClick={() => setEditingLook('new')}>
-                + ADD LOOK
-              </button>
+              <div className="flex gap-2">
+                <button
+                  className="text-[9px] tracking-[0.12em] px-3 py-1.5 bg-[#C4A882] text-white hover:opacity-85 disabled:opacity-40"
+                  disabled={busy === `compose-${d.delivery_id}`}
+                  title="Build 3 looks from the item library, weighted by her brand affinities, brand families and past swaps"
+                  onClick={() =>
+                    run(
+                      `compose-${d.delivery_id}`,
+                      () => composeDeliveryLooks(d.delivery_id),
+                      'LOOKS COMPOSED — REVIEW, SWAP OR APPROVE',
+                    )
+                  }
+                >
+                  {busy === `compose-${d.delivery_id}` ? 'COMPOSING…' : '✦ COMPOSE 3 LOOKS'}
+                </button>
+                <button className={btnTiny} onClick={() => setEditingLook('new')}>
+                  + ADD LOOK
+                </button>
+              </div>
             )
           )}
 
@@ -971,29 +993,119 @@ function LookRow({
   onEdit: () => void
 }) {
   const [reason, setReason] = useState<ResponseReason>('not_my_style')
+  const [swapIdx, setSwapIdx] = useState<number | null>(null)
+  const [swapOptions, setSwapOptions] = useState<SwapOption[] | null>(null)
+  const [swapBusy, setSwapBusy] = useState(false)
+  const composed = l.items.some((it) => it.item_id)
+
+  async function openSwap(i: number) {
+    setSwapIdx(i)
+    setSwapOptions(null)
+    setSwapBusy(true)
+    const r = await lookAlternates(l.look_id, i)
+    setSwapBusy(false)
+    setSwapOptions(r.options ?? [])
+  }
+
   return (
     <div className="border border-[#E2E0DB] px-4 py-3">
       <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-[10px] tracking-[0.14em] text-[#0A0A0A]">
             LOOK {l.position} — {formatRoomMix(l.room_mix) || 'NO ROOM MIX'}
+            {l.approved_at && <span className="ml-2 text-[#3D7A50]">· APPROVED ✓</span>}
           </p>
+          {composed && (
+            <div className="mt-2 flex gap-1.5 flex-wrap">
+              {l.items.filter((it) => it.image_url).map((it, i) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img key={i} src={it.image_url as string} alt={it.product_name} className="w-14 h-[72px] object-cover border border-[#E2E0DB]" />
+              ))}
+              {l.image_url && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={l.image_url} alt="Higgsfield shoot" className="w-14 h-[72px] object-cover border-2 border-[#C4A882]" title="Higgsfield shoot" />
+              )}
+            </div>
+          )}
           <div className="mt-1.5 space-y-0.5">
             {l.items.map((it, i) => (
-              <p key={i} className="text-[9px] tracking-[0.06em] text-[#6B6B6B]">
-                {it.owned ? '◈ OWNED — ' : ''}
-                {it.brand.toUpperCase()} {it.product_name.toUpperCase()}
-                {typeof it.price_gbp === 'number' && ` · £${it.price_gbp}`}
-                {it.size && ` · ${it.size.toUpperCase()}`}
-                {!it.owned && (it.stock_checked_at ? ' · STOCK ✓' : ' · STOCK UNCHECKED')}
+              <p key={i} className="text-[9px] tracking-[0.06em] text-[#6B6B6B] flex items-center gap-2">
+                <span>
+                  {it.owned ? '◈ OWNED — ' : ''}
+                  {it.brand.toUpperCase()} {it.product_name.toUpperCase()}
+                  {typeof it.price_gbp === 'number' && ` · £${it.price_gbp}`}
+                  {it.size && ` · ${it.size.toUpperCase()}`}
+                  {!it.owned && (it.stock_checked_at ? ' · STOCK ✓' : ' · STOCK UNCHECKED')}
+                </span>
+                {!sent && it.item_id && it.slot && (
+                  <button
+                    className="text-[8px] tracking-[0.12em] text-[#C4A882] hover:underline shrink-0"
+                    onClick={() => (swapIdx === i ? setSwapIdx(null) : openSwap(i))}
+                  >
+                    {swapIdx === i ? 'CLOSE' : 'SWAP'}
+                  </button>
+                )}
               </p>
             ))}
           </div>
+          {swapIdx !== null && (
+            <div className="mt-2 border border-[#E8D9B8] bg-[#FBF8F2] p-3">
+              <p className="text-[8px] tracking-[0.14em] text-[#8B5E00] mb-2">
+                SWAP {l.items[swapIdx]?.product_name?.toUpperCase()} — RANKED FOR {member?.name?.toUpperCase() ?? 'HER'} (TASTE × COHERENCE). YOUR PICK TEACHES THE SYSTEM.
+              </p>
+              {swapBusy && <p className="text-[9px] tracking-[0.1em] text-[#A8A8A4]">FINDING ALTERNATES…</p>}
+              {swapOptions && swapOptions.length === 0 && <p className="text-[9px] tracking-[0.1em] text-[#A8A8A4]">NO IN-STOCK ALTERNATES FOR THIS SLOT.</p>}
+              {swapOptions && swapOptions.length > 0 && (
+                <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                  {swapOptions.map((o) => (
+                    <button
+                      key={o.item_id}
+                      className="text-left border border-[#E2E0DB] bg-white hover:border-[#0A0A0A] transition-colors"
+                      onClick={() =>
+                        run(`swap-${l.look_id}-${o.item_id}`, async () => {
+                          const r = await swapComposedLookItem(l.look_id, swapIdx, o.item_id)
+                          setSwapIdx(null)
+                          return r
+                        }, 'SWAPPED — TASTE UPDATED')
+                      }
+                    >
+                      {o.image_url && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={o.image_url} alt={o.product_name} className="w-full aspect-[3/4] object-cover" />
+                      )}
+                      <p className="text-[7px] tracking-[0.1em] text-[#6B6B6B] px-1 py-1 truncate">
+                        {(o.brand_name ?? '').toUpperCase()} {o.product_name.toUpperCase()}
+                        {typeof o.price_gbp === 'number' && ` £${o.price_gbp}`}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {l.notes && <p className="text-[9px] tracking-[0.06em] text-[#A8A8A4] mt-1">{l.notes.toUpperCase()}</p>}
         </div>
         <div className="shrink-0 flex flex-col items-end gap-2">
           {!sent && (
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap justify-end">
+              {composed && !l.approved_at && (
+                <button
+                  className="text-[9px] tracking-[0.12em] px-3 py-1.5 bg-[#0A0A0A] text-white hover:opacity-85"
+                  title="Approve this composition — logs every item and brand pairing as a win for her taste"
+                  onClick={() => run(`appr-${l.look_id}`, () => approveComposedLook(l.look_id), 'APPROVED — TASTE UPDATED')}
+                >
+                  APPROVE ✓
+                </button>
+              )}
+              {composed && (
+                <button
+                  className="text-[9px] tracking-[0.12em] px-3 py-1.5 border border-[#C4A882] text-[#8B5E00] hover:bg-[#C4A882] hover:text-white transition-colors"
+                  title="Generate an editorial shoot of this look via the local Higgsfield CLI"
+                  onClick={() => run(`hf-${l.look_id}`, () => higgsfieldShootForLook(l.look_id), 'HIGGSFIELD SHOOT ATTACHED TO THE LOOK')}
+                >
+                  ✦ HIGGSFIELD
+                </button>
+              )}
               <button className={btnTiny} onClick={onEdit}>
                 EDIT
               </button>

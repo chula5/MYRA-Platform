@@ -48,9 +48,35 @@ export async function generateHiggsfieldShoot(
   referenceUrls: string[],
 ): Promise<{ imageUrl?: string; error?: string }> {
   if (!outfitId) return { error: 'No outfit id' }
+  const gen = await runHiggsfieldGeneration(prompt, referenceUrls, `shoot-${outfitId}-${Date.now()}`)
+  if (!gen.imageUrl) return gen
+  // Attach to the outfit's additional_images (non-destructive).
+  try {
+    const admin = createAdminClient()
+    const { data: cur } = await admin
+      .from('outfit')
+      .select('additional_images')
+      .eq('outfit_id', outfitId)
+      .single()
+    const imgs: string[] = Array.isArray((cur as any)?.additional_images) ? (cur as any).additional_images : []
+    if (!imgs.includes(gen.imageUrl)) imgs.push(gen.imageUrl)
+    await (admin.from('outfit') as any).update({ additional_images: imgs }).eq('outfit_id', outfitId)
+  } catch {
+    /* image still returned to the client even if the attach fails */
+  }
+  return gen
+}
+
+// The target-agnostic core: prompt + reference URLs → generated image persisted
+// to Cloudinary. Used by the outfit shoot above and the private-stylist looks.
+export async function runHiggsfieldGeneration(
+  prompt: string,
+  referenceUrls: string[],
+  publicId: string,
+): Promise<{ imageUrl?: string; error?: string }> {
   if (!prompt?.trim()) return { error: 'No prompt provided' }
   const refs = (referenceUrls ?? []).filter((u) => typeof u === 'string' && u.startsWith('http')).slice(0, 6)
-  if (refs.length === 0) return { error: 'No reference images — add item photos to the outfit first' }
+  if (refs.length === 0) return { error: 'No reference images — add item photos first' }
 
   const bin = path.join(process.cwd(), 'node_modules', '.bin', 'higgsfield')
 
@@ -136,27 +162,10 @@ export async function generateHiggsfieldShoot(
     // Dedicated folder so generated shoots are grouped, away from product photos.
     const cloudUrl = await persistImageToCloudinary(resultUrl, {
       folder: 'higgsfield-shoots',
-      publicId: `shoot-${outfitId}-${Date.now()}`,
+      publicId,
     })
-    if (!cloudUrl) console.error('[generateHiggsfieldShoot] Cloudinary persist failed — storing ephemeral CDN URL for', outfitId)
-    const finalUrl = cloudUrl ?? resultUrl
-
-    // 5. Attach to the outfit's additional_images (non-destructive).
-    try {
-      const admin = createAdminClient()
-      const { data: cur } = await admin
-        .from('outfit')
-        .select('additional_images')
-        .eq('outfit_id', outfitId)
-        .single()
-      const imgs: string[] = Array.isArray((cur as any)?.additional_images) ? (cur as any).additional_images : []
-      if (!imgs.includes(finalUrl)) imgs.push(finalUrl)
-      await (admin.from('outfit') as any).update({ additional_images: imgs }).eq('outfit_id', outfitId)
-    } catch {
-      /* image still returned to the client even if the attach fails */
-    }
-
-    return { imageUrl: finalUrl }
+    if (!cloudUrl) console.error('[runHiggsfieldGeneration] Cloudinary persist failed — storing ephemeral CDN URL for', publicId)
+    return { imageUrl: cloudUrl ?? resultUrl }
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

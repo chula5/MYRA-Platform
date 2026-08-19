@@ -28,8 +28,9 @@ export default async function TasteInspectorPage() {
         <div className="border border-[#E2E0DB] rounded-[10px] p-6 max-w-xl bg-white">
           <p className="text-[11px] tracking-[0.12em] text-[#4A4E57] mb-2">MIGRATION NEEDED</p>
           <p className="text-[10px] tracking-[0.06em] text-[#6B6B6B] leading-relaxed">
-            RUN <span className="text-[#C4A882]">supabase/migrations/0032_brand_affinity.sql</span> IN THE SUPABASE
-            SQL EDITOR, THEN RELOAD THIS PAGE.
+            RUN THE BRAND MIGRATIONS (<span className="text-[#C4A882]">0032_brand_affinity.sql</span> AND{' '}
+            <span className="text-[#C4A882]">0035_brand_price_position.sql</span>) IN THE SUPABASE SQL EDITOR,
+            THEN RELOAD THIS PAGE.{data.error ? ` (${data.error.slice(0, 80).toUpperCase()})` : ''}
           </p>
         </div>
       ) : (
