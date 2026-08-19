@@ -65,6 +65,8 @@ function extractItemFields(formData: FormData) {
     colour_depth: parseNullableInt(formData.get('colour_depth')),
     pattern: parseNullableInt(formData.get('pattern')),
     sheen: parseNullableInt(formData.get('sheen')),
+    neckline: parseNullableInt(formData.get('neckline')),
+    sleeve: parseNullableInt(formData.get('sleeve')),
     colour_hex: (formData.get('colour_hex') as string) || null,
     colour_family: (formData.get('colour_family') as string) || null,
     // Material
@@ -123,6 +125,8 @@ async function logTasteEvent(
         colour_depth: fields.colour_depth,
         pattern: fields.pattern,
         sheen: fields.sheen,
+        neckline: fields.neckline,
+        sleeve: fields.sleeve,
         material_weight: fields.material_weight,
         material_formality: fields.material_formality,
         admin_notes: fields.admin_notes,

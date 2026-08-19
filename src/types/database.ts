@@ -46,6 +46,10 @@ export interface Database {
           rise: number | null
           structure: number | null
           shoulder: number | null
+          // 1=HIGH/CLOSED → 5=PLUNGING/LOW
+          neckline: number | null
+          // 1=SLEEVELESS → 5=FULL LONG SLEEVE
+          sleeve: number | null
           waist_definition: number | null
           leg_opening: number | null
           surface: number | null

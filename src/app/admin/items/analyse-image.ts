@@ -32,6 +32,8 @@ Return this exact JSON:
   "rise": integer 1-5 (1=ultra low, 5=ultra high) or null,
   "structure": integer 1-5 (1=fully boned, 5=unstructured) or null,
   "shoulder": integer 1-5 (1=heavily padded, 5=off-shoulder/none) or null,
+  "neckline": integer 1-5 (1=high/closed e.g. crew or funnel, 3=open e.g. shallow v or scoop, 5=plunging/low) or null — null unless it's a top, dress or bodysuit,
+  "sleeve": integer 1-5 (1=sleeveless/strappy, 2=cap, 3=short, 4=three-quarter, 5=full long sleeve) or null — null unless it's a top, dress or bodysuit,
   "waist_definition": integer 1-5 (1=corseted, 5=boxy) or null,
   "leg_opening": integer 1-5 (1=narrow, 5=flared) or null,
   "surface": integer 1-5 (1=clean/flat, 5=highly patterned) or null,

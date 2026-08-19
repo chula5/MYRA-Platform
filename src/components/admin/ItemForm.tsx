@@ -112,6 +112,8 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
     rise: item?.rise ?? null,
     structure: item?.structure ?? null,
     shoulder: item?.shoulder ?? null,
+    neckline: item?.neckline ?? null,
+    sleeve: item?.sleeve ?? null,
     waist_definition: item?.waist_definition ?? null,
     leg_opening: item?.leg_opening ?? null,
     surface: item?.surface ?? null,
@@ -157,6 +159,8 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
       rise: d.rise ?? prev.rise,
       structure: d.structure ?? prev.structure,
       shoulder: d.shoulder ?? prev.shoulder,
+      neckline: d.neckline ?? prev.neckline,
+      sleeve: d.sleeve ?? prev.sleeve,
       waist_definition: d.waist_definition ?? prev.waist_definition,
       leg_opening: d.leg_opening ?? prev.leg_opening,
       surface: d.surface ?? prev.surface,
@@ -672,6 +676,11 @@ export default function ItemForm({ item, brands: initialBrands, action }: ItemFo
           <ScoreInput label="RISE" description="1=ULTRA LOW → 5=ULTRA HIGH" name="rise" value={scores.rise} onChange={(v) => setScores((s) => ({ ...s, rise: v }))} />
           <ScoreInput label="STRUCTURE" description="1=FULLY BONED → 5=UNSTRUCTURED" name="structure" value={scores.structure} onChange={(v) => setScores((s) => ({ ...s, structure: v }))} />
           <ScoreInput label="SHOULDER" description="1=HEAVILY PADDED → 5=OFF-SHOULDER" name="shoulder" value={scores.shoulder} onChange={(v) => setScores((s) => ({ ...s, shoulder: v }))} />
+          {/* Neckline and sleeve are how a client's "no low necklines" and "no
+              sleeveless" rules get enforced — leave them blank on anything
+              that isn't a top, dress or bodysuit. */}
+          <ScoreInput label="NECKLINE" description="1=HIGH/CLOSED → 5=PLUNGING/LOW" name="neckline" value={scores.neckline} onChange={(v) => setScores((s) => ({ ...s, neckline: v }))} />
+          <ScoreInput label="SLEEVE" description="1=SLEEVELESS → 5=FULL LONG SLEEVE" name="sleeve" value={scores.sleeve} onChange={(v) => setScores((s) => ({ ...s, sleeve: v }))} />
           <ScoreInput label="WAIST DEFINITION" description="1=CORSETED → 5=BOXY" name="waist_definition" value={scores.waist_definition} onChange={(v) => setScores((s) => ({ ...s, waist_definition: v }))} />
           <ScoreInput label="LEG OPENING" description="1=NARROW → 5=FLARED" name="leg_opening" value={scores.leg_opening} onChange={(v) => setScores((s) => ({ ...s, leg_opening: v }))} />
         </div>

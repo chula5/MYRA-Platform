@@ -108,12 +108,19 @@ export const PRICE_BANDS: { tier: number; label: string; hint: string }[] = [
 
 // ── HARD constraints → the item mask ────────────────────────────────────────
 //
-// Enforcement confidence, honestly stated — the schema carries colour, type and
-// a 1–5 `length` (1 = cropped/micro → 5 = maxi/floor) but has no neckline or
-// sleeve field, so those two fall back to product-name matching:
-//   exact       colour_never, high_heel, heel_preference, price_comfort
-//   good        mini, above_knee, cropped_top   (item_type + length score)
-//   best-effort sleeveless, low_neckline        (name keywords only)
+// Every rule here is enforced from scored fields, not guesswork:
+//   colour_never    item.colour_family
+//   price_comfort   brand.price_tier
+//   mini/above_knee item_type + item.length   (1 = cropped/micro → 5 = maxi/floor)
+//   cropped_top     item_type + item.length
+//   sleeveless      item.sleeve               (1 = sleeveless → 5 = full long sleeve)
+//   low_neckline    item.neckline             (1 = high/closed → 5 = plunging/low)
+//   heels           item_type + heel keywords
+//
+// sleeve and neckline (migration 0042) replaced product-name matching, which
+// missed most pieces. Items scored before 0042 have neither, so the name check
+// stays as a fallback for exactly those — remove it once the library is
+// backfilled and the rule becomes purely structural.
 
 const DRESS_SKIRT: ItemType[] = ['mini_dress', 'midi_dress', 'maxi_dress', 'shirt_dress', 'slip_dress', 'skirt']
 const TOP_TYPES: ItemType[] = ['shirt', 'blouse', 't-shirt', 'knitwear', 'corset', 'bodysuit']
@@ -128,6 +135,8 @@ interface MaskItem {
   item_type?: ItemType | null
   colour_family?: ColourFamily | null
   length?: number | null
+  neckline?: number | null
+  sleeve?: number | null
   product_name?: string | null
   brand?: { price_tier?: number | null } | null
 }
@@ -153,8 +162,17 @@ export function itemBlocked(p: ClientStyleProfile | null, item: MaskItem): boole
   if (noGo.has('mini') && (type === 'mini_dress' || (isDressSkirt && len != null && len <= 1))) return true
   if (noGo.has('above_knee') && (type === 'mini_dress' || (isDressSkirt && len != null && len <= 2))) return true
   if (noGo.has('cropped_top') && isTop && len != null && len <= 2) return true
-  if (noGo.has('sleeveless') && (SLEEVELESS_RE.test(name) || type === 'corset')) return true
-  if (noGo.has('low_neckline') && (LOW_NECK_RE.test(name) || type === 'corset')) return true
+  // Scored fields win. Only fall back to the name when the item predates 0042
+  // and has no score at all — an item scored 5 for sleeve is NOT sleeveless,
+  // whatever the word "cami" in its name suggests.
+  const sleeve = typeof item.sleeve === 'number' ? item.sleeve : null
+  const neckline = typeof item.neckline === 'number' ? item.neckline : null
+  if (noGo.has('sleeveless')) {
+    if (sleeve != null ? sleeve <= 1 : (SLEEVELESS_RE.test(name) || type === 'corset')) return true
+  }
+  if (noGo.has('low_neckline')) {
+    if (neckline != null ? neckline >= 4 : (LOW_NECK_RE.test(name) || type === 'corset')) return true
+  }
   if (noGo.has('high_heel') && (type === 'heel' || (type != null && SHOE_TYPES.includes(type) && HIGH_HEEL_RE.test(name)))) return true
 
   // heel_preference
