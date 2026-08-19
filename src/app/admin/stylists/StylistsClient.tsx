@@ -15,6 +15,7 @@ import {
   type StylistListEntry,
 } from './actions'
 import InspirationReview from './InspirationReview'
+import ClientsPanel from './ClientsPanel'
 
 const STATUS_TONE: Record<string, string> = {
   draft: 'text-[#8B5E00] border-[#E8D9B8]',
@@ -55,9 +56,13 @@ export default function StylistsClient({
     router.refresh()
   }
 
+  const personaOptions = stylists.map((x) => ({ stylist_id: x.stylist_id, name: x.name }))
+
   return (
     <div className="space-y-8">
       {msg && <p className="text-[9px] tracking-[0.12em] text-[#C4A882]">{msg}</p>}
+
+      <ClientsPanel personas={personaOptions} />
 
       {/* Stylist cards */}
       <div className="space-y-4">

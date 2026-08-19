@@ -25,6 +25,8 @@ export async function earlyAccessSignIn(formData: FormData) {
 
   if (data.user) await recordEarlyAccessLogin(data.user.id)
 
+  // Pilot clients have their own area; everyone else browses The Edit.
+  if ((data.user?.user_metadata as any)?.role === 'client') redirect('/me')
   redirect('/edit')
 }
 

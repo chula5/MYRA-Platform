@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase-server'
+import { poolFor } from '@/lib/user-persona'
 import { normaliseProfile, type ClientStyleProfile } from '@/lib/style-profile'
 import type { OutfitWithItems } from '@/types/database'
 import {
@@ -143,6 +144,10 @@ export async function recordTasteEvent(
       event_type: eventType,
       signal_weight: weight,
       occasion_context: opts.occasion ?? null,
+      // Swipes, saves and click-outs are the BEHAVIOURAL pool — the one that
+      // decays a client's persona weight. Uploads are aspirational and are
+      // logged separately; the two pools are never merged.
+      pool: poolFor(eventType),
     })
 
     if (weight === 0) return

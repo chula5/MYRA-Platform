@@ -219,6 +219,13 @@ function ImageCard({
             {corrected.size} CORRECTED
           </span>
         )}
+        {/* Client uploads sit in the same review queue as seed-set variants,
+            tagged so it's obvious whose eye this came from. */}
+        {img.source === 'user_upload' && (
+          <span className="absolute bottom-2 right-2 bg-[#4A6FA5] text-white rounded-full px-2 py-0.5 text-[8px] tracking-[0.1em]">
+            CLIENT UPLOAD
+          </span>
+        )}
       </div>
 
       <div className="px-2.5 py-2">
