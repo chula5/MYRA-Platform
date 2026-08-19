@@ -39,6 +39,30 @@ async function fetchImageBytes(imageUrl: string): Promise<{ data: Buffer; conten
   return null
 }
 
+// Cloudinary rejects any image over this at ingest — on every route (raw bytes,
+// chunked, or its own remote fetch), so oversized sources must be shrunk here.
+// Generated shoots arrive as ~16MB PNGs; retailer photos are far below it and
+// pass through untouched.
+const MAX_UPLOAD_BYTES = 9 * 1024 * 1024
+
+/** Downscale to fit within Cloudinary's ceiling. Returns null if sharp is
+ *  unavailable or the re-encode fails — the caller then tries the raw bytes. */
+async function shrinkToFit(data: Buffer): Promise<{ data: Buffer; contentType: string } | null> {
+  try {
+    const sharp = (await import('sharp')).default
+    for (const [width, quality] of [[2400, 88], [1800, 82], [1400, 75]] as const) {
+      const out = await sharp(data)
+        .resize({ width, height: width, fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality })
+        .toBuffer()
+      if (out.length <= MAX_UPLOAD_BYTES) return { data: out, contentType: 'image/jpeg' }
+    }
+  } catch (err) {
+    console.error('[persistImageToCloudinary] resize failed:', err)
+  }
+  return null
+}
+
 /**
  * Persist a remote image into MYRA's Cloudinary account and return the stable
  * secure URL, or null if every route failed. Tries a server-side byte fetch
@@ -64,7 +88,10 @@ export async function persistImageToCloudinary(
   form.append('folder', folder)
   form.append('public_id', publicId)
 
-  const bytes = await fetchImageBytes(imageUrl)
+  let bytes = await fetchImageBytes(imageUrl)
+  if (bytes && bytes.data.length > MAX_UPLOAD_BYTES) {
+    bytes = (await shrinkToFit(bytes.data)) ?? bytes
+  }
   if (bytes) {
     form.append('file', `data:${bytes.contentType};base64,${bytes.data.toString('base64')}`)
   } else {
