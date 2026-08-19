@@ -12,7 +12,7 @@ create table if not exists public.pilot_look_feedback (
   member_id   uuid not null references public.pilot_member(member_id) on delete cascade,
   delivery_id uuid references public.pilot_delivery(delivery_id) on delete set null,
   look_id     uuid references public.pilot_look(look_id) on delete set null,
-  action      text not null check (action in ('accept', 'swap')),
+  action      text not null check (action in ('accept', 'swap', 'remove')),
   slot        text,
   item_out    uuid,           -- swapped away (no FK: survives item deletion)
   item_in     uuid,           -- swapped in / accepted
@@ -20,6 +20,12 @@ create table if not exists public.pilot_look_feedback (
   brand_in    uuid,
   created_at  timestamptz not null default now()
 );
+-- idempotent re-run guard: widen the action check if an earlier run created it
+-- without 'remove'
+alter table public.pilot_look_feedback drop constraint if exists pilot_look_feedback_action_check;
+alter table public.pilot_look_feedback add constraint pilot_look_feedback_action_check
+  check (action in ('accept', 'swap', 'remove'));
+
 create index if not exists idx_plf_member on public.pilot_look_feedback (member_id, created_at desc);
 alter table public.pilot_look_feedback enable row level security;
 -- No anon policies: service-role only, same as the other pilot tables.

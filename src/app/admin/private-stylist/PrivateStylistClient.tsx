@@ -51,6 +51,7 @@ import {
   composeDeliveryLooks,
   lookAlternates,
   swapComposedLookItem,
+  removeComposedLookItem,
   approveComposedLook,
   higgsfieldShootForLook,
   type SwapOption,
@@ -1015,39 +1016,75 @@ function LookRow({
             LOOK {l.position} — {formatRoomMix(l.room_mix) || 'NO ROOM MIX'}
             {l.approved_at && <span className="ml-2 text-[#3D7A50]">· APPROVED ✓</span>}
           </p>
-          {composed && (
-            <div className="mt-2 flex gap-1.5 flex-wrap">
-              {l.items.filter((it) => it.image_url).map((it, i) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img key={i} src={it.image_url as string} alt={it.product_name} title={`${it.brand} ${it.product_name}`} className="w-56 aspect-[3/4] object-cover border border-[#E2E0DB] bg-[#F8F8F6]" />
+          {composed ? (
+            <div className="mt-3 flex gap-3 flex-wrap items-start">
+              {l.items.map((it, i) => (
+                <div key={i} className="w-56 border border-[#E2E0DB] bg-white">
+                  {it.image_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={it.image_url as string} alt={it.product_name} className="w-full aspect-[3/4] object-cover bg-[#F8F8F6]" />
+                  ) : (
+                    <div className="w-full aspect-[3/4] bg-[#F8F8F6] flex items-center justify-center">
+                      <span className="text-[9px] tracking-[0.1em] text-[#A8A8A4]">NO IMAGE</span>
+                    </div>
+                  )}
+                  <div className="px-2.5 py-2">
+                    <p className="text-[9px] tracking-[0.12em] text-[#A8A8A4]">{it.brand.toUpperCase()}</p>
+                    <p className="text-[10px] tracking-[0.08em] text-[#0A0A0A] mt-0.5">
+                      {it.owned ? '◈ OWNED — ' : ''}
+                      {it.product_name.toUpperCase()}
+                    </p>
+                    <p className="text-[9px] tracking-[0.08em] text-[#6B6B6B] mt-0.5">
+                      {typeof it.price_gbp === 'number' && `£${it.price_gbp}`}
+                      {it.size && ` · ${it.size.toUpperCase()}`}
+                      {!it.owned && (it.stock_checked_at ? ' · STOCK ✓' : ' · STOCK UNCHECKED')}
+                    </p>
+                    {!sent && it.item_id && (
+                      <div className="mt-1.5 flex items-center gap-3">
+                        {it.slot && (
+                          <button
+                            className="text-[9px] tracking-[0.12em] text-[#C4A882] hover:underline"
+                            onClick={() => (swapIdx === i ? setSwapIdx(null) : openSwap(i))}
+                          >
+                            {swapIdx === i ? 'CLOSE' : '⇄ SWAP'}
+                          </button>
+                        )}
+                        <button
+                          className="text-[9px] tracking-[0.12em] text-[#B83A3A] hover:underline"
+                          title="Remove from the look — teaches the system this piece was wrong for her"
+                          onClick={() => {
+                            setSwapIdx(null)
+                            run(`rm-${l.look_id}-${i}`, () => removeComposedLookItem(l.look_id, i), 'REMOVED — TASTE UPDATED')
+                          }}
+                        >
+                          ✕ REMOVE
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
               ))}
               {l.image_url && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={l.image_url} alt="Higgsfield shoot" className="w-56 aspect-[3/4] object-cover border-2 border-[#C4A882]" title="Higgsfield shoot" />
+                <div className="w-56 border-2 border-[#C4A882] bg-white">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={l.image_url} alt="Higgsfield shoot" className="w-full aspect-[3/4] object-cover" />
+                  <p className="text-[9px] tracking-[0.12em] text-[#8B5E00] px-2.5 py-2">✦ HIGGSFIELD SHOOT</p>
+                </div>
               )}
             </div>
-          )}
-          <div className="mt-1.5 space-y-0.5">
-            {l.items.map((it, i) => (
-              <p key={i} className="text-[9px] tracking-[0.06em] text-[#6B6B6B] flex items-center gap-2">
-                <span>
+          ) : (
+            <div className="mt-1.5 space-y-0.5">
+              {l.items.map((it, i) => (
+                <p key={i} className="text-[9px] tracking-[0.06em] text-[#6B6B6B]">
                   {it.owned ? '◈ OWNED — ' : ''}
                   {it.brand.toUpperCase()} {it.product_name.toUpperCase()}
                   {typeof it.price_gbp === 'number' && ` · £${it.price_gbp}`}
                   {it.size && ` · ${it.size.toUpperCase()}`}
                   {!it.owned && (it.stock_checked_at ? ' · STOCK ✓' : ' · STOCK UNCHECKED')}
-                </span>
-                {!sent && it.item_id && it.slot && (
-                  <button
-                    className="text-[8px] tracking-[0.12em] text-[#C4A882] hover:underline shrink-0"
-                    onClick={() => (swapIdx === i ? setSwapIdx(null) : openSwap(i))}
-                  >
-                    {swapIdx === i ? 'CLOSE' : 'SWAP'}
-                  </button>
-                )}
-              </p>
-            ))}
-          </div>
+                </p>
+              ))}
+            </div>
+          )}
           {swapIdx !== null && (
             <div className="mt-2 border border-[#E8D9B8] bg-[#FBF8F2] p-3">
               <p className="text-[8px] tracking-[0.14em] text-[#8B5E00] mb-2">

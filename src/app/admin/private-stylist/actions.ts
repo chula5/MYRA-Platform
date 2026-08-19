@@ -887,7 +887,7 @@ async function loadMemberTaste(admin: any, member: { member_id: string; brands: 
       const [a, b] = pairKeyOrdered(r.brand_out, r.brand_in)
       const k = `${a}|${b}`
       t.pairNet.set(k, (t.pairNet.get(k) ?? 0) + (r.action === 'accept' ? 1 : -1))
-    } else if (r.action === 'swap' && r.item_out) {
+    } else if ((r.action === 'swap' || r.action === 'remove') && r.item_out) {
       t.itemSwapOut.set(r.item_out, (t.itemSwapOut.get(r.item_out) ?? 0) + 1)
       if (r.brand_out) t.brandSwapOut.set(r.brand_out, (t.brandSwapOut.get(r.brand_out) ?? 0) + 1)
     }
@@ -1022,6 +1022,47 @@ export async function swapComposedLookItem(lookId: string, itemIndex: number, ne
     if (outgoing.brand) await applyBrandSignals(admin, delivery.member_id, [outgoing.brand], 'no')
     if (incoming.brand) await applyBrandSignals(admin, delivery.member_id, [incoming.brand], 'yes')
   } catch { /* affinity nudge is best-effort */ }
+
+  revalidatePath(PATH)
+  return {}
+}
+
+export async function removeComposedLookItem(lookId: string, itemIndex: number): Promise<{ error?: string }> {
+  const admin = createAdminClient() as any
+  const { data: look, error: lerr } = await admin.from('pilot_look').select('*').eq('look_id', lookId).single()
+  if (lerr || !look) return { error: lerr?.message ?? 'Look not found' }
+  const items: LookItem[] = [...(look.items ?? [])]
+  const outgoing = items[itemIndex]
+  if (!outgoing) return { error: 'No item at that position' }
+  const { data: delivery } = await admin.from('pilot_delivery').select('member_id').eq('delivery_id', look.delivery_id).single()
+  if (!delivery) return { error: 'Delivery not found' }
+
+  items.splice(itemIndex, 1)
+  const { error: uerr } = await admin.from('pilot_look').update({ items }).eq('look_id', lookId)
+  if (uerr) return { error: uerr.message }
+
+  // Teach: removed = wrong for HER (same penalty as a swap-out, no incoming).
+  const fb: any[] = [{
+    member_id: delivery.member_id,
+    delivery_id: look.delivery_id,
+    look_id: lookId,
+    action: 'remove',
+    slot: outgoing.slot ?? null,
+    item_out: outgoing.item_id ?? null,
+    brand_out: outgoing.brand_id ?? null,
+  }]
+  if (outgoing.brand_id) {
+    for (const other of items) {
+      if (!other.brand_id || other.brand_id === outgoing.brand_id) continue
+      const [a, b] = pairKeyOrdered(outgoing.brand_id, other.brand_id)
+      fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action: 'remove', brand_out: a, brand_in: b })
+    }
+  }
+  await admin.from('pilot_look_feedback').insert(fb)
+
+  try {
+    if (outgoing.brand) await applyBrandSignals(admin, delivery.member_id, [outgoing.brand], 'no')
+  } catch { /* best-effort */ }
 
   revalidatePath(PATH)
   return {}
