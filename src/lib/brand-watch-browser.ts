@@ -87,7 +87,11 @@ export async function discoverProductUrls(baseUrl: string): Promise<string[]> {
   const pageUrls = new Set<string>()
   const queue = Array.from(sitemapUrls)
   const visited = new Set<string>()
-  while (queue.length && visited.size < 15 && pageUrls.size < 12000) {
+  // The URL bound must survive locale multiplication: By Malene Birger's
+  // sitemaps carry ~36k URLs that collapse to ~900 real products, and a 12k cap
+  // stopped the walk after three sub-sitemaps — the newest drops live in the
+  // later ones, so exactly the pieces worth queueing were the ones never seen.
+  while (queue.length && visited.size < 30 && pageUrls.size < 120000) {
     const sm = queue.shift()!
     if (visited.has(sm)) continue
     visited.add(sm)
