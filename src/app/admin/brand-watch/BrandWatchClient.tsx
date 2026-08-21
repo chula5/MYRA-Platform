@@ -262,7 +262,9 @@ export default function BrandWatchClient(props: Props) {
             {shown.length} SHOWN{page.queueTotal > queue.length ? ` · ${page.queueTotal - gone.size} IN ${fBrand ? fBrand.toUpperCase() + "'S" : 'THE'} QUEUE` : ''}
           </p>
           <div className="flex items-center gap-2 flex-wrap">
-            {notice && <p className="text-[9px] tracking-[0.1em] text-[#C4A882] max-w-md truncate">{notice}</p>}
+            {/* Scan notices explain WHY nothing queued, so they must be readable
+                in full — truncating them hid the whole point of the message. */}
+            {notice && <p className="text-[9px] tracking-[0.1em] text-[#C4A882] max-w-xl leading-relaxed">{notice}</p>}
             {lastSkip.length > 0 && (
               <button
                 disabled={pending}

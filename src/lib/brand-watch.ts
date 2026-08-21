@@ -96,7 +96,7 @@ function scanDiagnostic(
 
 const HOUSE_STYLE = {
   weights: { colour: 3, material: 2, silhouette: 2 },
-  houseColours: ['black', 'white', 'ivory', 'cream', 'ecru', 'bone', 'off white', 'off-white', 'beige', 'taupe', 'sand', 'camel', 'tan', 'caramel', 'chocolate', 'brown', 'cognac', 'grey', 'charcoal', 'navy', 'khaki', 'olive', 'burgundy', 'bordeaux', 'oxblood'],
+  houseColours: ['black', 'white', 'ivory', 'cream', 'ecru', 'bone', 'off white', 'off-white', 'beige', 'taupe', 'sand', 'camel', 'tan', 'caramel', 'chocolate', 'brown', 'cognac', 'grey', 'gray', 'charcoal', 'navy', 'khaki', 'olive', 'burgundy', 'bordeaux', 'oxblood'],
   offColours: ['neon', 'fluo', 'lime', 'fuchsia', 'hot pink', 'bright pink', 'turquoise', 'rainbow', 'multicolour', 'multicolor', 'leopard', 'zebra', 'animal print', 'cow print', 'snake print', 'glitter', 'holographic', 'iridescent', 'metallic silver', 'metallic gold'],
   houseMaterials: ['leather', 'suede', 'calf', 'nappa', 'lambskin', 'nubuck', 'shearling', 'wool', 'cashmere', 'merino', 'mohair', 'silk', 'cotton', 'linen', 'poplin', 'denim'],
   offMaterials: ['sequin', 'diamante', 'rhinestone', 'pvc', 'vinyl', 'faux fur', 'marabou', 'feather', 'lurex', 'glitter'],
