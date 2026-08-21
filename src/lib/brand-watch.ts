@@ -103,9 +103,38 @@ const HOUSE_STYLE = {
   offMaterials: ['sequin', 'diamante', 'rhinestone', 'pvc', 'vinyl', 'faux fur', 'marabou', 'feather', 'lurex', 'glitter'],
   houseSilhouettes: ['pointed', 'pointy', 'slingback', 'kitten heel', 'stiletto', 'ballet', 'ballerina', 'loafer', 'riding boot', 'knee boot', 'ankle boot', 'column', 'straight leg', 'wide leg', 'tailored', 'blazer', 'trench', 'slip dress', 'shirt dress', 'square toe', 'minimal', 'clean', 'structured', 'longline'],
   offSilhouettes: ['platform', 'flatform', 'chunky', 'wedge sneaker', 'extreme crop', 'cut-out', 'cut out', 'ruffle', 'bow embellished', 'ultra mini', 'micro mini'],
-  skipCategories: ['sock', 'socks', 'hair clip', 'hair claw', 'hairband', 'scrunchie', 'kids', 'child', 'children', 'baby', 'gift card', 'giftcard', 'care kit', 'shoe care', 'cleaner', 'insole', 'laces', 'shoelace', 'protector', 'candle', 'keyring', 'key ring', 'phone case'],
+  // Categories that are not clothing. Matched on whole words (see NON_FASHION_RE)
+  // so fashion vocabulary can't be caught by accident: "linen" is a fabric and
+  // only "bed linen" is homeware, "slip" is a dress, "cupro" a fibre.
+  skipCategories: [
+    // accessories and care that MYRA doesn't style
+    'sock', 'hair clip', 'hair claw', 'hairband', 'scrunchie', 'gift card', 'giftcard',
+    'care kit', 'shoe care', 'cleaner', 'insole', 'shoelace', 'protector',
+    'keyring', 'key ring', 'phone case', 'kids', 'child', 'children', 'baby',
+    // beauty and fragrance
+    'beauty', 'skincare', 'skin care', 'cosmetic', 'fragrance', 'perfume', 'parfum',
+    'parfume', 'eau de parfum', 'eau de toilette', 'cologne', 'scent', 'diffuser',
+    'body lotion', 'body oil', 'hand cream', 'soap dispenser', 'shampoo',
+    'serum', 'moisturiser', 'moisturizer', 'deodorant', 'incense',
+    // home
+    'homeware', 'interior', 'tableware', 'vase', 'plate', 'bowl', 'mug', 'tray',
+    'jug', 'carafe', 'coaster', 'napkin', 'tablecloth', 'placemat', 'cutlery',
+    'bed linen', 'bedding', 'duvet', 'pillowcase', 'pillow', 'towel', 'blanket',
+    'cushion', 'doormat', 'ornament', 'sculpture', 'artwork', 'poster',
+    'stationery', 'notebook',
+  ],
   newDays: 60,
 }
+
+// Non-fashion match: whole words with an optional plural, so 'plate' catches
+// "Marble Plate" and "Plates" but 'lace' can't fire on "necklace" and 'scent'
+// can't fire on "scented". Substring matching had no such protection.
+const NON_FASHION_RE = new RegExp(
+  '\\b(' + HOUSE_STYLE.skipCategories
+    .map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s+'))
+    .join('|') + ')(s|es)?\\b',
+  'i',
+)
 
 // Gender read. "women" never trips the men pattern — the boundary before "men"
 // inside "women" isn't a word boundary — and a WOMEN marker always wins, so a
@@ -265,7 +294,12 @@ function classifyAndScore(p: {
     if (hn) { score -= w; reasons.push(`−${w} ${hn.t}`) }
   }
 
-  const nonFashion = HOUSE_STYLE.skipCategories.some((s) => hay.includes(s))
+  // Read on structured fields only, and strip the machine tags first: care and
+  // composition tags carry words like "Hand wash" and "Dry clean" that read as
+  // product categories and were excluding real garments — every Isabel Marant
+  // piece tagged care_handwash was being dropped as homeware.
+  const categoryTags = p.tags.filter((t) => !/^(care|composition|__id|model|cat_shoes)_/i.test(t))
+  const nonFashion = NON_FASHION_RE.test([p.product_type, categoryTags.join(' '), p.title].join(' '))
   // MYRA is womenswear only for now. Mixed-gender feeds are common (Isabel
   // Marant types 135 of its products "Men"; CMMN SWDN is menswear with a small
   // women's line), and menswear was reaching the library and even composed
