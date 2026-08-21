@@ -6,6 +6,7 @@
 // tool); this is the in-app version the Monday cron runs.
 
 import { createAdminClient } from '@/lib/supabase-server'
+import { toGbpAmount } from '@/lib/currency'
 import {
   discoverProductUrls, fetchNewProductPages, urlHash, type ParsedProduct,
 } from '@/lib/brand-watch-browser'
@@ -619,6 +620,29 @@ function isGbpStore(baseUrl: string): boolean {
   return /\.uk(\/|$)/.test(baseUrl) || /\.co\.uk/.test(baseUrl)
 }
 
+/**
+ * The currency a store actually prices in. /products.json never says, so a
+ * Danish store's "2200" was stored as a bare number with no currency and read
+ * as £2200 in the queue — OpéraSPORT prices in DKK, where 2200 is about £250.
+ *
+ * Shopify's /cart.js reports the storefront's active currency; the .uk domain
+ * check is the fallback, and an unknown currency stays null rather than being
+ * guessed as GBP.
+ */
+async function detectStoreCurrency(baseUrl: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${baseUrl}/cart.js`, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh) MYRA-BrandWatch/1.0', Accept: 'application/json' },
+      cache: 'no-store',
+    })
+    if (res.ok) {
+      const cur = (await res.json())?.currency
+      if (typeof cur === 'string' && /^[A-Z]{3}$/.test(cur)) return cur
+    }
+  } catch { /* fall through to the domain heuristic */ }
+  return isGbpStore(baseUrl) ? 'GBP' : null
+}
+
 // Insert scanned products into the brand_watch_queue for review. NOT the item
 // table — only a KEEP decision creates a library item; skips stay here as
 // decisions so the piece never resurfaces and never touches the library.
@@ -643,7 +667,8 @@ async function queueProducts(
   // ("TOP DOUNA" = "Douna Top" — safe because it's scoped to one brand).
   const known = await fetchKnownForBrand(admin, brandId)
 
-  const gbp = isGbpStore(watched.base_url)
+  // The store's real currency, not a guess from the domain.
+  const storeCurrency = await detectStoreCurrency(watched.base_url)
   const rows = products
     .filter((p) => !isKnown(known, { pid: p.shopifyProductId, url: p.url, name: p.title, colour: p.colourFamily }))
     .map((p) => ({
@@ -655,8 +680,9 @@ async function queueProducts(
       retailer_url: p.url,
       image_url: p.images[0] ?? '',
       price: p.price != null ? String(p.price) : null,
-      currency: p.currency ?? (gbp ? 'GBP' : null),
-      price_gbp: (p.currency ?? (gbp ? 'GBP' : null)) === 'GBP' ? p.price : null,
+      currency: p.currency ?? storeCurrency,
+      // Converted at queue time so every price in the queue is comparable.
+      price_gbp: toGbpAmount(p.price, p.currency ?? storeCurrency),
       item_type: p.itemType, // null = unmapped — honest in the queue; the keep flow defaults at item-creation
       colour_family: p.colourFamily,
       material_category: p.materialCategory,

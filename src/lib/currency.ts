@@ -19,10 +19,20 @@ const GBP_PER: Record<string, number> = {
   CAD: 0.532,
   JPY: 0.00458,
   CHF: 0.92,
+  // Nordic + central European. Most of the watched brands are Danish
+  // (OpéraSPORT, Mos Mosh, Rabens Saloner, By Malene Birger, Munthe,
+  // Anonymous Copenhagen) and without DKK their prices converted to null and
+  // showed as bare numbers — 2200 kr reading as £2200 rather than ~£253.
+  DKK: 0.1149,
+  SEK: 0.0765,
+  NOK: 0.0732,
+  PLN: 0.202,
+  CZK: 0.0347,
 }
 
 const SYMBOL: Record<string, string> = {
   GBP: '£', USD: '$', EUR: '€', AUD: 'A$', CAD: 'C$', JPY: '¥', CHF: 'CHF ',
+  DKK: 'kr ', SEK: 'kr ', NOK: 'kr ', PLN: 'zł ', CZK: 'Kč ',
 }
 
 function parseAmount(price: string | number | null | undefined): number | null {
