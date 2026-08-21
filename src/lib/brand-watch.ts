@@ -36,6 +36,7 @@ export interface ScannedProduct {
   reasons: string[]
   nonFashion: boolean
   menswear: boolean
+  optionColours: string[] // raw colour names from the feed, for the lexicon to learn from
 }
 
 export interface WatchedBrandRow {
@@ -173,6 +174,41 @@ const TYPE_RULES: Array<[RegExp, string]> = [
   [/glove/, 'gloves'], [/sunglass|eyewear|glasses/, 'sunglasses'],
 ]
 
+
+// ── COLOUR LEXICON ──────────────────────────────────────────────────────────
+// Brands name colours poetically — "French toast", "Port Royale", "Skyway",
+// "Rust combo" — and the plain-word rules below can't read any of them. Colour
+// is 3 of the 7 available points, so an unreadable name caps a piece at 4 and
+// it can never clear a min score of 5. Measured on Rabens Saloner: 101 of 302
+// in-stock pieces scored ZERO, almost all of them readable by eye.
+//
+// Checked BEFORE the plain-word rules so specific names win. Earthy names
+// (rust, terracotta, tobacco) resolve to brown rather than orange: in a
+// wardrobe they sit with the browns, while orange stays coral/apricot/bright.
+const COLOUR_LEXICON: Array<[RegExp, string]> = [
+  // browns, rusts, earths
+  [/french toast|toffee|fudge|demitasse|tannin|chipmunk|cowhide|brindle|pine bark|petrified oak|bracken|subterranean|incense|tobacco|cinnamon|hazel|acorn|pecan|umber|sepia|truffle|cacao|bison|otter|teak|walnut wood/, 'brown'],
+  [/\brust\b|terracotta|burnt (?:brick|russet|sienna|ochre)|russet|paprika|henna|copper|amber|ginger|marmalade|clay|adobe|rosin|autumn/, 'brown'],
+  // beiges, sands, creams
+  [/sesame|doeskin|toasted coconut|oat|oatmeal|birch|parchment|alabaster|pristine|ermine|nature|warm kit|soft kit|shortbread|almond|wheat|flax|putty|greige|desert|dune|safari/, 'camel'],
+  // greys, near-blacks
+  [/phantom|falcon|shadow|thunderstorm|aluminum|aluminium|asphalt|sharkskin|cement|boulder|castlerock|bungee cord|vulcan|antracite|anthracite|pewter|gunmetal|smoke|ash\b|steel|silver birch|urban chic|rain drum|eventide|moonless/, 'grey'],
+  [/india ink|total eclipse|midnight|deep well|dark sapphire|blue nights|maritime|peacoat/, 'navy'],
+  // blues
+  [/skyway|clear sky|regatta|brunnera|crown blue|vintage indigo|indigo|denim|chambray|cornflower|periwinkle|azure|aegean|cerulean|niagara|placid|dusk blue|forget.?me.?not|spellbound|hydrangea/, 'blue'],
+  // greens
+  [/grape leaf|four leaf clover|watercress|kelp|scarab|turf green|amazon|\bsag\b|sage|moss|fern|eucalyptus|seaweed|artichoke|basil|juniper|cypress|loden|bottle green|sea turtle|foxtrot/, 'green'],
+  // reds, wines
+  [/port royale|cabernet|merlot|claret|sangria|rhubarb|garnet|brick red|tawny port|syrah/, 'burgundy'],
+  // pinks, purples
+  [/ballet slipper|peachy|blush|powder pink|dusty rose|sweet grape|orchid|mauve|heather/, 'pink'],
+  [/aubergine|eggplant|amethyst|iris\b|wisteria/, 'purple'],
+  // yellows
+  [/lemon icing|straw|honey|turmeric|saffron|ochre|dijon/, 'yellow'],
+  // brights that stay OFF-taste
+  [/carrot|tangerine|papaya|marigold/, 'orange'],
+]
+
 const COLOUR_RULES: Array<[RegExp, string]> = [
   [/\bblack|onyx|noir/, 'black'],
   [/off.?white|ivory|cream|ecru|\bbone\b|eggshell|vanilla/, 'cream'],
@@ -222,6 +258,16 @@ function compileTerms(list: string[]): CompiledTerm[] {
     re: new RegExp('\\b' + t.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b'),
   }))
 }
+// Which resolved colour families are on-taste. Derived from houseColours above
+// (black, ivory/cream, beige→camel, chocolate→brown, grey, navy, khaki/olive→
+// green, burgundy) plus BLUE: denim and pale blue run right through the looks
+// MYRA actually builds, and excluding them was hiding whole brands.
+// Bright orange, pink, red, yellow, purple and multicolour stay out — earthy
+// rusts resolve to brown in the lexicon, so they are not caught by that.
+const HOUSE_COLOUR_FAMILIES = new Set([
+  'black', 'white', 'cream', 'grey', 'navy', 'brown', 'camel', 'green', 'burgundy', 'blue',
+])
+
 const COMPILED: Array<[CompiledTerm[], CompiledTerm[], number]> = [
   [compileTerms(HOUSE_STYLE.houseColours), compileTerms(HOUSE_STYLE.offColours), HOUSE_STYLE.weights.colour],
   [compileTerms(HOUSE_STYLE.houseMaterials), compileTerms(HOUSE_STYLE.offMaterials), HOUSE_STYLE.weights.material],
@@ -278,7 +324,10 @@ function classifyAndScore(p: {
   const colTag = (tagValue(p.tags, 'color') ?? tagValue(p.tags, 'colour') ?? '').toLowerCase()
   const optCol = p.optionColours.join(' ').toLowerCase()
   let colourFamily: string | null = null
-  for (const [re, c] of COLOUR_RULES) { if (colTag && re.test(colTag)) { colourFamily = c; break } }
+  // Lexicon first — a specific marketing name beats a plain-word guess.
+  const colourText = [colTag, p.optionColours.join(' '), p.title].join(' ').toLowerCase()
+  for (const [re, c] of COLOUR_LEXICON) { if (re.test(colourText)) { colourFamily = c; break } }
+  if (!colourFamily) for (const [re, c] of COLOUR_RULES) { if (colTag && re.test(colTag)) { colourFamily = c; break } }
   if (!colourFamily) for (const [re, c] of COLOUR_RULES) { if (optCol && re.test(optCol)) { colourFamily = c; break } }
   if (!colourFamily) for (const [re, c] of COLOUR_RULES) { if (re.test(p.title.toLowerCase())) { colourFamily = c; break } }
 
@@ -287,7 +336,21 @@ function classifyAndScore(p: {
 
   let score = 0
   const reasons: string[] = []
-  for (const [pos, neg, w] of COMPILED) {
+
+  // Colour is scored from the RESOLVED family, so a piece named "French toast"
+  // counts as the brown it is. Raw-text matching could only ever see literal
+  // colour words, which is why poetic names scored zero.
+  const [, colourNeg, colourWeight] = COMPILED[0]
+  const offColour = colourNeg.find((x) => x.re.test(scoreHay))
+  if (offColour) {
+    score -= colourWeight
+    reasons.push(`−${colourWeight} ${offColour.t}`)
+  } else if (colourFamily && HOUSE_COLOUR_FAMILIES.has(colourFamily)) {
+    score += colourWeight
+    reasons.push(`+${colourWeight} ${colourFamily}`)
+  }
+
+  for (const [pos, neg, w] of COMPILED.slice(1)) {
     const hp = pos.find((x) => x.re.test(scoreHay))
     if (hp) { score += w; reasons.push(`+${w} ${hp.t}`) }
     const hn = neg.find((x) => x.re.test(scoreHay))
@@ -314,6 +377,7 @@ function classifyAndScore(p: {
     publishedAt: p.published_at, images: p.images,
     ...stockFromVariants(p.variants),
     itemType, colourFamily, materialCategory, materialPrimary, score, reasons, nonFashion, menswear,
+    optionColours: p.optionColours ?? [],
   }
 }
 
@@ -743,6 +807,51 @@ export async function onboardBrand(watched: WatchedBrandRow): Promise<BrandCheck
   return scanAndQueue(watched, (p) => p.score >= watched.min_score)
 }
 
+/**
+ * Record colour names the lexicon couldn't read. Never throws and never blocks
+ * a scan — this turns "some pieces score low" into a ranked list of exactly
+ * which names to teach it next.
+ */
+async function logUnresolvedColours(
+  admin: ReturnType<typeof createAdminClient>,
+  brandName: string,
+  products: ScannedProduct[],
+): Promise<void> {
+  try {
+    const counts = new Map<string, { n: number; sample: string }>()
+    for (const p of products) {
+      if (p.colourFamily) continue
+      for (const raw of p.optionColours ?? []) {
+        const name = String(raw).trim()
+        if (!name || name.length > 40) continue
+        const cur = counts.get(name) ?? { n: 0, sample: p.title }
+        cur.n++
+        counts.set(name, cur)
+      }
+    }
+    if (!counts.size) return
+    const names = Array.from(counts.keys())
+    const { data: existing } = await (admin as any)
+      .from('unresolved_colour').select('name, seen_count, brands').in('name', names)
+    const prev = new Map(((existing ?? []) as any[]).map((r) => [r.name, r]))
+    const rows = Array.from(counts.entries()).map(([name, info]) => {
+      const before = prev.get(name) as any
+      return {
+        name,
+        seen_count: (before?.seen_count ?? 0) + info.n,
+        brands: Array.from(new Set([...(before?.brands ?? []), brandName])),
+        sample_product: info.sample,
+        last_seen: new Date().toISOString(),
+      }
+    })
+    for (let i = 0; i < rows.length; i += 100) {
+      await (admin as any).from('unresolved_colour').upsert(rows.slice(i, i + 100), { onConflict: 'name' })
+    }
+  } catch (err) {
+    console.error('[logUnresolvedColours]', err)
+  }
+}
+
 async function scanAndQueue(
   watchedIn: WatchedBrandRow,
   wanted: (p: ScannedProduct) => boolean,
@@ -760,6 +869,7 @@ async function scanAndQueue(
   const candidates = inStock.filter((p) => !shouldSuppress(p, watched.name))
   const suppressed = new Set(inStock.filter((p) => shouldSuppress(p, watched.name)).map((p) => p.shopifyProductId))
   const queued = await queueProducts(admin, watched, candidates)
+  await logUnresolvedColours(admin, watched.name, fashion)
   const restocked = await refreshBrandStock(admin, products)
   // Stock-held and learning-suppressed pieces are NOT marked seen — later
   // scans re-evaluate them (restock lets one through; a taste shift lets the
