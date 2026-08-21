@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { PICKER_COLOURS, PICKER_TYPES } from '@/components/admin/ItemPickerModal'
+import { findSimilarToSkipped } from '@/lib/brand-watch-similar'
 import type { WatchedBrandRow } from '@/lib/brand-watch'
 import {
   addWatchedBrand, checkAllBrandsNow, checkBrandNow, fullScanBrand, keepAllForBrand,
@@ -30,6 +31,9 @@ export default function BrandWatchClient(props: Props) {
   const [notice, setNotice] = useState<string | null>(null)
   const [busyBrand, setBusyBrand] = useState<string | null>(null)
   const [gone, setGone] = useState<Set<string>>(new Set()) // optimistically hidden cards
+  // After a skip: the loaded queue's near-twins of what was just skipped, so
+  // they can go in one tap instead of one by one.
+  const [similarPrompt, setSimilarPrompt] = useState<{ name: string; ids: string[] } | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set()) // multi-select for batch keep/skip
   const [lastSkip, setLastSkip] = useState<string[]>([]) // most recent skip batch, for UNDO
 
@@ -74,6 +78,17 @@ export default function BrandWatchClient(props: Props) {
     act(() => loadQueuePage(0, fBrand || undefined), (r: QueuePage) => { setPage(r); setGone(new Set()) })
 
   const decide = (ids: string[], keep: boolean) => {
+    // A single-card skip looks for its near-twins still on screen — same brand
+    // and kind, same model line or same colour-and-material — and offers them
+    // as one skip. Suggestion only; nothing is skipped without a tap.
+    if (!keep && ids.length === 1) {
+      const base = queue.find((q) => q.item_id === ids[0])
+      const pool = queue.filter((q) => !gone.has(q.item_id) && !ids.includes(q.item_id))
+      const sims = base ? findSimilarToSkipped(base, pool) : []
+      setSimilarPrompt(sims.length ? { name: base!.product_name, ids: sims.map((x) => x.item_id) } : null)
+    } else {
+      setSimilarPrompt(null)
+    }
     setGone((g) => new Set(Array.from(g).concat(ids)))
     setSelected((s) => new Set(Array.from(s).filter((id) => !ids.includes(id))))
     if (!keep) setLastSkip(ids)
@@ -84,6 +99,7 @@ export default function BrandWatchClient(props: Props) {
   const undoLastSkip = () => {
     const ids = lastSkip
     setLastSkip([])
+    setSimilarPrompt(null)
     act(() => undoSkip(ids), (r) => {
       // bring the cards straight back into view
       setGone((g) => new Set(Array.from(g).filter((id) => !ids.includes(id))))
@@ -265,6 +281,26 @@ export default function BrandWatchClient(props: Props) {
             {/* Scan notices explain WHY nothing queued, so they must be readable
                 in full — truncating them hid the whole point of the message. */}
             {notice && <p className="text-[9px] tracking-[0.1em] text-[#C4A882] max-w-xl leading-relaxed">{notice}</p>}
+            {/* One tap clears the near-twins of what was just skipped — the whole
+                point is not skipping six monogram bags one by one. */}
+            {similarPrompt && (
+              <button
+                disabled={pending}
+                onClick={() => { const ids = similarPrompt.ids; setSimilarPrompt(null); decide(ids, false) }}
+                className="bg-[#C4A882] text-white rounded-full px-4 py-2 text-[9px] tracking-[0.12em] hover:opacity-85 transition-opacity disabled:opacity-40"
+                title={`Skip everything on screen that closely matches ${similarPrompt.name}`}
+              >
+                SKIP {similarPrompt.ids.length} SIMILAR TO “{similarPrompt.name.slice(0, 22).toUpperCase()}”
+              </button>
+            )}
+            {similarPrompt && (
+              <button
+                onClick={() => setSimilarPrompt(null)}
+                className="border border-[#E2E0DB] text-[#6B6B6B] rounded-full px-3 py-2 text-[9px] tracking-[0.12em] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors"
+              >
+                NO, THEY&rsquo;RE FINE
+              </button>
+            )}
             {lastSkip.length > 0 && (
               <button
                 disabled={pending}
