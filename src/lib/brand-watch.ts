@@ -35,6 +35,7 @@ export interface ScannedProduct {
   score: number
   reasons: string[]
   nonFashion: boolean
+  menswear: boolean
 }
 
 export interface WatchedBrandRow {
@@ -105,6 +106,14 @@ const HOUSE_STYLE = {
   skipCategories: ['sock', 'socks', 'hair clip', 'hair claw', 'hairband', 'scrunchie', 'kids', 'child', 'children', 'baby', 'gift card', 'giftcard', 'care kit', 'shoe care', 'cleaner', 'insole', 'laces', 'shoelace', 'protector', 'candle', 'keyring', 'key ring', 'phone case'],
   newDays: 60,
 }
+
+// Gender read. "women" never trips the men pattern — the boundary before "men"
+// inside "women" isn't a word boundary — and a WOMEN marker always wins, so a
+// piece labelled for both stays. Season codes (MSS26, WAW25) are how some
+// brands mark it. Unknown gender is treated as womenswear: a brand that says
+// nothing is assumed in scope rather than silently dropped.
+const WOMEN_RE = /\b(women|womens|women's|woman|femme|femmes|ladies|damen|donna|mujer|w(?:ss|aw|fw)\d{2})\b/i
+const MEN_RE = /\b(men|mens|men's|man|menswear|homme|hommes|herren|uomo|hombre|m(?:ss|aw|fw)\d{2})\b/i
 
 // ---------------------------------------------------------------- taxonomy mapping
 
@@ -257,13 +266,20 @@ function classifyAndScore(p: {
   }
 
   const nonFashion = HOUSE_STYLE.skipCategories.some((s) => hay.includes(s))
+  // MYRA is womenswear only for now. Mixed-gender feeds are common (Isabel
+  // Marant types 135 of its products "Men"; CMMN SWDN is menswear with a small
+  // women's line), and menswear was reaching the library and even composed
+  // looks. Read on structured fields only — never body copy, where a women's
+  // piece can mention menswear in passing.
+  const genderHay = [p.product_type, p.tags.join(' '), p.title, p.handle].join(' ').toLowerCase()
+  const menswear = !WOMEN_RE.test(genderHay) && MEN_RE.test(genderHay)
 
   return {
     shopifyProductId: String(p.id), handle: p.handle, title: p.title, vendor: p.vendor,
     productType: p.product_type, tags: p.tags, url: p.url, price: p.price,
     publishedAt: p.published_at, images: p.images,
     ...stockFromVariants(p.variants),
-    itemType, colourFamily, materialCategory, materialPrimary, score, reasons, nonFashion,
+    itemType, colourFamily, materialCategory, materialPrimary, score, reasons, nonFashion, menswear,
   }
 }
 
@@ -701,7 +717,7 @@ async function scanAndQueue(
   const products = await fetchCatalogue(watchedIn.base_url)
   const adopted = await adoptRealBrandName(admin as any, watchedIn, vendorMode(products))
   const watched = { ...watchedIn, ...adopted }
-  const fashion = products.filter((p) => !p.nonFashion)
+  const fashion = products.filter((p) => !p.nonFashion && !p.menswear)
   const onTaste = fashion.filter(wanted)
   // Low or out of stock isn't worth adding — it gets another chance on a
   // later check if it restocks (queueing only marks items, not seen state).
@@ -785,7 +801,7 @@ async function browserScanAndQueue(watchedRow: WatchedBrandRow, mode: 'watch' | 
     const adopted = await adoptRealBrandName(admin, watchedRow, brandNames.length ? vendorMode(brandNames.map((v) => ({ vendor: v } as ScannedProduct))) : null)
     const watched = { ...watchedRow, ...adopted }
     const products = res.parsed.map(classifyExternalProduct)
-    const fashion = products.filter((p) => !p.nonFashion)
+    const fashion = products.filter((p) => !p.nonFashion && !p.menswear)
     const onTaste = fashion.filter((p) => p.score >= watched.min_score)
     const inStock = onTaste.filter((p) => p.stockStatus === 'in_stock')
     const shouldSuppress = await loadLearnedSkipper(admin)
@@ -843,7 +859,7 @@ export async function checkWatchedBrand(watchedIn: WatchedBrandRow): Promise<Bra
   }
 
   const fresh = products.filter((p) => !seen.has(p.shopifyProductId))
-  const onTaste = fresh.filter((p) => !p.nonFashion && p.score >= watched.min_score)
+  const onTaste = fresh.filter((p) => !p.nonFashion && !p.menswear && p.score >= watched.min_score)
   // Low or out of stock isn't worth adding — and it is NOT marked seen, so a
   // later check queues it the moment it restocks. Stock-held is computed over
   // the WHOLE catalogue (not just unseen products) so pieces marked seen by
@@ -856,7 +872,7 @@ export async function checkWatchedBrand(watchedIn: WatchedBrandRow): Promise<Bra
   const restocked = await refreshBrandStock(admin, products)
   const stockHeld = new Set(
     products
-      .filter((p) => !p.nonFashion && p.score >= watched.min_score && p.stockStatus !== 'in_stock')
+      .filter((p) => !p.nonFashion && !p.menswear && p.score >= watched.min_score && p.stockStatus !== 'in_stock')
       .map((p) => p.shopifyProductId),
   )
   const held = new Set([...Array.from(stockHeld), ...Array.from(suppressed)])
@@ -871,7 +887,7 @@ export async function checkWatchedBrand(watchedIn: WatchedBrandRow): Promise<Bra
     name: watched.name, scanned: products.length, newProducts: fresh.length,
     queued, belowScore: fresh.length - onTaste.length,
     skippedStock: stockHeld.size, suppressedByLearning: suppressed.size, restocked,
-    note: scanDiagnostic(products.filter((p) => !p.nonFashion), watched.min_score, queued),
+    note: scanDiagnostic(products.filter((p) => !p.nonFashion && !p.menswear), watched.min_score, queued),
   }
 }
 
