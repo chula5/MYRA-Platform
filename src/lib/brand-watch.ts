@@ -63,6 +63,35 @@ export interface BrandCheckResult {
   error?: string
 }
 
+/**
+ * Why a scan queued nothing. The score sums three dimensions — colour (3),
+ * material (2), silhouette (2) — so a feed that never states a colour caps
+ * every piece at 4, so nothing can clear a min score of 5, however on-taste
+ * the brand is. That's a limitation of the brand's feed, not a verdict on the
+ * brand, and it should say so rather than looking like a flat rejection.
+ */
+function scanDiagnostic(
+  fashion: ScannedProduct[],
+  minScore: number,
+  queued: number,
+): string | undefined {
+  if (queued > 0 || !fashion.length) return undefined
+  // Judge on what could actually have been queued. A brand whose only
+  // high-scoring pieces are sold out reads as "nothing on taste" otherwise.
+  const buyable = fashion.filter((p) => p.stockStatus === 'in_stock')
+  if (!buyable.length) return `nothing in stock — ${fashion.length} pieces scanned, all sold out or low`
+  const top = buyable.reduce((m, p) => Math.max(m, p.score), 0)
+  if (top >= minScore) return undefined
+  const atTop = buyable.filter((p) => p.score === top).length
+  const withColour = fashion.filter((p) => p.colourFamily).length
+  const pct = Math.round((withColour / fashion.length) * 100)
+  const colourCapped = withColour / fashion.length < 0.25
+  const lead = colourCapped
+    ? `this feed states a colour on only ${pct}% of pieces, so in-stock scores cap at ${top}`
+    : `nothing in stock scored above ${top}`
+  return `${lead} — drop min score to ${top} to see ${atTop} pieces`
+}
+
 // ---------------------------------------------------------------- house style
 
 const HOUSE_STYLE = {
@@ -699,6 +728,7 @@ async function scanAndQueue(
     name: watched.name, scanned: products.length, newProducts: onTaste.length,
     queued, belowScore: fashion.length - onTaste.length,
     skippedStock: stockHeld.size, suppressedByLearning: suppressed.size, restocked,
+    note: scanDiagnostic(fashion, watched.min_score, queued),
   }
 }
 
@@ -841,6 +871,7 @@ export async function checkWatchedBrand(watchedIn: WatchedBrandRow): Promise<Bra
     name: watched.name, scanned: products.length, newProducts: fresh.length,
     queued, belowScore: fresh.length - onTaste.length,
     skippedStock: stockHeld.size, suppressedByLearning: suppressed.size, restocked,
+    note: scanDiagnostic(products.filter((p) => !p.nonFashion), watched.min_score, queued),
   }
 }
 
