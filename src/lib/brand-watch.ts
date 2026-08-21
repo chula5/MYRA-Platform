@@ -104,7 +104,9 @@ const HOUSE_STYLE = {
   houseMaterials: ['leather', 'suede', 'calf', 'nappa', 'lambskin', 'nubuck', 'shearling', 'wool', 'cashmere', 'merino', 'mohair', 'silk', 'cotton', 'linen', 'poplin', 'denim'],
   offMaterials: ['sequin', 'diamante', 'rhinestone', 'pvc', 'vinyl', 'faux fur', 'marabou', 'feather', 'lurex', 'glitter'],
   houseSilhouettes: ['pointed', 'pointy', 'slingback', 'kitten heel', 'stiletto', 'ballet', 'ballerina', 'loafer', 'riding boot', 'knee boot', 'ankle boot', 'column', 'straight leg', 'wide leg', 'tailored', 'blazer', 'trench', 'slip dress', 'shirt dress', 'square toe', 'minimal', 'clean', 'structured', 'longline'],
-  offSilhouettes: ['platform', 'flatform', 'chunky', 'wedge sneaker', 'extreme crop', 'cut-out', 'cut out', 'ruffle', 'bow embellished', 'ultra mini', 'micro mini'],
+  // 'chunky' alone punished chunky KNITS — a house staple. The penalty is
+  // about footwear silhouettes, so it names them.
+  offSilhouettes: ['platform', 'flatform', 'chunky sole', 'chunky sneaker', 'chunky trainer', 'chunky boot', 'chunky loafer', 'chunky sandal', 'wedge sneaker', 'extreme crop', 'cut-out', 'cut out', 'ruffle', 'bow embellished', 'ultra mini', 'micro mini'],
   // Categories that are not clothing. Matched on whole words (see NON_FASHION_RE)
   // so fashion vocabulary can't be caught by accident: "linen" is a fabric and
   // only "bed linen" is homeware, "slip" is a dress, "cupro" a fibre.
@@ -188,7 +190,7 @@ const TYPE_RULES: Array<[RegExp, string]> = [
 // wardrobe they sit with the browns, while orange stays coral/apricot/bright.
 const COLOUR_LEXICON: Array<[RegExp, string]> = [
   // browns, rusts, earths
-  [/french toast|toffee|fudge|demitasse|tannin|chipmunk|cowhide|brindle|pine bark|petrified oak|bracken|subterranean|incense|tobacco|cinnamon|hazel|acorn|pecan|umber|sepia|truffle|cacao|bison|otter|teak|walnut wood/, 'brown'],
+  [/french toast|\btoast\b|cocoa|toffee|fudge|demitasse|tannin|chipmunk|cowhide|brindle|pine bark|petrified oak|bracken|subterranean|incense|tobacco|cinnamon|hazel|acorn|pecan|umber|sepia|truffle|cacao|bison|otter|teak|walnut wood/, 'brown'],
   [/\brust\b|terracotta|burnt (?:brick|russet|sienna|ochre)|russet|paprika|henna|copper|amber|ginger|marmalade|clay|adobe|rosin|autumn/, 'brown'],
   // beiges, sands, creams
   [/sesame|doeskin|toasted coconut|oat|oatmeal|birch|parchment|alabaster|pristine|ermine|nature|warm kit|soft kit|shortbread|almond|wheat|flax|putty|greige|desert|dune|safari/, 'camel'],
@@ -196,11 +198,12 @@ const COLOUR_LEXICON: Array<[RegExp, string]> = [
   [/phantom|falcon|shadow|thunderstorm|aluminum|aluminium|asphalt|sharkskin|cement|boulder|castlerock|bungee cord|vulcan|antracite|anthracite|pewter|gunmetal|smoke|ash\b|steel|silver birch|urban chic|rain drum|eventide|moonless/, 'grey'],
   [/india ink|total eclipse|midnight|deep well|dark sapphire|blue nights|maritime|peacoat/, 'navy'],
   // blues
-  [/skyway|clear sky|regatta|brunnera|crown blue|vintage indigo|indigo|denim|chambray|cornflower|periwinkle|azure|aegean|cerulean|niagara|placid|dusk blue|forget.?me.?not|spellbound|hydrangea/, 'blue'],
+  [/skyway|clear sky|regatta|brunnera|crown blue|vintage indigo|indigo|denim|chambray|cornflower|periwinkle|azure|aegean|cerulean|niagara|placid|dusk blue|forget.?me.?not|spellbound|hydrangea|(?:light|mid|dark|stone) wash/, 'blue'],
   // greens
   [/grape leaf|four leaf clover|watercress|kelp|scarab|turf green|amazon|\bsag\b|sage|moss|fern|eucalyptus|seaweed|artichoke|basil|juniper|cypress|loden|bottle green|sea turtle|foxtrot/, 'green'],
   // reds, wines
   [/port royale|cabernet|merlot|claret|sangria|rhubarb|garnet|brick red|tawny port|syrah/, 'burgundy'],
+  [/cranberry|poppy red|lipstick/, 'red'],
   // pinks, purples
   [/ballet slipper|peachy|blush|powder pink|dusty rose|sweet grape|orchid|mauve|heather/, 'pink'],
   [/aubergine|eggplant|amethyst|iris\b|wisteria/, 'purple'],
@@ -532,11 +535,33 @@ export async function fetchCatalogue(baseUrl: string): Promise<ScannedProduct[]>
 
 // ---------------------------------------------------------------- queueing
 
+/**
+ * Brand identity survives formatting: "By Malene Birger", "bymalenebirger" and
+ * "BY MALENE BIRGER" are one brand. Auto-created brand rows have split on
+ * exactly this — a domain-derived name next to a display name — and a split
+ * brand BLINDS the queue dedupe, which is brand-scoped: her Adrienna blazer
+ * sat in the library under one row while the scan re-queued it under the other.
+ */
+export function foldBrandName(name: string | null | undefined): string {
+  return String(name ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+/** Every brand row that is, by folded name, the same brand. */
+async function siblingBrandIds(admin: ReturnType<typeof createAdminClient>, brandId: string): Promise<string[]> {
+  const { data: rows } = await (admin as any).from('brand').select('brand_id, name')
+  const me = ((rows ?? []) as any[]).find((r) => r.brand_id === brandId)
+  if (!me) return [brandId]
+  const key = foldBrandName(me.name)
+  return ((rows ?? []) as any[]).filter((r) => foldBrandName(r.name) === key).map((r) => r.brand_id)
+}
+
 async function resolveBrandId(admin: ReturnType<typeof createAdminClient>, name: string): Promise<string> {
   const clean = name.trim()
-  const { data: existing } = await admin.from('brand').select('brand_id').ilike('name', clean).limit(1)
-  const row = (existing ?? [])[0] as { brand_id: string } | undefined
-  if (row) return row.brand_id
+  // Fold-compare against every brand, not ilike — spacing and casing variants
+  // must resolve to the same row or the library splits.
+  const { data: all } = await (admin as any).from('brand').select('brand_id, name')
+  const match = ((all ?? []) as any[]).find((r) => foldBrandName(r.name) === foldBrandName(clean))
+  if (match) return match.brand_id
   const { data: created } = await admin
     .from('brand')
     .insert([{ name: clean, price_tier: 3, era_orientation: 3, aesthetic_output: 3, cultural_legibility: 3, creative_behaviour: 3 }] as any)
@@ -569,7 +594,7 @@ export function isKnown(
   p: { pid?: string | null; url?: string | null; name?: string | null; colour?: string | null },
 ): boolean {
   if (p.pid && k.pids.has(String(p.pid))) return true
-  if (p.url && k.urls.has(p.url)) return true
+  if (p.url && k.urls.has(p.url.split('?')[0])) return true
   const slug = urlSlug(p.url ?? null)
   if (slug && k.slugs.has(slug)) return true
   const n = normName(p.name ?? null)
@@ -588,18 +613,21 @@ export async function fetchKnownForBrand(
   brandId: string,
 ): Promise<KnownKeys> {
   const k: KnownKeys = { pids: new Set(), urls: new Set(), slugs: new Set(), names: new Map() }
+  // A split brand (name variants across rows) must not blind the dedupe.
+  const brandIds = await siblingBrandIds(admin, brandId)
   for (const table of ['item', 'brand_watch_queue']) {
     for (let from = 0; ; from += 1000) {
       const { data } = await (admin as any)
         .from(table)
         .select('shopify_product_id, retailer_url, product_name, colour_family')
-        .eq('brand_id', brandId)
+        .in('brand_id', brandIds)
         .order(table === 'item' ? 'item_id' : 'queue_id')
         .range(from, from + 999)
       for (const r of data ?? []) {
         if (r.shopify_product_id != null) k.pids.add(String(r.shopify_product_id))
         if (r.retailer_url) {
-          k.urls.add(r.retailer_url)
+          // Affiliate links carry ?cjevent=…&utm_… — the same page must match.
+          k.urls.add(r.retailer_url.split('?')[0])
           const slug = urlSlug(r.retailer_url)
           if (slug) k.slugs.add(slug)
         }
@@ -813,6 +841,19 @@ async function refreshBrandStock(
 
 // ---------------------------------------------------------------- entry points
 
+/**
+ * What may enter the queue by stock state. In stock, obviously. LOW stock is
+ * buyable right now — holding it for the restock cycle meant never seeing it.
+ * And an unavailable piece PUBLISHED in the last 60 days reads as COMING SOON
+ * on a live storefront — the most valuable moment to see it (the Goldie boots
+ * scored a perfect 7 and were silently held for being pre-launch). Only old
+ * unavailable stock stays held for restock. The queue card badges the state.
+ */
+function queueableStock(p: ScannedProduct): boolean {
+  if (p.stockStatus === 'in_stock' || p.stockStatus === 'low_stock') return true
+  return isRecent(p, HOUSE_STYLE.newDays)
+}
+
 function isRecent(p: ScannedProduct, days: number): boolean {
   if (!p.publishedAt) return false
   return Date.now() - Date.parse(p.publishedAt) < days * 86_400_000
@@ -890,10 +931,17 @@ async function scanAndQueue(
   const onTaste = fashion.filter(wanted)
   // Low or out of stock isn't worth adding — it gets another chance on a
   // later check if it restocks (queueing only marks items, not seen state).
-  const inStock = onTaste.filter((p) => p.stockStatus === 'in_stock')
+  const inStock = onTaste.filter((p) => queueableStock(p))
   const shouldSuppress = await loadLearnedSkipper(admin as any)
-  const candidates = inStock.filter((p) => !shouldSuppress(p, watched.name))
-  const suppressed = new Set(inStock.filter((p) => shouldSuppress(p, watched.name)).map((p) => p.shopifyProductId))
+  // The learned skipper may thin the queue, but it may not VETO the house
+  // style: scan-time suppression removes a piece invisibly (unlike the queue's
+  // predicted-skip toggle, which only hides), and it was swallowing 7-score
+  // pieces on generic tokens — 'wide' and 'light' learned negative from bag
+  // skips took out a wide-leg jean. Anything two points clear of the brand's
+  // min score always queues; the queue-time learning can still fold it away.
+  const vetoed = (p: ScannedProduct) => shouldSuppress(p, watched.name) && p.score < watched.min_score + 2
+  const candidates = inStock.filter((p) => !vetoed(p))
+  const suppressed = new Set(inStock.filter((p) => vetoed(p)).map((p) => p.shopifyProductId))
   const queued = await queueProducts(admin, watched, candidates)
   await logUnresolvedColours(admin, watched.name, fashion)
   const restocked = await refreshBrandStock(admin, products)
@@ -973,15 +1021,22 @@ async function browserScanAndQueue(watchedRow: WatchedBrandRow, mode: 'watch' | 
     const products = res.parsed.map(classifyExternalProduct)
     const fashion = products.filter((p) => !p.nonFashion && !p.menswear)
     const onTaste = fashion.filter((p) => p.score >= watched.min_score)
-    const inStock = onTaste.filter((p) => p.stockStatus === 'in_stock')
+    const inStock = onTaste.filter((p) => queueableStock(p))
     const shouldSuppress = await loadLearnedSkipper(admin)
-    const candidates = inStock.filter((p) => !shouldSuppress(p, watched.name))
-    const suppressed = new Set(inStock.filter((p) => shouldSuppress(p, watched.name)).map((p) => p.shopifyProductId))
+    // The learned skipper may thin the queue, but it may not VETO the house
+  // style: scan-time suppression removes a piece invisibly (unlike the queue's
+  // predicted-skip toggle, which only hides), and it was swallowing 7-score
+  // pieces on generic tokens — 'wide' and 'light' learned negative from bag
+  // skips took out a wide-leg jean. Anything two points clear of the brand's
+  // min score always queues; the queue-time learning can still fold it away.
+  const vetoed = (p: ScannedProduct) => shouldSuppress(p, watched.name) && p.score < watched.min_score + 2
+  const candidates = inStock.filter((p) => !vetoed(p))
+    const suppressed = new Set(inStock.filter((p) => vetoed(p)).map((p) => p.shopifyProductId))
     const queued = await queueProducts(admin, watched, candidates)
     const restocked = await refreshBrandStock(admin, products)
     // stock-held and learning-suppressed pieces stay unseen — restocks and
     // taste shifts both get another chance on later scans
-    const stockHeld = new Set(onTaste.filter((p) => p.stockStatus !== 'in_stock').map((p) => p.shopifyProductId))
+    const stockHeld = new Set(onTaste.filter((p) => !queueableStock(p)).map((p) => p.shopifyProductId))
     const held = new Set([...Array.from(stockHeld), ...Array.from(suppressed)])
     await markHashes(res.processedUrls.map(urlHash).filter((h) => !held.has(h)))
     await admin.from('watched_brand')
@@ -1034,15 +1089,22 @@ export async function checkWatchedBrand(watchedIn: WatchedBrandRow): Promise<Bra
   // later check queues it the moment it restocks. Stock-held is computed over
   // the WHOLE catalogue (not just unseen products) so pieces marked seen by
   // earlier scans are released from the seen list too.
-  const inStock = onTaste.filter((p) => p.stockStatus === 'in_stock')
+  const inStock = onTaste.filter((p) => queueableStock(p))
   const shouldSuppress = await loadLearnedSkipper(admin as any)
-  const candidates = inStock.filter((p) => !shouldSuppress(p, watched.name))
-  const suppressed = new Set(inStock.filter((p) => shouldSuppress(p, watched.name)).map((p) => p.shopifyProductId))
+  // The learned skipper may thin the queue, but it may not VETO the house
+  // style: scan-time suppression removes a piece invisibly (unlike the queue's
+  // predicted-skip toggle, which only hides), and it was swallowing 7-score
+  // pieces on generic tokens — 'wide' and 'light' learned negative from bag
+  // skips took out a wide-leg jean. Anything two points clear of the brand's
+  // min score always queues; the queue-time learning can still fold it away.
+  const vetoed = (p: ScannedProduct) => shouldSuppress(p, watched.name) && p.score < watched.min_score + 2
+  const candidates = inStock.filter((p) => !vetoed(p))
+  const suppressed = new Set(inStock.filter((p) => vetoed(p)).map((p) => p.shopifyProductId))
   const queued = await queueProducts(admin, watched, candidates)
   const restocked = await refreshBrandStock(admin, products)
   const stockHeld = new Set(
     products
-      .filter((p) => !p.nonFashion && !p.menswear && p.score >= watched.min_score && p.stockStatus !== 'in_stock')
+      .filter((p) => !p.nonFashion && !p.menswear && p.score >= watched.min_score && !queueableStock(p))
       .map((p) => p.shopifyProductId),
   )
   const held = new Set([...Array.from(stockHeld), ...Array.from(suppressed)])

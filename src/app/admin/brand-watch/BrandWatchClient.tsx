@@ -382,6 +382,13 @@ export default function BrandWatchClient(props: Props) {
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={q.image_url} alt="" loading="lazy" className="w-full h-full object-cover" />
                   )}
+                  {/* Pre-launch and thin stock are queueable now — say so. */}
+                  {q.stock_status === 'out_of_stock' && (
+                    <span className="absolute bottom-2 left-2 bg-[#0A0A0A]/85 text-white rounded px-1.5 py-0.5 text-[8px] tracking-[0.1em]">COMING SOON</span>
+                  )}
+                  {q.stock_status === 'low_stock' && (
+                    <span className="absolute bottom-2 left-2 bg-[#C4A882] text-white rounded px-1.5 py-0.5 text-[8px] tracking-[0.1em]">LOW STOCK</span>
+                  )}
                   {q.discovery_score != null && (
                     <span className="absolute top-2 left-2 bg-white/95 border border-[#E2E0DB] rounded px-1.5 py-0.5 text-[9px] tracking-[0.08em] text-[#4A4E57]">
                       {q.discovery_score > 0 ? '+' : ''}{q.discovery_score}

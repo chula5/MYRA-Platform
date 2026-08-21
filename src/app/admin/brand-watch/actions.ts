@@ -20,6 +20,7 @@ export interface QueueItemRow {
   currency: string | null
   image_url: string
   retailer_url: string
+  stock_status: string | null
   discovery_score: number | null
   discovered_at: string | null
   admin_notes: string | null
@@ -59,6 +60,7 @@ function mapQueueRow(r: any): Omit<QueueItemRow, 'learned_delta' | 'learned_reas
     currency: r.currency,
     image_url: r.image_url,
     retailer_url: r.retailer_url,
+    stock_status: r.stock_status ?? null,
     discovery_score: r.discovery_score != null ? Number(r.discovery_score) : null,
     discovered_at: r.discovered_at,
     admin_notes: r.admin_notes,
