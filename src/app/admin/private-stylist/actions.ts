@@ -946,7 +946,9 @@ export async function assignMemberPersona(memberId: string, personaId: string): 
       revalidatePath(PATH)
       return {}
     }
-    await admin.from('user_persona').upsert(
+    // Supabase returns errors, it doesn't throw — ignoring the result meant a
+    // failed write still reported "PERSONA ASSIGNED". Check every step.
+    const { error: upsertErr } = await admin.from('user_persona').upsert(
       {
         user_id: memberId,
         persona_id: personaId,
@@ -956,10 +958,15 @@ export async function assignMemberPersona(memberId: string, personaId: string): 
       },
       { onConflict: 'user_id' },
     )
-    await admin.from('user_persona_weight_log').insert({
+    if (upsertErr) {
+      const hint = /subject_kind/.test(upsertErr.message) ? ' — run migration 0043 in the Supabase SQL editor' : ''
+      return { error: `${upsertErr.message}${hint}` }
+    }
+    const { error: logErr } = await admin.from('user_persona_weight_log').insert({
       user_id: memberId, persona_id: personaId, subject_kind: 'pilot_member',
       weight: PERSONA_START_WEIGHT, event_count: 0,
     })
+    if (logErr) return { error: logErr.message }
     revalidatePath(PATH)
     return {}
   } catch (err) {
@@ -1029,7 +1036,27 @@ export async function composeDeliveryLooks(deliveryId: string): Promise<{ create
   const mix = normalise(delivery.effective_weights ?? {})
   const occ: OccasionContext = { id: delivery.occasion ?? null, vector: lookTasteVector(mix) }
   const lens = await loadPersonaLens(admin, delivery.member_id)
-  const looks = composeMemberLooks(taste, library, 3, occ, lens)
+
+  // Her look history: everything already composed for her (any delivery) plus
+  // her explicit rejections — the composer ranks those down so each delivery
+  // explores the library instead of regenerating the same argmax looks.
+  const [{ data: priorLooks }, { data: fb }] = await Promise.all([
+    admin.from('pilot_look').select('items, delivery:delivery_id!inner(member_id)').eq('delivery.member_id', delivery.member_id),
+    admin.from('pilot_look_feedback').select('item_in, action').eq('member_id', delivery.member_id).limit(5000),
+  ])
+  const seenCounts = new Map<string, number>()
+  for (const l of priorLooks ?? []) {
+    for (const it of (l.items ?? []) as any[]) {
+      if (it.item_id) seenCounts.set(it.item_id, (seenCounts.get(it.item_id) ?? 0) + 1)
+    }
+  }
+  const rejected = new Set<string>()
+  for (const f of fb ?? []) {
+    if (f.item_in && f.action === 'remove') rejected.add(f.item_in)
+    if (f.item_in && f.action === 'accept') seenCounts.set(f.item_in, (seenCounts.get(f.item_in) ?? 0) + 1)
+  }
+
+  const looks = composeMemberLooks(taste, library, 3, occ, lens, { seenCounts, rejected })
   if (!looks.length) return { error: 'Could not compose — not enough compatible in-stock items in the library' }
 
   const { count } = await admin
@@ -1056,6 +1083,7 @@ export interface SwapOption {
   item_id: string
   product_name: string
   brand_name: string | null
+  colour_family: string | null
   image_url: string | null
   price_gbp: number | null
   score: number
@@ -1083,12 +1111,13 @@ export async function lookAlternates(lookId: string, itemIndex: number): Promise
 
   const occ: OccasionContext = { id: delivery?.occasion ?? null, vector: lookTasteVector(normalise(delivery?.effective_weights ?? {})) }
   const lens = await loadPersonaLens(admin, delivery?.member_id)
-  const ranked = rankAlternates(taste, library, slot, keepItems, exclude, 12, occ, lens)
+  const ranked = rankAlternates(taste, library, slot, keepItems, exclude, 200, occ, lens)
   return {
     options: ranked.map(({ item, score }) => ({
       item_id: item.item_id,
       product_name: item.product_name,
       brand_name: item.brand?.name ?? null,
+      colour_family: item.colour_family ?? null,
       image_url: item.image_url ?? null,
       price_gbp: (item as any).price_gbp != null ? Number((item as any).price_gbp) : item.price != null ? Number(item.price) : null,
       score: Math.round(score * 100) / 100,
@@ -1115,12 +1144,13 @@ export async function lookAddOptions(lookId: string, slot: string): Promise<{ op
   const occ: OccasionContext = { id: delivery?.occasion ?? null, vector: lookTasteVector(normalise(delivery?.effective_weights ?? {})) }
 
   const lens = await loadPersonaLens(admin, delivery?.member_id)
-  const ranked = rankAlternates(taste, library, slot as Slot, keepItems, exclude, 12, occ, lens)
+  const ranked = rankAlternates(taste, library, slot as Slot, keepItems, exclude, 200, occ, lens)
   return {
     options: ranked.map(({ item, score }) => ({
       item_id: item.item_id,
       product_name: item.product_name,
       brand_name: item.brand?.name ?? null,
+      colour_family: item.colour_family ?? null,
       image_url: item.image_url ?? null,
       price_gbp: (item as any).price_gbp != null ? Number((item as any).price_gbp) : item.price != null ? Number(item.price) : null,
       score: Math.round(score * 100) / 100,
@@ -1291,6 +1321,45 @@ export async function approveComposedLook(lookId: string): Promise<{ error?: str
     if (brandNames.length) await applyBrandSignals(admin, delivery.member_id, brandNames, 'yes')
   } catch { /* best-effort */ }
 
+  revalidatePath(PATH)
+  return {}
+}
+
+// The mirror of approveComposedLook: every item and brand pairing is logged
+// as a rejection ('remove' — the existing negative vocabulary), her brand
+// affinities take the negative signal, and the look is removed. Distinct from
+// × (delete), which throws a look away WITHOUT teaching anything.
+export async function skipComposedLook(lookId: string): Promise<{ error?: string }> {
+  const admin = createAdminClient() as any
+  const { data: look, error: lerr } = await admin.from('pilot_look').select('*').eq('look_id', lookId).single()
+  if (lerr || !look) return { error: lerr?.message ?? 'Look not found' }
+  const { data: delivery } = await admin.from('pilot_delivery').select('member_id').eq('delivery_id', look.delivery_id).single()
+  if (!delivery) return { error: 'Delivery not found' }
+
+  const items: LookItem[] = look.items ?? []
+  const fb: any[] = []
+  for (const it of items) {
+    if (it.item_id) fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action: 'remove', slot: it.slot ?? null, item_in: it.item_id, brand_in: it.brand_id ?? null })
+  }
+  const brandIds = Array.from(new Set(items.map((it) => it.brand_id).filter(Boolean))) as string[]
+  for (let i = 0; i < brandIds.length; i++) {
+    for (let j = i + 1; j < brandIds.length; j++) {
+      const [a, b] = pairKeyOrdered(brandIds[i], brandIds[j])
+      fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action: 'remove', brand_out: a, brand_in: b })
+    }
+  }
+  if (fb.length) {
+    const { error: fbErr } = await admin.from('pilot_look_feedback').insert(fb)
+    if (fbErr) return { error: fbErr.message }
+  }
+
+  try {
+    const brandNames = Array.from(new Set(items.map((it) => it.brand).filter(Boolean)))
+    if (brandNames.length) await applyBrandSignals(admin, delivery.member_id, brandNames, 'no')
+  } catch { /* best-effort */ }
+
+  const { error: derr } = await admin.from('pilot_look').delete().eq('look_id', lookId)
+  if (derr) return { error: derr.message }
   revalidatePath(PATH)
   return {}
 }

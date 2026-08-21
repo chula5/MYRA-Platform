@@ -57,7 +57,7 @@ import {
   lookAddOptions,
   addComposedLookItem,
   approveComposedLook,
-  higgsfieldShootForLook,
+  skipComposedLook,
   restoreLookShoot,
   type SwapOption,
   type PilotData,
@@ -195,13 +195,21 @@ export default function PrivateStylistClient({ data }: { data: PilotData }) {
   async function run(key: string, fn: () => Promise<any>, ok: string) {
     setBusy(key)
     setMsg(null)
-    const r = await fn()
-    setBusy(null)
-    if (r?.error) setMsg(String(r.error).toUpperCase())
-    else if (r?.errors?.length) setMsg(r.errors.join(' · '))
-    else setMsg(ok)
-    router.refresh()
-    return r
+    try {
+      const r = await fn()
+      if (r?.error) setMsg(String(r.error).toUpperCase())
+      else if (r?.errors?.length) setMsg(r.errors.join(' · '))
+      else setMsg(ok)
+      return r
+    } catch (e) {
+      // A thrown server-action error (stale page after a deploy, network drop)
+      // used to vanish silently — the button just "did nothing".
+      setMsg(`FAILED: ${e instanceof Error ? e.message : String(e)} — RELOAD THE PAGE AND TRY AGAIN`.toUpperCase())
+      return { error: String(e) }
+    } finally {
+      setBusy(null)
+      router.refresh()
+    }
   }
 
   return (
@@ -261,7 +269,14 @@ function MembersTab({ data, run, busy }: { data: PilotData; run: Run; busy: stri
       {showNew && <NewMemberForm run={run} busy={busy} done={() => setShowNew(false)} />}
 
       {data.members.map((m) => (
-        <MemberCard key={m.member_id} member={m} run={run} busy={busy} personas={data.personas} />
+        <MemberCard
+          key={m.member_id}
+          member={m}
+          run={run}
+          busy={busy}
+          personas={data.personas}
+          deliveries={data.deliveries.filter((d) => d.member_id === m.member_id)}
+        />
       ))}
 
       {data.members.length === 0 && !showNew && (
@@ -408,16 +423,91 @@ function NewMemberForm({ run, busy, done }: { run: Run; busy: string | null; don
   )
 }
 
+// The screenshot lookbook: every shot look for this member, presented the way
+// the main outfit page does it — items on the left, editorial image on the
+// right, no admin controls inside the frame. Screenshot a card, send it, come
+// back with her yes/no.
+function Lookbook({ deliveries, memberName }: { deliveries: PilotDelivery[]; memberName: string }) {
+  const shot = deliveries
+    .flatMap((d) => (d.looks ?? []).map((l) => ({ l, d })))
+    .filter(({ l }) => l.image_url)
+    .sort((a, b) => String(b.d.created_at ?? '').localeCompare(String(a.d.created_at ?? '')) || a.l.position - b.l.position)
+  if (!shot.length) {
+    return (
+      <div>
+        <p className="text-[9px] tracking-[0.18em] text-[#6B6B6B] mb-2">LOOKBOOK — SHARE &amp; SCREENSHOT</p>
+        <p className="text-[9px] tracking-[0.08em] text-[#A8A8A4]">
+          NO SHOT LOOKS YET — COMPOSE A DELIVERY, THEN ✦ HIGGSFIELD EACH LOOK AND THEY APPEAR HERE.
+        </p>
+      </div>
+    )
+  }
+  return (
+    <div>
+      <p className="text-[9px] tracking-[0.18em] text-[#6B6B6B] mb-2">
+        LOOKBOOK — SHARE &amp; SCREENSHOT · {shot.length} LOOK{shot.length === 1 ? '' : 'S'} FOR {memberName.toUpperCase()}
+      </p>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {shot.map(({ l }, idx) => {
+          const withImg = l.items.filter((it) => it.image_url)
+          return (
+            // Same frame as the live site: full-bleed shoot with the
+            // Shop-the-Look panel floating top-left over it.
+            <div key={l.look_id} className="relative aspect-[4/5] overflow-hidden bg-[#EDEDED]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={l.image_url!} alt="" className="absolute inset-0 w-full h-full object-cover" />
+              <div className="absolute top-2.5 right-2.5 bg-black/55 text-white text-[9px] tracking-[0.1em] px-2 py-1 rounded-full">
+                {idx + 1} / {shot.length}
+              </div>
+              <div className="absolute left-2.5 top-2.5 z-10 w-[27%] max-w-[110px] max-h-[calc(100%-1.25rem)] overflow-y-auto pr-1" data-lenis-prevent>
+                <div className="flex items-center gap-1.5 mb-2">
+                  <span className="text-white text-[8px] sm:text-[9px] tracking-[0.081em] drop-shadow-[0_1px_3px_rgba(0,0,0,0.55)]">
+                    LOOK {idx + 1}
+                  </span>
+                  <span className="bg-white/90 text-[#4A4E57] text-[8px] tracking-[0.036em] rounded-full px-1.5 py-0.5 leading-none">
+                    {withImg.length}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {withImg.map((it, i) => (
+                    <div key={i} className="relative w-full aspect-[3/4] overflow-hidden bg-[#EDEDED]">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={`${it.image_url}${it.image_url!.includes('?') ? '&' : '?'}width=500`} alt={it.product_name} loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
+                      {/* same caption treatment as the live site's item cards */}
+                      <div className="absolute inset-x-0 bottom-0 z-10 pt-8 pb-1.5 px-1.5 bg-gradient-to-t from-black/70 via-black/25 to-transparent">
+                        <p className="text-white/75 text-[6px] tracking-[0.06em] uppercase truncate">{it.brand ?? 'BRAND'}</p>
+                        <p className="text-white text-[7px] leading-[1.15] line-clamp-2 mt-0.5">{it.product_name}</p>
+                        {typeof it.price_gbp === 'number' && (
+                          <p className="text-white/90 text-[7px] tracking-[0.03em] mt-0.5">£{it.price_gbp}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <p className="absolute bottom-2 right-2.5 text-white text-[7.5px] tracking-[0.14em] drop-shadow-[0_1px_3px_rgba(0,0,0,0.55)]">
+                MYRA · STYLED FOR {memberName.split(' ')[0].toUpperCase()}
+              </p>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function MemberCard({
   member: m,
   run,
   busy,
   personas = [],
+  deliveries = [],
 }: {
   member: PilotMember
   run: Run
   busy: string | null
   personas?: { stylist_id: string; name: string; hasEnvelope: boolean }[]
+  deliveries?: PilotDelivery[]
 }) {
   const [open, setOpen] = useState(false)
   const [occasions, setOccasions] = useState(m.occasions)
@@ -520,6 +610,7 @@ function MemberCard({
 
       {open && (
         <div className="mt-6 space-y-6">
+          <Lookbook deliveries={deliveries} memberName={m.name} />
           {/* Brands */}
           <div>
             <p className={`${label} mb-2`}>BRANDS — RANKED, WITH THE INFERRED WHY</p>
@@ -725,6 +816,11 @@ function DeliveriesTab({ data, run, busy }: { data: PilotData; run: Run; busy: s
       </div>
 
       {showNew && <NewDeliveryForm members={data.members} run={run} busy={busy} done={() => setShowNew(false)} />}
+
+      {/* Filter to one member → her screenshot lookbook sits right here on top */}
+      {memberId !== 'all' && memberById[memberId] && (
+        <Lookbook deliveries={deliveries} memberName={memberById[memberId].name} />
+      )}
 
       {deliveries.map((d) => (
         <DeliveryCard key={d.delivery_id} delivery={d} member={memberById[d.member_id]} run={run} busy={busy} />
@@ -1069,10 +1165,13 @@ function LookRow({
   const composed = l.items.some((it) => it.item_id)
   const presentSlots = new Set(l.items.map((it) => it.slot).filter(Boolean) as string[])
 
+  const [swapQuery, setSwapQuery] = useState('')
+
   async function openSwap(i: number) {
     setAddSlot(null)
     setSwapIdx(i)
     setSwapOptions(null)
+    setSwapQuery('')
     setSwapBusy(true)
     const r = await lookAlternates(l.look_id, i)
     setSwapBusy(false)
@@ -1083,6 +1182,7 @@ function LookRow({
     setSwapIdx(null)
     setAddSlot(slot)
     setSwapOptions(null)
+    setSwapQuery('')
     setSwapBusy(true)
     const r = await lookAddOptions(l.look_id, slot)
     setSwapBusy(false)
@@ -1200,9 +1300,26 @@ function LookRow({
               </p>
               {swapBusy && <p className="text-[9px] tracking-[0.1em] text-[#A8A8A4]">FINDING ALTERNATES…</p>}
               {swapOptions && swapOptions.length === 0 && <p className="text-[9px] tracking-[0.1em] text-[#A8A8A4]">NOTHING IN STOCK FOR THIS SLOT IN THE LIBRARY.</p>}
-              {swapOptions && swapOptions.length > 0 && (
+              {swapOptions && swapOptions.length > 0 && (() => {
+                const q = swapQuery.trim().toLowerCase()
+                const shownOptions = q
+                  ? swapOptions.filter((o) =>
+                      [o.product_name, o.brand_name, o.colour_family].filter(Boolean).join(' ').toLowerCase().includes(q),
+                    ).slice(0, 24)
+                  : swapOptions.slice(0, 12)
+                return (
+                  <>
+                    <input
+                      value={swapQuery}
+                      onChange={(e) => setSwapQuery(e.target.value)}
+                      placeholder={`SEARCH ALL ${swapOptions.length} IN-STOCK OPTIONS — NAME, BRAND OR COLOUR`}
+                      className="w-full max-w-md mb-3 border border-[#E2E0DB] bg-white px-3 py-2 text-[9px] tracking-[0.08em] outline-none focus:border-[#0A0A0A] uppercase placeholder:text-[#A8A8A4]"
+                    />
+                    {q && shownOptions.length === 0 && (
+                      <p className="text-[9px] tracking-[0.1em] text-[#A8A8A4] mb-2">NO MATCH IN THIS SLOT — TRY A BRAND OR COLOUR WORD.</p>
+                    )}
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                  {swapOptions.map((o) => (
+                  {shownOptions.map((o) => (
                     <button
                       key={o.item_id}
                       className="text-left border border-[#E2E0DB] bg-white hover:border-[#0A0A0A] transition-colors"
@@ -1229,7 +1346,9 @@ function LookRow({
                     </button>
                   ))}
                 </div>
-              )}
+                  </>
+                )
+              })()}
             </div>
           )}
           {poseOpen && !sent && (
@@ -1245,7 +1364,14 @@ function LookRow({
                     className="text-left border border-[#E2E0DB] bg-white px-2.5 py-1.5 hover:border-[#0A0A0A] transition-colors disabled:opacity-40"
                     onClick={() => {
                       setPoseOpen(false)
-                      void shoot(() => higgsfieldShootForLook(l.look_id, c.key),
+                      // via the API route, NOT a server action — a running
+                      // shoot must never queue-block the page's other buttons
+                      void shoot(
+                        () => fetch('/api/pilot/shoot', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ lookId: l.look_id, poseKey: c.key }),
+                        }).then((r) => r.json()),
                         `HIGGSFIELD SHOOT (${c.label}) ATTACHED — TAKES A FEW MINUTES`)
                     }}
                   >
@@ -1292,6 +1418,15 @@ function LookRow({
                   onClick={() => run(`appr-${l.look_id}`, () => approveComposedLook(l.look_id), 'APPROVED — TASTE UPDATED')}
                 >
                   APPROVE ✓
+                </button>
+              )}
+              {composed && !l.approved_at && (
+                <button
+                  className="text-[9px] tracking-[0.12em] px-3 py-1.5 border border-[#0A0A0A] text-[#0A0A0A] hover:bg-[#0A0A0A] hover:text-white transition-colors"
+                  title="Skip this composition — logs every item and brand pairing as a miss for her taste, then removes the look. × deletes without teaching anything."
+                  onClick={() => run(`skip-${l.look_id}`, () => skipComposedLook(l.look_id), 'SKIPPED — TASTE UPDATED, LOOK REMOVED')}
+                >
+                  SKIP
                 </button>
               )}
               {composed && (

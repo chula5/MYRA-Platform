@@ -244,17 +244,45 @@ export interface ComposedLook {
   score: number
 }
 
+// What this member has already been shown, so composition explores instead
+// of replaying its own greedy argmax delivery after delivery.
+export interface ComposeHistory {
+  seenCounts: Map<string, number> // item_id → times already featured in her looks
+  rejected: Set<string> // item_ids she skipped / had removed
+}
+
+function historyPenalty(h: ComposeHistory | undefined, itemId: string): number {
+  if (!h) return 0
+  let p = 0
+  const n = h.seenCounts.get(itemId) ?? 0
+  if (n) p += 0.3 * Math.min(n, 3) // shown before — rank down, don't ban (small library)
+  if (h.rejected.has(itemId)) p += 0.5 // she said no to it
+  return p
+}
+
+// Deterministic tie-rotation: a small per-item offset seeded by how much
+// history exists, so two back-to-back compositions with near-tied scores pick
+// different pieces — and the same inputs still reproduce the same output.
+function varietyJitter(itemId: string, seed: number): number {
+  let h = (0x811c9dc5 ^ seed) >>> 0
+  for (let i = 0; i < itemId.length; i++) h = Math.imul(h ^ itemId.charCodeAt(i), 0x01000193) >>> 0
+  return ((h % 1000) / 1000 - 0.5) * 0.16
+}
+
 // Compose up to `count` looks. Anchors are the member's highest-affinity
 // dresses/tops (each look anchored on a different brand where possible);
 // the rest of each look comes from the Outfit Composer with the member's
-// taste folded into generation. Items never repeat across the set.
+// taste folded into generation. Items never repeat across the set, and the
+// member's look history pushes fresh pieces forward each delivery.
 export function composeMemberLooks(
   t: MemberTaste,
   library: ItemWithBrand[],
   count = 3,
   occ?: OccasionContext,
   lens?: PersonaLens,
+  history?: ComposeHistory,
 ): ComposedLook[] {
+  const seed = history ? Array.from(history.seenCounts.values()).reduce((s, n) => s + n, 0) + history.rejected.size : 0
   const usable = library.filter(
     (i) =>
       i.image_url &&
@@ -267,7 +295,11 @@ export function composeMemberLooks(
       const slot = slotForItemType(i.item_type)
       return slot === 'dress' || slot === 'top'
     })
-    .map((i) => ({ item: i, score: memberItemScore(t, i) + occasionItemScore(occ, i) + personaFitScore(lens, i) }))
+    .map((i) => ({
+      item: i,
+      score: memberItemScore(t, i) + occasionItemScore(occ, i) + personaFitScore(lens, i)
+        - historyPenalty(history, i.item_id) + varietyJitter(i.item_id, seed),
+    }))
     .sort((a, b) => b.score - a.score)
 
   const looks: ComposedLook[] = []
@@ -290,7 +322,8 @@ export function composeMemberLooks(
       excludeItemIds: Array.from(usedItems),
       learnedBonus: (items) =>
         memberComboBonus(t, a.item, items) +
-        items.reduce((sum, i) => sum + occasionItemScore(occ, i.item) + personaFitScore(lens, i.item), 0) /
+        items.reduce((sum, i) => sum + occasionItemScore(occ, i.item) + personaFitScore(lens, i.item)
+          - historyPenalty(history, i.item.item_id) + varietyJitter(i.item.item_id, seed), 0) /
           Math.max(1, items.length),
       learnedBlend: 0.4,
       houseGate: (items) => memberGate(t, a.item, items),
