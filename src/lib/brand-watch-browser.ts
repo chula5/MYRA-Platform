@@ -19,9 +19,35 @@ const HEADERS = {
 
 export const BROWSER_SCAN_PAGE_BUDGET = 350 // pages per run; re-run continues
 
-// Stable id for a product URL (fills the shopify_product_id slot for dedupe
-// and the seen table). Two fnv1a passes → 16 hex chars.
-export function urlHash(url: string): string {
+/**
+ * One key per PRODUCT, not per URL. Big brands publish the same piece under
+ * every country and language — By Malene Birger lists one coat at /at/en/,
+ * /be/en/, /be/fr/, /bg/en/ and thirty more — and deduping on the raw URL let
+ * every locale through as a separate item: 331 queue rows that were a few dozen
+ * real products.
+ *
+ * Strips the leading locale segments, then prefers the trailing product code
+ * (…/dalimas-wool-coat/10150912L.html), which survives translation — the French
+ * URL has a different slug but the same code.
+ */
+export function canonicalProductKey(url: string): string {
+  let path: string
+  try { path = new URL(url).pathname } catch { return url }
+  const segs = path.split('/').filter(Boolean)
+  // /at/en/… , /en-gb/… , /uk/…
+  while (segs.length && /^([a-z]{2}([-_][a-z]{2})?)$/i.test(segs[0])) segs.shift()
+  const last = segs[segs.length - 1] ?? ''
+  const code = last.replace(/\.(html?|php|aspx)$/i, '')
+  // A product code is mostly digits and short — a slug is words and hyphens.
+  if (/^[0-9][0-9a-z_-]{3,}$/i.test(code) && (code.match(/\d/g) ?? []).length >= 4) return code.toLowerCase()
+  return segs.join('/').toLowerCase()
+}
+
+// Stable id for a product (fills the shopify_product_id slot for dedupe and the
+// seen table). Hashes the CANONICAL key, so the same piece in any locale gets
+// the same id. Two fnv1a passes → 16 hex chars.
+export function urlHash(rawUrl: string): string {
+  const url = canonicalProductKey(rawUrl)
   const fnv = (seed: number) => {
     let h = seed >>> 0
     for (let i = 0; i < url.length; i++) {
@@ -86,7 +112,21 @@ export async function discoverProductUrls(baseUrl: string): Promise<string[]> {
       return path.split('/').filter(Boolean).length >= 2 && !NON_PRODUCT_PATH.test(path)
     })
   }
-  return Array.from(new Set(products)).slice(0, 6000)
+  // One URL per product. Prefer an English (and ideally GB) locale so the
+  // scraped title, description and price are the ones we want.
+  const byProduct = new Map<string, string>()
+  const localeRank = (u: string): number => {
+    const p = u.toLowerCase()
+    if (/\/(gb|uk)\/en|\/en-(gb|uk)\//.test(p)) return 0
+    if (/\/en(\/|-)/.test(p)) return 1
+    return 2
+  }
+  for (const u of products) {
+    const key = canonicalProductKey(u)
+    const cur = byProduct.get(key)
+    if (!cur || localeRank(u) < localeRank(cur)) byProduct.set(key, u)
+  }
+  return Array.from(byProduct.values()).slice(0, 6000)
 }
 
 export interface ParsedProduct {
