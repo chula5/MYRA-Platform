@@ -153,6 +153,29 @@ function firstOffer(offers: any): any {
 }
 
 // JSON-LD Product (handles arrays, @graph, list types), og: fallback.
+/**
+ * Product pages carry HTML entities in their metadata — "Adolfo Dom&iacute;nguez",
+ * "Agn&egrave;s b." — and storing them raw put the entity on screen and into the
+ * brand name. Decodes the named and numeric entities that appear in titles.
+ */
+export function decodeEntities(text: string): string {
+  const NAMED: Record<string, string> = {
+    amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ',
+    aacute: 'á', eacute: 'é', iacute: 'í', oacute: 'ó', uacute: 'ú',
+    agrave: 'à', egrave: 'è', igrave: 'ì', ograve: 'ò', ugrave: 'ù',
+    acirc: 'â', ecirc: 'ê', icirc: 'î', ocirc: 'ô', ucirc: 'û',
+    auml: 'ä', euml: 'ë', iuml: 'ï', ouml: 'ö', uuml: 'ü', yuml: 'ÿ',
+    ntilde: 'ñ', atilde: 'ã', otilde: 'õ', ccedil: 'ç', aring: 'å',
+    oslash: 'ø', aelig: 'æ', szlig: 'ß', reg: '®', copy: '©', trade: '™',
+    hellip: '…', mdash: '—', ndash: '–', rsquo: '’', lsquo: '‘',
+    rdquo: '”', ldquo: '“', deg: '°', middot: '·', eur: '€', pound: '£',
+  }
+  return text
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)))
+    .replace(/&([a-z][a-z0-9]*);/gi, (m, n) => NAMED[String(n).toLowerCase()] ?? m)
+}
+
 export function parseProductPage(html: string, url: string): ParsedProduct | null {
   const nodes: any[] = []
   for (const m of Array.from(html.matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi))) {
@@ -169,21 +192,30 @@ export function parseProductPage(html: string, url: string): ParsedProduct | nul
     return t === 'Product' || (Array.isArray(t) && t.includes('Product'))
   })
   const siteName = html.match(/<meta[^>]+property="og:site_name"[^>]+content="([^"]*)"/i)?.[1]?.trim() || null
+  const ogMeta = (prop: string) =>
+    html.match(new RegExp(`<meta[^>]+property="og:${prop}"[^>]+content="([^"]*)"`, 'i'))?.[1] ?? ''
   if (product) {
     const offer = firstOffer(product.offers)
     const price = parseFloat(String(offer.price ?? offer.lowPrice ?? ''))
-    const imgs = Array.isArray(product.image) ? product.image : product.image ? [product.image] : []
+    // Resolve to real URLs FIRST, then fall back. Adolfo Domínguez publishes
+    // "image": [null, null] — a non-empty array that yields nothing — so a
+    // plain length check passed and every card rendered blank.
+    const rawImgs = Array.isArray(product.image) ? product.image : product.image ? [product.image] : []
+    let imgs: string[] = rawImgs
+      .map((i: any) => (typeof i === 'string' ? i : i?.url))
+      .filter((u: any): u is string => typeof u === 'string' && /^https?:\/\//.test(u))
+    if (!imgs.length && ogMeta('image')) imgs = [ogMeta('image')]
     const brandNode = product.brand
     const brand = (typeof brandNode === 'string' ? brandNode : brandNode?.name) || siteName
     return {
       url,
-      brand: brand ? String(brand).trim() : null,
-      title: String(product.name ?? '').trim(),
-      description: String(product.description ?? '').slice(0, 400),
+      brand: brand ? decodeEntities(String(brand)).trim() : null,
+      title: decodeEntities(String(product.name ?? '')).trim(),
+      description: decodeEntities(String(product.description ?? '')).slice(0, 400),
       category: String(product.category ?? ''),
       price: isNaN(price) ? null : price,
       currency: offer.priceCurrency ? String(offer.priceCurrency) : null,
-      images: imgs.map((i: any) => (typeof i === 'string' ? i : i?.url)).filter(Boolean).slice(0, 6),
+      images: imgs.slice(0, 6),
       available: !/OutOfStock|SoldOut|Discontinued/i.test(String(offer.availability ?? 'InStock')),
     }
   }
@@ -193,7 +225,8 @@ export function parseProductPage(html: string, url: string): ParsedProduct | nul
   if (!title) return null
   const price = parseFloat(og('price:amount') || html.match(/<meta[^>]+property="product:price:amount"[^>]+content="([^"]*)"/i)?.[1] || '')
   return {
-    url, brand: siteName, title: title.trim(), description: og('description').slice(0, 400), category: '',
+    url, brand: siteName ? decodeEntities(siteName) : null, title: decodeEntities(title).trim(),
+    description: decodeEntities(og('description')).slice(0, 400), category: '',
     price: isNaN(price) ? null : price,
     currency: og('price:currency') || html.match(/<meta[^>]+property="product:price:currency"[^>]+content="([^"]*)"/i)?.[1] || null,
     images: [og('image')].filter(Boolean),
