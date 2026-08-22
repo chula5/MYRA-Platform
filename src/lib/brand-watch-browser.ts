@@ -36,10 +36,14 @@ export function canonicalProductKey(url: string): string {
   const segs = path.split('/').filter(Boolean)
   // /at/en/… , /en-gb/… , /uk/…
   while (segs.length && /^([a-z]{2}([-_][a-z]{2})?)$/i.test(segs[0])) segs.shift()
-  const last = segs[segs.length - 1] ?? ''
-  const code = last.replace(/\.(html?|php|aspx)$/i, '')
-  // A product code is mostly digits and short — a slug is words and hyphens.
-  if (/^[0-9][0-9a-z_-]{3,}$/i.test(code) && (code.match(/\d/g) ?? []).length >= 4) return code.toLowerCase()
+  const last = (segs[segs.length - 1] ?? '').replace(/\.(html?|php|aspx)$/i, '')
+  // A product code as its own segment: …/dalimas-wool-coat/10150912L
+  if (/^[0-9][0-9a-z_-]{3,}$/i.test(last) && (last.match(/\d/g) ?? []).length >= 4) return last.toLowerCase()
+  // …or a code appended to the slug: rye-snap-cardigan-0178JKG0_300. Agnès b.
+  // translates its slugs per locale but keeps the code, so matching on the code
+  // is what collapses /en-uk/, /fr-eu/ and the rest into one product.
+  const tail = last.match(/-([0-9][0-9a-z]{4,}(?:_[0-9a-z]{2,4})?)$/i)
+  if (tail && (tail[1].match(/\d/g) ?? []).length >= 4) return tail[1].toLowerCase()
   return segs.join('/').toLowerCase()
 }
 
