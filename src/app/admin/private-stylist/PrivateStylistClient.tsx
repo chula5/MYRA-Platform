@@ -341,6 +341,7 @@ function MembersTab({ data, run, busy }: { data: PilotData; run: Run; busy: stri
           personas={data.personas}
           deliveries={data.deliveries.filter((d) => d.member_id === m.member_id)}
           activity={data.activity}
+          prefsReady={data.stylePrefsReady}
         />
       ))}
 
@@ -648,7 +649,10 @@ function LookFeedbackStrip({ look, notes, run, busy, firstName }: {
 // or won't wear. Authored, never learned over: an AVOID is a hard gate on
 // composition (the piece is never built into a look), a LOVE lifts a piece in
 // scoring. Sits alongside the learned signals rather than replacing them.
-function StylePreferences({ member: m, run, busy }: { member: PilotMember; run: Run; busy: string | null }) {
+function StylePreferences({ member: m, run, busy, ready = true }: { member: PilotMember; run: Run; busy: string | null; ready?: boolean }) {
+  // The page-level flash sits far above this block once a member card is open,
+  // so the outcome is reported right next to the button that caused it.
+  const [result, setResult] = useState<string | null>(null)
   const saved = useMemo<StylePrefs>(() => ({
     colours_loved: m.colours_loved ?? [],
     colours_avoided: m.colours_avoided ?? [],
@@ -752,14 +756,37 @@ function StylePreferences({ member: m, run, busy }: { member: PilotMember; run: 
             LEFT COLUMN LIFTS A PIECE · RIGHT COLUMN BLOCKS IT ENTIRELY · CLICK AGAIN TO UNDO
           </p>
         </div>
-        <button
-          className={`${btnDark} !px-4 !py-1.5 !text-[9px]`}
-          disabled={!dirty || busy === key}
-          onClick={() => run(key, () => updateMember(m.member_id, prefs), 'PREFERENCES SAVED — COMPOSER UPDATED')}
-        >
-          {busy === key ? 'SAVING…' : dirty ? 'SAVE PREFERENCES' : 'SAVED'}
-        </button>
+        <div className="flex items-center gap-3">
+          {result && (
+            <span className={`text-[8px] tracking-[0.12em] ${result.startsWith('SAVED') ? 'text-[#3D6B45]' : 'text-[#B83A3A]'}`}>
+              {result}
+            </span>
+          )}
+          <button
+            className={`${btnDark} !px-4 !py-1.5 !text-[9px]`}
+            disabled={!dirty || busy === key || !ready}
+            onClick={async () => {
+              setResult(null)
+              const r = await run(key, () => updateMember(m.member_id, prefs), 'PREFERENCES SAVED — COMPOSER UPDATED')
+              setResult(r?.error ? 'NOT SAVED — SEE THE MESSAGE AT THE TOP OF THE PAGE' : `SAVED · ${new Date().toLocaleTimeString()}`)
+            }}
+          >
+            {busy === key ? 'SAVING…' : dirty ? 'SAVE PREFERENCES' : 'SAVED'}
+          </button>
+        </div>
       </div>
+
+      {!ready && (
+        <div className="border border-[#E4C97E] bg-[#FFFBEF] px-3 py-2.5">
+          <p className="text-[9px] tracking-[0.14em] text-[#8A6D1F]">
+            MIGRATION 0045 NOT RUN — NOTHING PICKED HERE CAN SAVE YET
+          </p>
+          <p className="text-[9px] tracking-[0.04em] text-[#8A6D1F] mt-1 leading-relaxed">
+            Run <span className="font-mono">supabase/migrations/0045_pilot_style_preferences.sql</span> in the Supabase
+            SQL editor, then reload this page. Your picks below will be lost on reload until then.
+          </p>
+        </div>
+      )}
 
       {category('COLOURS — PICK A WHOLE FAMILY, OR JUST THE SHADE SHE MEANS', 'WEARS', 'WON\u2019T WEAR', 'colours_loved', 'colours_avoided', (listKey, otherKey, tone) => (
         <div className="space-y-2">
@@ -799,6 +826,7 @@ function MemberCard({
   personas = [],
   deliveries = [],
   activity = [],
+  prefsReady = true,
 }: {
   member: PilotMember
   run: Run
@@ -806,6 +834,7 @@ function MemberCard({
   personas?: { stylist_id: string; name: string; hasEnvelope: boolean }[]
   deliveries?: PilotDelivery[]
   activity?: PilotActivity[]
+  prefsReady?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [occasions, setOccasions] = useState(m.occasions)
@@ -1021,7 +1050,7 @@ function MemberCard({
             </div>
           </div>
 
-          <StylePreferences member={m} run={run} busy={busy} />
+          <StylePreferences member={m} run={run} busy={busy} ready={prefsReady} />
 
           {/* Wardrobe */}
           <div>

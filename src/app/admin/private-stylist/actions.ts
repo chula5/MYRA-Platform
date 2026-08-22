@@ -162,6 +162,9 @@ export interface ExitArtefact {
 export interface PilotData {
   ready: boolean
   missingMigration: '0029' | '0030' | null
+  /** False until 0045 adds the style-preference columns — the editor says so
+   *  rather than letting a save fail silently far from the button. */
+  stylePrefsReady: boolean
   members: PilotMember[]
   deliveries: PilotDelivery[]
   activity: PilotActivity[]
@@ -189,10 +192,10 @@ export async function loadPilotData(): Promise<PilotData> {
   // Table missing → migration not run. Render the section with a notice
   // instead of crashing the whole admin.
   if (membersRes.error) {
-    return { ready: false, missingMigration: '0029', members: [], deliveries: [], activity: [], artefacts: {}, personas: [] }
+    return { ready: false, missingMigration: '0029', stylePrefsReady: false, members: [], deliveries: [], activity: [], artefacts: {}, personas: [] }
   }
   if (tasteRes.error) {
-    return { ready: false, missingMigration: '0030', members: [], deliveries: [], activity: [], artefacts: {}, personas: [] }
+    return { ready: false, missingMigration: '0030', stylePrefsReady: false, members: [], deliveries: [], activity: [], artefacts: {}, personas: [] }
   }
 
   // Personas a member can be styled through, and who is currently assigned.
@@ -216,12 +219,17 @@ export async function loadPilotData(): Promise<PilotData> {
   const looks = (looksRes.data ?? []) as any[]
   const tasteEvents = (tasteRes.data ?? []) as any[]
 
+  // A pre-0045 row simply has no preference keys — that is how we know.
+  const firstRow = ((membersRes.data ?? []) as any[])[0]
+  const stylePrefsReady = firstRow ? 'colours_loved' in firstRow : true
+
   const members: PilotMember[] = ((membersRes.data ?? []) as any[]).map((m) => {
     const mine = tasteEvents.filter((t) => t.member_id === m.member_id)
     const counts = { yes: 0, no: 0, save: 0, click_out: 0, purchase: 0 } as Record<PilotTasteEventType, number>
     for (const t of mine) if (t.event_type in counts) counts[t.event_type as PilotTasteEventType]++
     return {
       ...m,
+      ...readStylePrefs(m),
       taste_vector: m.taste_vector ?? null,
       taste_event_counts: counts,
       events: events.filter((e) => e.member_id === m.member_id),
@@ -246,7 +254,7 @@ export async function loadPilotData(): Promise<PilotData> {
     artefacts[m.member_id] = buildArtefact(m, deliveries, activity)
   }
 
-  return { ready: true, missingMigration: null, members, personas, deliveries, activity, artefacts }
+  return { ready: true, missingMigration: null, stylePrefsReady, members, personas, deliveries, activity, artefacts }
 }
 
 function buildArtefact(
