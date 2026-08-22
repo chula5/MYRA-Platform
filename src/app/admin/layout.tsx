@@ -77,6 +77,12 @@ export default async function AdminLayout({
             PRIVATE STYLIST
           </a>
           <a
+            href="/admin/wardrobe"
+            className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
+          >
+            WARDROBE
+          </a>
+          <a
             href="/studio/taste"
             className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
           >

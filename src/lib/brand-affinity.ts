@@ -590,14 +590,22 @@ export async function recomputeBrandVectors(adminIn?: Admin, onlyBrandIds?: stri
   // from scored items
   const pricesByBrand = new Map<string, Map<string, number[]>>()
   for (let from = 0; ; from += 1000) {
-    let q = admin
-      .from('item')
-      .select('brand_id, item_type, colour_family, structure, surface, colour_depth, pattern, sheen, material_formality, material_weight, length, fit, price, price_gbp, currency, brand:brand_id(brand_id, price_tier, era_orientation, aesthetic_output, cultural_legibility, creative_behaviour)')
-      .in('status', ['ready', 'live', 'draft', 'out_of_stock'])
-      .order('item_id')
-      .range(from, from + 999)
-    if (onlyBrandIds?.length) q = q.in('brand_id', onlyBrandIds)
-    const { data } = await q
+    const build = (excludeOwned: boolean) => {
+      let q = admin
+        .from('item')
+        .select('brand_id, item_type, colour_family, structure, surface, colour_depth, pattern, sheen, material_formality, material_weight, length, fit, price, price_gbp, currency, brand:brand_id(brand_id, price_tier, era_orientation, aesthetic_output, cultural_legibility, creative_behaviour)')
+        .in('status', ['ready', 'live', 'draft', 'out_of_stock'])
+        .order('item_id')
+        .range(from, from + 999)
+      if (onlyBrandIds?.length) q = q.in('brand_id', onlyBrandIds)
+      // Owned wardrobe items (migration 0046) never train the brand graph — a
+      // client's Sézane shirt says nothing about Sézane's house position.
+      if (excludeOwned) q = q.neq('ownership', 'owned')
+      return q
+    }
+    // The column may not exist before the migration — retry unfiltered on error.
+    let { data } = await build(true)
+    if (!data) ({ data } = await build(false))
     for (const item of data ?? []) {
       if (!item.brand_id) continue
       const { gbp } = priceOfItem(item)

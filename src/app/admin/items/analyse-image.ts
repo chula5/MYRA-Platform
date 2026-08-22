@@ -60,7 +60,7 @@ function capCloudinaryImage(url: string): string {
 
 export async function analyseProductImage(
   imageUrl: string
-): Promise<{ data?: AnalysedProduct; error?: string }> {
+): Promise<{ data?: AnalysedProduct; error?: string; usage?: { input_tokens: number; output_tokens: number; model: string } }> {
   if (!imageUrl || !imageUrl.startsWith('http')) {
     return { error: 'Paste a valid image URL first' }
   }
@@ -125,7 +125,8 @@ export async function analyseProductImage(
     if (!jsonStr) return { error: 'AI returned no structured data' }
 
     const data = JSON.parse(jsonStr) as AnalysedProduct
-    return { data }
+    // Usage rides along so callers that pay per item (wardrobe import) can log spend.
+    return { data, usage: { input_tokens: response.usage?.input_tokens ?? 0, output_tokens: response.usage?.output_tokens ?? 0, model: response.model } }
   } catch (err: unknown) {
     console.error('[analyseProductImage]', err)
     if (err instanceof SyntaxError) {

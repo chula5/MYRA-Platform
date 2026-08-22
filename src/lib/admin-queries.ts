@@ -1,3 +1,4 @@
+import { retailOnly } from '@/lib/wardrobe/owned-items'
 import { createAdminClient } from '@/lib/supabase-server'
 import type { Brand, Item, AdminProject, Outfit, OutfitWithItems, Lookbook } from '@/types/database'
 
@@ -254,6 +255,7 @@ export async function getAllBrands(): Promise<Brand[]> {
 
 // ── Items ─────────────────────────────────────────────────────────────────────
 
+// brand is null for owned wardrobe items with no matched brand row (migration 0046).
 export type ItemWithBrand = Item & { brand: Brand }
 
 export interface ItemFacet { value: string; count: number }
@@ -347,6 +349,7 @@ export async function getItemsPage(opts: {
 export async function getAllItems(
   status?: string,
   stockFilter?: 'flagged' | 'out_of_stock' | 'low_stock',
+  opts?: { includeOwned?: boolean },
 ): Promise<ItemWithBrand[]> {
   const supabase = createAdminClient()
   try {
@@ -374,7 +377,9 @@ export async function getAllItems(
       out.push(...((data ?? []) as unknown as ItemWithBrand[]))
       if (!data || data.length < 1000) break
     }
-    return out
+    // Owned wardrobe items (migration 0046) belong to ONE client — they never
+    // enter a shared pool. Filtered in memory so this stays safe pre-migration.
+    return opts?.includeOwned ? out : retailOnly(out)
   } catch (err) {
     console.error('[getAllItems]', err)
     return []
@@ -410,7 +415,9 @@ export async function getReadyAndLiveItems(): Promise<ItemWithBrand[]> {
       .in('status', ['draft', 'ready', 'live'])
       .order('created_at', { ascending: false })
     if (error) throw error
-    return (data ?? []) as unknown as ItemWithBrand[]
+    // Shared pool = retail only. A client's owned pieces (migration 0046) are
+    // composed for HER alone via the private-stylist path.
+    return retailOnly((data ?? []) as unknown as ItemWithBrand[])
   } catch (err) {
     console.error('[getReadyAndLiveItems]', err)
     return []

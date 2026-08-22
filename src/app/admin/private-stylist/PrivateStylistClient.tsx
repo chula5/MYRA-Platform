@@ -63,6 +63,10 @@ import {
   skipComposedLook,
   restoreLookShoot,
   recordMemberLookFeedback,
+  setMemberBrands,
+  loadMemberBrandMap,
+  type MemberBrandMap,
+  type MemberBrandDot,
   type SwapOption,
   type PilotData,
   type PilotMember,
@@ -664,6 +668,262 @@ function LookFeedbackStrip({ look, notes, run, busy, firstName }: {
   )
 }
 
+// Her ranked brands, editable after onboarding. Rank 1 carries the most
+// weight, so the order is the statement — moving a brand up is a real change,
+// not decoration. Saving re-seeds brand affinities so a newly added brand
+// actually reaches the recommender, and reports any name MYRA has no brand row
+// for, since such a name can never influence anything.
+// Her brand universe on the same axes as the Taste Inspector map, coloured by
+// what MYRA thinks her relationship with each brand is. The check that the
+// right brands are reaching her composer: gold = she named it, teal = MYRA
+// expanded to it from one she named, black = confirmed by her own responses.
+const DOT_ROLES: { role: MemberBrandDot['role']; label: string; colour: string }[] = [
+  { role: 'named', label: 'SHE NAMED', colour: '#C4A882' },
+  { role: 'suggested', label: 'MYRA SUGGESTS', colour: '#3E8E8C' },
+  { role: 'learned', label: 'CONFIRMED BY HER', colour: '#0A0A0A' },
+  { role: 'baseline', label: 'STOCK, NO RELATIONSHIP', colour: '#DAD8D3' },
+  { role: 'hidden', label: 'HIDDEN', colour: '#B83A3A' },
+]
+
+function MemberBrandMapView({ memberId, name }: { memberId: string; name: string }) {
+  const [data, setData] = useState<MemberBrandMap | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [hover, setHover] = useState<MemberBrandDot | null>(null)
+  const [show, setShow] = useState<Set<string>>(new Set(['named', 'suggested', 'learned']))
+
+  const load = async () => {
+    setLoading(true)
+    try { setData(await loadMemberBrandMap(memberId)) }
+    catch (e) { setData({ dots: [], counts: {}, unmatched: [], error: e instanceof Error ? e.message : String(e) }) }
+    finally { setLoading(false) }
+  }
+
+  const W = 900, H = 300, PAD = 34
+  const plotted = useMemo(() => (data?.dots ?? []).filter((d) => d.x != null && d.price_position != null), [data])
+  const scales = useMemo(() => {
+    if (!plotted.length) return null
+    const xs = plotted.map((d) => d.x!), ys = plotted.map((d) => d.price_position!)
+    const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys)
+    return {
+      sx: (v: number) => PAD + ((v - x0) / (x1 - x0 || 1)) * (W - PAD * 2),
+      // price rises up the chart
+      sy: (v: number) => H - PAD - ((v - y0) / (y1 - y0 || 1)) * (H - PAD * 2),
+      y0, y1,
+    }
+  }, [plotted])
+
+  const visible = plotted.filter((d) => show.has(d.role))
+  const toggle = (r: string) => setShow((s) => { const n = new Set(s); n.has(r) ? n.delete(r) : n.add(r); return n })
+
+  return (
+    <div className="border border-[#E2E0DB] bg-white p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className={label}>BRAND MAP — WHAT IS REACHING {name.split(' ')[0].toUpperCase()}&rsquo;S COMPOSER</p>
+          <p className="text-[8px] tracking-[0.1em] text-[#A8A8A4] mt-1">
+            SAME AXES AS THE TASTE INSPECTOR · ACROSS = AESTHETIC (BRAND CODES) · UP = PRICE
+          </p>
+        </div>
+        <button className={`${btnLight} !px-4 !py-1.5 !text-[9px]`} disabled={loading} onClick={load}>
+          {loading ? 'LOADING…' : data ? 'REFRESH' : 'SHOW MAP'}
+        </button>
+      </div>
+
+      {data?.error && <p className="text-[9px] tracking-[0.08em] text-[#B83A3A] mt-3">{data.error.toUpperCase()}</p>}
+
+      {data && !data.error && (
+        <>
+          <div className="flex flex-wrap items-center gap-3 mt-3">
+            {DOT_ROLES.map((r) => (
+              <button
+                key={r.role}
+                onClick={() => toggle(r.role)}
+                className={`flex items-center gap-1.5 text-[8px] tracking-[0.12em] transition-opacity ${show.has(r.role) ? '' : 'opacity-35'}`}
+              >
+                <span className="w-2.5 h-2.5 rounded-full border border-[#D8D6D1]" style={{ background: r.colour }} />
+                {r.label} · {data.counts[r.role] ?? 0}
+              </button>
+            ))}
+          </div>
+
+          {scales ? (
+            <svg viewBox={`0 0 ${W} ${H}`} className="w-full mt-2" style={{ maxHeight: 320 }}>
+              <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke="#EDECE8" />
+              <line x1={PAD} y1={PAD} x2={PAD} y2={H - PAD} stroke="#EDECE8" />
+              <text x={PAD} y={PAD - 8} className="fill-[#A8A8A4]" style={{ fontSize: 8, letterSpacing: '0.1em' }}>
+                £{Math.round(Math.exp(scales.y1))}
+              </text>
+              <text x={PAD} y={H - PAD + 12} className="fill-[#A8A8A4]" style={{ fontSize: 8, letterSpacing: '0.1em' }}>
+                £{Math.round(Math.exp(scales.y0))}
+              </text>
+              {/* faint first, so her brands sit on top */}
+              {['baseline', 'hidden', 'suggested', 'learned', 'named'].map((role) =>
+                visible.filter((d) => d.role === role).map((d) => {
+                  const c = DOT_ROLES.find((r) => r.role === d.role)!.colour
+                  const big = d.role === 'named' || d.role === 'learned'
+                  return (
+                    <circle
+                      key={d.brand_id}
+                      cx={scales.sx(d.x!)}
+                      cy={scales.sy(d.price_position!)}
+                      r={big ? 5 : d.role === 'suggested' ? 4 : 2.5}
+                      fill={d.coded ? c : 'none'}
+                      stroke={c}
+                      strokeWidth={d.coded ? 0 : 1.2}
+                      opacity={d.role === 'baseline' ? 0.5 : 0.95}
+                      onMouseEnter={() => setHover(d)}
+                      onMouseLeave={() => setHover(null)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                  )
+                }),
+              )}
+            </svg>
+          ) : (
+            <p className="text-[10px] tracking-[0.1em] text-[#A8A8A4] mt-3">
+              NO BRAND IS POSITIONED YET — A DOT NEEDS BRAND CODES (OR ENOUGH SCORED ITEMS) AND A PRICE.
+            </p>
+          )}
+
+          <div className="min-h-[34px] mt-1">
+            {hover ? (
+              <p className="text-[9px] tracking-[0.06em] text-[#0A0A0A]">
+                {hover.name.toUpperCase()} · AFFINITY {hover.affinity.toFixed(2)} ·{' '}
+                {DOT_ROLES.find((r) => r.role === hover.role)!.label}
+                {hover.medianPrice ? ` · MEDIAN £${Math.round(hover.medianPrice)}` : ''}
+                {hover.coded ? '' : ' · PROVISIONAL POSITION'}
+                {hover.trace ? <span className="text-[#6B6B6B]"> — {hover.trace.toUpperCase()}</span> : null}
+              </p>
+            ) : (
+              <p className="text-[9px] tracking-[0.06em] text-[#A8A8A4]">HOVER A DOT FOR THE BRAND AND WHY IT IS THERE.</p>
+            )}
+          </div>
+
+          <p className="text-[8px] tracking-[0.1em] text-[#A8A8A4]">
+            {plotted.length} OF {data.dots.length} BRANDS POSITIONED · THE REST HAVE NO CODES OR NO PRICE YET
+          </p>
+          {data.unmatched.length > 0 && (
+            <p className="text-[9px] tracking-[0.08em] text-[#B83A3A] mt-1">
+              NAMED BUT NOT IN MYRA&rsquo;S BRAND TABLE, SO THEY REACH NOTHING: {data.unmatched.join(' · ').toUpperCase()}
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+function MemberBrands({ member: m, run, busy }: { member: PilotMember; run: Run; busy: string | null }) {
+  const [brands, setBrands] = useState<RankedBrand[]>(m.brands)
+  const [inputOnly, setInputOnly] = useState<string[]>(m.brands_input_only)
+  const [newBrand, setNewBrand] = useState({ name: '', why: '', inputOnly: false })
+  const [warn, setWarn] = useState<string | null>(null)
+  const key = `brands-${m.member_id}`
+  const dirty =
+    JSON.stringify(brands) !== JSON.stringify(m.brands) ||
+    JSON.stringify(inputOnly) !== JSON.stringify(m.brands_input_only)
+
+  const move = (i: number, by: number) => {
+    const j = i + by
+    if (j < 0 || j >= brands.length) return
+    const next = [...brands]
+    ;[next[i], next[j]] = [next[j], next[i]]
+    setBrands(next.map((b, k) => ({ ...b, rank: k + 1 })))
+  }
+
+  const add = () => {
+    const name = newBrand.name.trim()
+    if (!name) return
+    const known = [...brands.map((b) => b.name), ...inputOnly].some((n) => n.toLowerCase() === name.toLowerCase())
+    if (known) { setWarn(`${name.toUpperCase()} IS ALREADY ON THE LIST`); return }
+    setWarn(null)
+    if (newBrand.inputOnly) setInputOnly([...inputOnly, name])
+    else setBrands([...brands, { name, rank: brands.length + 1, inferred_why: newBrand.why.trim() || undefined }])
+    setNewBrand({ name: '', why: '', inputOnly: false })
+  }
+
+  const save = async () => {
+    setWarn(null)
+    const r = await run(key, () => setMemberBrands(m.member_id, brands, inputOnly), 'BRANDS SAVED — AFFINITIES RE-SEEDED')
+    if (r?.unmatched?.length) {
+      setWarn(`NOT IN MYRA'S BRAND TABLE YET, SO THEY CANNOT INFLUENCE PICKS: ${r.unmatched.join(' · ').toUpperCase()}`)
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <p className={label}>BRANDS — RANKED, WITH THE INFERRED WHY</p>
+        <button className={`${btnDark} !px-4 !py-1.5 !text-[9px]`} disabled={!dirty || busy === key} onClick={save}>
+          {busy === key ? 'SAVING…' : dirty ? 'SAVE BRANDS' : 'SAVED'}
+        </button>
+      </div>
+
+      <div className="space-y-1">
+        {brands.map((b, i) => (
+          <div key={`${b.name}-${i}`} className="flex items-center gap-2">
+            <span className="text-[10px] tracking-[0.06em] text-[#A8A8A4] w-4">{i + 1}.</span>
+            <input
+              className={`${input} !py-1 !text-[10px] max-w-[190px]`}
+              value={b.name}
+              onChange={(e) => setBrands(brands.map((x, k) => (k === i ? { ...x, name: e.target.value } : x)))}
+            />
+            <input
+              className={`${input} !py-1 !text-[10px] max-w-sm`}
+              placeholder="THE INFERRED WHY (OPTIONAL)"
+              value={b.inferred_why ?? ''}
+              onChange={(e) => setBrands(brands.map((x, k) => (k === i ? { ...x, inferred_why: e.target.value } : x)))}
+            />
+            <button className={btnTiny} disabled={i === 0} onClick={() => move(i, -1)} title="MOVE UP">↑</button>
+            <button className={btnTiny} disabled={i === brands.length - 1} onClick={() => move(i, 1)} title="MOVE DOWN">↓</button>
+            <button className={btnTiny} onClick={() => setBrands(brands.filter((_, k) => k !== i).map((x, k) => ({ ...x, rank: k + 1 })))}>×</button>
+          </div>
+        ))}
+        {brands.length === 0 && <p className="text-[10px] tracking-[0.1em] text-[#A8A8A4]">NO BRANDS YET.</p>}
+      </div>
+
+      {inputOnly.length > 0 && (
+        <div className="mt-2">
+          <p className="text-[9px] tracking-[0.1em] text-[#8B5E00] mb-1">INPUT ONLY (TASTE SIGNAL, NEVER RECOMMENDED)</p>
+          <div className="flex flex-wrap gap-1.5">
+            {inputOnly.map((n, i) => (
+              <span key={`${n}-${i}`} className="flex items-center gap-1.5 text-[9px] tracking-[0.1em] text-[#8B5E00] border border-[#E8DCC0] bg-[#FFFBEF] px-2 py-1">
+                {n.toUpperCase()}
+                <button className="text-[#8B5E00] hover:opacity-60" onClick={() => setInputOnly(inputOnly.filter((_, k) => k !== i))}>×</button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2 mt-3">
+        <input
+          className={`${input} !py-1.5 !text-[10px] max-w-[190px]`}
+          placeholder="ADD A BRAND"
+          value={newBrand.name}
+          onChange={(e) => setNewBrand({ ...newBrand, name: e.target.value })}
+          onKeyDown={(e) => { if (e.key === 'Enter') add() }}
+        />
+        <input
+          className={`${input} !py-1.5 !text-[10px] max-w-sm`}
+          placeholder="WHY SHE WEARS IT (OPTIONAL)"
+          value={newBrand.why}
+          onChange={(e) => setNewBrand({ ...newBrand, why: e.target.value })}
+          onKeyDown={(e) => { if (e.key === 'Enter') add() }}
+        />
+        <label className="flex items-center gap-1.5 text-[9px] tracking-[0.1em] text-[#6B6B6B]">
+          <input type="checkbox" checked={newBrand.inputOnly} onChange={(e) => setNewBrand({ ...newBrand, inputOnly: e.target.checked })} />
+          INPUT ONLY
+        </label>
+        <button className={btnTiny} disabled={!newBrand.name.trim()} onClick={add}>ADD</button>
+        {dirty && <span className="text-[8px] tracking-[0.12em] text-[#B83A3A]">UNSAVED</span>}
+      </div>
+
+      {warn && <p className="text-[9px] tracking-[0.08em] text-[#B83A3A] mt-2">{warn}</p>}
+    </div>
+  )
+}
+
 function StylePreferences({ member: m, run, busy, ready = true }: { member: PilotMember; run: Run; busy: string | null; ready?: boolean }) {
   // The page-level flash sits far above this block once a member card is open,
   // so the outcome is reported right next to the button that caused it.
@@ -955,20 +1215,8 @@ function MemberCard({
           <Lookbook deliveries={deliveries} memberName={m.name} activity={activity} run={run} busy={busy} />
           {/* Brands */}
           <div>
-            <p className={`${label} mb-2`}>BRANDS — RANKED, WITH THE INFERRED WHY</p>
-            <div className="space-y-1">
-              {m.brands.map((b) => (
-                <p key={b.rank} className="text-[10px] tracking-[0.06em] text-[#0A0A0A]">
-                  {b.rank}. {b.name.toUpperCase()}
-                  {b.inferred_why && <span className="text-[#6B6B6B]"> — {b.inferred_why.toUpperCase()}</span>}
-                </p>
-              ))}
-            </div>
-            {m.brands_input_only.length > 0 && (
-              <p className="text-[9px] tracking-[0.1em] text-[#8B5E00] mt-2">
-                INPUT ONLY (NEVER RECOMMENDED): {m.brands_input_only.join(' · ').toUpperCase()}
-              </p>
-            )}
+            <MemberBrands member={m} run={run} busy={busy} />
+            <MemberBrandMapView memberId={m.member_id} name={m.name} />
           </div>
 
           {/* Occasion profile */}

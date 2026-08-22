@@ -13,7 +13,16 @@
 
 import { createAdminClient } from '@/lib/supabase-server'
 import { revalidatePath } from 'next/cache'
-import { applyBrandSignals, seedUserAffinities } from '@/lib/brand-affinity'
+import {
+  applyBrandSignals,
+  seedUserAffinities,
+  loadBrandGraph,
+  codesComplete,
+  codesVector,
+  pcaProject1D,
+  isThinBrand,
+  resolveBrandNames,
+} from '@/lib/brand-affinity'
 import {
   type RoomWeights,
   type OccasionId,
@@ -41,10 +50,16 @@ import {
   composeMemberLooks,
   rankAlternates,
   toLookItem,
+  DEFAULT_OWNED_TARGET_SHARE,
+  type ComposeOptions,
   type MemberTaste,
   type OccasionContext,
   type PersonaLens,
 } from '@/lib/pilot-composer'
+import { listOwnedItems, looksUsingItems } from '@/lib/wardrobe/store'
+import { ownerRefsForMember } from '@/lib/wardrobe/owned-items'
+import { loadLearnedMaterialPairs } from '@/lib/house-style-store'
+import { checkRenderFidelity } from '@/app/admin/ai/render-fidelity'
 import { personaWeight, PERSONA_START_WEIGHT } from '@/lib/user-persona'
 import { slotForItemType, type Slot } from '@/lib/composer'
 import {
@@ -89,6 +104,10 @@ export interface PilotMember {
   persona_name: string | null
   persona_weight: number | null
   persona_has_envelope: boolean
+  // Wardrobe import (migration 0046): her login, if linked, and how many owned
+  // pieces are approved and composable.
+  auth_user_id: string | null
+  owned_count: number
   events: { event_id: string; label: string; event_date: string; done: boolean }[]
   wardrobe: {
     wardrobe_id: string
@@ -223,6 +242,13 @@ export async function loadPilotData(): Promise<PilotData> {
   const firstRow = ((membersRes.data ?? []) as any[])[0]
   const stylePrefsReady = firstRow ? 'colours_loved' in firstRow : true
 
+  // Approved owned pieces per member (0 everywhere before migration 0046).
+  const ownedCount = new Map<string, number>()
+  try {
+    const { data: ownedRows } = await adminAny.from('item').select('owner_user_id').eq('ownership', 'owned').neq('status', 'archived').limit(5000)
+    for (const r of (ownedRows ?? []) as any[]) ownedCount.set(r.owner_user_id, (ownedCount.get(r.owner_user_id) ?? 0) + 1)
+  } catch { /* pre-migration */ }
+
   const members: PilotMember[] = ((membersRes.data ?? []) as any[]).map((m) => {
     const mine = tasteEvents.filter((t) => t.member_id === m.member_id)
     const counts = { yes: 0, no: 0, save: 0, click_out: 0, purchase: 0 } as Record<PilotTasteEventType, number>
@@ -239,6 +265,8 @@ export async function loadPilotData(): Promise<PilotData> {
       persona_name: personaById.get(assignByMember.get(m.member_id)?.persona_id)?.name ?? null,
       persona_weight: assignByMember.get(m.member_id)?.weight ?? null,
       persona_has_envelope: personaById.get(assignByMember.get(m.member_id)?.persona_id)?.hasEnvelope ?? false,
+      auth_user_id: m.auth_user_id ?? null,
+      owned_count: (ownedCount.get(m.member_id) ?? 0) + (m.auth_user_id ? ownedCount.get(m.auth_user_id) ?? 0 : 0),
     }
   })
 
@@ -354,6 +382,141 @@ export async function createMember(input: {
   } catch { /* brand affinity is additive; ignore */ }
   revalidatePath(PATH)
   return { member_id: memberId }
+}
+
+// ── Per-member brand map ────────────────────────────────────────────────────
+// The same positions as the Taste Inspector map, but coloured for ONE member:
+// which brands she named, which MYRA expanded to from those, which have been
+// confirmed by her responses, and which are just stock she has no relationship
+// with. This is the check that the right brands are reaching her composer.
+
+export interface MemberBrandDot {
+  brand_id: string
+  name: string
+  x: number | null // codes PCA (or provisional item-centroid PCA)
+  price_position: number | null // ln £
+  medianPrice: number | null
+  coded: boolean
+  itemCount: number
+  affinity: number
+  role: 'named' | 'suggested' | 'learned' | 'baseline' | 'hidden'
+  trace: string | null // "because you like X"
+}
+
+export interface MemberBrandMap {
+  dots: MemberBrandDot[]
+  counts: Record<string, number>
+  unmatched: string[] // named brands with no brand row — they influence nothing
+  migrationNeeded?: boolean
+  error?: string
+}
+
+export async function loadMemberBrandMap(memberId: string): Promise<MemberBrandMap> {
+  const admin = createAdminClient() as any
+  const empty: MemberBrandMap = { dots: [], counts: {}, unmatched: [] }
+  try {
+    const graph = await loadBrandGraph(admin)
+
+    // Identical X-axis derivation to the Taste Inspector, so a brand sits in
+    // the same place on both maps.
+    const coded = graph.brands.filter((b: any) => codesComplete(b))
+    const codesProj = pcaProject1D(coded.map((b: any) => codesVector(b.codes!).map((v: number) => v - 3)))
+    const xById = new Map<string, number>(coded.map((b: any, i: number) => [b.brand_id, codesProj[i]]))
+    const provisional = graph.brands.filter((b: any) => !codesComplete(b) && b.brand_vector && !isThinBrand(b))
+    const vecProj = pcaProject1D(provisional.map((b: any) => b.brand_vector!))
+    provisional.forEach((b: any, i: number) => xById.set(b.brand_id, vecProj[i]))
+
+    const { data: affRows } = await admin
+      .from('user_brand_affinity')
+      .select('brand_id, affinity, source, expansion_trace, hidden, positive_count')
+      .eq('user_id', memberId)
+    const affById = new Map<string, any>((affRows ?? []).map((r: any) => [r.brand_id, r]))
+
+    const { data: member } = await admin.from('pilot_member').select('brands, brands_input_only').eq('member_id', memberId).single()
+    const namedRaw: string[] = [
+      ...(((member?.brands ?? []) as RankedBrand[]).map((b) => b.name)),
+      ...((member?.brands_input_only ?? []) as string[]),
+    ]
+    // Use the SAME resolver the recommender uses — a plain lowercase compare
+    // misses "Sessun" → "Sessùn" and "Adolfo Domingues" → "Adolfo Domínguez",
+    // and would wrongly report a live brand as reaching nothing.
+    const { matched: namedBrands, unmatched } = resolveBrandNames(graph, namedRaw)
+    const namedIds = new Set(namedBrands.map((b: any) => b.brand_id))
+
+    const counts: Record<string, number> = { named: 0, suggested: 0, learned: 0, baseline: 0, hidden: 0 }
+    const dots: MemberBrandDot[] = graph.brands.map((b: any) => {
+      const a = affById.get(b.brand_id)
+      const isNamed = namedIds.has(b.brand_id) || a?.source === 'onboarded'
+      let role: MemberBrandDot['role'] = 'baseline'
+      if (a?.hidden) role = 'hidden'
+      else if (isNamed) role = 'named'
+      else if (a?.source === 'learned') role = 'learned'
+      else if (a?.expansion_trace && a.expansion_trace !== 'baseline') role = 'suggested'
+      counts[role]++
+      return {
+        brand_id: b.brand_id,
+        name: b.name,
+        x: xById.get(b.brand_id) ?? null,
+        price_position: b.price_position,
+        medianPrice: b.median_price_overall,
+        coded: codesComplete(b),
+        itemCount: b.vector_item_count,
+        affinity: a?.affinity ?? 0,
+        role,
+        trace: a?.expansion_trace && a.expansion_trace !== 'baseline' ? a.expansion_trace : null,
+      }
+    })
+
+    // A named brand MYRA has no row for cannot reach the composer at all.
+    return { dots, counts, unmatched }
+  } catch (e) {
+    return { ...empty, migrationNeeded: true, error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+// Edit a member's ranked brands after onboarding. Ranks are renumbered from
+// the order given, so moving a brand up is just a reorder. Room weights are
+// deliberately NOT recomputed from the new list — they have been learning from
+// her responses since intake, and recomputing would throw that away.
+export async function setMemberBrands(
+  memberId: string,
+  brands: RankedBrand[],
+  inputOnly: string[],
+): Promise<{ error?: string; unmatched?: string[] }> {
+  const admin = createAdminClient()
+  const clean: RankedBrand[] = []
+  const seen = new Set<string>()
+  for (const b of brands) {
+    const name = (b.name ?? '').trim()
+    if (!name || seen.has(name.toLowerCase())) continue
+    seen.add(name.toLowerCase())
+    clean.push({ name, rank: clean.length + 1, inferred_why: b.inferred_why?.trim() || undefined })
+  }
+  const cleanInputOnly = Array.from(
+    new Map(inputOnly.map((n) => [n.trim().toLowerCase(), n.trim()])).values(),
+  ).filter(Boolean)
+
+  const { error } = await admin
+    .from('pilot_member' as any)
+    .update({ brands: clean, brands_input_only: cleanInputOnly, updated_at: new Date().toISOString() })
+    .eq('member_id', memberId)
+  if (error) return { error: error.message }
+
+  // Re-seed so a newly named brand actually reaches the recommender. Safe to
+  // re-run: seeding skips anything already at or above its seed value and
+  // never demotes a learned affinity.
+  let unmatched: string[] = []
+  try {
+    const names = [...clean.map((b) => b.name), ...cleanInputOnly]
+    if (names.length) {
+      const res = await seedUserAffinities(admin as any, memberId, names)
+      unmatched = res.unmatched ?? []
+    }
+  } catch { /* brand affinity is additive; ignore */ }
+
+  revalidatePath(PATH)
+  // A name MYRA has no brand row for cannot influence anything — say so.
+  return unmatched.length ? { unmatched } : {}
 }
 
 export async function updateMember(
@@ -1017,9 +1180,28 @@ async function loadMemberTaste(admin: any, member: { member_id: string; brands: 
   return t
 }
 
-async function loadComposableLibrary(): Promise<ItemWithBrand[]> {
-  const [ready, live] = await Promise.all([getAllItems('ready'), getAllItems('live')])
-  return [...ready, ...live]
+// The candidate pool for ONE member: the retail library (ready + live, retail
+// only — getAllItems filters owned out) PLUS her approved owned pieces from the
+// wardrobe import. Owned items are eligible for any slot; they never appear in
+// any other member's pool.
+async function loadComposableLibrary(member?: { member_id: string; auth_user_id?: string | null } | null): Promise<ItemWithBrand[]> {
+  const [ready, live, owned] = await Promise.all([
+    getAllItems('ready'),
+    getAllItems('live'),
+    member ? listOwnedItems(ownerRefsForMember(member)) : Promise.resolve([] as ItemWithBrand[]),
+  ])
+  return [...ready, ...live, ...owned]
+}
+
+// House Style Constitution options for the pilot composer: the learned
+// material pairings ride along so the gate matches the main composer exactly.
+async function houseStyleOptions(): Promise<ComposeOptions['houseStyle']> {
+  try {
+    const learned = await loadLearnedMaterialPairs()
+    return { enabled: true, opts: { learnedApprovedPairs: learned.approved, learnedRejectedPairs: learned.rejected } }
+  } catch {
+    return { enabled: true }
+  }
 }
 
 // ── PERSONA LENS ────────────────────────────────────────────────────────────
@@ -1114,7 +1296,15 @@ export async function recomputeMemberPersonaWeight(memberId: string): Promise<{ 
   }
 }
 
-export async function composeDeliveryLooks(deliveryId: string): Promise<{ created?: number; error?: string }> {
+export interface ComposeDeliveryOptions {
+  /** blend (default) · style_owned ("style what she owns") · retail_only */
+  ownedMode?: ComposeOptions['ownedMode']
+  /** share of looks that must contain ≥1 owned piece in style_owned mode (default 0.6) */
+  ownedTargetShare?: number
+  count?: number
+}
+
+export async function composeDeliveryLooks(deliveryId: string, options: ComposeDeliveryOptions = {}): Promise<{ created?: number; ownedLooks?: number; error?: string }> {
   const admin = createAdminClient() as any
   const { data: delivery, error: derr } = await admin.from('pilot_delivery').select('*').eq('delivery_id', deliveryId).single()
   if (derr || !delivery) return { error: derr?.message ?? 'Delivery not found' }
@@ -1123,10 +1313,11 @@ export async function composeDeliveryLooks(deliveryId: string): Promise<{ create
   if (merr || !member) return { error: merr?.message ?? 'Member not found' }
 
   const taste = await loadMemberTaste(admin, member)
-  const library = await loadComposableLibrary()
+  const library = await loadComposableLibrary(member)
   const mix = normalise(delivery.effective_weights ?? {})
   const occ: OccasionContext = { id: delivery.occasion ?? null, vector: lookTasteVector(mix) }
   const lens = await loadPersonaLens(admin, delivery.member_id)
+  const houseStyle = await houseStyleOptions()
 
   // Her look history: everything already composed for her (any delivery) plus
   // her explicit rejections — the composer ranks those down so each delivery
@@ -1147,8 +1338,19 @@ export async function composeDeliveryLooks(deliveryId: string): Promise<{ create
     if (f.item_in && f.action === 'accept') seenCounts.set(f.item_in, (seenCounts.get(f.item_in) ?? 0) + 1)
   }
 
-  const looks = composeMemberLooks(taste, library, 3, occ, lens, { seenCounts, rejected })
-  if (!looks.length) return { error: 'Could not compose — not enough compatible in-stock items in the library' }
+  const count = Math.max(1, Math.min(6, options.count ?? 3))
+  const looks = composeMemberLooks(taste, library, count, occ, lens, { seenCounts, rejected }, {
+    ownedMode: options.ownedMode ?? 'blend',
+    ownedTargetShare: options.ownedTargetShare ?? DEFAULT_OWNED_TARGET_SHARE,
+    houseStyle,
+  })
+  if (!looks.length) {
+    return {
+      error: options.ownedMode === 'style_owned'
+        ? 'Could not compose around her wardrobe — nothing she owns clears the constitution with what is in stock. Approve more pieces or compose in blend mode.'
+        : 'Could not compose — not enough compatible in-stock items in the library',
+    }
+  }
 
   const { count } = await admin
     .from('pilot_look')
@@ -1167,7 +1369,7 @@ export async function composeDeliveryLooks(deliveryId: string): Promise<{ create
   const { error } = await admin.from('pilot_look').insert(rows)
   if (error) return { error: error.message }
   revalidatePath(PATH)
-  return { created: rows.length }
+  return { created: rows.length, ownedLooks: looks.filter((l) => l.ownedCount > 0).length }
 }
 
 export interface SwapOption {
@@ -1195,7 +1397,7 @@ export async function lookAlternates(lookId: string, itemIndex: number): Promise
   if (!slot) return { error: 'This item was added by hand — edit the look instead' }
 
   const taste = await loadMemberTaste(admin, member)
-  const library = await loadComposableLibrary()
+  const library = await loadComposableLibrary(member)
   const keepIds = items.filter((it, i) => i !== itemIndex && it.item_id).map((it) => it.item_id as string)
   const keepItems = library.filter((i) => keepIds.includes(i.item_id))
   const exclude = new Set(items.filter((it) => it.item_id).map((it) => it.item_id as string))
@@ -1228,7 +1430,7 @@ export async function lookAddOptions(lookId: string, slot: string): Promise<{ op
   if (!member) return { error: 'Member not found' }
 
   const taste = await loadMemberTaste(admin, member)
-  const library = await loadComposableLibrary()
+  const library = await loadComposableLibrary(member)
   const keepIds = items.filter((it) => it.item_id).map((it) => it.item_id as string)
   const keepItems = library.filter((i) => keepIds.includes(i.item_id))
   const exclude = new Set(keepIds)
@@ -1482,7 +1684,11 @@ export async function higgsfieldShootForLook(lookId: string, poseKey = 'E5'): Pr
     }
   }
 
-  const shootItems: ShootItem[] = items
+  // Owned pieces go FIRST: buildReferenceUrls caps references at five, and a
+  // look built around what she owns must render those pieces exactly as
+  // extracted — the retail pieces are the ones that can fall off the end.
+  const shootItems: ShootItem[] = [...items]
+    .sort((a, b) => Number(Boolean(b.owned)) - Number(Boolean(a.owned)))
     .filter((it) => it.image_url)
     .map((it) => ({
       product_name: it.product_name,
@@ -1497,13 +1703,45 @@ export async function higgsfieldShootForLook(lookId: string, poseKey = 'E5'): Pr
   const combo = HIGGSFIELD_COMBOS[poseKey] ?? HIGGSFIELD_COMBOS.E5
   const prompt = buildGenerationPrompt(combo, shootItems)
   const refs = buildReferenceUrls(combo, shootItems)
-  const gen = await runHiggsfieldGeneration(prompt, refs, `pilot-look-${lookId}-${Date.now()}`)
+  let gen = await runHiggsfieldGeneration(prompt, refs, `pilot-look-${lookId}-${Date.now()}`)
   if (!gen.imageUrl) return gen
+
+  // RENDER FIDELITY CHECK — applies unchanged to private looks, owned pieces
+  // included: colour, silhouette, cut and length must match the real item
+  // photos (for owned pieces, the extracted cutout). Fail → one retry with
+  // corrective notes; second failure → the render is kept in history, flagged,
+  // and does NOT become the look's image.
+  let fidelity: { score: number; passed: boolean; issues: any[] } | null = null
+  try {
+    const fidelityItems = shootItems.map((i) => ({ label: [i.brand_name, i.product_name].filter(Boolean).join(' — ') || String(i.item_type), image_url: i.image_url }))
+    const first = await checkRenderFidelity(gen.imageUrl, fidelityItems)
+    fidelity = { score: first.score, passed: first.passed, issues: first.issues }
+    if (!first.passed && !first.error) {
+      const retryPrompt = first.correctiveNotes
+        ? `${prompt}\n\nMANDATORY CORRECTIONS — the previous render misrepresented the clothes: ${first.correctiveNotes}`
+        : prompt
+      const retry = await runHiggsfieldGeneration(retryPrompt, refs, `pilot-look-${lookId}-${Date.now()}`)
+      if (retry.imageUrl) {
+        const second = await checkRenderFidelity(retry.imageUrl, fidelityItems)
+        fidelity = { score: second.score, passed: second.passed, issues: second.issues }
+        if (second.passed || second.error) gen = retry
+        else {
+          const history: any[] = Array.isArray(look.shoot_history) ? look.shoot_history : []
+          history.push({ url: retry.imageUrl, pose: poseKey, created_at: new Date().toISOString(), fidelity, flagged: true })
+          await admin.from('pilot_look').update({ shoot_history: history.slice(-12) }).eq('look_id', lookId)
+          revalidatePath(PATH)
+          return { error: 'Render misrepresented the clothes twice — kept in shoot history, flagged, not used as the look image' }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[higgsfieldShootForLook] fidelity check errored — continuing unchecked', err)
+  }
 
   // Append to history rather than replacing — the previous shoot stays reachable.
   const history: any[] = Array.isArray(look.shoot_history) ? look.shoot_history : []
   if (!history.some((h) => h?.url === gen.imageUrl)) {
-    history.push({ url: gen.imageUrl, pose: poseKey, created_at: new Date().toISOString() })
+    history.push({ url: gen.imageUrl, pose: poseKey, created_at: new Date().toISOString(), ...(fidelity ? { fidelity } : {}) })
   }
   await admin.from('pilot_look')
     .update({ image_url: gen.imageUrl, shoot_history: history.slice(-12) })
@@ -1523,4 +1761,63 @@ export async function restoreLookShoot(lookId: string, url: string): Promise<{ e
   await admin.from('pilot_look').update({ image_url: url }).eq('look_id', lookId)
   revalidatePath(PATH)
   return {}
+}
+
+
+// ── Wardrobe import: rebuild looks after an owned piece is deleted ──────────
+// A client may delete a source photo at any time; every owned item extracted
+// from it goes with it, and any look that used one of those items is rebuilt:
+// the piece comes out, the slot is refilled from her pool with the same taste
+// × coherence ranking, and a shoot that showed the deleted piece is retired to
+// history so the lookbook never shows something she has removed.
+export async function rebuildLooksWithoutItems(itemIds: string[]): Promise<{ rebuilt: number; error?: string }> {
+  if (!itemIds.length) return { rebuilt: 0 }
+  const admin = createAdminClient() as any
+  const removed = new Set(itemIds)
+  let rebuilt = 0
+  try {
+    const looks = await looksUsingItems(itemIds)
+    const byMember = new Map<string, { taste: MemberTaste; library: ItemWithBrand[]; lens?: PersonaLens }>()
+    for (const look of looks) {
+      const kept: LookItem[] = look.items.filter((it: any) => !(it?.item_id && removed.has(it.item_id)))
+      const gone: LookItem[] = look.items.filter((it: any) => it?.item_id && removed.has(it.item_id))
+      if (!gone.length) continue
+
+      let ctx = byMember.get(look.member_id)
+      if (!ctx) {
+        const { data: member } = await admin.from('pilot_member').select('*').eq('member_id', look.member_id).single()
+        if (!member) continue
+        ctx = { taste: await loadMemberTaste(admin, member), library: await loadComposableLibrary(member), lens: await loadPersonaLens(admin, look.member_id) }
+        byMember.set(look.member_id, ctx)
+      }
+      const { data: delivery } = await admin.from('pilot_delivery').select('occasion, effective_weights').eq('delivery_id', look.delivery_id).single()
+      const occ: OccasionContext = { id: delivery?.occasion ?? null, vector: lookTasteVector(normalise(delivery?.effective_weights ?? {})) }
+
+      const keepIds = kept.filter((it) => it.item_id).map((it) => it.item_id as string)
+      const items: LookItem[] = [...kept]
+      for (const g of gone) {
+        if (!g.slot) continue
+        const keepItems = ctx.library.filter((i) => items.some((it) => it.item_id === i.item_id))
+        const exclude = new Set([...keepIds, ...items.map((it) => it.item_id).filter(Boolean) as string[], ...Array.from(removed)])
+        const [pick] = rankAlternates(ctx.taste, ctx.library, g.slot as Slot, keepItems, exclude, 1, occ, ctx.lens)
+        if (pick) items.push(toLookItem(pick.item))
+      }
+
+      const history: any[] = Array.isArray(look.shoot_history) ? look.shoot_history : []
+      const note = `Rebuilt ${new Date().toISOString().slice(0, 10)}: ${gone.map((g) => g.product_name).join(', ')} removed from her wardrobe`
+      const { data: cur } = await admin.from('pilot_look').select('notes').eq('look_id', look.look_id).single()
+      await admin.from('pilot_look').update({
+        items,
+        notes: [cur?.notes, note].filter(Boolean).join(' · '),
+        // the old shoot showed a piece that no longer exists — retire it
+        image_url: null,
+        shoot_history: history.slice(-12),
+      }).eq('look_id', look.look_id)
+      rebuilt++
+    }
+  } catch (err) {
+    return { rebuilt, error: err instanceof Error ? err.message : 'Rebuild failed' }
+  }
+  if (rebuilt) revalidatePath(PATH)
+  return { rebuilt }
 }

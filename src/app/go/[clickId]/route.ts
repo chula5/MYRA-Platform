@@ -38,7 +38,7 @@ export async function GET(
   const admin = createAdminClient()
   let { data: item, error } = await admin
     .from('item' as any)
-    .select('item_id, product_name, retailer_url, available, merchant_id, brand:brand_id(name), merchant:merchant_id(merchant_id, type, link_mode, tracking_param_template, status)')
+    .select('item_id, product_name, retailer_url, available, merchant_id, ownership, brand:brand_id(name), merchant:merchant_id(merchant_id, type, link_mode, tracking_param_template, status)')
     .eq('item_id', itemId)
     .single()
 
@@ -54,7 +54,10 @@ export async function GET(
   }
 
   const row = item as any
-  if (!row?.retailer_url) {
+  // Owned wardrobe items (migration 0046) have no retailer and are never
+  // shopped — they carry no retailer_url, so they fall out here; the explicit
+  // check keeps that true even if one is ever given a URL by hand.
+  if (!row?.retailer_url || row.ownership === 'owned') {
     return NextResponse.redirect(fallback, { status: 302 })
   }
   // Sold-out unique pieces: no dead retailer links from our highest-intent

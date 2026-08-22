@@ -595,6 +595,9 @@ export interface LookItem {
   price_gbp?: number | null
   url?: string
   owned: boolean
+  // Owned pieces carry no price — what she'd pay is £0 — but can carry her own
+  // replacement-value estimate so cost-per-wear maths still runs.
+  estimated_value_gbp?: number | null
   size?: string
   in_stock?: boolean
   stock_checked_at?: string | null

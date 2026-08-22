@@ -74,6 +74,17 @@ export interface Database {
           stock_signal: string | null
           stock_notes: string | null
           stock_sizes: string[] | null
+          // ── Wardrobe Import (migration 0046) ──
+          // 'retail' = catalogue piece; 'owned' = a client's own garment,
+          // visible only to its owner + admin, never live, never in a shared pool.
+          ownership: 'retail' | 'owned'
+          owner_user_id: string | null          // pilot_member.member_id or auth.users.id
+          owner_kind: 'pilot_member' | 'auth_user' | null
+          source_photo_id: string | null
+          extraction_id: string | null
+          extraction_confidence: number | null
+          estimated_value: number | null        // GBP, user-entered — keeps cost-per-wear running
+          owned_metadata: Json
         }
         Insert: Omit<Database['public']['Tables']['item']['Row'], 'item_id'> & { item_id?: string }
         Update: Partial<Database['public']['Tables']['item']['Row']>

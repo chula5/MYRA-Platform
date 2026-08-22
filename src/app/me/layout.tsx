@@ -24,6 +24,7 @@ export default async function MeLayout({ children }: { children: React.ReactNode
         <nav className="flex items-center gap-4">
           <Link href="/me" className="text-[10px] tracking-[0.12em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors">PROFILE</Link>
           <Link href="/me/inspiration" className="text-[10px] tracking-[0.12em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors">INSPIRATION</Link>
+          <Link href="/me/wardrobe" className="text-[10px] tracking-[0.12em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors">WARDROBE</Link>
           <form action={earlyAccessSignOut}>
             <button type="submit" className="text-[10px] tracking-[0.12em] text-[#A8A8A4] hover:text-[#4A4E57] transition-colors">OUT</button>
           </form>

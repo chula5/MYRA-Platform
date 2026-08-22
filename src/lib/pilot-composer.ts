@@ -23,6 +23,9 @@ import type { LookItem, StylePrefs } from '@/lib/pilot-stylist'
 import { avoidReasons, lovedScore } from '@/lib/pilot-stylist'
 import { itemPseudoVector } from '@/lib/brand-affinity'
 import { cosine } from '@/lib/taste-vector'
+import { evaluateHouseStyle, type EvaluateOpts } from '@/lib/house-style'
+import { toHouseItem } from '@/lib/house-item'
+import { isOwnedItem, ownedBrandLabel, estimatedValueOf } from '@/lib/wardrobe/owned-items'
 
 // ── Persona lens ────────────────────────────────────────────────────────────
 // A member can be assigned a stylist persona. Its envelope — the mean and
@@ -166,6 +169,9 @@ export function memberItemScore(t: MemberTaste, item: ItemWithBrand): number {
   }
   const itemSwaps = t.itemSwapOut.get(item.item_id) ?? 0
   s -= Math.min(0.3 * itemSwaps, 0.6)
+  // She already owns it — it has passed her taste once. A small, steady lift so
+  // her own pieces surface in swap pickers; coherence still decides the look.
+  if (isOwnedItem(item as any)) s += 0.1
   // Authored preferences. The avoid penalty only bites in the fallback pool —
   // normally avoided pieces are gated out entirely before scoring.
   s += lovedScore(t.prefs, item as any)
@@ -210,6 +216,9 @@ export function memberGate(
 ): boolean {
   const all = [anchor, ...items.map((i) => i.item)]
   for (const it of all) {
+    // The Zara rule (input, never output) is about what we RECOMMEND. A piece
+    // she already owns is never a recommendation, so owned items are exempt.
+    if (isOwnedItem(it as any)) continue
     const name = it.brand?.name?.toLowerCase()
     if (name && t.inputOnlyBrands.has(name)) return false
   }
@@ -224,15 +233,18 @@ export function memberGate(
 }
 
 export function toLookItem(item: ItemWithBrand): LookItem {
+  const owned = isOwnedItem(item as any)
   const priceGbp =
     (item as any).price_gbp != null ? Number((item as any).price_gbp) : item.price != null ? Number(item.price) : null
   return {
-    brand: item.brand?.name ?? '—',
+    brand: owned ? ownedBrandLabel(item as any) : item.brand?.name ?? '—',
     product_name: item.product_name,
-    price_gbp: priceGbp != null && !isNaN(priceGbp) ? priceGbp : null,
-    url: item.retailer_url ?? undefined,
-    owned: false,
-    in_stock: item.stock_status !== 'out_of_stock',
+    // Owned = £0 of new spend. Her replacement-value estimate rides separately.
+    price_gbp: owned ? null : priceGbp != null && !isNaN(priceGbp) ? priceGbp : null,
+    estimated_value_gbp: owned ? estimatedValueOf(item as any) : undefined,
+    url: owned ? undefined : item.retailer_url ?? undefined,
+    owned,
+    in_stock: owned ? true : item.stock_status !== 'out_of_stock',
     stock_checked_at: (item as any).stock_checked_at ?? null,
     item_id: item.item_id,
     brand_id: item.brand_id ?? null,
@@ -250,6 +262,38 @@ export interface ComposedLook {
   items: LookItem[]
   notes: string
   score: number
+  /** How many of the pieces she already owns (wardrobe import). */
+  ownedCount: number
+  /** True when the House Style Constitution had to be relaxed to build it (retail-only looks only). */
+  constitutionRelaxed: boolean
+}
+
+// ── Owned-items modes & the constitution gate ───────────────────────────────
+export interface ComposeOptions {
+  /**
+   * blend        — (default) her owned pieces sit in the pool and compete for
+   *                every slot like any retail piece.
+   * style_owned  — "style what she owns": at least ⌈count × ownedTargetShare⌉
+   *                looks contain ≥1 owned piece, each anchored on one (any slot).
+   * retail_only  — ignore the wardrobe (what composition did before import).
+   */
+  ownedMode?: 'blend' | 'style_owned' | 'retail_only'
+  ownedTargetShare?: number
+  /**
+   * The House Style Constitution gate — statement budget, echo rule, silhouette
+   * balance, material pairing, colour rules, price integrity (which skips
+   * null-priced owned pieces). On by default. A look containing an owned piece
+   * is NEVER relaxed — an owned item that can't be styled to standard doesn't
+   * get forced in. A retail-only look falls back to the member gate only when
+   * the constitution would leave nothing to send, and says so in its notes.
+   */
+  houseStyle?: { enabled?: boolean; opts?: EvaluateOpts }
+}
+
+export const DEFAULT_OWNED_TARGET_SHARE = 0.6
+
+export function lookHasOwned(items: { owned?: boolean }[]): boolean {
+  return items.some((i) => i.owned)
 }
 
 // What this member has already been shown, so composition explores instead
@@ -297,18 +341,25 @@ function canBuildLooks(pool: ItemWithBrand[]): boolean {
 
 export function composeMemberLooks(
   t: MemberTaste,
-  library: ItemWithBrand[],
+  libraryIn: ItemWithBrand[],
   count = 3,
   occ?: OccasionContext,
   lens?: PersonaLens,
   history?: ComposeHistory,
+  opts: ComposeOptions = {},
 ): ComposedLook[] {
+  const mode = opts.ownedMode ?? 'blend'
+  const library = mode === 'retail_only' ? libraryIn.filter((i) => !isOwnedItem(i as any)) : libraryIn
+  const hsEnabled = opts.houseStyle?.enabled !== false
+  const hsOpts: EvaluateOpts = { occasion: occ?.id ?? null, ...(opts.houseStyle?.opts ?? {}) }
+
   const seed = history ? Array.from(history.seenCounts.values()).reduce((s, n) => s + n, 0) + history.rejected.size : 0
   const inStock = library.filter(
     (i) =>
       i.image_url &&
       i.stock_status !== 'out_of_stock' &&
-      !(i.brand?.name && t.inputOnlyBrands.has(i.brand.name.toLowerCase())),
+      // owned pieces are exempt from the input-only (Zara) rule — see memberGate
+      (isOwnedItem(i as any) || !(i.brand?.name && t.inputOnlyBrands.has(i.brand.name.toLowerCase()))),
   )
   // Authored avoids are a hard gate: a colour or shape she has told us she
   // won't wear never gets composed. Safety net — if the gate would leave too
@@ -316,47 +367,76 @@ export function composeMemberLooks(
   // avoids still apply as a heavy scoring penalty) rather than send nothing.
   const preferred = inStock.filter((i) => avoidReasons(t.prefs, i as any).length === 0)
   const usable = canBuildLooks(preferred) ? preferred : inStock
+  const retailUsable = usable.filter((i) => !isOwnedItem(i as any))
 
+  const constitutionPass = (all: { item: ItemWithBrand; slot: Slot }[]): boolean =>
+    evaluateHouseStyle(all.map(({ item, slot }) => toHouseItem(item, slot)), hsOpts).pass
+
+  const itemScore = (i: ItemWithBrand) =>
+    memberItemScore(t, i) + occasionItemScore(occ, i) + personaFitScore(lens, i)
+      - historyPenalty(history, i.item_id) + varietyJitter(i.item_id, seed)
+
+  // Regular anchors: dresses and tops (owned or retail, in blend mode).
   const anchors = usable
     .filter((i) => {
       const slot = slotForItemType(i.item_type)
       return slot === 'dress' || slot === 'top'
     })
-    .map((i) => ({
-      item: i,
-      score: memberItemScore(t, i) + occasionItemScore(occ, i) + personaFitScore(lens, i)
-        - historyPenalty(history, i.item_id) + varietyJitter(i.item_id, seed),
-    }))
+    .map((i) => ({ item: i, score: itemScore(i) }))
     .sort((a, b) => b.score - a.score)
+
+  // Owned anchors for "style what she owns": ANY slot — a coat, a bag or a pair
+  // of boots she owns is a perfectly good thing to build the rest around.
+  const ownedAnchors = mode === 'style_owned'
+    ? usable.filter((i) => isOwnedItem(i as any)).map((i) => ({ item: i, score: itemScore(i) })).sort((a, b) => b.score - a.score)
+    : []
+  const ownedTarget = mode === 'style_owned' && ownedAnchors.length
+    ? Math.max(1, Math.ceil(count * (opts.ownedTargetShare ?? DEFAULT_OWNED_TARGET_SHARE)))
+    : 0
 
   const looks: ComposedLook[] = []
   const usedItems = new Set<string>()
   const usedAnchorBrands = new Set<string>()
+  let ownedLooks = 0
 
-  for (const a of anchors) {
-    if (looks.length >= count) break
-    if (usedItems.has(a.item.item_id)) continue
+  const tryAnchor = (a: { item: ItemWithBrand; score: number }, requireOwned: boolean, anchorsInPhase: number): boolean => {
+    if (usedItems.has(a.item.item_id)) return false
     const brandId = a.item.brand_id ?? ''
     // brand diversity across the set — relax only if we run out of brands
-    if (brandId && usedAnchorBrands.has(brandId) && anchors.length > count) continue
+    if (brandId && usedAnchorBrands.has(brandId) && anchorsInPhase > count) return false
 
-    const cands = generateCandidates({
-      anchor: a.item,
-      library: usable,
-      perSlotPool: 5,
-      maxCandidates: 5,
-      minScore: 0.5,
-      excludeItemIds: Array.from(usedItems),
-      learnedBonus: (items) =>
-        memberComboBonus(t, a.item, items) +
-        items.reduce((sum, i) => sum + occasionItemScore(occ, i.item) + personaFitScore(lens, i.item)
-          - historyPenalty(history, i.item.item_id) + varietyJitter(i.item.item_id, seed), 0) /
-          Math.max(1, items.length),
-      learnedBlend: 0.4,
-      houseGate: (items) => memberGate(t, a.item, items),
-    })
+    const anchorOwned = isOwnedItem(a.item as any)
+    const baseGate = (items: { item: ItemWithBrand; slot: Slot }[]) => memberGate(t, a.item, items)
+    const fullGate = (items: { item: ItemWithBrand; slot: Slot }[]) =>
+      baseGate(items) && (!hsEnabled || constitutionPass([{ item: a.item, slot: slotForItemType(a.item.item_type) }, ...items]))
+    const generate = (lib: ItemWithBrand[], gate: (items: { item: ItemWithBrand; slot: Slot }[]) => boolean) =>
+      generateCandidates({
+        anchor: a.item,
+        library: lib,
+        perSlotPool: 5,
+        maxCandidates: 5,
+        minScore: 0.5,
+        excludeItemIds: Array.from(usedItems),
+        learnedBonus: (items) =>
+          memberComboBonus(t, a.item, items) +
+          items.reduce((sum, i) => sum + occasionItemScore(occ, i.item) + personaFitScore(lens, i.item)
+            - historyPenalty(history, i.item.item_id) + varietyJitter(i.item.item_id, seed), 0) /
+            Math.max(1, items.length),
+        learnedBlend: 0.4,
+        houseGate: gate,
+      })
+
+    let cands = generate(usable, fullGate)
+    let relaxed = false
+    // Constitution fallback — retail-only. If the anchor is owned, or the only
+    // way through is with owned pieces, we don't force it: owned items are never
+    // styled below standard.
+    if (!cands.length && hsEnabled && !anchorOwned && !requireOwned) {
+      cands = generate(retailUsable, baseGate)
+      relaxed = cands.length > 0
+    }
     const best = cands[0]
-    if (!best) continue
+    if (!best) return false
 
     const all = [
       { item: a.item, slot: slotForItemType(a.item.item_type) },
@@ -365,12 +445,16 @@ export function composeMemberLooks(
 
     // A finished look carries a bag. The shared composer treats bag as
     // optional (it competes with omitting it), so top it up here rather than
-    // changing slot planning for the main Outfit Composer.
+    // changing slot planning for the main Outfit Composer — and the bag must
+    // still clear the constitution with the rest of the look.
     for (const need of ENSURE_SLOTS) {
       if (all.some((x) => x.slot === need)) continue
       const exclude = new Set([...Array.from(usedItems), ...all.map((x) => x.item.item_id)])
-      const [pick] = rankAlternates(t, usable, need, all.map((x) => x.item), exclude, 1, occ)
-      if (pick) all.push({ item: pick.item, slot: need })
+      const picks = rankAlternates(t, relaxed ? retailUsable : usable, need, all.map((x) => x.item), exclude, 4, occ)
+      for (const pick of picks) {
+        const withBag = [...all, { item: pick.item, slot: need }]
+        if (!hsEnabled || relaxed || constitutionPass(withBag)) { all.push({ item: pick.item, slot: need }); break }
+      }
     }
 
     all.forEach(({ item }) => usedItems.add(item.item_id))
@@ -382,21 +466,38 @@ export function composeMemberLooks(
         if (shareFamily(t, all[i].item.brand_id, all[j].item.brand_id))
           famPairs.push(`${all[i].item.brand?.name} × ${all[j].item.brand?.name}`)
 
+    const ownedCount = all.filter(({ item }) => isOwnedItem(item as any)).length
     const affinity = memberItemScore(t, a.item)
     const occFit = occasionItemScore(occ, a.item)
     const lensFit = personaFitScore(lens, a.item)
+    const anchorLabel = anchorOwned ? `her own ${a.item.product_name}` : a.item.brand?.name ?? '—'
     const notes = [
-      `Anchor ${a.item.brand?.name ?? '—'} (affinity ${affinity.toFixed(2)}${occ?.id ? `, occasion fit ${occFit >= 0 ? '+' : ''}${occFit.toFixed(2)}` : ''})`,
+      `Anchor ${anchorLabel} (affinity ${affinity.toFixed(2)}${occ?.id ? `, occasion fit ${occFit >= 0 ? '+' : ''}${occFit.toFixed(2)}` : ''})`,
       lens?.envelope && lens.weight > 0
         ? `through ${lens.name ?? 'persona'} at weight ${lens.weight.toFixed(2)} (lens fit ${lensFit >= 0 ? '+' : ''}${lensFit.toFixed(2)})`
         : null,
       `coherence ${best.score.toFixed(2)}`,
+      ownedCount ? `◈ ${ownedCount} from her wardrobe` : null,
+      hsEnabled ? (relaxed ? 'constitution relaxed (retail only)' : 'constitution ✓') : null,
       famPairs.length ? `family pairing: ${Array.from(new Set(famPairs)).join(', ')}` : null,
     ]
       .filter(Boolean)
       .join(' · ')
 
-    looks.push({ items: all.map(({ item }) => toLookItem(item)), notes, score: best.score })
+    looks.push({ items: all.map(({ item }) => toLookItem(item)), notes, score: best.score, ownedCount, constitutionRelaxed: relaxed })
+    if (ownedCount) ownedLooks++
+    return true
+  }
+
+  // Phase 1 — style what she owns: one look per owned anchor until the target is met.
+  for (const a of ownedAnchors) {
+    if (looks.length >= count || ownedLooks >= ownedTarget) break
+    tryAnchor(a, true, ownedAnchors.length)
+  }
+  // Phase 2 — fill the delivery from the regular anchors (owned or retail).
+  for (const a of anchors) {
+    if (looks.length >= count) break
+    tryAnchor(a, false, anchors.length)
   }
 
   return looks
@@ -421,7 +522,7 @@ export function rankAlternates(
         !excludeIds.has(i.item_id) &&
         i.image_url &&
         i.stock_status !== 'out_of_stock' &&
-        !(i.brand?.name && t.inputOnlyBrands.has(i.brand.name.toLowerCase())),
+        (isOwnedItem(i as any) || !(i.brand?.name && t.inputOnlyBrands.has(i.brand.name.toLowerCase()))),
     )
     .map((i) => {
       const compat =
