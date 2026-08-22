@@ -810,6 +810,15 @@ export async function recordMemberLookFeedback(
   const { data: delivery } = await admin.from('pilot_delivery').select('member_id').eq('delivery_id', look.delivery_id).single()
   if (!delivery) return { error: 'Delivery not found' }
 
+  // A verdict SUPERSEDES any earlier verdict on the same look. Without this,
+  // re-logging (or correcting a yes to a no) stacked a second taste event and
+  // the vector counted her twice, with the retracted opinion still in it.
+  await admin.from('pilot_taste_event').delete().eq('member_id', delivery.member_id).eq('look_id', lookId)
+  // Per-item rows likewise: the wearer's verdict is the authority on the look,
+  // so it replaces any earlier per-item verdict (Chloe's review included).
+  // Brand-pair rows carry no item_in and are left alone.
+  await admin.from('pilot_look_feedback').delete().eq('look_id', lookId).not('item_in', 'is', null)
+
   const text = verbatim.trim()
   if (text) {
     const r = await logActivity({

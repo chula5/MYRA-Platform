@@ -586,13 +586,38 @@ function LookFeedbackStrip({ look, notes, run, busy, firstName }: {
   const [resp, setResp] = useState<'yes' | 'no' | null>(look.response)
   const [reason, setReason] = useState<ResponseReason>(look.response_reason ?? 'not_my_style')
   const [text, setText] = useState('')
+  const [flash, setFlash] = useState<string | null>(null)
   const key = `mumfb-${look.look_id}`
   const first = firstName.toUpperCase()
-  const save = async () => {
-    if (!resp) return
-    const r = await run(key, () => recordMemberLookFeedback(look.look_id, resp, resp === 'no' ? reason : null, text), 'FEEDBACK LOGGED — TASTE UPDATED')
-    if (!r?.error) setText('')
+
+  // The verdict saves the moment it is clicked — no second step to forget. A
+  // later click supersedes the earlier one server-side, so changing her mind
+  // (or adding her words afterwards) never double-counts.
+  const commit = async (r: 'yes' | 'no', rsn: ResponseReason, note: string) => {
+    setFlash(null)
+    const res = await run(key, () => recordMemberLookFeedback(look.look_id, r, r === 'no' ? rsn : null, note), 'FEEDBACK LOGGED — TASTE UPDATED')
+    if (res?.error) { setFlash('NOT SAVED') ; return false }
+    setFlash(note.trim() ? 'SAVED WITH HER WORDS' : 'SAVED')
+    if (note.trim()) setText('')
+    return true
   }
+
+  const pick = (r: 'yes' | 'no') => { setResp(r); commit(r, reason, text) }
+  const changeReason = (rsn: ResponseReason) => { setReason(rsn); if (resp === 'no') commit('no', rsn, text) }
+  const logNote = () => { if (resp) commit(resp, reason, text) }
+
+  const verdictBtn = (value: 'yes' | 'no', text2: string) => (
+    <button
+      className={`text-[8px] tracking-[0.14em] px-2.5 py-1.5 border transition-colors ${
+        resp === value ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A]'
+      }`}
+      disabled={busy === key}
+      onClick={() => pick(value)}
+    >
+      {text2}
+    </button>
+  )
+
   return (
     <div className="border border-t-0 border-[#E2E0DB] bg-white px-2.5 py-2 space-y-1.5">
       {look.response && (
@@ -605,50 +630,40 @@ function LookFeedbackStrip({ look, notes, run, busy, firstName }: {
         <p key={n.activity_id} className="text-[11px] leading-snug text-[#0A0A0A]">&ldquo;{n.detail}&rdquo;</p>
       ))}
       <div className="flex flex-wrap items-center gap-1.5">
-        <button
-          className={`text-[8px] tracking-[0.14em] px-2.5 py-1.5 border transition-colors ${resp === 'yes' ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A]'}`}
-          onClick={() => setResp('yes')}
-        >
-          SHE LIKES IT
-        </button>
-        <button
-          className={`text-[8px] tracking-[0.14em] px-2.5 py-1.5 border transition-colors ${resp === 'no' ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A]'}`}
-          onClick={() => setResp('no')}
-        >
-          NOT FOR HER
-        </button>
+        {verdictBtn('yes', 'SHE LIKES IT')}
+        {verdictBtn('no', 'NOT FOR HER')}
         {resp === 'no' && (
           <select
             className="border border-[#E2E0DB] bg-white px-1.5 py-1.5 text-[8px] tracking-[0.1em] text-[#0A0A0A] outline-none"
             value={reason}
-            onChange={(e) => setReason(e.target.value as ResponseReason)}
+            disabled={busy === key}
+            onChange={(e) => changeReason(e.target.value as ResponseReason)}
           >
             {RESPONSE_REASONS.map((r) => (
               <option key={r.id} value={r.id}>{r.label}</option>
             ))}
           </select>
         )}
+        <span className={`text-[8px] tracking-[0.12em] ${flash === 'NOT SAVED' ? 'text-[#B83A3A]' : 'text-[#3D6B45]'}`}>
+          {busy === key ? 'SAVING…' : flash ?? ''}
+        </span>
       </div>
       <div className="flex gap-1.5">
         <input
           className={`${input} !px-2 !py-1.5 !text-[10px]`}
-          placeholder={`${first}'S WORDS — E.G. DON'T LIKE ANY OF IT, WOULDN'T SUIT ME`}
+          placeholder={resp ? `ADD ${first}'S WORDS (OPTIONAL)` : `PICK A VERDICT FIRST, THEN ADD ${first}'S WORDS`}
           value={text}
           onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') save() }}
+          onKeyDown={(e) => { if (e.key === 'Enter') logNote() }}
         />
-        <button className={`${btnDark} !px-3 !py-1.5 !text-[8px] whitespace-nowrap`} disabled={!resp || busy === key} onClick={save}>
-          {busy === key ? '…' : 'LOG'}
+        <button className={`${btnDark} !px-3 !py-1.5 !text-[8px] whitespace-nowrap`} disabled={!resp || !text.trim() || busy === key} onClick={logNote}>
+          {busy === key ? '…' : 'ADD WORDS'}
         </button>
       </div>
     </div>
   )
 }
 
-// What she TELLS us about her taste — colours, shapes and item types she loves
-// or won't wear. Authored, never learned over: an AVOID is a hard gate on
-// composition (the piece is never built into a look), a LOVE lifts a piece in
-// scoring. Sits alongside the learned signals rather than replacing them.
 function StylePreferences({ member: m, run, busy, ready = true }: { member: PilotMember; run: Run; busy: string | null; ready?: boolean }) {
   // The page-level flash sits far above this block once a member card is open,
   // so the outcome is reported right next to the button that caused it.
