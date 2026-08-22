@@ -639,102 +639,133 @@ function LookFeedbackStrip({ look, notes, run, busy, firstName }: {
 // composition (the piece is never built into a look), a LOVE lifts a piece in
 // scoring. Sits alongside the learned signals rather than replacing them.
 function StylePreferences({ member: m, run, busy }: { member: PilotMember; run: Run; busy: string | null }) {
-  const [loved, setLoved] = useState<StylePrefs>({
+  const saved = useMemo<StylePrefs>(() => ({
     colours_loved: m.colours_loved ?? [],
     colours_avoided: m.colours_avoided ?? [],
     shapes_loved: m.shapes_loved ?? [],
     shapes_avoided: m.shapes_avoided ?? [],
     types_loved: m.types_loved ?? [],
     types_avoided: m.types_avoided ?? [],
-  })
+  }), [m.colours_loved, m.colours_avoided, m.shapes_loved, m.shapes_avoided, m.types_loved, m.types_avoided])
+  const [prefs, setPrefs] = useState<StylePrefs>(saved)
   const key = `prefs-${m.member_id}`
-  const dirty =
-    JSON.stringify(loved) !==
-    JSON.stringify({
-      colours_loved: m.colours_loved ?? [], colours_avoided: m.colours_avoided ?? [],
-      shapes_loved: m.shapes_loved ?? [], shapes_avoided: m.shapes_avoided ?? [],
-      types_loved: m.types_loved ?? [], types_avoided: m.types_avoided ?? [],
-    })
+  const dirty = JSON.stringify(prefs) !== JSON.stringify(saved)
 
-  // One chip, three states: neutral → loves → avoids → neutral. A value can
-  // never sit in both lists.
-  const cycle = (lovedKey: keyof StylePrefs, avoidKey: keyof StylePrefs, value: string) => {
-    setLoved((p) => {
-      const inLoved = p[lovedKey].includes(value)
-      const inAvoid = p[avoidKey].includes(value)
-      const next = { ...p, [lovedKey]: p[lovedKey].filter((v) => v !== value), [avoidKey]: p[avoidKey].filter((v) => v !== value) }
-      if (!inLoved && !inAvoid) next[lovedKey] = [...next[lovedKey], value]
-      else if (inLoved) next[avoidKey] = [...next[avoidKey], value]
-      return next
+  const count = (k: keyof StylePrefs) => prefs[k].length
+
+  // Two explicit lists per category: one PLUS, one MINUS. One click adds or
+  // removes, and a value can never sit in both — picking it on one side lifts
+  // it off the other.
+  const toggle = (listKey: keyof StylePrefs, otherKey: keyof StylePrefs, value: string) => {
+    setPrefs((p) => {
+      const on = p[listKey].includes(value)
+      return {
+        ...p,
+        [listKey]: on ? p[listKey].filter((v) => v !== value) : [...p[listKey], value],
+        [otherKey]: p[otherKey].filter((v) => v !== value),
+      }
     })
   }
 
-  const chip = (lovedKey: keyof StylePrefs, avoidKey: keyof StylePrefs, value: string, text: string, swatch?: string) => {
-    const isLoved = loved[lovedKey].includes(value)
-    const isAvoided = loved[avoidKey].includes(value)
-    return (
-      <button
-        key={value}
-        onClick={() => cycle(lovedKey, avoidKey, value)}
-        title="CLICK: LOVES → AVOIDS → NEUTRAL"
-        className={`flex items-center gap-1.5 text-[9px] tracking-[0.1em] px-2 py-1.5 border transition-colors ${
-          isLoved
-            ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]'
-            : isAvoided
-              ? 'bg-white text-[#B83A3A] border-[#B83A3A] line-through'
-              : 'bg-white text-[#6B6B6B] border-[#E2E0DB] hover:border-[#0A0A0A]'
-        }`}
-      >
-        {swatch && <span className="w-2.5 h-2.5 rounded-full border border-[#D8D6D1]" style={{ background: swatch }} />}
-        {text}
-      </button>
-    )
-  }
+  const chipRow = (
+    listKey: keyof StylePrefs,
+    otherKey: keyof StylePrefs,
+    tone: 'plus' | 'minus',
+    options: { value: string; label: string; swatch?: string }[],
+  ) => (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((o) => {
+        const on = prefs[listKey].includes(o.value)
+        const dimmed = !on && prefs[otherKey].includes(o.value)
+        return (
+          <button
+            key={o.value}
+            onClick={() => toggle(listKey, otherKey, o.value)}
+            title={dimmed ? 'CURRENTLY ON THE OTHER LIST — CLICK TO MOVE IT HERE' : undefined}
+            className={`flex items-center gap-1.5 text-[9px] tracking-[0.1em] px-2 py-1.5 border transition-colors ${
+              on
+                ? tone === 'plus'
+                  ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]'
+                  : 'bg-[#B83A3A] text-white border-[#B83A3A]'
+                : dimmed
+                  ? 'bg-white text-[#D8D6D1] border-[#F0EFEC]'
+                  : `bg-white text-[#6B6B6B] border-[#E2E0DB] ${tone === 'plus' ? 'hover:border-[#0A0A0A]' : 'hover:border-[#B83A3A] hover:text-[#B83A3A]'}`
+            }`}
+          >
+            {o.swatch && <span className="w-2.5 h-2.5 rounded-full border border-[#D8D6D1]" style={{ background: o.swatch }} />}
+            {o.label}
+          </button>
+        )
+      })}
+    </div>
+  )
 
   const shapeGroups = ['FIT', 'LINE', 'LENGTH', 'DETAIL'] as const
+  const shapeOptions = SHAPE_PREFERENCES.map((s) => ({ value: s.id, label: s.label, group: s.group }))
+
+  // One category = a PLUS panel and a MINUS panel, side by side on wide screens.
+  const category = (
+    title: string,
+    plusLabel: string,
+    minusLabel: string,
+    lovedKey: keyof StylePrefs,
+    avoidKey: keyof StylePrefs,
+    body: (listKey: keyof StylePrefs, otherKey: keyof StylePrefs, tone: 'plus' | 'minus') => React.ReactNode,
+  ) => (
+    <div>
+      <p className="text-[8px] tracking-[0.14em] text-[#6B6B6B] mb-2">{title}</p>
+      <div className="grid gap-3 lg:grid-cols-2">
+        <div className="border border-[#E2E0DB] bg-white p-2.5">
+          <p className="text-[8px] tracking-[0.14em] text-[#0A0A0A] mb-2">
+            + {plusLabel}
+            <span className="text-[#A8A8A4]"> · {count(lovedKey)} SELECTED · SCORED UP</span>
+          </p>
+          {body(lovedKey, avoidKey, 'plus')}
+        </div>
+        <div className="border border-[#EAD9D9] bg-white p-2.5">
+          <p className="text-[8px] tracking-[0.14em] text-[#B83A3A] mb-2">
+            − {minusLabel}
+            <span className="text-[#A8A8A4]"> · {count(avoidKey)} SELECTED · NEVER COMPOSED</span>
+          </p>
+          {body(avoidKey, lovedKey, 'minus')}
+        </div>
+      </div>
+    </div>
+  )
 
   return (
-    <div className="border border-[#E2E0DB] bg-[#FCFCFA] p-4 space-y-4">
+    <div className="border border-[#E2E0DB] bg-[#FCFCFA] p-4 space-y-5">
       <div className="flex items-center justify-between">
-        <p className={label}>STYLE PREFERENCES — WHAT SHE SAYS (AVOIDS ARE NEVER COMPOSED)</p>
+        <div>
+          <p className={label}>STYLE PREFERENCES — WHAT SHE SAYS</p>
+          <p className="text-[8px] tracking-[0.1em] text-[#A8A8A4] mt-1">
+            LEFT COLUMN LIFTS A PIECE · RIGHT COLUMN BLOCKS IT ENTIRELY · CLICK AGAIN TO UNDO
+          </p>
+        </div>
         <button
           className={`${btnDark} !px-4 !py-1.5 !text-[9px]`}
           disabled={!dirty || busy === key}
-          onClick={() => run(key, () => updateMember(m.member_id, loved), 'PREFERENCES SAVED — COMPOSER UPDATED')}
+          onClick={() => run(key, () => updateMember(m.member_id, prefs), 'PREFERENCES SAVED — COMPOSER UPDATED')}
         >
           {busy === key ? 'SAVING…' : dirty ? 'SAVE PREFERENCES' : 'SAVED'}
         </button>
       </div>
-      <p className="text-[8px] tracking-[0.1em] text-[#A8A8A4] -mt-2">
-        CLICK ONCE = SHE LOVES IT · TWICE = SHE WON&rsquo;T WEAR IT · THREE TIMES = NO OPINION
-      </p>
 
-      <div>
-        <p className="text-[8px] tracking-[0.14em] text-[#6B6B6B] mb-1.5">COLOURS</p>
-        <div className="flex flex-wrap gap-1.5">
-          {PREF_COLOURS.map((c) => chip('colours_loved', 'colours_avoided', c.value, c.label, c.swatch))}
-        </div>
-      </div>
+      {category('COLOURS', 'WEARS', 'WON\u2019T WEAR', 'colours_loved', 'colours_avoided', (listKey, otherKey, tone) =>
+        chipRow(listKey, otherKey, tone, PREF_COLOURS),
+      )}
 
-      <div>
-        <p className="text-[8px] tracking-[0.14em] text-[#6B6B6B] mb-1.5">SHAPES &amp; SILHOUETTES</p>
+      {category('SHAPES & SILHOUETTES', 'SUITS HER', 'DOESN\u2019T SUIT HER', 'shapes_loved', 'shapes_avoided', (listKey, otherKey, tone) => (
         <div className="space-y-1.5">
           {shapeGroups.map((g) => (
-            <div key={g} className="flex flex-wrap gap-1.5">
-              {SHAPE_PREFERENCES.filter((s) => s.group === g).map((s) =>
-                chip('shapes_loved', 'shapes_avoided', s.id, s.label),
-              )}
-            </div>
+            <div key={g}>{chipRow(listKey, otherKey, tone, shapeOptions.filter((s) => s.group === g))}</div>
           ))}
         </div>
-      </div>
+      ))}
 
-      <div>
-        <p className="text-[8px] tracking-[0.14em] text-[#6B6B6B] mb-1.5">PIECES — WHAT SHE LIVES IN / NEVER TOUCHES</p>
-        <div className="flex flex-wrap gap-1.5">
-          {PREF_TYPES.map((t) => chip('types_loved', 'types_avoided', t.value, t.label))}
-        </div>
-      </div>
+      {category('PIECES', 'LIVES IN', 'NEVER TOUCHES', 'types_loved', 'types_avoided', (listKey, otherKey, tone) =>
+        chipRow(listKey, otherKey, tone, PREF_TYPES),
+      )}
     </div>
   )
 }
