@@ -3,6 +3,7 @@
 import { createAdminClient } from '@/lib/supabase-server'
 import {
   baselineBrand, checkWatchedBrand, onboardBrand, provisionalNameFromUrl, runBrandWatch, normaliseBaseUrl,
+  foldBrandName,
   type BrandCheckResult, type WatchedBrandRow,
 } from '@/lib/brand-watch'
 import { buildLearning, type DecidedRow } from '@/lib/brand-watch-learning'
@@ -109,13 +110,22 @@ export async function loadQueuePage(offset: number, brandName?: string | null): 
   }))
   const learn = buildLearning(decided)
 
+  // The learning may fold a piece away, but never one the house style rates
+  // well: anything two points clear of its brand's min score stays visible.
+  // Same cap as the scan-time veto — a 7-score jean was being hidden on
+  // 'light' and grey learned negative from bag skips.
+  const { data: wbs } = await admin.from('watched_brand').select('name, min_score')
+  const minByBrand = new Map<string, number>(((wbs ?? []) as any[]).map((w) => [foldBrandName(w.name), Number(w.min_score ?? 5)]))
+
   const annotated: QueueItemRow[] = drafts.map((r) => {
     const base = mapQueueRow(r)
     const v = learn({
       brandName: base.brand_name, productName: base.product_name, itemType: base.item_type,
       colourFamily: base.colour_family, materialCategory: base.material_category, price: base.price,
     })
-    return { ...base, learned_delta: v.delta, learned_reasons: v.reasons, predicted_skip: v.predictedSkip, adjusted: (base.discovery_score ?? 0) + v.delta }
+    const minScore = minByBrand.get(foldBrandName(base.brand_name)) ?? 5
+    const strong = (base.discovery_score ?? 0) >= minScore + 2
+    return { ...base, learned_delta: v.delta, learned_reasons: v.reasons, predicted_skip: v.predictedSkip && !strong, adjusted: (base.discovery_score ?? 0) + v.delta }
   })
 
   const brandCounts: Record<string, number> = {}
