@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { matchesShape, avoidReasons, lovedScore, readStylePrefs, EMPTY_STYLE_PREFS, SHAPE_PREFERENCES } from '@/lib/pilot-stylist'
+import { matchesShape, avoidReasons, lovedScore, readStylePrefs, EMPTY_STYLE_PREFS, SHAPE_PREFERENCES, matchesColourPref, COLOUR_SHADES } from '@/lib/pilot-stylist'
 
 const prefs = (p: Partial<typeof EMPTY_STYLE_PREFS>) => ({ ...EMPTY_STYLE_PREFS, ...p })
 
@@ -54,5 +54,55 @@ describe('readStylePrefs', () => {
     expect(readStylePrefs(null)).toEqual(EMPTY_STYLE_PREFS)
     expect(readStylePrefs({} as any)).toEqual(EMPTY_STYLE_PREFS)
     expect(readStylePrefs({ colours_loved: ['navy', 42 as any] } as any).colours_loved).toEqual(['navy'])
+  })
+})
+
+describe('colour shades', () => {
+  it('separates a shade from its family — no mint is not no green', () => {
+    const mintTop = { colour_family: 'green', product_name: 'Aria knit mint green' }
+    const forestTop = { colour_family: 'green', product_name: 'Aria knit forest green' }
+    expect(matchesColourPref('mint', mintTop)).toBe(true)
+    expect(matchesColourPref('mint', forestTop)).toBe(false)
+    // the family still catches both
+    expect(matchesColourPref('green', mintTop)).toBe(true)
+    expect(matchesColourPref('green', forestTop)).toBe(true)
+  })
+
+  it('tells cobalt from navy', () => {
+    const cobalt = { colour_family: 'blue', product_name: 'Lena dress cobalt' }
+    const navy = { colour_family: 'navy', product_name: 'Serge navy' }
+    expect(matchesColourPref('cobalt', cobalt)).toBe(true)
+    expect(matchesColourPref('cobalt', navy)).toBe(false)
+    // NAVY is a family, so it answers on the scored family alone
+    expect(matchesColourPref('navy', navy)).toBe(true)
+    expect(matchesColourPref('navy', cobalt)).toBe(false)
+    expect(matchesColourPref('navy', { colour_family: 'navy', product_name: 'Unnamed coat' })).toBe(true)
+  })
+
+  it('reads the real colourways sitting in the library', () => {
+    expect(matchesColourPref('khaki', { colour_family: 'green', product_name: 'JIKOLAZ - STRIPE KHAKI' })).toBe(true)
+    expect(matchesColourPref('taupe', { colour_family: 'camel', product_name: 'Claudia Vegetal soft calf Taupe' })).toBe(true)
+    expect(matchesColourPref('olive', { colour_family: 'green', product_name: 'Tarisha Calf suede Dried olive' })).toBe(true)
+    expect(matchesColourPref('chocolate', { colour_family: 'brown', product_name: 'Ayano Ganache Leather' })).toBe(true)
+  })
+
+  it('will not let a stray word overrule the scored family', () => {
+    // "rose" in a style name, but the piece is scored black
+    expect(matchesColourPref('dusty_rose', { colour_family: 'black', product_name: 'Rose blazer black' })).toBe(false)
+    // family unknown → trust the colourway
+    expect(matchesColourPref('dusty_rose', { colour_family: null, product_name: 'Petal dusty rose' })).toBe(true)
+  })
+
+  it('never matches an item with no colour text and no family', () => {
+    for (const s of COLOUR_SHADES) expect(matchesColourPref(s.id, { colour_family: null, product_name: '' })).toBe(false)
+    // ...and a family preference is equally silent when nothing was scored
+    expect(matchesColourPref('green', { colour_family: null, product_name: '' })).toBe(false)
+  })
+
+  it('gates and rewards through the shade, not the family', () => {
+    const p = { ...EMPTY_STYLE_PREFS, colours_avoided: ['mint'], colours_loved: ['navy'] }
+    expect(avoidReasons(p, { colour_family: 'green', product_name: 'Knit mint green' })).toEqual(['MINT / SEAFOAM'])
+    expect(avoidReasons(p, { colour_family: 'green', product_name: 'Knit olive green' })).toEqual([])
+    expect(lovedScore(p, { colour_family: 'navy', product_name: 'Serge navy' })).toBeCloseTo(0.18)
   })
 })

@@ -283,6 +283,114 @@ export function matchesShape(id: string, item: ShapeDims): boolean {
   return rule ? rule.match(item) : false
 }
 
+// ── Colour shades ────────────────────────────────────────────────
+// The 16 colour_family values are too blunt for real taste — "no green" is not
+// the same statement as "no mint green". Each shade names a real colourway and
+// carries the families it can legitimately belong to, because the only reliable
+// colour signal on an item is the colourway in its product name (only ~1% of
+// items carry a colour_hex, and some of those are wrong). A shade matches when
+// its words appear in the item's colour text AND the item's scored family
+// agrees — so a scored family never gets overruled by a stray word.
+
+export interface ColourShade {
+  id: string
+  label: string
+  families: string[] // acceptable colour_family values
+  match: RegExp
+}
+
+export const COLOUR_SHADES: ColourShade[] = [
+  // whites, creams
+  { id: 'optical_white', label: 'OPTICAL WHITE', families: ['white'], match: /optical white|pure white|bright white/ },
+  { id: 'off_white', label: 'OFF-WHITE / IVORY', families: ['white', 'cream'], match: /off.?white|ivory|eggshell|chalk/ },
+  { id: 'ecru', label: 'ECRU / RAW', families: ['cream', 'camel'], match: /ecru|raw white|undyed|natural white/ },
+  { id: 'vanilla', label: 'VANILLA / BUTTERMILK', families: ['cream'], match: /vanilla|buttermilk|\bbone\b/ },
+  { id: 'oat', label: 'OAT / OATMEAL', families: ['cream', 'camel'], match: /\boat\b|oatmeal|porridge/ },
+  // blacks, greys
+  { id: 'true_black', label: 'TRUE BLACK', families: ['black'], match: /\bblack\b|noir|onyx|jet/ },
+  { id: 'washed_black', label: 'WASHED / FADED BLACK', families: ['black', 'grey'], match: /washed black|faded black|vintage black/ },
+  { id: 'charcoal', label: 'CHARCOAL', families: ['grey', 'black'], match: /charcoal|anthracite|graphite/ },
+  { id: 'mid_grey', label: 'MID GREY / MARL', families: ['grey'], match: /\bmarl\b|heather grey|mid grey|melange/ },
+  { id: 'light_grey', label: 'LIGHT GREY / SILVER', families: ['grey'], match: /light grey|light gray|silver|pearl grey|dove/ },
+  { id: 'slate', label: 'SLATE / STEEL', families: ['grey', 'blue'], match: /slate|steel|pewter|gunmetal/ },
+  { id: 'taupe', label: 'TAUPE / GREIGE', families: ['camel', 'grey', 'brown'], match: /taupe|greige|mushroom/ },
+  // navies, blues
+  { id: 'midnight', label: 'MIDNIGHT / INK', families: ['navy', 'black'], match: /midnight|india ink|\bink\b|eclipse/ },
+  { id: 'cobalt', label: 'COBALT / ROYAL BLUE', families: ['blue'], match: /cobalt|royal blue|klein blue|electric blue/ },
+  { id: 'sky_blue', label: 'SKY / PALE BLUE', families: ['blue'], match: /sky blue|pale blue|light blue|powder blue|baby blue/ },
+  { id: 'cornflower', label: 'CORNFLOWER / PERIWINKLE', families: ['blue', 'purple'], match: /cornflower|periwinkle|forget.?me.?not/ },
+  { id: 'denim_blue', label: 'DENIM / INDIGO', families: ['blue'], match: /indigo|denim blue|chambray|mid wash|light wash|dark wash/ },
+  { id: 'teal', label: 'TEAL / PETROL', families: ['blue', 'green'], match: /teal|petrol|peacock|deep sea/ },
+  // greens
+  { id: 'mint', label: 'MINT / SEAFOAM', families: ['green'], match: /\bmint\b|seafoam|sea foam|pistachio|celadon/ },
+  { id: 'sage', label: 'SAGE / EUCALYPTUS', families: ['green'], match: /\bsage\b|eucalyptus|\bmoss\b|lichen/ },
+  { id: 'olive', label: 'OLIVE', families: ['green'], match: /\bolive\b|loden|fatigue/ },
+  { id: 'khaki', label: 'KHAKI / ARMY', families: ['green', 'camel'], match: /khaki|\barmy\b|military green|utility green/ },
+  { id: 'forest', label: 'FOREST / BOTTLE GREEN', families: ['green'], match: /forest|bottle green|hunter green|racing green|dark green|juniper|cypress/ },
+  { id: 'emerald', label: 'EMERALD / JADE', families: ['green'], match: /emerald|\bjade\b|kelly green|bright green/ },
+  // browns, camels
+  { id: 'chocolate', label: 'CHOCOLATE / ESPRESSO', families: ['brown'], match: /chocolate|espresso|\bcocoa\b|coffee|dark brown|ganache/ },
+  { id: 'mocha', label: 'MOCHA / TAUPE BROWN', families: ['brown'], match: /mocha|\bmoka\b|truffle|walnut/ },
+  { id: 'cognac', label: 'COGNAC / TAN', families: ['brown', 'camel'], match: /cognac|\btan\b|chestnut|saddle|whisky/ },
+  { id: 'caramel', label: 'CARAMEL / TOFFEE', families: ['brown', 'camel'], match: /caramel|toffee|butterscotch|honey brown/ },
+  { id: 'rust', label: 'RUST / TERRACOTTA', families: ['brown', 'orange'], match: /\brust\b|terracotta|\bbrick\b|paprika|henna/ },
+  { id: 'beige_sand', label: 'BEIGE / SAND', families: ['camel'], match: /beige|\bsand\b|\bdune\b|biscuit|latte|desert/ },
+  { id: 'stone', label: 'STONE / PUTTY', families: ['camel', 'grey'], match: /\bstone\b|putty|\bclay\b|pebble/ },
+  { id: 'nude', label: 'NUDE / BLUSH BEIGE', families: ['camel', 'pink'], match: /\bnude\b|skin tone|powder beige/ },
+  // reds, wines
+  { id: 'oxblood', label: 'OXBLOOD / MAROON', families: ['burgundy'], match: /oxblood|maroon|garnet|port\b/ },
+  { id: 'true_red', label: 'TRUE RED', families: ['red'], match: /\bred\b|scarlet|crimson|poppy|lipstick/ },
+  { id: 'cherry', label: 'CHERRY / RASPBERRY', families: ['red', 'pink'], match: /cherry|raspberry|cranberry/ },
+  // pinks
+  { id: 'blush', label: 'BLUSH / POWDER PINK', families: ['pink'], match: /blush|powder pink|ballet|pale pink|baby pink/ },
+  { id: 'dusty_rose', label: 'DUSTY ROSE', families: ['pink'], match: /dusty rose|dusky pink|\brose\b|old pink/ },
+  { id: 'fuchsia', label: 'FUCHSIA / HOT PINK', families: ['pink'], match: /fuchsia|fuschia|hot pink|magenta|shocking pink/ },
+  // yellows, oranges
+  { id: 'butter', label: 'BUTTER / PALE YELLOW', families: ['yellow'], match: /butter|pale yellow|lemon|primrose|vanilla yellow/ },
+  { id: 'mustard', label: 'MUSTARD / OCHRE', families: ['yellow'], match: /mustard|ochre|dijon|turmeric|saffron/ },
+  { id: 'gold', label: 'GOLD', families: ['yellow'], match: /\bgold\b|golden|brass/ },
+  { id: 'coral', label: 'CORAL / APRICOT', families: ['orange', 'pink'], match: /coral|apricot|peach|salmon/ },
+  { id: 'bright_orange', label: 'BRIGHT ORANGE', families: ['orange'], match: /tangerine|\borange\b|marigold|carrot/ },
+  // purples
+  { id: 'lilac', label: 'LILAC / LAVENDER', families: ['purple', 'pink'], match: /lilac|lavender|wisteria|\bmauve\b/ },
+  { id: 'aubergine', label: 'AUBERGINE / PLUM', families: ['purple', 'burgundy'], match: /aubergine|eggplant|\bplum\b|damson/ },
+  { id: 'violet', label: 'VIOLET / PURPLE', families: ['purple'], match: /violet|\bpurple\b|amethyst|\biris\b/ },
+  // prints
+  { id: 'print', label: 'PRINT / PATTERNED', families: ['multicolour'], match: /print|floral|leopard|zebra|stripe|check|gingham|paisley|polka/ },
+]
+
+const SHADE_BY_ID = new Map(COLOUR_SHADES.map((s) => [s.id, s]))
+// Family ids are usable as colour preferences too, so "no green at all" stays
+// sayable alongside "no mint green".
+export const COLOUR_FAMILY_IDS = [
+  'white', 'cream', 'black', 'grey', 'navy', 'blue', 'green', 'brown',
+  'camel', 'burgundy', 'red', 'pink', 'yellow', 'orange', 'purple', 'multicolour',
+]
+
+export function colourPrefLabel(id: string): string {
+  return SHADE_BY_ID.get(id)?.label ?? id.replace(/_/g, ' ').toUpperCase()
+}
+
+export interface ColourReadable {
+  colour_family?: string | null
+  product_name?: string | null
+}
+
+// Does this item carry the colour the preference names? A family id compares
+// against the scored family; a shade id needs its words in the colourway AND a
+// family that does not contradict it.
+export function matchesColourPref(id: string, item: ColourReadable): boolean {
+  const fam = item.colour_family ?? null
+  // A family preference is answered by the scored family alone — it must never
+  // fall through to colourway text, or an unnamed piece would escape the rule.
+  if (COLOUR_FAMILY_IDS.includes(id)) return fam === id
+  const shade = SHADE_BY_ID.get(id)
+  if (!shade) return false
+  if (fam && !shade.families.includes(fam)) return false
+  const text = (item.product_name ?? '').toLowerCase()
+  return text.length > 0 && shade.match.test(text)
+}
+
 export function readStylePrefs(row: Partial<StylePrefs> | null | undefined): StylePrefs {
   const arr = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
   return {
@@ -302,10 +410,10 @@ export function hasStylePrefs(p: StylePrefs | undefined | null): boolean {
 
 // An item she has told us NOT to wear. Reasons are returned so the composer
 // and the UI can say WHY a piece was held back.
-export function avoidReasons(p: StylePrefs | undefined, item: ShapeDims & { colour_family?: string | null }): string[] {
+export function avoidReasons(p: StylePrefs | undefined, item: ShapeDims & ColourReadable): string[] {
   if (!p) return []
   const out: string[] = []
-  if (item.colour_family && p.colours_avoided.includes(item.colour_family)) out.push(item.colour_family.toUpperCase())
+  for (const c of p.colours_avoided) if (matchesColourPref(c, item)) out.push(colourPrefLabel(c))
   if (item.item_type && p.types_avoided.includes(item.item_type)) out.push(item.item_type.replace(/_/g, ' ').toUpperCase())
   for (const s of p.shapes_avoided) if (matchesShape(s, item)) out.push(shapeLabel(s))
   return out
@@ -314,10 +422,10 @@ export function avoidReasons(p: StylePrefs | undefined, item: ShapeDims & { colo
 // Bonus for the things she has told us she loves, ~0..0.45 — additive with the
 // learned affinity so an authored love lifts a piece without overruling
 // everything else in the look.
-export function lovedScore(p: StylePrefs | undefined, item: ShapeDims & { colour_family?: string | null }): number {
+export function lovedScore(p: StylePrefs | undefined, item: ShapeDims & ColourReadable): number {
   if (!p) return 0
   let s = 0
-  if (item.colour_family && p.colours_loved.includes(item.colour_family)) s += 0.18
+  for (const c of p.colours_loved) if (matchesColourPref(c, item)) { s += 0.18; break }
   if (item.item_type && p.types_loved.includes(item.item_type)) s += 0.15
   for (const sh of p.shapes_loved) if (matchesShape(sh, item)) { s += 0.12; break }
   return Math.min(0.45, s)

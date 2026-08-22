@@ -30,6 +30,7 @@ import {
   type LookItem,
   type ResponseReason,
   SHAPE_PREFERENCES,
+  COLOUR_SHADES,
   type StylePrefs,
 } from '@/lib/pilot-stylist'
 import {
@@ -98,24 +99,33 @@ const ADD_SLOTS: { value: string; label: string }[] = [
 // Full colour_family taxonomy + the pieces worth having an opinion about.
 // Local display constants on purpose — importing the admin picker would drag
 // server-only modules into this client bundle.
-const PREF_COLOURS: { value: string; label: string; swatch: string }[] = [
-  { value: 'black', label: 'BLACK', swatch: '#111' },
-  { value: 'white', label: 'WHITE', swatch: '#fff' },
-  { value: 'cream', label: 'CREAM', swatch: '#f1e9d9' },
-  { value: 'grey', label: 'GREY', swatch: '#9a9a9a' },
-  { value: 'navy', label: 'NAVY', swatch: '#1d2a44' },
-  { value: 'brown', label: 'BROWN', swatch: '#6b4a2f' },
-  { value: 'camel', label: 'CAMEL', swatch: '#c19a6b' },
-  { value: 'green', label: 'GREEN', swatch: '#3d6b45' },
-  { value: 'burgundy', label: 'BURGUNDY', swatch: '#6d1f2c' },
-  { value: 'red', label: 'RED', swatch: '#b3202a' },
-  { value: 'blue', label: 'BLUE', swatch: '#3565b0' },
-  { value: 'pink', label: 'PINK', swatch: '#e6a6b5' },
-  { value: 'yellow', label: 'YELLOW', swatch: '#e0b93f' },
-  { value: 'orange', label: 'ORANGE', swatch: '#d4762e' },
-  { value: 'purple', label: 'PURPLE', swatch: '#6b4a8c' },
-  { value: 'multicolour', label: 'MULTICOLOUR', swatch: 'linear-gradient(135deg,#b3202a,#3565b0,#3d6b45)' },
+// Colour families, each with the shades that live under it. She picks at
+// whichever level she actually means — "NO GREEN" or just "NO MINT GREEN".
+const COLOUR_GROUPS: { family: string; label: string; swatch: string }[] = [
+  { family: 'black', label: 'BLACK', swatch: '#111' },
+  { family: 'white', label: 'WHITE', swatch: '#fff' },
+  { family: 'cream', label: 'CREAM', swatch: '#f1e9d9' },
+  { family: 'grey', label: 'GREY', swatch: '#9a9a9a' },
+  { family: 'navy', label: 'NAVY', swatch: '#1d2a44' },
+  { family: 'blue', label: 'BLUE', swatch: '#3565b0' },
+  { family: 'green', label: 'GREEN', swatch: '#3d6b45' },
+  { family: 'brown', label: 'BROWN', swatch: '#6b4a2f' },
+  { family: 'camel', label: 'CAMEL / NEUTRALS', swatch: '#c19a6b' },
+  { family: 'burgundy', label: 'BURGUNDY', swatch: '#6d1f2c' },
+  { family: 'red', label: 'RED', swatch: '#b3202a' },
+  { family: 'pink', label: 'PINK', swatch: '#e6a6b5' },
+  { family: 'yellow', label: 'YELLOW', swatch: '#e0b93f' },
+  { family: 'orange', label: 'ORANGE', swatch: '#d4762e' },
+  { family: 'purple', label: 'PURPLE', swatch: '#6b4a8c' },
+  { family: 'multicolour', label: 'MULTICOLOUR', swatch: 'linear-gradient(135deg,#b3202a,#3565b0,#3d6b45)' },
 ]
+
+// A shade sits under its FIRST listed family in the picker (it can still match
+// items scored into any of its families).
+const SHADES_BY_FAMILY = COLOUR_GROUPS.reduce<Record<string, { value: string; label: string }[]>>((acc, g) => {
+  acc[g.family] = COLOUR_SHADES.filter((s) => s.families[0] === g.family).map((s) => ({ value: s.id, label: s.label }))
+  return acc
+}, {})
 
 const PREF_TYPES: { value: string; label: string }[] = [
   { value: 'coat', label: 'COAT' },
@@ -751,9 +761,21 @@ function StylePreferences({ member: m, run, busy }: { member: PilotMember; run: 
         </button>
       </div>
 
-      {category('COLOURS', 'WEARS', 'WON\u2019T WEAR', 'colours_loved', 'colours_avoided', (listKey, otherKey, tone) =>
-        chipRow(listKey, otherKey, tone, PREF_COLOURS),
-      )}
+      {category('COLOURS — PICK A WHOLE FAMILY, OR JUST THE SHADE SHE MEANS', 'WEARS', 'WON\u2019T WEAR', 'colours_loved', 'colours_avoided', (listKey, otherKey, tone) => (
+        <div className="space-y-2">
+          {COLOUR_GROUPS.map((g) => (
+            <div key={g.family} className="flex flex-wrap items-center gap-1.5">
+              {chipRow(listKey, otherKey, tone, [{ value: g.family, label: g.label, swatch: g.swatch }])}
+              {SHADES_BY_FAMILY[g.family].length > 0 && (
+                <>
+                  <span className="text-[#D8D6D1] text-[9px]">/</span>
+                  {chipRow(listKey, otherKey, tone, SHADES_BY_FAMILY[g.family])}
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      ))}
 
       {category('SHAPES & SILHOUETTES', 'SUITS HER', 'DOESN\u2019T SUIT HER', 'shapes_loved', 'shapes_avoided', (listKey, otherKey, tone) => (
         <div className="space-y-1.5">
