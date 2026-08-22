@@ -7,6 +7,7 @@
 
 import { createAdminClient } from '@/lib/supabase-server'
 import { toGbpAmount } from '@/lib/currency'
+import { classifyProductGender } from '@/app/admin/ai/classify-gender'
 import {
   discoverProductUrls, fetchNewProductPages, urlHash, type ParsedProduct,
 } from '@/lib/brand-watch-browser'
@@ -975,6 +976,35 @@ async function scanAndQueue(
 // nothing (no publish dates exist off-Shopify, so "last 60 days" has no
 // meaning; new drops queue from the next check onward).
 // mode 'scan': fetch unseen pages, queue on-taste in-stock pieces.
+/**
+ * MYRA is womenswear only, and most feeds say the gender in a product type,
+ * tag or URL path — read for free in classifyAndScore. Some sites say it
+ * NOWHERE: Adolfo Domínguez publishes flat URLs, numeric category codes and a
+ * JS-rendered women's section, and 168 men's pieces reached the queue because
+ * "no signal" was treated as womenswear.
+ *
+ * For those, the product image is the only evidence. One cheap vision call per
+ * otherwise-unknowable product, and only when the brand shows no textual gender
+ * signal at all — a feed that labels its women's pieces never pays for this.
+ */
+async function applyVisionGender(products: ScannedProduct[]): Promise<number> {
+  const anySignal = products.some((p) => p.menswear) ||
+    products.some((p) => WOMEN_RE.test([p.productType, p.tags.join(' '), p.title, p.handle].join(' ')))
+  if (anySignal) return 0
+
+  let excluded = 0
+  const CONC = 6
+  const withImages = products.filter((p) => p.images[0])
+  for (let i = 0; i < withImages.length; i += CONC) {
+    const chunk = withImages.slice(i, i + CONC)
+    const reads = await Promise.all(chunk.map((p) => classifyProductGender(p.images[0])))
+    reads.forEach((r, j) => {
+      if (r.gender === 'men') { chunk[j].menswear = true; excluded++ }
+    })
+  }
+  return excluded
+}
+
 async function browserScanAndQueue(watchedRow: WatchedBrandRow, mode: 'watch' | 'scan'): Promise<BrandCheckResult> {
   const admin = createAdminClient() as any
   const writeState = (state: unknown) =>
@@ -1019,6 +1049,8 @@ async function browserScanAndQueue(watchedRow: WatchedBrandRow, mode: 'watch' | 
     const adopted = await adoptRealBrandName(admin, watchedRow, brandNames.length ? vendorMode(brandNames.map((v) => ({ vendor: v } as ScannedProduct))) : null)
     const watched = { ...watchedRow, ...adopted }
     const products = res.parsed.map(classifyExternalProduct)
+    // Sites with no textual gender signal get one vision call per product.
+    await applyVisionGender(products)
     const fashion = products.filter((p) => !p.nonFashion && !p.menswear)
     const onTaste = fashion.filter((p) => p.score >= watched.min_score)
     const inStock = onTaste.filter((p) => queueableStock(p))
