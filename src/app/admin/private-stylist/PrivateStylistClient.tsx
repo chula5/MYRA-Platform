@@ -29,6 +29,8 @@ import {
   type RankedBrand,
   type LookItem,
   type ResponseReason,
+  SHAPE_PREFERENCES,
+  type StylePrefs,
 } from '@/lib/pilot-stylist'
 import {
   createMember,
@@ -59,11 +61,13 @@ import {
   approveComposedLook,
   skipComposedLook,
   restoreLookShoot,
+  recordMemberLookFeedback,
   type SwapOption,
   type PilotData,
   type PilotMember,
   type PilotDelivery,
   type PilotLook,
+  type PilotActivity,
 } from './actions'
 
 const ROOM_COLOUR: Record<RoomKey, string> = {
@@ -89,6 +93,56 @@ const ADD_SLOTS: { value: string; label: string }[] = [
   { value: 'shoe', label: 'SHOES' },
   { value: 'top', label: 'TOP' },
   { value: 'bottom', label: 'BOTTOM' },
+]
+
+// Full colour_family taxonomy + the pieces worth having an opinion about.
+// Local display constants on purpose — importing the admin picker would drag
+// server-only modules into this client bundle.
+const PREF_COLOURS: { value: string; label: string; swatch: string }[] = [
+  { value: 'black', label: 'BLACK', swatch: '#111' },
+  { value: 'white', label: 'WHITE', swatch: '#fff' },
+  { value: 'cream', label: 'CREAM', swatch: '#f1e9d9' },
+  { value: 'grey', label: 'GREY', swatch: '#9a9a9a' },
+  { value: 'navy', label: 'NAVY', swatch: '#1d2a44' },
+  { value: 'brown', label: 'BROWN', swatch: '#6b4a2f' },
+  { value: 'camel', label: 'CAMEL', swatch: '#c19a6b' },
+  { value: 'green', label: 'GREEN', swatch: '#3d6b45' },
+  { value: 'burgundy', label: 'BURGUNDY', swatch: '#6d1f2c' },
+  { value: 'red', label: 'RED', swatch: '#b3202a' },
+  { value: 'blue', label: 'BLUE', swatch: '#3565b0' },
+  { value: 'pink', label: 'PINK', swatch: '#e6a6b5' },
+  { value: 'yellow', label: 'YELLOW', swatch: '#e0b93f' },
+  { value: 'orange', label: 'ORANGE', swatch: '#d4762e' },
+  { value: 'purple', label: 'PURPLE', swatch: '#6b4a8c' },
+  { value: 'multicolour', label: 'MULTICOLOUR', swatch: 'linear-gradient(135deg,#b3202a,#3565b0,#3d6b45)' },
+]
+
+const PREF_TYPES: { value: string; label: string }[] = [
+  { value: 'coat', label: 'COAT' },
+  { value: 'trench', label: 'TRENCH' },
+  { value: 'jacket', label: 'JACKET' },
+  { value: 'blazer', label: 'BLAZER' },
+  { value: 'gilet', label: 'GILET' },
+  { value: 'shirt', label: 'SHIRT' },
+  { value: 'blouse', label: 'BLOUSE' },
+  { value: 't-shirt', label: 'T-SHIRT' },
+  { value: 'knitwear', label: 'KNITWEAR' },
+  { value: 'bodysuit', label: 'BODYSUIT' },
+  { value: 'trousers', label: 'TROUSERS' },
+  { value: 'jeans', label: 'JEANS' },
+  { value: 'shorts', label: 'SHORTS' },
+  { value: 'skirt', label: 'SKIRT' },
+  { value: 'mini_dress', label: 'MINI DRESS' },
+  { value: 'midi_dress', label: 'MIDI DRESS' },
+  { value: 'maxi_dress', label: 'MAXI DRESS' },
+  { value: 'shirt_dress', label: 'SHIRT DRESS' },
+  { value: 'slip_dress', label: 'SLIP DRESS' },
+  { value: 'boot', label: 'BOOTS' },
+  { value: 'heel', label: 'HEELS' },
+  { value: 'flat', label: 'FLATS' },
+  { value: 'sneaker', label: 'TRAINERS' },
+  { value: 'mule', label: 'MULES' },
+  { value: 'sandal', label: 'SANDALS' },
 ]
 
 const label = 'text-[9px] tracking-[0.18em] text-[#6B6B6B]'
@@ -276,6 +330,7 @@ function MembersTab({ data, run, busy }: { data: PilotData; run: Run; busy: stri
           busy={busy}
           personas={data.personas}
           deliveries={data.deliveries.filter((d) => d.member_id === m.member_id)}
+          activity={data.activity}
         />
       ))}
 
@@ -427,7 +482,13 @@ function NewMemberForm({ run, busy, done }: { run: Run; busy: string | null; don
 // the main outfit page does it — items on the left, editorial image on the
 // right, no admin controls inside the frame. Screenshot a card, send it, come
 // back with her yes/no.
-function Lookbook({ deliveries, memberName }: { deliveries: PilotDelivery[]; memberName: string }) {
+function Lookbook({ deliveries, memberName, activity, run, busy }: {
+  deliveries: PilotDelivery[]
+  memberName: string
+  activity: PilotActivity[]
+  run: Run
+  busy: string | null
+}) {
   const shot = deliveries
     .flatMap((d) => (d.looks ?? []).map((l) => ({ l, d })))
     .filter(({ l }) => l.image_url)
@@ -450,10 +511,12 @@ function Lookbook({ deliveries, memberName }: { deliveries: PilotDelivery[]; mem
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {shot.map(({ l }, idx) => {
           const withImg = l.items.filter((it) => it.image_url)
+          const notes = activity.filter((a) => a.type === 'note' && a.look_id === l.look_id)
           return (
             // Same frame as the live site: full-bleed shoot with the
             // Shop-the-Look panel floating top-left over it.
-            <div key={l.look_id} className="relative aspect-[4/5] overflow-hidden bg-[#EDEDED]">
+            <div key={l.look_id}>
+            <div className="relative aspect-[4/5] overflow-hidden bg-[#EDEDED]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={l.image_url!} alt="" className="absolute inset-0 w-full h-full object-cover" />
               <div className="absolute top-2.5 right-2.5 bg-black/55 text-white text-[9px] tracking-[0.1em] px-2 py-1 rounded-full">
@@ -489,8 +552,188 @@ function Lookbook({ deliveries, memberName }: { deliveries: PilotDelivery[]; mem
                 MYRA · STYLED FOR {memberName.split(' ')[0].toUpperCase()}
               </p>
             </div>
+            <LookFeedbackStrip look={l} notes={notes} run={run} busy={busy} firstName={memberName.split(' ')[0]} />
+            </div>
           )
         })}
+      </div>
+    </div>
+  )
+}
+
+// Under each Lookbook card: log the member's reaction in her own words. The
+// verbatim goes in as an append-only note and the YES/NO drives the real
+// learning pipeline (taste vector, brand affinities, persona fade) — so every
+// piece of feedback she sends back sharpens the next delivery.
+function LookFeedbackStrip({ look, notes, run, busy, firstName }: {
+  look: PilotLook
+  notes: PilotActivity[]
+  run: Run
+  busy: string | null
+  firstName: string
+}) {
+  const [resp, setResp] = useState<'yes' | 'no' | null>(look.response)
+  const [reason, setReason] = useState<ResponseReason>(look.response_reason ?? 'not_my_style')
+  const [text, setText] = useState('')
+  const key = `mumfb-${look.look_id}`
+  const first = firstName.toUpperCase()
+  const save = async () => {
+    if (!resp) return
+    const r = await run(key, () => recordMemberLookFeedback(look.look_id, resp, resp === 'no' ? reason : null, text), 'FEEDBACK LOGGED — TASTE UPDATED')
+    if (!r?.error) setText('')
+  }
+  return (
+    <div className="border border-t-0 border-[#E2E0DB] bg-white px-2.5 py-2 space-y-1.5">
+      {look.response && (
+        <p className="text-[8px] tracking-[0.16em] text-[#6B6B6B]">
+          {first} SAID {look.response === 'yes' ? 'YES' : 'NO'}
+          {look.response === 'no' && look.response_reason ? ` — ${look.response_reason.replace(/_/g, ' ').toUpperCase()}` : ''} · LEARNED
+        </p>
+      )}
+      {notes.map((n) => (
+        <p key={n.activity_id} className="text-[11px] leading-snug text-[#0A0A0A]">&ldquo;{n.detail}&rdquo;</p>
+      ))}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button
+          className={`text-[8px] tracking-[0.14em] px-2.5 py-1.5 border transition-colors ${resp === 'yes' ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A]'}`}
+          onClick={() => setResp('yes')}
+        >
+          SHE LIKES IT
+        </button>
+        <button
+          className={`text-[8px] tracking-[0.14em] px-2.5 py-1.5 border transition-colors ${resp === 'no' ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A]'}`}
+          onClick={() => setResp('no')}
+        >
+          NOT FOR HER
+        </button>
+        {resp === 'no' && (
+          <select
+            className="border border-[#E2E0DB] bg-white px-1.5 py-1.5 text-[8px] tracking-[0.1em] text-[#0A0A0A] outline-none"
+            value={reason}
+            onChange={(e) => setReason(e.target.value as ResponseReason)}
+          >
+            {RESPONSE_REASONS.map((r) => (
+              <option key={r.id} value={r.id}>{r.label}</option>
+            ))}
+          </select>
+        )}
+      </div>
+      <div className="flex gap-1.5">
+        <input
+          className={`${input} !px-2 !py-1.5 !text-[10px]`}
+          placeholder={`${first}'S WORDS — E.G. DON'T LIKE ANY OF IT, WOULDN'T SUIT ME`}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') save() }}
+        />
+        <button className={`${btnDark} !px-3 !py-1.5 !text-[8px] whitespace-nowrap`} disabled={!resp || busy === key} onClick={save}>
+          {busy === key ? '…' : 'LOG'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// What she TELLS us about her taste — colours, shapes and item types she loves
+// or won't wear. Authored, never learned over: an AVOID is a hard gate on
+// composition (the piece is never built into a look), a LOVE lifts a piece in
+// scoring. Sits alongside the learned signals rather than replacing them.
+function StylePreferences({ member: m, run, busy }: { member: PilotMember; run: Run; busy: string | null }) {
+  const [loved, setLoved] = useState<StylePrefs>({
+    colours_loved: m.colours_loved ?? [],
+    colours_avoided: m.colours_avoided ?? [],
+    shapes_loved: m.shapes_loved ?? [],
+    shapes_avoided: m.shapes_avoided ?? [],
+    types_loved: m.types_loved ?? [],
+    types_avoided: m.types_avoided ?? [],
+  })
+  const key = `prefs-${m.member_id}`
+  const dirty =
+    JSON.stringify(loved) !==
+    JSON.stringify({
+      colours_loved: m.colours_loved ?? [], colours_avoided: m.colours_avoided ?? [],
+      shapes_loved: m.shapes_loved ?? [], shapes_avoided: m.shapes_avoided ?? [],
+      types_loved: m.types_loved ?? [], types_avoided: m.types_avoided ?? [],
+    })
+
+  // One chip, three states: neutral → loves → avoids → neutral. A value can
+  // never sit in both lists.
+  const cycle = (lovedKey: keyof StylePrefs, avoidKey: keyof StylePrefs, value: string) => {
+    setLoved((p) => {
+      const inLoved = p[lovedKey].includes(value)
+      const inAvoid = p[avoidKey].includes(value)
+      const next = { ...p, [lovedKey]: p[lovedKey].filter((v) => v !== value), [avoidKey]: p[avoidKey].filter((v) => v !== value) }
+      if (!inLoved && !inAvoid) next[lovedKey] = [...next[lovedKey], value]
+      else if (inLoved) next[avoidKey] = [...next[avoidKey], value]
+      return next
+    })
+  }
+
+  const chip = (lovedKey: keyof StylePrefs, avoidKey: keyof StylePrefs, value: string, text: string, swatch?: string) => {
+    const isLoved = loved[lovedKey].includes(value)
+    const isAvoided = loved[avoidKey].includes(value)
+    return (
+      <button
+        key={value}
+        onClick={() => cycle(lovedKey, avoidKey, value)}
+        title="CLICK: LOVES → AVOIDS → NEUTRAL"
+        className={`flex items-center gap-1.5 text-[9px] tracking-[0.1em] px-2 py-1.5 border transition-colors ${
+          isLoved
+            ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]'
+            : isAvoided
+              ? 'bg-white text-[#B83A3A] border-[#B83A3A] line-through'
+              : 'bg-white text-[#6B6B6B] border-[#E2E0DB] hover:border-[#0A0A0A]'
+        }`}
+      >
+        {swatch && <span className="w-2.5 h-2.5 rounded-full border border-[#D8D6D1]" style={{ background: swatch }} />}
+        {text}
+      </button>
+    )
+  }
+
+  const shapeGroups = ['FIT', 'LINE', 'LENGTH', 'DETAIL'] as const
+
+  return (
+    <div className="border border-[#E2E0DB] bg-[#FCFCFA] p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <p className={label}>STYLE PREFERENCES — WHAT SHE SAYS (AVOIDS ARE NEVER COMPOSED)</p>
+        <button
+          className={`${btnDark} !px-4 !py-1.5 !text-[9px]`}
+          disabled={!dirty || busy === key}
+          onClick={() => run(key, () => updateMember(m.member_id, loved), 'PREFERENCES SAVED — COMPOSER UPDATED')}
+        >
+          {busy === key ? 'SAVING…' : dirty ? 'SAVE PREFERENCES' : 'SAVED'}
+        </button>
+      </div>
+      <p className="text-[8px] tracking-[0.1em] text-[#A8A8A4] -mt-2">
+        CLICK ONCE = SHE LOVES IT · TWICE = SHE WON&rsquo;T WEAR IT · THREE TIMES = NO OPINION
+      </p>
+
+      <div>
+        <p className="text-[8px] tracking-[0.14em] text-[#6B6B6B] mb-1.5">COLOURS</p>
+        <div className="flex flex-wrap gap-1.5">
+          {PREF_COLOURS.map((c) => chip('colours_loved', 'colours_avoided', c.value, c.label, c.swatch))}
+        </div>
+      </div>
+
+      <div>
+        <p className="text-[8px] tracking-[0.14em] text-[#6B6B6B] mb-1.5">SHAPES &amp; SILHOUETTES</p>
+        <div className="space-y-1.5">
+          {shapeGroups.map((g) => (
+            <div key={g} className="flex flex-wrap gap-1.5">
+              {SHAPE_PREFERENCES.filter((s) => s.group === g).map((s) =>
+                chip('shapes_loved', 'shapes_avoided', s.id, s.label),
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <p className="text-[8px] tracking-[0.14em] text-[#6B6B6B] mb-1.5">PIECES — WHAT SHE LIVES IN / NEVER TOUCHES</p>
+        <div className="flex flex-wrap gap-1.5">
+          {PREF_TYPES.map((t) => chip('types_loved', 'types_avoided', t.value, t.label))}
+        </div>
       </div>
     </div>
   )
@@ -502,12 +745,14 @@ function MemberCard({
   busy,
   personas = [],
   deliveries = [],
+  activity = [],
 }: {
   member: PilotMember
   run: Run
   busy: string | null
   personas?: { stylist_id: string; name: string; hasEnvelope: boolean }[]
   deliveries?: PilotDelivery[]
+  activity?: PilotActivity[]
 }) {
   const [open, setOpen] = useState(false)
   const [occasions, setOccasions] = useState(m.occasions)
@@ -610,7 +855,7 @@ function MemberCard({
 
       {open && (
         <div className="mt-6 space-y-6">
-          <Lookbook deliveries={deliveries} memberName={m.name} />
+          <Lookbook deliveries={deliveries} memberName={m.name} activity={activity} run={run} busy={busy} />
           {/* Brands */}
           <div>
             <p className={`${label} mb-2`}>BRANDS — RANKED, WITH THE INFERRED WHY</p>
@@ -723,6 +968,8 @@ function MemberCard({
             </div>
           </div>
 
+          <StylePreferences member={m} run={run} busy={busy} />
+
           {/* Wardrobe */}
           <div>
             <p className={`${label} mb-2`}>WARDROBE — MOST-WORN PIECES (STYLE AROUND WHAT SHE OWNS)</p>
@@ -819,7 +1066,7 @@ function DeliveriesTab({ data, run, busy }: { data: PilotData; run: Run; busy: s
 
       {/* Filter to one member → her screenshot lookbook sits right here on top */}
       {memberId !== 'all' && memberById[memberId] && (
-        <Lookbook deliveries={deliveries} memberName={memberById[memberId].name} />
+        <Lookbook deliveries={deliveries} memberName={memberById[memberId].name} activity={data.activity} run={run} busy={busy} />
       )}
 
       {deliveries.map((d) => (

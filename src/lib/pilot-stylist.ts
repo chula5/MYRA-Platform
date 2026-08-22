@@ -204,6 +204,125 @@ export const RESPONSE_REASONS = [
 
 export type ResponseReason = (typeof RESPONSE_REASONS)[number]['id']
 
+// ── Authored style preferences ───────────────────────────────────
+// What she TELLS us about her taste, as opposed to what the feedback loop
+// infers. Colours, shapes and item types she loves or won't wear. Authored by
+// Chloe from real conversation; never overwritten by learning.
+
+export interface StylePrefs {
+  colours_loved: string[]
+  colours_avoided: string[]
+  shapes_loved: string[]
+  shapes_avoided: string[]
+  types_loved: string[]
+  types_avoided: string[]
+}
+
+export const EMPTY_STYLE_PREFS: StylePrefs = {
+  colours_loved: [], colours_avoided: [], shapes_loved: [], shapes_avoided: [], types_loved: [], types_avoided: [],
+}
+
+// Each shape reads the item's scored dimensions (the same 1-5 scales the item
+// form uses), so "WIDE-LEG TROUSERS" is a real predicate, not a keyword match.
+// dim scales: fit 1=SKIN TIGHT→5=OVERSIZED · length 1=CROPPED→5=MAXI ·
+// rise 1=ULTRA LOW→5=ULTRA HIGH · structure 1=BONED→5=UNSTRUCTURED ·
+// shoulder 1=PADDED→5=OFF-SHOULDER · neckline 1=HIGH→5=PLUNGING ·
+// sleeve 1=SLEEVELESS→5=LONG · waist_definition 1=CORSETED→5=BOXY ·
+// leg_opening 1=NARROW→5=FLARED · pattern 1=NONE→5=STATEMENT
+export interface ShapeDims {
+  item_type?: string | null
+  fit?: number | null
+  length?: number | null
+  rise?: number | null
+  structure?: number | null
+  shoulder?: number | null
+  neckline?: number | null
+  sleeve?: number | null
+  waist_definition?: number | null
+  leg_opening?: number | null
+  pattern?: number | null
+}
+
+const BOTTOMS = ['trousers', 'jeans']
+
+export const SHAPE_PREFERENCES: {
+  id: string
+  label: string
+  group: 'FIT' | 'LENGTH' | 'LINE' | 'DETAIL'
+  match: (i: ShapeDims) => boolean
+}[] = [
+  { id: 'oversized', label: 'OVERSIZED / ROOMY FIT', group: 'FIT', match: (i) => (i.fit ?? 0) >= 4 },
+  { id: 'fitted', label: 'FITTED / BODY-SKIMMING', group: 'FIT', match: (i) => i.fit != null && i.fit <= 2 },
+  { id: 'boxy', label: 'BOXY / UNDEFINED WAIST', group: 'FIT', match: (i) => (i.waist_definition ?? 0) >= 4 },
+  { id: 'defined_waist', label: 'DEFINED WAIST', group: 'FIT', match: (i) => i.waist_definition != null && i.waist_definition <= 2 },
+  { id: 'wide_leg', label: 'WIDE / FLARED TROUSERS', group: 'LINE', match: (i) => BOTTOMS.includes(i.item_type ?? '') && (i.leg_opening ?? 0) >= 4 },
+  { id: 'slim_leg', label: 'SLIM / STRAIGHT TROUSERS', group: 'LINE', match: (i) => BOTTOMS.includes(i.item_type ?? '') && i.leg_opening != null && i.leg_opening <= 2 },
+  { id: 'high_rise', label: 'HIGH-WAISTED', group: 'LINE', match: (i) => (i.rise ?? 0) >= 4 },
+  { id: 'low_rise', label: 'LOW / MID RISE', group: 'LINE', match: (i) => i.rise != null && i.rise <= 2 },
+  { id: 'long_length', label: 'MIDI / MAXI LENGTH', group: 'LENGTH', match: (i) => (i.length ?? 0) >= 4 },
+  { id: 'short_length', label: 'CROPPED / SHORT LENGTH', group: 'LENGTH', match: (i) => i.length != null && i.length <= 2 },
+  { id: 'unstructured', label: 'SOFT / UNSTRUCTURED', group: 'LINE', match: (i) => (i.structure ?? 0) >= 4 },
+  { id: 'structured_shoulder', label: 'STRUCTURED SHOULDER', group: 'LINE', match: (i) => i.shoulder != null && i.shoulder <= 2 },
+  { id: 'bare_shoulder', label: 'OFF / BARE SHOULDER', group: 'DETAIL', match: (i) => (i.shoulder ?? 0) >= 4 },
+  { id: 'high_neck', label: 'HIGH / CLOSED NECKLINE', group: 'DETAIL', match: (i) => i.neckline != null && i.neckline <= 2 },
+  { id: 'low_neck', label: 'LOW / OPEN NECKLINE', group: 'DETAIL', match: (i) => (i.neckline ?? 0) >= 4 },
+  { id: 'sleeveless', label: 'SLEEVELESS / BARE ARMS', group: 'DETAIL', match: (i) => i.sleeve != null && i.sleeve <= 2 },
+  { id: 'long_sleeve', label: 'LONG SLEEVES', group: 'DETAIL', match: (i) => (i.sleeve ?? 0) >= 4 },
+  { id: 'statement_pattern', label: 'PATTERN / PRINT', group: 'DETAIL', match: (i) => (i.pattern ?? 0) >= 4 },
+  { id: 'plain', label: 'PLAIN / NO PATTERN', group: 'DETAIL', match: (i) => i.pattern != null && i.pattern <= 2 },
+] as const
+
+const SHAPE_BY_ID = new Map(SHAPE_PREFERENCES.map((s) => [s.id, s]))
+
+export function shapeLabel(id: string): string {
+  return SHAPE_BY_ID.get(id)?.label ?? id.replace(/_/g, ' ').toUpperCase()
+}
+
+export function matchesShape(id: string, item: ShapeDims): boolean {
+  const rule = SHAPE_BY_ID.get(id)
+  return rule ? rule.match(item) : false
+}
+
+export function readStylePrefs(row: Partial<StylePrefs> | null | undefined): StylePrefs {
+  const arr = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
+  return {
+    colours_loved: arr(row?.colours_loved),
+    colours_avoided: arr(row?.colours_avoided),
+    shapes_loved: arr(row?.shapes_loved),
+    shapes_avoided: arr(row?.shapes_avoided),
+    types_loved: arr(row?.types_loved),
+    types_avoided: arr(row?.types_avoided),
+  }
+}
+
+export function hasStylePrefs(p: StylePrefs | undefined | null): boolean {
+  if (!p) return false
+  return Object.values(p).some((v) => Array.isArray(v) && v.length > 0)
+}
+
+// An item she has told us NOT to wear. Reasons are returned so the composer
+// and the UI can say WHY a piece was held back.
+export function avoidReasons(p: StylePrefs | undefined, item: ShapeDims & { colour_family?: string | null }): string[] {
+  if (!p) return []
+  const out: string[] = []
+  if (item.colour_family && p.colours_avoided.includes(item.colour_family)) out.push(item.colour_family.toUpperCase())
+  if (item.item_type && p.types_avoided.includes(item.item_type)) out.push(item.item_type.replace(/_/g, ' ').toUpperCase())
+  for (const s of p.shapes_avoided) if (matchesShape(s, item)) out.push(shapeLabel(s))
+  return out
+}
+
+// Bonus for the things she has told us she loves, ~0..0.45 — additive with the
+// learned affinity so an authored love lifts a piece without overruling
+// everything else in the look.
+export function lovedScore(p: StylePrefs | undefined, item: ShapeDims & { colour_family?: string | null }): number {
+  if (!p) return 0
+  let s = 0
+  if (item.colour_family && p.colours_loved.includes(item.colour_family)) s += 0.18
+  if (item.item_type && p.types_loved.includes(item.item_type)) s += 0.15
+  for (const sh of p.shapes_loved) if (matchesShape(sh, item)) { s += 0.12; break }
+  return Math.min(0.45, s)
+}
+
 // ── Taste signals ───────────────────────────────────────────────────────────
 // Same hierarchy as the main app: money moves taste hardest, a save next, a
 // yes is a like, a no pulls gently away. Every one of these writes a

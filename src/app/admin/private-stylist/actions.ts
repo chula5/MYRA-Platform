@@ -32,6 +32,8 @@ import {
   calibrationPlan,
   validateDelivery,
   normalise,
+  readStylePrefs,
+  type StylePrefs,
 } from '@/lib/pilot-stylist'
 import { accumulate, zeroVector } from '@/lib/taste-vector'
 import { getAllItems, type ItemWithBrand } from '@/lib/admin-queries'
@@ -70,6 +72,14 @@ export interface PilotMember {
   budget_ceiling: Record<string, number>
   never_wears: string | null
   notes: string | null
+  // Authored style preferences (migration 0045) — what she says about her own
+  // taste, as opposed to what the feedback loop infers.
+  colours_loved: string[]
+  colours_avoided: string[]
+  shapes_loved: string[]
+  shapes_avoided: string[]
+  types_loved: string[]
+  types_avoided: string[]
   created_at: string
   // Σ signal_weight × look vector across her taste events — the 34-dim view
   taste_vector: number[] | null
@@ -351,6 +361,12 @@ export async function updateMember(
     budget_ceiling: Record<string, number>
     never_wears: string | null
     notes: string | null
+    colours_loved: string[]
+    colours_avoided: string[]
+    shapes_loved: string[]
+    shapes_avoided: string[]
+    types_loved: string[]
+    types_avoided: string[]
   }>,
 ): Promise<{ error?: string }> {
   const admin = createAdminClient()
@@ -359,7 +375,15 @@ export async function updateMember(
     .update({ ...patch, updated_at: new Date().toISOString() })
     .eq('member_id', memberId)
   revalidatePath(PATH)
-  return error ? { error: error.message } : {}
+  if (!error) return {}
+  // The style-preference columns arrive with 0045 — say so rather than
+  // showing a raw PostgREST column error.
+  // PostgREST says either "column ... does not exist" or, for an update,
+  // "Could not find the 'x' column of 'pilot_member' in the schema cache".
+  if (/does not exist|schema cache/i.test(error.message)) {
+    return { error: `${error.message} — RUN MIGRATION 0045_pilot_style_preferences.sql IN SUPABASE` }
+  }
+  return { error: error.message }
 }
 
 export async function deleteMember(memberId: string): Promise<{ error?: string }> {
@@ -760,6 +784,53 @@ export async function recordResponse(
   return {}
 }
 
+// A member's verbatim reaction to a shot look, logged from the Lookbook after
+// Chloe reads it back to her. The quote is kept as an append-only pilot_activity
+// note (re-phrasings never overwrite each other), and the yes/no rides the full
+// recordResponse pipeline: taste event → 34-dim vector, brand affinity signals,
+// persona weight fade. This is the loop that sharpens her vector delivery after
+// delivery.
+export async function recordMemberLookFeedback(
+  lookId: string,
+  response: 'yes' | 'no',
+  reason: ResponseReason | null,
+  verbatim: string,
+): Promise<{ error?: string }> {
+  const admin = createAdminClient() as any
+  const { data: look, error: lerr } = await admin.from('pilot_look').select('delivery_id, items').eq('look_id', lookId).single()
+  if (lerr || !look) return { error: lerr?.message ?? 'Look not found' }
+  const { data: delivery } = await admin.from('pilot_delivery').select('member_id').eq('delivery_id', look.delivery_id).single()
+  if (!delivery) return { error: 'Delivery not found' }
+
+  const text = verbatim.trim()
+  if (text) {
+    const r = await logActivity({
+      member_id: delivery.member_id,
+      type: 'note',
+      detail: text,
+      delivery_id: look.delivery_id,
+      look_id: lookId,
+    })
+    if (r.error) return r
+  }
+
+  // The composer's avoid/favour list reads pilot_look_feedback — so her verdict
+  // also lands there per item, exactly like Chloe's approve/skip review does.
+  // A NO means these specific pieces stop being re-composed for her.
+  const items: LookItem[] = look.items ?? []
+  const action = response === 'yes' ? 'accept' : 'remove'
+  const fb: any[] = []
+  for (const it of items) {
+    if (it.item_id) fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action, slot: it.slot ?? null, item_in: it.item_id, brand_in: it.brand_id ?? null })
+  }
+  if (fb.length) {
+    const { error: fbErr } = await admin.from('pilot_look_feedback').insert(fb)
+    if (fbErr) return { error: fbErr.message }
+  }
+
+  return recordResponse(lookId, response, response === 'no' ? (reason ?? 'not_my_style') : reason)
+}
+
 export async function logActivity(input: {
   member_id: string
   type: PilotActivity['type']
@@ -865,7 +936,7 @@ export async function recomputeWeights(memberId: string): Promise<{ weights?: Ro
 
 const pairKeyOrdered = (a: string, b: string): [string, string] => (a < b ? [a, b] : [b, a])
 
-async function loadMemberTaste(admin: any, member: { member_id: string; brands: RankedBrand[]; brands_input_only: string[] }): Promise<MemberTaste> {
+async function loadMemberTaste(admin: any, member: { member_id: string; brands: RankedBrand[]; brands_input_only: string[] } & Partial<StylePrefs>): Promise<MemberTaste> {
   const t: MemberTaste = {
     affinity: new Map(),
     families: new Map(),
@@ -874,6 +945,9 @@ async function loadMemberTaste(admin: any, member: { member_id: string; brands: 
     itemSwapOut: new Map(),
     brandSwapOut: new Map(),
     pairNet: new Map(),
+    // Authored preferences ride along with the learned signals; pre-0045 rows
+    // simply have none.
+    prefs: readStylePrefs(member),
   }
 
   const [affRes, famRes, exclRes, fbRes] = await Promise.all([

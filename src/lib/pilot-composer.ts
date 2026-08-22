@@ -19,7 +19,8 @@ import {
   slotForItemType,
   type Slot,
 } from '@/lib/composer'
-import type { LookItem } from '@/lib/pilot-stylist'
+import type { LookItem, StylePrefs } from '@/lib/pilot-stylist'
+import { avoidReasons, lovedScore } from '@/lib/pilot-stylist'
 import { itemPseudoVector } from '@/lib/brand-affinity'
 import { cosine } from '@/lib/taste-vector'
 
@@ -139,6 +140,9 @@ export interface MemberTaste {
   itemSwapOut: Map<string, number> // item_id → times swapped away
   brandSwapOut: Map<string, number> // brand_id → times swapped away
   pairNet: Map<string, number> // "a|b" → accepts − swaps
+  // What she has TOLD us (authored, never learned over): colours/shapes/types
+  // she loves or won't wear. Avoided = hard gate, loved = scoring bonus.
+  prefs?: StylePrefs
 }
 
 const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`)
@@ -162,7 +166,11 @@ export function memberItemScore(t: MemberTaste, item: ItemWithBrand): number {
   }
   const itemSwaps = t.itemSwapOut.get(item.item_id) ?? 0
   s -= Math.min(0.3 * itemSwaps, 0.6)
-  return Math.max(-0.5, Math.min(1, s))
+  // Authored preferences. The avoid penalty only bites in the fallback pool —
+  // normally avoided pieces are gated out entirely before scoring.
+  s += lovedScore(t.prefs, item as any)
+  if (avoidReasons(t.prefs, item as any).length) s -= 0.5
+  return Math.max(-0.5, Math.min(1.4, s))
 }
 
 // learnedBonus hook for generateCandidates: brand taste + pairing history for
@@ -274,6 +282,19 @@ function varietyJitter(itemId: string, seed: number): number {
 // the rest of each look comes from the Outfit Composer with the member's
 // taste folded into generation. Items never repeat across the set, and the
 // member's look history pushes fresh pieces forward each delivery.
+// A pool can build looks if it can dress the body: a dress, or a top and a
+// bottom. Accessories alone are not an outfit.
+function canBuildLooks(pool: ItemWithBrand[]): boolean {
+  let dress = 0, top = 0, bottom = 0
+  for (const i of pool) {
+    const slot = slotForItemType(i.item_type)
+    if (slot === 'dress') dress++
+    else if (slot === 'top') top++
+    else if (slot === 'bottom') bottom++
+  }
+  return dress >= 2 || (top >= 2 && bottom >= 2)
+}
+
 export function composeMemberLooks(
   t: MemberTaste,
   library: ItemWithBrand[],
@@ -283,12 +304,18 @@ export function composeMemberLooks(
   history?: ComposeHistory,
 ): ComposedLook[] {
   const seed = history ? Array.from(history.seenCounts.values()).reduce((s, n) => s + n, 0) + history.rejected.size : 0
-  const usable = library.filter(
+  const inStock = library.filter(
     (i) =>
       i.image_url &&
       i.stock_status !== 'out_of_stock' &&
       !(i.brand?.name && t.inputOnlyBrands.has(i.brand.name.toLowerCase())),
   )
+  // Authored avoids are a hard gate: a colour or shape she has told us she
+  // won't wear never gets composed. Safety net — if the gate would leave too
+  // little to build a look from, fall back to the full pool (where the same
+  // avoids still apply as a heavy scoring penalty) rather than send nothing.
+  const preferred = inStock.filter((i) => avoidReasons(t.prefs, i as any).length === 0)
+  const usable = canBuildLooks(preferred) ? preferred : inStock
 
   const anchors = usable
     .filter((i) => {
