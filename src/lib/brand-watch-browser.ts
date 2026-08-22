@@ -104,8 +104,12 @@ export async function discoverProductUrls(baseUrl: string): Promise<string[]> {
     if (/<sitemapindex/i.test(xml)) {
       const subs = locs(xml)
       // prefer EN/GB locale sub-sitemaps and anything mentioning products
-      const preferred = subs.filter((u) => LOCALE_SITEMAP.test(u) || /product/i.test(u))
-      for (const u of (preferred.length ? preferred : subs).slice(0, 10)) queue.push(u)
+      // Skip the editorial/CMS sitemaps outright — ME+EM's sitemap-cms.xml
+      // queued "Female Voices" and "Jacket Theory" as if they were garments.
+      const productish = subs.filter((u) => !/\b(cms|blog|journal|content|editorial|stories|pages?)\b/i.test(u))
+      const pool = productish.length ? productish : subs
+      const preferred = pool.filter((u) => LOCALE_SITEMAP.test(u) || /product|oms/i.test(u))
+      for (const u of (preferred.length ? preferred : pool).slice(0, 12)) queue.push(u)
     } else {
       for (const u of locs(xml)) pageUrls.add(u)
     }
