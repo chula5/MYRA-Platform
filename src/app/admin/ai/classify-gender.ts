@@ -15,13 +15,19 @@ import Anthropic from '@anthropic-ai/sdk'
 
 export type GenderRead = 'women' | 'men' | 'unclear'
 
-const PROMPT = `Is this a WOMEN'S or MEN'S fashion product?
+const PROMPT = `Is this fashion product WOMEN'S or MEN'S wear?
 
 Answer with exactly one word: women, men, or unclear.
 
-Judge on the garment and, if a model is shown, who it is cut for. Unisex or
-genuinely ambiguous pieces (most bags, jewellery, scarves, sunglasses) are
-"unclear" — not a guess. Answer "men" only when it is clearly menswear.`
+How to decide, in order:
+1. If a person is shown, judge THEM — face, body, hair, build — even if the
+   shot is cropped to the torso or legs. A male model means "men", whatever
+   the styling. Contemporary menswear is often loose, pastel and androgynous;
+   do not read that as womenswear.
+2. With no person, judge the garment's cut: bust darts, a nipped waist, a
+   women's button side, narrow shoulders and a shaped body mean "women";
+   a straight boxy body, wide shoulders and a men's placket mean "men".
+3. If you genuinely cannot tell, answer "unclear". Do not guess.`
 
 export async function classifyProductGender(imageUrl: string): Promise<{ gender: GenderRead; error?: string }> {
   if (!imageUrl || !/^https?:\/\//.test(imageUrl)) return { gender: 'unclear', error: 'no image' }
@@ -39,8 +45,10 @@ export async function classifyProductGender(imageUrl: string): Promise<{ gender:
 
     const client = new Anthropic({ apiKey })
     const r = await client.messages.create({
-      // Cheapest capable model — this is a one-word visual call, not styling.
-      model: 'claude-haiku-4-5-20251001',
+      // Haiku read a plainly male model in cropped shorts as womenswear, and a
+      // whole queue of menswear followed. This call decides what MYRA shows,
+      // so it uses the stronger model — it still costs one word of output.
+      model: 'claude-sonnet-4-6',
       max_tokens: 8,
       messages: [{
         role: 'user',
