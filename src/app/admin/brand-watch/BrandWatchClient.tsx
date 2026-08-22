@@ -14,10 +14,18 @@ const CHIP = 'px-3 py-1.5 rounded-full text-[9px] tracking-[0.12em] border trans
 const CHIP_ON = `${CHIP} bg-[#0A0A0A] text-white border-[#0A0A0A]`
 const CHIP_OFF = `${CHIP} bg-white text-[#6B6B6B] border-[#E2E0DB] hover:border-[#0A0A0A]`
 
-function fmtPrice(price: string | null, currency: string | null): string {
-  if (!price) return ''
-  const sym: Record<string, string> = { GBP: '£', USD: '$', EUR: '€' }
-  return `${sym[currency ?? ''] ?? ''}${String(price).replace(/\.00$/, '')}`
+/**
+ * Always lead in pounds — you shop in £, so a queue mixing $, € and kr is
+ * unreadable. The native price follows in brackets when it isn't GBP, because
+ * a converted figure is an estimate and the retailer charges the original.
+ */
+function fmtPrice(price: string | null, currency: string | null, priceGbp?: number | null): string {
+  const sym: Record<string, string> = { GBP: '£', USD: '$', EUR: '€', DKK: 'kr ', SEK: 'kr ', NOK: 'kr ', CHF: 'CHF ' }
+  const native = price ? `${sym[currency ?? ''] ?? ''}${String(price).replace(/\.00$/, '')}` : ''
+  if (priceGbp == null) return native
+  const gbp = `£${Math.round(priceGbp)}`
+  if (!native || (currency ?? 'GBP') === 'GBP') return gbp
+  return `${gbp} (${native})`
 }
 
 interface Props extends QueuePage {
@@ -416,7 +424,7 @@ export default function BrandWatchClient(props: Props) {
                   <p className="text-[8px] tracking-[0.1em] text-[#A8A8A4]">
                     {[q.item_type, q.colour_family, q.material_category].filter(Boolean).join(' · ').toUpperCase()}
                   </p>
-                  <p className="text-[10px] tracking-[0.06em] text-[#4A4E57]">{fmtPrice(q.price, q.currency)}</p>
+                  <p className="text-[10px] tracking-[0.06em] text-[#4A4E57]">{fmtPrice(q.price, q.currency, q.price_gbp)}</p>
                   <div className="mt-auto pt-2 flex gap-2">
                     <button
                       disabled={pending}

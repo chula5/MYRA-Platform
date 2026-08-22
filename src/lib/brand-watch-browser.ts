@@ -123,11 +123,23 @@ export async function discoverProductUrls(baseUrl: string): Promise<string[]> {
   // One URL per product. Prefer an English (and ideally GB) locale so the
   // scraped title, description and price are the ones we want.
   const byProduct = new Map<string, string>()
+  // Which locale of a product to keep. ME+EM serves the UK from the UNPREFIXED
+  // root and puts other markets under /us/, /de/, /fr/, /int/ — so "no prefix"
+  // has to outrank a foreign locale, or the US page wins and every price
+  // arrives in dollars.
+  const FOREIGN = /^\/(us|ca|au|nz|de|fr|es|it|nl|be|dk|se|no|fi|pt|pl|cz|at|ch|ie|jp|kr|cn|hk|sg|ae|int|eu|row)(\/|-)/i
   const localeRank = (u: string): number => {
-    const p = u.toLowerCase()
-    if (/\/(gb|uk)\/en|\/en-(gb|uk)\//.test(p)) return 0
-    if (/\/en(\/|-)/.test(p)) return 1
-    return 2
+    let path = '/'
+    try { path = new URL(u).pathname } catch { /* keep root */ }
+    const low = path.toLowerCase()
+    if (/^\/(gb|uk)(\/|-)|^\/en-(gb|uk)(\/|$)/.test(low)) return 0
+    if (FOREIGN.test(low)) return 3
+    // No locale segment at all — the site's home market, usually the UK for
+    // the brands MYRA watches.
+    const first = low.split('/').filter(Boolean)[0] ?? ''
+    if (!/^[a-z]{2}([-_][a-z]{2})?$/.test(first)) return 1
+    if (/^en([-_]|$)/.test(first)) return 2
+    return 3
   }
   for (const u of products) {
     const key = canonicalProductKey(u)
