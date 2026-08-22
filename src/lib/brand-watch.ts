@@ -992,14 +992,19 @@ async function applyVisionGender(products: ScannedProduct[]): Promise<number> {
     products.some((p) => WOMEN_RE.test([p.productType, p.tags.join(' '), p.title, p.handle].join(' ')))
   if (anySignal) return 0
 
+  // On a site that states gender NOWHERE, only a positive women's read gets
+  // through. Excluding the confirmed men's reads was not enough: a flat-lay
+  // trench or a cropped shot returns "unclear", and Adolfo Domínguez's queue
+  // filled with menswear again. MYRA is womenswear only — an item nobody can
+  // confirm as women's is not worth showing, and a brand that labels its
+  // sections never reaches this code at all.
   let excluded = 0
   const CONC = 6
-  const withImages = products.filter((p) => p.images[0])
-  for (let i = 0; i < withImages.length; i += CONC) {
-    const chunk = withImages.slice(i, i + CONC)
-    const reads = await Promise.all(chunk.map((p) => classifyProductGender(p.images[0])))
+  for (let i = 0; i < products.length; i += CONC) {
+    const chunk = products.slice(i, i + CONC)
+    const reads = await Promise.all(chunk.map((p) => (p.images[0] ? classifyProductGender(p.images[0]) : Promise.resolve({ gender: 'unclear' as const }))))
     reads.forEach((r, j) => {
-      if (r.gender === 'men') { chunk[j].menswear = true; excluded++ }
+      if (r.gender !== 'women') { chunk[j].menswear = true; excluded++ }
     })
   }
   return excluded
