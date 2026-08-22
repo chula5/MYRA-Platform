@@ -185,10 +185,19 @@ export function parseProductPage(html: string, url: string): ParsedProduct | nul
   for (const m of Array.from(html.matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi))) {
     try {
       const d = JSON.parse(m[1].trim())
-      for (const item of Array.isArray(d) ? d : [d]) {
-        nodes.push(item)
-        if (Array.isArray(item?.['@graph'])) nodes.push(...item['@graph'])
+      // Walk into the wrappers brands nest a Product in: @graph, and the
+      // WebPage → mainEntity shape Agnès b. uses. Without mainEntity the
+      // Product was never found, the parser fell through to og: tags, and
+      // every one of its items came out with no price at all.
+      const visit = (node: any, depth: number): void => {
+        if (!node || typeof node !== 'object' || depth > 4) return
+        if (Array.isArray(node)) { for (const n of node) visit(n, depth + 1); return }
+        nodes.push(node)
+        for (const key of ['@graph', 'mainEntity', 'mainEntityOfPage', 'itemListElement']) {
+          if (node[key]) visit(node[key], depth + 1)
+        }
       }
+      visit(d, 0)
     } catch { /* invalid JSON-LD block — skip */ }
   }
   const product = nodes.find((n) => {
