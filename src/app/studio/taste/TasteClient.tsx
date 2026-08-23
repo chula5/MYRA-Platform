@@ -589,7 +589,17 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                   )}
                 </div>
 
-                <MemberScatter inspection={inspection} brands={data.brands} W={W} H={H} M={M} />
+                <MemberScatter
+                  inspection={inspection}
+                  brands={data.brands}
+                  W={W}
+                  H={H}
+                  M={M}
+                  pending={pending}
+                  onAdd={(n) => act(() => forceAddBrand(inspection.member.member_id, n), (r) => { setNotice(r.error ?? `${n.toUpperCase()} ADDED AT 1.0`); if (!r.error) selectMember(inspection.member.member_id) })}
+                  onRemove={(id) => act(() => setBrandHidden(inspection.member.member_id, id, true), () => { setNotice('REMOVED FROM HER CIRCLE'); selectMember(inspection.member.member_id) })}
+                  onRestore={(id) => act(() => setBrandHidden(inspection.member.member_id, id, false), () => { setNotice('PUT BACK IN HER CIRCLE'); selectMember(inspection.member.member_id) })}
+                />
 
                 <div>
                   <p className={H2}>AFFINITIES ABOVE BASELINE · {inspection.affinities.length} — THE NUMBERS BEHIND THE MAP</p>
@@ -743,15 +753,21 @@ const MEMBER_ROLES: { key: string; label: string; colour: string }[] = [
 ]
 
 function MemberScatter({
-  inspection, brands, W, H, M,
+  inspection, brands, W, H, M, onAdd, onRemove, onRestore, pending,
 }: {
   inspection: MemberInspection
   brands: MapBrand[]
   W: number
   H: number
   M: { left: number; right: number; top: number; bottom: number }
+  onAdd: (name: string) => void
+  onRemove: (brandId: string) => void
+  onRestore: (brandId: string) => void
+  pending: boolean
 }) {
   const [showRoles, setShowRoles] = useState<Set<string>>(new Set(['onboarded', 'expanded', 'learned']))
+  const [sel, setSel] = useState<{ id: string; name: string } | null>(null)
+  const [addName, setAddName] = useState('')
   const byId = useMemo(() => new Map(brands.map((b) => [b.brand_id, b])), [brands])
 
   // Her own frame. Reusing the global map's scale left her brands squashed
@@ -759,10 +775,16 @@ function MemberScatter({
   // full ladder runs to £3,000+ and she does not shop there.
   const raw = useMemo(() => {
     const out: Array<{ id: string; name: string; ax: number; ay: number; role: string; aff: number; trace: string | null; hidden: boolean }> = []
+    // Named-ness comes from her intake list, not the affinity source: a
+    // positive signal used to rewrite source to 'learned', which made the map
+    // claim she had named nothing.
+    const namedIds = new Set((inspection.onboarded ?? []).map((o) => o.brand_id).filter(Boolean) as string[])
     for (const a of inspection.affinities) {
       const b = byId.get(a.brand_id)
       if (!b || b.x == null || b.price_position == null) continue
-      const role = a.source === 'onboarded' ? 'onboarded' : a.source === 'learned' ? 'learned' : 'expanded'
+      const role = namedIds.has(a.brand_id) || a.source === 'onboarded'
+        ? 'onboarded'
+        : a.source === 'learned' ? 'learned' : 'expanded'
       out.push({ id: a.brand_id, name: a.brand_name, ax: b.x, ay: b.price_position, role, aff: a.affinity, trace: a.expansion_trace, hidden: a.hidden })
     }
     return out
@@ -818,7 +840,7 @@ function MemberScatter({
             const colour = MEMBER_ROLES.find((r) => r.key === d.role)!.colour
             const named = d.role === 'onboarded'
             return (
-              <g key={d.id} opacity={d.hidden ? 0.3 : 1}>
+              <g key={d.id} opacity={d.hidden ? 0.3 : 1} onClick={() => setSel({ id: d.id, name: d.name })} style={{ cursor: 'pointer' }}>
                 <circle
                   cx={d.x} cy={d.y} r={named ? 4.5 : 3}
                   fill={colour}
@@ -845,6 +867,33 @@ function MemberScatter({
           )}
         </svg>
       </div>
+      {/* correcting her circle where you spot the problem — on the graph */}
+      <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-[#EFEDE9] pt-2">
+        {sel ? (
+          <>
+            <span className="text-[16px] tracking-[0.06em] text-[#0A0A0A]">{sel.name.toUpperCase()}</span>
+            {inspection.affinities.find((a) => a.brand_id === sel.id)?.hidden ? (
+              <button disabled={pending} className={BTN_GHOST} onClick={() => { onRestore(sel.id); setSel(null) }}>PUT BACK IN HER CIRCLE</button>
+            ) : (
+              <button disabled={pending} className={BTN_GHOST} onClick={() => { onRemove(sel.id); setSel(null) }}>REMOVE FROM HER CIRCLE</button>
+            )}
+            <button className={BTN_GHOST} onClick={() => setSel(null)}>CLEAR</button>
+          </>
+        ) : (
+          <span className="text-[16px] tracking-[0.06em] text-[#A8A8A4]">CLICK A DOT TO TAKE THAT BRAND OUT OF HER CIRCLE.</span>
+        )}
+        <span className="ml-auto flex items-center gap-1.5">
+          <input
+            value={addName}
+            onChange={(e) => setAddName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && addName.trim()) { onAdd(addName); setAddName('') } }}
+            placeholder="ADD A BRAND FOR HER"
+            className={`${INPUT} w-52 uppercase placeholder:text-[#A8A8A4]`}
+          />
+          <button disabled={pending || !addName.trim()} className={BTN_GHOST} onClick={() => { onAdd(addName); setAddName('') }}>ADD</button>
+        </span>
+      </div>
+
       <p className="mt-1.5 text-[16px] tracking-[0.12em] text-[#A8A8A4]">
         GOLD RING = A BRAND SHE NAMED
         {frame ? ` · ZOOMED TO HER RANGE, £${Math.round(frame.lo)}–£${Math.round(frame.hi)}` : ''}

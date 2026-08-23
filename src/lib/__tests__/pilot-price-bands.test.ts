@@ -108,3 +108,16 @@ describe('price gate on brand suggestions', () => {
     expect([...gated.keys()]).toEqual(['cheap'])
   })
 })
+
+describe('brand provenance', () => {
+  it('a positive signal must not un-name a brand she named herself', async () => {
+    // Regression: applyBrandSignals wrote source:'learned' unconditionally, so
+    // liking a look containing Sessùn erased the fact she named Sessùn at
+    // intake. The map then reported "SHE NAMED · 0" for a member with five.
+    const src = await import('node:fs').then((fs) =>
+      fs.readFileSync(new URL('../brand-affinity.ts', import.meta.url), 'utf8'))
+    const positiveBranch = src.slice(src.indexOf('if (positive) {'), src.indexOf('if (positive) {') + 700)
+    expect(positiveBranch).toContain("old?.source === 'onboarded' ? 'onboarded' : 'learned'")
+    expect(positiveBranch).not.toMatch(/source: 'learned',/)
+  })
+})

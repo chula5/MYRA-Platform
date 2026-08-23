@@ -819,7 +819,11 @@ export async function applyBrandSignals(
       const oldVal = old?.affinity ?? SEED.baseline
       await writeAffinity(admin, userId, b.brand_id, {
         affinity: stepPositive(oldVal),
-        source: 'learned', // first positive on an expanded brand confirms the hypothesis
+        // A positive promotes an EXPANDED brand to learned — the hypothesis is
+        // confirmed. It must never overwrite 'onboarded': she named that brand
+        // herself, and liking it later does not un-name it. Losing that made
+        // the map report "SHE NAMED · 0" for a member with five named brands.
+        source: old?.source === 'onboarded' ? 'onboarded' : 'learned',
         positive_count: (old?.positive_count ?? 0) + 1,
         expansion_trace: old?.expansion_trace ?? null,
       }, 'learned', eventType, old?.affinity ?? null)

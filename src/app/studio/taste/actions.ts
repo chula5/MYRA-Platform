@@ -305,7 +305,7 @@ export async function seedStarterFamily(): Promise<{ error?: string }> {
 
 export interface MemberInspection {
   member: { member_id: string; name: string; occasions: string[]; taste_vector: number[] | null }
-  onboarded: Array<{ name: string; rank?: number; matched: boolean }>
+  onboarded: Array<{ name: string; rank?: number; matched: boolean; brand_id?: string }>
   unmatched: string[]
   affinities: Array<{
     brand_id: string; brand_name: string; affinity: number; source: string
@@ -355,8 +355,14 @@ export async function loadMemberInspection(memberId: string, logPreview = false)
     ...((member.brands_input_only ?? []) as string[]).map((n) => ({ name: n })),
   ]
   const { matched } = resolveBrandNames(graph, namedRaw.map((n) => n.name))
-  const matchedKeys = new Set(matched.map((m) => brandKey(m.name)))
-  const onboarded = namedRaw.map((n) => ({ ...n, matched: matchedKeys.has(brandKey(n.name)) }))
+  const idByKey = new Map(matched.map((m) => [brandKey(m.name), m.brand_id]))
+  // aliases resolve too, so "Sessun" finds the row named "Sessùn"
+  for (const m of matched) for (const a of m.aliases ?? []) idByKey.set(brandKey(a), m.brand_id)
+  const onboarded = namedRaw.map((n) => ({
+    ...n,
+    matched: idByKey.has(brandKey(n.name)),
+    brand_id: idByKey.get(brandKey(n.name)),
+  }))
 
   const { data: unmatchedRows } = await admin.from('unmatched_brand_log')
     .select('raw_name').eq('user_id', memberId).order('created_at')
