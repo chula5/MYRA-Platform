@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { HIGGSFIELD_POSE_OPTIONS } from '@/lib/higgsfield-shoot'
+import { lookSpend, formatLookSpend } from '@/lib/wardrobe/owned-items'
 import {
   ROOMS,
   ROOM_KEYS,
@@ -555,13 +556,23 @@ function Lookbook({ deliveries, memberName, activity, run, busy }: {
                       <div className="absolute inset-x-0 bottom-0 z-10 pt-8 pb-1.5 px-1.5 bg-gradient-to-t from-black/70 via-black/25 to-transparent">
                         <p className="text-white/75 text-[6px] tracking-[0.06em] uppercase truncate">{it.brand ?? 'BRAND'}</p>
                         <p className="text-white text-[7px] leading-[1.15] line-clamp-2 mt-0.5">{it.product_name}</p>
-                        {typeof it.price_gbp === 'number' && (
+                        {it.owned ? (
+                          <p className="text-[#F3E3C3] text-[6px] tracking-[0.08em] mt-0.5 uppercase">◈ In your wardrobe</p>
+                        ) : typeof it.price_gbp === 'number' ? (
                           <p className="text-white/90 text-[7px] tracking-[0.03em] mt-0.5">£{it.price_gbp}</p>
-                        )}
+                        ) : null}
                       </div>
                     </div>
                   ))}
                 </div>
+                {(() => {
+                  const sp = lookSpend(l.items)
+                  return (
+                    <p className="mt-2 text-white text-[7px] tracking-[0.08em] leading-[1.3] drop-shadow-[0_1px_3px_rgba(0,0,0,0.55)] uppercase">
+                      {formatLookSpend(sp)}
+                    </p>
+                  )
+                })()}
               </div>
               <p className="absolute bottom-2 right-2.5 text-white text-[7.5px] tracking-[0.14em] drop-shadow-[0_1px_3px_rgba(0,0,0,0.55)]">
                 MYRA · STYLED FOR {memberName.split(' ')[0].toUpperCase()}
@@ -1317,7 +1328,12 @@ function MemberCard({
 
           {/* Wardrobe */}
           <div>
-            <p className={`${label} mb-2`}>WARDROBE — MOST-WORN PIECES (STYLE AROUND WHAT SHE OWNS)</p>
+            <p className={`${label} mb-2`}>
+              WARDROBE — MOST-WORN PIECES (STYLE AROUND WHAT SHE OWNS)
+              <a href={`/admin/wardrobe?member=${m.member_id}`} className="ml-3 text-[#C4A882] hover:underline">
+                ◈ PHOTO IMPORT · {m.owned_count} APPROVED PIECE{m.owned_count === 1 ? '' : 'S'} →
+              </a>
+            </p>
             {m.wardrobe.map((w) => (
               <div key={w.wardrobe_id} className="flex items-center gap-3 mb-1">
                 <p className="text-[10px] tracking-[0.06em] text-[#0A0A0A]">
@@ -1536,6 +1552,7 @@ function DeliveryCard({
   run: Run
   busy: string | null
 }) {
+  const [ownedShare, setOwnedShare] = useState(0.6)
   const [open, setOpen] = useState(d.status === 'draft')
   const [editingLook, setEditingLook] = useState<string | 'new' | null>(null)
   const [activityDetail, setActivityDetail] = useState('')
@@ -1630,6 +1647,32 @@ function DeliveryCard({
                 >
                   {busy === `compose-${d.delivery_id}` ? 'COMPOSING…' : '✦ COMPOSE 3 LOOKS'}
                 </button>
+                <button
+                  className="text-[9px] tracking-[0.12em] px-3 py-1.5 border border-[#C4A882] text-[#8B5E00] hover:bg-[#C4A882] hover:text-white disabled:opacity-40"
+                  disabled={busy === `compose-owned-${d.delivery_id}`}
+                  title={`Style what she owns: at least ${Math.round(ownedShare * 100)}% of the looks are built around a piece from her wardrobe (owned pieces are £0 of new spend). Needs approved wardrobe pieces — see /admin/wardrobe.`}
+                  onClick={() =>
+                    run(
+                      `compose-owned-${d.delivery_id}`,
+                      () => composeDeliveryLooks(d.delivery_id, { ownedMode: 'style_owned', ownedTargetShare: ownedShare }),
+                      'LOOKS COMPOSED AROUND HER WARDROBE — REVIEW, SWAP OR APPROVE',
+                    )
+                  }
+                >
+                  {busy === `compose-owned-${d.delivery_id}` ? 'COMPOSING…' : '◈ STYLE WHAT SHE OWNS'}
+                </button>
+                <label className="flex items-center gap-1 text-[8px] tracking-[0.12em] text-[#6B6B6B]" title="Share of looks that must contain at least one owned piece">
+                  <input
+                    type="number"
+                    min={10}
+                    max={100}
+                    step={10}
+                    value={Math.round(ownedShare * 100)}
+                    onChange={(e) => setOwnedShare(Math.max(0.1, Math.min(1, Number(e.target.value) / 100)))}
+                    className="w-12 border border-[#E2E0DB] px-1.5 py-1 text-[9px] text-[#0A0A0A] bg-white"
+                  />
+                  % OWNED
+                </label>
                 <button className={btnTiny} onClick={() => setEditingLook('new')}>
                   + ADD LOOK
                 </button>
@@ -1788,6 +1831,11 @@ function LookRow({
           <p className="text-[10px] tracking-[0.14em] text-[#0A0A0A]">
             LOOK {l.position} — {formatRoomMix(l.room_mix) || 'NO ROOM MIX'}
             {l.approved_at && <span className="ml-2 text-[#3D7A50]">· APPROVED ✓</span>}
+            {composed && (
+              <span className="ml-2 text-[#8B5E00]" title="What she'd pay — owned pieces are £0 of new spend but still count toward reuse">
+                · {formatLookSpend(lookSpend(l.items)).toUpperCase()}
+              </span>
+            )}
           </p>
           {composed ? (
             <div className="mt-3 flex gap-3 flex-wrap items-start">
@@ -1807,8 +1855,10 @@ function LookRow({
                       {it.owned ? '◈ OWNED — ' : ''}
                       {it.product_name.toUpperCase()}
                     </p>
-                    <p className="text-[9px] tracking-[0.08em] text-[#6B6B6B] mt-0.5">
-                      {typeof it.price_gbp === 'number' && `£${it.price_gbp}`}
+                    <p className={`text-[9px] tracking-[0.08em] mt-0.5 ${it.owned ? 'text-[#8B5E00]' : 'text-[#6B6B6B]'}`}>
+                      {it.owned
+                        ? `IN HER WARDROBE${typeof it.estimated_value_gbp === 'number' ? ` · WORTH ~£${it.estimated_value_gbp}` : ''}`
+                        : typeof it.price_gbp === 'number' ? `£${it.price_gbp}` : ''}
                       {it.size && ` · ${it.size.toUpperCase()}`}
                       {!it.owned && (it.stock_checked_at ? ' · STOCK ✓' : ' · STOCK UNCHECKED')}
                     </p>

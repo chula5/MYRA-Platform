@@ -23,8 +23,6 @@ import type { LookItem, StylePrefs } from '@/lib/pilot-stylist'
 import { avoidReasons, lovedScore } from '@/lib/pilot-stylist'
 import { itemPseudoVector } from '@/lib/brand-affinity'
 import { cosine } from '@/lib/taste-vector'
-import { evaluateHouseStyle, type EvaluateOpts } from '@/lib/house-style'
-import { toHouseItem } from '@/lib/house-item'
 import { isOwnedItem, ownedBrandLabel, estimatedValueOf } from '@/lib/wardrobe/owned-items'
 
 // ── Persona lens ────────────────────────────────────────────────────────────
@@ -264,11 +262,18 @@ export interface ComposedLook {
   score: number
   /** How many of the pieces she already owns (wardrobe import). */
   ownedCount: number
-  /** True when the House Style Constitution had to be relaxed to build it (retail-only looks only). */
-  constitutionRelaxed: boolean
 }
 
-// ── Owned-items modes & the constitution gate ───────────────────────────────
+// ── Owned-items modes ───────────────────────────────────────────────────────
+//
+// NOTE on the House Style Constitution: it governs what MYRA PUBLISHES — the
+// public feed, via the Outfit Composer, the pipeline and outfit review. It does
+// NOT run here. A private client's looks are filtered by HER stylist persona
+// (the moodboard envelope, via personaFitScore) plus her own authored
+// preferences and her feedback history, which sharpen as she responds. A rule
+// like "every look needs exactly one statement element" is a house editorial
+// position, not a universal one — for a quiet persona it would reject precisely
+// the looks that are right for her.
 export interface ComposeOptions {
   /**
    * blend        — (default) her owned pieces sit in the pool and compete for
@@ -279,15 +284,6 @@ export interface ComposeOptions {
    */
   ownedMode?: 'blend' | 'style_owned' | 'retail_only'
   ownedTargetShare?: number
-  /**
-   * The House Style Constitution gate — statement budget, echo rule, silhouette
-   * balance, material pairing, colour rules, price integrity (which skips
-   * null-priced owned pieces). On by default. A look containing an owned piece
-   * is NEVER relaxed — an owned item that can't be styled to standard doesn't
-   * get forced in. A retail-only look falls back to the member gate only when
-   * the constitution would leave nothing to send, and says so in its notes.
-   */
-  houseStyle?: { enabled?: boolean; opts?: EvaluateOpts }
 }
 
 export const DEFAULT_OWNED_TARGET_SHARE = 0.6
@@ -350,8 +346,6 @@ export function composeMemberLooks(
 ): ComposedLook[] {
   const mode = opts.ownedMode ?? 'blend'
   const library = mode === 'retail_only' ? libraryIn.filter((i) => !isOwnedItem(i as any)) : libraryIn
-  const hsEnabled = opts.houseStyle?.enabled !== false
-  const hsOpts: EvaluateOpts = { occasion: occ?.id ?? null, ...(opts.houseStyle?.opts ?? {}) }
 
   const seed = history ? Array.from(history.seenCounts.values()).reduce((s, n) => s + n, 0) + history.rejected.size : 0
   const inStock = library.filter(
@@ -367,10 +361,6 @@ export function composeMemberLooks(
   // avoids still apply as a heavy scoring penalty) rather than send nothing.
   const preferred = inStock.filter((i) => avoidReasons(t.prefs, i as any).length === 0)
   const usable = canBuildLooks(preferred) ? preferred : inStock
-  const retailUsable = usable.filter((i) => !isOwnedItem(i as any))
-
-  const constitutionPass = (all: { item: ItemWithBrand; slot: Slot }[]): boolean =>
-    evaluateHouseStyle(all.map(({ item, slot }) => toHouseItem(item, slot)), hsOpts).pass
 
   const itemScore = (i: ItemWithBrand) =>
     memberItemScore(t, i) + occasionItemScore(occ, i) + personaFitScore(lens, i)
@@ -399,42 +389,30 @@ export function composeMemberLooks(
   const usedAnchorBrands = new Set<string>()
   let ownedLooks = 0
 
-  const tryAnchor = (a: { item: ItemWithBrand; score: number }, requireOwned: boolean, anchorsInPhase: number): boolean => {
+  const tryAnchor = (a: { item: ItemWithBrand; score: number }, anchorsInPhase: number): boolean => {
     if (usedItems.has(a.item.item_id)) return false
     const brandId = a.item.brand_id ?? ''
     // brand diversity across the set — relax only if we run out of brands
     if (brandId && usedAnchorBrands.has(brandId) && anchorsInPhase > count) return false
 
     const anchorOwned = isOwnedItem(a.item as any)
-    const baseGate = (items: { item: ItemWithBrand; slot: Slot }[]) => memberGate(t, a.item, items)
-    const fullGate = (items: { item: ItemWithBrand; slot: Slot }[]) =>
-      baseGate(items) && (!hsEnabled || constitutionPass([{ item: a.item, slot: slotForItemType(a.item.item_type) }, ...items]))
-    const generate = (lib: ItemWithBrand[], gate: (items: { item: ItemWithBrand; slot: Slot }[]) => boolean) =>
-      generateCandidates({
-        anchor: a.item,
-        library: lib,
-        perSlotPool: 5,
-        maxCandidates: 5,
-        minScore: 0.5,
-        excludeItemIds: Array.from(usedItems),
-        learnedBonus: (items) =>
-          memberComboBonus(t, a.item, items) +
-          items.reduce((sum, i) => sum + occasionItemScore(occ, i.item) + personaFitScore(lens, i.item)
-            - historyPenalty(history, i.item.item_id) + varietyJitter(i.item.item_id, seed), 0) /
-            Math.max(1, items.length),
-        learnedBlend: 0.4,
-        houseGate: gate,
-      })
-
-    let cands = generate(usable, fullGate)
-    let relaxed = false
-    // Constitution fallback — retail-only. If the anchor is owned, or the only
-    // way through is with owned pieces, we don't force it: owned items are never
-    // styled below standard.
-    if (!cands.length && hsEnabled && !anchorOwned && !requireOwned) {
-      cands = generate(retailUsable, baseGate)
-      relaxed = cands.length > 0
-    }
+    // The persona lens and her own preferences do the filtering; the only hard
+    // gate is hers — input-only brands and brand pairs she has excluded.
+    const cands = generateCandidates({
+      anchor: a.item,
+      library: usable,
+      perSlotPool: 5,
+      maxCandidates: 5,
+      minScore: 0.5,
+      excludeItemIds: Array.from(usedItems),
+      learnedBonus: (items) =>
+        memberComboBonus(t, a.item, items) +
+        items.reduce((sum, i) => sum + occasionItemScore(occ, i.item) + personaFitScore(lens, i.item)
+          - historyPenalty(history, i.item.item_id) + varietyJitter(i.item.item_id, seed), 0) /
+          Math.max(1, items.length),
+      learnedBlend: 0.4,
+      houseGate: (items) => memberGate(t, a.item, items),
+    })
     const best = cands[0]
     if (!best) return false
 
@@ -445,16 +423,12 @@ export function composeMemberLooks(
 
     // A finished look carries a bag. The shared composer treats bag as
     // optional (it competes with omitting it), so top it up here rather than
-    // changing slot planning for the main Outfit Composer — and the bag must
-    // still clear the constitution with the rest of the look.
+    // changing slot planning for the main Outfit Composer.
     for (const need of ENSURE_SLOTS) {
       if (all.some((x) => x.slot === need)) continue
       const exclude = new Set([...Array.from(usedItems), ...all.map((x) => x.item.item_id)])
-      const picks = rankAlternates(t, relaxed ? retailUsable : usable, need, all.map((x) => x.item), exclude, 4, occ)
-      for (const pick of picks) {
-        const withBag = [...all, { item: pick.item, slot: need }]
-        if (!hsEnabled || relaxed || constitutionPass(withBag)) { all.push({ item: pick.item, slot: need }); break }
-      }
+      const [pick] = rankAlternates(t, usable, need, all.map((x) => x.item), exclude, 1, occ, lens)
+      if (pick) all.push({ item: pick.item, slot: need })
     }
 
     all.forEach(({ item }) => usedItems.add(item.item_id))
@@ -478,13 +452,12 @@ export function composeMemberLooks(
         : null,
       `coherence ${best.score.toFixed(2)}`,
       ownedCount ? `◈ ${ownedCount} from her wardrobe` : null,
-      hsEnabled ? (relaxed ? 'constitution relaxed (retail only)' : 'constitution ✓') : null,
       famPairs.length ? `family pairing: ${Array.from(new Set(famPairs)).join(', ')}` : null,
     ]
       .filter(Boolean)
       .join(' · ')
 
-    looks.push({ items: all.map(({ item }) => toLookItem(item)), notes, score: best.score, ownedCount, constitutionRelaxed: relaxed })
+    looks.push({ items: all.map(({ item }) => toLookItem(item)), notes, score: best.score, ownedCount })
     if (ownedCount) ownedLooks++
     return true
   }
@@ -492,12 +465,12 @@ export function composeMemberLooks(
   // Phase 1 — style what she owns: one look per owned anchor until the target is met.
   for (const a of ownedAnchors) {
     if (looks.length >= count || ownedLooks >= ownedTarget) break
-    tryAnchor(a, true, ownedAnchors.length)
+    tryAnchor(a, ownedAnchors.length)
   }
   // Phase 2 — fill the delivery from the regular anchors (owned or retail).
   for (const a of anchors) {
     if (looks.length >= count) break
-    tryAnchor(a, false, anchors.length)
+    tryAnchor(a, anchors.length)
   }
 
   return looks

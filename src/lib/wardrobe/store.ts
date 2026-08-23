@@ -240,6 +240,36 @@ export async function listBrandNames(): Promise<string[]> {
 
 // ── Approval → item ─────────────────────────────────────────────────────────
 
+/**
+ * Insert an owned item, surviving a schema that is behind the code.
+ *
+ * A missing column makes PostgREST reject the whole row — "Could not find the
+ * 'sleeve' column of 'item' in the schema cache" — which, at the approve step,
+ * throws away an extraction the client has already paid to detect, cut out and
+ * score. That is the worst possible moment to fail on a taxonomy field nobody
+ * would miss. So an unknown column is dropped and the insert retried; what was
+ * dropped is returned so the caller can log it loudly. Every column that DOES
+ * exist is still written, and a genuine error (constraint, type, permission)
+ * still fails the way it should.
+ */
+async function insertItemTolerantly(
+  a: Admin,
+  row: Record<string, unknown>,
+  maxDrops = 8,
+): Promise<{ itemId?: string; dropped: string[]; error?: string }> {
+  const attempt: Record<string, unknown> = { ...row }
+  const dropped: string[] = []
+  for (let i = 0; i <= maxDrops; i++) {
+    const { data, error } = await a.from('item').insert(attempt).select('item_id').single()
+    if (!error && data) return { itemId: data.item_id, dropped }
+    const missing = error?.message?.match(/Could not find the '([^']+)' column/)?.[1]
+    if (!missing || !(missing in attempt)) return { dropped, error: error?.message ?? 'Could not create item' }
+    delete attempt[missing]
+    dropped.push(missing)
+  }
+  return { dropped, error: `Too many unknown columns on item (${dropped.join(', ')}) — the database schema is behind the code` }
+}
+
 export async function approveExtraction(
   extractionId: string,
   edits: ExtractionEdits,
@@ -266,8 +296,13 @@ export async function approveExtraction(
     brandId,
     lowConfidence: low,
   })
-  const { data: item, error } = await a.from('item').insert(row).select('item_id').single()
-  if (error || !item) return { error: error?.message ?? 'Could not create item' }
+  const ins = await insertItemTolerantly(a, row)
+  if (ins.error || !ins.itemId) return { error: ins.error ?? 'Could not create item' }
+  const item = { item_id: ins.itemId }
+  if (ins.dropped.length) {
+    console.warn(`[wardrobe] item ${item.item_id} saved without ${ins.dropped.join(', ')} — those columns are missing from the item table (run the outstanding migration)`)
+    ;(mergedEdits as any).__dropped_columns = ins.dropped
+  }
   await a
     .from('wardrobe_extraction')
     .update({ status: 'approved', item_id: item.item_id, edits: mergedEdits, low_confidence_dims: low, reviewed_at: new Date().toISOString(), updated_at: new Date().toISOString() })

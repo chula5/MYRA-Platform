@@ -1,19 +1,20 @@
 // "What should she buy to unlock the most outfits from what she owns?"
 //
-// Pure. For each candidate retail item, count the distinct constitution-passing
-// outfits it would complete using ONLY her owned pieces for every other slot.
-// Every outfit counted here is one she could not wear before the purchase, so
-// the count is exactly the marginal unlock — the sharpest cost-per-wear number
-// we can give her before she spends anything.
+// Pure. For each candidate retail item, count the distinct wearable outfits it
+// would complete using ONLY her owned pieces for every other slot. Every outfit
+// counted here is one she could not wear before the purchase, so the count is
+// exactly the marginal unlock — the sharpest cost-per-wear number we can give
+// her before she spends anything.
 //
 // An outfit = body covered (a dress, or a top + a bottom) + shoes when she owns
-// any, and it must (a) clear the composer's pairwise coherence floor and
-// (b) pass the House Style Constitution — the same bar as every composed look.
+// any, and it must clear the same bar her composed looks clear: the composer's
+// pairwise coherence floor plus her own hard gate (input-only brands, excluded
+// brand pairs). Ranking is by her taste and her stylist persona — the same
+// signals that decide what actually gets composed — so the count and the order
+// answer the same question the lookbook does.
 
 import type { ItemWithBrand } from '@/lib/admin-queries'
 import { pairCompat, slotForItemType, type Slot } from '@/lib/composer'
-import { evaluateHouseStyle, type EvaluateOpts } from '@/lib/house-style'
-import { toHouseItem } from '@/lib/house-item'
 
 export interface UnlockOptions {
   /** Candidates considered (after ranking) — keeps the enumeration bounded. */
@@ -22,8 +23,9 @@ export interface UnlockOptions {
   perSlotOwned?: number
   /** Average pairwise compat floor — same register as the composer's minScore. */
   minCoherence?: number
-  houseOpts?: EvaluateOpts
-  /** Member-specific ranking of the retail pool (affinity, occasion…); higher first. */
+  /** Her hard gate — the same one composition uses (input-only brands, excluded pairs). */
+  gate?: (items: ItemWithBrand[]) => boolean
+  /** Member-specific ranking of the retail pool (affinity, occasion, persona lens); higher first. */
   rank?: (item: ItemWithBrand) => number
   maxResults?: number
 }
@@ -36,7 +38,7 @@ export interface UnlockExample {
 export interface UnlockResult {
   item: ItemWithBrand
   slot: Slot
-  /** Distinct constitution-passing outfits this purchase would unlock. */
+  /** Distinct wearable outfits this purchase would unlock. */
   unlocked: number
   /** Best few, as item-id lists (candidate first), for the UI. */
   examples: UnlockExample[]
@@ -134,8 +136,7 @@ export function rankUnlockPurchases(owned: ItemWithBrand[], retail: ItemWithBran
         seen.add(key)
         const coherence = meanPairwise(outfit)
         if (coherence < minCoherence) continue
-        const verdict = evaluateHouseStyle(outfit.map((i) => toHouseItem(i)), opts.houseOpts)
-        if (!verdict.pass) continue
+        if (opts.gate && !opts.gate(outfit)) continue
         unlocked++
         cohSum += coherence
         if (examples.length < 3) examples.push({ itemIds: outfit.map((i) => i.item_id), coherence })

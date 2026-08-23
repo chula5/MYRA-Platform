@@ -58,7 +58,6 @@ import {
 } from '@/lib/pilot-composer'
 import { listOwnedItems, looksUsingItems } from '@/lib/wardrobe/store'
 import { ownerRefsForMember } from '@/lib/wardrobe/owned-items'
-import { loadLearnedMaterialPairs } from '@/lib/house-style-store'
 import { checkRenderFidelity } from '@/app/admin/ai/render-fidelity'
 import { personaWeight, PERSONA_START_WEIGHT } from '@/lib/user-persona'
 import { slotForItemType, type Slot } from '@/lib/composer'
@@ -1193,16 +1192,6 @@ async function loadComposableLibrary(member?: { member_id: string; auth_user_id?
   return [...ready, ...live, ...owned]
 }
 
-// House Style Constitution options for the pilot composer: the learned
-// material pairings ride along so the gate matches the main composer exactly.
-async function houseStyleOptions(): Promise<ComposeOptions['houseStyle']> {
-  try {
-    const learned = await loadLearnedMaterialPairs()
-    return { enabled: true, opts: { learnedApprovedPairs: learned.approved, learnedRejectedPairs: learned.rejected } }
-  } catch {
-    return { enabled: true }
-  }
-}
 
 // ── PERSONA LENS ────────────────────────────────────────────────────────────
 // A member can be styled THROUGH a persona: its moodboard envelope shapes her
@@ -1317,7 +1306,6 @@ export async function composeDeliveryLooks(deliveryId: string, options: ComposeD
   const mix = normalise(delivery.effective_weights ?? {})
   const occ: OccasionContext = { id: delivery.occasion ?? null, vector: lookTasteVector(mix) }
   const lens = await loadPersonaLens(admin, delivery.member_id)
-  const houseStyle = await houseStyleOptions()
 
   // Her look history: everything already composed for her (any delivery) plus
   // her explicit rejections — the composer ranks those down so each delivery
@@ -1338,16 +1326,15 @@ export async function composeDeliveryLooks(deliveryId: string, options: ComposeD
     if (f.item_in && f.action === 'accept') seenCounts.set(f.item_in, (seenCounts.get(f.item_in) ?? 0) + 1)
   }
 
-  const count = Math.max(1, Math.min(6, options.count ?? 3))
-  const looks = composeMemberLooks(taste, library, count, occ, lens, { seenCounts, rejected }, {
+  const lookCount = Math.max(1, Math.min(6, options.count ?? 3))
+  const looks = composeMemberLooks(taste, library, lookCount, occ, lens, { seenCounts, rejected }, {
     ownedMode: options.ownedMode ?? 'blend',
     ownedTargetShare: options.ownedTargetShare ?? DEFAULT_OWNED_TARGET_SHARE,
-    houseStyle,
   })
   if (!looks.length) {
     return {
       error: options.ownedMode === 'style_owned'
-        ? 'Could not compose around her wardrobe — nothing she owns clears the constitution with what is in stock. Approve more pieces or compose in blend mode.'
+        ? 'Could not compose around her wardrobe — nothing she owns pairs coherently with what is in stock. Approve more pieces or compose in blend mode.'
         : 'Could not compose — not enough compatible in-stock items in the library',
     }
   }
@@ -1713,7 +1700,9 @@ export async function higgsfieldShootForLook(lookId: string, poseKey = 'E5'): Pr
   // and does NOT become the look's image.
   let fidelity: { score: number; passed: boolean; issues: any[] } | null = null
   try {
-    const fidelityItems = shootItems.map((i) => ({ label: [i.brand_name, i.product_name].filter(Boolean).join(' — ') || String(i.item_type), image_url: i.image_url }))
+    const fidelityItems = shootItems
+      .filter((i): i is ShootItem & { image_url: string } => !!i.image_url)
+      .map((i) => ({ label: [i.brand_name, i.product_name].filter(Boolean).join(' — ') || String(i.item_type), image_url: i.image_url }))
     const first = await checkRenderFidelity(gen.imageUrl, fidelityItems)
     fidelity = { score: first.score, passed: first.passed, issues: first.issues }
     if (!first.passed && !first.error) {
@@ -1820,4 +1809,26 @@ export async function rebuildLooksWithoutItems(itemIds: string[]): Promise<{ reb
   }
   if (rebuilt) revalidatePath(PATH)
   return { rebuilt }
+}
+
+
+/** Member taste for server-side callers outside this file (wardrobe "what to buy"). */
+export async function loadMemberTasteFor(memberId: string): Promise<MemberTaste | null> {
+  const admin = createAdminClient() as any
+  const { data: member } = await admin.from('pilot_member').select('*').eq('member_id', memberId).single()
+  if (!member) return null
+  return loadMemberTaste(admin, member)
+}
+
+/** Retail + her owned pieces — the pool the composer sees for this member. */
+export async function loadMemberLibrary(memberId: string): Promise<ItemWithBrand[]> {
+  const admin = createAdminClient() as any
+  const { data: member } = await admin.from('pilot_member').select('member_id, auth_user_id').eq('member_id', memberId).single()
+  return loadComposableLibrary(member ?? null)
+}
+
+/** Her stylist persona's lens — the filter her looks are composed through. */
+export async function loadMemberPersonaLens(memberId: string): Promise<PersonaLens | undefined> {
+  const admin = createAdminClient() as any
+  return loadPersonaLens(admin, memberId)
 }
