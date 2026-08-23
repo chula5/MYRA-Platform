@@ -30,8 +30,11 @@ export interface UnlockOptions {
   maxResults?: number
 }
 
-export interface UnlockExample {
+/** One complete way to wear the candidate, using only pieces she owns. */
+export interface UnlockLook {
+  /** Candidate first, then her pieces in slot order. */
   itemIds: string[]
+  slots: Slot[]
   coherence: number
 }
 
@@ -40,12 +43,17 @@ export interface UnlockResult {
   slot: Slot
   /** Distinct wearable outfits this purchase would unlock. */
   unlocked: number
-  /** Best few, as item-id lists (candidate first), for the UI. */
-  examples: UnlockExample[]
+  /** The best few, COMPLETED — layer, bag and jewellery added from her wardrobe. */
+  looks: UnlockLook[]
   /** Mean coherence across the unlocked outfits. */
   avgCoherence: number
   /** unlocked ÷ price — how many new outfits per £100 (null when unpriced). */
   outfitsPer100: number | null
+  /**
+   * Slots no owned piece could fill, so the look is shown honestly incomplete
+   * rather than pretending an outfit with no shoes is finished.
+   */
+  missingSlots: Slot[]
 }
 
 function priceGbp(it: ItemWithBrand): number | null {
@@ -98,6 +106,40 @@ function bodiesFor(candidate: ItemWithBrand, owned: Record<Slot, ItemWithBrand[]
   return bodies
 }
 
+/**
+ * Finish a core combination into an outfit she could actually put on: add the
+ * best-matching layer, bag and jewellery she already owns, each only if it does
+ * not drag the look below the coherence floor. Nothing is added twice and
+ * nothing is invented — if she owns no bag, the look simply has no bag.
+ */
+function completeLook(
+  core: { item: ItemWithBrand; slot: Slot }[],
+  ownedBySlot: Record<Slot, ItemWithBrand[]>,
+  minCoherence: number,
+  gate?: (items: ItemWithBrand[]) => boolean,
+): { item: ItemWithBrand; slot: Slot }[] {
+  const out = [...core]
+  const used = new Set(core.map((x) => x.item.item_id))
+  const present = new Set(core.map((x) => x.slot))
+  for (const need of ['outerwear', 'shoe', 'bag', 'jewellery'] as Slot[]) {
+    if (present.has(need)) continue
+    const pool = (ownedBySlot[need] ?? []).filter((i) => !used.has(i.item_id))
+    if (!pool.length) continue
+    const current = out.map((x) => x.item)
+    const best = pool
+      .map((i) => ({ i, c: current.reduce((s2, k) => s2 + pairCompat(k, i).total, 0) / current.length }))
+      .sort((a, b) => b.c - a.c)[0]
+    if (!best) continue
+    const withIt = [...current, best.i]
+    if (meanPairwise(withIt) < minCoherence) continue
+    if (gate && !gate(withIt)) continue
+    out.push({ item: best.i, slot: need })
+    used.add(best.i.item_id)
+    present.add(need)
+  }
+  return out
+}
+
 export function rankUnlockPurchases(owned: ItemWithBrand[], retail: ItemWithBrand[], opts: UnlockOptions = {}): UnlockResult[] {
   const maxCandidates = opts.maxCandidates ?? 150
   const perSlot = opts.perSlotOwned ?? 6
@@ -125,9 +167,7 @@ export function rankUnlockPurchases(owned: ItemWithBrand[], retail: ItemWithBran
       slot === 'shoe' ? [null] : hasOwnedShoes ? topByCompat(ownedBySlot.shoe, c, perSlot) : [null]
 
     const seen = new Set<string>()
-    const examples: UnlockExample[] = []
-    let unlocked = 0
-    let cohSum = 0
+    const cores: { items: ItemWithBrand[]; coherence: number }[] = []
     for (const body of bodies) {
       for (const shoe of shoeOptions) {
         const outfit = shoe ? [...body, shoe] : body
@@ -137,20 +177,47 @@ export function rankUnlockPurchases(owned: ItemWithBrand[], retail: ItemWithBran
         const coherence = meanPairwise(outfit)
         if (coherence < minCoherence) continue
         if (opts.gate && !opts.gate(outfit)) continue
-        unlocked++
-        cohSum += coherence
-        if (examples.length < 3) examples.push({ itemIds: outfit.map((i) => i.item_id), coherence })
+        cores.push({ items: outfit, coherence })
       }
     }
-    if (!unlocked) continue
+    if (!cores.length) continue
+    const unlocked = cores.length
+    const cohSum = cores.reduce((s2, x) => s2 + x.coherence, 0)
+
+    // Only the looks we actually show get completed — the count is of distinct
+    // CORE combinations, so swapping her one bag for another never inflates it.
+    const looks: UnlockLook[] = cores
+      .sort((a, b) => b.coherence - a.coherence)
+      .slice(0, 3)
+      .map(({ items }) => {
+        const core = items.map((i) => ({ item: i, slot: slotForItemType(i.item_type) }))
+        const full = completeLook(core, ownedBySlot, minCoherence, opts.gate)
+        // candidate first, then her pieces in a stable head-to-toe order
+        const order: Slot[] = ['outerwear', 'dress', 'top', 'bottom', 'shoe', 'bag', 'jewellery', 'accessory']
+        const rest = full
+          .filter((x) => x.item.item_id !== c.item_id)
+          .sort((a, b) => order.indexOf(a.slot) - order.indexOf(b.slot))
+        const seq = [{ item: c, slot }, ...rest]
+        return {
+          itemIds: seq.map((x) => x.item.item_id),
+          slots: seq.map((x) => x.slot),
+          coherence: meanPairwise(seq.map((x) => x.item)),
+        }
+      })
+
+    // What her wardrobe cannot finish. A look with no shoes is not a look.
+    const covered = new Set(looks.flatMap((l) => l.slots))
+    const missingSlots = (['shoe', 'bag'] as Slot[]).filter((sl) => !covered.has(sl))
+
     const price = priceGbp(c)
     results.push({
       item: c,
       slot,
       unlocked,
-      examples: examples.sort((a, b) => b.coherence - a.coherence),
+      looks,
       avgCoherence: cohSum / unlocked,
       outfitsPer100: price ? (unlocked / price) * 100 : null,
+      missingSlots,
     })
   }
 

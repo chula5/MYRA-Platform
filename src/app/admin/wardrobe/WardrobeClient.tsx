@@ -569,10 +569,11 @@ function UnlockPanel({ sel }: { sel: MemberWardrobe }) {
     if (r.error) setErr(r.error)
     setRows(r.rows ?? [])
   }
+  const first = sel.member.name.split(' ')[0].toUpperCase()
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <p className="text-[9px] tracking-[0.08em] text-[#6B6B6B] max-w-3xl leading-relaxed">
-        FOR EACH RETAIL PIECE IN HER POOL: HOW MANY NEW OUTFITS IT COMPLETES USING ONLY WHAT SHE ALREADY OWNS FOR EVERY OTHER SLOT — EACH ONE CLEARING THE SAME BAR HER LOOKS DO, RANKED THROUGH HER STYLIST PERSONA. THE SHARPEST COST-PER-WEAR NUMBER BEFORE SHE SPENDS A POUND.
+        ONE PIECE TO BUY, AND THE COMPLETE LOOKS IT UNLOCKS FROM WHAT {first} ALREADY OWNS — EVERY OTHER PIECE IN EACH LOOK IS HERS. RANKED BY HOW MANY NEW OUTFITS EACH PURCHASE MAKES POSSIBLE, THROUGH HER STYLIST PERSONA. THE SHARPEST COST-PER-WEAR NUMBER BEFORE SHE SPENDS A POUND.
       </p>
       <div className="flex items-center gap-2">
         <select className={`${input} !w-56`} value={occasion} onChange={(e) => setOccasion(e.target.value)}>
@@ -583,41 +584,81 @@ function UnlockPanel({ sel }: { sel: MemberWardrobe }) {
       </div>
       {err && <p className="text-[9px] tracking-[0.1em] text-[#B83A3A]">{err.toUpperCase()}</p>}
       {rows && !rows.length && <p className="text-[9px] tracking-[0.1em] text-[#A8A8A4]">NOTHING IN THE RETAIL POOL COMPLETES A WEARABLE OUTFIT WITH HER WARDROBE YET — SHE MAY NEED A BODY PIECE (TOP + BOTTOM OR DRESS) APPROVED FIRST.</p>}
-      {rows && rows.length > 0 && (
-        <div className="space-y-3">
-          {rows.map((r, i) => (
-            <div key={r.item_id} className="border border-[#E2E0DB] bg-white flex gap-3 p-3">
-              <span className="text-[10px] tracking-[0.1em] text-[#C4A882] w-6 shrink-0">{i + 1}</span>
-              {r.image_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={r.image_url} alt="" className="w-20 aspect-[3/4] object-cover bg-[#F8F8F6] shrink-0" />
-              ) : <div className="w-20 aspect-[3/4] bg-[#F8F8F6] shrink-0" />}
-              <div className="min-w-0 flex-1">
-                <p className="text-[9px] tracking-[0.12em] text-[#A8A8A4]">{(r.brand_name ?? '—').toUpperCase()} · {SLOT_LABEL[r.slot] ?? r.slot.toUpperCase()}</p>
-                <p className="text-[10px] tracking-[0.08em] text-[#0A0A0A]">{r.product_name.toUpperCase()}</p>
-                <p className="text-[9px] tracking-[0.08em] text-[#8B5E00] mt-1">
-                  UNLOCKS {r.unlocked} NEW OUTFIT{r.unlocked === 1 ? '' : 'S'}{r.price_gbp != null ? ` · £${r.price_gbp}` : ''}{r.outfitsPer100 != null ? ` · ${r.outfitsPer100} OUTFITS PER £100` : ''} · COHERENCE {r.avgCoherence}
-                </p>
-                {r.retailer_url && <a href={r.retailer_url} target="_blank" rel="noreferrer" className="text-[8px] tracking-[0.12em] text-[#C4A882] hover:underline">RETAILER →</a>}
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {r.examples.map((ex, j) => (
-                    <div key={j} className="flex gap-1 border border-[#F0EEE9] p-1">
-                      {ex.items.map((it) => (
-                        <div key={it.item_id} className="w-9" title={`${it.product_name}${it.owned ? ' — hers' : ''}`}>
-                          {it.image_url ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={it.image_url} alt="" className={`w-9 aspect-[3/4] object-cover ${it.owned ? 'ring-1 ring-[#C4A882]' : ''}`} />
-                          ) : <div className="w-9 aspect-[3/4] bg-[#F2F2F0]" />}
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ))}
+
+      {/* What her wardrobe cannot finish — the same gap in every look is worth saying once, loudly. */}
+      {rows && rows.length > 0 && rows[0].missingSlots.length > 0 && (
+        <div className="border border-[#C4A882] bg-[#FBF8F2] px-4 py-2.5">
+          <p className="text-[9px] tracking-[0.1em] text-[#8B5E00]">
+            SHE OWNS NO {rows[0].missingSlots.map((sl) => SLOT_LABEL[sl] ?? sl.toUpperCase()).join(' AND NO ')} — SO THESE LOOKS ARE SHOWN WITHOUT {rows[0].missingSlots.length === 1 ? 'ONE' : 'THEM'}. ADD {rows[0].missingSlots.length === 1 ? 'A PAIR' : 'SOME'} TO HER WARDROBE, OR TREAT THAT AS THE FIRST THING TO BUY.
+          </p>
         </div>
       )}
+
+      {rows && rows.map((r, i) => (
+        <div key={r.item_id} className="border border-[#E2E0DB] bg-white">
+          {/* The purchase */}
+          <div className="flex gap-4 p-4 border-b border-[#F0EEE9]">
+            <span className="text-[11px] tracking-[0.1em] text-[#C4A882] w-5 shrink-0 pt-1">{i + 1}</span>
+            <div className="w-28 shrink-0">
+              {r.image_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={r.image_url} alt="" className="w-28 aspect-[3/4] object-cover bg-[#F8F8F6]" />
+              ) : <div className="w-28 aspect-[3/4] bg-[#F8F8F6]" />}
+              <p className="mt-1 text-center text-[8px] tracking-[0.14em] text-white bg-[#0A0A0A] py-0.5">BUY</p>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[9px] tracking-[0.14em] text-[#A8A8A4]">{(r.brand_name ?? '—').toUpperCase()} · {SLOT_LABEL[r.slot] ?? r.slot.toUpperCase()}</p>
+              <p className="text-[13px] tracking-[0.06em] text-[#0A0A0A] mt-0.5">{r.product_name.toUpperCase()}</p>
+              <p className="text-[11px] tracking-[0.06em] text-[#8B5E00] mt-2">
+                {r.price_gbp != null ? `£${r.price_gbp}` : 'PRICE UNKNOWN'} · UNLOCKS {r.unlocked} NEW LOOK{r.unlocked === 1 ? '' : 'S'} FROM HER OWN WARDROBE
+              </p>
+              <p className="text-[9px] tracking-[0.08em] text-[#6B6B6B] mt-1">
+                {r.outfitsPer100 != null ? `${r.outfitsPer100} LOOKS PER £100 SPENT · ` : ''}
+                {r.price_gbp != null && r.unlocked > 0 ? `£${(r.price_gbp / r.unlocked).toFixed(0)} PER LOOK · ` : ''}
+                COHERENCE {r.avgCoherence}
+              </p>
+              {r.retailer_url && (
+                <a href={r.retailer_url} target="_blank" rel="noreferrer" className="inline-block mt-2 text-[9px] tracking-[0.12em] text-[#C4A882] hover:underline">
+                  VIEW AT RETAILER →
+                </a>
+              )}
+            </div>
+          </div>
+
+          {/* How to wear it */}
+          <div className="px-4 py-3">
+            <p className="text-[9px] tracking-[0.18em] text-[#6B6B6B] mb-3">
+              HOW TO WEAR IT{r.looks.length > 1 ? ` — ${r.looks.length} WAYS` : ''}
+            </p>
+            <div className="grid gap-4 lg:grid-cols-3">
+              {r.looks.map((look, j) => (
+                <div key={j} className="border border-[#F0EEE9] p-2.5">
+                  <p className="text-[8px] tracking-[0.14em] text-[#A8A8A4] mb-2">
+                    LOOK {j + 1} · {look.pieces.length} PIECE{look.pieces.length === 1 ? '' : 'S'} · COHERENCE {look.coherence}
+                  </p>
+                  <div className="flex gap-1.5">
+                    {look.pieces.map((p) => (
+                      <div key={p.item_id} className="flex-1 min-w-0" title={`${p.brand_name ?? ''} ${p.product_name}`}>
+                        <div className={`relative ${p.owned ? '' : 'ring-2 ring-[#0A0A0A]'}`}>
+                          {p.image_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={p.image_url} alt="" className="w-full aspect-[3/4] object-cover bg-[#F8F8F6]" />
+                          ) : <div className="w-full aspect-[3/4] bg-[#F8F8F6]" />}
+                          <span className={`absolute bottom-0 inset-x-0 text-center text-[7px] tracking-[0.1em] py-0.5 ${p.owned ? 'bg-[#C4A882] text-white' : 'bg-[#0A0A0A] text-white'}`}>
+                            {p.owned ? 'HERS' : 'BUY'}
+                          </span>
+                        </div>
+                        <p className="text-[7px] tracking-[0.1em] text-[#A8A8A4] mt-1 truncate">{SLOT_LABEL[p.slot] ?? p.slot.toUpperCase()}</p>
+                        <p className="text-[8px] tracking-[0.04em] text-[#4A4E57] leading-tight line-clamp-2">{p.product_name}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

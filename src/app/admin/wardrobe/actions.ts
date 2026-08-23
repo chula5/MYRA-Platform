@@ -312,6 +312,16 @@ export async function unlinkMemberLogin(memberId: string): Promise<{ error?: str
 
 // ── "What should she buy?" ──────────────────────────────────────────────────
 
+export interface UnlockPiece {
+  item_id: string
+  product_name: string
+  brand_name: string | null
+  image_url: string | null
+  slot: string
+  owned: boolean
+  price_gbp: number | null
+}
+
 export interface UnlockRow {
   item_id: string
   product_name: string
@@ -323,7 +333,10 @@ export interface UnlockRow {
   unlocked: number
   outfitsPer100: number | null
   avgCoherence: number
-  examples: { items: { item_id: string; product_name: string; image_url: string | null; owned: boolean }[] }[]
+  /** Complete ways to wear it — the piece to buy first, then her own pieces. */
+  looks: { pieces: UnlockPiece[]; coherence: number }[]
+  /** Slots her wardrobe cannot finish (e.g. she owns no shoes). */
+  missingSlots: string[]
 }
 
 export async function unlockPurchases(memberId: string, occasion?: OccasionId | null): Promise<{ rows?: UnlockRow[]; ownedCount?: number; error?: string }> {
@@ -352,23 +365,38 @@ export async function unlockPurchases(memberId: string, occasion?: OccasionId | 
     rank: (i) => memberItemScore(taste, i) + occasionItemScore(occ, i) + personaFitScore(lens, i),
   })
   const byId = new Map(library.map((i) => [i.item_id, i]))
+  const priceOf = (it: any): number | null => {
+    const v = it?.price_gbp != null ? Number(it.price_gbp) : it?.price != null ? Number(it.price) : NaN
+    return Number.isFinite(v) && v > 0 ? v : null
+  }
   const rows: UnlockRow[] = results.map((r) => ({
     item_id: r.item.item_id,
     product_name: r.item.product_name,
     brand_name: r.item.brand?.name ?? null,
     image_url: r.item.image_url ?? null,
-    price_gbp: (r.item as any).price_gbp != null ? Number((r.item as any).price_gbp) : r.item.price != null ? Number(r.item.price) : null,
+    price_gbp: priceOf(r.item),
     retailer_url: r.item.retailer_url ?? null,
     slot: r.slot,
     unlocked: r.unlocked,
     outfitsPer100: r.outfitsPer100 != null ? Math.round(r.outfitsPer100 * 10) / 10 : null,
     avgCoherence: Math.round(r.avgCoherence * 100) / 100,
-    examples: r.examples.map((e) => ({
-      items: e.itemIds.map((id) => {
-        const it = byId.get(id)
-        return { item_id: id, product_name: it?.product_name ?? '—', image_url: it?.image_url ?? null, owned: isOwnedItem(it as any) }
+    looks: r.looks.map((l) => ({
+      coherence: Math.round(l.coherence * 100) / 100,
+      pieces: l.itemIds.map((id, i) => {
+        const it: any = byId.get(id)
+        const isOwned = isOwnedItem(it)
+        return {
+          item_id: id,
+          product_name: it?.product_name ?? '—',
+          brand_name: it?.brand?.name ?? it?.owned_metadata?.brand_label ?? null,
+          image_url: it?.image_url ?? null,
+          slot: l.slots[i] ?? '',
+          owned: isOwned,
+          price_gbp: isOwned ? null : priceOf(it),
+        }
       }),
     })),
+    missingSlots: r.missingSlots,
   }))
   return { rows, ownedCount: owned.length }
 }

@@ -235,9 +235,37 @@ describe('what to buy', () => {
     expect(ranked.length).toBeGreaterThan(0)
     expect(ranked[0].unlocked).toBeGreaterThanOrEqual(ranked[ranked.length - 1].unlocked)
     for (const r of ranked) {
-      expect(r.examples.length).toBeGreaterThan(0)
-      expect(r.examples[0].itemIds[0]).toBe(r.item.item_id)
+      expect(r.looks.length).toBeGreaterThan(0)
+      // the piece to buy always leads the look
+      expect(r.looks[0].itemIds[0]).toBe(r.item.item_id)
+      expect(r.looks[0].slots.length).toBe(r.looks[0].itemIds.length)
+      // no piece appears twice in a look
+      expect(new Set(r.looks[0].itemIds).size).toBe(r.looks[0].itemIds.length)
     }
+  })
+  it('completes each look with the layer and bag she already owns', () => {
+    const ownedPool = [
+      owned({ item_type: 'shirt' }), owned({ item_type: 'trousers' }), owned({ item_type: 'flat' }),
+      owned({ item_type: 'jacket', product_name: 'Her navy blazer' }),
+      owned({ item_type: 'tote', product_name: 'Her tote' }),
+    ]
+    const [top] = rankUnlockPurchases(ownedPool, [item({ item_type: 'skirt', product_name: 'New skirt' })], { minCoherence: 0.5 })
+    expect(top).toBeTruthy()
+    const slots = top.looks[0].slots
+    // a body piece, her shoes, and the optional slots her wardrobe can fill
+    expect(slots).toContain('bottom')
+    expect(slots).toContain('shoe')
+    expect(slots).toContain('outerwear')
+    expect(slots).toContain('bag')
+    expect(top.missingSlots).toEqual([])
+  })
+  it('says which slots her wardrobe cannot finish', () => {
+    // no shoes, no bag — the look is shown honestly incomplete
+    const ownedPool = [owned({ item_type: 'shirt' }), owned({ item_type: 'trousers' })]
+    const [top] = rankUnlockPurchases(ownedPool, [item({ item_type: 'jacket' })], { minCoherence: 0.5 })
+    expect(top).toBeTruthy()
+    expect(top.missingSlots).toEqual(expect.arrayContaining(['shoe', 'bag']))
+    expect(top.looks[0].slots).not.toContain('shoe')
   })
   it('returns nothing when she owns no body pieces and the candidate is an accessory', () => {
     const ranked = rankUnlockPurchases([owned({ item_type: 'flat' })], [item({ item_type: 'tote' })])
