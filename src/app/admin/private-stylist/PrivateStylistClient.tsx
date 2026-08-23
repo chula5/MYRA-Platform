@@ -32,7 +32,9 @@ import {
   type ResponseReason,
   SHAPE_PREFERENCES,
   COLOUR_SHADES,
+  PRICE_BUCKETS,
   type StylePrefs,
+  type PriceBands,
 } from '@/lib/pilot-stylist'
 import {
   createMember,
@@ -347,6 +349,7 @@ function MembersTab({ data, run, busy }: { data: PilotData; run: Run; busy: stri
           deliveries={data.deliveries.filter((d) => d.member_id === m.member_id)}
           activity={data.activity}
           prefsReady={data.stylePrefsReady}
+          bandsReady={data.priceBandsReady}
         />
       ))}
 
@@ -946,6 +949,112 @@ function MemberBrands({ member: m, run, busy }: { member: PilotMember; run: Run;
   )
 }
 
+// What she actually spends, per kind of piece. A ceiling here is a real gate:
+// over it, the piece is never composed into a look for her, however much she
+// likes the brand. Bags, shoes and jewellery are deliberately separate and do
+// NOT inherit the clothing default — accessories are routinely bought well
+// above the clothing range, and guessing either way would be wrong.
+function PriceBandsEditor({ member: m, run, busy, ready = true }: { member: PilotMember; run: Run; busy: string | null; ready?: boolean }) {
+  const saved = useMemo<PriceBands>(() => m.price_bands ?? {}, [m.price_bands])
+  const [bands, setBands] = useState<PriceBands>(saved)
+  const [result, setResult] = useState<string | null>(null)
+  const key = `bands-${m.member_id}`
+  const dirty = JSON.stringify(bands) !== JSON.stringify(saved)
+
+  const set = (bucket: string, edge: 'min' | 'max', raw: string) => {
+    const n = raw.trim() === '' ? null : Number(raw)
+    setBands((b) => ({ ...b, [bucket]: { ...(b[bucket] ?? {}), [edge]: Number.isFinite(n as number) && (n as number) > 0 ? n : null } }))
+  }
+
+  const row = (id: string, labelText: string, hint?: string) => {
+    const b = bands[id] ?? {}
+    const bad = b.min != null && b.max != null && b.min > b.max
+    return (
+      <div key={id} className="flex items-center gap-2 py-1">
+        <span className="text-[9px] tracking-[0.1em] text-[#4A4E57] w-52 shrink-0">
+          {labelText}
+          {hint && <span className="text-[#A8A8A4]"> · {hint}</span>}
+        </span>
+        <span className="text-[9px] text-[#A8A8A4]">£</span>
+        <input
+          className={`${input} !py-1 !text-[10px] !w-20`}
+          placeholder="MIN"
+          value={b.min ?? ''}
+          onChange={(e) => set(id, 'min', e.target.value)}
+        />
+        <span className="text-[9px] text-[#A8A8A4]">TO £</span>
+        <input
+          className={`${input} !py-1 !text-[10px] !w-20`}
+          placeholder="MAX"
+          value={b.max ?? ''}
+          onChange={(e) => set(id, 'max', e.target.value)}
+        />
+        {bad && <span className="text-[8px] tracking-[0.12em] text-[#B83A3A]">MIN IS ABOVE MAX</span>}
+      </div>
+    )
+  }
+
+  const anyBad = Object.values(bands).some((b) => b?.min != null && b?.max != null && b.min > b.max)
+
+  return (
+    <div className="border border-[#E2E0DB] bg-[#FCFCFA] p-4">
+      <div className="flex items-center justify-between mb-1">
+        <div>
+          <p className={label}>WHAT SHE SPENDS — OVER THE MAX IS NEVER COMPOSED</p>
+          <p className="text-[8px] tracking-[0.1em] text-[#A8A8A4] mt-1">
+            LOVING A BRAND IS NOT THE SAME AS BUYING EVERY PRICE IT SELLS · LEAVE BLANK FOR NO OPINION
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          {result && (
+            <span className={`text-[8px] tracking-[0.12em] ${result.startsWith('SAVED') ? 'text-[#3D6B45]' : 'text-[#B83A3A]'}`}>{result}</span>
+          )}
+          <button
+            className={`${btnDark} !px-4 !py-1.5 !text-[9px]`}
+            disabled={!dirty || busy === key || !ready || anyBad}
+            onClick={async () => {
+              setResult(null)
+              const r = await run(key, () => updateMember(m.member_id, { price_bands: bands }), 'PRICE BANDS SAVED — COMPOSER UPDATED')
+              setResult(r?.error ? 'NOT SAVED — SEE THE TOP OF THE PAGE' : `SAVED · ${new Date().toLocaleTimeString()}`)
+            }}
+          >
+            {busy === key ? 'SAVING…' : dirty ? 'SAVE PRICE BANDS' : 'SAVED'}
+          </button>
+        </div>
+      </div>
+
+      {!ready && (
+        <div className="border border-[#E4C97E] bg-[#FFFBEF] px-3 py-2.5 my-2">
+          <p className="text-[9px] tracking-[0.14em] text-[#8A6D1F]">MIGRATION 0049 NOT RUN — NOTHING HERE CAN SAVE YET</p>
+          <p className="text-[9px] tracking-[0.04em] text-[#8A6D1F] mt-1">
+            Run <span className="font-mono">supabase/migrations/0049_pilot_price_bands.sql</span>, then reload.
+          </p>
+        </div>
+      )}
+
+      <div className="mt-2 grid gap-3 lg:grid-cols-2">
+        <div>
+          <p className="text-[8px] tracking-[0.14em] text-[#6B6B6B] mb-1">CLOTHING</p>
+          {row('default', 'ANYTHING NOT LISTED BELOW')}
+          {PRICE_BUCKETS.filter((b) => !['bag', 'shoes', 'jewellery'].includes(b.id)).map((b) => row(b.id, b.label))}
+        </div>
+        <div>
+          <p className="text-[8px] tracking-[0.14em] text-[#6B6B6B] mb-1">
+            ACCESSORIES — SET SEPARATELY, THEY NEVER INHERIT THE CLOTHING RANGE
+          </p>
+          {PRICE_BUCKETS.filter((b) => ['shoes', 'bag', 'jewellery'].includes(b.id)).map((b) =>
+            row(b.id, b.label, 'OFTEN ABOVE HER CLOTHING RANGE'),
+          )}
+          <p className="text-[8px] tracking-[0.04em] text-[#A8A8A4] mt-2 leading-relaxed normal-case">
+            Left blank, MYRA has no price opinion on that bucket at all — it will not fall back to the clothing
+            range, because what someone pays for a bag says nothing about what they pay for a top.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function StylePreferences({ member: m, run, busy, ready = true }: { member: PilotMember; run: Run; busy: string | null; ready?: boolean }) {
   // The page-level flash sits far above this block once a member card is open,
   // so the outcome is reported right next to the button that caused it.
@@ -1124,6 +1233,7 @@ function MemberCard({
   deliveries = [],
   activity = [],
   prefsReady = true,
+  bandsReady = true,
 }: {
   member: PilotMember
   run: Run
@@ -1132,6 +1242,7 @@ function MemberCard({
   deliveries?: PilotDelivery[]
   activity?: PilotActivity[]
   prefsReady?: boolean
+  bandsReady?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [occasions, setOccasions] = useState(m.occasions)
@@ -1335,6 +1446,7 @@ function MemberCard({
             </div>
           </div>
 
+          <PriceBandsEditor member={m} run={run} busy={busy} ready={bandsReady} />
           <StylePreferences member={m} run={run} busy={busy} ready={prefsReady} />
 
           {/* Wardrobe */}

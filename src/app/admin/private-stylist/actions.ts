@@ -42,7 +42,9 @@ import {
   validateDelivery,
   normalise,
   readStylePrefs,
+  readPriceBands,
   type StylePrefs,
+  type PriceBands,
 } from '@/lib/pilot-stylist'
 import { accumulate, zeroVector } from '@/lib/taste-vector'
 import { getAllItems, type ItemWithBrand } from '@/lib/admin-queries'
@@ -96,6 +98,8 @@ export interface PilotMember {
   shapes_avoided: string[]
   types_loved: string[]
   types_avoided: string[]
+  /** What she actually spends, per bucket (migration 0049). */
+  price_bands: PriceBands
   created_at: string
   // Σ signal_weight × look vector across her taste events — the 34-dim view
   taste_vector: number[] | null
@@ -185,6 +189,8 @@ export interface PilotData {
   /** False until 0045 adds the style-preference columns — the editor says so
    *  rather than letting a save fail silently far from the button. */
   stylePrefsReady: boolean
+  /** False until 0049 adds price_bands. */
+  priceBandsReady: boolean
   members: PilotMember[]
   deliveries: PilotDelivery[]
   activity: PilotActivity[]
@@ -212,10 +218,10 @@ export async function loadPilotData(): Promise<PilotData> {
   // Table missing → migration not run. Render the section with a notice
   // instead of crashing the whole admin.
   if (membersRes.error) {
-    return { ready: false, missingMigration: '0029', stylePrefsReady: false, members: [], deliveries: [], activity: [], artefacts: {}, personas: [] }
+    return { ready: false, missingMigration: '0029', stylePrefsReady: false, priceBandsReady: false, members: [], deliveries: [], activity: [], artefacts: {}, personas: [] }
   }
   if (tasteRes.error) {
-    return { ready: false, missingMigration: '0030', stylePrefsReady: false, members: [], deliveries: [], activity: [], artefacts: {}, personas: [] }
+    return { ready: false, missingMigration: '0030', stylePrefsReady: false, priceBandsReady: false, members: [], deliveries: [], activity: [], artefacts: {}, personas: [] }
   }
 
   // Personas a member can be styled through, and who is currently assigned.
@@ -242,6 +248,7 @@ export async function loadPilotData(): Promise<PilotData> {
   // A pre-0045 row simply has no preference keys — that is how we know.
   const firstRow = ((membersRes.data ?? []) as any[])[0]
   const stylePrefsReady = firstRow ? 'colours_loved' in firstRow : true
+  const priceBandsReady = firstRow ? 'price_bands' in firstRow : true
 
   // Approved owned pieces per member (0 everywhere before migration 0046).
   const ownedCount = new Map<string, number>()
@@ -257,6 +264,7 @@ export async function loadPilotData(): Promise<PilotData> {
     return {
       ...m,
       ...readStylePrefs(m),
+      price_bands: readPriceBands(m),
       taste_vector: m.taste_vector ?? null,
       taste_event_counts: counts,
       events: events.filter((e) => e.member_id === m.member_id),
@@ -283,7 +291,7 @@ export async function loadPilotData(): Promise<PilotData> {
     artefacts[m.member_id] = buildArtefact(m, deliveries, activity)
   }
 
-  return { ready: true, missingMigration: null, stylePrefsReady, members, personas, deliveries, activity, artefacts }
+  return { ready: true, missingMigration: null, stylePrefsReady, priceBandsReady, members, personas, deliveries, activity, artefacts }
 }
 
 function buildArtefact(
@@ -539,6 +547,7 @@ export async function updateMember(
     shapes_avoided: string[]
     types_loved: string[]
     types_avoided: string[]
+    price_bands: PriceBands
   }>,
 ): Promise<{ error?: string }> {
   const admin = createAdminClient()
@@ -553,7 +562,8 @@ export async function updateMember(
   // PostgREST says either "column ... does not exist" or, for an update,
   // "Could not find the 'x' column of 'pilot_member' in the schema cache".
   if (/does not exist|schema cache/i.test(error.message)) {
-    return { error: `${error.message} — RUN MIGRATION 0045_pilot_style_preferences.sql IN SUPABASE` }
+    const which = /price_bands/.test(error.message) ? '0049_pilot_price_bands.sql' : '0045_pilot_style_preferences.sql'
+    return { error: `${error.message} — RUN MIGRATION ${which} IN SUPABASE` }
   }
   return { error: error.message }
 }
@@ -1170,6 +1180,7 @@ async function loadMemberTaste(admin: any, member: { member_id: string; brands: 
     // Authored preferences ride along with the learned signals; pre-0045 rows
     // simply have none.
     prefs: readStylePrefs(member),
+    priceBands: readPriceBands(member as any),
   }
 
   const [affRes, famRes, exclRes, fbRes] = await Promise.all([

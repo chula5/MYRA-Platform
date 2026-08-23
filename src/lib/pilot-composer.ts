@@ -19,8 +19,9 @@ import {
   slotForItemType,
   type Slot,
 } from '@/lib/composer'
-import type { LookItem, StylePrefs } from '@/lib/pilot-stylist'
-import { avoidReasons, lovedScore } from '@/lib/pilot-stylist'
+import type { LookItem, StylePrefs, PriceBands } from '@/lib/pilot-stylist'
+import { avoidReasons, lovedScore, priceVerdict } from '@/lib/pilot-stylist'
+import { priceOfItem } from '@/lib/brand-affinity'
 import { itemPseudoVector } from '@/lib/brand-affinity'
 import { cosine } from '@/lib/taste-vector'
 import { isOwnedItem, ownedBrandLabel, estimatedValueOf } from '@/lib/wardrobe/owned-items'
@@ -144,6 +145,9 @@ export interface MemberTaste {
   // What she has TOLD us (authored, never learned over): colours/shapes/types
   // she loves or won't wear. Avoided = hard gate, loved = scoring bonus.
   prefs?: StylePrefs
+  // What she actually spends, per kind of piece. Over her ceiling is a gate;
+  // below her floor is a nudge, not a veto.
+  priceBands?: PriceBands
 }
 
 const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`)
@@ -155,6 +159,14 @@ export function shareFamily(t: MemberTaste, a?: string | null, b?: string | null
   if (!fa || !fb) return false
   for (const f of Array.from(fa)) if (fb.has(f)) return true
   return false
+}
+
+// Her price verdict on a piece, resolving the price the same way the rest of
+// the system does (price_gbp, else the item's own currency converted).
+export function itemPriceVerdict(t: MemberTaste, item: ItemWithBrand) {
+  if (!t.priceBands) return 'unknown' as const
+  const { gbp } = priceOfItem(item as any)
+  return priceVerdict(t.priceBands, { item_type: item.item_type, price_gbp: gbp })
 }
 
 // How much this member wants this item, independent of the outfit around it.
@@ -174,6 +186,12 @@ export function memberItemScore(t: MemberTaste, item: ItemWithBrand): number {
   // normally avoided pieces are gated out entirely before scoring.
   s += lovedScore(t.prefs, item as any)
   if (avoidReasons(t.prefs, item as any).length) s -= 0.5
+  const pv = itemPriceVerdict(t, item)
+  // Over her ceiling normally never reaches scoring (it is gated out of the
+  // pool); the penalty only bites in the fallback pool. Below her floor is a
+  // gentle nudge — cheap for her is a quality signal, not a rule.
+  if (pv === 'over') s -= 0.5
+  else if (pv === 'under') s -= 0.15
   return Math.max(-0.5, Math.min(1.4, s))
 }
 
@@ -359,7 +377,9 @@ export function composeMemberLooks(
   // won't wear never gets composed. Safety net — if the gate would leave too
   // little to build a look from, fall back to the full pool (where the same
   // avoids still apply as a heavy scoring penalty) rather than send nothing.
-  const preferred = inStock.filter((i) => avoidReasons(t.prefs, i as any).length === 0)
+  const preferred = inStock.filter(
+    (i) => avoidReasons(t.prefs, i as any).length === 0 && itemPriceVerdict(t, i) !== 'over',
+  )
   const usable = canBuildLooks(preferred) ? preferred : inStock
 
   const itemScore = (i: ItemWithBrand) =>

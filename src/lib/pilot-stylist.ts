@@ -204,6 +204,82 @@ export const RESPONSE_REASONS = [
 
 export type ResponseReason = (typeof RESPONSE_REASONS)[number]['id']
 
+// ── Price bands ──────────────────────────────────────────────────
+// What she actually spends, per kind of piece. Liking a brand is not the same
+// as buying every price point it sells: a £600 jacket can be a no from someone
+// who happily pays £300 for a dress. Accessories are deliberately their own
+// buckets — bags and shoes are routinely bought above the clothing range.
+
+export interface PriceBand { min?: number | null; max?: number | null }
+export type PriceBands = Record<string, PriceBand>
+
+export const PRICE_BUCKETS: { id: string; label: string; types: string[] }[] = [
+  { id: 'top', label: 'TOPS & SHIRTS', types: ['shirt', 'blouse', 't-shirt', 'bodysuit', 'corset'] },
+  { id: 'knitwear', label: 'KNITWEAR', types: ['knitwear'] },
+  { id: 'bottom', label: 'TROUSERS, JEANS & SKIRTS', types: ['trousers', 'jeans', 'shorts', 'skirt'] },
+  { id: 'dress', label: 'DRESSES', types: ['mini_dress', 'midi_dress', 'maxi_dress', 'shirt_dress', 'slip_dress'] },
+  { id: 'outerwear', label: 'COATS & JACKETS', types: ['coat', 'trench', 'jacket', 'blazer', 'gilet', 'cape'] },
+  { id: 'shoes', label: 'SHOES', types: ['boot', 'heel', 'flat', 'sneaker', 'mule', 'sandal'] },
+  { id: 'bag', label: 'BAGS', types: ['tote', 'shoulder_bag', 'clutch', 'crossbody', 'structured_bag'] },
+  { id: 'jewellery', label: 'JEWELLERY & ACCESSORIES', types: ['necklace', 'earrings', 'bracelet', 'ring', 'brooch', 'belt', 'scarf', 'hair_accessory', 'hat', 'gloves', 'sunglasses'] },
+]
+
+const BUCKET_BY_TYPE = new Map<string, string>()
+for (const b of PRICE_BUCKETS) for (const t of b.types) BUCKET_BY_TYPE.set(t, b.id)
+
+export function priceBucketFor(itemType: string | null | undefined): string | null {
+  return itemType ? BUCKET_BY_TYPE.get(itemType) ?? null : null
+}
+
+// The band that governs this piece: its own bucket, else the default. An
+// accessory NEVER inherits the clothing default — spending £700 on a bag says
+// nothing about what she pays for a top, and vice versa. Without an explicit
+// band for those buckets we simply have no opinion.
+const NO_DEFAULT_INHERIT = new Set(['bag', 'shoes', 'jewellery'])
+
+export function bandForItem(bands: PriceBands | undefined, itemType: string | null | undefined): PriceBand | null {
+  if (!bands) return null
+  const bucket = priceBucketFor(itemType)
+  if (bucket && bands[bucket]) return bands[bucket]
+  if (bucket && NO_DEFAULT_INHERIT.has(bucket)) return null
+  return bands.default ?? null
+}
+
+export type PriceVerdict = 'in' | 'over' | 'under' | 'unknown'
+
+export function priceVerdict(
+  bands: PriceBands | undefined,
+  item: { item_type?: string | null; price_gbp?: number | null },
+): PriceVerdict {
+  const band = bandForItem(bands, item.item_type)
+  if (!band) return 'unknown'
+  const p = item.price_gbp
+  if (p == null || !(p > 0)) return 'unknown' // never judge a piece we cannot price
+  if (band.max != null && p > band.max) return 'over'
+  if (band.min != null && p < band.min) return 'under'
+  return 'in'
+}
+
+export function hasPriceBands(bands: PriceBands | undefined): boolean {
+  if (!bands) return false
+  return Object.values(bands).some((b) => b && (b.min != null || b.max != null))
+}
+
+export function readPriceBands(row: { price_bands?: unknown } | null | undefined): PriceBands {
+  const raw = (row?.price_bands ?? {}) as Record<string, any>
+  const out: PriceBands = {}
+  for (const [k, v] of Object.entries(raw)) {
+    if (!v || typeof v !== 'object') continue
+    const min = v.min == null ? null : Number(v.min)
+    const max = v.max == null ? null : Number(v.max)
+    out[k] = {
+      min: Number.isFinite(min as number) && (min as number) > 0 ? min : null,
+      max: Number.isFinite(max as number) && (max as number) > 0 ? max : null,
+    }
+  }
+  return out
+}
+
 // ── Authored style preferences ───────────────────────────────────
 // What she TELLS us about her taste, as opposed to what the feedback loop
 // infers. Colours, shapes and item types she loves or won't wear. Authored by

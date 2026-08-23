@@ -1,0 +1,15 @@
+-- 0049: Private Stylist — what a member actually spends, per kind of piece.
+-- Run manually in the Supabase SQL editor (idempotent).
+--
+-- budget_ceiling existed but nothing ever read it, and a single ceiling can't
+-- say the true thing anyway: she might love Isabel Marant and still never buy
+-- a £600 jacket, while happily paying £300 for a dress — and accessories break
+-- the pattern entirely, since people spend well above their clothing range on
+-- a bag or a pair of shoes.
+--
+-- price_bands is per BUCKET (tops, dresses, outerwear, shoes, bags...):
+--   { "default": {"min": 60, "max": 300},
+--     "dress":   {"min": 80, "max": 350},
+--     "bag":     {"min": 150, "max": 900} }
+-- A bucket with no entry falls back to "default"; no default means no opinion.
+alter table public.pilot_member add column if not exists price_bands jsonb not null default '{}'::jsonb;
