@@ -761,13 +761,13 @@ function MemberBrandMapView({ memberId, name }: { memberId: string; name: string
           </div>
 
           {scales ? (
-            <svg viewBox={`0 0 ${W} ${H}`} className="w-full mt-2" style={{ maxHeight: 320 }}>
+            <svg viewBox={`0 0 ${W} ${H}`} className="w-full mt-2" style={{ maxHeight: 460 }}>
               <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke="#EDECE8" />
               <line x1={PAD} y1={PAD} x2={PAD} y2={H - PAD} stroke="#EDECE8" />
-              <text x={PAD} y={PAD - 8} className="fill-[#A8A8A4]" style={{ fontSize: 8, letterSpacing: '0.1em' }}>
+              <text x={PAD} y={PAD - 8} className="fill-[#A8A8A4]" style={{ fontSize: 11, letterSpacing: '0.08em' }}>
                 £{Math.round(Math.exp(scales.y1))}
               </text>
-              <text x={PAD} y={H - PAD + 12} className="fill-[#A8A8A4]" style={{ fontSize: 8, letterSpacing: '0.1em' }}>
+              <text x={PAD} y={H - PAD + 12} className="fill-[#A8A8A4]" style={{ fontSize: 11, letterSpacing: '0.08em' }}>
                 £{Math.round(Math.exp(scales.y0))}
               </text>
               {/* faint first, so her brands sit on top */}
@@ -791,7 +791,7 @@ function MemberBrandMapView({ memberId, name }: { memberId: string; name: string
                       {d.role !== 'baseline' && (
                         <text
                           x={scales.sx(d.x!)} y={scales.sy(d.price_position!) + 8} textAnchor="middle"
-                          fontSize={5.2} letterSpacing={0.3}
+                          fontSize={8} letterSpacing={0.25}
                           fill={big ? '#0A0A0A' : '#6B6B6B'}
                           stroke="#FFFFFF" strokeWidth={1.5} paintOrder="stroke"
                           style={{ pointerEvents: 'none' }}

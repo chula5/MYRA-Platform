@@ -16,20 +16,20 @@ import { saveAffinityConfig } from './actions'
 // TYPES but never its values.
 const BAND_NAMES = ['HIGH STREET', 'ACCESSIBLE', 'CONTEMPORARY', 'ADV. CONTEMPORARY', 'DESIGNER', 'LUXURY']
 
-const CHIP = 'px-3.5 py-2 rounded-full text-[13px] tracking-[0.08em] border transition-colors'
+const CHIP = 'px-3.5 py-2 rounded-full text-[16px] tracking-[0.08em] border transition-colors'
 const CHIP_ON = `${CHIP} bg-[#0A0A0A] text-white border-[#0A0A0A]`
 const CHIP_OFF = `${CHIP} bg-white text-[#6B6B6B] border-[#E2E0DB] hover:border-[#0A0A0A]`
-const BTN_DARK = 'bg-[#0A0A0A] text-white rounded-full px-5 py-2.5 text-[13px] tracking-[0.1em] hover:opacity-85 transition-opacity disabled:opacity-40'
-const BTN_LIGHT = 'border border-[#0A0A0A] text-[#0A0A0A] rounded-full px-5 py-2.5 text-[13px] tracking-[0.1em] hover:bg-[#0A0A0A] hover:text-white transition-colors disabled:opacity-40'
-const BTN_GHOST = 'border border-[#E2E0DB] text-[#4A4E57] rounded-full px-4 py-2 text-[13px] tracking-[0.1em] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors disabled:opacity-40'
-const INPUT = 'border border-[#E2E0DB] rounded-[8px] px-3 py-2.5 text-[13px] tracking-[0.04em] outline-none focus:border-[#0A0A0A] bg-white'
-const LABEL = 'text-[13px] tracking-[0.12em] text-[#4A4E57]'
-const H2 = 'text-[13px] tracking-[0.16em] text-[#4A4E57] mb-3'
+const BTN_DARK = 'bg-[#0A0A0A] text-white rounded-full px-5 py-2.5 text-[16px] tracking-[0.1em] hover:opacity-85 transition-opacity disabled:opacity-40'
+const BTN_LIGHT = 'border border-[#0A0A0A] text-[#0A0A0A] rounded-full px-5 py-2.5 text-[16px] tracking-[0.1em] hover:bg-[#0A0A0A] hover:text-white transition-colors disabled:opacity-40'
+const BTN_GHOST = 'border border-[#E2E0DB] text-[#4A4E57] rounded-full px-4 py-2 text-[16px] tracking-[0.1em] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors disabled:opacity-40'
+const INPUT = 'border border-[#E2E0DB] rounded-[8px] px-3 py-2.5 text-[16px] tracking-[0.04em] outline-none focus:border-[#0A0A0A] bg-white'
+const LABEL = 'text-[16px] tracking-[0.12em] text-[#4A4E57]'
+const H2 = 'text-[15px] tracking-[0.14em] text-[#4A4E57] mb-3'
 
 const TIER_LABELS = ['', 'HIGH STREET', 'CONTEMPORARY', 'PREMIUM', 'LUXURY', 'ULTRA-LUXURY']
 
 function Spark({ values }: { values: number[] }) {
-  if (values.length < 2) return <span className="text-[13px] text-[#A8A8A4]">—</span>
+  if (values.length < 2) return <span className="text-[16px] text-[#A8A8A4]">—</span>
   const pts = values.map((v, i) => `${(i / (values.length - 1)) * 60},${16 - v * 14}`).join(' ')
   return (
     <svg width="60" height="16" className="inline-block">
@@ -97,7 +97,9 @@ export default function TasteClient({ data }: { data: InspectorData }) {
   // computed/manual price_position — no placeholder fallbacks, ever.
   const [brandQuery, setBrandQuery] = useState('')
   const W = 1000; const H = 520
-  const M = { left: 118, right: 24, top: 16, bottom: 44 }
+  // left margin holds the band names — 'ADV. CONTEMPORARY' is the widest at
+  // ~127 units, so anything narrower runs it into the £ gridline labels
+  const M = { left: 145, right: 24, top: 16, bottom: 44 }
   const bounds = data.config.bandBounds
   const bandEdges = [40, ...bounds, 8000] // full band ladder; domain clamps below
 
@@ -185,8 +187,8 @@ export default function TasteClient({ data }: { data: InspectorData }) {
             )}
           </button>
         ))}
-        {notice && <p className="text-[13px] tracking-[0.1em] text-[#C4A882] max-w-lg truncate">{notice}</p>}
-        {pending && <span className="text-[13px] tracking-[0.14em] text-[#A8A8A4]">WORKING…</span>}
+        {notice && <p className="text-[16px] tracking-[0.1em] text-[#C4A882] max-w-lg truncate">{notice}</p>}
+        {pending && <span className="text-[16px] tracking-[0.14em] text-[#A8A8A4]">WORKING…</span>}
       </div>
 
       {/* ═══════════ BRAND MAP ═══════════ */}
@@ -217,7 +219,7 @@ export default function TasteClient({ data }: { data: InspectorData }) {
               </span>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 mb-3 text-[13px] tracking-[0.14em] text-[#A8A8A4]">
+            <div className="flex flex-wrap items-center gap-2 mb-3 text-[16px] tracking-[0.14em] text-[#A8A8A4]">
               BAND BOUNDS £
               <input value={cfgBounds} onChange={(e) => setCfgBounds(e.target.value)} className={`${INPUT} w-56`} title="5 ascending GBP boundaries, comma-separated" />
               PRICE DECAY K
@@ -231,7 +233,7 @@ export default function TasteClient({ data }: { data: InspectorData }) {
               </button>
             </div>
 
-            <p className="mb-1.5 text-[13px] tracking-[0.16em] text-[#6B6B6B]">
+            <p className="mb-1.5 text-[16px] tracking-[0.16em] text-[#6B6B6B]">
               POSITIONED: {positioned.length} OF {data.brands.length} BRANDS
               {unpositioned.length > 0 && <span className="text-[#A8A8A4]"> · {unpositioned.length} IN THE RAIL BELOW</span>}
             </p>
@@ -265,7 +267,7 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                     <g key={lo}>
                       <rect x={M.left} y={yTop} width={W - M.left - M.right} height={yBot - yTop} fill={bandIdx % 2 ? '#FAFAF8' : '#FFFFFF'} />
                       {yBot - yTop > 14 && (
-                        <text x={8} y={(yTop + yBot) / 2 + 4} fontSize={13} fill="#7A7A75" letterSpacing={1.4}>{BAND_NAMES[Math.min(bandIdx, BAND_NAMES.length - 1)]}</text>
+                        <text x={8} y={(yTop + yBot) / 2 + 4} fontSize={9.5} fill="#7A7A75" letterSpacing={1.4}>{BAND_NAMES[Math.min(bandIdx, BAND_NAMES.length - 1)]}</text>
                       )}
                     </g>
                   )
@@ -274,14 +276,14 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                 {GRID_PRICES.map((p) => (
                   <g key={p}>
                     <line x1={M.left} x2={W - M.right} y1={py(Math.log(p))} y2={py(Math.log(p))} stroke="#E2E0DB" strokeWidth={0.8} />
-                    <text x={M.left + 6} y={py(Math.log(p)) - 4} fontSize={13} fill="#7A7A75" letterSpacing={1}>£{p.toLocaleString()}</text>
+                    <text x={M.left + 6} y={py(Math.log(p)) - 4} fontSize={9.5} fill="#7A7A75" letterSpacing={1}>£{p.toLocaleString()}</text>
                   </g>
                 ))}
-                <text x={M.left + 8} y={H - 12} fontSize={13} fill="#7A7A75" letterSpacing={1.8}>← AESTHETIC POSITION (PCA OF BRAND VECTORS) →</text>
+                <text x={M.left + 8} y={H - 12} fontSize={9.5} fill="#7A7A75" letterSpacing={1.8}>← AESTHETIC POSITION (PCA OF BRAND VECTORS) →</text>
                 {familyBoxes.map((f) => (
                   <g key={f.name}>
                     <rect x={f.x} y={f.y} width={f.w} height={f.h} fill="none" stroke="#C4A882" strokeWidth={1} strokeDasharray="5 4" rx={12} />
-                    <text x={f.x + 6} y={f.y - 6} fontSize={13} fill="#C4A882" letterSpacing={1.5}>{f.name.toUpperCase()}</text>
+                    <text x={f.x + 6} y={f.y - 6} fontSize={10} fill="#C4A882" letterSpacing={1.5}>{f.name.toUpperCase()}</text>
                   </g>
                 ))}
                 {mapped.map(({ b, px: cx, py: cy }) => (
@@ -297,7 +299,7 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                         the glyphs so overlapping labels stay readable */}
                     <text
                       x={cx} y={cy + 9} textAnchor="middle"
-                      fontSize={5.4} letterSpacing={0.35}
+                      fontSize={6.6} letterSpacing={0.3}
                       fill={selBrand === b.brand_id ? '#0A0A0A' : '#6B6B6B'}
                       stroke="#FFFFFF" strokeWidth={1.6} paintOrder="stroke"
                       style={{ pointerEvents: 'none' }}
@@ -326,14 +328,14 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                 )}
               </svg>
             </div>
-            <p className="mt-2 text-[13px] tracking-[0.12em] text-[#A8A8A4]">
+            <p className="mt-2 text-[16px] tracking-[0.12em] text-[#A8A8A4]">
               EVERY DOT IS LABELLED — ZOOM IN WHERE THEY CROWD · FILLED = FULLY CODED (X = PCA OF BRAND CODES) · HOLLOW = CODES INCOMPLETE, PROVISIONAL ITEM-CENTROID POSITION · GOLD = REFERENCE · Y = LOG MEDIAN PRICE, REAL DATA ONLY · DASHED BOXES = FAMILIES · DOUBLE-CLICK/± TO ZOOM, DRAG TO PAN
             </p>
 
             {/* not-yet-positioned rail — brands stay OFF the map until they
                 have a real X and a real price; no placeholder positions */}
             <div className="mt-3 border border-[#E2E0DB] rounded-[10px] bg-white">
-              <button onClick={() => setRailOpen(!railOpen)} className="w-full text-left px-4 py-2.5 text-[13px] tracking-[0.16em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors">
+              <button onClick={() => setRailOpen(!railOpen)} className="w-full text-left px-4 py-2.5 text-[16px] tracking-[0.16em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors">
                 NOT YET POSITIONED ({unpositioned.length} BRANDS) {railOpen ? '▾' : '▸'}
               </button>
               {railOpen && (
@@ -345,7 +347,7 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                     ].filter(Boolean).join(' + ')
                     return (
                       <div key={b.brand_id} className="flex items-center justify-between gap-2 py-0.5 border-b border-[#EFEDE9] last:border-b-0">
-                        <button onClick={() => selectBrand(b.brand_id)} className="text-[13px] tracking-[0.08em] text-[#4A4E57] hover:underline text-left truncate">
+                        <button onClick={() => selectBrand(b.brand_id)} className="text-[16px] tracking-[0.08em] text-[#4A4E57] hover:underline text-left truncate">
                           {b.name.toUpperCase()}
                           <span className="text-[#A8A8A4] normal-case"> — {reasons} · {b.itemCount} items</span>
                         </button>
@@ -416,10 +418,10 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                         on ? 'bg-[#FBF6EC]' : 'hover:bg-[#FAFAF8]'
                       }`}
                     >
-                      <span className={`text-[13px] tracking-[0.08em] truncate ${on ? 'text-[#0A0A0A]' : 'text-[#4A4E57]'}`}>
+                      <span className={`text-[16px] tracking-[0.08em] truncate ${on ? 'text-[#0A0A0A]' : 'text-[#4A4E57]'}`}>
                         {b.name.toUpperCase()}
                       </span>
-                      <span className="text-[13px] tracking-[0.06em] text-[#A8A8A4] shrink-0">
+                      <span className="text-[16px] tracking-[0.06em] text-[#A8A8A4] shrink-0">
                         {placed ? (b.medianPrice ? `£${Math.round(b.medianPrice)}` : '—') : 'NOT ON MAP'}
                       </span>
                     </button>
@@ -431,12 +433,12 @@ export default function TasteClient({ data }: { data: InspectorData }) {
           {/* detail panel */}
           <aside className="border border-[#E2E0DB] rounded-[10px] bg-white p-4">
             {!sel ? (
-              <p className="text-[13px] tracking-[0.12em] text-[#A8A8A4]">CLICK A BRAND ON THE MAP.</p>
+              <p className="text-[16px] tracking-[0.12em] text-[#A8A8A4]">CLICK A BRAND ON THE MAP.</p>
             ) : (
               <div className="grid gap-4">
                 <div>
-                  <p className="text-[13px] tracking-[0.1em] text-[#0A0A0A]">{sel.name.toUpperCase()}</p>
-                  <p className="text-[13px] tracking-[0.12em] text-[#A8A8A4] mt-1">
+                  <p className="text-[16px] tracking-[0.1em] text-[#0A0A0A]">{sel.name.toUpperCase()}</p>
+                  <p className="text-[16px] tracking-[0.12em] text-[#A8A8A4] mt-1">
                     {TIER_LABELS[sel.price_tier]} · {sel.status.toUpperCase()} · {sel.itemCount} SCORED ITEMS
                     {sel.thin && <span className="text-[#B3202A]"> · THIN VECTOR</span>}
                   </p>
@@ -444,10 +446,10 @@ export default function TasteClient({ data }: { data: InspectorData }) {
 
                 <div>
                   <p className={H2}>FAMILIES</p>
-                  {selFamilies.length === 0 && <p className="text-[13px] text-[#A8A8A4] tracking-[0.08em]">NONE</p>}
+                  {selFamilies.length === 0 && <p className="text-[16px] text-[#A8A8A4] tracking-[0.08em]">NONE</p>}
                   {selFamilies.map((f) => (
                     <div key={f.family_id} className="flex items-center justify-between gap-2 py-1">
-                      <span className="text-[13px] tracking-[0.1em] text-[#4A4E57]">
+                      <span className="text-[16px] tracking-[0.1em] text-[#4A4E57]">
                         {f.name.toUpperCase()} · {f.members.find((m) => m.brand_id === sel.brand_id)?.weight.toUpperCase()}
                       </span>
                       <button disabled={pending} className={BTN_GHOST} onClick={() => act(() => setMembership(f.family_id, sel.brand_id, null), () => setNotice('REMOVED — RELOAD'))}>REMOVE</button>
@@ -465,8 +467,8 @@ export default function TasteClient({ data }: { data: InspectorData }) {
 
                 {detail?.thin ? (
                   <div className="border border-[#E2E0DB] rounded-[8px] p-3 bg-[#FAFAF8]">
-                    <p className="text-[13px] tracking-[0.12em] text-[#B3202A]">NOT ENOUGH DATA — {sel.itemCount} SCORED ITEM{sel.itemCount === 1 ? '' : 'S'}</p>
-                    <p className="mt-1 text-[13px] tracking-[0.05em] text-[#6B6B6B] normal-case leading-relaxed">
+                    <p className="text-[16px] tracking-[0.12em] text-[#B3202A]">NOT ENOUGH DATA — {sel.itemCount} SCORED ITEM{sel.itemCount === 1 ? '' : 'S'}</p>
+                    <p className="mt-1 text-[16px] tracking-[0.05em] text-[#6B6B6B] normal-case leading-relaxed">
                       Neighbour lists and similarity scores are suppressed until this brand has 5+ scored items,
                       or a reference-image vector. Only curated family membership can expand from it meanwhile.
                     </p>
@@ -482,18 +484,18 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                     <div>
                       <p className={H2}>NEAREST — AESTHETIC × PRICE = COMBINED</p>
                       {(detail?.neighbours ?? []).map((n) => (
-                        <div key={n.brand_id} className="flex justify-between gap-2 py-0.5 text-[13px] tracking-[0.08em] text-[#4A4E57]">
+                        <div key={n.brand_id} className="flex justify-between gap-2 py-0.5 text-[16px] tracking-[0.08em] text-[#4A4E57]">
                           <span className="truncate">{n.name.toUpperCase()}{n.basis === 'vector' && <span className="text-[#B3202A]"> · PROV.</span>}</span>
                           <span className="text-[#A8A8A4] whitespace-nowrap">{n.aesthetic.toFixed(2)} × {n.priceFactor.toFixed(2)} = <span className="text-[#4A4E57]">{n.combined.toFixed(2)}</span></span>
                         </div>
                       ))}
-                      {detail && !detail.neighbours.length && <p className="text-[13px] text-[#A8A8A4] tracking-[0.08em]">NO VECTOR YET</p>}
+                      {detail && !detail.neighbours.length && <p className="text-[16px] text-[#A8A8A4] tracking-[0.08em]">NO VECTOR YET</p>}
                     </div>
 
                     <div>
                       <p className={H2}>WHAT A CUSTOMER NAMING THIS BRAND GETS</p>
                       {(detail?.similar ?? []).map((s) => (
-                        <div key={s.brand_id} className="flex justify-between gap-2 py-0.5 text-[13px] tracking-[0.08em]">
+                        <div key={s.brand_id} className="flex justify-between gap-2 py-0.5 text-[16px] tracking-[0.08em]">
                           <span className="text-[#4A4E57] truncate">{s.name.toUpperCase()}</span>
                           <span className="text-[#A8A8A4] whitespace-nowrap">
                             {s.mechanism === 'core_family' ? `CORE · ${s.family_name}` : s.mechanism === 'adjacent_family' ? `ADJ · ${s.family_name}` :
@@ -501,7 +503,7 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                           </span>
                         </div>
                       ))}
-                      {detail && !detail.similar.length && <p className="text-[13px] text-[#A8A8A4] tracking-[0.08em]">NOTHING — ORPHAN BRAND</p>}
+                      {detail && !detail.similar.length && <p className="text-[16px] text-[#A8A8A4] tracking-[0.08em]">NOTHING — ORPHAN BRAND</p>}
                     </div>
                   </>
                 )}
@@ -510,7 +512,7 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                   <p className={H2}>EXCLUSIONS</p>
                   {data.exclusions.filter((e) => e.brand_a === sel.brand_id || e.brand_b === sel.brand_id).map((e) => (
                     <div key={e.brand_a + e.brand_b} className="flex items-center justify-between gap-2 py-1">
-                      <span className="text-[13px] tracking-[0.08em] text-[#B3202A]">NEVER WITH {(e.brand_a === sel.brand_id ? e.b_name : e.a_name).toUpperCase()}</span>
+                      <span className="text-[16px] tracking-[0.08em] text-[#B3202A]">NEVER WITH {(e.brand_a === sel.brand_id ? e.b_name : e.a_name).toUpperCase()}</span>
                       <button disabled={pending} className={BTN_GHOST} onClick={() => act(() => removeExclusion(e.brand_a, e.brand_b), () => setNotice('EXCLUSION REMOVED — RELOAD'))}>REMOVE</button>
                     </div>
                   ))}
@@ -540,17 +542,17 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                   {m.name.toUpperCase()}{m.is_synthetic ? ' · SYNTH' : ''}
                 </button>
               ))}
-              {!data.members.length && <p className="text-[13px] text-[#A8A8A4] tracking-[0.08em]">NO PILOT MEMBERS YET.</p>}
+              {!data.members.length && <p className="text-[16px] text-[#A8A8A4] tracking-[0.08em]">NO PILOT MEMBERS YET.</p>}
             </div>
           </aside>
 
           <section className="grid gap-6">
             {!inspection ? (
-              <p className="text-[13px] tracking-[0.12em] text-[#A8A8A4]">{selMember ? 'LOADING…' : 'PICK A MEMBER.'}</p>
+              <p className="text-[16px] tracking-[0.12em] text-[#A8A8A4]">{selMember ? 'LOADING…' : 'PICK A MEMBER.'}</p>
             ) : (
               <>
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-[13px] tracking-[0.1em] text-[#0A0A0A] mr-2">{inspection.member.name.toUpperCase()}</p>
+                  <p className="text-[16px] tracking-[0.1em] text-[#0A0A0A] mr-2">{inspection.member.name.toUpperCase()}</p>
                   <button disabled={pending} className={BTN_DARK} onClick={() => act(() => seedMemberFromIntake(inspection.member.member_id), (r) => { setNotice(r.error ?? `SEEDED: ${r.named} NAMED, ${r.expanded} EXPANDED, ${r.baseline} BASELINE${r.unmatched?.length ? `, UNMATCHED: ${r.unmatched.join(', ')}` : ''}`); selectMember(inspection.member.member_id) })}>
                     SEED FROM ONBOARDED BRANDS
                   </button>
@@ -573,7 +575,7 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                     ))}
                   </div>
                   {inspection.unmatched.length > 0 && (
-                    <p className="mt-1.5 text-[13px] tracking-[0.1em] text-[#A8A8A4]">FREE-TEXT LOGGED FOR STOCKING INTEL: {inspection.unmatched.join(' · ').toUpperCase()}</p>
+                    <p className="mt-1.5 text-[16px] tracking-[0.1em] text-[#A8A8A4]">FREE-TEXT LOGGED FOR STOCKING INTEL: {inspection.unmatched.join(' · ').toUpperCase()}</p>
                   )}
                 </div>
 
@@ -591,9 +593,9 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                 <div>
                   <p className={H2}>AFFINITIES ABOVE BASELINE · {inspection.affinities.length} — THE NUMBERS BEHIND THE MAP</p>
                   <div className="border border-[#E2E0DB] rounded-[10px] bg-white overflow-x-auto">
-                    <table className="w-full text-[13px] tracking-[0.06em] text-[#4A4E57]">
+                    <table className="w-full text-[16px] tracking-[0.06em] text-[#4A4E57]">
                       <thead>
-                        <tr className="text-left text-[13px] tracking-[0.16em] text-[#A8A8A4] border-b border-[#EFEDE9]">
+                        <tr className="text-left text-[16px] tracking-[0.16em] text-[#A8A8A4] border-b border-[#EFEDE9]">
                           <th className="px-3 py-2">BRAND</th><th className="px-2 py-2">AFFINITY</th><th className="px-2 py-2">SOURCE</th>
                           <th className="px-2 py-2">HISTORY</th><th className="px-2 py-2">+/−</th><th className="px-2 py-2">EXPANSION TRACE</th><th className="px-2 py-2" />
                         </tr>
@@ -628,11 +630,11 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                 <div>
                   <p className={H2}>DISCOVERY OUTCOMES · {inspection.discoveries.length}</p>
                   {!inspection.discoveries.length ? (
-                    <p className="text-[13px] text-[#A8A8A4] tracking-[0.08em]">NO DISCOVERY IMPRESSIONS YET — THEY LOG WHEN A FEED IS SERVED OR PREVIEW-LOGGED.</p>
+                    <p className="text-[16px] text-[#A8A8A4] tracking-[0.08em]">NO DISCOVERY IMPRESSIONS YET — THEY LOG WHEN A FEED IS SERVED OR PREVIEW-LOGGED.</p>
                   ) : (
                     <div className="grid gap-1">
                       {inspection.discoveries.map((d, i) => (
-                        <p key={i} className="text-[13px] tracking-[0.06em] text-[#4A4E57]">
+                        <p key={i} className="text-[16px] tracking-[0.06em] text-[#4A4E57]">
                           <span className={d.outcome === 'engaged' ? 'text-[#3D7A50]' : d.outcome === 'skipped' ? 'text-[#B3202A]' : 'text-[#A8A8A4]'}>{d.outcome.toUpperCase()}</span>
                           {' · '}{d.brand.toUpperCase()}{d.mechanism ? <span className="text-[#A8A8A4] normal-case"> — {d.mechanism}</span> : ''}
                           <span className="text-[#A8A8A4]"> · {d.context.toUpperCase()} · {d.created_at.slice(0, 10)}</span>
@@ -661,12 +663,12 @@ export default function TasteClient({ data }: { data: InspectorData }) {
           </div>
           {sim && (
             <>
-              {sim.error && <p className="text-[13px] tracking-[0.1em] text-[#B3202A]">{sim.error.toUpperCase()}</p>}
-              {sim.unmatched.length > 0 && <p className="text-[13px] tracking-[0.1em] text-[#B3202A]">UNMATCHED: {sim.unmatched.join(' · ').toUpperCase()}</p>}
+              {sim.error && <p className="text-[16px] tracking-[0.1em] text-[#B3202A]">{sim.error.toUpperCase()}</p>}
+              {sim.unmatched.length > 0 && <p className="text-[16px] tracking-[0.1em] text-[#B3202A]">UNMATCHED: {sim.unmatched.join(' · ').toUpperCase()}</p>}
               <div className="border border-[#E2E0DB] rounded-[10px] bg-white overflow-x-auto">
-                <table className="w-full text-[13px] tracking-[0.06em] text-[#4A4E57]">
+                <table className="w-full text-[16px] tracking-[0.06em] text-[#4A4E57]">
                   <thead>
-                    <tr className="text-left text-[13px] tracking-[0.16em] text-[#A8A8A4] border-b border-[#EFEDE9]">
+                    <tr className="text-left text-[16px] tracking-[0.16em] text-[#A8A8A4] border-b border-[#EFEDE9]">
                       <th className="px-3 py-2">BRAND</th><th className="px-2 py-2">SEEDED</th><th className="px-2 py-2">SOURCE</th><th className="px-2 py-2">WHY</th>
                     </tr>
                   </thead>
@@ -693,10 +695,10 @@ export default function TasteClient({ data }: { data: InspectorData }) {
         <div className="grid gap-6 max-w-4xl">
           <div className="flex items-center gap-3">
             <button disabled={pending} className={BTN_DARK} onClick={() => act(() => runHealthNow(), (r) => { setReport(r); setNotice('HEALTH CHECKS COMPLETE') })}>RUN CHECKS NOW</button>
-            <p className="text-[13px] tracking-[0.12em] text-[#A8A8A4]">ALSO RUNS EVERY MONDAY WITH THE CALIBRATION CRON · FAILURES LAND IN THE CALIBRATION EMAIL</p>
+            <p className="text-[16px] tracking-[0.12em] text-[#A8A8A4]">ALSO RUNS EVERY MONDAY WITH THE CALIBRATION CRON · FAILURES LAND IN THE CALIBRATION EMAIL</p>
           </div>
           {!report ? (
-            <p className="text-[13px] tracking-[0.12em] text-[#A8A8A4]">NO REPORT YET.</p>
+            <p className="text-[16px] tracking-[0.12em] text-[#A8A8A4]">NO REPORT YET.</p>
           ) : (
             <div className="grid md:grid-cols-2 gap-4">
               <HealthCard title="ORPHAN BRANDS" hint="stocked, no family, no vector neighbour ≥ 0.5 — naming these expands to almost nothing"
@@ -772,7 +774,7 @@ function MemberScatter({
   const counts = dots.reduce<Record<string, number>>((acc, d) => ({ ...acc, [d.role]: (acc[d.role] ?? 0) + 1 }), {})
   const offMap = inspection.affinities.length - dots.length
   const visible = dots.filter((d) => showRoles.has(d.role))
-  const H2S = 'text-[13px] tracking-[0.16em] text-[#6B6B6B]'
+  const H2S = 'text-[16px] tracking-[0.16em] text-[#6B6B6B]'
 
   return (
     <div>
@@ -783,7 +785,7 @@ function MemberScatter({
             <button
               key={r.key}
               onClick={() => setShowRoles((s) => { const n = new Set(s); n.has(r.key) ? n.delete(r.key) : n.add(r.key); return n })}
-              className={`flex items-center gap-1.5 text-[13px] tracking-[0.12em] text-[#4A4E57] transition-opacity ${showRoles.has(r.key) ? '' : 'opacity-35'}`}
+              className={`flex items-center gap-1.5 text-[16px] tracking-[0.12em] text-[#4A4E57] transition-opacity ${showRoles.has(r.key) ? '' : 'opacity-35'}`}
             >
               <span className="w-2.5 h-2.5 rounded-full" style={{ background: r.colour }} />
               {r.label} · {counts[r.key] ?? 0}
@@ -797,10 +799,10 @@ function MemberScatter({
           {gridPrices.map((p) => (
             <g key={p}>
               <line x1={M.left} x2={W - M.right} y1={py(Math.log(p))} y2={py(Math.log(p))} stroke="#E2E0DB" strokeWidth={0.8} />
-              <text x={M.left + 6} y={py(Math.log(p)) - 4} fontSize={13} fill="#7A7A75" letterSpacing={1}>£{p.toLocaleString()}</text>
+              <text x={M.left + 6} y={py(Math.log(p)) - 4} fontSize={9.5} fill="#7A7A75" letterSpacing={1}>£{p.toLocaleString()}</text>
             </g>
           ))}
-          <text x={M.left + 8} y={H - 12} fontSize={13} fill="#7A7A75" letterSpacing={1.8}>← AESTHETIC POSITION (SAME AXES AS THE BRAND MAP) →</text>
+          <text x={M.left + 8} y={H - 12} fontSize={9.5} fill="#7A7A75" letterSpacing={1.8}>← AESTHETIC POSITION (SAME AXES AS THE BRAND MAP) →</text>
 
           {visible.map((d) => {
             const colour = MEMBER_ROLES.find((r) => r.key === d.role)!.colour
@@ -815,7 +817,7 @@ function MemberScatter({
                 />
                 <text
                   x={d.x} y={d.y + (named ? 11 : 9)} textAnchor="middle"
-                  fontSize={named ? 6.4 : 5.4} letterSpacing={0.35}
+                  fontSize={named ? 7.6 : 6.6} letterSpacing={0.3}
                   fill={named ? '#0A0A0A' : '#6B6B6B'}
                   stroke="#FFFFFF" strokeWidth={1.6} paintOrder="stroke"
                 >
@@ -833,7 +835,7 @@ function MemberScatter({
           )}
         </svg>
       </div>
-      <p className="mt-1.5 text-[13px] tracking-[0.12em] text-[#A8A8A4]">
+      <p className="mt-1.5 text-[16px] tracking-[0.12em] text-[#A8A8A4]">
         GOLD RING = A BRAND SHE NAMED · {offMap} OF HER {inspection.affinities.length} BRANDS HAVE NO MAP POSITION YET (NO CODES OR NO PRICE) AND ARE LISTED BELOW ONLY
       </p>
     </div>
@@ -843,14 +845,14 @@ function MemberScatter({
 function HealthCard({ title, hint, rows }: { title: string; hint: string; rows: string[] }) {
   return (
     <div className="border border-[#E2E0DB] rounded-[10px] bg-white p-4">
-      <p className="text-[13px] tracking-[0.18em] text-[#4A4E57]">
+      <p className="text-[16px] tracking-[0.18em] text-[#4A4E57]">
         {title} <span className={rows.length ? 'text-[#B3202A]' : 'text-[#3D7A50]'}>· {rows.length}</span>
       </p>
-      <p className="mt-1 text-[13px] tracking-[0.06em] text-[#A8A8A4] normal-case leading-relaxed">{hint}</p>
+      <p className="mt-1 text-[16px] tracking-[0.06em] text-[#A8A8A4] normal-case leading-relaxed">{hint}</p>
       <div className="mt-2 grid gap-0.5">
-        {rows.slice(0, 12).map((r, i) => <p key={i} className="text-[13px] tracking-[0.05em] text-[#4A4E57] normal-case">{r}</p>)}
-        {rows.length > 12 && <p className="text-[13px] text-[#A8A8A4]">+{rows.length - 12} more</p>}
-        {!rows.length && <p className="text-[13px] tracking-[0.1em] text-[#3D7A50]">CLEAR</p>}
+        {rows.slice(0, 12).map((r, i) => <p key={i} className="text-[16px] tracking-[0.05em] text-[#4A4E57] normal-case">{r}</p>)}
+        {rows.length > 12 && <p className="text-[16px] text-[#A8A8A4]">+{rows.length - 12} more</p>}
+        {!rows.length && <p className="text-[16px] tracking-[0.1em] text-[#3D7A50]">CLEAR</p>}
       </div>
     </div>
   )
@@ -861,7 +863,7 @@ function FeedPreview({ title, feed }: { title: string; feed: MemberInspection['f
     <div>
       <p className={H2}>{title}</p>
       {!feed.length ? (
-        <p className="text-[13px] text-[#A8A8A4] tracking-[0.08em]">NO LIVE OUTFITS TO RANK.</p>
+        <p className="text-[16px] text-[#A8A8A4] tracking-[0.08em]">NO LIVE OUTFITS TO RANK.</p>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3">
           {feed.map((f, i) => (
@@ -871,12 +873,12 @@ function FeedPreview({ title, feed }: { title: string; feed: MemberInspection['f
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={f.image_url} alt="" loading="lazy" className="w-full h-full object-cover" />
                 )}
-                <span className="absolute top-1.5 left-1.5 bg-white/95 border border-[#E2E0DB] rounded px-1 py-0.5 text-[13px] text-[#4A4E57]">#{i + 1}</span>
+                <span className="absolute top-1.5 left-1.5 bg-white/95 border border-[#E2E0DB] rounded px-1 py-0.5 text-[16px] text-[#4A4E57]">#{i + 1}</span>
                 {f.discovery && <span className="absolute top-1.5 right-1.5 bg-[#C4A882] text-white rounded px-1 py-0.5 text-[7px] tracking-[0.1em]">DISCOVERY</span>}
               </div>
               <div className="p-2">
-                <p className="text-[13px] tracking-[0.1em] text-[#A8A8A4]">{(f.hero ?? '?').toUpperCase()}{f.occasionMatch ? ' · OCC ✓' : ''}</p>
-                <p className="text-[13px] tracking-[0.04em] text-[#4A4E57] mt-0.5">
+                <p className="text-[16px] tracking-[0.1em] text-[#A8A8A4]">{(f.hero ?? '?').toUpperCase()}{f.occasionMatch ? ' · OCC ✓' : ''}</p>
+                <p className="text-[16px] tracking-[0.04em] text-[#4A4E57] mt-0.5">
                   {f.combined}{' = '}
                   {f.vecSim != null ? `0.6×${f.vecSim} + 0.4×${f.brandAff}` : `brand ${f.brandAff}`}
                 </p>

@@ -14,7 +14,12 @@ export default async function TasteInspectorPage() {
   const data = await loadTasteInspector()
 
   return (
+    // Capped so the map SVG cannot stretch past ~2x its viewBox. Left
+    // full-bleed it hit 3.7x on a wide display, blowing in-chart labels up to
+    // 48px while the HTML controls stayed at 13px — the two scales have to
+    // stay in step for the page to be readable.
     <div className="min-h-screen bg-[#FAFAF8] px-6 py-8 lg:px-10">
+      <div className="max-w-[2400px] mx-auto">
       <div className="mb-8">
         <p className="text-[13px] tracking-[0.1em] text-[#6B6B6B] mb-2">STUDIO</p>
         <h1 className="text-[28px] tracking-[0.045em] text-[#4A4E57]">TASTE INSPECTOR</h1>
@@ -36,6 +41,7 @@ export default async function TasteInspectorPage() {
       ) : (
         <TasteClient data={data} />
       )}
+      </div>
     </div>
   )
 }
