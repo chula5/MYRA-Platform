@@ -26,7 +26,7 @@ alter table public.item
   add column if not exists poll_tier text check (poll_tier in ('A', 'B', 'C')),
   add column if not exists risk_score numeric,
   add column if not exists next_check_at timestamptz,
-  -- Second-hand merchandising: when the piece first went live, so the studio
+  -- Second-hand merchandising: when the piece first went live, so  sthe studio
   -- can flag ">14 days live, no click-outs".
   add column if not exists live_since timestamptz,
   -- The merchant's own id for this product, when a feed or webhook gives us
@@ -319,9 +319,31 @@ alter table public.render_job
   add column if not exists rescue_id uuid,
   add column if not exists alternative_id uuid;
 
-alter table public.render_job drop constraint if exists render_job_trigger_check;
-alter table public.render_job add constraint render_job_trigger_check
-  check (trigger in ('approval', 'stock_swap', 'restock_restore', 'manual', 'rescue', 'rescue_alternative'));
+-- Widen the allowed triggers. The existing constraint came from an inline
+-- column CHECK in migration 0017, so its name was auto-generated — and guessing
+-- that name wrong would fail SILENTLY, leaving the old narrow constraint in
+-- place to reject every 'rescue' job at runtime. So resolve it from the
+-- catalogs instead of assuming, and drop whatever is actually there.
+do $$
+declare c record;
+begin
+  for c in
+    select con.conname
+    from pg_constraint con
+    join pg_class rel on rel.oid = con.conrelid
+    join pg_namespace nsp on nsp.oid = rel.relnamespace
+    where nsp.nspname = 'public'
+      and rel.relname = 'render_job'
+      and con.contype = 'c'
+      and pg_get_constraintdef(con.oid) ilike '%trigger%'
+  loop
+    execute format('alter table public.render_job drop constraint %I', c.conname);
+  end loop;
+
+  execute $c$alter table public.render_job add constraint render_job_trigger_check check (
+    trigger in ('approval', 'stock_swap', 'restock_restore', 'manual', 'rescue', 'rescue_alternative')
+  )$c$;
+end $$;
 
 create index if not exists render_job_rescue_idx on public.render_job (rescue_id) where rescue_id is not null;
 

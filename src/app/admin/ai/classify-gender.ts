@@ -12,6 +12,7 @@
 // otherwise-unknowable product, cached on the row so it never repeats.
 
 import Anthropic from '@anthropic-ai/sdk'
+import { fetchImageForVision } from '@/lib/vision-image'
 
 export type GenderRead = 'women' | 'men' | 'unclear'
 
@@ -30,19 +31,16 @@ How to decide, in order:
 3. If you genuinely cannot tell, answer "unclear". Do not guess.`
 
 export async function classifyProductGender(imageUrl: string): Promise<{ gender: GenderRead; error?: string }> {
-  if (!imageUrl || !/^https?:\/\//.test(imageUrl)) return { gender: 'unclear', error: 'no image' }
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return { gender: 'unclear', error: 'ANTHROPIC_API_KEY not configured' }
 
-  try {
-    const res = await fetch(imageUrl, { signal: AbortSignal.timeout(20000) })
-    if (!res.ok) return { gender: 'unclear', error: `image fetch ${res.status}` }
-    const ct = res.headers.get('content-type') ?? 'image/jpeg'
-    const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-    const mediaType = allowed.find((t) => ct.includes(t)) ?? 'image/jpeg'
-    const buf = await res.arrayBuffer()
-    if (buf.byteLength > 4.5 * 1024 * 1024) return { gender: 'unclear', error: 'image too large' }
+  // The media type is sniffed from the bytes: the CDN header lies often enough
+  // that trusting it cost real answers, and here an unanswered read excludes a
+  // womenswear piece.
+  const { image, error } = await fetchImageForVision(imageUrl)
+  if (!image) return { gender: 'unclear', error }
 
+  try {
     const client = new Anthropic({ apiKey })
     const r = await client.messages.create({
       // Haiku read a plainly male model in cropped shorts as womenswear, and a
@@ -53,7 +51,7 @@ export async function classifyProductGender(imageUrl: string): Promise<{ gender:
       messages: [{
         role: 'user',
         content: [
-          { type: 'image', source: { type: 'base64', media_type: mediaType as any, data: Buffer.from(buf).toString('base64') } },
+          { type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.data } },
           { type: 'text', text: PROMPT },
         ],
       }],

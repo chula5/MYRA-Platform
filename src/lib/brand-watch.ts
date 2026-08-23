@@ -8,6 +8,7 @@
 import { createAdminClient } from '@/lib/supabase-server'
 import { toGbpAmount } from '@/lib/currency'
 import { classifyProductGender } from '@/app/admin/ai/classify-gender'
+import { classifyProductColour } from '@/app/admin/ai/classify-colour'
 import {
   discoverProductUrls, fetchNewProductPages, urlHash, type ParsedProduct,
 } from '@/lib/brand-watch-browser'
@@ -63,6 +64,7 @@ export interface BrandCheckResult {
   skippedStock: number // new on-taste pieces NOT queued because low/out of stock
   suppressedByLearning: number // predicted-skip by your keep/skip history — left unseen, re-evaluated as the model evolves
   restocked: number // existing library items that went out-of-stock → back in stock
+  visionColours?: number // colours read from the product image because the feed stated none
   note?: string // e.g. browser scan chunking: "350 of 812 pages this run"
   error?: string
 }
@@ -89,9 +91,11 @@ function scanDiagnostic(
   const atTop = buyable.filter((p) => p.score === top).length
   const withColour = fashion.filter((p) => p.colourFamily).length
   const pct = Math.round((withColour / fashion.length) * 100)
+  // The image pass fills most of this gap now, so a feed that still reads as
+  // colourless is one where the photographs could not be read either.
   const colourCapped = withColour / fashion.length < 0.25
   const lead = colourCapped
-    ? `this feed states a colour on only ${pct}% of pieces, so in-stock scores cap at ${top}`
+    ? `no colour could be read on ${100 - pct}% of pieces, from the feed or the images, so in-stock scores cap at ${top}`
     : `nothing in stock scored above ${top}`
   return `${lead} — drop min score to ${top} to see ${atTop} pieces`
 }
@@ -194,14 +198,16 @@ const COLOUR_LEXICON: Array<[RegExp, string]> = [
   [/french toast|\btoast\b|cocoa|toffee|fudge|demitasse|tannin|chipmunk|cowhide|brindle|pine bark|petrified oak|bracken|subterranean|incense|tobacco|cinnamon|hazel|acorn|pecan|umber|sepia|truffle|cacao|bison|otter|teak|walnut wood/, 'brown'],
   [/\brust\b|terracotta|burnt (?:brick|russet|sienna|ochre)|russet|paprika|henna|copper|amber|ginger|marmalade|clay|adobe|rosin|autumn/, 'brown'],
   // beiges, sands, creams
-  [/sesame|doeskin|toasted coconut|oat|oatmeal|birch|parchment|alabaster|pristine|ermine|nature|warm kit|soft kit|shortbread|almond|wheat|flax|putty|greige|desert|dune|safari/, 'camel'],
+  [/sesame|doeskin|toasted coconut|oat|oatmeal|birch|parchment|alabaster|pristine|ermine|nature|natural|biscotti|warm kit|soft kit|shortbread|almond|wheat|flax|putty|greige|desert|dune|safari/, 'camel'],
+  // Cream under another name — 'pearl' and 'porcelain' are house neutrals, not whites.
+  [/\bpearl\b|porcelain|chalk|milk\b|coconut milk/, 'cream'],
   // greys, near-blacks
-  [/phantom|falcon|shadow|thunderstorm|aluminum|aluminium|asphalt|sharkskin|cement|boulder|castlerock|bungee cord|vulcan|antracite|anthracite|pewter|gunmetal|smoke|ash\b|steel|silver birch|urban chic|rain drum|eventide|moonless/, 'grey'],
+  [/phantom|falcon|shadow|thunderstorm|aluminum|aluminium|asphalt|sharkskin|cement|boulder|castlerock|bungee cord|vulcan|antracite|anthracite|pewter|gunmetal|smoke|ash\b|steel|silver birch|urban chic|rain drum|eventide|moonless|dusk(?! blue)\b|dusky/, 'grey'],
   [/india ink|total eclipse|midnight|deep well|dark sapphire|blue nights|maritime|peacoat/, 'navy'],
   // blues
   [/skyway|clear sky|regatta|brunnera|crown blue|vintage indigo|indigo|denim|chambray|cornflower|periwinkle|azure|aegean|cerulean|niagara|placid|dusk blue|forget.?me.?not|spellbound|hydrangea|(?:light|mid|dark|stone) wash/, 'blue'],
   // greens
-  [/grape leaf|four leaf clover|watercress|kelp|scarab|turf green|amazon|\bsag\b|sage|moss|fern|eucalyptus|seaweed|artichoke|basil|juniper|cypress|loden|bottle green|sea turtle|foxtrot/, 'green'],
+  [/grape leaf|four leaf clover|watercress|kelp|scarab|turf green|amazon|\bsag\b|sage|moss|fern|eucalyptus|seaweed|artichoke|basil|juniper|cypress|loden|bottle green|bottiglia|sea turtle|seafoam|sea foam|foxtrot/, 'green'],
   // reds, wines
   [/port royale|cabernet|merlot|claret|sangria|rhubarb|garnet|brick red|tawny port|syrah/, 'burgundy'],
   [/cranberry|poppy red|lipstick/, 'red'],
@@ -209,13 +215,13 @@ const COLOUR_LEXICON: Array<[RegExp, string]> = [
   [/ballet slipper|peachy|blush|powder pink|dusty rose|sweet grape|orchid|mauve|heather/, 'pink'],
   [/aubergine|eggplant|amethyst|iris\b|wisteria/, 'purple'],
   // yellows
-  [/lemon icing|straw|honey|turmeric|saffron|ochre|dijon/, 'yellow'],
+  [/lemon icing|straw|honey|turmeric|saffron|ochre|dijon|citron/, 'yellow'],
   // brights that stay OFF-taste
   [/carrot|tangerine|papaya|marigold/, 'orange'],
 ]
 
 const COLOUR_RULES: Array<[RegExp, string]> = [
-  [/\bblack|onyx|noir/, 'black'],
+  [/\bblack|onyx|noir|\bnero\b/, 'black'],
   [/off.?white|ivory|cream|ecru|\bbone\b|eggshell|vanilla/, 'cream'],
   [/\bwhite|\bblanc/, 'white'],
   [/charcoal|\bgrey|\bgray|slate|graphite/, 'grey'],
@@ -295,6 +301,33 @@ function stockFromVariants(variants: any[]): { stockStatus: ScannedProduct['stoc
   return { stockStatus: 'in_stock', sizesInStock }
 }
 
+/**
+ * The colourway hiding in the URL slug.
+ *
+ * THE POSSE names 624 products "MAEVE LONG SLEEVE TOP" with no colour option,
+ * no colour tag and an empty-ish description — but handles them
+ * `maeve-long-sleeve-top-vintage-white`. Reading the slug is free and exact
+ * where the feed says nothing.
+ *
+ * Only the part AFTER the slugified title counts. Matching colour words
+ * anywhere in the slug reads product names as colours — OLIVIA is not olive,
+ * ROSIE is not rose — and a wrong colour is worse than none, because it both
+ * scores the piece and files it in the library.
+ */
+export function slugColourway(handle: string, title: string): string {
+  const slugTokens = String(handle ?? '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
+  const titleTokens = new Set(String(title ?? '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean))
+  if (!slugTokens.length || !titleTokens.size) return ''
+  // Everything after the LAST token the title accounts for. A plain prefix
+  // test is too strict for real stores: THE POSSE titles a piece "EMMA BUTTON
+  // DOWN DRESS" and handles it emma-button-down-MINI-dress-black, so the
+  // colour sitting in plain sight went unread.
+  let last = -1
+  slugTokens.forEach((t, i) => { if (titleTokens.has(t)) last = i })
+  if (last < 0) return ''
+  return slugTokens.slice(last + 1).join(' ')
+}
+
 function classifyAndScore(p: {
   id: unknown; handle: string; title: string; vendor: string; product_type: string
   tags: string[]; url: string; price: number | null; published_at: string | null; images: string[]
@@ -328,12 +361,14 @@ function classifyAndScore(p: {
 
   const colTag = (tagValue(p.tags, 'color') ?? tagValue(p.tags, 'colour') ?? '').toLowerCase()
   const optCol = p.optionColours.join(' ').toLowerCase()
+  const slugCol = slugColourway(p.handle, p.title)
   let colourFamily: string | null = null
   // Lexicon first — a specific marketing name beats a plain-word guess.
-  const colourText = [colTag, p.optionColours.join(' '), p.title].join(' ').toLowerCase()
+  const colourText = [colTag, p.optionColours.join(' '), slugCol, p.title].join(' ').toLowerCase()
   for (const [re, c] of COLOUR_LEXICON) { if (re.test(colourText)) { colourFamily = c; break } }
   if (!colourFamily) for (const [re, c] of COLOUR_RULES) { if (colTag && re.test(colTag)) { colourFamily = c; break } }
   if (!colourFamily) for (const [re, c] of COLOUR_RULES) { if (optCol && re.test(optCol)) { colourFamily = c; break } }
+  if (!colourFamily) for (const [re, c] of COLOUR_RULES) { if (slugCol && re.test(slugCol)) { colourFamily = c; break } }
   if (!colourFamily) for (const [re, c] of COLOUR_RULES) { if (re.test(p.title.toLowerCase())) { colourFamily = c; break } }
 
   const materialPrimary = tagValue(p.tags, 'material')
@@ -928,6 +963,7 @@ async function scanAndQueue(
   const products = await fetchCatalogue(watchedIn.base_url)
   const adopted = await adoptRealBrandName(admin as any, watchedIn, vendorMode(products))
   const watched = { ...watchedIn, ...adopted }
+  const visionColours = await applyVisionColour(products, watched.min_score)
   const fashion = products.filter((p) => !p.nonFashion && !p.menswear)
   const onTaste = fashion.filter(wanted)
   // Low or out of stock isn't worth adding — it gets another chance on a
@@ -962,7 +998,7 @@ async function scanAndQueue(
   return {
     name: watched.name, scanned: products.length, newProducts: onTaste.length,
     queued, belowScore: fashion.length - onTaste.length,
-    skippedStock: stockHeld.size, suppressedByLearning: suppressed.size, restocked,
+    skippedStock: stockHeld.size, suppressedByLearning: suppressed.size, restocked, visionColours,
     note: scanDiagnostic(fashion, watched.min_score, queued),
   }
 }
@@ -976,6 +1012,92 @@ async function scanAndQueue(
 // nothing (no publish dates exist off-Shopify, so "last 60 days" has no
 // meaning; new drops queue from the next check onward).
 // mode 'scan': fetch unseen pages, queue on-taste in-stock pieces.
+// ── colour from the image ───────────────────────────────────────────────────
+
+const VISION_COLOUR_CAP = 600
+
+/**
+ * Read the colour off the photograph for pieces whose feed never states one.
+ *
+ * Colour is 3 of the 7 house-style points, so an unreadable colour caps a
+ * piece at 4 and it can never clear a min score of 5 — a whole brand reads as
+ * off-taste when in truth its feed is just quiet. THE POSSE scanned 624
+ * products and queued nothing for exactly this reason.
+ *
+ * Only pieces where the colour would actually change the verdict are worth a
+ * call, so the gate is tight: no colour from any text, womenswear, in stock,
+ * and within reach of the brand's min score. A piece already carrying the
+ * off-colour penalty is left alone — the feed did state a colour there, and it
+ * was a loud one.
+ */
+async function applyVisionColour(products: ScannedProduct[], minScore: number): Promise<number> {
+  const w = HOUSE_STYLE.weights.colour
+  const candidates = products.filter((p) =>
+    !p.colourFamily &&
+    !p.nonFashion && !p.menswear &&
+    !!p.images[0] &&
+    queueableStock(p) &&
+    p.score + w >= minScore &&
+    !p.reasons.some((r) => r.startsWith(`−${w} `)),
+  )
+  if (!candidates.length) return 0
+  const capped = candidates.slice(0, VISION_COLOUR_CAP)
+
+  const admin = createAdminClient() as any
+  const cache = await loadColourReads(admin, capped.map((p) => p.images[0]))
+  const fresh: Array<{ image_url: string; colour_family: string | null }> = []
+
+  const CONC = 6
+  for (let i = 0; i < capped.length; i += CONC) {
+    const chunk = capped.slice(i, i + CONC)
+    const reads = await Promise.all(chunk.map(async (p) => {
+      const url = p.images[0]
+      if (cache.has(url)) return cache.get(url) ?? null
+      const { colour } = await classifyProductColour(url)
+      // A failed read is cached as null too: the same broken image should not
+      // be paid for on every scan.
+      fresh.push({ image_url: url, colour_family: colour })
+      return colour
+    }))
+    reads.forEach((colour, j) => {
+      if (!colour) return
+      const p = chunk[j]
+      p.colourFamily = colour
+      if (HOUSE_COLOUR_FAMILIES.has(colour)) {
+        p.score += w
+        p.reasons.push(`+${w} ${colour} (from image)`)
+      }
+    })
+  }
+
+  await saveColourReads(admin, fresh)
+  return capped.filter((p) => p.colourFamily).length
+}
+
+/** Colours already read from these images on an earlier scan. */
+async function loadColourReads(admin: any, urls: string[]): Promise<Map<string, string | null>> {
+  const out = new Map<string, string | null>()
+  const unique = Array.from(new Set(urls.filter(Boolean)))
+  for (let i = 0; i < unique.length; i += 200) {
+    try {
+      const { data } = await admin
+        .from('brand_watch_colour_read').select('image_url, colour_family')
+        .in('image_url', unique.slice(i, i + 200))
+      for (const r of data ?? []) out.set(String(r.image_url), r.colour_family ?? null)
+    } catch { /* an unavailable cache costs money, not correctness */ }
+  }
+  return out
+}
+
+async function saveColourReads(admin: any, rows: Array<{ image_url: string; colour_family: string | null }>): Promise<void> {
+  for (let i = 0; i < rows.length; i += 200) {
+    try {
+      await admin.from('brand_watch_colour_read')
+        .upsert(rows.slice(i, i + 200), { onConflict: 'image_url' })
+    } catch { /* same — never fail a scan over the cache */ }
+  }
+}
+
 /**
  * MYRA is womenswear only, and most feeds say the gender in a product type,
  * tag or URL path — read for free in classifyAndScore. Some sites say it
@@ -1056,6 +1178,7 @@ async function browserScanAndQueue(watchedRow: WatchedBrandRow, mode: 'watch' | 
     const products = res.parsed.map(classifyExternalProduct)
     // Sites with no textual gender signal get one vision call per product.
     await applyVisionGender(products)
+    const visionColours = await applyVisionColour(products, watched.min_score)
     const fashion = products.filter((p) => !p.nonFashion && !p.menswear)
     const onTaste = fashion.filter((p) => p.score >= watched.min_score)
     const inStock = onTaste.filter((p) => queueableStock(p))
@@ -1086,7 +1209,7 @@ async function browserScanAndQueue(watchedRow: WatchedBrandRow, mode: 'watch' | 
     return {
       name: watched.name, scanned: res.discovered, newProducts: onTaste.length, queued,
       belowScore: fashion.length - onTaste.length, skippedStock: stockHeld.size,
-      suppressedByLearning: suppressed.size, restocked,
+      suppressedByLearning: suppressed.size, restocked, visionColours,
       note: res.remaining > 0
         ? `${res.processedUrls.length} pages this run, ${res.remaining} remaining — run FULL SCAN again to continue`
         : undefined,
@@ -1121,6 +1244,8 @@ export async function checkWatchedBrand(watchedIn: WatchedBrandRow): Promise<Bra
   }
 
   const fresh = products.filter((p) => !seen.has(p.shopifyProductId))
+  // Only the new pieces are worth a vision call on a weekly check.
+  const visionColours = await applyVisionColour(fresh, watched.min_score)
   const onTaste = fresh.filter((p) => !p.nonFashion && !p.menswear && p.score >= watched.min_score)
   // Low or out of stock isn't worth adding — and it is NOT marked seen, so a
   // later check queues it the moment it restocks. Stock-held is computed over
@@ -1155,7 +1280,7 @@ export async function checkWatchedBrand(watchedIn: WatchedBrandRow): Promise<Bra
   return {
     name: watched.name, scanned: products.length, newProducts: fresh.length,
     queued, belowScore: fresh.length - onTaste.length,
-    skippedStock: stockHeld.size, suppressedByLearning: suppressed.size, restocked,
+    skippedStock: stockHeld.size, suppressedByLearning: suppressed.size, restocked, visionColours,
     note: scanDiagnostic(products.filter((p) => !p.nonFashion && !p.menswear), watched.min_score, queued),
   }
 }

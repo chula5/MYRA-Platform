@@ -186,14 +186,14 @@ export default function BrandWatchClient(props: Props) {
                   <span className="flex gap-1.5 flex-shrink-0">
                     <button
                       disabled={pending}
-                      onClick={() => { setBusyBrand(w.watched_brand_id); act(() => checkBrandNow(w.watched_brand_id), (r) => { setNotice(r.error ?? `${r.result.name}: ${r.result.newProducts} NEW, ${r.result.queued} QUEUED, ${r.result.skippedStock} HELD FOR STOCK, ${r.result.suppressedByLearning ?? 0} SUPPRESSED BY LEARNING, ${r.result.restocked} RESTOCKED`); if (!r.error) reloadQueue() }) }}
+                      onClick={() => { setBusyBrand(w.watched_brand_id); act(() => checkBrandNow(w.watched_brand_id), (r) => { setNotice(r.error ?? `${r.result.name}: ${r.result.newProducts} NEW, ${r.result.queued} QUEUED, ${r.result.skippedStock} HELD FOR STOCK, ${r.result.suppressedByLearning ?? 0} SUPPRESSED BY LEARNING, ${r.result.restocked} RESTOCKED${r.result.visionColours ? `, ${r.result.visionColours} COLOURS READ FROM THE IMAGES` : ''}`); if (!r.error) reloadQueue() }) }}
                       className="text-[8px] tracking-[0.1em] text-[#4A4E57] border border-[#E2E0DB] rounded-full px-2.5 py-1 hover:border-[#0A0A0A] transition-colors disabled:opacity-40"
                     >
                       {busyBrand === w.watched_brand_id ? <span className="text-[#C4A882]">WORKING…</span> : 'CHECK NOW'}
                     </button>
                     <button
                       disabled={pending}
-                      onClick={() => { setBusyBrand(w.watched_brand_id); act(() => fullScanBrand(w.watched_brand_id), (r) => { setNotice(r.error ?? `${r.result.name}: ${r.result.queued} QUEUED FROM THE FULL CATALOGUE (${r.result.belowScore} BELOW MIN SCORE)${r.result.note ? ` — ${r.result.note.toUpperCase()}` : ''}`); if (!r.error) reloadQueue() }) }}
+                      onClick={() => { setBusyBrand(w.watched_brand_id); act(() => fullScanBrand(w.watched_brand_id), (r) => { setNotice(r.error ?? `${r.result.name}: ${r.result.queued} QUEUED FROM THE FULL CATALOGUE (${r.result.belowScore} BELOW MIN SCORE)${r.result.visionColours ? `, ${r.result.visionColours} COLOURS READ FROM THE IMAGES` : ''}${r.result.note ? ` — ${r.result.note.toUpperCase()}` : ''}`); if (!r.error) reloadQueue() }) }}
                       className="text-[8px] tracking-[0.1em] text-[#4A4E57] border border-[#E2E0DB] rounded-full px-2.5 py-1 hover:border-[#0A0A0A] transition-colors disabled:opacity-40"
                       title="Queue every on-taste piece in the whole catalogue at this brand's min score — lower the min score and run again to go deeper"
                     >
