@@ -66,9 +66,13 @@ export function scoreUpdateFor(item: ScorableItem, a: AnalysedScores): Record<st
     const v = clamp15(a[d])
     if (v != null) out[d] = v
   }
-  if (item.neckline == null) {
-    const v = clamp15(a.neckline)
-    if (v != null) out.neckline = v
+  // neckline and sleeve live outside SCORED_DIMENSIONS because their columns
+  // are still being repaired by migration 0047 — the writer drops either if
+  // this database does not have it yet.
+  for (const f of ['neckline', 'sleeve'] as const) {
+    if (item[f] != null) continue
+    const v = clamp15((a as Record<string, unknown>)[f])
+    if (v != null) out[f] = v
   }
   for (const f of ['colour_family', 'material_category', 'material_primary', 'colour_hex'] as const) {
     if (item[f] != null) continue

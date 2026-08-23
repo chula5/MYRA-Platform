@@ -27,7 +27,7 @@ export interface ScoreRunResult {
   errors: string[]
 }
 
-const COLUMNS = `item_id, product_name, image_url, item_type, colour_family, colour_hex, material_category, material_primary, neckline, ${SCORED_DIMENSIONS.join(', ')}`
+const COLUMNS = `item_id, product_name, image_url, item_type, colour_family, colour_hex, material_category, material_primary, ${SCORED_DIMENSIONS.join(', ')}`
 
 /**
  * Items still missing their dimensions, newest first, paged by created_at.
@@ -38,12 +38,20 @@ const COLUMNS = `item_id, product_name, image_url, item_type, colour_family, col
  * they are read. Selecting purely on that put the same unscorable items at the
  * front of every batch and the run stalled on them. The cursor always moves.
  */
-async function unscoredBatch(admin: any, limit: number, before?: string | null): Promise<ScorableItem[]> {
+async function unscoredBatch(
+  admin: any,
+  limit: number,
+  before?: string | null,
+  missingField: string = 'structure',
+): Promise<ScorableItem[]> {
+  // neckline and sleeve are selected too when they are the gap being closed;
+  // asking for a column this database has not got yet fails the whole query.
+  const extra = missingField === 'structure' ? '' : `, ${missingField}`
   let q = admin
     .from('item')
-    .select(`${COLUMNS}, created_at`)
+    .select(`${COLUMNS}${extra}, created_at`)
     .in('status', ['ready', 'live'])
-    .is('structure', null)
+    .is(missingField, null)
     .not('image_url', 'is', null)
     .order('created_at', { ascending: false })
     .limit(limit)
@@ -55,19 +63,26 @@ async function unscoredBatch(admin: any, limit: number, before?: string | null):
 /**
  * Write the scores and stamp the attempt.
  *
- * scored_at arrives with migration 0050; until that has been run PostgREST
- * rejects the whole update for the unknown column, so the stamp is dropped and
- * the scores still land. Missing columns come back as "could not find the
- * column … in the schema cache", not "does not exist".
+ * Columns can legitimately be missing on this database: `scored_at` arrives
+ * with migration 0050, and `sleeve` with 0047, which has not been run — so a
+ * write naming either is rejected outright and takes the whole update with it.
+ * Rather than guess the schema, drop whatever column PostgREST names and try
+ * again, so the scores that CAN land always land. Missing columns come back as
+ * "could not find the 'x' column … in the schema cache".
  */
 async function writeScores(admin: any, itemId: string, update: Record<string, unknown>): Promise<{ error?: string }> {
-  const stamped = { ...update, scored_at: new Date().toISOString() }
-  const first = await admin.from('item').update(stamped).eq('item_id', itemId)
-  if (!first.error) return {}
-  if (!/schema cache|does not exist/i.test(first.error.message)) return { error: first.error.message }
-  if (!Object.keys(update).length) return {}
-  const retry = await admin.from('item').update(update).eq('item_id', itemId)
-  return retry.error ? { error: retry.error.message } : {}
+  let payload: Record<string, unknown> = { ...update, scored_at: new Date().toISOString() }
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const { error } = await admin.from('item').update(payload).eq('item_id', itemId)
+    if (!error) return {}
+    const missing = error.message.match(/'([a-z_]+)' column/i)?.[1]
+      ?? error.message.match(/column "?([a-z_.]+)"? .*does not exist/i)?.[1]?.split('.').pop()
+    if (!missing || !(missing in payload)) return { error: error.message }
+    const { [missing]: _dropped, ...rest } = payload
+    payload = rest
+    if (!Object.keys(payload).length) return {}
+  }
+  return { error: 'could not write scores' }
 }
 
 export async function countUnscored(): Promise<{ unscored: number; total: number }> {
@@ -90,9 +105,14 @@ export async function scoreUnscoredItems(
   limit = 40,
   concurrency = 5,
   before?: string | null,
+  // Which gap to close. 'structure' is the main sweep; a second pass on
+  // 'sleeve' catches tops and dresses once migration 0047 has given that
+  // column back — "sleeves too long" is real feedback with nowhere to land
+  // until it exists.
+  missingField: string = 'structure',
 ): Promise<ScoreRunResult> {
   const admin = createAdminClient() as any
-  const items = await unscoredBatch(admin, limit, before)
+  const items = await unscoredBatch(admin, limit, before, missingField)
   const res: ScoreRunResult = {
     looked: items.length, scored: 0, skipped: 0, failed: 0, remaining: 0,
     nextCursor: items.length ? String((items[items.length - 1] as any).created_at) : null,
