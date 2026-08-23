@@ -148,8 +148,17 @@ export default function TasteClient({ data }: { data: InspectorData }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.brands, LN_MIN, LN_MAX])
 
-  const GRID_PRICES = [150, 400, 800, 1500, 3000].filter((p) => Math.log(p) >= LN_MIN && Math.log(p) <= LN_MAX)
+  // ONE ladder. The gridlines ARE the band boundaries — a £ figure on this
+  // chart marks exactly where one band ends and the next begins. Previously a
+  // hardcoded [150, 400, 800, 1500, 3000] ran alongside the band edges, so
+  // four of five rules sat 11-19 units off the tint they appeared to label and
+  // the map asserted boundaries that did not exist. Deriving them from the
+  // configured bounds also makes the rules react to the BAND BOUNDS input,
+  // which they never did before.
   const visibleBandEdges = bandEdges.filter((e) => Math.log(e) >= LN_MIN && Math.log(e) <= LN_MAX)
+  // 40 and 8000 close the ladder; they are sentinels, not authored boundaries,
+  // so they get a tint edge but never a labelled rule.
+  const gridPrices = bounds.filter((p) => Math.log(p) >= LN_MIN && Math.log(p) <= LN_MAX)
 
   const familyInfo = data.families.map((f) => {
     const pts = mapped.filter((p) => f.members.some((m) => m.brand_id === p.b.brand_id))
@@ -274,7 +283,7 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                   )
                 })}
                 {/* £ gridlines, labels INSIDE the plot on the left */}
-                {GRID_PRICES.map((p) => (
+                {gridPrices.map((p) => (
                   <g key={p}>
                     <line x1={M.left} x2={W - M.right} y1={py(Math.log(p))} y2={py(Math.log(p))} stroke="#E2E0DB" strokeWidth={0.8} />
                     <text x={M.left + 6} y={py(Math.log(p)) - 4} fontSize={9.5} fill="#7A7A75" letterSpacing={1}>£{p.toLocaleString()}</text>
