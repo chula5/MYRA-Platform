@@ -7,6 +7,8 @@ import Hotspot from '@/components/hotspot/Hotspot'
 import ShopTheLookOverlay from '@/components/source-panel/ShopTheLookOverlay'
 import SaveHeartButton from '@/components/outfit-card/SaveHeartButton'
 import { trackEngagement } from '@/lib/track'
+import { ONE_OF_ONE_BADGE } from '@/lib/second-hand'
+import type { OutfitSizeInfo } from '@/lib/outfit-size'
 import type { OutfitWithItems, Item, Brand, ItemType } from '@/types/database'
 
 type SourceItemData = Item & { brand: Brand }
@@ -27,6 +29,11 @@ interface OutfitCardProps {
   initialSaved?: boolean
   // Signed-out: show a greyed heart that nudges sign-in instead.
   lockedSave?: boolean
+  // Per-item size verdicts for this shopper. Looks containing a one-of-one
+  // outside her size never reach this component — they're filtered server-side.
+  // What survives here is the softer case: a replenishable piece she can't
+  // currently buy in her size, which is labelled rather than hidden.
+  sizeInfo?: OutfitSizeInfo
 }
 
 export default function OutfitCard({
@@ -38,6 +45,7 @@ export default function OutfitCard({
   canSave = false,
   initialSaved = false,
   lockedSave = false,
+  sizeInfo,
 }: OutfitCardProps) {
   const router = useRouter()
   const [sourcePanelOpen, setSourcePanelOpen] = useState(false)
@@ -91,6 +99,8 @@ export default function OutfitCard({
     router.push(detailHref ?? `/outfit/${outfit.outfit_id}`)
   }
 
+  const hasUnique = Object.values(sizeInfo?.items ?? {}).some((i) => i.unique)
+
   const actionClass = 'pointer-events-auto text-white text-[10px] sm:text-[11px] tracking-[0.1em] uppercase font-light hover:opacity-70 transition-opacity'
 
   return (
@@ -120,6 +130,13 @@ export default function OutfitCard({
               className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${i === current ? 'opacity-100' : 'opacity-0'}`}
             />
           ))
+        )}
+
+        {/* Scarcity badge — a one-of-one in the look is the reason to act now. */}
+        {hasUnique && (
+          <span className="absolute top-3 left-3 z-20 bg-white/92 text-[#0A0A0A] text-[8px] sm:text-[9px] tracking-[0.14em] rounded-full px-2.5 py-1 leading-none">
+            {ONE_OF_ONE_BADGE}
+          </span>
         )}
 
         {/* Save heart (signed-in users) */}
@@ -170,6 +187,7 @@ export default function OutfitCard({
               items={items}
               outfitId={outfit.outfit_id}
               onClose={() => setSourcePanelOpen(false)}
+              sizeInfo={sizeInfo?.items}
             />
           </div>
         )}
@@ -188,6 +206,13 @@ export default function OutfitCard({
             <div className="flex justify-center mt-1.5">
               <button onClick={(e) => { e.stopPropagation(); trackEngagement('explore_styles', outfit.outfit_id); onExploreStyles?.(outfit) }} className={actionClass}>Explore Styles</button>
             </div>
+            {/* Honest, not apologetic: the styling still stands, and the piece
+                comes back. Sorting already put this look behind her sizes. */}
+            {sizeInfo?.outOfSize && (
+              <p className="mt-1.5 text-center text-white/75 text-[9px] sm:text-[10px] tracking-[0.1em] uppercase">
+                A piece here isn’t in your size right now
+              </p>
+            )}
           </div>
       </div>
     </article>

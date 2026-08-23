@@ -151,3 +151,79 @@ export async function saveOnboarding(payload: OnboardingPayload): Promise<{ erro
     return { error: err instanceof Error ? err.message : 'Failed to save' }
   }
 }
+
+// ── Sizes + second-hand consent ──────────────────────────────────────────────
+
+export interface SizeAnswers {
+  /** Canonical UK values per category, plus the optional "I also wear" size. */
+  tops?: { value: number | null; adjacent: number | null }
+  bottoms?: { value: number | null; adjacent: number | null }
+  outerwear?: { value: number | null; adjacent: number | null }
+  shoes?: { value: number | null; adjacent: number | null }
+  acceptsSecondHand: boolean
+}
+
+/**
+ * Persist her sizes and her answer on pre-loved pieces.
+ *
+ * Both facts change what she is SHOWN, not just how it's ranked — a one-of-one
+ * outside her size never reaches her, and pre-loved stock appears only if she
+ * asked for it — so this is saved on its own rather than bundled with the rest
+ * of onboarding, and it stands even if she abandons the flow afterwards.
+ */
+export async function saveSizes(answers: SizeAnswers): Promise<{ error?: string }> {
+  try {
+    const supabase = await createServerClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'Not signed in' }
+
+    const { saveUserSizeProfile } = await import('@/lib/size-availability')
+    const profile: Record<string, { value: number | null; adjacent: number | null }> = {}
+    for (const key of ['tops', 'bottoms', 'outerwear', 'shoes'] as const) {
+      const a = answers[key]
+      if (a?.value != null) profile[key] = { value: a.value, adjacent: a.adjacent ?? null }
+    }
+
+    const res = await saveUserSizeProfile(user.id, profile as any, answers.acceptsSecondHand)
+    if (res.error) return res
+
+    // Mirror her main clothing size into user_metadata: the feed's size filter
+    // pre-fills from it, and reading metadata is far cheaper than a table hit
+    // on every render.
+    try {
+      const admin = createAdminClient()
+      const { data: got } = await admin.auth.admin.getUserById(user.id)
+      const meta = got.user?.user_metadata ?? {}
+      await admin.auth.admin.updateUserById(user.id, {
+        user_metadata: { ...meta, clothing_uk: profile.tops?.value ?? null },
+      })
+    } catch (err) {
+      console.error('[saveSizes] metadata mirror', err)
+    }
+
+    return {}
+  } catch (err: unknown) {
+    console.error('[saveSizes]', err)
+    return { error: err instanceof Error ? err.message : 'Failed to save your sizes' }
+  }
+}
+
+/** Her current sizes + consent, for the settings screen. */
+export async function loadSizes(): Promise<SizeAnswers | null> {
+  try {
+    const supabase = await createServerClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return null
+    const { loadUserSizeProfile } = await import('@/lib/size-availability')
+    const ctx = await loadUserSizeProfile(user.id)
+    return {
+      tops: ctx.profile.tops ?? undefined,
+      bottoms: ctx.profile.bottoms ?? undefined,
+      outerwear: ctx.profile.outerwear ?? undefined,
+      shoes: ctx.profile.shoes ?? undefined,
+      acceptsSecondHand: ctx.acceptsSecondHand,
+    }
+  } catch {
+    return null
+  }
+}

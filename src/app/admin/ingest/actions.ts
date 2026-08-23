@@ -352,6 +352,7 @@ export async function bulkApproveCandidates(
 
     let created = 0
     let failed = 0
+    const newItemIds: string[] = []
 
     // Insert one-by-one so a single bad row doesn't kill the batch.
     for (const c of candidates) {
@@ -396,13 +397,28 @@ export async function bulkApproveCandidates(
           admin_notes: 'Imported via Batch Ingest. Pre-scored by AI — review before marking ready.',
         }
 
-        const { error: insertErr } = await supabase.from('item').insert([insertRow])
+        const { data: inserted, error: insertErr } = await (supabase.from('item') as any)
+          .insert([insertRow])
+          .select('item_id')
+          .single()
         if (insertErr) throw insertErr
         created++
+        // Second-hand pieces are time-sensitive — classify them and get them
+        // styled straight away rather than waiting for the standing backlog.
+        // Retail items fall straight back out of onItemApproved.
+        if ((inserted as any)?.item_id) newItemIds.push((inserted as any).item_id)
       } catch (err) {
         console.error('[bulkApprove] item failed', c.source_url, err)
         failed++
       }
+    }
+
+    if (newItemIds.length) {
+      const { onItemsApproved } = await import('@/lib/second-hand-intake')
+      // Fire-and-forget: a slow compose must not hold up the ingest response.
+      void onItemsApproved(newItemIds).catch((err) =>
+        console.error('[bulkApprove] second-hand intake', err),
+      )
     }
 
     revalidatePath('/admin/items')

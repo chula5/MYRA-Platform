@@ -10,6 +10,10 @@ import {
   type WardrobeItem,
 } from './save-actions'
 import ShopLink from '@/components/ShopLink'
+import RescueCard from './RescueCard'
+import { getWardrobeRescues, dismissAlerts, type WardrobeRescue } from './stock-actions'
+import { ALERT_COPY, type UserAlert } from '@/lib/stock-alerts'
+import Link from 'next/link'
 
 function fmtPrice(price: string | null, currency: string | null): string {
   if (!price) return ''
@@ -33,12 +37,16 @@ export default function Wardrobe() {
   const [loading, setLoading] = useState(true)
   const [outfits, setOutfits] = useState<WardrobeOutfit[]>([])
   const [items, setItems] = useState<WardrobeItem[]>([])
+  const [rescues, setRescues] = useState<WardrobeRescue[]>([])
+  const [alerts, setAlerts] = useState<UserAlert[]>([])
 
   async function load() {
     setLoading(true)
-    const w = await getWardrobe()
+    const [w, r] = await Promise.all([getWardrobe(), getWardrobeRescues()])
     setOutfits(w.outfits)
     setItems(w.items)
+    setRescues(r.rescues)
+    setAlerts(r.alerts)
     setLoading(false)
   }
 
@@ -52,6 +60,11 @@ export default function Wardrobe() {
   }, [])
 
   const count = outfits.length + items.length
+  // A saved look whose one-of-one has sold is never dropped — it moves out of
+  // the rail and into its own rescue card at the top of the wardrobe.
+  const rescuedIds = new Set(rescues.map((r) => r.outfit.outfit_id))
+  const railOutfits = outfits.filter((o) => !rescuedIds.has(o.outfit_id))
+  const unseenAlerts = alerts.filter((a) => !a.seen_at)
 
   async function removeOutfit(id: string) {
     setOutfits((o) => o.filter((x) => x.outfit_id !== id))
@@ -110,19 +123,84 @@ export default function Wardrobe() {
               </div>
             ) : (
               <>
+                {/* ── STOCK ALERTS — in-app, scoped to her size ── */}
+                {unseenAlerts.length > 0 && (
+                  <div className="mb-6 rounded-[12px] border border-[#E0D6BE] bg-[#FBF7EE] p-3.5">
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                      <p className="text-[12px] tracking-[0.14em] text-[#8A7340]">IN YOUR SIZE</p>
+                      <button
+                        onClick={async () => {
+                          setAlerts((a) => a.map((x) => ({ ...x, seen_at: new Date().toISOString() })))
+                          await dismissAlerts()
+                        }}
+                        className="text-[12px] tracking-[0.08em] text-[#A8A8A4] hover:text-[#6B6B6B] transition-colors"
+                      >
+                        DISMISS
+                      </button>
+                    </div>
+                    <div className="space-y-2">
+                      {unseenAlerts.slice(0, 5).map((a) => (
+                        <div key={a.alert_id} className="flex items-center gap-2.5">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={a.image_url || '/placeholder-outfit.jpg'}
+                            alt=""
+                            className="w-[30px] h-[40px] object-cover rounded-[5px] bg-[#F2F2F2]"
+                          />
+                          <div className="min-w-0">
+                            <p className="text-[12px] tracking-[0.05em] text-[#A8A8A4] uppercase truncate">
+                              {a.brand_name ?? 'BRAND'}
+                            </p>
+                            <p className="text-[13px] text-[#4A4E57] truncate">{a.product_name ?? 'A piece you saved'}</p>
+                            <p className="text-[13px] text-[#8A7340]">{ALERT_COPY[a.kind](a.size_label)}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <Link
+                      href="/settings/sizes"
+                      className="inline-block mt-2.5 text-[12px] tracking-[0.08em] text-[#6B6B6B] underline underline-offset-4"
+                    >
+                      CHANGE YOUR SIZES
+                    </Link>
+                  </div>
+                )}
+
+                {/* ── RESCUED LOOKS — a one-of-one in them has sold ── */}
+                {rescues.length > 0 && (
+                  <div className="mb-7">
+                    <p className="text-[12px] tracking-[0.16em] text-[#6B6B6B] mb-1">RESTYLED FOR YOU · {rescues.length}</p>
+                    <p className="text-[13px] text-[#A8A8A4] leading-relaxed mb-3">
+                      An item in a look you saved has sold — here&rsquo;s how we&rsquo;d restyle it.
+                    </p>
+                    <div className="space-y-3">
+                      {rescues.map((r) => (
+                        <RescueCard
+                          key={r.rescue.rescue_id}
+                          outfit={r.outfit}
+                          rescue={r.rescue}
+                          onOpen={() => { setOpen(false); router.push(`/edit/${r.outfit.outfit_id}`) }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* ── TOP COMPARTMENT: saved looks, hanging on the rail ── */}
                 <div className="mb-7">
-                  <p className="text-[9px] tracking-[0.16em] text-[#6B6B6B] mb-3">SAVED LOOKS · {outfits.length}</p>
-                  {outfits.length === 0 ? (
+                  <p className="text-[9px] tracking-[0.16em] text-[#6B6B6B] mb-3">SAVED LOOKS · {railOutfits.length}</p>
+                  {railOutfits.length === 0 ? (
                     <p className="text-[9px] tracking-[0.08em] text-[#A8A8A4] leading-relaxed py-3">
-                      No saved looks yet — tap <span className="text-[#C8302A]">♥</span> on an outfit.
+                      {rescues.length > 0
+                        ? 'Every other saved look is being restyled above.'
+                        : <>No saved looks yet — tap <span className="text-[#C8302A]">♥</span> on an outfit.</>}
                     </p>
                   ) : (
                     <div className="relative">
                       {/* the rail */}
                       <div className="absolute left-1 right-1 top-0 h-[2px] bg-gradient-to-r from-[#C9AE80] via-[#B89A6E] to-[#C9AE80] rounded-full" />
                       <div className="grid grid-cols-3 gap-2.5 pt-0">
-                        {outfits.map((o) => (
+                        {railOutfits.map((o) => (
                           <div key={o.outfit_id} className="relative group">
                             {/* hanger stem from the rail */}
                             <div className="w-[1px] h-2.5 bg-[#B89A6E] mx-auto" />

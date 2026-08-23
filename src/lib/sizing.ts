@@ -10,6 +10,7 @@
 // and never excludes an item whose sizing we can't parse.
 
 import { slotForItemType, type Slot } from '@/lib/composer'
+import { parseSizeLabel, CLOTHING_LADDER, SHOE_LADDER } from '@/lib/size-canonical'
 import type { ItemType, OutfitWithItems } from '@/types/database'
 
 // Women's clothing — index-aligned equivalents. `alpha` lists the letter
@@ -42,11 +43,6 @@ export const SHOE_SIZES: ShoeRow[] = [
   { uk: 9,   us: 11,  eu: 42,   au: 11 },
 ]
 
-const ALPHA_TO_INDICES: Record<string, number[]> = {
-  XXS: [0], XS: [1], S: [2, 3], M: [3, 4], L: [5], XL: [6, 7], XXL: [7, 8], '3XL': [9],
-  'XS/S': [1, 2, 3], 'S/M': [2, 3, 4], 'M/L': [4, 5], 'L/XL': [5, 6],
-}
-
 export function clothingRowByUk(uk: number): ClothingRow | undefined {
   return CLOTHING_SIZES.find((r) => r.uk === uk)
 }
@@ -62,53 +58,30 @@ export function shoeLabel(r: ShoeRow): string {
   return `UK ${r.uk} · US ${r.us} · EU ${r.eu} · AU ${r.au}`
 }
 
-const nearestIndex = <T,>(rows: T[], field: keyof T, n: number): number | null => {
-  let best = -1
-  let bestD = Infinity
-  rows.forEach((r, i) => {
-    const d = Math.abs((r[field] as unknown as number) - n)
-    if (d < bestD) { bestD = d; best = i }
-  })
-  return bestD <= 1.5 ? best : null
-}
-
 /**
  * Parse a raw garment size string into a CLOTHING_SIZES index (or null if the
  * sizing is unknown/one-size — never treated as a mismatch).
+ *
+ * Delegates to the canonical conversion table in size-canonical.ts so the
+ * lenient feed filter and the strict one-of-one gate can never disagree about
+ * what an "IT 42" is. This function keeps returning a ladder INDEX because the
+ * ±1 leniency below is expressed in ladder steps.
  */
 export function garmentSizeIndex(raw: string): number | null {
-  const s = String(raw).trim().toUpperCase()
-  if (!s || /ONE\s*SIZE|^O\/?S$|^TU$|^UNI/.test(s)) return null
-  let m: RegExpMatchArray | null
-  if ((m = s.match(/UK\s*(\d+(?:\.\d+)?)/))) return nearestIndex(CLOTHING_SIZES, 'uk', +m[1])
-  if ((m = s.match(/US\s*(\d+)/)))            return nearestIndex(CLOTHING_SIZES, 'us', +m[1])
-  if ((m = s.match(/(?:EU|FR|DE)\s*(\d+)/)))  return nearestIndex(CLOTHING_SIZES, 'eu', +m[1])
-  if ((m = s.match(/IT\s*(\d+)/)))            return nearestIndex(CLOTHING_SIZES, 'eu', +m[1] - 4) // IT ≈ EU+4
-  if (ALPHA_TO_INDICES[s]) return ALPHA_TO_INDICES[s][0] // representative index; matching tolerates ±1
-  if ((m = s.match(/^(\d+(?:\.\d+)?)$/))) {
-    const n = +m[1]
-    if (n >= 30 && n <= 52) return nearestIndex(CLOTHING_SIZES, 'eu', n)  // EU clothing
-    if (n >= 0 && n <= 24)  return nearestIndex(CLOTHING_SIZES, 'us', n)  // US numeric
-    return null // jeans waist etc. — unknown, don't exclude
-  }
-  return null
+  const parsed = parseSizeLabel(raw, 'tops')
+  const uk = parsed?.values[0]
+  if (uk == null) return null
+  const i = CLOTHING_LADDER.indexOf(uk as (typeof CLOTHING_LADDER)[number])
+  return i < 0 ? null : i
 }
 
 /** Parse a raw shoe size string into a SHOE_SIZES index (or null if unknown). */
 export function shoeSizeIndex(raw: string): number | null {
-  const s = String(raw).trim().toUpperCase()
-  if (!s || /ONE\s*SIZE|^O\/?S$/.test(s)) return null
-  let m: RegExpMatchArray | null
-  if ((m = s.match(/UK\s*(\d+(?:\.\d+)?)/))) return nearestIndex(SHOE_SIZES, 'uk', +m[1])
-  if ((m = s.match(/US\s*(\d+(?:\.\d+)?)/))) return nearestIndex(SHOE_SIZES, 'us', +m[1])
-  if ((m = s.match(/(?:EU|FR)\s*(\d+(?:\.\d+)?)/))) return nearestIndex(SHOE_SIZES, 'eu', +m[1])
-  if ((m = s.match(/^(\d+(?:\.\d+)?)$/))) {
-    const n = +m[1]
-    if (n >= 34 && n <= 46) return nearestIndex(SHOE_SIZES, 'eu', n) // bare number on a shoe = EU
-    if (n >= 2 && n <= 12)  return nearestIndex(SHOE_SIZES, 'uk', n) // small = UK
-    return null
-  }
-  return null
+  const parsed = parseSizeLabel(raw, 'shoes')
+  const uk = parsed?.values[0]
+  if (uk == null) return null
+  const i = SHOE_LADDER.indexOf(uk as (typeof SHOE_LADDER)[number])
+  return i < 0 ? null : i
 }
 
 type SizedItem = { item_type: ItemType | string; stock_sizes?: string[] | null }

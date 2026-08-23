@@ -59,6 +59,7 @@ import {
 import { listOwnedItems, looksUsingItems } from '@/lib/wardrobe/store'
 import { ownerRefsForMember } from '@/lib/wardrobe/owned-items'
 import { checkRenderFidelity } from '@/app/admin/ai/render-fidelity'
+import { loadMemberSizeProfile, filterItemsForShopper } from '@/lib/size-availability'
 import { personaWeight, PERSONA_START_WEIGHT } from '@/lib/user-persona'
 import { slotForItemType, type Slot } from '@/lib/composer'
 import {
@@ -1183,13 +1184,26 @@ async function loadMemberTaste(admin: any, member: { member_id: string; brands: 
 // only — getAllItems filters owned out) PLUS her approved owned pieces from the
 // wardrobe import. Owned items are eligible for any slot; they never appear in
 // any other member's pool.
+//
+// SIZE IS A HARD GATE HERE, AT COMPOSITION TIME — stricter than the public
+// feed. A private lookbook is a personal recommendation, so every retail item
+// in it must be available in HER size when it is built; if a slot can't be
+// filled in her size the composer picks something else rather than shipping her
+// a look she can't buy. Pre-loved pieces appear only if she asked for them.
+//
+// Her own wardrobe is exempt: she already owns those, and they already fit.
 async function loadComposableLibrary(member?: { member_id: string; auth_user_id?: string | null } | null): Promise<ItemWithBrand[]> {
   const [ready, live, owned] = await Promise.all([
     getAllItems('ready'),
     getAllItems('live'),
     member ? listOwnedItems(ownerRefsForMember(member)) : Promise.resolve([] as ItemWithBrand[]),
   ])
-  return [...ready, ...live, ...owned]
+  const retail = [...ready, ...live]
+  if (!member) return [...retail, ...owned]
+
+  const ctx = await loadMemberSizeProfile(member.member_id)
+  const inHerSize = await filterItemsForShopper(retail as any[], ctx, { strict: true })
+  return [...(inHerSize as ItemWithBrand[]), ...owned]
 }
 
 

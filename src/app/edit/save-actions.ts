@@ -3,6 +3,9 @@
 import { createServerClient, createAdminClient } from '@/lib/supabase-server'
 import { recordTasteEvent } from '@/lib/taste-profile'
 import { EVENT_WEIGHTS } from '@/lib/taste-vector'
+import {
+  subscribeToOutfit, unsubscribeOutfit, subscribeToItems, unsubscribe,
+} from '@/lib/stock-alerts'
 
 // IDs of every outfit the current user has saved.
 export async function getSavedOutfitIds(): Promise<string[]> {
@@ -35,12 +38,16 @@ export async function toggleSaveOutfit(outfitId: string): Promise<{ saved?: bool
 
     if (existing) {
       await admin.from('saved_outfit').delete().eq('user_id', user.id).eq('outfit_id', outfitId)
+      void unsubscribeOutfit(user.id, outfitId)
       return { saved: false }
     }
     const { error } = await (admin.from('saved_outfit') as any).insert({ user_id: user.id, outfit_id: outfitId })
     if (error) throw error
     // A save is a strong taste signal — learn from it.
     void recordTasteEvent(user.id, outfitId, 'save')
+    // …and it's a commitment we owe her news about: saving subscribes her to
+    // stock events for these items, SCOPED TO HER SIZE (see stock-alerts.ts).
+    void subscribeToOutfit(user.id, outfitId)
     return { saved: true }
   } catch (err: unknown) {
     console.error('[toggleSaveOutfit]', err)
@@ -82,6 +89,7 @@ export async function toggleSaveItem(
 
     if (existing) {
       await admin.from('saved_item').delete().eq('user_id', user.id).eq('item_id', itemId)
+      void unsubscribe(user.id, itemId, 'saved_item')
       return { saved: false }
     }
     const { error } = await (admin.from('saved_item') as any).insert({
@@ -92,6 +100,19 @@ export async function toggleSaveItem(
     if (error) throw error
     // Saving an item is a strong taste signal — learn from its outfit context.
     if (outfitId) void recordTasteEvent(user.id, outfitId, 'save', { itemId })
+
+    // Watch it in her size from here on.
+    const { data: row } = await admin
+      .from('item')
+      .select('item_id, item_type')
+      .eq('item_id', itemId)
+      .maybeSingle()
+    void subscribeToItems(
+      user.id,
+      [{ item_id: itemId, item_type: (row as any)?.item_type ?? null }],
+      'saved_item',
+      outfitId ?? null,
+    )
     return { saved: true }
   } catch (err: unknown) {
     console.error('[toggleSaveItem]', err)

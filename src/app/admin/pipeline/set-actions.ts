@@ -26,6 +26,7 @@ import {
   confidenceGate,
 } from '@/lib/pipeline'
 import { evaluateHouseStyle } from '@/lib/house-style'
+import { isUnique, isSecondHand } from '@/lib/second-hand'
 import { toHouseItem, loadLearnedMaterialPairs, recordHouseRejections } from '@/lib/house-style-store'
 import {
   loadEjectionConstraints,
@@ -150,11 +151,22 @@ export async function composeStylingSet(
 
     // The stylist's lens: item mask + ejection constraints.
     const band = formalityBand([hero])
-    const library = libraryAll.filter(
+    const eligible = libraryAll.filter(
       (i) =>
         itemEligible(mask, i.item_id) &&
         !isExcluded(constraints, i.item_id, slotForItemType(i.item_type), band),
     )
+
+    // ONE-OF-ONES ARE HEROES, NOT SUPPORTING CAST.
+    //
+    // A unique piece in a supporting slot takes the whole set down with it when
+    // it sells. As the hero it takes only its own set, and every replenishable
+    // partner survives for reuse. So unique stock is kept out of the supporting
+    // pool — unless removing it leaves the composer nothing to work with, in
+    // which case a styled look beats no look and we fall back.
+    const heroIsUnique = isUnique(hero as any)
+    const withoutUnique = eligible.filter((i) => !isUnique(i as any) || i.item_id === heroItemId)
+    let uniqueFallback = false
 
     const houseOpts = {
       learnedApprovedPairs: learnedPairs.approved,
@@ -175,91 +187,108 @@ export async function composeStylingSet(
     const wanted = Math.max(0, target - acceptedShapes.length)
     const rejectionHits: import('@/lib/house-style').RuleHit[] = []
 
-    for (const preset of DIRECTION_PRESETS) {
-      if (accepted.length >= wanted) break
-      // Skip directions already covered by approved variants.
-      if (acceptedShapes.some((v) => v.direction === preset.key)) continue
+    // ONE PASS over the directions, against whichever library we're using.
+    // Pulled out so the unique-fallback below reads as one decision rather than
+    // a loop wrapped around a loop.
+    const runDirections = (pool: ItemWithBrand[]) => {
+      for (const preset of DIRECTION_PRESETS) {
+        if (accepted.length >= wanted) break
+        // Skip directions already covered by approved variants.
+        if (acceptedShapes.some((v) => v.direction === preset.key)) continue
 
-      const steered = steerLibrary(library, preset)
-      const raw = generateCandidates({
-        anchor: hero,
-        library: steered,
-        maxCandidates: 8,
-        learnedBlend: blendStrength(model),
-        learnedBonus: (items) => learnedBonus(model, [toFeature(hero), ...items.map((x) => toFeature(x.item))]),
-        houseGate: (items) => {
-          const v = evaluateHouseStyle(
-            [toHouseItem(hero, heroSlot), ...items.map((x) => toHouseItem(x.item, x.slot))],
+        const steered = steerLibrary(pool, preset)
+        const raw = generateCandidates({
+          anchor: hero,
+          library: steered,
+          maxCandidates: 8,
+          learnedBlend: blendStrength(model),
+          learnedBonus: (items) => learnedBonus(model, [toFeature(hero), ...items.map((x) => toFeature(x.item))]),
+          houseGate: (items) => {
+            const v = evaluateHouseStyle(
+              [toHouseItem(hero, heroSlot), ...items.map((x) => toHouseItem(x.item, x.slot))],
+              houseOpts,
+            )
+            if (!v.pass) rejectionHits.push(...v.violations)
+            return v.pass
+          },
+        })
+
+        for (const c of raw) {
+          const comboKey = c.items.map((x) => x.item.item_id).sort().join('|')
+          if (excludedCombos.has(comboKey)) continue
+
+          const allEntries = [{ item: hero, slot: heroSlot }, ...c.items]
+          const hv = evaluateHouseStyle(
+            allEntries.map((e) => toHouseItem(e.item, e.slot)),
             houseOpts,
           )
-          if (!v.pass) rejectionHits.push(...v.violations)
-          return v.pass
-        },
-      })
+          if (!hv.pass) continue
 
-      for (const c of raw) {
-        const comboKey = c.items.map((x) => x.item.item_id).sort().join('|')
-        if (excludedCombos.has(comboKey)) continue
+          // Statement-consistency across the set.
+          const stmtIsHero = hv.statement?.itemId === heroItemId
+          if (heroIsStatement === true && !stmtIsHero) continue
+          if (heroIsStatement === false && stmtIsHero) continue
 
-        const allEntries = [{ item: hero, slot: heroSlot }, ...c.items]
-        const hv = evaluateHouseStyle(
-          allEntries.map((e) => toHouseItem(e.item, e.slot)),
-          houseOpts,
-        )
-        if (!hv.pass) continue
+          const occasion = deriveOccasionScores(allEntries)
+          // Direction fit: the derived occasion must land in the preset's window
+          // (loose — one step of slack either side).
+          if (occasion.time_of_day < preset.targetTimeOfDay[0] - 1 || occasion.time_of_day > preset.targetTimeOfDay[1] + 1) continue
 
-        // Statement-consistency across the set.
-        const stmtIsHero = hv.statement?.itemId === heroItemId
-        if (heroIsStatement === true && !stmtIsHero) continue
-        if (heroIsStatement === false && stmtIsHero) continue
+          const shape = asSetVariant(preset.key, c.items, occasion, hv.statement?.itemId ?? null)
+          if (!isDistinctFromAll(shape, acceptedShapes).ok) continue
 
-        const occasion = deriveOccasionScores(allEntries)
-        // Direction fit: the derived occasion must land in the preset's window
-        // (loose — one step of slack either side).
-        if (occasion.time_of_day < preset.targetTimeOfDay[0] - 1 || occasion.time_of_day > preset.targetTimeOfDay[1] + 1) continue
+          const vector = vectorForCandidate(
+            allEntries,
+            occasion,
+            deriveOutfitLevelScores(hero, c.items),
+            deriveSlotScores(allEntries),
+          )
+          // The stylist's operating envelope — never compose outside it.
+          if (stylist && !withinVectorRange(vector, stylist.vector_range)) continue
 
-        const shape = asSetVariant(preset.key, c.items, occasion, hv.statement?.itemId ?? null)
-        if (!isDistinctFromAll(shape, acceptedShapes).ok) continue
+          const gate = confidenceGate({
+            vector,
+            approvedVectors,
+            items: allEntries.map((e) => toFeature(e.item)),
+            itemIds: allEntries.map((e) => e.item.item_id),
+            itemLabels: allEntries.map((e) => [e.item.brand?.name, e.item.product_name].filter(Boolean).join(' ')),
+            slotByItemId: Object.fromEntries(allEntries.map((e) => [e.item.item_id, e.slot])),
+            band: formalityBand(allEntries.map((e) => e.item)),
+            constraints,
+            model,
+          })
+          const confidence = gate.confidence - hv.penaltyTotal
 
-        const vector = vectorForCandidate(
-          allEntries,
-          occasion,
-          deriveOutfitLevelScores(hero, c.items),
-          deriveSlotScores(allEntries),
-        )
-        // The stylist's operating envelope — never compose outside it.
-        if (stylist && !withinVectorRange(vector, stylist.vector_range)) continue
-
-        const gate = confidenceGate({
-          vector,
-          approvedVectors,
-          items: allEntries.map((e) => toFeature(e.item)),
-          itemIds: allEntries.map((e) => e.item.item_id),
-          itemLabels: allEntries.map((e) => [e.item.brand?.name, e.item.product_name].filter(Boolean).join(' ')),
-          slotByItemId: Object.fromEntries(allEntries.map((e) => [e.item.item_id, e.slot])),
-          band: formalityBand(allEntries.map((e) => e.item)),
-          constraints,
-          model,
-        })
-        const confidence = gate.confidence - hv.penaltyTotal
-
-        accepted.push({
-          direction: preset.key,
-          items: c.items,
-          baseScore: c.score,
-          vector,
-          occasion,
-          confidence,
-          similarity: gate.similarity,
-          lane: confidence >= config.fast_lane_threshold ? 'fast' : 'standard',
-          reasons: [...gate.reasons, ...hv.penalties.map((p) => p.message)],
-          statementItemId: hv.statement?.itemId ?? null,
-          setVariant: shape,
-        })
-        acceptedShapes.push(shape)
-        if (heroIsStatement === null) heroIsStatement = stmtIsHero
-        break // one variant per direction
+          accepted.push({
+            direction: preset.key,
+            items: c.items,
+            baseScore: c.score,
+            vector,
+            occasion,
+            confidence,
+            similarity: gate.similarity,
+            lane: confidence >= config.fast_lane_threshold ? 'fast' : 'standard',
+            reasons: [...gate.reasons, ...hv.penalties.map((p) => p.message)],
+            statementItemId: hv.statement?.itemId ?? null,
+            setVariant: shape,
+          })
+          acceptedShapes.push(shape)
+          if (heroIsStatement === null) heroIsStatement = stmtIsHero
+          break // one variant per direction
+        }
       }
+    }
+
+    runDirections(withoutUnique)
+    if (accepted.length === 0 && withoutUnique.length !== eligible.length) {
+      // Excluding one-of-one supporting pieces starved the composer. A styled
+      // look beats no look, so try again with them allowed.
+      uniqueFallback = true
+      runDirections(eligible)
+    }
+
+    if (uniqueFallback) {
+      console.warn('[composeStylingSet] no set was possible without one-of-one supporting pieces —', heroItemId)
     }
 
     void recordHouseRejections(rejectionHits, heroItemId)
@@ -297,6 +326,9 @@ export async function composeStylingSet(
           stylistId: sid,
           variantDirection: v.direction,
           setSize: accepted.length + (opts?.acceptedVariants?.length ?? 0),
+          // Second-hand stock is time-sensitive: a one-of-one that isn't styled
+          // is a one-of-one that sells somewhere else. Its set jumps the queue.
+          priority: heroIsUnique || isSecondHand(hero as any) ? 1 : 2,
         })
       }
       // Every staged variant was OFFERED.

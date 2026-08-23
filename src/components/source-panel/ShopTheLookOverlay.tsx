@@ -4,6 +4,9 @@ import { useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import ShopLink from '@/components/ShopLink'
 import { formatGbp } from '@/lib/currency'
+import { watchForRestock } from '@/app/edit/stock-actions'
+import { ONE_OF_ONE_BADGE, LOW_IN_SIZE_BADGE, NOT_IN_SIZE_LABEL, savedByLabel } from '@/lib/second-hand'
+import type { ItemSizeInfo } from '@/lib/outfit-size'
 import type { Item, Brand } from '@/types/database'
 
 type SourceItem = Item & { brand: Brand }
@@ -18,6 +21,9 @@ export default function ShopTheLookOverlay({
   savedItemIds = [],
   onToggleItem,
   offsetTop = false,
+  sizeInfo,
+  soldItemId,
+  onFindSimilar,
 }: {
   items: SourceItem[]
   outfitId?: string
@@ -25,6 +31,12 @@ export default function ShopTheLookOverlay({
   canSave?: boolean
   savedItemIds?: string[]
   onToggleItem?: (itemId: string) => void
+  /** Per-item size verdicts for the signed-in shopper (see outfit-size.ts). */
+  sizeInfo?: Record<string, ItemSizeInfo>
+  /** A one-of-one in this look that has sold — struck through, still listed. */
+  soldItemId?: string | null
+  /** "Find me something similar" on the struck-through item. */
+  onFindSimilar?: (itemId: string) => void
   // On the detail view the mobile header (BACK + arrows) overlays the image top,
   // so push the panel down on mobile to clear it (desktop has no such header).
   offsetTop?: boolean
@@ -66,6 +78,9 @@ export default function ShopTheLookOverlay({
             canSave={canSave}
             saved={savedSet.has(item.item_id)}
             onToggle={() => onToggleItem?.(item.item_id)}
+            size={sizeInfo?.[item.item_id]}
+            sold={item.item_id === soldItemId || (item as any).status === 'sold'}
+            onFindSimilar={onFindSimilar ? () => onFindSimilar(item.item_id) : undefined}
           />
         ))}
       </div>
@@ -79,17 +94,43 @@ function ItemCard({
   canSave,
   saved,
   onToggle,
+  size,
+  sold = false,
+  onFindSimilar,
 }: {
   item: SourceItem
   outfitId?: string
   canSave: boolean
   saved: boolean
   onToggle: () => void
+  size?: ItemSizeInfo
+  sold?: boolean
+  onFindSimilar?: () => void
 }) {
   const [imgFailed, setImgFailed] = useState(false)
+  const [watching, setWatching] = useState(false)
   const brandInitial = (item.brand?.name ?? 'M').trim().charAt(0).toUpperCase()
   // Source Items shows GBP only (no bracketed original — that's the big view).
   const price = formatGbp(item.price ?? null, item.currency ?? null)
+
+  // A sold one-of-one is struck through and stays in the list. Every other
+  // piece in the look is still linked and shoppable — she saved the whole
+  // outfit, and most of it is still buyable.
+  const proof = size?.unique ? savedByLabel(size.saves ?? 0) : null
+  const badge = sold
+    ? 'NO LONGER AVAILABLE'
+    : size?.lowInHerSize
+      ? LOW_IN_SIZE_BADGE
+      : size?.unique
+        ? ONE_OF_ONE_BADGE
+        : null
+
+  async function watch(e: React.MouseEvent) {
+    e.stopPropagation()
+    setWatching(true)
+    const res = await watchForRestock(item.item_id, item.item_type ?? null)
+    if (res.error) setWatching(false)
+  }
 
   return (
     <div className="relative w-full aspect-[3/4] overflow-hidden bg-[#EDEDED]">
@@ -109,6 +150,21 @@ function ItemCard({
         </div>
       )}
 
+      {/* Scarcity + size badges — top-left, over the photo */}
+      {badge && (
+        <span
+          className={`absolute top-1.5 left-1.5 z-10 rounded-full px-1.5 py-0.5 text-[6px] sm:text-[7px] tracking-[0.09em] leading-none ${
+            sold
+              ? 'bg-[#4A4E57] text-white'
+              : size?.lowInHerSize
+                ? 'bg-[#B8842A] text-white'
+                : 'bg-white/92 text-[#0A0A0A]'
+          }`}
+        >
+          {badge}
+        </span>
+      )}
+
       {/* Save heart — top-right */}
       {canSave && (
         <button
@@ -125,10 +181,41 @@ function ItemCard({
         <div className="flex items-end justify-between gap-1.5">
           <div className="min-w-0">
             <p className="text-white/75 text-[6px] sm:text-[7px] tracking-[0.06em] uppercase truncate">{item.brand?.name ?? 'BRAND'}</p>
-            <p className="text-white text-[7px] sm:text-[9px] leading-[1.15] line-clamp-2 mt-0.5">{item.product_name}</p>
+            <p className={`text-white text-[7px] sm:text-[9px] leading-[1.15] line-clamp-2 mt-0.5 ${sold ? 'line-through opacity-70' : ''}`}>
+              {item.product_name}
+            </p>
             <p className="text-white/90 text-[7px] sm:text-[8px] tracking-[0.03em] mt-0.5">{price || '—'}</p>
+            {size?.herSizeLabel && !sold && !size.outOfHerSize && (
+              <p className="text-white/70 text-[6px] sm:text-[7px] tracking-[0.06em] mt-0.5">
+                YOUR SIZE · {size.herSizeLabel.toUpperCase()}
+              </p>
+            )}
+            {size?.outOfHerSize && !sold && (
+              <button
+                onClick={watch}
+                disabled={watching}
+                className="text-left text-white/85 text-[6px] sm:text-[7px] tracking-[0.06em] mt-0.5 underline underline-offset-2 disabled:no-underline"
+              >
+                {watching ? 'WE’LL TELL YOU WHEN IT’S BACK' : `${NOT_IN_SIZE_LABEL} · NOTIFY ME`}
+              </button>
+            )}
+            {size?.overrideNote && (
+              <p className="text-white/70 text-[6px] sm:text-[7px] tracking-[0.05em] mt-0.5 italic">{size.overrideNote}</p>
+            )}
+            {proof && !sold && (
+              <p className="text-white/60 text-[6px] sm:text-[7px] tracking-[0.06em] mt-0.5">{proof}</p>
+            )}
           </div>
-          {item.retailer_url && (
+          {sold ? (
+            onFindSimilar && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onFindSimilar() }}
+                className="flex-shrink-0 text-white text-[7px] sm:text-[8px] tracking-[0.1em] uppercase underline underline-offset-2 hover:opacity-70 transition-opacity pb-0.5"
+              >
+                Find similar
+              </button>
+            )
+          ) : item.retailer_url ? (
             <ShopLink
               item={item}
               outfitId={outfitId}
@@ -136,7 +223,7 @@ function ItemCard({
             >
               Shop
             </ShopLink>
-          )}
+          ) : null}
         </div>
       </div>
     </div>

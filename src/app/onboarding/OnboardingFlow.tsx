@@ -4,8 +4,9 @@ import { useMemo, useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import { useRouter } from 'next/navigation'
 import { BRAND_GROUPS, AGE_RANGES } from './brand-groups'
-import { saveOnboarding, saveStyleProfile } from './actions'
+import { saveOnboarding, saveStyleProfile, saveSizes } from './actions'
 import StyleQuestionnaire from './StyleQuestionnaire'
+import SizePicker, { type SizePickerValue } from '@/components/SizePicker'
 
 export interface OnboardingOutfit {
   id: string
@@ -51,11 +52,12 @@ export default function OnboardingFlow({
   preview?: boolean
 }) {
   const router = useRouter()
-  // 1 brands → 2 age → 3 style questionnaire → 4 rating swipes
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1)
+  // 1 brands → 2 age → 3 sizes + pre-loved → 4 style questionnaire → 5 rating
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1)
 
   const [brandGroups, setBrandGroups] = useState<string[]>([])
   const [ageRange, setAgeRange] = useState<string>('')
+  const [sizes, setSizes] = useState<SizePickerValue>({ acceptsSecondHand: false })
 
   const [liked, setLiked] = useState<string[]>([])
   const [disliked, setDisliked] = useState<string[]>([])
@@ -113,7 +115,7 @@ export default function OnboardingFlow({
   // ── Progress dots ──
   const progress = (
     <div className="flex items-center justify-center gap-2 mb-10">
-      {[1, 2, 3, 4].map((s) => (
+      {[1, 2, 3, 4, 5].map((s) => (
         <span
           key={s}
           className={`h-1.5 rounded-full transition-all duration-300 ${
@@ -267,21 +269,62 @@ export default function OnboardingFlow({
           </div>
         )}
 
-        {/* ── STEP 3 — STYLE QUESTIONNAIRE ─────────────────────── */}
+        {/* ── STEP 3 — SIZES + PRE-LOVED ───────────────────────── */}
+        {/* Asked EARLY, and saved on its own. These two answers decide what she
+            is shown at all — a one-of-one outside her size never reaches her,
+            and pre-loved stock appears only if she asks for it — so they must
+            hold even if she abandons the rest of the flow. */}
         {step === 3 && (
+          <div>
+            <div className="text-center mb-10">
+              <p className="text-[13px] tracking-[0.113em] text-[#6B6B6B] mb-3">A FEW QUESTIONS</p>
+              <h1 className="text-[clamp(22px,3vw,32px)] tracking-[0.036em] text-[#4A4E57] leading-tight mb-3">
+                WHAT SIZE ARE YOU?
+              </h1>
+              <p className="text-[14px] sm:text-[16px] text-[#A8A8A4] leading-relaxed max-w-[480px] mx-auto">
+                So we only style you in pieces you can actually buy. Skip anything you&rsquo;d rather not say.
+              </p>
+            </div>
+
+            <div className="max-w-[560px] mx-auto">
+              <SizePicker value={sizes} onChange={setSizes} />
+            </div>
+
+            <div className="flex items-center justify-center gap-4 mt-10">
+              <button
+                onClick={() => setStep(2)}
+                className="text-[15px] tracking-[0.09em] text-[#6B6B6B] hover:text-[#4A4E57] px-6 py-3.5 transition-colors"
+              >
+                ← BACK
+              </button>
+              <button
+                onClick={() => {
+                  if (!preview) void saveSizes(sizes)
+                  setStep(4)
+                }}
+                className="bg-[#0A0A0A] text-white px-12 py-3.5 rounded-[12px] text-[15px] tracking-[0.099em] hover:opacity-85 transition-opacity"
+              >
+                CONTINUE →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── STEP 4 — STYLE QUESTIONNAIRE ─────────────────────── */}
+        {step === 4 && (
           <StyleQuestionnaire
-            onBack={() => setStep(2)}
+            onBack={() => setStep(3)}
             onComplete={(answers) => {
               // Save now rather than at the end: the hard constraints should
               // hold even if she leaves before rating a single outfit.
               if (!preview) void saveStyleProfile(answers)
-              setStep(4)
+              setStep(5)
             }}
           />
         )}
 
-        {/* ── STEP 4 — RATE OUTFITS (optional) ─────────────────── */}
-        {step === 4 && (
+        {/* ── STEP 5 — RATE OUTFITS (optional) ─────────────────── */}
+        {step === 5 && (
           <div>
             <div className="text-center mb-8">
               <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-3">LAST STEP — OPTIONAL</p>

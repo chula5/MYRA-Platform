@@ -22,6 +22,7 @@ import { occasionLooks } from '@/components/OccasionLookCard'
 import { thumbUrl } from '@/lib/image-utils'
 import SizeFilter from './SizeFilter'
 import { outfitFitsClothingUk } from '@/lib/sizing'
+import type { OutfitSizeInfo } from '@/lib/outfit-size'
 import { occasionLabel, BASE_OCCASIONS, CANDIDATE_OCCASIONS, occasionMatchTags } from '@/lib/occasions'
 
 // The reference box holds a 3-across, 2-deep contact grid of occasions.
@@ -345,6 +346,7 @@ export default function FeedClient({
   occasionOrder,
   signupHref,
   defaultSizeUk = null,
+  sizeInfo,
   stylists = [],
   ourPicks,
 }: {
@@ -367,6 +369,9 @@ export default function FeedClient({
   // Signed-in shopper's saved clothing size (canonical UK) — pre-fills the size
   // filter so the feed defaults to their size (with a "show all" escape).
   defaultSizeUk?: number | null
+  // Per-outfit size verdicts from the server mask (see lib/outfit-size.ts).
+  // Looks she can't buy at all are already gone; this labels what remains.
+  sizeInfo?: Record<string, OutfitSizeInfo>
   // Live stylists — the feed can be browsed through one stylist's lens.
   // Switching is free and instant: a FILTER, not an account setting. The
   // viewer's own taste vector keeps learning regardless of the active lens.
@@ -1160,6 +1165,7 @@ export default function FeedClient({
               canSave={canSave}
               initialSaved={savedSet.has(outfit.outfit_id)}
               lockedSave={lockedSave}
+              sizeInfo={sizeInfo?.[outfit.outfit_id]}
             />
           ))}
         </div>
@@ -1254,6 +1260,7 @@ export default function FeedClient({
                   canSave={canSave}
                   initialSaved={savedSet.has(outfit.outfit_id)}
                   lockedSave={lockedSave}
+                  sizeInfo={sizeInfo?.[outfit.outfit_id]}
                 />
               </div>
             ))}
@@ -1352,6 +1359,7 @@ export default function FeedClient({
                 canSave={canSave}
                 initialSaved={savedSet.has(outfit.outfit_id)}
                 lockedSave={lockedSave}
+                sizeInfo={sizeInfo?.[outfit.outfit_id]}
               />
               </div>
             ))}

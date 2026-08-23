@@ -11,6 +11,8 @@ import OnboardingPrompt from '@/components/OnboardingPrompt'
 import { getTasteRecommendations, getUserTasteVector, getBrandAffinityRows, getOccasionOrder, getClientStyleProfile } from '@/lib/taste-profile'
 import { applyItemMask } from '@/lib/style-profile'
 import { getLiveStylists } from '@/lib/queries'
+import { loadUserSizeProfile } from '@/lib/size-availability'
+import { maskOutfitsForShopper, serialiseVerdicts } from '@/lib/outfit-size'
 import { getOurPicks } from '@/lib/our-picks'
 import type { OutfitWithItems } from '@/types/database'
 
@@ -46,7 +48,15 @@ export default async function EditPage() {
   // won't wear, lengths she won't show, heels, and her spend ceiling. They filter
   // the feed absolutely — taste ranking only ever reorders what's left.
   const styleProfile = await getClientStyleProfile(user.id)
-  const liveOutfits = applyItemMask(styleProfile, allLive)
+  const masked = applyItemMask(styleProfile, allLive)
+
+  // SIZE + SECOND-HAND MASK. One-of-one pieces outside her size are removed
+  // outright (no restock will ever bring them into it), pre-loved pieces appear
+  // only if she asked for them, and looks with a replenishable piece she can't
+  // currently buy in her size sort to the back rather than disappearing.
+  const sizeCtx = await loadUserSizeProfile(user.id)
+  const { outfits: liveOutfits, verdicts } = await maskOutfitsForShopper(masked, sizeCtx)
+  const sizeInfo = serialiseVerdicts(verdicts)
 
   // Saved outfits, cosine taste recommendations, and the user's taste vector
   // (so the occasion feed can re-rank by taste). Tables may not exist yet → [] .
@@ -58,8 +68,10 @@ export default async function EditPage() {
 
   // Brand-affinity discovery rows + a per-user occasion order.
   const brandRows = await getBrandAffinityRows(user.id, liveOutfits, tasteVector)
-  // Recommendations come from a different query, so they need the mask too.
-  const maskedRecommended = applyItemMask(styleProfile, recommended)
+  // Recommendations come from a different query, so they need both masks too.
+  const maskedRecommended = (
+    await maskOutfitsForShopper(applyItemMask(styleProfile, recommended), sizeCtx)
+  ).outfits
   const occasionOrder = getOccasionOrder(tasteVector, liveOutfits)
 
   return (
@@ -106,12 +118,16 @@ export default async function EditPage() {
         tasteVector={tasteVector}
         brandRows={brandRows}
         occasionOrder={occasionOrder}
-        defaultSizeUk={(user.user_metadata?.clothing_uk as number | undefined) ?? null}
+        defaultSizeUk={sizeCtx.profile.tops?.value ?? (user.user_metadata?.clothing_uk as number | undefined) ?? null}
+        sizeInfo={sizeInfo}
         stylists={await getLiveStylists()}
         ourPicks={await getOurPicks()}
       />
 
-      {/* Slide-out wardrobe of saved outfits + items */}
+      {/* Slide-out wardrobe of saved outfits + items. It also carries the
+          rescue cards for looks whose one-of-one piece has sold, and the stock
+          alerts she's owed — both loaded with the wardrobe itself so they stay
+          fresh while the panel is open. */}
       <Wardrobe />
 
       <HelpPopover

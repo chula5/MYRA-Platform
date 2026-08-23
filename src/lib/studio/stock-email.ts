@@ -10,7 +10,7 @@ import type { SentinelReport } from './stock-sentinel'
 
 export function stockEmailNeeded(r: SentinelReport): boolean {
   return r.itemsDown.length > 0 || r.autoSwapped.length > 0 || r.needsPick.length > 0 ||
-    r.backInStock.length > 0 || r.archived > 0 || r.deferred > 0
+    r.backInStock.length > 0 || r.archived > 0 || r.deferred > 0 || r.uniqueSold.length > 0
 }
 
 export async function sendStockEmail(r: SentinelReport): Promise<void> {
@@ -34,6 +34,23 @@ export async function sendStockEmail(r: SentinelReport): Promise<void> {
         </tr>
       </table>`).join('')
     sections.push(`<h3 style="font-size:12px;letter-spacing:0.1em;color:#4a4e57;margin:22px 0 6px 0;">SWAPPED AND RELISTING</h3>${rows}`)
+  }
+
+  // One-of-ones lead the email: they are irreversible, and each one has already
+  // retired looks and started rescues that you may want to look at.
+  if (r.uniqueSold.length > 0) {
+    const rows = r.uniqueSold.map((u) => `
+      <div style="margin:10px 0;padding:12px;border:1px solid #e2e0db;border-radius:8px;">
+        <p style="margin:0 0 4px 0;font-size:12px;"><strong>${escapeHtml(u.name)}</strong> — sold</p>
+        <p style="margin:0;font-size:11px;color:#a8a8a4;">
+          ${u.outfitsRetired} live look${u.outfitsRetired === 1 ? '' : 's'} retired ·
+          ${u.rescuesCreated} saved look${u.rescuesCreated === 1 ? '' : 's'} being restyled
+        </p>
+      </div>`).join('')
+    sections.push(`<h3 style="font-size:12px;letter-spacing:0.1em;color:#4a4e57;margin:22px 0 6px 0;">ONE OF ONE — SOLD</h3>${rows}
+      <p style="margin:6px 0 0 0;font-size:11px;color:#a8a8a4;">
+        <a href="${siteUrl('/admin/second-hand')}" style="color:#4a4e57;">Open the second-hand dashboard →</a>
+      </p>`)
   }
 
   if (r.needsPick.length > 0) {
@@ -67,6 +84,8 @@ export async function sendStockEmail(r: SentinelReport): Promise<void> {
     `${r.itemsChecked} items checked · ${r.itemsDown.length} down · ` +
     `${r.outfitsPaused} outfits paused · ${r.autoSwapped.length} auto-recovered` +
     (r.archived ? ` · ${r.archived} archived (30d dead)` : '') +
+    (r.uniqueSold.length ? ` · ${r.uniqueSold.length} one-of-one sold` : '') +
+    (r.sizeAlerts ? ` · ${r.sizeAlerts} size alerts raised` : '') +
     (r.deferred ? ` · ${r.deferred} held back by the per-run pause cap (next run)` : '')
   sections.push(`<p style="margin:24px 0 0 0;padding-top:14px;border-top:1px solid #e2e0db;font-size:11px;color:#a8a8a4;letter-spacing:0.04em;">${summary}</p>`)
 
@@ -75,6 +94,7 @@ export async function sendStockEmail(r: SentinelReport): Promise<void> {
   if (r.autoSwapped.length) subjectBits.push(`${r.autoSwapped.length} auto-swapped`)
   if (r.needsPick.length) subjectBits.push(`${r.needsPick.length} need your pick`)
   if (r.backInStock.length) subjectBits.push(`${r.backInStock.length} back in stock`)
+  if (r.uniqueSold.length) subjectBits.unshift(`${r.uniqueSold.length} one-of-one sold`)
   const subject = `MYRA stock — ${subjectBits.join(', ') || 'housekeeping'}`
 
   await sendStudioEmail({
@@ -85,6 +105,7 @@ export async function sendStockEmail(r: SentinelReport): Promise<void> {
       checked: r.itemsChecked, down: r.itemsDown.length, paused: r.outfitsPaused,
       autoSwapped: r.autoSwapped.length, needsPick: r.needsPick.length,
       backInStock: r.backInStock.length, archived: r.archived,
+      uniqueSold: r.uniqueSold.length, sizeAlerts: r.sizeAlerts,
     },
   })
 }

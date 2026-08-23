@@ -4,7 +4,12 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase-server'
 
-export type AuditTrigger = 'mobile_review' | 'stock_sentinel' | 'email_link' | 'cron' | 'desktop' | 'system'
+export type AuditTrigger =
+  | 'mobile_review' | 'stock_sentinel' | 'email_link' | 'cron' | 'desktop' | 'system'
+  // Availability that came from the merchant rather than from us: a pulled
+  // product feed, or a pushed webhook. Worth distinguishing in the log — those
+  // are statements, and we act on them without a second confirmation.
+  | 'feed' | 'webhook'
 
 export async function writeAudit(opts: {
   action: string

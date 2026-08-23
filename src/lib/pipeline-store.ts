@@ -315,6 +315,8 @@ export interface StagedOutfit {
   stylist_id: string | null
   variant_direction: string | null
   set_size: number | null
+  /** 1 = ahead of normal composer work (a time-sensitive one-of-one), 2 = normal. */
+  priority: number
 }
 
 export async function stageComposedOutfit(row: {
@@ -332,6 +334,8 @@ export async function stageComposedOutfit(row: {
   stylistId?: string | null
   variantDirection?: string | null
   setSize?: number | null
+  /** 1 jumps the queue — used when a unique second-hand piece is approved. */
+  priority?: number
 }): Promise<string | null> {
   try {
     const admin = createAdminClient()
@@ -350,6 +354,7 @@ export async function stageComposedOutfit(row: {
         stylist_id: row.stylistId ?? null,
         variant_direction: row.variantDirection ?? null,
         set_size: row.setSize ?? null,
+        priority: row.priority ?? 2,
       })
       .select('id')
       .single()
@@ -368,6 +373,9 @@ export async function loadPipelineQueue(lane?: 'fast' | 'standard'): Promise<Sta
       .from('composed_outfit' as any)
       .select('*')
       .eq('status', 'pending')
+      // Priority first: a one-of-one is styled ahead of the standing backlog,
+      // because it can sell out from under us while the backlog cannot.
+      .order('priority', { ascending: true })
       .order('confidence', { ascending: false })
       .limit(200)
     if (lane) q = q.eq('lane', lane)
@@ -377,6 +385,7 @@ export async function loadPipelineQueue(lane?: 'fast' | 'standard'): Promise<Sta
       taste_vector: Array.isArray(r.taste_vector) ? r.taste_vector : null,
       reasons: Array.isArray(r.reasons) ? r.reasons : [],
       occasion_scores: r.occasion_scores ?? {},
+      priority: r.priority ?? 2,
     }))
   } catch {
     return []

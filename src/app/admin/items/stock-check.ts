@@ -248,3 +248,152 @@ export async function checkItemStock(
     return { error: err instanceof Error ? err.message : 'Stock check failed' }
   }
 }
+
+// ── Detailed check: per-SIZE availability + how sure we are ──────────────────
+//
+// The coarse status answers "can anyone buy this". Size-level availability
+// answers "can SHE buy this", which is the event a shopper actually reacts to —
+// her size going low, or going, or coming back.
+//
+// `source` matters as much as the status. A Shopify variant flag or a JSON-LD
+// offer is an EXPLICIT statement; a regex hit on page text is an inference; a
+// timeout is neither. Unique stock acts immediately on an explicit sold signal
+// and waits for a second reading on anything ambiguous.
+
+export interface DetailedStock {
+  status: StockStatus
+  signal: string
+  source: 'shopify' | 'jsonld' | 'regex' | 'error'
+  /** One entry per size the page lists, with its own availability. */
+  sizes: { label: string; inStock: boolean; level: 'in_stock' | 'low' | 'sold_out' | 'unknown' }[]
+}
+
+export async function checkStockDetailed(url: string): Promise<DetailedStock> {
+  if (!/^https?:\/\//i.test(url)) {
+    return { status: 'unknown', signal: 'bad-url', source: 'error', sizes: [] }
+  }
+  try {
+    // 1. Shopify variant data — authoritative, and the only source that gives
+    // us availability per size rather than a single page-level verdict.
+    const shop = await shopifyVariants(url)
+    if (shop) return shop
+
+    // 2. Page HTML: JSON-LD offers (often carry size + availability), else text.
+    const r = await detectStock(url)
+    const sizes = r.status === 'unknown' ? [] : await sizesFromJsonLd(url)
+    return {
+      status: r.status,
+      signal: r.signal,
+      source: r.signal.startsWith('jsonld') ? 'jsonld' : r.signal.startsWith('http:') ? 'error' : 'regex',
+      sizes,
+    }
+  } catch (err) {
+    return {
+      status: 'unknown',
+      signal: err instanceof Error ? err.message.slice(0, 120) : 'fetch failed',
+      source: 'error',
+      sizes: [],
+    }
+  }
+}
+
+/** Shopify `<url>.js`, keeping SOLD-OUT variants — a size going is the event. */
+async function shopifyVariants(url: string): Promise<DetailedStock | null> {
+  try {
+    const clean = url.split('#')[0].split('?')[0].replace(/\/$/, '')
+    if (!/\/products\//.test(clean)) return null
+    const res = await fetch(`${clean}.js`, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
+        Accept: 'application/json',
+      },
+      redirect: 'follow',
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    const variants: any[] = Array.isArray(data?.variants) ? data.variants : []
+    if (variants.length === 0) return null
+
+    const seen = new Map<string, boolean>()
+    for (const v of variants) {
+      const label = sizeFromVariant(v)
+      if (!label) continue
+      // A size can appear on more than one variant (colourways). Available in
+      // any of them means available.
+      seen.set(label, (seen.get(label) ?? false) || !!v.available)
+    }
+    const sizes = Array.from(seen.entries()).map(([label, inStock]) => ({
+      label,
+      inStock,
+      level: (inStock ? 'in_stock' : 'sold_out') as 'in_stock' | 'sold_out',
+    }))
+
+    const available = variants.filter((v) => v?.available)
+    let status: StockStatus
+    if (available.length === 0) status = 'out_of_stock'
+    else if (variants.length >= 4 && available.length <= 2) status = 'low_stock'
+    else status = 'in_stock'
+
+    // Down to one or two sizes: mark the survivors low, so "only a few left in
+    // your size" is true of the size rather than of the product page.
+    const inStockSizes = sizes.filter((s) => s.inStock)
+    if (inStockSizes.length > 0 && inStockSizes.length <= 2 && sizes.length >= 4) {
+      for (const s of inStockSizes) (s as any).level = 'low'
+    }
+
+    return { status, signal: `shopify:${status}`, source: 'shopify', sizes }
+  } catch {
+    return null
+  }
+}
+
+/** JSON-LD offers sometimes name the size — pick it up where they do. */
+async function sizesFromJsonLd(url: string): Promise<DetailedStock['sizes']> {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml',
+      },
+      redirect: 'follow',
+    })
+    if (!res.ok) return []
+    const html = await res.text()
+    const out = new Map<string, boolean>()
+    const blocks = Array.from(html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi))
+    for (const match of blocks) {
+      try {
+        collectSizedOffers(JSON.parse(match[1].trim()), out)
+      } catch {
+        // a malformed block is not worth failing the check over
+      }
+    }
+    return Array.from(out.entries()).map(([label, inStock]) => ({
+      label,
+      inStock,
+      level: (inStock ? 'in_stock' : 'sold_out') as 'in_stock' | 'sold_out',
+    }))
+  } catch {
+    return []
+  }
+}
+
+function collectSizedOffers(node: unknown, out: Map<string, boolean>): void {
+  if (!node || typeof node !== 'object') return
+  if (Array.isArray(node)) { for (const n of node) collectSizedOffers(n, out); return }
+  const obj = node as Record<string, any>
+  const rawSize = obj.size ?? obj.sku_size ?? obj.variesBy
+  const availability = typeof obj.availability === 'string' ? obj.availability.toLowerCase() : null
+  if (rawSize && availability) {
+    const label = String(rawSize).trim().toUpperCase()
+    if (label && SIZE_RE.test(label)) {
+      const inStock = /instock|onlineonly|preorder|instoreonly|limitedavailability|lowstock|presale|backorder/.test(availability)
+      out.set(label, (out.get(label) ?? false) || inStock)
+    }
+  }
+  for (const value of Object.values(obj)) {
+    if (value && typeof value === 'object') collectSizedOffers(value, out)
+  }
+}

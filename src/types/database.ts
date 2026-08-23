@@ -18,6 +18,11 @@ export interface Database {
           brand_id: string
           name: string
           price_tier: number
+          // Where this label's pieces come from. The MERCHANT is authoritative;
+          // this is the override for own-label vintage houses (migration 0048).
+          source_type?: 'retail' | 'second_hand' | 'vintage' | null
+          // Per-category size offset in ladder STEPS: -1 runs small, +1 large.
+          size_offset?: Json
           era_orientation: number
           aesthetic_output: number
           cultural_legibility: number
@@ -39,7 +44,7 @@ export interface Database {
           currency: string | null
           in_inventory: boolean
           source: 'manual' | 'retailer_api' | 'web_discovery'
-          status: 'draft' | 'ready' | 'live' | 'archived'
+          status: 'draft' | 'ready' | 'live' | 'archived' | 'out_of_stock' | 'sold'
           admin_notes: string | null
           fit: number | null
           length: number | null
@@ -74,6 +79,17 @@ export interface Database {
           stock_signal: string | null
           stock_notes: string | null
           stock_sizes: string[] | null
+          // ── Second-hand / one-of-one inventory (migration 0048) ──
+          // 'unique' = quantity 1. When it sells, status → 'sold': permanent,
+          // never re-checked, never restored, excluded from the restock watch.
+          stock_class: 'replenishable' | 'unique'
+          sold_at: string | null
+          sold_signal: 'feed' | 'webhook' | 'poll' | 'manual' | null
+          poll_tier: 'A' | 'B' | 'C' | null
+          risk_score: number | null
+          next_check_at: string | null
+          live_since: string | null
+          external_id: string | null
           // ── Wardrobe Import (migration 0046) ──
           // 'retail' = catalogue piece; 'owned' = a client's own garment,
           // visible only to its owner + admin, never live, never in a shared pool.
@@ -97,7 +113,11 @@ export interface Database {
           aesthetic_label: string
           occasion_tags: string[]
           source_brand_ids: string[]
-          status: 'draft' | 'in_review' | 'live' | 'archived'
+          // 'retired' is a pause that can never be lifted: a one-of-one in this
+          // look has sold, so the look can never be shoppable again.
+          status: 'draft' | 'in_review' | 'live' | 'archived' | 'paused' | 'retired'
+          retired_reason?: string | null
+          retired_at?: string | null
           project_id: string | null
           admin_notes: string | null
           published_at: string | null
@@ -141,6 +161,11 @@ export interface Database {
           item_id: string
           slot: 'outerwear' | 'top' | 'bottom' | 'dress' | 'shoe' | 'bag' | 'jewellery' | 'accessory'
           sort_order: number | null
+          // Deliberately keeping a piece that's outside the client's size, with
+          // the reason ("sized up on purpose — oversized fit"). Exempts this
+          // item from the hard size gate (migration 0048).
+          size_override?: boolean
+          size_override_note?: string | null
         }
         Insert: Omit<Database['public']['Tables']['outfit_item']['Row'], 'outfit_item_id'> & { outfit_item_id?: string }
         Update: Partial<Database['public']['Tables']['outfit_item']['Row']>

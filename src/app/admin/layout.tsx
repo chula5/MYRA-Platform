@@ -161,6 +161,12 @@ export default async function AdminLayout({
             BRAND WATCH
           </a>
           <a
+            href="/admin/second-hand"
+            className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
+          >
+            SECOND-HAND
+          </a>
+          <a
             href="/admin/runway-search"
             className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
           >

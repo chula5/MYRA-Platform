@@ -18,7 +18,9 @@ import 'server-only'
 import { existsSync } from 'fs'
 import path from 'path'
 import { createAdminClient } from '@/lib/supabase-server'
-import { generateHiggsfieldShootForOutfit } from '@/app/admin/projects/higgsfield-actions'
+import { generateHiggsfieldShootForOutfit, runHiggsfieldGeneration } from '@/app/admin/projects/higgsfield-actions'
+import { HIGGSFIELD_COMBOS, buildGenerationPrompt, buildReferenceUrls, type ShootItem } from '@/lib/higgsfield-shoot'
+import { rescueShootItems } from '@/lib/rescue'
 import { writeAudit } from './audit'
 
 const MAX_ATTEMPTS = 2               // initial try + one retry
@@ -47,6 +49,10 @@ export function rendererAvailable(): boolean {
     return false
   }
 }
+
+export type RenderTrigger =
+  | 'approval' | 'stock_swap' | 'restock_restore' | 'manual'
+  | 'rescue' | 'rescue_alternative'
 
 export async function enqueueRender(
   outfitId: string,
@@ -114,13 +120,13 @@ export async function processRenderQueue(
 
     const { data: nextRows } = await admin
       .from('render_job' as any)
-      .select('job_id, outfit_id, trigger, attempts')
+      .select('job_id, outfit_id, trigger, attempts, rescue_id, alternative_id')
       .eq('status', 'queued')
       .order('priority', { ascending: true })   // approvals first
       .order('created_at', { ascending: true }) // then FIFO
       .limit(1)
     const job = (nextRows ?? [])[0] as
-      | { job_id: string; outfit_id: string; trigger: string; attempts: number }
+      | { job_id: string; outfit_id: string; trigger: string; attempts: number; rescue_id: string | null; alternative_id: string | null }
       | undefined
     if (!job) break
 
@@ -132,10 +138,34 @@ export async function processRenderQueue(
       .select('job_id')
     if (!claimed || (claimed as any[]).length === 0) continue
 
-    const res: { imageUrl?: string; error?: string } = await generateHiggsfieldShootForOutfit(job.outfit_id, 'F6')
-      .catch((err: unknown) => ({ error: err instanceof Error ? err.message : 'Render crashed' }))
+    const isRescue = job.trigger === 'rescue' || job.trigger === 'rescue_alternative'
+    const res: { imageUrl?: string; error?: string } = isRescue
+      ? await renderRescueJob(job.rescue_id, job.alternative_id)
+          .catch((err: unknown) => ({ error: err instanceof Error ? err.message : 'Rescue render crashed' }))
+      : await generateHiggsfieldShootForOutfit(job.outfit_id, 'F6')
+          .catch((err: unknown) => ({ error: err instanceof Error ? err.message : 'Render crashed' }))
 
-    if (res.imageUrl) {
+    if (res.imageUrl && isRescue) {
+      // A rescue render is CACHED, never published: the outfit stays retired.
+      // Every user who saved the look reads this one image.
+      await (admin.from('render_job') as any)
+        .update({ status: 'done', finished_at: new Date().toISOString(), error: null })
+        .eq('job_id', job.job_id)
+      if (job.alternative_id) {
+        await (admin.from('rescue_alternative') as any)
+          .update({ rendered_image_url: res.imageUrl })
+          .eq('alternative_id', job.alternative_id)
+      } else if (job.rescue_id) {
+        await (admin.from('outfit_rescue') as any)
+          .update({ state: 'ready', restyled_image_url: res.imageUrl, updated_at: new Date().toISOString() })
+          .eq('rescue_id', job.rescue_id)
+      }
+      await writeAudit({
+        action: 'rescue_rendered', entity: 'outfit', entityId: job.outfit_id,
+        trigger: 'system', after: { rescueId: job.rescue_id, alternativeId: job.alternative_id, image: res.imageUrl },
+      })
+      done++
+    } else if (res.imageUrl) {
       // Hero attached (the shoot promotes itself to image_url). Publish.
       await (admin.from('render_job') as any)
         .update({ status: 'done', finished_at: new Date().toISOString(), error: null })
@@ -165,6 +195,13 @@ export async function processRenderQueue(
         await (admin.from('render_job') as any)
           .update({ status: 'failed', finished_at: new Date().toISOString(), error })
           .eq('job_id', job.job_id)
+        if (isRescue && job.rescue_id && !job.alternative_id) {
+          // The saved card keeps the intact look and the honest line —
+          // "we'll restyle this when we find the right replacement".
+          await (admin.from('outfit_rescue') as any)
+            .update({ state: 'failed', note: error, updated_at: new Date().toISOString() })
+            .eq('rescue_id', job.rescue_id)
+        }
         await (admin.from('outfit') as any)
           .update({ status: 'render_failed', last_render_error: error })
           .eq('outfit_id', job.outfit_id)
@@ -227,4 +264,70 @@ export async function renderQueueStats(): Promise<{ pending: number; failedOutfi
       label: o.aesthetic_label ?? 'Untitled',
     })),
   }
+}
+
+
+// ── Rescue renders ───────────────────────────────────────────────────────────
+//
+// Same renderer, same fidelity check, different destination: the image is
+// cached against the rescue (or the chosen alternative) instead of becoming an
+// outfit's hero. The outfit that contained the sold piece is retired and never
+// publishes again — what savers see is this cached restyle.
+
+async function renderRescueJob(
+  rescueId: string | null,
+  alternativeId: string | null,
+): Promise<{ imageUrl?: string; error?: string }> {
+  if (!rescueId) return { error: 'Rescue job has no rescue_id' }
+  const plan = await rescueShootItems(rescueId, alternativeId)
+  if (!plan) return { error: 'Rescue has no replacement to render' }
+
+  const combo = HIGGSFIELD_COMBOS.F6 ?? HIGGSFIELD_COMBOS.E5
+  const items: ShootItem[] = plan.items.map(({ item, slot }) => ({
+    product_name: item.product_name,
+    item_type: item.item_type,
+    material_primary: (item as any).material_primary ?? null,
+    slot,
+    image_url: item.image_url,
+    brand_name: item.brand?.name ?? null,
+  }))
+  if (items.filter((i) => i.image_url).length === 0) {
+    return { error: 'No item photos to reference for the restyle' }
+  }
+
+  const prompt = buildGenerationPrompt(combo, items)
+  const refs = buildReferenceUrls(combo, items)
+  const suffix = alternativeId ? `alt-${alternativeId}` : `rescue-${rescueId}`
+  let res = await runHiggsfieldGeneration(prompt, refs, `${suffix}-${Date.now()}`)
+
+  // The fidelity check is never skipped for a rescue: a restyle that
+  // misrepresents the replacement is worse than no restyle at all, because she
+  // saved the original and will compare them.
+  if (res.imageUrl) {
+    try {
+      const { checkRenderFidelity, logRenderCheck } = await import('@/app/admin/ai/render-fidelity')
+      const fidelityItems = items
+        .filter((i): i is typeof i & { image_url: string } => !!i.image_url)
+        .map((i) => ({
+          label: [i.brand_name, i.product_name].filter(Boolean).join(' — ') || String(i.item_type),
+          image_url: i.image_url,
+        }))
+      const first = await checkRenderFidelity(res.imageUrl, fidelityItems)
+      await logRenderCheck({ outfitId: plan.outfitId, imageUrl: res.imageUrl, attempt: 1, result: first })
+      if (!first.passed) {
+        const retryPrompt = first.correctiveNotes
+          ? `${prompt}\n\nMANDATORY CORRECTIONS — the previous render misrepresented the clothes: ${first.correctiveNotes}`
+          : prompt
+        const retry = await runHiggsfieldGeneration(retryPrompt, refs, `${suffix}-retry-${Date.now()}`)
+        if (!retry.imageUrl) return { error: 'Restyle failed the fidelity check and the retry did not generate' }
+        const second = await checkRenderFidelity(retry.imageUrl, fidelityItems)
+        await logRenderCheck({ outfitId: plan.outfitId, imageUrl: retry.imageUrl, attempt: 2, result: second, needsReview: !second.passed })
+        if (!second.passed) return { error: 'Restyle misrepresented the clothes twice — flagged for your review' }
+        res = retry
+      }
+    } catch (err) {
+      console.error('[renderRescueJob] fidelity check errored — continuing unchecked', err)
+    }
+  }
+  return res
 }

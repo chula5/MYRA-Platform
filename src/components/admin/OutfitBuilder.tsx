@@ -7,6 +7,7 @@ import type { OutfitWithItems } from '@/types/database'
 import ScoreInput from '@/components/admin/ScoreInput'
 import StatusBadge from '@/components/admin/StatusBadge'
 import StockBadge from '@/components/admin/StockBadge'
+import SizeOverrideControl from '@/components/admin/SizeOverrideControl'
 import { analyseOutfit, type OutfitAnalysis, type DetectedItem } from '@/app/admin/ai/analyse-outfit'
 import { scrapeProductInfo } from '@/app/admin/ai/scrape-product'
 import { scrapeAndUploadToCloudinary } from '@/app/admin/items/cloudinary-upload'
@@ -1298,6 +1299,13 @@ INSTRUCTIONS:
                               </div>
                               <div className="flex flex-col items-end gap-1.5 shrink-0">
                                 <button type="button" onClick={() => startEdit(oi)} className="text-[9px] tracking-[0.068em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors">EDIT</button>
+                                {/* Keep an out-of-size piece on purpose, with a
+                                    note she'll see in the sourcing panel. */}
+                                <SizeOverrideControl
+                                  outfitItemId={oi.outfit_item_id}
+                                  initialOn={(oi as any).size_override === true}
+                                  initialNote={(oi as any).size_override_note ?? null}
+                                />
                                 <button type="button" onClick={() => handleRemoveItem(oi.outfit_item_id)} disabled={removingId === oi.outfit_item_id} className="text-[#A8A8A4] hover:text-[#4A4E57] transition-colors text-[16px]">×</button>
                               </div>
                             </div>

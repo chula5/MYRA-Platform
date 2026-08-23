@@ -4,16 +4,57 @@
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "crons": [
-    { "path": "/api/cron/weekly-calibration", "schedule": "0 7 * * 1" },
-    { "path": "/api/cron/brand-watch", "schedule": "0 7 * * 1" },
-    { "path": "/api/cron/audit-digest", "schedule": "0 17 * * *" },
-    { "path": "/api/cron/autonomous-compose", "schedule": "0 5 * * *" },
-    { "path": "/api/cron/review-digest", "schedule": "0 7 * * *" },
-    { "path": "/api/cron/review-digest", "schedule": "0 12 * * *" },
-    { "path": "/api/cron/stock-sentinel", "schedule": "30 5 * * *" },
-    { "path": "/api/cron/stock-sentinel", "schedule": "30 17 * * *" },
-    { "path": "/api/cron/render-queue", "schedule": "*/15 * * * *" },
-    { "path": "/api/cron/commissions", "schedule": "15 6 * * *" },
-    { "path": "/api/cron/wardrobe-queue", "schedule": "*/5 * * * *" }
+    {
+      "path": "/api/cron/weekly-calibration",
+      "schedule": "0 7 * * 1"
+    },
+    {
+      "path": "/api/cron/brand-watch",
+      "schedule": "0 7 * * 1"
+    },
+    {
+      "path": "/api/cron/audit-digest",
+      "schedule": "0 17 * * *"
+    },
+    {
+      "path": "/api/cron/autonomous-compose",
+      "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/review-digest",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/review-digest",
+      "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/stock-sentinel",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/render-queue",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/commissions",
+      "schedule": "15 6 * * *"
+    },
+    {
+      "path": "/api/cron/wardrobe-queue",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/second-hand-feed",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/stock-alerts?mode=urgent",
+      "schedule": "5 * * * *"
+    },
+    {
+      "path": "/api/cron/stock-alerts?mode=batch",
+      "schedule": "0 8 * * *"
+    }
   ]
 }

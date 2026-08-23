@@ -6,6 +6,8 @@ import { updateItem, updateItemStatus } from '@/app/admin/items/actions'
 import StatusBadge from '@/components/admin/StatusBadge'
 import { countYield } from '@/lib/composer'
 import DeleteItemButton from './DeleteItemButton'
+import StockClassPanel from './StockClassPanel'
+import { getItemSizeRows } from '@/app/admin/items/stock-class-actions'
 
 // Brand list and yield count must always be fresh — both depend on rows added
 // in other admin flows (Batch Ingest, createBrand, marking items ready).
@@ -17,11 +19,12 @@ interface PageProps {
 
 export default async function EditItemPage({ params }: PageProps) {
   const { id } = await params
-  const [item, brands, linkedOutfits, library] = await Promise.all([
+  const [item, brands, linkedOutfits, library, sizeRows] = await Promise.all([
     getItem(id),
     getAllBrands(),
     getOutfitsForItem(id),
     getReadyAndLiveItems(),
+    getItemSizeRows(id),
   ])
 
   if (!item) {
@@ -38,18 +41,26 @@ export default async function EditItemPage({ params }: PageProps) {
     return updateItem(id, formData)
   }
 
-  const nextStatus = {
+  // The one-way ladder. Two statuses are dead ends and deliberately have no
+  // next step: an out_of_stock item is the sentinel's to move (it restores on
+  // restock or archives after 30 days), and 'sold' is terminal — a one-of-one
+  // that has gone cannot be brought back by changing a dropdown.
+  const nextStatus: 'ready' | 'live' | 'archived' | null = {
     draft: 'ready' as const,
     ready: 'live' as const,
     live: 'archived' as const,
     archived: null,
+    out_of_stock: null,
+    sold: null,
   }[item.status]
 
-  const nextStatusLabel = {
+  const nextStatusLabel: string | null = {
     draft: 'MARK AS READY',
     ready: 'MARK AS LIVE',
     live: 'ARCHIVE',
     archived: null,
+    out_of_stock: null,
+    sold: null,
   }[item.status]
 
   return (
@@ -95,8 +106,19 @@ export default async function EditItemPage({ params }: PageProps) {
           <ItemForm item={item} brands={brands} action={handleUpdate} />
         </div>
 
-        {/* Right sidebar: Yield + Linked outfits */}
+        {/* Right sidebar: Stock class + Yield + Linked outfits */}
         <div className="w-64 shrink-0 pt-1 flex flex-col gap-8">
+          {/* One-of-one or replenishable, and what sizes it comes in. Both
+              decide whether this piece is hidden from a shopper or merely
+              ranked below what fits her. */}
+          <StockClassPanel
+            itemId={item.item_id}
+            stockClass={((item as any).stock_class === 'unique' ? 'unique' : 'replenishable')}
+            status={item.status}
+            soldAt={(item as any).sold_at ?? null}
+            sizes={sizeRows}
+          />
+
           {/* Yield surface */}
           {yieldCount !== null && (
             <div>

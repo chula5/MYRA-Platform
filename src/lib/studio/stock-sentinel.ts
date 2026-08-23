@@ -1,34 +1,47 @@
-// Stock Sentinel — every 12 hours, checks availability of every LIVE item that
-// appears in at least one live outfit, via its retailer product URL (reusing
-// the existing stock-check detection: Shopify variants → JSON-LD → text
-// markers). A failed fetch is 'unknown', never 'dead' — an item is only marked
-// out_of_stock after 2 consecutive OOS-indicating checks.
+// Stock Sentinel — the POLLING FALLBACK for availability.
 //
-// When an item goes down:
-//   1. item → out_of_stock (distinct from archived; original status remembered)
-//   2. every live outfit containing it → paused (off the feed instantly)
-//   3. replacement candidates ranked by item-vector cosine, filtered by the
-//      same ejection/skip-combination/stock rules as the mobile swap sheet
-//   4. confidence routing — like-for-like top candidate (same type, same
-//      colour family, same/adjacent tier, similarity ≥ threshold) is swapped
-//      in automatically, the outfit vector recomputed, and the MANDATORY
-//      Higgsfield re-render queued (the outfit republishes only when the
-//      render lands). Anything less keeps the outfit paused and sends it to
-//      the review queue as a "restock" card with the dead item greyed out.
+// Feed and webhook come first (see second-hand-feed.ts): structured
+// availability beats scraping, and a webhook is an instant sold-signal. This
+// sweep covers everything those don't reach, and it is RISK-TIERED rather than
+// uniform (see risk-tier.ts):
 //
-// Restock: out_of_stock items keep being checked for 30 days. Back in stock →
-// flagged in the next stock email with a one-tap restore. 30 days dead →
-// archived automatically. Everything lands in the audit log.
+//   Tier A  saved by 1+ users in their size, or clicked in the last 24h  30 min
+//   Tier B  live in outfits, no engagement                                3 h
+//   Tier C  no live outfit                                               daily
+//
+// Every check captures SIZE-LEVEL availability, not just an item-level verdict:
+// a size selling out is a user-facing event ("sold out in your size"), and it
+// happens long before the product page goes dark. Requests are staggered across
+// hosts and throttled per host — a sweep must never burst a retailer.
+//
+// TWO CLASSES, TWO ENDINGS:
+//
+//   replenishable  2 consecutive OOS readings → status out_of_stock, live
+//                  outfits PAUSED, auto-swap or review, 30-day restock watch,
+//                  archived if it never returns.
+//   unique         an EXPLICIT sold signal is acted on at once — no second
+//                  confirmation, because waiting means leaving a look live that
+//                  nobody can buy. Only ambiguous failures (timeout, 500) need
+//                  a second reading. Then it is SOLD: outfits retired, saved
+//                  outfits rescued, never re-checked, never restored.
 
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase-server'
-import { checkStockForUrl } from '@/app/admin/items/stock-check'
+import { checkStockDetailed } from '@/app/admin/items/stock-check'
 import { getOutfit, getReadyAndLiveItems, type ItemWithBrand } from '@/lib/admin-queries'
 import { getSwapCandidates, qualifiesForAutoSwap, type SwapCandidate } from './swap-candidates'
 import { loadStyleGuards } from './guards'
 import { recomputeOutfit, outfitEntries } from './outfit-recompute'
 import { enqueueRender } from './render-queue'
 import { writeAudit } from './audit'
+import {
+  selectDueItems, refreshPollSchedule, scheduleNextCheck, computeRisk, HostThrottle,
+  type DueItem,
+} from './risk-tier'
+import { upsertSizeAvailability, loadBrandOffsets } from '@/lib/size-availability'
+import { raiseSizeAlerts } from '@/lib/stock-alerts'
+import { markUniqueSold } from '@/lib/rescue'
+import { actImmediately, classifySignal } from '@/lib/second-hand'
 
 const OOS_STRIKES_REQUIRED = 2
 const ARCHIVE_AFTER_DAYS = 30
@@ -69,70 +82,10 @@ export interface SentinelReport {
   archived: number
   /** Confirmed-down items held back by the per-run pause cap; handled next run. */
   deferred: number
-}
-
-// Supabase caps a single response at 1000 rows, so both queries below MUST be
-// paged: a truncated link list would silently exclude items from the sweep
-// permanently (they'd look like they aren't in any live outfit), leaving a
-// blind spot no number of re-runs could clear.
-async function fetchAllPages<T = any>(
-  buildPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: any }>,
-  hardCap = 100_000,
-): Promise<T[]> {
-  const PAGE = 1000
-  const all: T[] = []
-  for (let from = 0; from < hardCap; from += PAGE) {
-    const { data, error } = await buildPage(from, from + PAGE - 1)
-    if (error) {
-      console.error('[stock-sentinel] page fetch failed', error)
-      break
-    }
-    const rows = data ?? []
-    all.push(...rows)
-    if (rows.length < PAGE) break
-  }
-  return all
-}
-
-// Items to check this run: every item that appears in ≥1 LIVE outfit, plus
-// every out_of_stock item still inside its 30-day restock window. Stalest
-// first, so repeated runs rotate through the whole catalogue.
-//
-// Scope is defined by LIVE-OUTFIT MEMBERSHIP, not item.status. The spec said
-// "every item with status live", but MYRA's library keeps almost everything at
-// draft (1575 draft / 3 ready / 32 live) while 305 outfits are live — so
-// item.status reflects the admin's editing workflow, not what's publicly
-// shoppable. Filtering on it would have checked ~32 items instead of the
-// ~1500 actually reachable from live outfit pages, which is exactly the set
-// that matters: a dead link there is a customer hitting a sold-out product.
-// Archived items are still skipped.
-async function listItemsToCheck(maxItems: number): Promise<any[]> {
-  const admin = createAdminClient()
-
-  const liveLinks = await fetchAllPages<{ item_id: string }>((from, to) =>
-    admin
-      .from('outfit_item' as any)
-      .select('item_id, outfit!inner(status)')
-      .eq('outfit.status', 'live')
-      .range(from, to) as any,
-  )
-  const liveItemIds = new Set(liveLinks.map((r) => r.item_id))
-
-  const items = await fetchAllPages<any>((from, to) =>
-    admin
-      .from('item' as any)
-      .select('item_id, product_name, retailer_url, status, stock_status, stock_checked_at, oos_strikes, oos_since, status_before_oos, image_url')
-      .neq('status', 'archived')
-      .not('retailer_url', 'is', null)
-      .neq('retailer_url', '')
-      .order('stock_checked_at', { ascending: true, nullsFirst: true })
-      .order('item_id', { ascending: true }) // stable tiebreak so paging can't repeat/skip rows
-      .range(from, to) as any,
-  )
-
-  return items
-    .filter((it) => it.status === 'out_of_stock' || liveItemIds.has(it.item_id))
-    .slice(0, maxItems)
+  /** One-of-one pieces confirmed sold this run, with what that retired/rescued. */
+  uniqueSold: { id: string; name: string; outfitsRetired: number; rescuesCreated: number }[]
+  /** Size-level alerts raised (her size low / gone / back). */
+  sizeAlerts: number
 }
 
 export async function runStockSentinel(
@@ -145,21 +98,48 @@ export async function runStockSentinel(
   const report: SentinelReport = {
     itemsChecked: 0, itemsDown: [], outfitsPaused: 0,
     autoSwapped: [], needsPick: [], backInStock: [], archived: 0, deferred: 0,
+    uniqueSold: [], sizeAlerts: 0,
   }
 
-  const items = await listItemsToCheck(maxItems)
+  // Re-tier before selecting: saves and click-outs since the last run are
+  // exactly what should move a piece into the 30-minute lane.
+  await refreshPollSchedule()
+
+  const items = await selectDueItems(maxItems)
   // Guards + library loaded ONCE for the whole cycle.
   const guards = await loadStyleGuards()
   const library = await getReadyAndLiveItems()
+  const offsets = await loadBrandOffsets(items.map((i) => i.brand_id).filter(Boolean) as string[])
+  const risks = await computeRisk(items)
+  const throttle = new HostThrottle()
 
   for (const item of items) {
     if (Date.now() - startedAt > budgetMs) break
     report.itemsChecked++
 
-    const { status: checked } = await checkStockForUrl(item.retailer_url)
+    await throttle.wait(item.retailer_url)
+    const checked = await checkStockDetailed(item.retailer_url)
     const now = new Date().toISOString()
+    const signalKind = classifySignal(checked.source)
 
-    if (checked === 'unknown') {
+    // ── SIZE-LEVEL AVAILABILITY, captured on every check ──
+    if (checked.sizes.length) {
+      const { previous, changed } = await upsertSizeAvailability(item.item_id, checked.sizes, {
+        itemType: item.item_type,
+        brandOffsets: item.brand_id ? offsets.get(item.brand_id) ?? null : null,
+      })
+      report.sizeAlerts += await raiseSizeAlerts({
+        itemId: item.item_id,
+        before: previous,
+        after: changed,
+        stockClass: item.stock_class,
+        risk: risks.get(item.item_id),
+      })
+    }
+
+    await scheduleNextCheck(item.item_id, item.poll_tier)
+
+    if (checked.status === 'unknown') {
       // Failed fetch — retailer downtime is not a strike, just note the check.
       await (admin.from('item') as any)
         .update({ stock_checked_at: now, stock_signal: 'sentinel:unknown' })
@@ -167,44 +147,23 @@ export async function runStockSentinel(
       continue
     }
 
-    if (checked === 'in_stock' || checked === 'low_stock') {
-      const wasOOS = item.status === 'out_of_stock'
-      await (admin.from('item') as any)
-        .update({
-          stock_status: checked,
-          stock_checked_at: now,
-          stock_signal: `sentinel:${checked}`,
-          oos_strikes: 0,
-          ...(wasOOS
-            ? { status: item.status_before_oos ?? 'live', oos_since: null, status_before_oos: null }
-            : {}),
-        })
-        .eq('item_id', item.item_id)
-
-      if (wasOOS) {
-        // Back in stock — offer a one-tap restore of the most recent
-        // not-yet-undone swap that replaced this item.
-        const { data: swaps } = await admin
-          .from('stock_swap' as any)
-          .select('undo_token')
-          .eq('out_item_id', item.item_id)
-          .eq('undone', false)
-          .order('created_at', { ascending: false })
-          .limit(1)
-        report.backInStock.push({
-          id: item.item_id,
-          name: item.product_name,
-          restoreToken: ((swaps ?? []) as any[])[0]?.undo_token ?? null,
-        })
-        await writeAudit({
-          action: 'back_in_stock', entity: 'item', entityId: item.item_id,
-          trigger: 'stock_sentinel', before: { status: 'out_of_stock' }, after: { status: item.status_before_oos ?? 'live' },
-        })
-      }
+    if (checked.status === 'in_stock' || checked.status === 'low_stock') {
+      await handleBackUp(item, checked.status, now, report)
       continue
     }
 
-    // checked === 'out_of_stock' — a strike.
+    // ── out_of_stock ──
+    // A one-of-one with an EXPLICIT sold signal is acted on immediately: no
+    // second confirmation, no strike accounting, no restock watch.
+    if (actImmediately(item.stock_class, signalKind)) {
+      const sold = await markUniqueSold(item.item_id, 'poll')
+      report.uniqueSold.push({
+        id: item.item_id, name: item.product_name,
+        outfitsRetired: sold.outfitsRetired, rescuesCreated: sold.rescuesCreated,
+      })
+      continue
+    }
+
     const strikes = (item.oos_strikes ?? 0) + 1
     if (item.status === 'out_of_stock' || strikes < OOS_STRIKES_REQUIRED) {
       await (admin.from('item') as any)
@@ -213,9 +172,20 @@ export async function runStockSentinel(
       continue
     }
 
-    // Two consecutive strikes — the item is genuinely down. Unless the pause
-    // budget for this run is spent: bank the strike and confirm it next run,
-    // so a big backlog can't empty the feed in one pass.
+    // Confirmed down on a second reading. A unique piece confirmed twice is
+    // sold — the second reading is what an ambiguous signal needed.
+    if (item.stock_class === 'unique') {
+      const sold = await markUniqueSold(item.item_id, 'poll')
+      report.uniqueSold.push({
+        id: item.item_id, name: item.product_name,
+        outfitsRetired: sold.outfitsRetired, rescuesCreated: sold.rescuesCreated,
+      })
+      continue
+    }
+
+    // Replenishable, confirmed down — unless the pause budget for this run is
+    // spent: bank the strike and confirm it next run, so a big backlog can't
+    // empty the feed in one pass.
     if (report.outfitsPaused >= MAX_PAUSES_PER_RUN) {
       await (admin.from('item') as any)
         .update({ stock_status: 'out_of_stock', stock_checked_at: now, stock_signal: 'sentinel:oos-deferred', oos_strikes: strikes })
@@ -244,7 +214,8 @@ export async function runStockSentinel(
     await handleItemDown(item.item_id, item.product_name, guards, library, report)
   }
 
-  // 30 days dead → archived automatically.
+  // 30 days dead → archived automatically. SOLD items are excluded by the
+  // status filter: they were never on the restock watch to begin with.
   const cutoff = new Date(Date.now() - ARCHIVE_AFTER_DAYS * 86_400_000).toISOString()
   const { data: archivedRows } = await (admin.from('item') as any)
     .update({ status: 'archived' })
@@ -262,9 +233,53 @@ export async function runStockSentinel(
   return report
 }
 
-// An item is confirmed down: pause its live outfits, then route each one —
-// auto-swap when the top candidate is like-for-like, otherwise leave paused
-// for the review queue's restock card.
+/** In stock again (or still). Restores a replenishable item; never a sold one. */
+async function handleBackUp(
+  item: DueItem,
+  status: 'in_stock' | 'low_stock',
+  now: string,
+  report: SentinelReport,
+): Promise<void> {
+  const admin = createAdminClient()
+  const wasOOS = item.status === 'out_of_stock'
+  await (admin.from('item') as any)
+    .update({
+      stock_status: status,
+      stock_checked_at: now,
+      stock_signal: `sentinel:${status}`,
+      oos_strikes: 0,
+      ...(wasOOS
+        ? { status: item.status_before_oos ?? 'live', oos_since: null, status_before_oos: null }
+        : {}),
+    })
+    .eq('item_id', item.item_id)
+
+  if (!wasOOS) return
+
+  // Back in stock — offer a one-tap restore of the most recent not-yet-undone
+  // swap that replaced this item.
+  const { data: swaps } = await admin
+    .from('stock_swap' as any)
+    .select('undo_token')
+    .eq('out_item_id', item.item_id)
+    .eq('undone', false)
+    .order('created_at', { ascending: false })
+    .limit(1)
+  report.backInStock.push({
+    id: item.item_id,
+    name: item.product_name,
+    restoreToken: ((swaps ?? []) as any[])[0]?.undo_token ?? null,
+  })
+  await writeAudit({
+    action: 'back_in_stock', entity: 'item', entityId: item.item_id,
+    trigger: 'stock_sentinel', before: { status: 'out_of_stock' }, after: { status: item.status_before_oos ?? 'live' },
+  })
+}
+
+// A REPLENISHABLE item is confirmed down: pause its live outfits, then route
+// each one — auto-swap when the top candidate is like-for-like, otherwise leave
+// paused for the review queue's restock card. Unique items never reach here;
+// they retire rather than pause, because they cannot come back.
 async function handleItemDown(
   itemId: string,
   itemName: string,

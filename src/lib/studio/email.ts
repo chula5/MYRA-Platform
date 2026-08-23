@@ -17,7 +17,11 @@ export function siteUrl(path: string): string {
   return `${SITE.replace(/\/$/, '')}${path}`
 }
 
-export type EmailKind = 'review_digest' | 'stock_report' | 'calibration_report'
+export type EmailKind =
+  | 'review_digest' | 'stock_report' | 'calibration_report'
+  // Shopper-facing sends (stock alerts on saved pieces). Same transport, and
+  // logged in the same ledger, but never subject to the studio digest caps.
+  | 'shopper_stock_digest' | 'shopper_stock_urgent'
 
 export async function countEmailsToday(kind: EmailKind): Promise<number> {
   try {
@@ -79,7 +83,7 @@ export async function sendStudioEmail(opts: {
 
 // ── Shared HTML bits (email-client-safe: tables + inline styles) ─────────────
 
-export function emailShell(title: string, bodyHtml: string): string {
+export function emailShell(title: string, bodyHtml: string, footer = 'MYRA STUDIO · AUTOMATED'): string {
   return `<!doctype html><html><body style="margin:0;padding:0;background:#f2f2f2;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f2f2f2;padding:24px 0;">
 <tr><td align="center">
@@ -92,7 +96,7 @@ export function emailShell(title: string, bodyHtml: string): string {
 ${bodyHtml}
 </td></tr>
 </table>
-<p style="font-family:Helvetica,Arial,sans-serif;font-size:10px;color:#a8a8a4;margin-top:14px;letter-spacing:0.05em;">MYRA STUDIO · AUTOMATED</p>
+<p style="font-family:Helvetica,Arial,sans-serif;font-size:10px;color:#a8a8a4;margin-top:14px;letter-spacing:0.05em;">${footer}</p>
 </td></tr></table></body></html>`
 }
 
