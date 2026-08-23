@@ -2,6 +2,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import type { AnalysedProduct } from '@/app/admin/items/analyse-url'
+import { DEFAULT_SCORING_MODEL } from '@/lib/item-scoring'
 
 /**
  * Vision fallback for when a retailer URL can't be scraped.
@@ -59,7 +60,8 @@ function capCloudinaryImage(url: string): string {
 }
 
 export async function analyseProductImage(
-  imageUrl: string
+  imageUrl: string,
+  model: string = DEFAULT_SCORING_MODEL,
 ): Promise<{ data?: AnalysedProduct; error?: string; usage?: { input_tokens: number; output_tokens: number; model: string } }> {
   if (!imageUrl || !imageUrl.startsWith('http')) {
     return { error: 'Paste a valid image URL first' }
@@ -92,7 +94,7 @@ export async function analyseProductImage(
     const client = new Anthropic({ apiKey })
 
     const response = await client.messages.create({
-      model: 'claude-opus-4-6',
+      model,
       max_tokens: 1024,
       messages: [
         {

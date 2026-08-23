@@ -72,6 +72,9 @@ import {
   type ShootItem,
 } from '@/lib/higgsfield-shoot'
 import { runHiggsfieldGeneration } from '@/app/admin/projects/higgsfield-actions'
+import { buildTraitModel, type TraitModel, type TraitItem, type TraitDecision } from '@/lib/member-traits'
+import { readTrust, trustHeadline, type LookOutcome, type TrustRead } from '@/lib/member-trust'
+import { explainTraits } from '@/lib/member-traits'
 
 const PATH = '/admin/private-stylist'
 
@@ -1235,6 +1238,44 @@ export async function recomputeWeights(memberId: string): Promise<{ weights?: Ro
 
 const pairKeyOrdered = (a: string, b: string): [string, string] => (a < b ? [a, b] : [b, a])
 
+/**
+ * Turn her raw accept/swap/remove rows into a trait model.
+ *
+ * One decision per (item, action): an item swapped away is a rejection of that
+ * piece as it was shown, an accepted item is a keep. The item table supplies
+ * what the piece is — brand, type, colour, material, price and the scored
+ * shape dimensions — which is why the library backfill matters: an unscored
+ * piece teaches nothing about shape.
+ */
+async function buildMemberTraitModel(admin: any, rows: any[]): Promise<TraitModel | undefined> {
+  const ids = new Set<string>()
+  for (const r of rows) {
+    if ((r.action === 'swap' || r.action === 'remove') && r.item_out) ids.add(r.item_out)
+    if (r.action === 'accept' && r.item_in) ids.add(r.item_in)
+  }
+  if (!ids.size) return undefined
+
+  const all = Array.from(ids)
+  const items = new Map<string, TraitItem>()
+  for (let i = 0; i < all.length; i += 100) {
+    const { data } = await admin
+      .from('item')
+      .select('item_id, brand_id, item_type, colour_family, material_category, price_gbp, fit, structure, length, leg_opening, rise, pattern')
+      .in('item_id', all.slice(i, i + 100))
+    for (const r of data ?? []) items.set(r.item_id, r as TraitItem)
+  }
+
+  const decisions: TraitDecision[] = []
+  for (const r of rows) {
+    const isOut = (r.action === 'swap' || r.action === 'remove') && r.item_out
+    const id = isOut ? r.item_out : (r.action === 'accept' ? r.item_in : null)
+    if (!id) continue
+    const item = items.get(id)
+    if (item) decisions.push({ item, kept: !isOut })
+  }
+  return decisions.length ? buildTraitModel(decisions) : undefined
+}
+
 async function loadMemberTaste(admin: any, member: { member_id: string; brands: RankedBrand[]; brands_input_only: string[] } & Partial<StylePrefs>): Promise<MemberTaste> {
   const t: MemberTaste = {
     affinity: new Map(),
@@ -1285,6 +1326,11 @@ async function loadMemberTaste(admin: any, member: { member_id: string; brands: 
       t.affinity.set(id, Math.max(t.affinity.get(id) ?? 0, fromRank))
     }
   }
+
+  // Trait learning: every decision, joined to what the piece actually IS, so
+  // the composer can generalise from "not that bag" to "not black structured
+  // bags by this brand". Item-level penalties alone never converged.
+  t.traits = await buildMemberTraitModel(admin, fbRes.data ?? [])
 
   for (const r of fbRes.data ?? []) {
     const isPairRow = !r.item_out && !r.item_in
@@ -1965,4 +2011,78 @@ export async function loadMemberLibrary(memberId: string): Promise<ItemWithBrand
 export async function loadMemberPersonaLens(memberId: string): Promise<PersonaLens | undefined> {
   const admin = createAdminClient() as any
   return loadPersonaLens(admin, memberId)
+}
+
+
+// ── TRUST GATE ─────────────────────────────────────────────────────────────
+
+export interface MemberTrust extends TrustRead {
+  headline: string
+  /** What her decisions have taught the composer, in plain language. */
+  learned: string[]
+}
+
+/**
+ * How far this member is from being sent looks unreviewed.
+ *
+ * Everything is derived from what already happened — the looks composed for
+ * her, the edits made to them, and her own verdicts — so the number can never
+ * disagree with the history it came from.
+ */
+export async function loadMemberTrust(memberId: string): Promise<MemberTrust | { error: string }> {
+  try {
+    const admin = createAdminClient() as any
+    const { data: deliveries } = await admin
+      .from('pilot_delivery').select('delivery_id').eq('member_id', memberId)
+    const ids = (deliveries ?? []).map((d: any) => d.delivery_id)
+    if (!ids.length) {
+      const empty = readTrust([])
+      return { ...empty, headline: trustHeadline(empty), learned: [] }
+    }
+
+    const [{ data: looks }, { data: fb }] = await Promise.all([
+      admin.from('pilot_look')
+        .select('look_id, created_at, approved_at, response')
+        .in('delivery_id', ids).order('created_at'),
+      admin.from('pilot_look_feedback')
+        .select('look_id, action').eq('member_id', memberId).limit(5000),
+    ])
+
+    const editsBy = new Map<string, number>()
+    for (const f of fb ?? []) {
+      if (!f.look_id || f.action === 'accept') continue
+      editsBy.set(f.look_id, (editsBy.get(f.look_id) ?? 0) + 1)
+    }
+    const outcomes: LookOutcome[] = (looks ?? []).map((l: any) => ({
+      look_id: l.look_id,
+      created_at: l.created_at,
+      edits: editsBy.get(l.look_id) ?? 0,
+      approved: !!l.approved_at,
+      response: l.response ?? null,
+    }))
+
+    const trust = readTrust(outcomes)
+
+    // The learned traits, named rather than hashed, so the learning is
+    // auditable: she can see what it has concluded and disagree with it.
+    const { data: member } = await admin.from('pilot_member').select('*').eq('member_id', memberId).maybeSingle()
+    let learned: string[] = []
+    if (member) {
+      const { data: rows } = await admin.from('pilot_look_feedback').select('*').eq('member_id', memberId).limit(5000)
+      const model = await buildMemberTraitModel(admin, rows ?? [])
+      if (model) {
+        const { data: brands } = await admin.from('brand').select('brand_id, name')
+        const byId = new Map((brands ?? []).map((b: any) => [b.brand_id, b.name as string]))
+        learned = explainTraits(model, (t) =>
+          t.split('+').map((part) => {
+            const [kind, val] = [part.slice(0, part.indexOf(':')), part.slice(part.indexOf(':') + 1)]
+            return kind === 'brand' ? (byId.get(val) ?? val) : val.replace(/_/g, ' ')
+          }).join(' · ').toUpperCase())
+      }
+    }
+
+    return { ...trust, headline: trustHeadline(trust), learned }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Could not read trust' }
+  }
 }

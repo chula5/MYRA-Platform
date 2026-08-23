@@ -13,7 +13,7 @@ import { createAdminClient } from '@/lib/supabase-server'
 
 export interface FidelityIssue {
   item: string
-  field: 'colour' | 'silhouette' | 'cut' | 'length' | 'missing' | 'other'
+  field: 'colour' | 'silhouette' | 'cut' | 'length' | 'missing' | 'occluded' | 'other'
   expected: string
   seen: string
 }
@@ -55,15 +55,25 @@ For each real item, check whether the render represents it faithfully on these d
 - cut (neckline, sleeve, rise, shape details)
 - length (cropped/waist/hip/midi/maxi must not shift by more than one step)
 
-Also flag items that are MISSING from the render entirely.
+Judge ONLY what the render actually shows of each item. A real editorial shot
+layers and turns: a dress under a jacket, a bag behind an arm, a boot shaft
+under a maxi skirt. That is styling, not infidelity — report it as "occluded"
+and judge the visible part alone. Never fail an outfit for an item being
+partly or wholly hidden, and never call a hidden item missing.
 
-Be strict about silhouette and colour — a distorted silhouette or wrong colour is a failure. Minor styling drift (tucking, accessories placement, lighting) is acceptable.
+MISSING means something else is in its place, or a piece that should be the
+outer layer simply is not there.
+
+Be strict about silhouette and colour where you CAN see them — a wide-leg
+trouser rendered as a cargo, a striped blouse rendered plain, black rendered
+brown: those are failures. Minor styling drift (tucking, accessory placement,
+lighting) is acceptable.
 
 Return ONLY JSON:
 {
   "score": 0.0-1.0 overall fidelity,
-  "passed": true|false (false if ANY item has a wrong colour family, distorted silhouette, wrong cut, length shifted 2+ steps, or is missing),
-  "issues": [{ "item": "label", "field": "colour|silhouette|cut|length|missing|other", "expected": "…", "seen": "…" }],
+  "passed": true|false (false if ANY VISIBLE item has a wrong colour family, distorted silhouette, wrong cut, length shifted 2+ steps, or is missing — occlusion never fails),
+  "issues": [{ "item": "label", "field": "colour|silhouette|cut|length|missing|occluded|other", "expected": "…", "seen": "…" }],
   "corrective_notes": "one or two imperative sentences to add to the generation prompt to fix the issues, or null if passed"
 }`
 

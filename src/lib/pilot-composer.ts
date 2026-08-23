@@ -25,6 +25,7 @@ import { priceOfItem } from '@/lib/brand-affinity'
 import { itemPseudoVector } from '@/lib/brand-affinity'
 import { cosine } from '@/lib/taste-vector'
 import { isOwnedItem, ownedBrandLabel, estimatedValueOf } from '@/lib/wardrobe/owned-items'
+import { traitBlocked, traitPenalty, type TraitModel } from '@/lib/member-traits'
 
 // ── Persona lens ────────────────────────────────────────────────────────────
 // A member can be assigned a stylist persona. Its envelope — the mean and
@@ -141,6 +142,9 @@ export interface MemberTaste {
   inputOnlyBrands: Set<string> // lowercased brand names never recommended
   itemSwapOut: Map<string, number> // item_id → times swapped away
   brandSwapOut: Map<string, number> // brand_id → times swapped away
+  // What her decisions say about KINDS of piece, not individual ones. Absent
+  // on members with no history yet, and then nothing here applies.
+  traits?: TraitModel
   pairNet: Map<string, number> // "a|b" → accepts − swaps
   // What she has TOLD us (authored, never learned over): colours/shapes/types
   // she loves or won't wear. Avoided = hard gate, loved = scoring bonus.
@@ -179,6 +183,10 @@ export function memberItemScore(t: MemberTaste, item: ItemWithBrand): number {
   }
   const itemSwaps = t.itemSwapOut.get(item.item_id) ?? 0
   s -= Math.min(0.3 * itemSwaps, 0.6)
+  // The per-item and per-brand penalties above only ever punish the exact
+  // piece she saw. This punishes the description she keeps rejecting, so the
+  // sixth black MUNTHE bag is not offered as if it were the first.
+  if (t.traits) s -= traitPenalty(t.traits, item as any)
   // She already owns it — it has passed her taste once. A small, steady lift so
   // her own pieces surface in swap pickers; coherence still decides the look.
   if (isOwnedItem(item as any)) s += 0.1
@@ -378,7 +386,12 @@ export function composeMemberLooks(
   // little to build a look from, fall back to the full pool (where the same
   // avoids still apply as a heavy scoring penalty) rather than send nothing.
   const preferred = inStock.filter(
-    (i) => avoidReasons(t.prefs, i as any).length === 0 && itemPriceVerdict(t, i) !== 'over',
+    (i) => avoidReasons(t.prefs, i as any).length === 0 &&
+      itemPriceVerdict(t, i) !== 'over' &&
+      // A description she has rejected three times and never once kept —
+      // "MUNTHE structured bag" — is treated exactly like an authored avoid:
+      // gated out, and released only by the same starvation net below.
+      !(t.traits && traitBlocked(t.traits, i as any)),
   )
   const usable = canBuildLooks(preferred) ? preferred : inStock
 

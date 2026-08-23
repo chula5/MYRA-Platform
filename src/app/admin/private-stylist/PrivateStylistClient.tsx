@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { HIGGSFIELD_POSE_OPTIONS } from '@/lib/higgsfield-shoot'
 import { lookSpend, formatLookSpend } from '@/lib/wardrobe/owned-items'
@@ -65,6 +65,8 @@ import {
   approveComposedLook,
   skipComposedLook,
   restoreLookShoot,
+  loadMemberTrust,
+  type MemberTrust,
   recordMemberLookFeedback,
   setMemberBrands,
   addMemberBrand,
@@ -1281,6 +1283,91 @@ function StylePreferences({ member: m, run, busy, ready = true }: { member: Pilo
   )
 }
 
+// ── TRUST ───────────────────────────────────────────────────────────────────
+// How close this member is to being sent looks without Chloe reading them
+// first — and, below it, what her swaps have taught the composer, so the
+// learning can be argued with rather than taken on faith.
+function TrustPanel({ memberId }: { memberId: string }) {
+  const [state, setState] = useState<MemberTrust | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    let live = true
+    setLoading(true)
+    loadMemberTrust(memberId)
+      .then((r) => { if (!live) return; if ('error' in r) setErr(r.error); else setState(r) })
+      .finally(() => { if (live) setLoading(false) })
+    return () => { live = false }
+  }, [memberId])
+
+  if (loading && !state) return null
+  if (err) return <p className="text-[9px] tracking-[0.1em] text-[#B83A3A]">TRUST READ FAILED — {err.toUpperCase()}</p>
+  if (!state) return null
+
+  const pct = (n: number | null) => n == null ? '—' : `${Math.round(n * 100)}%`
+  const bar = (n: number) => (
+    <div className="h-1 bg-[#EFEDE8] w-full">
+      <div className="h-1 bg-[#C4A882]" style={{ width: `${Math.min(100, Math.round(n * 100))}%` }} />
+    </div>
+  )
+
+  return (
+    <div className="border border-[#E2E0DB] bg-[#FCFCFA] p-4 space-y-3">
+      <div>
+        <p className="text-[9px] tracking-[0.16em] text-[#0A0A0A]">
+          STAGE {state.stage} — {state.headline}
+        </p>
+        <p className="text-[8px] tracking-[0.1em] text-[#A8A8A4] mt-1">
+          A LOOK IS CLEAN WHEN IT GOES OUT WITH NO SWAP AND NO REMOVAL
+        </p>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <div>
+          <p className="text-[8px] tracking-[0.12em] text-[#6B6B6B] mb-1">CLEAN RATE · LAST {state.sample}</p>
+          {bar(state.cleanRate)}
+          <p className="text-[11px] tracking-[0.08em] text-[#0A0A0A] mt-1">{pct(state.cleanRate)}</p>
+        </div>
+        <div>
+          <p className="text-[8px] tracking-[0.12em] text-[#6B6B6B] mb-1">CLEAN IN A ROW</p>
+          {bar(state.streak / 8)}
+          <p className="text-[11px] tracking-[0.08em] text-[#0A0A0A] mt-1">{state.streak} / 8</p>
+        </div>
+        <div>
+          <p className="text-[8px] tracking-[0.12em] text-[#6B6B6B] mb-1">SHE SAYS YES · {state.responses} VERDICTS</p>
+          {bar(state.memberYesRate ?? 0)}
+          <p className="text-[11px] tracking-[0.08em] text-[#0A0A0A] mt-1">{pct(state.memberYesRate)}</p>
+        </div>
+      </div>
+
+      {state.blockers.length > 0 && (
+        <div>
+          <p className="text-[8px] tracking-[0.14em] text-[#8B5E00] mb-1">
+            BEFORE SHE CAN BE SENT LOOKS UNREVIEWED
+          </p>
+          {state.blockers.map((b, i) => (
+            <p key={i} className="text-[9px] tracking-[0.06em] text-[#6B6B6B]">· {b.toUpperCase()}</p>
+          ))}
+        </div>
+      )}
+
+      {state.learned.length > 0 && (
+        <div>
+          <p className="text-[8px] tracking-[0.14em] text-[#6B6B6B] mb-1">
+            WHAT HER SWAPS HAVE TAUGHT THE COMPOSER
+          </p>
+          {state.learned.map((l, i) => (
+            <p key={i} className={`text-[9px] tracking-[0.06em] ${l.includes('BLOCKED') ? 'text-[#B83A3A]' : 'text-[#A8A8A4]'}`}>
+              · {l}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function MemberCard({
   member: m,
   run,
@@ -1503,6 +1590,7 @@ function MemberCard({
           </div>
 
           <PriceBandsEditor member={m} run={run} busy={busy} ready={bandsReady} />
+          <TrustPanel memberId={m.member_id} />
           <StylePreferences member={m} run={run} busy={busy} ready={prefsReady} />
 
           {/* Wardrobe */}
@@ -1968,6 +2056,12 @@ function LookRow({
   const [poseOpen, setPoseOpen] = useState(false)
   const [shooting, setShooting] = useState(false)
   const shootHistory = l.shoot_history ?? []
+  // The most recent render the fidelity check refused. It is a real image on
+  // Cloudinary — it simply never became the look's picture.
+  const rejectedShoot = !l.image_url
+    ? [...shootHistory].reverse().find((h) => (h as any)?.flagged) as
+        (typeof shootHistory)[number] & { fidelity?: { score?: number; issues?: { field: string; item: string; seen: string }[] } } | undefined
+    : undefined
 
   // A shoot takes minutes — keep the picker locked while one is running so a
   // second click can't queue another generation over the top.
@@ -2095,6 +2189,33 @@ function LookRow({
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={l.image_url} alt="Higgsfield shoot" className="w-full aspect-[3/4] object-cover" />
                   <p className="text-[9px] tracking-[0.12em] text-[#8B5E00] px-2.5 py-2">✦ HIGGSFIELD SHOOT</p>
+                </div>
+              )}
+              {/* A shoot the fidelity check rejected used to leave NOTHING on
+                  screen — the render existed, it just never became the look
+                  image, so it read as "the shoot didn't work". Show it, say
+                  why, and let her overrule the check. */}
+              {!l.image_url && rejectedShoot && (
+                <div className="w-56 border-2 border-dashed border-[#C08A6A] bg-white">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={rejectedShoot.url} alt="Rejected shoot" className="w-full aspect-[3/4] object-cover opacity-80" />
+                  <div className="px-2.5 py-2">
+                    <p className="text-[9px] tracking-[0.12em] text-[#B4593A]">
+                      SHOOT HELD BACK{typeof rejectedShoot.fidelity?.score === 'number' ? ` — ${Math.round(rejectedShoot.fidelity.score * 100)}% FAITHFUL` : ''}
+                    </p>
+                    {(rejectedShoot.fidelity?.issues ?? []).slice(0, 3).map((iss, i) => (
+                      <p key={i} className="text-[8px] tracking-[0.06em] text-[#6B6B6B] mt-1 leading-snug">
+                        {String(iss.field).toUpperCase()} · {iss.item}: {iss.seen}
+                      </p>
+                    ))}
+                    <button
+                      disabled={shooting}
+                      onClick={() => run(`rs-${l.look_id}`, () => restoreLookShoot(l.look_id, rejectedShoot.url), 'SHOOT USED ANYWAY')}
+                      className="mt-2 text-[8px] tracking-[0.14em] text-[#0A0A0A] border border-[#E2E0DB] px-2 py-1 hover:border-[#0A0A0A] disabled:opacity-40"
+                    >
+                      USE IT ANYWAY
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
