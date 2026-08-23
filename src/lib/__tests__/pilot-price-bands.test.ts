@@ -75,3 +75,36 @@ describe('readPriceBands', () => {
     expect(hasPriceBands({ dress: { max: 350 } })).toBe(true)
   })
 })
+
+import { withinMemberPriceReach, expansionSeeds, EXPANSION_PRICE_HEADROOM } from '@/lib/brand-affinity'
+
+describe('price gate on brand suggestions', () => {
+  it('lets a brand near her ceiling through and blocks one far above it', () => {
+    // £300 clothing ceiling, 1.5x headroom → up to £450 is reachable
+    expect(withinMemberPriceReach(300, 280)).toBe(true)
+    expect(withinMemberPriceReach(300, 440)).toBe(true)
+    expect(withinMemberPriceReach(300, 508)).toBe(false) // the Cult Gaia case
+    expect(EXPANSION_PRICE_HEADROOM).toBe(1.5)
+  })
+
+  it('holds no opinion when either side is unknown', () => {
+    expect(withinMemberPriceReach(null, 900)).toBe(true) // she stated no ceiling
+    expect(withinMemberPriceReach(300, null)).toBe(true) // brand has no median
+    expect(withinMemberPriceReach(0, 900)).toBe(true)
+  })
+
+  it('drops an over-priced brand from the expansion set entirely', () => {
+    const named = [{ brand_id: 'sessun', name: 'Sessùn' } as any]
+    const similar = new Map([['sessun', [
+      { brand_id: 'cheap', name: 'Sézane', mechanism: 'vector', score: 0.9 } as any,
+      { brand_id: 'dear', name: 'Cult Gaia', mechanism: 'vector', score: 0.94 } as any,
+    ]]])
+    const medians = new Map<string, number | null>([['cheap', 132], ['dear', 508]])
+
+    const ungated = expansionSeeds(named, similar)
+    expect([...ungated.keys()].sort()).toEqual(['cheap', 'dear'])
+
+    const gated = expansionSeeds(named, similar, { priceCeiling: 300, medianById: medians })
+    expect([...gated.keys()]).toEqual(['cheap'])
+  })
+})

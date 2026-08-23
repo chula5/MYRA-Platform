@@ -393,6 +393,55 @@ export async function createMember(input: {
   return { member_id: memberId }
 }
 
+// Add a brand to a member's world by hand, or take one out. The graph is the
+// place Chloe spots a wrong suggestion, so it is the place to correct it.
+export async function addMemberBrand(memberId: string, brandName: string): Promise<{ error?: string }> {
+  const admin = createAdminClient() as any
+  const name = brandName.trim()
+  if (!name) return { error: 'NO BRAND NAME' }
+  try {
+    const graph = await loadBrandGraph(admin)
+    const { matched } = resolveBrandNames(graph, [name])
+    if (!matched.length) return { error: `${name.toUpperCase()} IS NOT IN MYRA'S BRAND TABLE` }
+    const b = matched[0]
+    const { error } = await admin.from('user_brand_affinity').upsert(
+      { user_id: memberId, brand_id: b.brand_id, affinity: 1, source: 'onboarded', expansion_trace: null, hidden: false },
+      { onConflict: 'user_id,brand_id' },
+    )
+    if (error) return { error: error.message }
+    revalidatePath(PATH)
+    return {}
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+// Removing is a judgement ("not her"), so it is remembered as hidden rather
+// than deleted — a later re-seed must not quietly bring it back.
+export async function removeMemberBrand(memberId: string, brandId: string): Promise<{ error?: string }> {
+  const admin = createAdminClient() as any
+  const { error } = await admin
+    .from('user_brand_affinity')
+    .update({ hidden: true, affinity: 0.05 })
+    .eq('user_id', memberId)
+    .eq('brand_id', brandId)
+  if (error) return { error: error.message }
+  revalidatePath(PATH)
+  return {}
+}
+
+export async function restoreMemberBrand(memberId: string, brandId: string): Promise<{ error?: string }> {
+  const admin = createAdminClient() as any
+  const { error } = await admin
+    .from('user_brand_affinity')
+    .update({ hidden: false })
+    .eq('user_id', memberId)
+    .eq('brand_id', brandId)
+  if (error) return { error: error.message }
+  revalidatePath(PATH)
+  return {}
+}
+
 // ── Per-member brand map ────────────────────────────────────────────────────
 // The same positions as the Taste Inspector map, but coloured for ONE member:
 // which brands she named, which MYRA expanded to from those, which have been
@@ -510,6 +559,24 @@ export async function setMemberBrands(
     .update({ brands: clean, brands_input_only: cleanInputOnly, updated_at: new Date().toISOString() })
     .eq('member_id', memberId)
   if (error) return { error: error.message }
+
+  // Dropping a brand must also drop what it dragged in. Expansions carry
+  // "... via <BRAND>" in their trace, so an expansion whose source is no
+  // longer named is retired — unless her own responses have since confirmed
+  // it, in which case it stands on its own evidence.
+  try {
+    const keep = new Set(clean.map((b) => b.name.toLowerCase()))
+    const { data: rows } = await admin
+      .from('user_brand_affinity')
+      .select('brand_id, expansion_trace, source, positive_count')
+      .eq('user_id', memberId)
+    for (const r of (rows ?? []) as any[]) {
+      const via = /via (.+)$/.exec(r.expansion_trace ?? '')?.[1]?.trim().toLowerCase()
+      if (!via || keep.has(via)) continue
+      if (r.source === 'learned' || (r.positive_count ?? 0) > 0) continue
+      await admin.from('user_brand_affinity').delete().eq('user_id', memberId).eq('brand_id', r.brand_id)
+    }
+  } catch { /* best-effort */ }
 
   // Re-seed so a newly named brand actually reaches the recommender. Safe to
   // re-run: seeding skips anything already at or above its seed value and

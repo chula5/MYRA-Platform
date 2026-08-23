@@ -379,15 +379,35 @@ export interface ExpansionSeed {
   mechanism: string
 }
 
+// A brand whose typical price sits far above what she actually spends should
+// never be SUGGESTED to her, however close its aesthetic. Her own named brands
+// and anything her responses have confirmed are exempt — a real signal always
+// outranks an inferred one. Returns true when the brand is affordable enough
+// to suggest.
+export const EXPANSION_PRICE_HEADROOM = 1.5
+
+export function withinMemberPriceReach(
+  ceiling: number | null | undefined,
+  brandMedian: number | null | undefined,
+): boolean {
+  if (ceiling == null || !(ceiling > 0)) return true // no stated ceiling → no opinion
+  if (brandMedian == null || !(brandMedian > 0)) return true // unpriced → cannot judge
+  // A brand priced somewhat above her ceiling still stocks pieces she can
+  // reach; far above it, she would almost never find one.
+  return brandMedian <= ceiling * EXPANSION_PRICE_HEADROOM
+}
+
 export function expansionSeeds(
   named: BrandLite[],
   similarByBrand: Map<string, SimilarBrand[]>,
+  opts: { priceCeiling?: number | null; medianById?: Map<string, number | null> } = {},
 ): Map<string, ExpansionSeed> {
   const out = new Map<string, ExpansionSeed>()
   const namedIds = new Set(named.map((b) => b.brand_id))
   for (const n of named) {
     for (const s of similarByBrand.get(n.brand_id) ?? []) {
       if (namedIds.has(s.brand_id)) continue
+      if (opts.priceCeiling != null && !withinMemberPriceReach(opts.priceCeiling, opts.medianById?.get(s.brand_id))) continue
       const value =
         s.mechanism === 'core_family' ? SEED.coreFamily :
         s.mechanism === 'adjacent_family' ? SEED.adjacentFamily : SEED.vectorOnly
@@ -727,7 +747,20 @@ export async function seedUserAffinities(
 
   const similarByBrand = new Map<string, SimilarBrand[]>()
   for (const b of matched) similarByBrand.set(b.brand_id, await getSimilarBrands(admin, b.brand_id, graph))
-  const seeds = expansionSeeds(matched, similarByBrand)
+  // Her stated clothing ceiling gates what may be suggested. Best-effort: an
+  // auth user (or a pre-0049 row) simply has none, and nothing is gated.
+  let priceCeiling: number | null = null
+  try {
+    const { data: pm } = await admin.from('pilot_member').select('price_bands').eq('member_id', userId).maybeSingle()
+    const bands = (pm?.price_bands ?? {}) as Record<string, { min?: number | null; max?: number | null }>
+    const clothingMaxes = Object.entries(bands)
+      .filter(([k]) => !['bag', 'shoes', 'jewellery'].includes(k))
+      .map(([, v]) => v?.max)
+      .filter((v): v is number => typeof v === 'number' && v > 0)
+    if (clothingMaxes.length) priceCeiling = Math.max(...clothingMaxes)
+  } catch { /* no bands → no gate */ }
+  const medianById = new Map<string, number | null>(graph.brands.map((b: any) => [b.brand_id, b.median_price_overall]))
+  const seeds = expansionSeeds(matched, similarByBrand, { priceCeiling, medianById })
   let expanded = 0
   const seedList = Array.from(seeds.values())
   for (const s of seedList) {

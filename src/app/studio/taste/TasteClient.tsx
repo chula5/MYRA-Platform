@@ -9,6 +9,7 @@ import {
   type BrandDetail, type InspectorData, type MemberInspection, type SimulationResult, type MapBrand,
 } from './actions'
 import type { HealthReport } from '@/lib/brand-affinity'
+import { fitFrame } from '@/lib/brand-map-frame'
 import { saveAffinityConfig } from './actions'
 
 // Display copy of lib BAND_NAMES — brand-affinity.ts is server-only (it pulls
@@ -579,16 +580,7 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                   )}
                 </div>
 
-                <MemberScatter
-                  inspection={inspection}
-                  brands={data.brands}
-                  px={px}
-                  py={py}
-                  W={W}
-                  H={H}
-                  M={M}
-                  gridPrices={GRID_PRICES}
-                />
+                <MemberScatter inspection={inspection} brands={data.brands} W={W} H={H} M={M} />
 
                 <div>
                   <p className={H2}>AFFINITIES ABOVE BASELINE · {inspection.affinities.length} — THE NUMBERS BEHIND THE MAP</p>
@@ -742,34 +734,43 @@ const MEMBER_ROLES: { key: string; label: string; colour: string }[] = [
 ]
 
 function MemberScatter({
-  inspection, brands, px, py, W, H, M, gridPrices,
+  inspection, brands, W, H, M,
 }: {
   inspection: MemberInspection
   brands: MapBrand[]
-  px: (x: number) => number
-  py: (p: number) => number
   W: number
   H: number
   M: { left: number; right: number; top: number; bottom: number }
-  gridPrices: number[]
 }) {
   const [showRoles, setShowRoles] = useState<Set<string>>(new Set(['onboarded', 'expanded', 'learned']))
   const byId = useMemo(() => new Map(brands.map((b) => [b.brand_id, b])), [brands])
 
-  const dots = useMemo(() => {
-    const out: Array<{ id: string; name: string; x: number; y: number; role: string; aff: number; trace: string | null; hidden: boolean }> = []
+  // Her own frame. Reusing the global map's scale left her brands squashed
+  // into a corner with two-thirds of the chart empty above them, because the
+  // full ladder runs to £3,000+ and she does not shop there.
+  const raw = useMemo(() => {
+    const out: Array<{ id: string; name: string; ax: number; ay: number; role: string; aff: number; trace: string | null; hidden: boolean }> = []
     for (const a of inspection.affinities) {
       const b = byId.get(a.brand_id)
       if (!b || b.x == null || b.price_position == null) continue
       const role = a.source === 'onboarded' ? 'onboarded' : a.source === 'learned' ? 'learned' : 'expanded'
-      out.push({
-        id: a.brand_id, name: a.brand_name, x: px(b.x), y: py(b.price_position),
-        role, aff: a.affinity, trace: a.expansion_trace, hidden: a.hidden,
-      })
+      out.push({ id: a.brand_id, name: a.brand_name, ax: b.x, ay: b.price_position, role, aff: a.affinity, trace: a.expansion_trace, hidden: a.hidden })
     }
-    // named last so their labels sit on top of the crowd
-    return out.sort((p, q) => (p.role === 'onboarded' ? 1 : 0) - (q.role === 'onboarded' ? 1 : 0))
-  }, [inspection, byId, px, py])
+    return out
+  }, [inspection, byId])
+
+  const frame = useMemo(
+    () => fitFrame(raw.map((d) => ({ x: d.ax, y: d.ay })), W, H, M),
+    [raw, W, H, M],
+  )
+
+  const dots = useMemo(() => {
+    if (!frame) return []
+    return raw
+      .map((d) => ({ ...d, x: frame.sx(d.ax), y: frame.sy(d.ay) }))
+      // named last so their labels sit on top of the crowd
+      .sort((p, q) => (p.role === 'onboarded' ? 1 : 0) - (q.role === 'onboarded' ? 1 : 0))
+  }, [raw, frame])
 
   const counts = dots.reduce<Record<string, number>>((acc, d) => ({ ...acc, [d.role]: (acc[d.role] ?? 0) + 1 }), {})
   const offMap = inspection.affinities.length - dots.length
@@ -796,10 +797,10 @@ function MemberScatter({
 
       <div className="border border-[#E2E0DB] rounded-[10px] bg-white overflow-hidden">
         <svg viewBox={`0 0 ${W} ${H}`} className="w-full min-w-[720px]">
-          {gridPrices.map((p) => (
+          {(frame?.grid ?? []).map((p) => (
             <g key={p}>
-              <line x1={M.left} x2={W - M.right} y1={py(Math.log(p))} y2={py(Math.log(p))} stroke="#E2E0DB" strokeWidth={0.8} />
-              <text x={M.left + 6} y={py(Math.log(p)) - 4} fontSize={9.5} fill="#7A7A75" letterSpacing={1}>£{p.toLocaleString()}</text>
+              <line x1={M.left} x2={W - M.right} y1={frame!.sy(Math.log(p))} y2={frame!.sy(Math.log(p))} stroke="#E2E0DB" strokeWidth={0.8} />
+              <text x={M.left + 6} y={frame!.sy(Math.log(p)) - 4} fontSize={9.5} fill="#7A7A75" letterSpacing={1}>£{p.toLocaleString()}</text>
             </g>
           ))}
           <text x={M.left + 8} y={H - 12} fontSize={9.5} fill="#7A7A75" letterSpacing={1.8}>← AESTHETIC POSITION (SAME AXES AS THE BRAND MAP) →</text>
@@ -836,7 +837,9 @@ function MemberScatter({
         </svg>
       </div>
       <p className="mt-1.5 text-[16px] tracking-[0.12em] text-[#A8A8A4]">
-        GOLD RING = A BRAND SHE NAMED · {offMap} OF HER {inspection.affinities.length} BRANDS HAVE NO MAP POSITION YET (NO CODES OR NO PRICE) AND ARE LISTED BELOW ONLY
+        GOLD RING = A BRAND SHE NAMED
+        {frame ? ` · ZOOMED TO HER RANGE, £${Math.round(frame.lo)}–£${Math.round(frame.hi)}` : ''}
+        {' '}· {offMap} OF HER {inspection.affinities.length} BRANDS HAVE NO MAP POSITION YET (NO CODES OR NO PRICE) AND ARE LISTED BELOW ONLY
       </p>
     </div>
   )

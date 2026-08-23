@@ -67,6 +67,9 @@ import {
   restoreLookShoot,
   recordMemberLookFeedback,
   setMemberBrands,
+  addMemberBrand,
+  removeMemberBrand,
+  restoreMemberBrand,
   loadMemberBrandMap,
   type MemberBrandMap,
   type MemberBrandDot,
@@ -699,10 +702,12 @@ const DOT_ROLES: { role: MemberBrandDot['role']; label: string; colour: string }
   { role: 'hidden', label: 'HIDDEN', colour: '#B83A3A' },
 ]
 
-function MemberBrandMapView({ memberId, name }: { memberId: string; name: string }) {
+function MemberBrandMapView({ memberId, name, run, busy }: { memberId: string; name: string; run: Run; busy: string | null }) {
   const [data, setData] = useState<MemberBrandMap | null>(null)
   const [loading, setLoading] = useState(false)
   const [hover, setHover] = useState<MemberBrandDot | null>(null)
+  const [sel, setSel] = useState<MemberBrandDot | null>(null)
+  const [newBrand, setNewBrand] = useState('')
   const [show, setShow] = useState<Set<string>>(new Set(['named', 'suggested', 'learned']))
 
   const load = async () => {
@@ -776,7 +781,7 @@ function MemberBrandMapView({ memberId, name }: { memberId: string; name: string
                   const c = DOT_ROLES.find((r) => r.role === d.role)!.colour
                   const big = d.role === 'named' || d.role === 'learned'
                   return (
-                    <g key={d.brand_id} onMouseEnter={() => setHover(d)} onMouseLeave={() => setHover(null)} style={{ cursor: 'pointer' }}>
+                    <g key={d.brand_id} onMouseEnter={() => setHover(d)} onMouseLeave={() => setHover(null)} onClick={() => setSel(d)} style={{ cursor: 'pointer' }}>
                       <circle
                         cx={scales.sx(d.x!)}
                         cy={scales.sy(d.price_position!)}
@@ -824,7 +829,58 @@ function MemberBrandMapView({ memberId, name }: { memberId: string; name: string
             )}
           </div>
 
-          <p className="text-[8px] tracking-[0.1em] text-[#A8A8A4]">
+          {/* correcting a wrong suggestion where you spot it — on the map */}
+          <div className="flex flex-wrap items-center gap-2 mt-1 border-t border-[#EFEDE9] pt-2">
+            {sel ? (
+              <>
+                <span className="text-[11px] tracking-[0.06em] text-[#0A0A0A]">
+                  {sel.name.toUpperCase()}
+                  <span className="text-[#6B6B6B]">
+                    {' '}· {DOT_ROLES.find((r) => r.role === sel.role)!.label}
+                    {sel.medianPrice ? ` · MEDIAN £${Math.round(sel.medianPrice)}` : ''}
+                  </span>
+                </span>
+                {sel.role === 'hidden' ? (
+                  <button
+                    className={`${btnTiny} !text-[10px]`}
+                    disabled={busy === `mb-${sel.brand_id}`}
+                    onClick={async () => { await run(`mb-${sel.brand_id}`, () => restoreMemberBrand(memberId, sel.brand_id), 'BRAND RESTORED'); setSel(null); load() }}
+                  >
+                    PUT BACK
+                  </button>
+                ) : (
+                  <button
+                    className={`${btnTiny} !text-[10px] !text-[#B83A3A] !border-[#E8C4C4]`}
+                    disabled={busy === `mb-${sel.brand_id}`}
+                    onClick={async () => { await run(`mb-${sel.brand_id}`, () => removeMemberBrand(memberId, sel.brand_id), 'BRAND REMOVED FROM HER WORLD'); setSel(null); load() }}
+                  >
+                    NOT FOR HER — REMOVE
+                  </button>
+                )}
+                <button className={`${btnTiny} !text-[10px]`} onClick={() => setSel(null)}>CLEAR</button>
+              </>
+            ) : (
+              <span className="text-[11px] tracking-[0.06em] text-[#A8A8A4]">CLICK A DOT TO REMOVE THAT BRAND FROM HER WORLD.</span>
+            )}
+            <span className="ml-auto flex items-center gap-1.5">
+              <input
+                className={`${input} !py-1 !text-[11px] !w-44`}
+                placeholder="ADD A BRAND FOR HER"
+                value={newBrand}
+                onChange={(e) => setNewBrand(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && newBrand.trim()) (async () => { await run(`mba-${memberId}`, () => addMemberBrand(memberId, newBrand), 'BRAND ADDED AT FULL AFFINITY'); setNewBrand(''); load() })() }}
+              />
+              <button
+                className={`${btnTiny} !text-[10px]`}
+                disabled={!newBrand.trim() || busy === `mba-${memberId}`}
+                onClick={async () => { await run(`mba-${memberId}`, () => addMemberBrand(memberId, newBrand), 'BRAND ADDED AT FULL AFFINITY'); setNewBrand(''); load() }}
+              >
+                ADD
+              </button>
+            </span>
+          </div>
+
+          <p className="text-[11px] tracking-[0.1em] text-[#A8A8A4] mt-1">
             {plotted.length} OF {data.dots.length} BRANDS POSITIONED · THE REST HAVE NO CODES OR NO PRICE YET
           </p>
           {data.unmatched.length > 0 && (
@@ -1349,7 +1405,7 @@ function MemberCard({
           {/* Brands */}
           <div>
             <MemberBrands member={m} run={run} busy={busy} />
-            <MemberBrandMapView memberId={m.member_id} name={m.name} />
+            <MemberBrandMapView memberId={m.member_id} name={m.name} run={run} busy={busy} />
           </div>
 
           {/* Occasion profile */}
