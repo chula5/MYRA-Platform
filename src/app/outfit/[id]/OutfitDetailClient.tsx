@@ -5,6 +5,8 @@ import FallbackImage from '@/components/FallbackImage'
 import { useRouter } from 'next/navigation'
 import Hotspot from '@/components/hotspot/Hotspot'
 import ShopTheLookOverlay from '@/components/source-panel/ShopTheLookOverlay'
+import { findSomethingSimilar } from '@/app/edit/stock-actions'
+import type { OutfitSizeInfo } from '@/lib/outfit-size'
 import OutfitCard from '@/components/outfit-card/OutfitCard'
 import SaveHeartButton from '@/components/outfit-card/SaveHeartButton'
 import CoachTip from '@/components/CoachTip'
@@ -41,6 +43,14 @@ interface OutfitDetailClientProps {
   canSave?: boolean                 // show the SAVE toggle (signed-in users)
   initialSaved?: boolean
   savedItemIds?: string[]           // item ids already in the user's wardrobe
+  // Per-item size verdicts for this shopper (see lib/outfit-size.ts). Drives
+  // "your size", "low stock in your size", and the notify-me on a piece that
+  // isn't currently in her size.
+  sizeInfo?: OutfitSizeInfo
+  // A one-of-one in this look has sold: it's struck through in the sourcing
+  // panel and every other piece stays linked and shoppable.
+  soldItemId?: string | null
+  rescueId?: string | null
 }
 
 export default function OutfitDetailClient({
@@ -54,6 +64,9 @@ export default function OutfitDetailClient({
   canSave = false,
   initialSaved = false,
   savedItemIds = [],
+  sizeInfo,
+  soldItemId = null,
+  rescueId = null,
 }: OutfitDetailClientProps) {
   const router = useRouter()
   const scrollTo = useScrollTo()
@@ -500,6 +513,13 @@ export default function OutfitDetailClient({
                   savedItemIds={[...savedItemSet]}
                   onToggleItem={toggleItem}
                   offsetTop
+                  sizeInfo={sizeInfo?.items}
+                  soldItemId={soldItemId}
+                  onFindSimilar={
+                    rescueId
+                      ? () => { void findSomethingSimilar(rescueId); router.push('/edit') }
+                      : undefined
+                  }
                 />
               )}
 

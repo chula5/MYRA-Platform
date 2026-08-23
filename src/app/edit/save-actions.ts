@@ -129,6 +129,9 @@ export interface WardrobeItem {
   price: string | null
   currency: string | null
   retailer_url: string | null
+  /** A one-of-one that has sold. Struck through, never removed from her list. */
+  sold: boolean
+  unique: boolean
 }
 
 // Everything in the user's wardrobe — saved outfits + saved items, with the
@@ -177,6 +180,8 @@ export async function getWardrobe(): Promise<{ outfits: WardrobeOutfit[]; items:
         price: i.price,
         currency: i.currency,
         retailer_url: i.retailer_url,
+        sold: i.status === 'sold',
+        unique: i.stock_class === 'unique',
       }))
 
     return { outfits, items }

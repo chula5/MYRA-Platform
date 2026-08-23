@@ -359,3 +359,10 @@ create trigger item_stamp_live_since
 update public.item
 set live_since = coalesce(live_since, stock_checked_at)
 where status = 'live' and live_since is null;
+
+-- ── 12. Private clients get their stock news inside the stylist delivery ─────
+-- A private client should not receive a second, differently-voiced email from
+-- the same brand on the same day. Her pending alerts are attached to the
+-- delivery when it is sent, and marked delivered at that moment.
+alter table public.pilot_delivery
+  add column if not exists stock_alerts jsonb not null default '[]'::jsonb;

@@ -93,9 +93,17 @@ export function resolveAvailability(
 
   if (!category || usable.length === 0) return base
 
-  // Best row for her, preferring an exact match over an adjacent one, and an
-  // in-stock row over a sold-out one of the same quality.
+  // Best row for her: AVAILABILITY OUTRANKS EXACTNESS.
+  //
+  // If her exact size is sold out and the adjacent size she listed is in stock,
+  // the adjacent one is the answer — she can buy that today. Ranking exactness
+  // first would report the look as out of her size while a size she told us she
+  // wears sat on the shelf.
+  //
+  // Only when nothing she wears is in stock do we fall back to the best-quality
+  // row, so "sold out in your size" names the size she actually wanted.
   const rank = (q: MatchQuality) => (q === 'full' ? 2 : q === 'acceptable' ? 1 : 0)
+  const buyable = (r: SizeRow) => r.in_stock && r.stock_level !== 'sold_out'
   let best: { row: SizeRow; q: MatchQuality } | null = null
   for (const row of usable) {
     const q = matchQuality(profile, category, valuesOf(row))
@@ -103,8 +111,8 @@ export function resolveAvailability(
     if (!isWearable(q)) continue
     if (
       !best ||
-      rank(q) > rank(best.q) ||
-      (rank(q) === rank(best.q) && row.in_stock && !best.row.in_stock)
+      (buyable(row) && !buyable(best.row)) ||
+      (buyable(row) === buyable(best.row) && rank(q) > rank(best.q))
     ) {
       best = { row, q }
     }
@@ -116,7 +124,7 @@ export function resolveAvailability(
   }
 
   const level = best.row.stock_level
-  const sold = !best.row.in_stock || level === 'sold_out'
+  const sold = !buyable(best.row)
   return {
     ...base,
     quality: best.q,

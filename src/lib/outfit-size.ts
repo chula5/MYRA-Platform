@@ -20,6 +20,7 @@
 import 'server-only'
 import type { OutfitWithItems } from '@/types/database'
 import { isSecondHand, isUnique } from '@/lib/second-hand'
+import { SEED } from '@/lib/brand-affinity'
 import { resolveAvailability, type ItemAvailability } from '@/lib/size-match'
 import { loadSizeRowsFor, type ShopperSizeContext } from '@/lib/size-availability'
 
@@ -27,7 +28,12 @@ export interface OutfitSizeVerdict {
   /** May she see this look at all? */
   visible: boolean
   /** Why it was hidden — for admin previews and debugging, never shown to her. */
-  hiddenReason: 'unique_out_of_size' | 'second_hand_not_opted_in' | 'item_sold' | null
+  hiddenReason:
+    | 'unique_out_of_size'
+    | 'second_hand_not_opted_in'
+    | 'second_hand_brand_off_taste'
+    | 'item_sold'
+    | null
   /** A replenishable piece she can't currently buy in her size. Sorts down. */
   outOfSize: boolean
   /** Item-level verdicts, keyed by item_id — drives the sourcing-panel labels. */
@@ -36,6 +42,40 @@ export interface OutfitSizeVerdict {
   overrides: { itemId: string; note: string | null }[]
   /** One-of-one items in this look, with their save counts. */
   unique: Record<string, { saves: number }>
+}
+
+/**
+ * Her brand affinities, or null when the taste graph has nothing to say about
+ * her yet. Null means the graph can't judge — and an unbuilt graph must not
+ * silently hide half the catalogue, so it lets everything through.
+ */
+async function loadBrandAffinities(
+  userId: string | null | undefined,
+): Promise<Map<string, { affinity: number; hidden: boolean }> | null> {
+  if (!userId) return null
+  try {
+    const { createAdminClient } = await import('@/lib/supabase-server')
+    const admin = createAdminClient()
+    const { data } = await admin
+      .from('user_brand_affinity' as any)
+      .select('brand_id, affinity, hidden')
+      .eq('user_id', userId)
+    const rows = (data ?? []) as any[]
+    if (!rows.length) return null
+    return new Map(rows.map((r) => [r.brand_id, { affinity: Number(r.affinity ?? 0), hidden: !!r.hidden }]))
+  } catch {
+    return null
+  }
+}
+
+function brandPassesTaste(
+  affinities: Map<string, { affinity: number; hidden: boolean }> | null,
+  brandId: string | null | undefined,
+): boolean {
+  if (!affinities || !brandId) return true
+  const row = affinities.get(brandId)
+  if (!row) return true // the graph hasn't reached this brand — not a verdict
+  return !row.hidden && row.affinity >= SEED.baseline
 }
 
 /** Save counts, for the honest social-proof line on scarce pieces. */
@@ -69,6 +109,7 @@ export interface MaskedFeed<T extends OutfitWithItems> {
 export async function maskOutfitsForShopper<T extends OutfitWithItems>(
   outfits: T[],
   ctx: ShopperSizeContext,
+  userId?: string | null,
 ): Promise<MaskedFeed<T>> {
   const verdicts = new Map<string, OutfitSizeVerdict>()
   if (!outfits.length) return { outfits, verdicts }
@@ -95,6 +136,11 @@ export async function maskOutfitsForShopper<T extends OutfitWithItems>(
   )
   const saveCounts = await loadSaveCounts(uniqueItemIds)
 
+  // Opting in to pre-loved is not a licence to show her any pre-loved thing.
+  // A second-hand piece still has to clear her taste graph like anything else,
+  // so its brand must sit at or above the baseline affinity and not be hidden.
+  const affinities = await loadBrandAffinities(userId)
+
   const visible: T[] = []
   for (const outfit of outfits) {
     const links = ((outfit.outfit_item ?? []) as any[]).filter((oi) => oi.item)
@@ -112,7 +158,10 @@ export async function maskOutfitsForShopper<T extends OutfitWithItems>(
       if (overridden) overrides.push({ itemId: item.item_id, note: link.size_override_note ?? null })
 
       if (item.status === 'sold') { hiddenReason = 'item_sold'; break }
-      if (isSecondHand(item) && !ctx.acceptsSecondHand) { hiddenReason = 'second_hand_not_opted_in'; break }
+      if (isSecondHand(item)) {
+        if (!ctx.acceptsSecondHand) { hiddenReason = 'second_hand_not_opted_in'; break }
+        if (!brandPassesTaste(affinities, item.brand_id)) { hiddenReason = 'second_hand_brand_off_taste'; break }
+      }
       if (isUnique(item) && a.outOfHerSize && !overridden) { hiddenReason = 'unique_out_of_size'; break }
       if (a.outOfHerSize && !overridden) outOfSize = true
     }

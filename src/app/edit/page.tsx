@@ -55,7 +55,7 @@ export default async function EditPage() {
   // only if she asked for them, and looks with a replenishable piece she can't
   // currently buy in her size sort to the back rather than disappearing.
   const sizeCtx = await loadUserSizeProfile(user.id)
-  const { outfits: liveOutfits, verdicts } = await maskOutfitsForShopper(masked, sizeCtx)
+  const { outfits: liveOutfits, verdicts } = await maskOutfitsForShopper(masked, sizeCtx, user.id)
   const sizeInfo = serialiseVerdicts(verdicts)
 
   // Saved outfits, cosine taste recommendations, and the user's taste vector
@@ -70,7 +70,7 @@ export default async function EditPage() {
   const brandRows = await getBrandAffinityRows(user.id, liveOutfits, tasteVector)
   // Recommendations come from a different query, so they need both masks too.
   const maskedRecommended = (
-    await maskOutfitsForShopper(applyItemMask(styleProfile, recommended), sizeCtx)
+    await maskOutfitsForShopper(applyItemMask(styleProfile, recommended), sizeCtx, user.id)
   ).outfits
   const occasionOrder = getOccasionOrder(tasteVector, liveOutfits)
 

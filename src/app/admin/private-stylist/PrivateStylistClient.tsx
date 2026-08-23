@@ -773,19 +773,30 @@ function MemberBrandMapView({ memberId, name }: { memberId: string; name: string
                   const c = DOT_ROLES.find((r) => r.role === d.role)!.colour
                   const big = d.role === 'named' || d.role === 'learned'
                   return (
-                    <circle
-                      key={d.brand_id}
-                      cx={scales.sx(d.x!)}
-                      cy={scales.sy(d.price_position!)}
-                      r={big ? 5 : d.role === 'suggested' ? 4 : 2.5}
-                      fill={d.coded ? c : 'none'}
-                      stroke={c}
-                      strokeWidth={d.coded ? 0 : 1.2}
-                      opacity={d.role === 'baseline' ? 0.5 : 0.95}
-                      onMouseEnter={() => setHover(d)}
-                      onMouseLeave={() => setHover(null)}
-                      style={{ cursor: 'pointer' }}
-                    />
+                    <g key={d.brand_id} onMouseEnter={() => setHover(d)} onMouseLeave={() => setHover(null)} style={{ cursor: 'pointer' }}>
+                      <circle
+                        cx={scales.sx(d.x!)}
+                        cy={scales.sy(d.price_position!)}
+                        r={big ? 3.5 : d.role === 'suggested' ? 3 : 2}
+                        fill={d.coded ? c : 'none'}
+                        stroke={c}
+                        strokeWidth={d.coded ? 0 : 1.1}
+                        opacity={d.role === 'baseline' ? 0.5 : 0.95}
+                      />
+                      {/* the baseline crowd stays unlabelled — only brands she
+                          has a relationship with are worth naming here */}
+                      {d.role !== 'baseline' && (
+                        <text
+                          x={scales.sx(d.x!)} y={scales.sy(d.price_position!) + 8} textAnchor="middle"
+                          fontSize={5.2} letterSpacing={0.3}
+                          fill={big ? '#0A0A0A' : '#6B6B6B'}
+                          stroke="#FFFFFF" strokeWidth={1.5} paintOrder="stroke"
+                          style={{ pointerEvents: 'none' }}
+                        >
+                          {d.name.toUpperCase()}
+                        </text>
+                      )}
+                    </g>
                   )
                 }),
               )}

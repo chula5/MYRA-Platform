@@ -60,6 +60,7 @@ import { listOwnedItems, looksUsingItems } from '@/lib/wardrobe/store'
 import { ownerRefsForMember } from '@/lib/wardrobe/owned-items'
 import { checkRenderFidelity } from '@/app/admin/ai/render-fidelity'
 import { loadMemberSizeProfile, filterItemsForShopper } from '@/lib/size-availability'
+import { pendingAlertsForUser, markDelivered, ALERT_COPY } from '@/lib/stock-alerts'
 import { personaWeight, PERSONA_START_WEIGHT } from '@/lib/user-persona'
 import { slotForItemType, type Slot } from '@/lib/composer'
 import {
@@ -813,12 +814,53 @@ export async function sendDelivery(deliveryId: string): Promise<{ errors?: strin
     { calibration: (delivery as any).trigger === 'calibration' },
   )
   if (errors.length > 0) return { errors }
+
+  // Her stock news rides INSIDE this delivery rather than arriving as a second
+  // email from the same brand on the same day (see stock-alerts.ts, which
+  // excludes private clients from the shopper digest for exactly this reason).
+  const stockAlerts = await collectClientStockAlerts((delivery as any).member_id)
+
   const { error } = await admin
     .from('pilot_delivery' as any)
-    .update({ status: 'sent', sent_at: new Date().toISOString() })
+    .update({ status: 'sent', sent_at: new Date().toISOString(), stock_alerts: stockAlerts.payload })
     .eq('delivery_id', deliveryId)
+  if (!error && stockAlerts.alertIds.length) await markDelivered(stockAlerts.alertIds)
   revalidatePath(PATH)
   return error ? { error: error.message } : {}
+}
+
+/** Her outstanding size/stock alerts, shaped for the delivery payload. */
+async function collectClientStockAlerts(
+  memberId: string,
+): Promise<{ payload: unknown[]; alertIds: string[] }> {
+  try {
+    const admin = createAdminClient()
+    const { data: member } = await admin
+      .from('pilot_member' as any)
+      .select('auth_user_id')
+      .eq('member_id', memberId)
+      .maybeSingle()
+    const userId = (member as any)?.auth_user_id
+    if (!userId) return { payload: [], alertIds: [] }
+
+    const pending = await pendingAlertsForUser(userId)
+    return {
+      payload: pending.map((a) => ({
+        item_id: a.item_id,
+        kind: a.kind,
+        size_label: a.size_label,
+        line: ALERT_COPY[a.kind](a.size_label),
+        product_name: a.item?.product_name ?? null,
+        brand_name: a.item?.brand?.name ?? null,
+        image_url: a.item?.image_url ?? null,
+      })),
+      alertIds: pending.map((a) => a.alert_id),
+    }
+  } catch (err) {
+    // Never block a delivery on stock news.
+    console.error('[collectClientStockAlerts]', err)
+    return { payload: [], alertIds: [] }
+  }
 }
 
 // ── Responses & activity → taste events ─────────────────────────────────────

@@ -5,6 +5,9 @@ import { getOutfit } from '@/lib/admin-queries'
 import OutfitDetailClient from '@/app/outfit/[id]/OutfitDetailClient'
 import { earlyAccessSignOut } from '@/app/earlyaccess/actions'
 import { getSavedOutfitIds, getSavedItemIds } from '../save-actions'
+import { loadUserSizeProfile } from '@/lib/size-availability'
+import { maskOutfitsForShopper, serialiseVerdicts } from '@/lib/outfit-size'
+import { rescuesForUser } from '@/lib/rescue'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,7 +26,19 @@ export default async function EditDetailPage({ params, searchParams }: PageProps
 
   // Service-role read so the outfit's items are visible (RLS hides draft items).
   const outfit = await getOutfit(id)
-  const [savedIds, savedItemIds] = await Promise.all([getSavedOutfitIds(), getSavedItemIds()])
+  const [savedIds, savedItemIds, sizeCtx] = await Promise.all([
+    getSavedOutfitIds(),
+    getSavedItemIds(),
+    loadUserSizeProfile(user.id),
+  ])
+
+  // Her size verdicts for this look, and — if a one-of-one in it has sold —
+  // the rescue, so the sourcing panel can strike that piece through and offer
+  // "find me something similar" while everything else stays shoppable.
+  const sizeInfo = outfit
+    ? serialiseVerdicts((await maskOutfitsForShopper([outfit], sizeCtx, user.id)).verdicts)[id] ?? null
+    : null
+  const rescue = outfit ? (await rescuesForUser(user.id, [id], sizeCtx)).get(id) ?? null : null
 
   return (
     <div className="min-h-screen bg-[#F2F2F2]">
@@ -70,6 +85,9 @@ export default async function EditDetailPage({ params, searchParams }: PageProps
           canSave
           initialSaved={savedIds.includes(id)}
           savedItemIds={savedItemIds}
+          sizeInfo={sizeInfo ?? undefined}
+          soldItemId={rescue?.sold_item_id ?? null}
+          rescueId={rescue?.rescue_id ?? null}
         />
       )}
     </div>

@@ -12,7 +12,7 @@ import {
 import ShopLink from '@/components/ShopLink'
 import RescueCard from './RescueCard'
 import { getWardrobeRescues, dismissAlerts, type WardrobeRescue } from './stock-actions'
-import { ALERT_COPY, type UserAlert } from '@/lib/stock-alerts'
+import { ALERT_COPY, type UserAlert } from '@/lib/stock-alert-copy'
 import Link from 'next/link'
 
 function fmtPrice(price: string | null, currency: string | null): string {
@@ -246,10 +246,17 @@ export default function Wardrobe() {
                           </div>
                           <div className="flex-1 min-w-0 flex flex-col">
                             <p className="text-[8px] tracking-[0.07em] text-[#6B6B6B] uppercase truncate">{it.brand_name ?? 'BRAND'}</p>
-                            <p className="text-[10px] leading-[1.2] text-[#4A4E57] line-clamp-2">{it.product_name}</p>
+                            <p className={`text-[10px] leading-[1.2] line-clamp-2 ${it.sold ? 'text-[#A8A8A4] line-through' : 'text-[#4A4E57]'}`}>
+                              {it.product_name}
+                            </p>
+                            {it.sold ? (
+                              <p className="text-[9px] tracking-[0.08em] text-[#6B6B6B] mt-0.5">ONE OF ONE · NOW SOLD</p>
+                            ) : it.unique ? (
+                              <p className="text-[9px] tracking-[0.08em] text-[#8A7340] mt-0.5">ONE OF ONE</p>
+                            ) : null}
                             <div className="mt-auto flex items-center justify-between gap-2 pt-1">
                               <span className="text-[10px] text-[#4A4E57]">{fmtPrice(it.price, it.currency)}</span>
-                              {it.retailer_url && (
+                              {it.retailer_url && !it.sold && (
                                 <ShopLink
                                   item={{ item_id: it.item_id, retailer_url: it.retailer_url, product_name: it.product_name, brand: { name: it.brand_name } }}
                                   className="bg-[#0A0A0A] text-white text-[8px] tracking-[0.06em] px-2 py-0.5 rounded hover:opacity-85 transition-opacity"

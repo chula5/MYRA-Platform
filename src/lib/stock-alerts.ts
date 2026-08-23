@@ -20,16 +20,15 @@ import type { SizeRow } from '@/lib/size-match'
 import { alertPriority, isFastMoving, type StockClass, type RiskInputs } from '@/lib/second-hand'
 import { sendStudioEmail, emailShell, emailButton, siteUrl } from '@/lib/studio/email'
 
-export type AlertKind = 'low_in_size' | 'sold_out_in_size' | 'back_in_size' | 'unique_sold' | 'restyled'
-export type SubscriptionSource = 'saved_item' | 'saved_outfit' | 'notify_me'
-
-export const ALERT_COPY: Record<AlertKind, (size: string | null) => string> = {
-  low_in_size: (s) => (s ? `Only a few left in your size (${s})` : 'Only a few left in your size'),
-  sold_out_in_size: (s) => (s ? `Sold out in your size (${s})` : 'Sold out in your size'),
-  back_in_size: (s) => (s ? `Back in your size (${s})` : 'Back in your size'),
-  unique_sold: () => 'One of one — now sold',
-  restyled: () => 'We’ve restyled a look you saved',
-}
+// The kinds, their copy and the saved-list shape live in a client-safe module
+// so the wardrobe panel can render them without importing this one.
+export {
+  ALERT_COPY,
+  type AlertKind,
+  type SubscriptionSource,
+  type UserAlert,
+} from '@/lib/stock-alert-copy'
+import { ALERT_COPY, type AlertKind, type SubscriptionSource, type UserAlert } from '@/lib/stock-alert-copy'
 
 // ── Subscriptions ────────────────────────────────────────────────────────────
 
@@ -308,19 +307,6 @@ export async function raiseUniqueSoldAlerts(itemId: string): Promise<number> {
 
 // ── In-app surface ───────────────────────────────────────────────────────────
 
-export interface UserAlert {
-  alert_id: string
-  item_id: string
-  outfit_id: string | null
-  kind: AlertKind
-  size_label: string | null
-  created_at: string
-  seen_at: string | null
-  product_name: string | null
-  brand_name: string | null
-  image_url: string | null
-}
-
 export async function listUserAlerts(userId: string, limit = 40): Promise<UserAlert[]> {
   try {
     const admin = createAdminClient()
@@ -449,14 +435,24 @@ export async function markDelivered(alertIds: string[]): Promise<void> {
     .in('alert_id', alertIds)
 }
 
+/**
+ * Everyone whose stock news belongs in a stylist delivery instead of the
+ * shopper digest. Both identities count: client_profile is the client-area
+ * record, pilot_member.auth_user_id is the private-stylist one, and a client
+ * can have either or both.
+ */
 async function privateClientUserIds(): Promise<Set<string>> {
+  const ids = new Set<string>()
+  const admin = createAdminClient()
   try {
-    const admin = createAdminClient()
     const { data } = await admin.from('client_profile' as any).select('user_id')
-    return new Set(((data ?? []) as any[]).map((r) => r.user_id).filter(Boolean))
-  } catch {
-    return new Set()
-  }
+    for (const r of (data ?? []) as any[]) if (r.user_id) ids.add(r.user_id)
+  } catch { /* table may not exist in every environment */ }
+  try {
+    const { data } = await admin.from('pilot_member' as any).select('auth_user_id')
+    for (const r of (data ?? []) as any[]) if (r.auth_user_id) ids.add(r.auth_user_id)
+  } catch { /* same */ }
+  return ids
 }
 
 async function emailFor(userId: string): Promise<string | null> {

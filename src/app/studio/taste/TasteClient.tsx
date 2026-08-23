@@ -6,7 +6,7 @@ import {
   loadBrandDetail, loadMemberInspection, overrideAffinity, recomputeVectorsNow,
   removeExclusion, runHealthNow, seedMemberFromIntake, seedStarterFamily,
   setBrandHidden, setMembership, simulateOnboarding,
-  type BrandDetail, type InspectorData, type MemberInspection, type SimulationResult,
+  type BrandDetail, type InspectorData, type MemberInspection, type SimulationResult, type MapBrand,
 } from './actions'
 import type { HealthReport } from '@/lib/brand-affinity'
 import { saveAffinityConfig } from './actions'
@@ -95,6 +95,7 @@ export default function TasteClient({ data }: { data: InspectorData }) {
   // ONE scale drives dots, gridlines and band stripes. A brand renders ONLY
   // with a real position: an X (codes or provisional centroid PCA) AND a
   // computed/manual price_position — no placeholder fallbacks, ever.
+  const [brandQuery, setBrandQuery] = useState('')
   const W = 1000; const H = 520
   const M = { left: 118, right: 24, top: 16, bottom: 44 }
   const bounds = data.config.bandBounds
@@ -286,18 +287,29 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                 {mapped.map(({ b, px: cx, py: cy }) => (
                   <g key={b.brand_id} onClick={() => selectBrand(b.brand_id)} style={{ cursor: 'pointer' }}>
                     <circle
-                      cx={cx} cy={cy} r={5.5}
+                      cx={cx} cy={cy} r={selBrand === b.brand_id ? 5 : 3}
                       fill={b.coded ? (b.status === 'reference' ? '#C4A882' : '#0A0A0A') : 'white'}
                       stroke={selBrand === b.brand_id ? '#C4A882' : b.coded ? '#0A0A0A' : b.thin ? '#A8A8A4' : '#6B6B6B'}
-                      strokeWidth={selBrand === b.brand_id ? 2.5 : 1.2}
+                      strokeWidth={selBrand === b.brand_id ? 2.5 : 1}
                       strokeDasharray={b.thin && !b.coded ? '2 2' : undefined}
                     />
+                    {/* name under every dot — paint-order keeps the halo behind
+                        the glyphs so overlapping labels stay readable */}
+                    <text
+                      x={cx} y={cy + 9} textAnchor="middle"
+                      fontSize={5.4} letterSpacing={0.35}
+                      fill={selBrand === b.brand_id ? '#0A0A0A' : '#6B6B6B'}
+                      stroke="#FFFFFF" strokeWidth={1.6} paintOrder="stroke"
+                      style={{ pointerEvents: 'none' }}
+                    >
+                      {b.name.toUpperCase()}
+                    </text>
                     <title>{`${b.name} — ${b.medianPrice != null ? `median £${Math.round(b.medianPrice)}` : `no price data (tier ${b.price_tier} assumed)`}${b.coreCategory ? ` · core: ${b.coreCategory}` : ''}${b.band != null ? ` · ${BAND_NAMES[b.band]}` : ''}${b.coded ? '' : ' · CODES INCOMPLETE (provisional position)'}${b.thin ? ` · THIN VECTOR (${b.itemCount} items)` : ` · ${b.itemCount} items`}${b.status === 'reference' ? ' · reference' : ''}`}</title>
                     {selBrand === b.brand_id && (() => {
                       const wEst = b.name.length * 7 + 10
                       const flip = cx + 10 + wEst > W - M.right
                       const lx = flip ? cx - 10 - wEst : cx + 10
-                      const ly = Math.max(M.top + 12, Math.min(H - M.bottom - 4, cy - 8))
+                      const ly = Math.max(M.top + 12, Math.min(H - M.bottom - 4, cy - 9))
                       return (
                         <g>
                           <rect x={lx - 3} y={ly - 10} width={wEst} height={14} fill="white" opacity={0.92} rx={3} />
@@ -315,7 +327,7 @@ export default function TasteClient({ data }: { data: InspectorData }) {
               </svg>
             </div>
             <p className="mt-2 text-[8px] tracking-[0.12em] text-[#A8A8A4]">
-              FILLED = FULLY CODED (X = PCA OF BRAND CODES) · HOLLOW = CODES INCOMPLETE, PROVISIONAL ITEM-CENTROID POSITION · GOLD = REFERENCE · Y = LOG MEDIAN PRICE, REAL DATA ONLY · DASHED BOXES = FAMILIES · DOUBLE-CLICK/± TO ZOOM, DRAG TO PAN
+              EVERY DOT IS LABELLED — ZOOM IN WHERE THEY CROWD · FILLED = FULLY CODED (X = PCA OF BRAND CODES) · HOLLOW = CODES INCOMPLETE, PROVISIONAL ITEM-CENTROID POSITION · GOLD = REFERENCE · Y = LOG MEDIAN PRICE, REAL DATA ONLY · DASHED BOXES = FAMILIES · DOUBLE-CLICK/± TO ZOOM, DRAG TO PAN
             </p>
 
             {/* not-yet-positioned rail — brands stay OFF the map until they
@@ -377,8 +389,47 @@ export default function TasteClient({ data }: { data: InspectorData }) {
             </div>
           </div>
 
+          <div className="self-start grid gap-4">
+          {/* every brand, clickable — the map is dense, so the list is the
+              reliable way to find one and light it up */}
+          <aside className="border border-[#E2E0DB] rounded-[10px] bg-white p-4">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <p className={H2}>ALL BRANDS · {data.brands.length}</p>
+              <input
+                value={brandQuery}
+                onChange={(e) => setBrandQuery(e.target.value)}
+                placeholder="SEARCH"
+                className={`${INPUT} w-28 uppercase placeholder:text-[#A8A8A4]`}
+              />
+            </div>
+            <div className="max-h-72 overflow-y-auto grid" data-lenis-prevent>
+              {data.brands
+                .filter((b) => b.name.toLowerCase().includes(brandQuery.trim().toLowerCase()))
+                .map((b) => {
+                  const on = selBrand === b.brand_id
+                  const placed = b.x != null && b.price_position != null
+                  return (
+                    <button
+                      key={b.brand_id}
+                      onClick={() => selectBrand(b.brand_id)}
+                      className={`flex items-center justify-between gap-2 text-left px-1.5 py-1 border-b border-[#F2F0EC] last:border-b-0 transition-colors ${
+                        on ? 'bg-[#FBF6EC]' : 'hover:bg-[#FAFAF8]'
+                      }`}
+                    >
+                      <span className={`text-[9px] tracking-[0.08em] truncate ${on ? 'text-[#0A0A0A]' : 'text-[#4A4E57]'}`}>
+                        {b.name.toUpperCase()}
+                      </span>
+                      <span className="text-[8px] tracking-[0.06em] text-[#A8A8A4] shrink-0">
+                        {placed ? (b.medianPrice ? `£${Math.round(b.medianPrice)}` : '—') : 'NOT ON MAP'}
+                      </span>
+                    </button>
+                  )
+                })}
+            </div>
+          </aside>
+
           {/* detail panel */}
-          <aside className="self-start border border-[#E2E0DB] rounded-[10px] bg-white p-4">
+          <aside className="border border-[#E2E0DB] rounded-[10px] bg-white p-4">
             {!sel ? (
               <p className="text-[10px] tracking-[0.12em] text-[#A8A8A4]">CLICK A BRAND ON THE MAP.</p>
             ) : (
@@ -474,6 +525,7 @@ export default function TasteClient({ data }: { data: InspectorData }) {
               </div>
             )}
           </aside>
+          </div>
         </div>
       )}
 
@@ -525,8 +577,19 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                   )}
                 </div>
 
+                <MemberScatter
+                  inspection={inspection}
+                  brands={data.brands}
+                  px={px}
+                  py={py}
+                  W={W}
+                  H={H}
+                  M={M}
+                  gridPrices={GRID_PRICES}
+                />
+
                 <div>
-                  <p className={H2}>AFFINITIES ABOVE BASELINE · {inspection.affinities.length}</p>
+                  <p className={H2}>AFFINITIES ABOVE BASELINE · {inspection.affinities.length} — THE NUMBERS BEHIND THE MAP</p>
                   <div className="border border-[#E2E0DB] rounded-[10px] bg-white overflow-x-auto">
                     <table className="w-full text-[9px] tracking-[0.06em] text-[#4A4E57]">
                       <thead>
@@ -662,6 +725,117 @@ export default function TasteClient({ data }: { data: InspectorData }) {
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+// Her brand world as a map rather than a table: the same axes as the brand
+// map, showing only the brands she has a relationship with. Gold = she named
+// it, teal = MYRA expanded to it from one she named, black = confirmed by her
+// own yes/no. Everything positioned here is what her composer can draw on.
+const MEMBER_ROLES: { key: string; label: string; colour: string }[] = [
+  { key: 'onboarded', label: 'SHE NAMED', colour: '#C4A882' },
+  { key: 'expanded', label: 'MYRA SUGGESTS', colour: '#3E8E8C' },
+  { key: 'learned', label: 'CONFIRMED BY HER', colour: '#0A0A0A' },
+]
+
+function MemberScatter({
+  inspection, brands, px, py, W, H, M, gridPrices,
+}: {
+  inspection: MemberInspection
+  brands: MapBrand[]
+  px: (x: number) => number
+  py: (p: number) => number
+  W: number
+  H: number
+  M: { left: number; right: number; top: number; bottom: number }
+  gridPrices: number[]
+}) {
+  const [showRoles, setShowRoles] = useState<Set<string>>(new Set(['onboarded', 'expanded', 'learned']))
+  const byId = useMemo(() => new Map(brands.map((b) => [b.brand_id, b])), [brands])
+
+  const dots = useMemo(() => {
+    const out: Array<{ id: string; name: string; x: number; y: number; role: string; aff: number; trace: string | null; hidden: boolean }> = []
+    for (const a of inspection.affinities) {
+      const b = byId.get(a.brand_id)
+      if (!b || b.x == null || b.price_position == null) continue
+      const role = a.source === 'onboarded' ? 'onboarded' : a.source === 'learned' ? 'learned' : 'expanded'
+      out.push({
+        id: a.brand_id, name: a.brand_name, x: px(b.x), y: py(b.price_position),
+        role, aff: a.affinity, trace: a.expansion_trace, hidden: a.hidden,
+      })
+    }
+    // named last so their labels sit on top of the crowd
+    return out.sort((p, q) => (p.role === 'onboarded' ? 1 : 0) - (q.role === 'onboarded' ? 1 : 0))
+  }, [inspection, byId, px, py])
+
+  const counts = dots.reduce<Record<string, number>>((acc, d) => ({ ...acc, [d.role]: (acc[d.role] ?? 0) + 1 }), {})
+  const offMap = inspection.affinities.length - dots.length
+  const visible = dots.filter((d) => showRoles.has(d.role))
+  const H2S = 'text-[9px] tracking-[0.16em] text-[#6B6B6B]'
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+        <p className={H2S}>HER BRAND WORLD — WHAT HER COMPOSER CAN DRAW ON</p>
+        <div className="flex flex-wrap items-center gap-3">
+          {MEMBER_ROLES.map((r) => (
+            <button
+              key={r.key}
+              onClick={() => setShowRoles((s) => { const n = new Set(s); n.has(r.key) ? n.delete(r.key) : n.add(r.key); return n })}
+              className={`flex items-center gap-1.5 text-[8px] tracking-[0.12em] text-[#4A4E57] transition-opacity ${showRoles.has(r.key) ? '' : 'opacity-35'}`}
+            >
+              <span className="w-2.5 h-2.5 rounded-full" style={{ background: r.colour }} />
+              {r.label} · {counts[r.key] ?? 0}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="border border-[#E2E0DB] rounded-[10px] bg-white overflow-hidden">
+        <svg viewBox={`0 0 ${W} ${H}`} className="w-full min-w-[720px]">
+          {gridPrices.map((p) => (
+            <g key={p}>
+              <line x1={M.left} x2={W - M.right} y1={py(Math.log(p))} y2={py(Math.log(p))} stroke="#E2E0DB" strokeWidth={0.8} />
+              <text x={M.left + 6} y={py(Math.log(p)) - 3} fontSize={8} fill="#A8A8A4" letterSpacing={1}>£{p.toLocaleString()}</text>
+            </g>
+          ))}
+          <text x={M.left + 8} y={H - 12} fontSize={8} fill="#A8A8A4" letterSpacing={2}>← AESTHETIC POSITION (SAME AXES AS THE BRAND MAP) →</text>
+
+          {visible.map((d) => {
+            const colour = MEMBER_ROLES.find((r) => r.key === d.role)!.colour
+            const named = d.role === 'onboarded'
+            return (
+              <g key={d.id} opacity={d.hidden ? 0.3 : 1}>
+                <circle
+                  cx={d.x} cy={d.y} r={named ? 4.5 : 3}
+                  fill={colour}
+                  stroke={named ? '#8A6D1F' : 'none'}
+                  strokeWidth={named ? 1.2 : 0}
+                />
+                <text
+                  x={d.x} y={d.y + (named ? 11 : 9)} textAnchor="middle"
+                  fontSize={named ? 6.4 : 5.4} letterSpacing={0.35}
+                  fill={named ? '#0A0A0A' : '#6B6B6B'}
+                  stroke="#FFFFFF" strokeWidth={1.6} paintOrder="stroke"
+                >
+                  {d.name.toUpperCase()}
+                </text>
+                <title>{`${d.name} — affinity ${d.aff.toFixed(2)} · ${MEMBER_ROLES.find((r) => r.key === d.role)!.label}${d.trace ? ` · ${d.trace}` : ''}${d.hidden ? ' · HIDDEN' : ''}`}</title>
+              </g>
+            )
+          })}
+
+          {!visible.length && (
+            <text x={W / 2} y={H / 2} fontSize={11} fill="#A8A8A4" letterSpacing={2} textAnchor="middle">
+              NOTHING TO PLOT — SEED FROM ONBOARDED BRANDS FIRST
+            </text>
+          )}
+        </svg>
+      </div>
+      <p className="mt-1.5 text-[8px] tracking-[0.12em] text-[#A8A8A4]">
+        GOLD RING = A BRAND SHE NAMED · {offMap} OF HER {inspection.affinities.length} BRANDS HAVE NO MAP POSITION YET (NO CODES OR NO PRICE) AND ARE LISTED BELOW ONLY
+      </p>
     </div>
   )
 }
