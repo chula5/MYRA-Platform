@@ -8,20 +8,34 @@
 // product photo — so a new collection goes live the moment it's curated,
 // without waiting on artwork.
 
+/**
+ * What a collection is made of. 'item' collections are shoppable products
+ * (each links out to a retailer); 'outfit' collections are complete looks
+ * (each opens the outfit page). One pick row can point at either — see
+ * migration 0051.
+ */
+export type PickKind = 'item' | 'outfit'
+
 export interface PickCollectionConfig {
   slug: string
   /** Heading on /picks/[slug]. */
   title: string
   /** Caption under the tile on the landing page. */
   label: string
+  kind: PickKind
   /** Optional background-removed cutout in /public. */
   art?: string
 }
 
 export const PICK_COLLECTIONS: PickCollectionConfig[] = [
-  { slug: 'bags', title: 'Summer Bags', label: 'SUMMER BAGS', art: '/amun-cutout.png' },
-  { slug: 'mint', title: 'Mint Green', label: 'MINT GREEN' },
+  { slug: 'bags', title: 'Summer Bags', label: 'SUMMER BAGS', kind: 'item', art: '/amun-cutout.png' },
+  { slug: 'mint', title: 'Mint Green', label: 'MINT GREEN', kind: 'outfit' },
 ]
+
+export function pickKind(slug: string): PickKind {
+  // 'picks' (the main grid) isn't in the list above but is item-based.
+  return PICK_COLLECTIONS.find((c) => c.slug === slug)?.kind ?? 'item'
+}
 
 export function pickCollection(slug: string): PickCollectionConfig | undefined {
   return PICK_COLLECTIONS.find((c) => c.slug === slug)

@@ -5,12 +5,15 @@ import { useRouter } from 'next/navigation'
 import { thumbUrl } from '@/lib/image-utils'
 import {
   addPick,
+  addOutfitPick,
   removePick,
   movePick,
   searchPickItems,
+  searchPickOutfits,
   type AdminPickRow,
   type PickCollection,
 } from './actions'
+import { pickKind } from '@/lib/pick-collections'
 import { PICKER_COLOURS, PICKER_TYPES } from '@/components/admin/ItemPickerModal'
 
 const COLLECTION_META: Record<PickCollection, { title: string; blurb: string }> = {
@@ -44,24 +47,39 @@ export default function PicksClient({
   const [itemType, setItemType] = useState('')
   const [colour, setColour] = useState('')
   const [results, setResults] = useState<Awaited<ReturnType<typeof searchPickItems>>>([])
+  const [outfitResults, setOutfitResults] = useState<Awaited<ReturnType<typeof searchPickOutfits>>>([])
   const [searching, setSearching] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
 
   const rows = initial[active]
-  const inCollection = new Set(rows.map((r) => r.item_id))
+  // Mint Green curates complete LOOKS, not products — so its picker searches
+  // outfits and the item-only filters (brand, type, colour) don't apply.
+  const kind = pickKind(active)
+  const isOutfitKind = kind === 'outfit'
+  const inCollection = new Set(
+    isOutfitKind
+      ? rows.map((r) => r.outfit_id ?? '').filter(Boolean)
+      : rows.map((r) => r.item_id),
+  )
 
   useEffect(() => {
     let alive = true
     setSearching(true)
     const t = setTimeout(async () => {
-      const res = await searchPickItems(q, active, { brand, itemType, colour })
-      if (!alive) return
-      setResults(res)
+      if (isOutfitKind) {
+        const res = await searchPickOutfits(q)
+        if (!alive) return
+        setOutfitResults(res)
+      } else {
+        const res = await searchPickItems(q, active, { brand, itemType, colour })
+        if (!alive) return
+        setResults(res)
+      }
       setSearching(false)
     }, 250)
     return () => { alive = false; clearTimeout(t) }
-  }, [q, active, brand, itemType, colour])
+  }, [q, active, brand, itemType, colour, isOutfitKind])
 
   async function run(id: string, fn: () => Promise<{ error?: string } | { ok: true }>, okMsg?: string) {
     setBusy(id)
@@ -135,15 +153,23 @@ export default function PicksClient({
 
       {/* Add items */}
       <div className="border border-[#E2E0DB] bg-white rounded-[12px] p-4">
-        <p className="text-[10px] tracking-[0.135em] text-[#6B6B6B] mb-3">ADD TO {active === 'picks' ? 'OUR PICKS' : 'THE BAGS'}</p>
+        <p className="text-[10px] tracking-[0.135em] text-[#6B6B6B] mb-3">
+          ADD {isOutfitKind ? 'LOOKS' : 'ITEMS'} TO {COLLECTION_META[active].title.split(' — ')[0]}
+        </p>
         <div className="flex flex-col sm:flex-row gap-2 mb-3">
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder={active === 'bags' ? 'SEARCH BAGS BY NAME… (EMPTY = ALL BAGS)' : 'SEARCH ITEMS BY NAME…'}
+            placeholder={
+              isOutfitKind
+                ? 'SEARCH LOOKS BY LABEL, OR BY A PIECE IN THEM… (EMPTY = NEWEST)'
+                : active === 'bags'
+                  ? 'SEARCH BAGS BY NAME… (EMPTY = ALL BAGS)'
+                  : 'SEARCH ITEMS BY NAME…'
+            }
             className="flex-1 border border-[#E2E0DB] rounded-[10px] px-4 py-2.5 text-[11px] tracking-[0.08em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A]"
           />
-          <select
+          {!isOutfitKind && <select
             value={brand}
             onChange={(e) => setBrand(e.target.value)}
             className="sm:w-[190px] border border-[#E2E0DB] rounded-[10px] px-3 py-2.5 text-[11px] tracking-[0.08em] text-[#4A4E57] bg-white focus:outline-none focus:border-[#0A0A0A]"
@@ -152,10 +178,10 @@ export default function PicksClient({
             {brands.map((b) => (
               <option key={b.name} value={b.name}>{b.name.toUpperCase()} ({b.count})</option>
             ))}
-          </select>
+          </select>}
         </div>
-        {/* Colour + item-type filters */}
-        <div className="flex flex-wrap gap-1.5 mb-2">
+        {/* Colour + item-type filters — products only; a look isn't one type. */}
+        {!isOutfitKind && <div className="flex flex-wrap gap-1.5 mb-2">
           {PICKER_COLOURS.map((c) => (
             <button
               key={c.value}
@@ -168,8 +194,8 @@ export default function PicksClient({
               {c.label}
             </button>
           ))}
-        </div>
-        <div className="flex flex-wrap gap-1.5 mb-4">
+        </div>}
+        {!isOutfitKind && <div className="flex flex-wrap gap-1.5 mb-4">
           {PICKER_TYPES.map((t) => (
             <button
               key={t.value}
@@ -181,10 +207,41 @@ export default function PicksClient({
               {t.label}
             </button>
           ))}
-        </div>
+        </div>}
         {searching ? (
           <p className="text-[10px] tracking-[0.14em] text-[#A8A8A4] py-6 text-center">SEARCHING…</p>
         ) : (
+          isOutfitKind ? (
+          <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-8 gap-3">
+            {outfitResults.map((o) => {
+              const added = inCollection.has(o.outfit_id)
+              return (
+                <div key={o.outfit_id} className="text-left">
+                  <div className="aspect-[3/4] rounded-[6px] overflow-hidden bg-[#F2F2F0] relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    {o.image_url && <img src={thumbUrl(o.image_url, 400)} alt="" className="w-full h-full object-cover" />}
+                    {o.status !== 'live' && (
+                      <span className="absolute top-1 left-1 bg-[#8B5E00] text-white text-[6px] tracking-[0.08em] px-1 py-0.5 rounded">{o.status.toUpperCase()}</span>
+                    )}
+                  </div>
+                  <p className="text-[8px] tracking-[0.04em] text-[#4A4E57] truncate mt-1">{o.label}</p>
+                  <button
+                    onClick={() => run(o.outfit_id, () => addOutfitPick(active, o.outfit_id), '✓ ADDED — SEE THE LIST ABOVE')}
+                    disabled={!!busy || added}
+                    className={`mt-1 w-full py-1 text-[8px] tracking-[0.12em] rounded-full border transition-colors disabled:opacity-40 ${
+                      added ? 'border-[#C9E0CF] text-[#3D7A50]' : 'border-[#0A0A0A] text-[#4A4E57] hover:bg-[#0A0A0A] hover:text-white'
+                    }`}
+                  >
+                    {added ? '✓ ADDED' : busy === o.outfit_id ? '…' : '+ ADD LOOK'}
+                  </button>
+                </div>
+              )
+            })}
+            {outfitResults.length === 0 && (
+              <p className="col-span-full text-[10px] tracking-[0.1em] text-[#A8A8A4] py-6 text-center">NO LOOKS MATCH.</p>
+            )}
+          </div>
+          ) : (
           <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-8 gap-3">
             {results.map((it) => {
               const added = inCollection.has(it.item_id)
@@ -213,6 +270,7 @@ export default function PicksClient({
             })}
             {results.length === 0 && <p className="col-span-full text-[10px] tracking-[0.12em] text-[#A8A8A4] py-6 text-center">NO MATCHES.</p>}
           </div>
+          )
         )}
       </div>
     </div>
