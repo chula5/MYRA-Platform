@@ -75,6 +75,7 @@ import { runHiggsfieldGeneration } from '@/app/admin/projects/higgsfield-actions
 import { buildTraitModel, type TraitModel, type TraitItem, type TraitDecision } from '@/lib/member-traits'
 import { readTrust, trustHeadline, type LookOutcome, type TrustRead } from '@/lib/member-trust'
 import { explainTraits } from '@/lib/member-traits'
+import { type ClimateId } from '@/lib/climate'
 
 const PATH = '/admin/private-stylist'
 
@@ -734,6 +735,8 @@ export async function createDelivery(input: {
   trigger: 'request' | 'anticipation'
   request_text: string
   occasion: OccasionId
+  // Hot, mild or cold where she is going. Unstated behaves exactly as before.
+  climate?: ClimateId | null
   dry_run_brief?: string
 }): Promise<{ delivery_id?: string; error?: string }> {
   const admin = createAdminClient()
@@ -745,19 +748,23 @@ export async function createDelivery(input: {
   if (mErr || !member) return { error: mErr?.message ?? 'MEMBER NOT FOUND' }
   const m = member as any
   const weights = effectiveWeights(m.room_weights, input.occasion, m.work_dress_code)
-  const { data, error } = await admin
-    .from('pilot_delivery' as any)
-    .insert({
-      member_id: input.member_id,
-      trigger: input.trigger,
-      request_text: input.request_text,
-      occasion: input.occasion,
-      effective_weights: weights,
-      is_synthetic: m.is_synthetic,
-      dry_run_brief: input.dry_run_brief ?? null,
-    })
-    .select('delivery_id')
-    .single()
+  const row: Record<string, unknown> = {
+    member_id: input.member_id,
+    trigger: input.trigger,
+    request_text: input.request_text,
+    occasion: input.occasion,
+    effective_weights: weights,
+    is_synthetic: m.is_synthetic,
+    dry_run_brief: input.dry_run_brief ?? null,
+  }
+  if (input.climate) row.climate = input.climate
+  let { data, error } = await admin.from('pilot_delivery' as any).insert(row).select('delivery_id').single()
+  // Pre-0051 the column is not there yet; the delivery is worth more than the
+  // climate, so save it without rather than failing outright.
+  if (error && /schema cache|does not exist/i.test(error.message) && input.climate) {
+    delete row.climate
+    ;({ data, error } = await admin.from('pilot_delivery' as any).insert(row).select('delivery_id').single())
+  }
   if (error) return { error: error.message }
   revalidatePath(PATH)
   return { delivery_id: (data as any).delivery_id }
@@ -1484,7 +1491,7 @@ export async function composeDeliveryLooks(deliveryId: string, options: ComposeD
   const taste = await loadMemberTaste(admin, member)
   const library = await loadComposableLibrary(member)
   const mix = normalise(delivery.effective_weights ?? {})
-  const occ: OccasionContext = { id: delivery.occasion ?? null, vector: lookTasteVector(mix) }
+  const occ: OccasionContext = { id: delivery.occasion ?? null, vector: lookTasteVector(mix), climate: delivery.climate ?? null }
   const lens = await loadPersonaLens(admin, delivery.member_id)
 
   // Her look history: everything already composed for her (any delivery) plus
@@ -1556,7 +1563,7 @@ export async function lookAlternates(lookId: string, itemIndex: number): Promise
   const items: LookItem[] = look.items ?? []
   const target = items[itemIndex]
   if (!target) return { error: 'No item at that position' }
-  const { data: delivery } = await admin.from('pilot_delivery').select('member_id, occasion, effective_weights').eq('delivery_id', look.delivery_id).single()
+  const { data: delivery } = await admin.from('pilot_delivery').select('*').eq('delivery_id', look.delivery_id).single()
   const { data: member } = await admin.from('pilot_member').select('*').eq('member_id', delivery?.member_id).single()
   if (!member) return { error: 'Member not found' }
 
@@ -1569,7 +1576,7 @@ export async function lookAlternates(lookId: string, itemIndex: number): Promise
   const keepItems = library.filter((i) => keepIds.includes(i.item_id))
   const exclude = new Set(items.filter((it) => it.item_id).map((it) => it.item_id as string))
 
-  const occ: OccasionContext = { id: delivery?.occasion ?? null, vector: lookTasteVector(normalise(delivery?.effective_weights ?? {})) }
+  const occ: OccasionContext = { id: delivery?.occasion ?? null, vector: lookTasteVector(normalise(delivery?.effective_weights ?? {})), climate: delivery?.climate ?? null }
   const lens = await loadPersonaLens(admin, delivery?.member_id)
   const ranked = rankAlternates(taste, library, slot, keepItems, exclude, 200, occ, lens)
   return {
@@ -1592,7 +1599,7 @@ export async function lookAddOptions(lookId: string, slot: string): Promise<{ op
   const { data: look, error: lerr } = await admin.from('pilot_look').select('*').eq('look_id', lookId).single()
   if (lerr || !look) return { error: lerr?.message ?? 'Look not found' }
   const items: LookItem[] = look.items ?? []
-  const { data: delivery } = await admin.from('pilot_delivery').select('member_id, occasion, effective_weights').eq('delivery_id', look.delivery_id).single()
+  const { data: delivery } = await admin.from('pilot_delivery').select('*').eq('delivery_id', look.delivery_id).single()
   const { data: member } = await admin.from('pilot_member').select('*').eq('member_id', delivery?.member_id).single()
   if (!member) return { error: 'Member not found' }
 
@@ -1601,7 +1608,7 @@ export async function lookAddOptions(lookId: string, slot: string): Promise<{ op
   const keepIds = items.filter((it) => it.item_id).map((it) => it.item_id as string)
   const keepItems = library.filter((i) => keepIds.includes(i.item_id))
   const exclude = new Set(keepIds)
-  const occ: OccasionContext = { id: delivery?.occasion ?? null, vector: lookTasteVector(normalise(delivery?.effective_weights ?? {})) }
+  const occ: OccasionContext = { id: delivery?.occasion ?? null, vector: lookTasteVector(normalise(delivery?.effective_weights ?? {})), climate: delivery?.climate ?? null }
 
   const lens = await loadPersonaLens(admin, delivery?.member_id)
   const ranked = rankAlternates(taste, library, slot as Slot, keepItems, exclude, 200, occ, lens)
@@ -1959,8 +1966,8 @@ export async function rebuildLooksWithoutItems(itemIds: string[]): Promise<{ reb
         ctx = { taste: await loadMemberTaste(admin, member), library: await loadComposableLibrary(member), lens: await loadPersonaLens(admin, look.member_id) }
         byMember.set(look.member_id, ctx)
       }
-      const { data: delivery } = await admin.from('pilot_delivery').select('occasion, effective_weights').eq('delivery_id', look.delivery_id).single()
-      const occ: OccasionContext = { id: delivery?.occasion ?? null, vector: lookTasteVector(normalise(delivery?.effective_weights ?? {})) }
+      const { data: delivery } = await admin.from('pilot_delivery').select('*').eq('delivery_id', look.delivery_id).single()
+      const occ: OccasionContext = { id: delivery?.occasion ?? null, vector: lookTasteVector(normalise(delivery?.effective_weights ?? {})), climate: delivery?.climate ?? null }
 
       const keepIds = kept.filter((it) => it.item_id).map((it) => it.item_id as string)
       const items: LookItem[] = [...kept]

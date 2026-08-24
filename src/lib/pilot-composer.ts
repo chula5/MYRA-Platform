@@ -26,6 +26,7 @@ import { itemPseudoVector } from '@/lib/brand-affinity'
 import { cosine } from '@/lib/taste-vector'
 import { isOwnedItem, ownedBrandLabel, estimatedValueOf } from '@/lib/wardrobe/owned-items'
 import { traitBlocked, traitPenalty, type TraitModel } from '@/lib/member-traits'
+import { climateReason, climateScore, type ClimateId } from '@/lib/climate'
 
 // ── Persona lens ────────────────────────────────────────────────────────────
 // A member can be assigned a stylist persona. Its envelope — the mean and
@@ -98,6 +99,9 @@ export function personaFitScore(lens: PersonaLens | undefined, item: ItemWithBra
 export interface OccasionContext {
   id: string | null
   vector: number[] | null // lookTasteVector(effective_weights)
+  // Where she is going, not just what for. A hot holiday and a ski week are
+  // both 'travel'.
+  climate?: ClimateId | null
 }
 
 const OCCASION_TYPE_PRIOR: Record<string, { favour: string[]; avoid: string[] }> = {
@@ -391,12 +395,16 @@ export function composeMemberLooks(
       // A description she has rejected three times and never once kept —
       // "MUNTHE structured bag" — is treated exactly like an authored avoid:
       // gated out, and released only by the same starvation net below.
-      !(t.traits && traitBlocked(t.traits, i as any)),
+      !(t.traits && traitBlocked(t.traits, i as any)) &&
+      // Wrong for the weather is wrong however much she likes the piece. The
+      // travel prior favours knitwear, which answered a hot holiday with
+      // jumpers and boots until this existed.
+      !climateReason(occ?.climate, i as any),
   )
   const usable = canBuildLooks(preferred) ? preferred : inStock
 
   const itemScore = (i: ItemWithBrand) =>
-    memberItemScore(t, i) + occasionItemScore(occ, i) + personaFitScore(lens, i)
+    memberItemScore(t, i) + occasionItemScore(occ, i) + climateScore(occ?.climate, i as any) + personaFitScore(lens, i)
       - historyPenalty(history, i.item_id) + varietyJitter(i.item_id, seed)
 
   // Regular anchors: dresses and tops (owned or retail, in blend mode).

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { CLIMATES, type ClimateId } from '@/lib/climate'
 import { HIGGSFIELD_POSE_OPTIONS } from '@/lib/higgsfield-shoot'
 import { lookSpend, formatLookSpend } from '@/lib/wardrobe/owned-items'
 import {
@@ -1723,6 +1724,7 @@ function NewDeliveryForm({
   const [memberId, setMemberId] = useState(preset?.member_id ?? members[0]?.member_id ?? '')
   const [trigger, setTrigger] = useState<'request' | 'anticipation'>('request')
   const [occasion, setOccasion] = useState<OccasionId>(preset?.occasion ?? 'dinner_drinks')
+  const [climate, setClimate] = useState<ClimateId | null>(null)
   const [text, setText] = useState(preset?.request_text ?? '')
   const member = members.find((m) => m.member_id === memberId)
   const eff = member ? effectiveWeights(member.room_weights, occasion, member.work_dress_code) : null
@@ -1767,6 +1769,28 @@ function NewDeliveryForm({
           </select>
         </div>
       </div>
+      {/* Weather is its own question. "Trips" covers a ski week and a beach
+          week, and the travel prior favours knitwear — so a hot holiday came
+          back with jumpers until this was asked. */}
+      <div>
+        <p className={`${label} mb-1.5`}>WEATHER WHERE SHE IS GOING</p>
+        <div className="flex gap-1.5 flex-wrap">
+          {CLIMATES.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => setClimate(climate === c.id ? null : c.id)}
+              className={`text-left px-3 py-2 border transition-colors duration-300 ${
+                climate === c.id ? 'border-[#0A0A0A] bg-[#0A0A0A] text-white' : 'border-[#E2E0DB] text-[#6B6B6B]'
+              }`}
+            >
+              <span className="block text-[9px] tracking-[0.1em]">{c.label}</span>
+              <span className={`block text-[8px] tracking-[0.08em] ${climate === c.id ? 'text-[#C4A882]' : 'text-[#A8A8A4]'}`}>
+                {c.hint.toUpperCase()}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
       <div>
         <p className={`${label} mb-1.5`}>{trigger === 'request' ? 'HER WORDS' : 'THE MOVE — E.G. “GREECE IS COMING — I’VE STARTED THREE LOOKS”'}</p>
         <input className={input} value={text} onChange={(e) => setText(e.target.value)} />
@@ -1789,6 +1813,7 @@ function NewDeliveryForm({
                 trigger,
                 request_text: text,
                 occasion,
+                climate,
                 dry_run_brief: preset?.dry_run_brief,
               }),
             'DELIVERY CREATED — ASSEMBLE 3 LOOKS',
