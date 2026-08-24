@@ -86,3 +86,11 @@ export function scoreUpdateFor(item: ScorableItem, a: AnalysedScores): Record<st
 export function isComposable(item: Record<string, unknown>): boolean {
   return CORE_DIMENSIONS.every((d) => item[d] != null)
 }
+
+// Sleeve and neckline only mean something on something worn on the body. A
+// vision call asking a handbag about its sleeves costs the same as a real one.
+export const SLEEVED_TYPES = [
+  'coat', 'trench', 'jacket', 'blazer', 'gilet', 'cape', 'shirt', 'blouse',
+  't-shirt', 'knitwear', 'corset', 'bodysuit', 'mini_dress', 'midi_dress',
+  'maxi_dress', 'shirt_dress', 'slip_dress',
+] as const

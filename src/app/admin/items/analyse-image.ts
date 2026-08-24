@@ -54,6 +54,16 @@ Return this exact JSON:
  *   .../upload/v123/foo.jpg  →  .../upload/w_2000,q_auto,f_jpg/v123/foo.jpg
  */
 function capCloudinaryImage(url: string): string {
+  // Shopify's CDN resizes on request too, and a retailer's 5MB original is a
+  // hard failure at the vision limit — one brand's braided-leather shots were
+  // being lost at 4.9MB.
+  if (/(^|\.)cdn\.shopify\.com/.test(url)) {
+    try {
+      const u = new URL(url)
+      if (!u.searchParams.has('width')) u.searchParams.set('width', '1400')
+      return u.toString()
+    } catch { return url }
+  }
   if (!url.includes('res.cloudinary.com')) return url
   if (/\/upload\/[^/]*[wqf]_/.test(url)) return url
   return url.replace('/upload/', '/upload/w_2000,q_auto,f_jpg/')

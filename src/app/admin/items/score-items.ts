@@ -43,6 +43,7 @@ async function unscoredBatch(
   limit: number,
   before?: string | null,
   missingField: string = 'structure',
+  types?: readonly string[],
 ): Promise<ScorableItem[]> {
   // neckline and sleeve are selected too when they are the gap being closed;
   // asking for a column this database has not got yet fails the whole query.
@@ -52,6 +53,8 @@ async function unscoredBatch(
     .select(`${COLUMNS}${extra}, created_at`)
     .in('status', ['ready', 'live'])
     .is(missingField, null)
+  if (types?.length) q = q.in('item_type', types)
+  q = q
     .not('image_url', 'is', null)
     .order('created_at', { ascending: false })
     .limit(limit)
@@ -110,9 +113,10 @@ export async function scoreUnscoredItems(
   // column back — "sleeves too long" is real feedback with nowhere to land
   // until it exists.
   missingField: string = 'structure',
+  types?: readonly string[],
 ): Promise<ScoreRunResult> {
   const admin = createAdminClient() as any
-  const items = await unscoredBatch(admin, limit, before, missingField)
+  const items = await unscoredBatch(admin, limit, before, missingField, types)
   const res: ScoreRunResult = {
     looked: items.length, scored: 0, skipped: 0, failed: 0, remaining: 0,
     nextCursor: items.length ? String((items[items.length - 1] as any).created_at) : null,
