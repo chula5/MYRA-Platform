@@ -110,11 +110,21 @@ export async function searchPickItems(
     const admin = createAdminClient()
     // Drafts are pickable in ADMIN (badged, so you can curate ahead of going
     // live) — the public pages still only ever show live items.
+    //
+    // out_of_stock is included deliberately. The stock sentinel moves items to
+    // that status, and leaving it out meant a piece you KNOW you own simply
+    // vanished from this picker with no explanation. It's badged like any
+    // other non-live status, and getPickCollection still keeps it off the site.
+    //
+    // Ordering matters as much as the limit: without it Postgres returns an
+    // arbitrary slice, so the same search could show a piece one time and not
+    // the next. Newest first is both deterministic and the useful default.
     let query = admin
       .from('item' as any)
       .select('item_id, product_name, image_url, item_type, status, colour_family, brand:brand_id(name)')
-      .in('status', ['draft', 'ready', 'live'])
-      .limit(120)
+      .in('status', ['draft', 'ready', 'live', 'out_of_stock'])
+      .order('created_at', { ascending: false })
+      .limit(200)
     // Brand filters SERVER-SIDE, before the row limit — filtering in memory
     // after a limit silently hid most of a brand's items. Case-insensitive so
     // near-duplicate brand rows still resolve.

@@ -167,7 +167,7 @@ export default function PicksClient({
                   </p>
                   <p className="text-[8px] tracking-[0.08em] text-[#A8A8A4]">
                     {r.item_type.replace(/_/g, ' ').toUpperCase()}
-                    {r.status !== 'live' && <span className="text-[#B83A3A]"> · {r.status.toUpperCase()} — WON&rsquo;T SHOW UNTIL LIVE</span>}
+                    {r.status !== 'live' && <span className="text-[#B83A3A]"> · {r.status.replace(/_/g, ' ').toUpperCase()} — WON&rsquo;T SHOW UNTIL LIVE</span>}
                   </p>
                 </div>
                 <button onClick={() => run(r.id, () => movePick(r.id, 'up'))} disabled={!!busy || i === 0} className="px-2 py-1 text-[10px] border border-[#E2E0DB] rounded text-[#6B6B6B] hover:border-[#0A0A0A] disabled:opacity-30">↑</button>
@@ -279,7 +279,7 @@ export default function PicksClient({
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     {it.image_url && <img src={thumbUrl(it.image_url, 400)} alt="" className="w-full h-full object-cover" />}
                     {it.status !== 'live' && (
-                      <span className="absolute top-1 left-1 bg-[#8B5E00] text-white text-[6px] tracking-[0.08em] px-1 py-0.5 rounded">{it.status.toUpperCase()}</span>
+                      <span className="absolute top-1 left-1 bg-[#8B5E00] text-white text-[6px] tracking-[0.08em] px-1 py-0.5 rounded">{it.status.replace(/_/g, ' ').toUpperCase()}</span>
                     )}
                   </div>
                   <p className="text-[7px] tracking-[0.08em] text-[#6B6B6B] mt-1 truncate">{(it.brand_name ?? '').toUpperCase()}</p>
