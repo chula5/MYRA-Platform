@@ -2128,15 +2128,24 @@ function LookRow({
   type Shoot = (typeof shootHistory)[number] & {
     flagged?: boolean
     attempt?: number
+    /** 2, 3 … for the other frames of one generation; the first has none. */
+    frame?: number
+    unchecked?: boolean
     fidelity?: { score?: number; issues?: { field: string; item: string; seen: string }[] }
   }
-  // Renders the fidelity check refused. They are real images on Cloudinary —
-  // they simply never became the look's picture. A shoot makes two attempts,
-  // and the retry is often the WORSE of the two, so the BEST one leads rather
-  // than the latest.
+  // Everything a held-back shoot produced: the checked attempts the fidelity
+  // pass refused, AND the other frames from the same generation — a shoot is a
+  // small batch, and the second frame is frequently the better picture even
+  // when the first was rejected. All real images on Cloudinary; none of them
+  // became the look's picture. Best-scoring attempt leads, unchecked frames
+  // follow, so the ranking still means something.
   const heldBack: Shoot[] = !l.image_url
-    ? (shootHistory as Shoot[]).filter((h) => h?.flagged)
-        .sort((a, b) => (b.fidelity?.score ?? 0) - (a.fidelity?.score ?? 0))
+    ? (shootHistory as Shoot[]).filter(Boolean).slice().sort((a, b) => {
+        const aScored = typeof a.fidelity?.score === 'number'
+        const bScored = typeof b.fidelity?.score === 'number'
+        if (aScored !== bScored) return aScored ? -1 : 1
+        return (b.fidelity?.score ?? 0) - (a.fidelity?.score ?? 0)
+      })
     : []
   const [heldPick, setHeldPick] = useState(0)
   const rejectedShoot = heldBack[Math.min(heldPick, Math.max(0, heldBack.length - 1))]
@@ -2303,8 +2312,13 @@ function LookRow({
                   <div className="px-2.5 py-2">
                     <p className="text-[9px] tracking-[0.12em] text-[#B4593A]">
                       SHOOT HELD BACK{typeof rejectedShoot.fidelity?.score === 'number' ? ` — ${Math.round(rejectedShoot.fidelity.score * 100)}% FAITHFUL` : ''}
-                      {heldBack.length > 1 && <span className="text-[#A8A8A4]"> · BEST OF {heldBack.length}</span>}
+                      {heldBack.length > 1 && <span className="text-[#A8A8A4]"> · {heldBack.length} FRAMES TO CHOOSE FROM</span>}
                     </p>
+                    {!rejectedShoot.fidelity && (
+                      <p className="text-[8px] tracking-[0.08em] text-[#A8A8A4] mt-1">
+                        ANOTHER FRAME FROM THE SAME SHOOT — NOT CHECKED AGAINST THE CLOTHES
+                      </p>
+                    )}
                     {(rejectedShoot.fidelity?.issues ?? []).slice(0, 3).map((iss, i) => (
                       <p key={i} className="text-[8px] tracking-[0.06em] text-[#6B6B6B] mt-1 leading-snug">
                         {String(iss.field).toUpperCase()} · {iss.item}: {iss.seen}
@@ -2316,11 +2330,15 @@ function LookRow({
                           <button
                             key={h.url}
                             onClick={() => setHeldPick(i)}
-                            className={`border ${i === heldPick ? 'border-[#0A0A0A]' : 'border-[#E2E0DB]'} px-1.5 py-1`}
-                            title={`Attempt ${h.attempt ?? i + 1}`}
+                            className={`border ${i === heldPick ? 'border-[#0A0A0A]' : 'border-[#E2E0DB]'}`}
+                            title={typeof h.fidelity?.score === 'number' ? `Checked attempt ${h.attempt ?? i + 1}` : 'Another frame from the same shoot — not checked'}
                           >
-                            <span className="text-[8px] tracking-[0.1em] text-[#6B6B6B]">
-                              {typeof h.fidelity?.score === 'number' ? `${Math.round(h.fidelity.score * 100)}%` : `TRY ${i + 1}`}
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={h.url} alt="" className="w-11 aspect-[3/4] object-cover" />
+                            <span className="block text-[7px] tracking-[0.08em] text-[#6B6B6B] py-0.5">
+                              {typeof h.fidelity?.score === 'number'
+                                ? `${Math.round(h.fidelity.score * 100)}%`
+                                : `FRAME ${h.frame ?? i + 1}`}
                             </span>
                           </button>
                         ))}
