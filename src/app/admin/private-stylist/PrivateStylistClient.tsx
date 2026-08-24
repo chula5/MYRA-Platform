@@ -514,6 +514,7 @@ function Lookbook({ deliveries, memberName, activity, run, busy }: {
   run: Run
   busy: string | null
 }) {
+  const [open, setOpen] = useState(false)
   const shot = deliveries
     .flatMap((d) => (d.looks ?? []).map((l) => ({ l, d })))
     .filter(({ l }) => l.image_url)
@@ -530,9 +531,24 @@ function Lookbook({ deliveries, memberName, activity, run, busy }: {
   }
   return (
     <div>
-      <p className="text-[9px] tracking-[0.18em] text-[#6B6B6B] mb-2">
-        LOOKBOOK — SHARE &amp; SCREENSHOT · {shot.length} LOOK{shot.length === 1 ? '' : 'S'} FOR {memberName.toUpperCase()}
-      </p>
+      {/* Closed by default. Nineteen full-bleed shoots pushed the actual work
+          — the deliveries and their swaps — a long way down the page. Her name
+          is the handle: click it to open her lookbook. */}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-baseline gap-2 text-left border-b border-[#E2E0DB] pb-2 mb-3 group"
+      >
+        <span className="text-[9px] tracking-[0.18em] text-[#0A0A0A] group-hover:text-[#8B5E00] transition-colors">
+          {open ? '−' : '+'} {memberName.toUpperCase()}
+        </span>
+        <span className="text-[9px] tracking-[0.14em] text-[#A8A8A4]">
+          LOOKBOOK · {shot.length} SHOT LOOK{shot.length === 1 ? '' : 'S'}
+        </span>
+        <span className="ml-auto text-[8px] tracking-[0.14em] text-[#A8A8A4]">
+          {open ? 'HIDE' : 'OPEN OUTFIT IMAGES'}
+        </span>
+      </button>
+      {!open ? null : (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {shot.map(({ l }, idx) => {
           const withImg = l.items.filter((it) => it.image_url)
@@ -592,6 +608,7 @@ function Lookbook({ deliveries, memberName, activity, run, busy }: {
           )
         })}
       </div>
+      )}
     </div>
   )
 }
@@ -1320,7 +1337,7 @@ function TrustPanel({ memberId }: { memberId: string }) {
           STAGE {state.stage} — {state.headline}
         </p>
         <p className="text-[8px] tracking-[0.1em] text-[#A8A8A4] mt-1">
-          A LOOK IS CLEAN WHEN IT GOES OUT WITH NO SWAP AND NO REMOVAL
+          A LOOK IS CLEAN WHEN IT GOES OUT WITH NO SWAP AND NO REMOVAL · {state.looksComposed} COMPOSED FOR HER
         </p>
       </div>
 
@@ -1341,6 +1358,33 @@ function TrustPanel({ memberId }: { memberId: string }) {
           <p className="text-[11px] tracking-[0.08em] text-[#0A0A0A] mt-1">{pct(state.memberYesRate)}</p>
         </div>
       </div>
+
+      <div className="grid grid-cols-3 gap-3 border-t border-[#EFEDE8] pt-3">
+        <div>
+          <p className="text-[8px] tracking-[0.12em] text-[#6B6B6B]">SWAPPED A PIECE</p>
+          <p className="text-[11px] tracking-[0.08em] text-[#0A0A0A] mt-0.5">{pct(state.swapRate)} OF LOOKS</p>
+        </div>
+        <div>
+          <p className="text-[8px] tracking-[0.12em] text-[#6B6B6B]">PULLED A PIECE OUT</p>
+          <p className="text-[11px] tracking-[0.08em] text-[#0A0A0A] mt-0.5">{pct(state.removeRate)} OF LOOKS</p>
+        </div>
+        <div>
+          {/* The sharpest read on the composing itself: one wrong piece in
+              five spoils a look, and a per-look rate hides that. */}
+          <p className="text-[8px] tracking-[0.12em] text-[#6B6B6B]">PIECES THAT DIDN’T SURVIVE</p>
+          <p className="text-[11px] tracking-[0.08em] text-[#0A0A0A] mt-0.5">{pct(state.itemErrorRate)} OF ALL COMPOSED</p>
+        </div>
+      </div>
+
+      {state.trend && (
+        <p className="text-[9px] tracking-[0.06em] text-[#6B6B6B]">
+          {state.trend.delta > 0.05
+            ? `IMPROVING — ${pct(state.trend.previous)} CLEAN OVER THE PREVIOUS 10, ${pct(state.trend.recent)} OVER THE LAST 10`
+            : state.trend.delta < -0.05
+              ? `SLIPPING — ${pct(state.trend.previous)} CLEAN OVER THE PREVIOUS 10, ${pct(state.trend.recent)} OVER THE LAST 10`
+              : `FLAT — ${pct(state.trend.recent)} CLEAN OVER THE LAST 10, ${pct(state.trend.previous)} BEFORE THAT`}
+        </p>
+      )}
 
       {state.blockers.length > 0 && (
         <div>
@@ -2081,12 +2125,21 @@ function LookRow({
   const [poseOpen, setPoseOpen] = useState(false)
   const [shooting, setShooting] = useState(false)
   const shootHistory = l.shoot_history ?? []
-  // The most recent render the fidelity check refused. It is a real image on
-  // Cloudinary — it simply never became the look's picture.
-  const rejectedShoot = !l.image_url
-    ? [...shootHistory].reverse().find((h) => (h as any)?.flagged) as
-        (typeof shootHistory)[number] & { fidelity?: { score?: number; issues?: { field: string; item: string; seen: string }[] } } | undefined
-    : undefined
+  type Shoot = (typeof shootHistory)[number] & {
+    flagged?: boolean
+    attempt?: number
+    fidelity?: { score?: number; issues?: { field: string; item: string; seen: string }[] }
+  }
+  // Renders the fidelity check refused. They are real images on Cloudinary —
+  // they simply never became the look's picture. A shoot makes two attempts,
+  // and the retry is often the WORSE of the two, so the BEST one leads rather
+  // than the latest.
+  const heldBack: Shoot[] = !l.image_url
+    ? (shootHistory as Shoot[]).filter((h) => h?.flagged)
+        .sort((a, b) => (b.fidelity?.score ?? 0) - (a.fidelity?.score ?? 0))
+    : []
+  const [heldPick, setHeldPick] = useState(0)
+  const rejectedShoot = heldBack[Math.min(heldPick, Math.max(0, heldBack.length - 1))]
 
   // A shoot takes minutes — keep the picker locked while one is running so a
   // second click can't queue another generation over the top.
@@ -2227,19 +2280,45 @@ function LookRow({
                   <div className="px-2.5 py-2">
                     <p className="text-[9px] tracking-[0.12em] text-[#B4593A]">
                       SHOOT HELD BACK{typeof rejectedShoot.fidelity?.score === 'number' ? ` — ${Math.round(rejectedShoot.fidelity.score * 100)}% FAITHFUL` : ''}
+                      {heldBack.length > 1 && <span className="text-[#A8A8A4]"> · BEST OF {heldBack.length}</span>}
                     </p>
                     {(rejectedShoot.fidelity?.issues ?? []).slice(0, 3).map((iss, i) => (
                       <p key={i} className="text-[8px] tracking-[0.06em] text-[#6B6B6B] mt-1 leading-snug">
                         {String(iss.field).toUpperCase()} · {iss.item}: {iss.seen}
                       </p>
                     ))}
-                    <button
-                      disabled={shooting}
-                      onClick={() => run(`rs-${l.look_id}`, () => restoreLookShoot(l.look_id, rejectedShoot.url), 'SHOOT USED ANYWAY')}
-                      className="mt-2 text-[8px] tracking-[0.14em] text-[#0A0A0A] border border-[#E2E0DB] px-2 py-1 hover:border-[#0A0A0A] disabled:opacity-40"
-                    >
-                      USE IT ANYWAY
-                    </button>
+                    {heldBack.length > 1 && (
+                      <div className="flex gap-1.5 mt-2">
+                        {heldBack.map((h, i) => (
+                          <button
+                            key={h.url}
+                            onClick={() => setHeldPick(i)}
+                            className={`border ${i === heldPick ? 'border-[#0A0A0A]' : 'border-[#E2E0DB]'} px-1.5 py-1`}
+                            title={`Attempt ${h.attempt ?? i + 1}`}
+                          >
+                            <span className="text-[8px] tracking-[0.1em] text-[#6B6B6B]">
+                              {typeof h.fidelity?.score === 'number' ? `${Math.round(h.fidelity.score * 100)}%` : `TRY ${i + 1}`}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex gap-1.5 mt-2">
+                      <button
+                        disabled={shooting}
+                        onClick={() => run(`rs-${l.look_id}`, () => restoreLookShoot(l.look_id, rejectedShoot.url), 'SHOOT USED ANYWAY')}
+                        className="text-[8px] tracking-[0.14em] text-[#0A0A0A] border border-[#E2E0DB] px-2 py-1 hover:border-[#0A0A0A] disabled:opacity-40"
+                      >
+                        USE IT ANYWAY
+                      </button>
+                      <button
+                        disabled={shooting}
+                        onClick={() => setPoseOpen(true)}
+                        className="text-[8px] tracking-[0.14em] text-[#8B5E00] border border-[#E8D9B8] px-2 py-1 hover:border-[#8B5E00] disabled:opacity-40"
+                      >
+                        ✦ SHOOT AGAIN
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}

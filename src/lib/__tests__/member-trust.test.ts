@@ -56,11 +56,39 @@ describe('trait learning', () => {
     expect(traitBlocked(m, bag('new', 'munthe'))).toBe('brand:munthe+type:structured_bag')
     expect(traitBlocked(m, bag('new2', 'sessun'))).toBeNull()
     // and the colour itself is never blocked
-    expect([...m.blocked].some((t) => t.startsWith('colour:'))).toBe(false)
+    expect(Array.from(m.blocked).some((t) => t.startsWith('colour:'))).toBe(false)
   })
 
   it('needs real evidence before it penalises anything', () => {
     const m = buildTraitModel([{ item: bag('a', 'munthe'), kept: false }])
     expect(traitPenalty(m, bag('b', 'munthe'))).toBe(0)
+  })
+})
+
+describe('tracking numbers', () => {
+  const look = (i: number, swaps: number, removes: number, items = 5) => ({
+    look_id: `t${i}`, created_at: `2026-08-${String(i + 1).padStart(2, '0')}T10:00:00Z`,
+    edits: swaps + removes, swaps, removes, items, approved: true, response: null,
+  })
+
+  it('separates a swap from a removal, and rates pieces not looks', () => {
+    // 4 looks, 5 pieces each: one look with 2 swaps, one with 1 removal.
+    const t = readTrust([look(0, 0, 0), look(1, 2, 0), look(2, 0, 1), look(3, 0, 0)])
+    expect(t.swapRate).toBeCloseTo(0.25)
+    expect(t.removeRate).toBeCloseTo(0.25)
+    expect(t.itemErrorRate).toBeCloseTo(3 / 20)   // 3 pieces pulled from 20 composed
+    expect(t.cleanRate).toBeCloseTo(0.5)
+  })
+
+  it('reports the direction of travel once there is enough history', () => {
+    const bad = Array.from({ length: 10 }, (_, i) => look(i, 2, 0))
+    const good = Array.from({ length: 10 }, (_, i) => look(i + 10, 0, 0))
+    const t = readTrust([...bad, ...good])
+    expect(t.trend).not.toBeNull()
+    expect(t.trend!.delta).toBeGreaterThan(0)
+  })
+
+  it('says nothing about a trend it cannot see', () => {
+    expect(readTrust([look(0, 0, 0), look(1, 1, 0)]).trend).toBeNull()
   })
 })

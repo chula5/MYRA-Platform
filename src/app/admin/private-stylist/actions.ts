@@ -1899,14 +1899,25 @@ export async function higgsfieldShootForLook(lookId: string, poseKey = 'E5'): Pr
       const retry = await runHiggsfieldGeneration(retryPrompt, refs, `pilot-look-${lookId}-${Date.now()}`)
       if (retry.imageUrl) {
         const second = await checkRenderFidelity(retry.imageUrl, fidelityItems)
-        fidelity = { score: second.score, passed: second.passed, issues: second.issues }
-        if (second.passed || second.error) gen = retry
-        else {
+        const secondFidelity = { score: second.score, passed: second.passed, issues: second.issues }
+        if (second.passed || second.error) {
+          gen = retry
+          fidelity = secondFidelity
+        } else {
+          // BOTH attempts are kept. The first used to be discarded here — its
+          // file survived on Cloudinary but the URL was lost — and the retry is
+          // often the WORSE of the two: corrective notes told it to fix a
+          // striped blouse and it changed the trousers instead. Measured on
+          // 23 Aug: 72%→42%, 55%→35%, 62%→62%. Throwing away the better image
+          // and showing her the worse one is not a defensible default.
           const history: any[] = Array.isArray(look.shoot_history) ? look.shoot_history : []
-          history.push({ url: retry.imageUrl, pose: poseKey, created_at: new Date().toISOString(), fidelity, flagged: true })
+          const at = new Date().toISOString()
+          history.push({ url: gen.imageUrl, pose: poseKey, created_at: at, fidelity, flagged: true, attempt: 1 })
+          history.push({ url: retry.imageUrl, pose: poseKey, created_at: at, fidelity: secondFidelity, flagged: true, attempt: 2 })
           await admin.from('pilot_look').update({ shoot_history: history.slice(-12) }).eq('look_id', lookId)
           revalidatePath(PATH)
-          return { error: 'Render misrepresented the clothes twice — kept in shoot history, flagged, not used as the look image' }
+          const best = Math.round(Math.max(first.score, second.score) * 100)
+          return { error: `Render misrepresented the clothes on both attempts — best was ${best}% faithful. Both are on the look to keep or reshoot.` }
         }
       }
     }
@@ -2049,24 +2060,41 @@ export async function loadMemberTrust(memberId: string): Promise<MemberTrust | {
 
     const [{ data: looks }, { data: fb }] = await Promise.all([
       admin.from('pilot_look')
-        .select('look_id, created_at, approved_at, response')
+        .select('look_id, created_at, approved_at, response, items')
         .in('delivery_id', ids).order('created_at'),
       admin.from('pilot_look_feedback')
-        .select('look_id, action').eq('member_id', memberId).limit(5000),
+        .select('look_id, action, slot, item_out, feedback_id').eq('member_id', memberId).limit(5000),
     ])
 
-    const editsBy = new Map<string, number>()
+    // Count DISTINCT pieces, not feedback rows. Swapping the same slot four
+    // times before settling is one piece rejected, not four — counting rows
+    // put "pieces that didn't survive" at 276%, which is not a number.
+    const swapsBy = new Map<string, Set<string>>()
+    const removesBy = new Map<string, Set<string>>()
     for (const f of fb ?? []) {
-      if (!f.look_id || f.action === 'accept') continue
-      editsBy.set(f.look_id, (editsBy.get(f.look_id) ?? 0) + 1)
+      if (!f.look_id) continue
+      const key = f.item_out ?? f.slot ?? f.feedback_id
+      if (!key) continue
+      const bucket = f.action === 'swap' ? swapsBy : f.action === 'remove' ? removesBy : null
+      if (!bucket) continue
+      const set = bucket.get(f.look_id) ?? new Set<string>()
+      set.add(String(key))
+      bucket.set(f.look_id, set)
     }
-    const outcomes: LookOutcome[] = (looks ?? []).map((l: any) => ({
-      look_id: l.look_id,
-      created_at: l.created_at,
-      edits: editsBy.get(l.look_id) ?? 0,
-      approved: !!l.approved_at,
-      response: l.response ?? null,
-    }))
+    const outcomes: LookOutcome[] = (looks ?? []).map((l: any) => {
+      const swaps = swapsBy.get(l.look_id)?.size ?? 0
+      const removes = removesBy.get(l.look_id)?.size ?? 0
+      return {
+        look_id: l.look_id,
+        created_at: l.created_at,
+        edits: swaps + removes,
+        swaps,
+        removes,
+        items: Array.isArray(l.items) ? l.items.length : 0,
+        approved: !!l.approved_at,
+        response: l.response ?? null,
+      }
+    })
 
     const trust = readTrust(outcomes)
 

@@ -21,6 +21,12 @@ export interface LookOutcome {
   created_at: string
   /** Swaps and removals Chloe made on this look. Zero = clean. */
   edits: number
+  /** Split out, because they mean different things: a swap says the slot was
+   *  right and the piece wrong; a removal says the look did not need it. */
+  swaps?: number
+  removes?: number
+  /** How many pieces the look was composed from, for a per-item rate. */
+  items?: number
   approved: boolean
   /** The member's own verdict, once she has given one. */
   response: 'yes' | 'no' | null
@@ -37,6 +43,19 @@ export interface TrustRead {
   sample: number
   memberYesRate: number | null
   responses: number
+  /** Share of reviewed looks needing at least one swap. */
+  swapRate: number
+  /** Share needing at least one removal. */
+  removeRate: number
+  /** Of every piece composed, the share that did not survive review — counted
+   *  as DISTINCT pieces, so swapping one slot four times is one piece wrong,
+   *  not four. The sharpest read on the composing itself: a look can be
+   *  spoiled by one bad piece in five, and a per-look rate hides that. */
+  itemErrorRate: number
+  /** Clean rate over the last 10 against the 10 before, so the panel can say
+   *  whether it is getting better rather than only where it stands. */
+  trend: { recent: number; previous: number; delta: number } | null
+  looksComposed: number
   /** What is still missing before the next stage, in her words. */
   blockers: string[]
   nextStage: TrustStage | null
@@ -72,6 +91,20 @@ export function readTrust(looks: LookOutcome[], stage2Since?: string | null, now
     else break
   }
 
+  const withSwap = window.filter((l) => (l.swaps ?? 0) > 0).length
+  const withRemove = window.filter((l) => (l.removes ?? 0) > 0).length
+  const itemsComposed = window.reduce((a, l) => a + (l.items ?? 0), 0)
+  const itemsPulled = window.reduce((a, l) => a + (l.swaps ?? 0) + (l.removes ?? 0), 0)
+
+  // Improving or not. Ten is small, so it is shown as a direction, never as a
+  // gate — nothing promotes or demotes on a trend.
+  const cleanShare = (rows: LookOutcome[]) => rows.length ? rows.filter((l) => l.edits === 0).length / rows.length : 0
+  const last10 = decided.slice(-10)
+  const prev10 = decided.slice(-20, -10)
+  const trend = last10.length >= 3 && prev10.length >= 3
+    ? { recent: cleanShare(last10), previous: cleanShare(prev10), delta: cleanShare(last10) - cleanShare(prev10) }
+    : null
+
   const responded = looks.filter((l) => l.response)
   const yes = responded.filter((l) => l.response === 'yes').length
   const memberYesRate = responded.length ? yes / responded.length : null
@@ -98,6 +131,11 @@ export function readTrust(looks: LookOutcome[], stage2Since?: string | null, now
     sample,
     memberYesRate,
     responses: responded.length,
+    swapRate: sample ? withSwap / sample : 0,
+    removeRate: sample ? withRemove / sample : 0,
+    itemErrorRate: itemsComposed ? Math.min(1, itemsPulled / itemsComposed) : 0,
+    trend,
+    looksComposed: looks.length,
     blockers,
     nextStage: stage === 3 ? null : ((stage + 1) as TrustStage),
   }
