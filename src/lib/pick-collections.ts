@@ -23,8 +23,16 @@ export interface PickCollectionConfig {
   /** Caption under the tile on the landing page. */
   label: string
   kind: PickKind
-  /** Optional background-removed cutout in /public. */
+  /** Optional hand-made cutout in /public. */
   art?: string
+  /**
+   * Ask Cloudinary to strip the background from the lead item's photo, so the
+   * tile reads as a cutout hanging on the page like the bag rather than a
+   * product shot in a white box. Only applies to Cloudinary-hosted images, and
+   * the tile falls back to the untouched photo if the transform doesn't
+   * resolve — see the FallbackImage ladder in OurPicks.
+   */
+  cutout?: boolean
 }
 
 // Every collection is currently item-based. The 'outfit' kind is fully wired
@@ -33,7 +41,7 @@ export interface PickCollectionConfig {
 // It's kept ready for the next collection that should hold whole looks.
 export const PICK_COLLECTIONS: PickCollectionConfig[] = [
   { slug: 'bags', title: 'Summer Bags', label: 'SUMMER BAGS', kind: 'item', art: '/amun-cutout.png' },
-  { slug: 'mint', title: 'Mint Green', label: 'MINT GREEN', kind: 'item' },
+  { slug: 'mint', title: 'Mint Green', label: 'MINT GREEN', kind: 'item', cutout: true },
 ]
 
 export function pickKind(slug: string): PickKind {

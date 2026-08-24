@@ -22,6 +22,8 @@ export interface LandingCollection {
   href: string
   /** Static cutout if the collection has one, else the lead item's photo. */
   artImageUrl: string
+  /** The lead photo untransformed — what the tile shows if the cutout fails. */
+  rawImageUrl?: string
 }
 
 export interface OurPicksData {
@@ -154,6 +156,21 @@ export async function getOutfitCollection(collection: string): Promise<PickOutfi
 }
 
 /**
+ * Cloudinary background removal for a tile image. Returns the URL untouched
+ * when it isn't a Cloudinary asset (nothing to transform) or already carries a
+ * transform. If the account can't serve the effect, Cloudinary errors on that
+ * derived URL and the tile falls back to the plain photo.
+ */
+function cutoutUrl(url: string): string {
+  if (!url.includes('res.cloudinary.com')) return url
+  const i = url.indexOf('/upload/')
+  if (i === -1) return url
+  const after = url.slice(i + 8)
+  if (/^e_/.test(after)) return url
+  return `${url.slice(0, i + 8)}e_background_removal/f_png/${after}`
+}
+
+/**
  * The collection tiles for the landing section. A collection only appears once
  * it has at least one LIVE curated entry — so a new slug can ship before it's
  * curated without leaving a dead link on the homepage. Collections without a
@@ -171,9 +188,17 @@ export async function getLandingCollections(): Promise<LandingCollection[]> {
         ? (await getOutfitCollection(c.slug)).map((o) => o.image_url)
         : (await getPickCollection(c.slug)).map((i) => i.image_url)
     if (images.length === 0) continue
-    const art = c.art ?? images.find(Boolean)
+    const lead = images.find(Boolean)
+    const art = c.art ?? (lead && c.cutout ? cutoutUrl(lead) : lead)
     if (!art) continue
-    out.push({ slug: c.slug, label: c.label, href: `/picks/${c.slug}`, artImageUrl: art })
+    out.push({
+      slug: c.slug,
+      label: c.label,
+      href: `/picks/${c.slug}`,
+      artImageUrl: art,
+      // Keep the untouched photo so the tile can fall back to it.
+      rawImageUrl: lead ?? art,
+    })
   }
   return out
 }
