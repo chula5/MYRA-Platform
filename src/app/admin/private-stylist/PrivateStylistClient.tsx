@@ -546,7 +546,7 @@ function Lookbook({ deliveries, memberName, activity, run, busy }: {
               <div className="absolute top-2.5 right-2.5 bg-black/55 text-white text-[9px] tracking-[0.1em] px-2 py-1 rounded-full">
                 {idx + 1} / {shot.length}
               </div>
-              <div className="absolute left-2.5 top-2.5 z-10 w-[27%] max-w-[110px] max-h-[calc(100%-1.25rem)] overflow-y-auto pr-1" data-lenis-prevent>
+              <div className="absolute left-2.5 top-2.5 z-10 w-[27%] max-w-[110px] max-h-[calc(100%-1.25rem)] overflow-hidden pr-1">
                 <div className="flex items-center gap-1.5 mb-2">
                   <span className="text-white text-[8px] sm:text-[9px] tracking-[0.081em] drop-shadow-[0_1px_3px_rgba(0,0,0,0.55)]">
                     LOOK {idx + 1}

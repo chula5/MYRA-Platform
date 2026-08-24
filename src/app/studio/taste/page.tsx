@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createServerClient } from '@/lib/supabase-server'
 import { loadTasteInspector } from './actions'
 import TasteClient from './TasteClient'
+import ScrollToTop from '@/components/admin/ScrollToTop'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // vision scoring + health checks run as this page's actions
@@ -42,6 +43,7 @@ export default async function TasteInspectorPage() {
         <TasteClient data={data} />
       )}
       </div>
+      <ScrollToTop />
     </div>
   )
 }

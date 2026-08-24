@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createServerClient } from '@/lib/supabase-server'
+import ScrollToTop from '@/components/admin/ScrollToTop'
 
 export default async function AdminLayout({
   children,
@@ -262,6 +263,7 @@ export default async function AdminLayout({
       <div className="max-w-[1440px] mx-auto px-10 py-10">
         {children}
       </div>
+      <ScrollToTop />
     </div>
   )
 }
