@@ -939,6 +939,70 @@ export async function clearDeliveryLooks(deliveryId: string): Promise<{ looks?: 
 
 // Stamp every buyable item in the delivery as stock-checked now.
 // "Stock checked 10am, moves fast."
+/**
+ * Delete a delivery, and forget what it taught.
+ *
+ * The plain delete leaves the learning in place: its feedback rows survive the
+ * cascade with null ids and keep shaping compositions. That is the right
+ * default when the delivery is simply finished — her decisions were real. It
+ * is the wrong one when the whole delivery was a mistake: wrong brief, wrong
+ * weather, a test run. Then it should leave nothing behind.
+ */
+export async function deleteDeliveryAndMemory(deliveryId: string): Promise<{ cleared?: number; error?: string }> {
+  const admin = createAdminClient() as any
+  try {
+    const { data: looks } = await admin.from('pilot_look').select('look_id').eq('delivery_id', deliveryId)
+    const ids = (looks ?? []).map((l: any) => l.look_id)
+    // By delivery AND by look: rows whose look was already deleted keep the
+    // delivery id, and rows on live looks are found by look id.
+    const { count } = await admin
+      .from('pilot_look_feedback').select('feedback_id', { count: 'exact', head: true }).eq('delivery_id', deliveryId)
+    await admin.from('pilot_look_feedback').delete().eq('delivery_id', deliveryId)
+    if (ids.length) await admin.from('pilot_look_feedback').delete().in('look_id', ids)
+    await admin.from('pilot_taste_event').delete().eq('delivery_id', deliveryId)
+    await admin.from('pilot_activity').delete().eq('delivery_id', deliveryId)
+    const { error } = await admin.from('pilot_delivery').delete().eq('delivery_id', deliveryId)
+    if (error) return { error: error.message }
+    revalidatePath(PATH)
+    return { cleared: count ?? 0 }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Could not delete the delivery' }
+  }
+}
+
+/**
+ * Amend a delivery's brief after the fact — her words, the occasion, the
+ * weather. Changing the occasion re-derives the effective weights, because
+ * they are a snapshot of the tilt at creation and a brief that has changed
+ * should not keep composing to the old one.
+ */
+export async function updateDelivery(
+  deliveryId: string,
+  patch: { request_text?: string; occasion?: OccasionId; climate?: ClimateId | null },
+): Promise<{ error?: string }> {
+  const admin = createAdminClient() as any
+  try {
+    const { data: d } = await admin.from('pilot_delivery').select('member_id, occasion').eq('delivery_id', deliveryId).single()
+    if (!d) return { error: 'Delivery not found' }
+    const row: Record<string, unknown> = {}
+    if (patch.request_text !== undefined) row.request_text = patch.request_text
+    if (patch.climate !== undefined) row.climate = patch.climate
+    if (patch.occasion && patch.occasion !== d.occasion) {
+      row.occasion = patch.occasion
+      const { data: m } = await admin.from('pilot_member')
+        .select('room_weights, work_dress_code').eq('member_id', d.member_id).single()
+      if (m) row.effective_weights = effectiveWeights(m.room_weights, patch.occasion, m.work_dress_code)
+    }
+    if (!Object.keys(row).length) return {}
+    const { error } = await admin.from('pilot_delivery').update(row).eq('delivery_id', deliveryId)
+    if (error) return { error: error.message }
+    revalidatePath(PATH)
+    return {}
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Could not update the delivery' }
+  }
+}
+
 export async function markStockChecked(deliveryId: string): Promise<{ error?: string }> {
   const admin = createAdminClient()
   const { data: looks, error } = await admin
@@ -1332,9 +1396,17 @@ const pairKeyOrdered = (a: string, b: string): [string, string] => (a < b ? [a, 
  * piece teaches nothing about shape.
  */
 async function buildMemberTraitModel(admin: any, rows: any[]): Promise<TraitModel | undefined> {
+  // A rejection is item_out. Skips written before that was made consistent
+  // put the piece in item_in instead, and there is no other way to read them:
+  // on a 'remove' row an item_in IS the rejected piece.
+  const rejectedId = (r: any): string | null =>
+    r.action === 'swap' ? (r.item_out ?? null)
+      : r.action === 'remove' ? (r.item_out ?? r.item_in ?? null)
+        : null
   const ids = new Set<string>()
   for (const r of rows) {
-    if ((r.action === 'swap' || r.action === 'remove') && r.item_out) ids.add(r.item_out)
+    const out = rejectedId(r)
+    if (out) ids.add(out)
     if (r.action === 'accept' && r.item_in) ids.add(r.item_in)
   }
   if (!ids.size) return undefined
@@ -1351,11 +1423,14 @@ async function buildMemberTraitModel(admin: any, rows: any[]): Promise<TraitMode
 
   const decisions: TraitDecision[] = []
   for (const r of rows) {
-    const isOut = (r.action === 'swap' || r.action === 'remove') && r.item_out
-    const id = isOut ? r.item_out : (r.action === 'accept' ? r.item_in : null)
+    const out = rejectedId(r)
+    const id = out ?? (r.action === 'accept' ? r.item_in : null)
     if (!id) continue
     const item = items.get(id)
-    if (item) decisions.push({ item, kept: !isOut })
+    // A skip writes one row per piece with no slot: the whole look went, not
+    // that piece. Weaker evidence, so it cannot block on its own.
+    const targeted = !(r.action === 'remove' && !r.slot && !r.item_out)
+    if (item) decisions.push({ item, kept: !out, targeted })
   }
   return decisions.length ? buildTraitModel(decisions) : undefined
 }
@@ -1576,7 +1651,7 @@ export async function composeDeliveryLooks(deliveryId: string, options: ComposeD
   // explores the library instead of regenerating the same argmax looks.
   const [{ data: priorLooks }, { data: fb }] = await Promise.all([
     admin.from('pilot_look').select('items, delivery:delivery_id!inner(member_id)').eq('delivery.member_id', delivery.member_id),
-    admin.from('pilot_look_feedback').select('item_in, action').eq('member_id', delivery.member_id).limit(5000),
+    admin.from('pilot_look_feedback').select('item_in, item_out, action').eq('member_id', delivery.member_id).limit(5000),
   ])
   const seenCounts = new Map<string, number>()
   for (const l of priorLooks ?? []) {
@@ -1586,7 +1661,10 @@ export async function composeDeliveryLooks(deliveryId: string, options: ComposeD
   }
   const rejected = new Set<string>()
   for (const f of fb ?? []) {
-    if (f.item_in && f.action === 'remove') rejected.add(f.item_in)
+    // Both shapes: a removed piece is item_out, a skipped one used to be
+    // item_in. Reading only item_in meant every ordinary removal was missed.
+    if (f.action === 'remove') { const id = f.item_out ?? f.item_in; if (id) rejected.add(id) }
+    if (f.action === 'swap' && f.item_out) rejected.add(f.item_out)
     if (f.item_in && f.action === 'accept') seenCounts.set(f.item_in, (seenCounts.get(f.item_in) ?? 0) + 1)
   }
 
@@ -1883,7 +1961,11 @@ export async function skipComposedLook(lookId: string): Promise<{ error?: string
   const items: LookItem[] = look.items ?? []
   const fb: any[] = []
   for (const it of items) {
-    if (it.item_id) fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action: 'remove', slot: it.slot ?? null, item_in: it.item_id, brand_in: it.brand_id ?? null })
+    // item_OUT, like every other rejection. Skipping used to record the piece
+    // as item_in — the column that means "she chose this" — so the strongest
+    // rejection in the system was invisible to the learning that reads
+    // item_out. 197 of Alison's skips taught nothing.
+    if (it.item_id) fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action: 'remove', slot: it.slot ?? null, item_out: it.item_id, brand_out: it.brand_id ?? null })
   }
   const brandIds = Array.from(new Set(items.map((it) => it.brand_id).filter(Boolean))) as string[]
   for (let i = 0; i < brandIds.length; i++) {

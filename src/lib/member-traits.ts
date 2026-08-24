@@ -30,9 +30,23 @@ export interface TraitItem {
   pattern?: number | null
 }
 
-export interface TraitDecision { item: TraitItem; kept: boolean }
+export interface TraitDecision {
+  item: TraitItem
+  kept: boolean
+  /**
+   * Was this piece rejected on its own, or as part of a look?
+   *
+   * Skipping a look records every piece in it as rejected, and that is weaker
+   * evidence: she turned down the combination, and some of those pieces she
+   * would happily have kept elsewhere. Untargeted rejections still count
+   * toward the penalty — a piece that keeps turning up in skipped looks is
+   * worth ranking down — but they cannot BLOCK on their own, or one bad
+   * outfit takes a whole brand-and-type out of the library.
+   */
+  targeted?: boolean
+}
 
-export interface TraitStat { accepts: number; rejects: number }
+export interface TraitStat { accepts: number; rejects: number; targetedRejects: number }
 export interface TraitModel {
   stats: Map<string, TraitStat>
   blocked: Set<string>
@@ -107,15 +121,24 @@ export function buildTraitModel(decisions: TraitDecision[]): TraitModel {
   const stats = new Map<string, TraitStat>()
   for (const d of decisions) {
     for (const t of traitsOf(d.item)) {
-      const s = stats.get(t) ?? { accepts: 0, rejects: 0 }
+      const s = stats.get(t) ?? { accepts: 0, rejects: 0, targetedRejects: 0 }
       if (d.kept) s.accepts++
-      else s.rejects++
+      else {
+        s.rejects++
+        // Default to targeted: a decision that does not say otherwise is one
+        // she made about that piece.
+        if (d.targeted !== false) s.targetedRejects++
+      }
       stats.set(t, s)
     }
   }
   const blocked = new Set<string>()
   for (const [t, s] of Array.from(stats.entries())) {
-    if (isPair(t) && s.rejects >= BLOCK_MIN_REJECTS && s.rejects >= BLOCK_RATIO * s.accepts) blocked.add(t)
+    if (!isPair(t)) continue
+    if (s.rejects < BLOCK_MIN_REJECTS || s.rejects < BLOCK_RATIO * s.accepts) continue
+    // At least some of it has to be her rejecting THIS piece.
+    if (s.targetedRejects < BLOCK_MIN_REJECTS) continue
+    blocked.add(t)
   }
   return { stats, blocked }
 }

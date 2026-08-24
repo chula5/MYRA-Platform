@@ -49,6 +49,8 @@ import {
   createDelivery,
   createCalibrationSet,
   deleteDelivery,
+  deleteDeliveryAndMemory,
+  updateDelivery,
   saveLook,
   deleteLook,
   clearLook,
@@ -1956,6 +1958,10 @@ function DeliveryCard({
 }) {
   const [ownedShare, setOwnedShare] = useState(0.6)
   const [open, setOpen] = useState(d.status === 'draft')
+  const [setupOpen, setSetupOpen] = useState(false)
+  const [setupText, setSetupText] = useState(d.request_text ?? '')
+  const [setupOccasion, setSetupOccasion] = useState<OccasionId>((d.occasion ?? 'casual_day') as OccasionId)
+  const [setupClimate, setSetupClimate] = useState<ClimateId | null>(((d as { climate?: ClimateId | null }).climate) ?? null)
   const [editingLook, setEditingLook] = useState<string | 'new' | null>(null)
   const [activityDetail, setActivityDetail] = useState('')
 
@@ -2008,6 +2014,11 @@ function DeliveryCard({
           </p>
         </div>
         <div className="flex gap-2 shrink-0">
+          {!calibration && (
+            <button className={btnTiny} onClick={() => { setSetupOpen((v) => !v); setOpen(true) }}>
+              {setupOpen ? 'CLOSE BRIEF' : 'EDIT BRIEF'}
+            </button>
+          )}
           <button className={btnTiny} onClick={() => setOpen((s) => !s)}>
             {open ? 'CLOSE' : `OPEN · ${d.looks.length} LOOK${d.looks.length === 1 ? '' : 'S'}`}
           </button>
@@ -2016,6 +2027,60 @@ function DeliveryCard({
 
       {open && (
         <div className="mt-5 space-y-4">
+          {/* The brief, editable after the fact. A delivery outlives the
+              moment it was created in — the weather turns out to be different,
+              her words were half-remembered, the occasion was wrong. */}
+          {setupOpen && (
+            <div className="border border-[#E2E0DB] bg-[#FCFCFA] p-4 space-y-3">
+              <p className="text-[9px] tracking-[0.16em] text-[#0A0A0A]">THE BRIEF</p>
+              <div>
+                <p className="text-[8px] tracking-[0.12em] text-[#A8A8A4] mb-1">HER WORDS</p>
+                <input className={input} value={setupText} onChange={(e) => setSetupText(e.target.value)} />
+              </div>
+              <div className="flex flex-wrap gap-4">
+                <div>
+                  <p className="text-[8px] tracking-[0.12em] text-[#A8A8A4] mb-1">OCCASION</p>
+                  <select className={`${input} !w-auto`} value={setupOccasion} onChange={(e) => setSetupOccasion(e.target.value as OccasionId)}>
+                    {OCCASION_TYPES.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <p className="text-[8px] tracking-[0.12em] text-[#A8A8A4] mb-1">WEATHER</p>
+                  <div className="flex gap-1.5">
+                    {CLIMATES.map((c) => (
+                      <button
+                        key={c.id}
+                        onClick={() => setSetupClimate(setupClimate === c.id ? null : c.id)}
+                        className={`text-[9px] tracking-[0.1em] px-2.5 py-1.5 border transition-colors ${
+                          setupClimate === c.id ? 'border-[#0A0A0A] bg-[#0A0A0A] text-white' : 'border-[#E2E0DB] text-[#6B6B6B]'
+                        }`}
+                      >
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <p className="text-[8px] tracking-[0.1em] text-[#A8A8A4]">
+                CHANGING THE OCCASION RE-DERIVES THE ROOM MIX. LOOKS ALREADY COMPOSED STAY AS THEY ARE — COMPOSE AGAIN TO APPLY IT.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  className={btnDark}
+                  disabled={busy === `upd-${d.delivery_id}`}
+                  onClick={() => run(
+                    `upd-${d.delivery_id}`,
+                    () => updateDelivery(d.delivery_id, { request_text: setupText, occasion: setupOccasion, climate: setupClimate }),
+                    'BRIEF UPDATED',
+                  ).then(() => setSetupOpen(false))}
+                >
+                  SAVE BRIEF
+                </button>
+                <button className={btnTiny} onClick={() => setSetupOpen(false)}>CANCEL</button>
+              </div>
+            </div>
+          )}
+
           {/* Non-negotiables tracker — calibration sets only need the 3 probes */}
           <div className="flex gap-4 text-[8px] tracking-[0.12em]">
             <span className={d.looks.length >= 3 ? 'text-[#3D7A50]' : 'text-[#B83A3A]'}>
@@ -2136,15 +2201,31 @@ function DeliveryCard({
                   CLEAR LOOKS
                 </button>
               )}
+              {/* Two deletes, because the delivery and what it taught are
+                  separate things. A finished delivery can go while her
+                  decisions stay; a delivery that was a mistake should leave
+                  nothing behind. */}
               <button
                 className={`text-[8px] tracking-[0.12em] text-[#B83A3A] hover:underline ${d.looks.length ? '' : 'ml-auto'}`}
+                title="Remove the delivery — what it taught the composer stays"
                 onClick={() => {
-                  if (window.confirm('Delete this delivery?')) {
-                    run(`deld-${d.delivery_id}`, () => deleteDelivery(d.delivery_id), 'DELIVERY DELETED')
+                  if (window.confirm('Delete this delivery?\n\nWhat it taught the composer stays — her swaps and verdicts here were real decisions.')) {
+                    run(`deld-${d.delivery_id}`, () => deleteDelivery(d.delivery_id), 'DELIVERY DELETED — LEARNING KEPT')
                   }
                 }}
               >
                 DELETE
+              </button>
+              <button
+                className="text-[8px] tracking-[0.12em] text-[#B83A3A] hover:underline"
+                title="Remove the delivery and everything it taught"
+                onClick={() => {
+                  if (window.confirm('Delete this delivery AND forget it?\n\nEvery swap, removal, verdict and note from it is deleted, so it shapes nothing. For a delivery that was a mistake — wrong brief, wrong weather, a test. This cannot be undone.')) {
+                    run(`deldm-${d.delivery_id}`, () => deleteDeliveryAndMemory(d.delivery_id), 'DELIVERY AND ITS MEMORY DELETED')
+                  }
+                }}
+              >
+                DELETE + FORGET
               </button>
             </div>
           )}
