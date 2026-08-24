@@ -319,6 +319,37 @@ export async function removePick(id: string): Promise<{ ok: true }> {
   return { ok: true }
 }
 
+/**
+ * Make this pick the collection's LEAD — first in display order, and so the
+ * image used for the collection's tile in OUR PICKS. Ordering already decided
+ * the tile implicitly; this makes it a deliberate one-click choice instead of
+ * something you have to arrive at with the arrows.
+ */
+export async function makeTileImage(id: string): Promise<{ ok: true }> {
+  try {
+    const admin = createAdminClient()
+    const { data: row } = await admin.from('our_pick' as any).select('*').eq('id', id).maybeSingle()
+    if (!row) return { ok: true }
+    const r = row as any
+    const { data: first } = await admin
+      .from('our_pick' as any)
+      .select('sort_order')
+      .eq('collection', r.collection)
+      .order('sort_order', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+    const lowest = (first as any)?.sort_order ?? 0
+    if (lowest === r.sort_order) return { ok: true } // already the lead
+    await (admin.from('our_pick') as any).update({ sort_order: lowest - 1 }).eq('id', r.id)
+    revalidatePath('/admin/picks')
+    revalidatePath('/')
+    revalidatePath(`/picks/${r.collection}`)
+  } catch (err) {
+    console.error('[makeTileImage]', err)
+  }
+  return { ok: true }
+}
+
 export async function movePick(id: string, direction: 'up' | 'down'): Promise<{ ok: true }> {
   try {
     const admin = createAdminClient()
