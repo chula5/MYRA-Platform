@@ -33,10 +33,22 @@ export async function listPicks(): Promise<Record<PickCollection, AdminPickRow[]
     const admin = createAdminClient()
     // Two-step join: our_pick has no FK to item, so PostgREST's embedded
     // select can't resolve the relationship — fetch items separately.
-    const { data } = await admin
+    // outfit_id only exists once migration 0051 has run. Selecting a missing
+    // column errors the whole query, which would blank EVERY collection —
+    // including the item curation that predates it — so fall back to the
+    // pre-0051 shape rather than showing an empty studio.
+    let { data, error } = await admin
       .from('our_pick' as any)
       .select('id, collection, item_id, outfit_id, sort_order')
       .order('sort_order', { ascending: true })
+    if (error) {
+      const retry = await admin
+        .from('our_pick' as any)
+        .select('id, collection, item_id, sort_order')
+        .order('sort_order', { ascending: true })
+      if (retry.error) throw retry.error
+      data = retry.data
+    }
     const rows = (data ?? []) as any[]
     if (!rows.length) return empty
     const itemIds = rows.map((r) => r.item_id).filter(Boolean)
