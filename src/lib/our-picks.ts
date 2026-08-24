@@ -59,12 +59,18 @@ export async function getPickCollectionWithOutfits(collection: string): Promise<
     for (const r of (data ?? []) as any[]) {
       const o = r.outfit
       if (!o || o.status !== 'live') continue
+      // The look's own hero, NOT the last additional image. When a Higgsfield
+      // shoot lands, generateHiggsfieldShootForOutfit promotes the render to
+      // image_url and pushes the PREVIOUS display — the anchor's flat-lay
+      // product shot — onto the end of additional_images. Reading the last
+      // extra therefore showed the product photo again instead of the model
+      // wearing the piece, which is the whole point of these thumbs.
       const extra = Array.isArray(o.additional_images) ? o.additional_images : []
       const arr = byItem.get(r.item_id) ?? []
       if (arr.some((x) => x.outfit_id === o.outfit_id)) continue
       arr.push({
         outfit_id: o.outfit_id,
-        image_url: extra[extra.length - 1] ?? o.image_url ?? null,
+        image_url: o.image_url ?? extra[extra.length - 1] ?? null,
         published_at: o.published_at ?? '',
       })
       byItem.set(r.item_id, arr)
