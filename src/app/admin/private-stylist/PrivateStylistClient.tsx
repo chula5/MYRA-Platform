@@ -113,6 +113,54 @@ const ADD_SLOTS: { value: string; label: string }[] = [
   { value: 'bottom', label: 'BOTTOM' },
 ]
 
+// The words a stylist types rarely equal the taxonomy's word. "Trainers" and
+// "sneakers" are the same shoe — the library stores item_type `sneaker`, so a
+// literal search for "trainer" found nothing. Each row is one bag of
+// interchangeable words; typing any of them matches an option carrying any of
+// the others.
+const SEARCH_SYNONYMS: string[][] = [
+  ['sneaker', 'sneakers', 'trainer', 'trainers', 'runner', 'runners', 'plimsoll', 'plimsolls', 'kicks'],
+  ['heel', 'heels', 'stiletto', 'stilettos', 'pump', 'pumps', 'court', 'courts', 'slingback', 'slingbacks'],
+  ['flat', 'flats', 'ballet', 'ballerina', 'ballerinas', 'loafer', 'loafers', 'espadrille', 'espadrilles', 'moccasin', 'mary jane', 'maryjane'],
+  ['sandal', 'sandals', 'slide', 'slides'],
+  ['mule', 'mules'],
+  ['boot', 'boots', 'bootie', 'booties'],
+  ['bag', 'bags', 'handbag', 'handbags', 'purse', 'clutch', 'tote', 'crossbody', 'baguette'],
+  ['jewellery', 'jewelry', 'necklace', 'pendant', 'earring', 'earrings', 'bracelet', 'ring', 'rings'],
+  ['outerwear', 'coat', 'coats', 'jacket', 'jackets', 'blazer', 'blazers', 'trench', 'parka'],
+  ['trouser', 'trousers', 'pant', 'pants', 'slacks', 'chino', 'chinos'],
+  ['jean', 'jeans', 'denim'],
+  ['jumper', 'jumpers', 'sweater', 'sweaters', 'knit', 'knitwear', 'pullover', 'cardigan'],
+  ['top', 'tops', 'blouse', 'blouses', 'shirt', 'shirts', 'tee', 'tees', 't-shirt', 'tshirt'],
+  ['dress', 'dresses', 'gown', 'frock'],
+  ['skirt', 'skirts'],
+  ['shorts', 'short'],
+]
+
+const SYNONYM_INDEX: Map<string, Set<string>> = (() => {
+  const m = new Map<string, Set<string>>()
+  for (const group of SEARCH_SYNONYMS) {
+    const set = new Set(group)
+    for (const w of group) m.set(w, set)
+  }
+  return m
+})()
+
+// True when EVERY word typed is present in the option's text — where "present"
+// also fires on any synonym. So "navy trainers" needs navy AND a sneaker;
+// "trainers" alone finds every sneaker even though none is literally named one.
+function optionMatchesQuery(haystack: string, query: string): boolean {
+  const hay = haystack.toLowerCase()
+  const tokens = query.toLowerCase().split(/\s+/).filter(Boolean)
+  if (tokens.length === 0) return true
+  return tokens.every((tok) => {
+    if (hay.includes(tok)) return true
+    const syns = SYNONYM_INDEX.get(tok)
+    if (syns) for (const s of syns) if (hay.includes(s)) return true
+    return false
+  })
+}
+
 // Full colour_family taxonomy + the pieces worth having an opinion about.
 // Local display constants on purpose — importing the admin picker would drag
 // server-only modules into this client bundle.
@@ -2336,12 +2384,16 @@ function LookRow({
   const presentSlots = new Set(l.items.map((it) => it.slot).filter(Boolean) as string[])
 
   const [swapQuery, setSwapQuery] = useState('')
+  const [swapBrand, setSwapBrand] = useState('')
+  const [swapColour, setSwapColour] = useState('')
 
   async function openSwap(i: number) {
     setAddSlot(null)
     setSwapIdx(i)
     setSwapOptions(null)
     setSwapQuery('')
+    setSwapBrand('')
+    setSwapColour('')
     setSwapBusy(true)
     const r = await lookAlternates(l.look_id, i)
     setSwapBusy(false)
@@ -2353,6 +2405,8 @@ function LookRow({
     setAddSlot(slot)
     setSwapOptions(null)
     setSwapQuery('')
+    setSwapBrand('')
+    setSwapColour('')
     setSwapBusy(true)
     const r = await lookAddOptions(l.look_id, slot)
     setSwapBusy(false)
@@ -2563,22 +2617,54 @@ function LookRow({
               {swapBusy && <p className="text-[9px] tracking-[0.1em] text-[#A8A8A4]">FINDING ALTERNATES…</p>}
               {swapOptions && swapOptions.length === 0 && <p className="text-[9px] tracking-[0.1em] text-[#A8A8A4]">NOTHING IN STOCK FOR THIS SLOT IN THE LIBRARY.</p>}
               {swapOptions && swapOptions.length > 0 && (() => {
-                const q = swapQuery.trim().toLowerCase()
-                const shownOptions = q
-                  ? swapOptions.filter((o) =>
-                      [o.product_name, o.brand_name, o.colour_family].filter(Boolean).join(' ').toLowerCase().includes(q),
-                    ).slice(0, 24)
-                  : swapOptions.slice(0, 12)
+                const q = swapQuery.trim()
+                const brandChoices = Array.from(new Set(swapOptions.map((o) => o.brand_name).filter(Boolean) as string[])).sort()
+                const colourChoices = Array.from(new Set(swapOptions.map((o) => o.colour_family).filter(Boolean) as string[])).sort()
+                const filtered = swapOptions.filter((o) => {
+                  if (swapBrand && o.brand_name !== swapBrand) return false
+                  if (swapColour && o.colour_family !== swapColour) return false
+                  if (q && !optionMatchesQuery(
+                    [o.product_name, o.brand_name, o.colour_family, o.item_type].filter(Boolean).join(' '),
+                    q,
+                  )) return false
+                  return true
+                })
+                const active = !!(q || swapBrand || swapColour)
+                const shownOptions = filtered.slice(0, active ? 48 : 12)
+                const selectCls = 'border border-[#E2E0DB] bg-white px-2 py-2 text-[9px] tracking-[0.08em] outline-none focus:border-[#0A0A0A] uppercase text-[#4A4E57]'
                 return (
                   <>
-                    <input
-                      value={swapQuery}
-                      onChange={(e) => setSwapQuery(e.target.value)}
-                      placeholder={`SEARCH ALL ${swapOptions.length} IN-STOCK OPTIONS — NAME, BRAND OR COLOUR`}
-                      className="w-full max-w-md mb-3 border border-[#E2E0DB] bg-white px-3 py-2 text-[9px] tracking-[0.08em] outline-none focus:border-[#0A0A0A] uppercase placeholder:text-[#A8A8A4]"
-                    />
-                    {q && shownOptions.length === 0 && (
-                      <p className="text-[9px] tracking-[0.1em] text-[#A8A8A4] mb-2">NO MATCH IN THIS SLOT — TRY A BRAND OR COLOUR WORD.</p>
+                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                      <input
+                        value={swapQuery}
+                        onChange={(e) => setSwapQuery(e.target.value)}
+                        placeholder={`SEARCH ${swapOptions.length} IN STOCK — NAME, TYPE (E.G. TRAINERS), BRAND OR COLOUR`}
+                        className="flex-1 min-w-[200px] max-w-md border border-[#E2E0DB] bg-white px-3 py-2 text-[9px] tracking-[0.08em] outline-none focus:border-[#0A0A0A] uppercase placeholder:text-[#A8A8A4]"
+                      />
+                      {brandChoices.length > 1 && (
+                        <select value={swapBrand} onChange={(e) => setSwapBrand(e.target.value)} className={selectCls}>
+                          <option value="">ALL BRANDS</option>
+                          {brandChoices.map((b) => <option key={b} value={b}>{b.toUpperCase()}</option>)}
+                        </select>
+                      )}
+                      {colourChoices.length > 1 && (
+                        <select value={swapColour} onChange={(e) => setSwapColour(e.target.value)} className={selectCls}>
+                          <option value="">ALL COLOURS</option>
+                          {colourChoices.map((c) => <option key={c} value={c}>{c.toUpperCase()}</option>)}
+                        </select>
+                      )}
+                      {active && (
+                        <button
+                          type="button"
+                          onClick={() => { setSwapQuery(''); setSwapBrand(''); setSwapColour('') }}
+                          className="text-[9px] tracking-[0.12em] text-[#8B5E00] hover:underline px-1"
+                        >
+                          CLEAR
+                        </button>
+                      )}
+                    </div>
+                    {active && shownOptions.length === 0 && (
+                      <p className="text-[9px] tracking-[0.1em] text-[#A8A8A4] mb-2">NO MATCH — TRY A DIFFERENT WORD, BRAND OR COLOUR.</p>
                     )}
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                   {shownOptions.map((o) => (

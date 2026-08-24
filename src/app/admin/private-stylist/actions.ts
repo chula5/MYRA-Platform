@@ -1706,6 +1706,7 @@ export interface SwapOption {
   product_name: string
   brand_name: string | null
   colour_family: string | null
+  item_type: string | null
   image_url: string | null
   price_gbp: number | null
   score: number
@@ -1740,6 +1741,7 @@ export async function lookAlternates(lookId: string, itemIndex: number): Promise
       product_name: item.product_name,
       brand_name: item.brand?.name ?? null,
       colour_family: item.colour_family ?? null,
+      item_type: (item as any).item_type ?? null,
       image_url: item.image_url ?? null,
       price_gbp: (item as any).price_gbp != null ? Number((item as any).price_gbp) : item.price != null ? Number(item.price) : null,
       score: Math.round(score * 100) / 100,
@@ -1773,6 +1775,7 @@ export async function lookAddOptions(lookId: string, slot: string): Promise<{ op
       product_name: item.product_name,
       brand_name: item.brand?.name ?? null,
       colour_family: item.colour_family ?? null,
+      item_type: (item as any).item_type ?? null,
       image_url: item.image_url ?? null,
       price_gbp: (item as any).price_gbp != null ? Number((item as any).price_gbp) : item.price != null ? Number(item.price) : null,
       score: Math.round(score * 100) / 100,
