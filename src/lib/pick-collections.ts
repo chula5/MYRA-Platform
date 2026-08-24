@@ -27,9 +27,13 @@ export interface PickCollectionConfig {
   art?: string
 }
 
+// Every collection is currently item-based. The 'outfit' kind is fully wired
+// end to end — schema (migration 0051), the admin look picker, and the
+// /picks/[slug] look grid — and switching a collection over is this one field.
+// It's kept ready for the next collection that should hold whole looks.
 export const PICK_COLLECTIONS: PickCollectionConfig[] = [
   { slug: 'bags', title: 'Summer Bags', label: 'SUMMER BAGS', kind: 'item', art: '/amun-cutout.png' },
-  { slug: 'mint', title: 'Mint Green', label: 'MINT GREEN', kind: 'outfit' },
+  { slug: 'mint', title: 'Mint Green', label: 'MINT GREEN', kind: 'item' },
 ]
 
 export function pickKind(slug: string): PickKind {
