@@ -113,6 +113,11 @@ const ADD_SLOTS: { value: string; label: string }[] = [
   { value: 'bottom', label: 'BOTTOM' },
 ]
 
+const SLOT_LABEL: Record<string, string> = {
+  top: 'TOP', bottom: 'BOTTOM', dress: 'DRESS', outerwear: 'OUTERWEAR',
+  shoe: 'SHOES', bag: 'BAG', jewellery: 'JEWELLERY', accessory: 'ACCESSORY',
+}
+
 // The words a stylist types rarely equal the taxonomy's word. "Trainers" and
 // "sneakers" are the same shoe — the library stores item_type `sneaker`, so a
 // literal search for "trainer" found nothing. Each row is one bag of
@@ -1853,6 +1858,17 @@ function ScoreStrip({ memberId }: { memberId: string }) {
         {cell('LOOKS YOU PULLED FROM', pct(t.removeRate), 'A PIECE TAKEN OUT')}
         {cell('PIECES THAT DIDN’T LAST', pct(t.itemErrorRate), 'OF ALL COMPOSED')}
       </div>
+
+      {t.slotEdits.length > 0 && (
+        <p className="text-[9px] tracking-[0.06em] text-[#6B6B6B] mt-3">
+          WHERE THE EDITS LAND (OF {t.sample} REVIEWED) — {t.slotEdits.map((s) => {
+            const bits: string[] = []
+            if (s.swapped) bits.push(`${s.swapped} SWAPPED`)
+            if (s.removed) bits.push(`${s.removed} PULLED`)
+            return `${SLOT_LABEL[s.slot] ?? s.slot.toUpperCase()} ${bits.join(', ')}`
+          }).join('   ·   ')}
+        </p>
+      )}
 
       {t.trend && (
         <p className="text-[9px] tracking-[0.06em] text-[#6B6B6B] mt-3">

@@ -73,7 +73,7 @@ import {
 } from '@/lib/higgsfield-shoot'
 import { runHiggsfieldGeneration } from '@/app/admin/projects/higgsfield-actions'
 import { buildTraitModel, type TraitModel, type TraitItem, type TraitDecision } from '@/lib/member-traits'
-import { readTrust, trustHeadline, type LookOutcome, type TrustRead } from '@/lib/member-trust'
+import { readTrust, trustHeadline, TRAILING, type LookOutcome, type TrustRead } from '@/lib/member-trust'
 import { explainTraits } from '@/lib/member-traits'
 import { type ClimateId } from '@/lib/climate'
 
@@ -2207,10 +2207,25 @@ export async function loadMemberPersonaLens(memberId: string): Promise<PersonaLe
 
 // ── TRUST GATE ─────────────────────────────────────────────────────────────
 
+/** How often one slot gets edited, over the trailing review window. The read
+ *  that turns "clean rate is 30%" into a single thing to fix: if shoes are
+ *  swapped on most looks, the composer's shoe ranking for her is wrong, and one
+ *  change lifts every future look at once. Counted as DISTINCT looks touched in
+ *  that slot, so swapping shoes four times on one look is one look, not four. */
+export interface SlotEdit {
+  slot: string
+  /** Looks in the window where this slot was swapped at least once. */
+  swapped: number
+  /** Looks where this slot's piece was pulled out. */
+  removed: number
+}
+
 export interface MemberTrust extends TrustRead {
   headline: string
   /** What her decisions have taught the composer, in plain language. */
   learned: string[]
+  /** Where the edits land, worst slot first. Denominator is `sample`. */
+  slotEdits: SlotEdit[]
 }
 
 /**
@@ -2228,7 +2243,7 @@ export async function loadMemberTrust(memberId: string): Promise<MemberTrust | {
     const ids = (deliveries ?? []).map((d: any) => d.delivery_id)
     if (!ids.length) {
       const empty = readTrust([])
-      return { ...empty, headline: trustHeadline(empty), learned: [] }
+      return { ...empty, headline: trustHeadline(empty), learned: [], slotEdits: [] }
     }
 
     const [{ data: looks }, { data: fb }] = await Promise.all([
@@ -2271,6 +2286,30 @@ export async function loadMemberTrust(memberId: string): Promise<MemberTrust | {
 
     const trust = readTrust(outcomes)
 
+    // Per-slot edit breakdown over the SAME trailing window readTrust scores,
+    // so the denominator matches the clean rate the panel shows. Distinct looks
+    // per slot — a slot swapped repeatedly on one look counts once.
+    const decidedForWindow = outcomes.filter((o) => o.approved || o.edits > 0)
+    const windowIds = new Set(decidedForWindow.slice(-TRAILING).map((o) => o.look_id))
+    const swapSlot = new Map<string, Set<string>>()
+    const removeSlot = new Map<string, Set<string>>()
+    for (const f of fb ?? []) {
+      if (!f.look_id || !f.slot || !windowIds.has(f.look_id)) continue
+      const m = f.action === 'swap' ? swapSlot : f.action === 'remove' ? removeSlot : null
+      if (!m) continue
+      const set = m.get(f.slot) ?? new Set<string>()
+      set.add(f.look_id)
+      m.set(f.slot, set)
+    }
+    const slotKeys = new Set<string>()
+    swapSlot.forEach((_v, k) => slotKeys.add(k))
+    removeSlot.forEach((_v, k) => slotKeys.add(k))
+    const slotEdits: SlotEdit[] = []
+    slotKeys.forEach((slot) =>
+      slotEdits.push({ slot, swapped: swapSlot.get(slot)?.size ?? 0, removed: removeSlot.get(slot)?.size ?? 0 }),
+    )
+    slotEdits.sort((a, b) => (b.swapped + b.removed) - (a.swapped + a.removed))
+
     // The learned traits, named rather than hashed, so the learning is
     // auditable: she can see what it has concluded and disagree with it.
     const { data: member } = await admin.from('pilot_member').select('*').eq('member_id', memberId).maybeSingle()
@@ -2289,7 +2328,7 @@ export async function loadMemberTrust(memberId: string): Promise<MemberTrust | {
       }
     }
 
-    return { ...trust, headline: trustHeadline(trust), learned }
+    return { ...trust, headline: trustHeadline(trust), learned, slotEdits }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Could not read trust' }
   }
