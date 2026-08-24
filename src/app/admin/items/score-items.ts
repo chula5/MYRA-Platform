@@ -30,13 +30,17 @@ export interface ScoreRunResult {
 const COLUMNS = `item_id, product_name, image_url, item_type, colour_family, colour_hex, material_category, material_primary, ${SCORED_DIMENSIONS.join(', ')}`
 
 /**
- * Items still missing their dimensions, newest first, paged by created_at.
+ * Items whose photograph has not been read, newest first, paged by created_at.
  *
- * Paging matters more than it looks. Some pieces have no scores to give — a
- * bag has no rise, hem length or leg opening, and the prompt correctly returns
- * null for all of them — so `structure IS NULL` stays true however many times
- * they are read. Selecting purely on that put the same unscorable items at the
- * front of every batch and the run stalled on them. The cursor always moves.
+ * The selector is `scored_at`, not a missing dimension, because some pieces
+ * have no scores to give: a bag has no rise, hem length or leg opening, and
+ * the prompt correctly returns null for all of them, so `structure IS NULL`
+ * stays true however many times it is read. Selecting on that re-read the same
+ * ~490 accessories on every run and stalled the backfill on them. scored_at
+ * records the attempt rather than the outcome.
+ *
+ * The cursor still moves regardless, so a database without 0050 yet degrades
+ * to the old behaviour instead of looping.
  */
 async function unscoredBatch(
   admin: any,
@@ -48,18 +52,28 @@ async function unscoredBatch(
   // neckline and sleeve are selected too when they are the gap being closed;
   // asking for a column this database has not got yet fails the whole query.
   const extra = missingField === 'structure' ? '' : `, ${missingField}`
-  let q = admin
-    .from('item')
-    .select(`${COLUMNS}${extra}, created_at`)
-    .in('status', ['ready', 'live'])
-    .is(missingField, null)
-  if (types?.length) q = q.in('item_type', types)
-  q = q
-    .not('image_url', 'is', null)
-    .order('created_at', { ascending: false })
-    .limit(limit)
-  if (before) q = q.lt('created_at', before)
-  const { data } = await q
+  const run = async (gapColumn: string) => {
+    let q = admin
+      .from('item')
+      .select(`${COLUMNS}${extra}, created_at`)
+      .in('status', ['ready', 'live'])
+      .is(gapColumn, null)
+    if (types?.length) q = q.in('item_type', types)
+    q = q
+      .not('image_url', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(limit)
+    if (before) q = q.lt('created_at', before)
+    return q
+  }
+  // The main sweep asks "has this been read?"; a targeted pass (sleeve) asks
+  // for its own gap, because a piece read before that column existed still
+  // needs looking at.
+  const primary = missingField === 'structure' ? 'scored_at' : missingField
+  let { data, error } = await run(primary)
+  if (error && /schema cache|does not exist/i.test(error.message)) {
+    ;({ data } = await run(missingField))
+  }
   return (data ?? []) as ScorableItem[]
 }
 
@@ -90,12 +104,14 @@ async function writeScores(admin: any, itemId: string, update: Record<string, un
 
 export async function countUnscored(): Promise<{ unscored: number; total: number }> {
   const admin = createAdminClient() as any
-  const [{ count: unscored }, { count: total }] = await Promise.all([
-    admin.from('item').select('item_id', { count: 'exact', head: true })
-      .in('status', ['ready', 'live']).is('structure', null).not('image_url', 'is', null),
-    admin.from('item').select('item_id', { count: 'exact', head: true }).in('status', ['ready', 'live']),
-  ])
-  return { unscored: unscored ?? 0, total: total ?? 0 }
+  const gap = async (column: string) => admin.from('item')
+    .select('item_id', { count: 'exact', head: true })
+    .in('status', ['ready', 'live']).is(column, null).not('image_url', 'is', null)
+  let counted = await gap('scored_at')
+  if (counted.error) counted = await gap('structure')  // pre-0050
+  const { count: total } = await admin
+    .from('item').select('item_id', { count: 'exact', head: true }).in('status', ['ready', 'live'])
+  return { unscored: counted.count ?? 0, total: total ?? 0 }
 }
 
 /**
