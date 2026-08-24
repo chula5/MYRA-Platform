@@ -52,6 +52,21 @@ describe('climate', () => {
     }
   })
 
+  it('reads the fibre out of the product name', () => {
+    // "Houndstooth Wool Trousers" carries no material_primary at all — the
+    // only place it says wool is the name, and it walked through a 25°C gate.
+    expect(climateReason('hot', item({ item_type: 'trousers', product_name: 'Houndstooth Wool Trousers', material_category: 'natural_woven' }))).toBeTruthy()
+    expect(climateReason('hot', item({ item_type: 'blouse', product_name: 'Linen Camp Shirt' }))).toBeNull()
+  })
+
+  it('makes an unlabelled jacket prove it is light', () => {
+    // No fibre data at all: a jacket is more likely to be warm than not, and
+    // being lenient here puts a wool jacket on a beach.
+    expect(climateReason('hot', item({ item_type: 'jacket', product_name: 'Darnley Short Jacket' }))).toBeTruthy()
+    expect(climateReason('hot', item({ item_type: 'jacket', product_name: 'Linen Summer Jacket' }))).toBeNull()
+    expect(climateReason('hot', item({ item_type: 'jacket', material_primary: 'Cotton', material_weight: 2 }))).toBeNull()
+  })
+
   it('judges an unscored piece on its type and fibre alone', () => {
     expect(warmthOf(item({}))).toBe(3)
     expect(warmthOf(item({ material_primary: 'Linen' }))).toBeLessThan(3)

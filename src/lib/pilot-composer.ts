@@ -389,19 +389,27 @@ export function composeMemberLooks(
   // won't wear never gets composed. Safety net — if the gate would leave too
   // little to build a look from, fall back to the full pool (where the same
   // avoids still apply as a heavy scoring penalty) rather than send nothing.
-  const preferred = inStock.filter(
+  // The weather is not a preference. A wool jacket in 25°C is wrong however
+  // thin the pool gets, so this gate sits OUTSIDE the starvation net — the old
+  // net released all four gates together, and one over-tight preference was
+  // enough to put houndstooth wool trousers in a hot-holiday look.
+  const weatherOk = inStock.filter((i) => !climateReason(occ?.climate, i as any))
+
+  const preferred = weatherOk.filter(
     (i) => avoidReasons(t.prefs, i as any).length === 0 &&
       itemPriceVerdict(t, i) !== 'over' &&
-      // A description she has rejected three times and never once kept —
-      // "MUNTHE structured bag" — is treated exactly like an authored avoid:
-      // gated out, and released only by the same starvation net below.
-      !(t.traits && traitBlocked(t.traits, i as any)) &&
-      // Wrong for the weather is wrong however much she likes the piece. The
-      // travel prior favours knitwear, which answered a hot holiday with
-      // jumpers and boots until this existed.
-      !climateReason(occ?.climate, i as any),
+      // A description she has rejected and never once kept — "MUNTHE
+      // structured bag" — is treated exactly like an authored avoid.
+      !(t.traits && traitBlocked(t.traits, i as any)),
   )
-  const usable = canBuildLooks(preferred) ? preferred : inStock
+  // Relax her preferences before the weather, and only fall past the weather
+  // when the library genuinely has nothing for it — at which point the caller
+  // says so rather than quietly dressing her for the wrong season.
+  const usable = canBuildLooks(preferred)
+    ? preferred
+    : canBuildLooks(weatherOk)
+      ? weatherOk
+      : inStock
 
   const itemScore = (i: ItemWithBrand) =>
     memberItemScore(t, i) + occasionItemScore(occ, i) + climateScore(occ?.climate, i as any) + personaFitScore(lens, i)

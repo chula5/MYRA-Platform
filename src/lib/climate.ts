@@ -22,6 +22,10 @@ export type ClimateId = (typeof CLIMATES)[number]['id']
 
 export interface ClimateItem {
   item_type?: string | null
+  /** Read for fibre words too. "Houndstooth Wool Trousers" carries its whole
+   *  material story in the name and nothing in material_primary, and passed a
+   *  25°C gate because only the structured fields were being read. */
+  product_name?: string | null
   material_primary?: string | null
   material_category?: string | null
   material_weight?: number | null   // 1 sheer … 5 structural
@@ -31,6 +35,12 @@ export interface ClimateItem {
 
 // Pieces that only make sense in the cold, whatever they are made of.
 const COLD_ONLY_TYPES = new Set(['coat', 'trench', 'cape', 'boot'])
+// Layers that are usually warm. With no fibre evidence at all these start
+// ABOVE neutral, so a hot brief excludes them unless something says they are
+// light — a linen blazer proves itself, an unlabelled wool one does not get
+// the benefit of the doubt. Getting this wrong in the lenient direction puts
+// a wool jacket on a beach.
+const USUALLY_WARM_TYPES = new Set(['jacket', 'blazer', 'gilet', 'knitwear'])
 // Pieces that only make sense in the heat.
 const HOT_ONLY_TYPES = new Set(['shorts', 'sandal', 'swimwear'])
 // Pieces that have no temperature. A structural leather tote read as "too
@@ -59,7 +69,9 @@ export function warmthOf(item: ClimateItem): number {
   if (HOT_ONLY_TYPES.has(type)) return 1
 
   let w = 3
-  const fibre = `${item.material_primary ?? ''} ${item.material_category ?? ''}`
+  const fibre = `${item.material_primary ?? ''} ${item.material_category ?? ''} ${item.product_name ?? ''}`
+  const noFibreEvidence = !item.material_primary && item.material_weight == null
+  if (USUALLY_WARM_TYPES.has(type) && noFibreEvidence) w += 0.8
   if (WARM_FIBRES.test(fibre)) w += 1.5
   else if (COOL_FIBRES.test(fibre)) w -= 1
   if (item.material_category === 'natural_knit' || item.material_category === 'synthetic_knit') w += 0.5
