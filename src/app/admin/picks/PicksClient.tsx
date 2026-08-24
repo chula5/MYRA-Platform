@@ -8,6 +8,7 @@ import {
   addOutfitPick,
   removePick,
   movePick,
+  makeTileImage,
   searchPickItems,
   searchPickOutfits,
   type AdminPickRow,
@@ -27,7 +28,7 @@ const COLLECTION_META: Record<PickCollection, { title: string; blurb: string }> 
   },
   mint: {
     title: 'MINT GREEN — COLLECTION',
-    blurb: 'The mint green edit, shown as a tile beside the bag in OUR PICKS. The FIRST item here becomes the tile image on the homepage, so lead with the piece you want people to see. Hidden entirely until at least one live item is added.',
+    blurb: 'The mint green edit, shown as a tile beside the bag in OUR PICKS. The lead item (marked TILE IMAGE) is what the homepage tile shows — use USE AS TILE on any row to change it. Drafts show publicly; only archived or out-of-stock pieces are withheld.',
   },
 }
 
@@ -53,8 +54,10 @@ export default function PicksClient({
   const [msg, setMsg] = useState<string | null>(null)
 
   const rows = initial[active]
-  // Only live entries reach the public pages (see getPickCollection).
-  const liveCount = rows.filter((r) => r.status === 'live').length
+  // Curated picks surface regardless of draft/ready/live — the curation is the
+  // editorial gate. Only retired or unbuyable pieces are withheld.
+  const HIDDEN_STATUSES = ['archived', 'out_of_stock']
+  const shownCount = rows.filter((r) => !HIDDEN_STATUSES.includes(r.status)).length
   // Mint Green curates complete LOOKS, not products — so its picker searches
   // outfits and the item-only filters (brand, type, colour) don't apply.
   const kind = pickKind(active)
@@ -117,23 +120,19 @@ export default function PicksClient({
           only LIVE ones ever reach the site — without this line a fully
           curated collection that simply hasn't been published reads as broken. */}
       {rows.length > 0 && (
-        liveCount === 0 ? (
+        shownCount === 0 ? (
           <div className="border border-[#E8D9B4] bg-[#FBF6E9] rounded-[10px] px-4 py-3">
             <p className="text-[10px] tracking-[0.1em] text-[#8A6D3B]">
-              NOT ON THE SITE YET — NONE OF THESE {rows.length} {isOutfitKind ? 'LOOKS ARE' : 'ITEMS ARE'} LIVE.
+              NOT ON THE SITE — ALL {rows.length} {isOutfitKind ? 'LOOKS ARE' : 'ITEMS ARE'} ARCHIVED OR OUT OF STOCK.
             </p>
             <p className="text-[9px] tracking-[0.06em] text-[#8A6D3B]/80 mt-1 leading-relaxed">
-              ONLY LIVE {isOutfitKind ? 'LOOKS' : 'ITEMS'} EVER SHOW PUBLICLY. SET THEM LIVE IN{' '}
-              <a href={isOutfitKind ? '/admin/the-edit' : '/admin/items'} className="underline">
-                {isOutfitKind ? 'THE EDIT' : 'ITEMS'}
-              </a>{' '}
-              AND THIS COLLECTION APPEARS ON THE HOMEPAGE.
+              DRAFTS DO SHOW — CURATING IS THE GATE. ONLY RETIRED OR UNBUYABLE PIECES ARE WITHHELD.
             </p>
           </div>
         ) : (
           <p className="text-[9px] tracking-[0.1em] text-[#3D7A50]">
-            ✓ ON THE SITE — {liveCount} OF {rows.length} LIVE
-            {liveCount < rows.length && ` · ${rows.length - liveCount} HIDDEN UNTIL LIVE`}
+            ✓ ON THE SITE — SHOWING {shownCount} OF {rows.length}
+            {shownCount < rows.length && ` · ${rows.length - shownCount} HIDDEN (ARCHIVED / OUT OF STOCK)`}
           </p>
         )
       )}
@@ -149,7 +148,7 @@ export default function PicksClient({
             {active === 'picks'
               ? 'EMPTY — THE SECTION IS USING THE AUTOMATIC SELECTION. ADD ITEMS BELOW TO CURATE IT.'
               : active === 'mint'
-                ? 'EMPTY — ADD MINT PIECES BELOW. THE FIRST ONE BECOMES THE HOMEPAGE TILE IMAGE.'
+                ? 'EMPTY — ADD MINT PIECES BELOW. THE LEAD ONE BECOMES THE HOMEPAGE TILE IMAGE.'
                 : 'EMPTY — ADD BAGS BELOW.'}
           </p>
         ) : (
@@ -167,9 +166,22 @@ export default function PicksClient({
                   </p>
                   <p className="text-[8px] tracking-[0.08em] text-[#A8A8A4]">
                     {r.item_type.replace(/_/g, ' ').toUpperCase()}
-                    {r.status !== 'live' && <span className="text-[#B83A3A]"> · {r.status.replace(/_/g, ' ').toUpperCase()} — WON&rsquo;T SHOW UNTIL LIVE</span>}
+                    {HIDDEN_STATUSES.includes(r.status)
+                      ? <span className="text-[#B83A3A]"> · {r.status.replace(/_/g, ' ').toUpperCase()} — HIDDEN PUBLICLY</span>
+                      : r.status !== 'live' && <span className="text-[#A8A8A4]"> · {r.status.toUpperCase()}</span>}
                   </p>
                 </div>
+                {i === 0 ? (
+                  <span className="px-2.5 py-1 text-[8px] tracking-[0.1em] rounded-full bg-[#0A0A0A] text-white whitespace-nowrap">TILE IMAGE</span>
+                ) : (
+                  <button
+                    onClick={() => run(r.id, () => makeTileImage(r.id), '✓ NOW THE TILE IMAGE')}
+                    disabled={!!busy}
+                    className="px-2.5 py-1 text-[8px] tracking-[0.1em] rounded-full border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] disabled:opacity-30 whitespace-nowrap"
+                  >
+                    USE AS TILE
+                  </button>
+                )}
                 <button onClick={() => run(r.id, () => movePick(r.id, 'up'))} disabled={!!busy || i === 0} className="px-2 py-1 text-[10px] border border-[#E2E0DB] rounded text-[#6B6B6B] hover:border-[#0A0A0A] disabled:opacity-30">↑</button>
                 <button onClick={() => run(r.id, () => movePick(r.id, 'down'))} disabled={!!busy || i === rows.length - 1} className="px-2 py-1 text-[10px] border border-[#E2E0DB] rounded text-[#6B6B6B] hover:border-[#0A0A0A] disabled:opacity-30">↓</button>
                 <button onClick={() => run(r.id, () => removePick(r.id))} disabled={!!busy} className="px-3 py-1 text-[9px] tracking-[0.1em] border border-[#E2E0DB] rounded-full text-[#B83A3A] hover:border-[#B83A3A] disabled:opacity-50">REMOVE</button>

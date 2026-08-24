@@ -107,7 +107,12 @@ export async function getPickCollection(collection: string): Promise<OurPick[]> 
     const byId = new Map(((items ?? []) as any[]).map((it) => [it.item_id, it]))
     return rows
       .map((r) => byId.get(r.item_id))
-      .filter((it) => it && it.status === 'live')
+      // Drafts DO surface in a curated collection: these are hand-picked, so
+      // the curation itself is the editorial gate rather than the item's
+      // workflow status (MYRA's library sits almost entirely at draft). Only
+      // genuinely unusable states are withheld — archived pieces are retired
+      // and out_of_stock ones can't be bought.
+      .filter((it) => it && !['archived', 'out_of_stock'].includes(String(it.status)))
       .map((it: any) => ({
         item_id: it.item_id,
         product_name: it.product_name,
