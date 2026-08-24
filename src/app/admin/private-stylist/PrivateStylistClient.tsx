@@ -69,6 +69,7 @@ import {
   addComposedLookItem,
   approveComposedLook,
   skipComposedLook,
+  composeLookVariants,
   restoreLookShoot,
   loadMemberTrust,
   type MemberTrust,
@@ -161,7 +162,7 @@ function optionMatchesQuery(haystack: string, query: string): boolean {
   return tokens.every((tok) => {
     if (hay.includes(tok)) return true
     const syns = SYNONYM_INDEX.get(tok)
-    if (syns) for (const s of syns) if (hay.includes(s)) return true
+    if (syns && Array.from(syns).some((s) => hay.includes(s))) return true
     return false
   })
 }
@@ -2164,13 +2165,37 @@ function DeliveryCard({
             )}
           </div>
 
-          {d.looks.map((l) =>
-            editingLook === l.look_id ? (
-              <LookEditor key={l.look_id} deliveryId={d.delivery_id} look={l} run={run} done={() => setEditingLook(null)} />
-            ) : (
-              <LookRow key={l.look_id} look={l} member={member} sent={d.status !== 'draft'} calibration={calibration} run={run} onEdit={() => setEditingLook(l.look_id)} />
-            ),
-          )}
+          {(() => {
+            // Cluster "styled several ways" siblings (same variant_group) so a
+            // hero's alternatives read as one set with a header. Standalone looks
+            // are a group of one and render exactly as before.
+            const order: string[] = []
+            const groups = new Map<string, typeof d.looks>()
+            for (const l of d.looks) {
+              const key = l.variant_group ?? l.look_id
+              if (!groups.has(key)) { groups.set(key, []); order.push(key) }
+              groups.get(key)!.push(l)
+            }
+            const renderLook = (l: (typeof d.looks)[number]) =>
+              editingLook === l.look_id ? (
+                <LookEditor key={l.look_id} deliveryId={d.delivery_id} look={l} run={run} done={() => setEditingLook(null)} />
+              ) : (
+                <LookRow key={l.look_id} look={l} member={member} sent={d.status !== 'draft'} calibration={calibration} run={run} onEdit={() => setEditingLook(l.look_id)} />
+              )
+            return order.map((key) => {
+              const set = groups.get(key)!.slice().sort((a, b) => a.position - b.position)
+              if (set.length < 2) return renderLook(set[0])
+              const heroName = set[0].items.find((it) => it.item_id)?.product_name ?? 'THIS PIECE'
+              return (
+                <div key={key} className="border-l-2 border-[#C4A882] pl-3">
+                  <p className="text-[8px] tracking-[0.16em] text-[#8B5E00] mb-1.5">
+                    ◆ {set.length} WAYS TO WEAR {heroName.toUpperCase()}
+                  </p>
+                  {set.map(renderLook)}
+                </div>
+              )
+            })
+          })()}
 
           {editingLook === 'new' ? (
             <LookEditor deliveryId={d.delivery_id} position={d.looks.length + 1} run={run} done={() => setEditingLook(null)} />
@@ -2802,6 +2827,15 @@ function LookRow({
                   onClick={() => setPoseOpen(!poseOpen)}
                 >
                   {shooting ? 'SHOOTING…' : l.image_url ? '✦ REDO SHOOT' : '✦ HIGGSFIELD'}
+                </button>
+              )}
+              {composed && (
+                <button
+                  className="text-[9px] tracking-[0.12em] px-3 py-1.5 border border-[#C4A882] text-[#8B5E00] hover:bg-[#C4A882] hover:text-white transition-colors"
+                  title="Style this same hero piece several ways — composes distinct sibling looks around it, so she sees what else it goes with. Each becomes its own approvable look."
+                  onClick={() => run(`var-${l.look_id}`, () => composeLookVariants(l.look_id), 'STYLED SEVERAL WAYS — NEW LOOKS ADDED')}
+                >
+                  ◆ STYLE 3 WAYS
                 </button>
               )}
               <button className={btnTiny} onClick={onEdit}>

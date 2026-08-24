@@ -50,6 +50,7 @@ import { accumulate, zeroVector } from '@/lib/taste-vector'
 import { getAllItems, type ItemWithBrand } from '@/lib/admin-queries'
 import {
   composeMemberLooks,
+  composeMemberVariants,
   rankAlternates,
   toLookItem,
   DEFAULT_OWNED_TARGET_SHARE,
@@ -142,6 +143,9 @@ export interface PilotLook {
   responded_at: string | null
   approved_at: string | null
   shoot_history: { url: string; pose?: string; created_at?: string }[]
+  /** Looks that style the same hero several ways share a variant_group. */
+  variant_group: string | null
+  hero_item_id: string | null
 }
 
 export interface PilotDelivery {
@@ -1699,6 +1703,96 @@ export async function composeDeliveryLooks(deliveryId: string, options: ComposeD
   if (error) return { error: error.message }
   revalidatePath(PATH)
   return { created: rows.length, ownedLooks: looks.filter((l) => l.ownedCount > 0).length }
+}
+
+// Style ONE hero several ways. Takes a composed look, holds its hero (the first
+// item — the anchor) fixed, and composes distinct sibling looks around it, so
+// the delivery answers "what else can I wear this with?". The looks join a
+// variant_group so the review queue shows them together; each is a normal look
+// that approves/swaps/shoots on its own. Ensures the group reaches `target`
+// looks, and always adds at least one so pressing again gives another way.
+export async function composeLookVariants(
+  lookId: string,
+  target = 3,
+): Promise<{ created?: number; group?: string; error?: string }> {
+  const admin = createAdminClient() as any
+  const { data: look, error: lerr } = await admin.from('pilot_look').select('*').eq('look_id', lookId).single()
+  if (lerr || !look) return { error: lerr?.message ?? 'Look not found' }
+  const items: LookItem[] = look.items ?? []
+  const hero = items.find((it) => it.item_id)
+  if (!hero?.item_id) return { error: 'This look has no hero item to build around — compose or edit it first' }
+
+  const { data: delivery, error: derr } = await admin.from('pilot_delivery').select('*').eq('delivery_id', look.delivery_id).single()
+  if (derr || !delivery) return { error: derr?.message ?? 'Delivery not found' }
+  if (delivery.status !== 'draft') return { error: 'Only draft deliveries can be styled into more looks' }
+  const { data: member, error: merr } = await admin.from('pilot_member').select('*').eq('member_id', delivery.member_id).single()
+  if (merr || !member) return { error: merr?.message ?? 'Member not found' }
+
+  const taste = await loadMemberTaste(admin, member)
+  const library = await loadComposableLibrary(member)
+  const mix = normalise(delivery.effective_weights ?? {})
+  const occ: OccasionContext = { id: delivery.occasion ?? null, vector: lookTasteVector(mix), climate: delivery.climate ?? null }
+  const lens = await loadPersonaLens(admin, delivery.member_id)
+
+  // Same history read as a fresh delivery, so variants avoid pieces she's rejected.
+  const [{ data: priorLooks }, { data: fb }] = await Promise.all([
+    admin.from('pilot_look').select('items, delivery:delivery_id!inner(member_id)').eq('delivery.member_id', delivery.member_id),
+    admin.from('pilot_look_feedback').select('item_in, item_out, action').eq('member_id', delivery.member_id).limit(5000),
+  ])
+  const seenCounts = new Map<string, number>()
+  for (const l of priorLooks ?? []) for (const it of (l.items ?? []) as any[]) {
+    if (it.item_id) seenCounts.set(it.item_id, (seenCounts.get(it.item_id) ?? 0) + 1)
+  }
+  const rejected = new Set<string>()
+  for (const f of fb ?? []) {
+    if (f.action === 'remove') { const id = f.item_out ?? f.item_in; if (id) rejected.add(id) }
+    if (f.action === 'swap' && f.item_out) rejected.add(f.item_out)
+  }
+
+  const groupId: string = look.variant_group ?? look.look_id
+  // Every look already in this group (this look included), so we don't repeat one.
+  const { data: groupLooks } = look.variant_group
+    ? await admin.from('pilot_look').select('items').eq('variant_group', groupId)
+    : { data: [{ items }] }
+  const existingSets = (groupLooks ?? []).map((l: any) =>
+    new Set(((l.items ?? []) as any[]).map((it) => it.item_id).filter(Boolean)))
+  const sameSet = (a: Set<string>, b: Set<string>) =>
+    a.size === b.size && Array.from(a).every((id) => b.has(id))
+
+  const need = Math.max(1, target - existingSets.length)
+  const variants = composeMemberVariants(
+    taste, library, hero.item_id, need + existingSets.length + 2, occ, lens, { seenCounts, rejected }, { ownedMode: 'blend' },
+  )
+  const fresh: typeof variants = []
+  for (const v of variants) {
+    if (fresh.length >= need) break
+    const vset = new Set(v.items.map((it) => it.item_id).filter(Boolean) as string[])
+    if (existingSets.some((s: Set<string>) => sameSet(s, vset))) continue
+    if (fresh.some((f) => sameSet(new Set(f.items.map((it) => it.item_id).filter(Boolean) as string[]), vset))) continue
+    fresh.push(v)
+  }
+  if (!fresh.length) return { error: 'Could not find a different way to style this piece from the library' }
+
+  const { count } = await admin.from('pilot_look').select('look_id', { count: 'exact', head: true }).eq('delivery_id', look.delivery_id)
+  const startPos = (count ?? 0) + 1
+  const rows = fresh.map((l, i) => ({
+    delivery_id: look.delivery_id,
+    position: startPos + i,
+    room_mix: mix,
+    taste_vector: lookTasteVector(mix),
+    items: l.items,
+    notes: l.notes,
+    variant_group: groupId,
+    hero_item_id: hero.item_id,
+  }))
+  const { error } = await admin.from('pilot_look').insert(rows)
+  if (error) return { error: error.message }
+  // Tag the seed look into the group too, so they render together.
+  if (!look.variant_group) {
+    await admin.from('pilot_look').update({ variant_group: groupId, hero_item_id: hero.item_id }).eq('look_id', look.look_id)
+  }
+  revalidatePath(PATH)
+  return { created: rows.length, group: groupId }
 }
 
 export interface SwapOption {

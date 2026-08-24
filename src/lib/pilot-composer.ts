@@ -18,6 +18,7 @@ import {
   pairCompat,
   slotForItemType,
   type Slot,
+  type ComposerCandidate,
 } from '@/lib/composer'
 import type { LookItem, StylePrefs, PriceBands } from '@/lib/pilot-stylist'
 import { avoidReasons, lovedScore, priceVerdict } from '@/lib/pilot-stylist'
@@ -523,6 +524,100 @@ export function composeMemberLooks(
   }
 
   return looks
+}
+
+// ── VARIANTS PER HERO ────────────────────────────────────────────────────────
+// The member's real question is "what else can I wear this with?" — so hold ONE
+// hero fixed and compose several genuinely different looks around it.
+// generateCandidates already returns many ranked outfits for one anchor; we keep
+// the most DISTINCT few (no more than half their supporting pieces shared) so the
+// set reads as real alternatives, not the same look nudged. Each returned look is
+// an ordinary ComposedLook whose first item is the shared hero, so it approves,
+// swaps and shoots exactly like any other look.
+export function composeMemberVariants(
+  t: MemberTaste,
+  libraryIn: ItemWithBrand[],
+  heroId: string,
+  count = 3,
+  occ?: OccasionContext,
+  lens?: PersonaLens,
+  history?: ComposeHistory,
+  opts: ComposeOptions = {},
+): ComposedLook[] {
+  const mode = opts.ownedMode ?? 'blend'
+  const library = mode === 'retail_only' ? libraryIn.filter((i) => !isOwnedItem(i as any)) : libraryIn
+  const seed = history ? Array.from(history.seenCounts.values()).reduce((s, n) => s + n, 0) + history.rejected.size : 0
+
+  // Same pool construction as composeMemberLooks — kept in step deliberately so
+  // a variant is never built from a piece a fresh delivery wouldn't use.
+  const inStock = library.filter(
+    (i) => i.image_url && i.stock_status !== 'out_of_stock' &&
+      (isOwnedItem(i as any) || !(i.brand?.name && t.inputOnlyBrands.has(i.brand.name.toLowerCase()))),
+  )
+  const weatherOk = inStock.filter((i) => !climateReason(occ?.climate, i as any))
+  const preferred = weatherOk.filter(
+    (i) => avoidReasons(t.prefs, i as any).length === 0 && itemPriceVerdict(t, i) !== 'over' &&
+      !(t.traits && traitBlocked(t.traits, i as any)),
+  )
+  const usable = canBuildLooks(preferred) ? preferred : canBuildLooks(weatherOk) ? weatherOk : inStock
+
+  const anchor = usable.find((i) => i.item_id === heroId)
+    ?? inStock.find((i) => i.item_id === heroId)
+    ?? libraryIn.find((i) => i.item_id === heroId)
+  if (!anchor) return []
+
+  const cands = generateCandidates({
+    anchor,
+    library: usable,
+    perSlotPool: 8,
+    maxCandidates: 20,
+    minScore: 0.45,
+    excludeItemIds: [],
+    learnedBonus: (items) =>
+      memberComboBonus(t, anchor, items) +
+      items.reduce((sum, i) => sum + occasionItemScore(occ, i.item) + personaFitScore(lens, i.item)
+        - historyPenalty(history, i.item.item_id) + varietyJitter(i.item.item_id, seed), 0) /
+        Math.max(1, items.length),
+    learnedBlend: 0.4,
+    houseGate: (items) => memberGate(t, anchor, items),
+  })
+
+  const supportIds = (c: ComposerCandidate) => new Set(c.items.map((x) => x.item.item_id))
+  const overlap = (a: Set<string>, b: Set<string>) => {
+    let shared = 0
+    a.forEach((id) => { if (b.has(id)) shared++ })
+    return shared / Math.max(a.size, b.size, 1)
+  }
+  const picked: ComposerCandidate[] = []
+  // Greedy distinctness: a variant joins only if it shares ≤ half its supporting
+  // pieces with every variant already kept.
+  for (const c of cands) {
+    if (picked.length >= count) break
+    const ids = supportIds(c)
+    if (picked.every((p) => overlap(ids, supportIds(p)) <= 0.5)) picked.push(c)
+  }
+  // If the library was too thin to find `count` distinct ones, top up in rank order.
+  for (const c of cands) { if (picked.length >= count) break; if (!picked.includes(c)) picked.push(c) }
+
+  const heroSlot = slotForItemType(anchor.item_type)
+  const anchorOwned = isOwnedItem(anchor as any)
+  const anchorLabel = anchorOwned ? `her own ${anchor.product_name}` : anchor.brand?.name ?? '—'
+  return picked.map((best) => {
+    const all = [{ item: anchor, slot: heroSlot }, ...best.items]
+    for (const need of ENSURE_SLOTS) {
+      if (all.some((x) => x.slot === need)) continue
+      const exclude = new Set(all.map((x) => x.item.item_id))
+      const [pick] = rankAlternates(t, usable, need, all.map((x) => x.item), exclude, 1, occ, lens)
+      if (pick) all.push({ item: pick.item, slot: need })
+    }
+    const ownedCount = all.filter(({ item }) => isOwnedItem(item as any)).length
+    const notes = [
+      `Anchor ${anchorLabel} (affinity ${memberItemScore(t, anchor).toFixed(2)})`,
+      `coherence ${best.score.toFixed(2)}`,
+      ownedCount ? `◈ ${ownedCount} from her wardrobe` : null,
+    ].filter(Boolean).join(' · ')
+    return { items: all.map(({ item }) => toLookItem(item)), notes, score: best.score, ownedCount }
+  })
 }
 
 // Ranked alternates for one slot of a look — what the SWAP picker shows.
