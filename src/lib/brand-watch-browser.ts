@@ -79,6 +79,32 @@ const PRODUCT_PATH = /\/(product|products|produit|produits|catalogue|item|shop-i
 const NON_PRODUCT_PATH = /\/(collection|collections|category|categories|blog|journal|stories|store|stores|locations|page|pages|about|legal|care|faq|search|account|cart|lookbook|edito)\b/i
 const LOCALE_SITEMAP = /(-|_|\/)(en|gb|uk|en-gb|en-en)[-._]/i
 
+/**
+ * Which of a site's sitemaps to walk.
+ *
+ * The storefront she typed names the locale she means. Bimba y Lola lists
+ * THIRTY-ONE locale sitemap indexes in robots.txt — one catalogue, thirty-one
+ * times — and walking them in order spent the entire visit budget opening
+ * index files, reaching zero products. Given /gb_en/, take the UK one and
+ * ignore the other thirty.
+ *
+ * Falls back to English-looking sitemaps, then to all of them: a site with one
+ * or two sitemaps is not paying for this and must not be filtered down to
+ * nothing.
+ */
+export function preferredSitemaps(baseUrl: string, all: string[]): string[] {
+  const localeHint = (() => {
+    try {
+      const seg = new URL(baseUrl).pathname.split('/').filter(Boolean)[0] ?? ''
+      return /^[a-z]{2}([-_][a-z]{2})?$/i.test(seg) ? seg.toLowerCase() : ''
+    } catch { return '' }
+  })()
+  const hinted = localeHint ? all.filter((u) => u.toLowerCase().includes(`/${localeHint}/`)) : []
+  if (hinted.length) return hinted
+  const english = all.filter((u) => LOCALE_SITEMAP.test(u))
+  return english.length && all.length > 4 ? english : all
+}
+
 // Walk robots.txt + sitemap(.xml|index) and return product-page URLs.
 export async function discoverProductUrls(baseUrl: string): Promise<string[]> {
   const origin = new URL(baseUrl).origin
@@ -88,14 +114,16 @@ export async function discoverProductUrls(baseUrl: string): Promise<string[]> {
   if (!sitemapUrls.size) sitemapUrls.add(origin + '/sitemap.xml')
   sitemapUrls.add(origin + '/sitemap_index.xml')
 
+  const start = preferredSitemaps(baseUrl, Array.from(sitemapUrls))
+
   const pageUrls = new Set<string>()
-  const queue = Array.from(sitemapUrls)
+  const queue = Array.from(start)
   const visited = new Set<string>()
   // The URL bound must survive locale multiplication: By Malene Birger's
   // sitemaps carry ~36k URLs that collapse to ~900 real products, and a 12k cap
   // stopped the walk after three sub-sitemaps — the newest drops live in the
   // later ones, so exactly the pieces worth queueing were the ones never seen.
-  while (queue.length && visited.size < 30 && pageUrls.size < 120000) {
+  while (queue.length && visited.size < 60 && pageUrls.size < 120000) {
     const sm = queue.shift()!
     if (visited.has(sm)) continue
     visited.add(sm)
@@ -109,7 +137,10 @@ export async function discoverProductUrls(baseUrl: string): Promise<string[]> {
       const productish = subs.filter((u) => !/\b(cms|blog|journal|content|editorial|stories|pages?)\b/i.test(u))
       const pool = productish.length ? productish : subs
       const preferred = pool.filter((u) => LOCALE_SITEMAP.test(u) || /product|oms/i.test(u))
-      for (const u of (preferred.length ? preferred : pool).slice(0, 12)) queue.push(u)
+      // Depth first: an index's own children go to the FRONT, so opening an
+      // index leads straight to its URLs. Breadth-first meant every index on
+      // the site was read before any of them was followed.
+      queue.unshift(...(preferred.length ? preferred : pool).slice(0, 12))
     } else {
       for (const u of locs(xml)) pageUrls.add(u)
     }
