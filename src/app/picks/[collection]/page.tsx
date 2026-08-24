@@ -1,16 +1,12 @@
 import { notFound } from 'next/navigation'
 import { getPickCollectionWithOutfits } from '@/lib/our-picks'
+import { pickCollection } from '@/lib/pick-collections'
 import PicksCollectionClient from './PicksCollectionClient'
 
 export const dynamic = 'force-dynamic'
 
-// Public curated collections. 'bags' is the OUR PICKS headline-bag destination;
-// future slugs (shoes, jewellery…) work as soon as the admin curates them.
-const TITLES: Record<string, string> = {
-  bags: 'Summer Bags',
-  shoes: 'The Shoes',
-  jewellery: 'The Jewellery',
-}
+// Titles come from the shared collection config, so a new collection is one
+// edit in lib/pick-collections.ts plus curating it in the studio.
 
 export default async function PicksCollectionPage({
   params,
@@ -18,7 +14,7 @@ export default async function PicksCollectionPage({
   params: Promise<{ collection: string }>
 }) {
   const { collection } = await params
-  const title = TITLES[collection]
+  const title = pickCollection(collection)?.title
   if (!title) notFound()
   const picks = await getPickCollectionWithOutfits(collection)
   return (

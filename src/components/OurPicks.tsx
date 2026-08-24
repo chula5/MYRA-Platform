@@ -11,6 +11,12 @@ import type { OurPicksData } from '@/lib/our-picks'
 export default function OurPicks({ data }: { data: OurPicksData }) {
   if (!data.artImageUrl) return null
 
+  // The bag keeps its own hand-placed cutout hooked through the S; every other
+  // curated collection renders as a tile beside it. A collection only reaches
+  // here once it has a live curated item (see getLandingCollections), so this
+  // never puts a dead link on the homepage.
+  const extras = (data.collections ?? []).filter((c) => c.slug !== 'bags')
+
   return (
     <section className="mt-20 mb-28 sm:mb-36">
       {/* All art offsets are in em of the headline font-size, so the bag stays
@@ -61,14 +67,41 @@ export default function OurPicks({ data }: { data: OurPicksData }) {
         {/* The positioning box is sized in HEADLINE em (it inherits the
             container font-size); the link sets its own smaller size inside.
             Putting both on one element would make em resolve against the
-            label's font-size and shove it to the far left. */}
-        <div style={{ marginLeft: '1.74em', width: '2.6em' }}>
-          <a
-            href="/picks/bags"
-            className="block text-center text-[clamp(15px,1.5vw,26px)] tracking-[0.22em] text-[#111111] hover:text-[#111111] transition-colors whitespace-nowrap"
-          >
-            SUMMER BAGS
-          </a>
+            label's font-size and shove it to the far left.
+
+            Any further curated collections sit to the RIGHT of the bag on the
+            same baseline. The row wraps rather than scrolls, so on a phone —
+            where the bag alone nearly fills the width — they drop to their own
+            line instead of pushing the page sideways. */}
+        <div className="flex flex-wrap items-start gap-y-[0.35em] gap-x-[0.5em]" style={{ marginLeft: '1.74em' }}>
+          <div style={{ width: '2.6em' }}>
+            <a
+              href="/picks/bags"
+              className="block text-center text-[clamp(15px,1.5vw,26px)] tracking-[0.22em] text-[#111111] hover:text-[#111111] transition-colors whitespace-nowrap"
+            >
+              SUMMER BAGS
+            </a>
+          </div>
+
+          {extras.map((c) => (
+            <a key={c.slug} href={c.href} className="group/col block shrink-0" style={{ width: '1.55em' }}>
+              {/* Lifted into the bag's band so both sit on one baseline. The
+                  bag ends at ~3.8em and this row starts at ~3.88em, so a
+                  1.9em box pulled up by 1.9em lands level with it. */}
+              <div className="flex items-end justify-center overflow-hidden" style={{ marginTop: '-1.9em', height: '1.9em' }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={c.artImageUrl}
+                  alt={c.label}
+                  className="max-h-full w-auto object-contain transition-transform duration-500 group-hover/col:scale-[1.02]"
+                  style={{ filter: 'drop-shadow(0 0.02em 0.05em rgba(0,0,0,0.10))' }}
+                />
+              </div>
+              <span className="block text-center text-[clamp(15px,1.5vw,26px)] tracking-[0.22em] text-[#111111] whitespace-nowrap">
+                {c.label}
+              </span>
+            </a>
+          ))}
         </div>
       </div>
     </section>
