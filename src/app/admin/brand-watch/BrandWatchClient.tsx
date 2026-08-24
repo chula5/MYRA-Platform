@@ -32,6 +32,18 @@ interface Props extends QueuePage {
   watched: WatchedBrandRow[]
 }
 
+// A scan writes { running: true } and clears it when it finishes or fails. If
+// the process dies between those two — a timeout, a dev-server restart, a
+// crash inside a vision pass — the flag is left set and the card says
+// "SCANNING" forever, with no way back. Anything older than half an hour is
+// not running any more.
+const STALE_SCAN_MS = 30 * 60 * 1000
+function staleScan(state: { running?: boolean; started_at?: string } | null | undefined): boolean {
+  if (!state?.running) return false
+  const started = state.started_at ? Date.parse(state.started_at) : NaN
+  return !Number.isFinite(started) || Date.now() - started > STALE_SCAN_MS
+}
+
 export default function BrandWatchClient(props: Props) {
   const { watched } = props
   const [pending, startTransition] = useTransition()
@@ -179,7 +191,9 @@ export default function BrandWatchClient(props: Props) {
                     <span className="block text-[8px] tracking-[0.08em] text-[#A8A8A4]">
                       {inQueue} IN QUEUE{w.last_checked_at ? ` · CHECKED ${w.last_checked_at.slice(0, 10)}` : ' · NEVER CHECKED'}
                       {w.platform === 'browser' && ' · BROWSER'}
-                      {w.scan_state?.running && <span className="text-[#C4A882]"> · SCANNING {w.scan_state.done ?? 0}/{w.scan_state.total ?? '?'}</span>}
+                      {w.scan_state?.running && (staleScan(w.scan_state)
+                        ? <span className="text-[#B4593A]"> · SCAN STOPPED PART-WAY — RUN FULL SCAN AGAIN</span>
+                        : <span className="text-[#C4A882]"> · SCANNING {w.scan_state.done ?? 0}/{w.scan_state.total ?? '?'}</span>)}
                       {!w.scan_state?.running && (w.scan_state?.remaining ?? 0) > 0 && <span className="text-[#C4A882]"> · {w.scan_state!.remaining} PAGES LEFT — FULL SCAN TO CONTINUE</span>}
                     </span>
                   </button>

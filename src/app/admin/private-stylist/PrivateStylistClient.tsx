@@ -2266,7 +2266,30 @@ function LookRow({
                 <div className="w-56 border-2 border-[#C4A882] bg-white">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={l.image_url} alt="Higgsfield shoot" className="w-full aspect-[3/4] object-cover" />
-                  <p className="text-[9px] tracking-[0.12em] text-[#8B5E00] px-2.5 py-2">✦ HIGGSFIELD SHOOT</p>
+                  <p className="text-[9px] tracking-[0.12em] text-[#8B5E00] px-2.5 pt-2">✦ HIGGSFIELD SHOOT</p>
+                  {/* One generation returns several frames. They used to be
+                      thrown away — now the alternatives sit under the one in
+                      use, so picking a different shot is one tap. */}
+                  {shootHistory.length > 1 && (
+                    <div className="px-2.5 pb-2 pt-1.5">
+                      <p className="text-[8px] tracking-[0.12em] text-[#A8A8A4] mb-1.5">
+                        {shootHistory.length} FRAMES — TAP TO USE ANOTHER
+                      </p>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {shootHistory.map((h) => (
+                          <button
+                            key={h.url}
+                            disabled={shooting || h.url === l.image_url}
+                            onClick={() => run(`rs-${l.look_id}`, () => restoreLookShoot(l.look_id, h.url), 'SHOOT SWITCHED')}
+                            className={`border ${h.url === l.image_url ? 'border-[#C4A882]' : 'border-[#E2E0DB] hover:border-[#0A0A0A]'} transition-colors`}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={h.url} alt="" className="w-12 aspect-[3/4] object-cover" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               {/* A shoot the fidelity check rejected used to leave NOTHING on
@@ -2429,7 +2452,7 @@ function LookRow({
               {shootHistory.length > 1 && (
                 <>
                   <p className="text-[8px] tracking-[0.14em] text-[#8B5E00] mt-3 mb-1.5">
-                    EARLIER SHOOTS — TAP TO PUT ONE BACK
+                    OTHER FRAMES AND EARLIER SHOOTS — TAP TO USE ONE
                   </p>
                   <div className="flex gap-2 flex-wrap">
                     {shootHistory.map((h) => (

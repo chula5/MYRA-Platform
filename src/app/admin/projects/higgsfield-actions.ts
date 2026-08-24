@@ -73,7 +73,10 @@ export async function runHiggsfieldGeneration(
   prompt: string,
   referenceUrls: string[],
   publicId: string,
-): Promise<{ imageUrl?: string; error?: string }> {
+  // imageUrl is the first frame — the default every existing caller uses.
+  // imageUrls is the whole batch, because a generation returns several and
+  // the second is often the better shot.
+): Promise<{ imageUrl?: string; imageUrls?: string[]; error?: string }> {
   if (!prompt?.trim()) return { error: 'No prompt provided' }
   const refs = (referenceUrls ?? []).filter((u) => typeof u === 'string' && u.startsWith('http')).slice(0, 6)
   if (refs.length === 0) return { error: 'No reference images — add item photos first' }
@@ -151,21 +154,32 @@ export async function runHiggsfieldGeneration(
     if (!jsonStr) return { error: 'Could not parse Higgsfield response' }
     let jobs: any
     try { jobs = JSON.parse(jsonStr) } catch { return { error: 'Higgsfield returned invalid JSON' } }
-    const job = Array.isArray(jobs) ? jobs[0] : jobs
-    const resultUrl: string | undefined = job?.result_url
-    if (!resultUrl) {
-      const status = job?.status ?? 'unknown'
+    // Higgsfield returns a JOB PER IMAGE — a generation is a small batch, not
+    // one picture. Taking jobs[0] threw the rest away, so a shoot that came
+    // back with a usable second frame offered no way to reach it. Keep them
+    // all; the first is still the default so every existing caller is
+    // unchanged.
+    const jobList: any[] = Array.isArray(jobs) ? jobs : [jobs]
+    const resultUrls: string[] = jobList
+      .map((j) => j?.result_url)
+      .filter((u: unknown): u is string => typeof u === 'string' && !!u)
+    if (!resultUrls.length) {
+      const status = jobList[0]?.status ?? 'unknown'
       return { error: `No image returned (status: ${status})` }
     }
 
-    // 4. Persist to Cloudinary so it lives in MYRA's asset pipeline (not ephemeral CDN).
-    // Dedicated folder so generated shoots are grouped, away from product photos.
-    const cloudUrl = await persistImageToCloudinary(resultUrl, {
-      folder: 'higgsfield-shoots',
-      publicId,
-    })
-    if (!cloudUrl) console.error('[runHiggsfieldGeneration] Cloudinary persist failed — storing ephemeral CDN URL for', publicId)
-    return { imageUrl: cloudUrl ?? resultUrl }
+    // 4. Persist to Cloudinary so they live in MYRA's asset pipeline (not the
+    // ephemeral CDN). Dedicated folder so generated shoots are grouped, away
+    // from product photos.
+    const persisted = await Promise.all(resultUrls.map(async (raw, i) => {
+      const cloudUrl = await persistImageToCloudinary(raw, {
+        folder: 'higgsfield-shoots',
+        publicId: i === 0 ? publicId : `${publicId}-${i + 1}`,
+      })
+      if (!cloudUrl) console.error('[runHiggsfieldGeneration] Cloudinary persist failed — storing ephemeral CDN URL for', publicId)
+      return cloudUrl ?? raw
+    }))
+    return { imageUrl: persisted[0], imageUrls: persisted }
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

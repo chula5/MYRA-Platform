@@ -7,7 +7,7 @@
 
 import { createAdminClient } from '@/lib/supabase-server'
 import { toGbpAmount } from '@/lib/currency'
-import { classifyProductGender } from '@/app/admin/ai/classify-gender'
+import { classifyProductGender, type GenderRead } from '@/app/admin/ai/classify-gender'
 import { classifyProductColour } from '@/app/admin/ai/classify-colour'
 import {
   discoverProductUrls, fetchNewProductPages, urlHash, type ParsedProduct,
@@ -1053,10 +1053,12 @@ async function applyVisionColour(products: ScannedProduct[], minScore: number): 
     const reads = await Promise.all(chunk.map(async (p) => {
       const url = p.images[0]
       if (cache.has(url)) return cache.get(url) ?? null
-      const { colour } = await classifyProductColour(url)
-      // A failed read is cached as null too: the same broken image should not
-      // be paid for on every scan.
-      fresh.push({ image_url: url, colour_family: colour })
+      const { colour, error } = await classifyProductColour(url)
+      // Cache a genuine "cannot tell" so a broken image is not paid for twice,
+      // but NEVER cache an outage: an API with no credit left would otherwise
+      // poison every image it touched during the outage, permanently.
+      const transient = error && /credit|rate.?limit|overloaded|timeout|429|5\d\d/i.test(error)
+      if (!transient) fresh.push({ image_url: url, colour_family: colour })
       return colour
     }))
     reads.forEach((colour, j) => {
@@ -1120,15 +1122,33 @@ async function applyVisionGender(products: ScannedProduct[]): Promise<number> {
   // filled with menswear again. MYRA is womenswear only — an item nobody can
   // confirm as women's is not worth showing, and a brand that labels its
   // sections never reaches this code at all.
-  let excluded = 0
+  // Read everything first, decide afterwards. "Not confirmed women's" only
+  // means menswear when the reader was actually working — and when it is not,
+  // this rule excludes an ENTIRE catalogue. Bimba y Lola scanned 350 pages and
+  // queued nothing because the API was out of credit and every call came back
+  // as an error, which this then read as 350 men's products.
+  const verdicts: Array<{ gender: GenderRead; error?: string }> = []
   const CONC = 6
   for (let i = 0; i < products.length; i += CONC) {
     const chunk = products.slice(i, i + CONC)
-    const reads = await Promise.all(chunk.map((p) => (p.images[0] ? classifyProductGender(p.images[0]) : Promise.resolve({ gender: 'unclear' as const }))))
-    reads.forEach((r, j) => {
-      if (r.gender !== 'women') { chunk[j].menswear = true; excluded++ }
-    })
+    verdicts.push(...await Promise.all(chunk.map((p) =>
+      p.images[0] ? classifyProductGender(p.images[0]) : Promise.resolve({ gender: 'unclear' as const, error: 'no image' }))))
   }
+
+  // Infrastructure failures — no credit, no key, a timeout — are not evidence
+  // about a garment. If the pass is broadly broken, it gets no vote at all.
+  const infraFailed = verdicts.filter((v) => v.error && !/no image/i.test(v.error)).length
+  if (verdicts.length && infraFailed / verdicts.length > 0.25) {
+    throw new Error(
+      `womenswear check could not run — ${infraFailed} of ${verdicts.length} image reads failed ` +
+      `(${verdicts.find((v) => v.error)?.error ?? 'unknown'}). Nothing was queued rather than guessing at gender.`,
+    )
+  }
+
+  let excluded = 0
+  verdicts.forEach((r, j) => {
+    if (r.gender !== 'women') { products[j].menswear = true; excluded++ }
+  })
   return excluded
 }
 

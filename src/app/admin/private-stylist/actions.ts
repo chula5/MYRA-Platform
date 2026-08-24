@@ -1925,11 +1925,22 @@ export async function higgsfieldShootForLook(lookId: string, poseKey = 'E5'): Pr
     console.error('[higgsfieldShootForLook] fidelity check errored — continuing unchecked', err)
   }
 
-  // Append to history rather than replacing — the previous shoot stays reachable.
+  // Append to history rather than replacing — the previous shoot stays
+  // reachable. EVERY frame the generation returned goes in, not just the one
+  // that becomes the look image: a shoot is a small batch and the second frame
+  // is often the better shot, so it should be one tap away rather than lost.
   const history: any[] = Array.isArray(look.shoot_history) ? look.shoot_history : []
-  if (!history.some((h) => h?.url === gen.imageUrl)) {
-    history.push({ url: gen.imageUrl, pose: poseKey, created_at: new Date().toISOString(), ...(fidelity ? { fidelity } : {}) })
-  }
+  const at = new Date().toISOString()
+  const frames = (gen.imageUrls?.length ? gen.imageUrls : [gen.imageUrl]).filter(Boolean) as string[]
+  frames.forEach((url, i) => {
+    if (history.some((h) => h?.url === url)) return
+    history.push({
+      url, pose: poseKey, created_at: at,
+      // Only the frame that was actually checked carries a fidelity score.
+      ...(i === 0 && fidelity ? { fidelity } : {}),
+      ...(i > 0 ? { frame: i + 1, unchecked: true } : {}),
+    })
+  })
   await admin.from('pilot_look')
     .update({ image_url: gen.imageUrl, shoot_history: history.slice(-12) })
     .eq('look_id', lookId)
