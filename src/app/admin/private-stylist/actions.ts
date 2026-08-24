@@ -862,6 +862,59 @@ export async function deleteLook(lookId: string) {
   return error ? { error: error.message } : {}
 }
 
+/**
+ * Clear a look AND everything it taught.
+ *
+ * Deleting a look leaves its decisions behind: the feedback rows survive with
+ * a null look_id and keep feeding the trait model, so a composition she threw
+ * away still shapes the next one. When a look is simply wrong — the wrong
+ * brief, the wrong weather, a mistake — none of the fiddling that went into it
+ * is a taste signal, and it should leave no trace.
+ *
+ * Deliberately separate from deleteLook: "remove this look, keep what I
+ * learned" and "pretend this never happened" are different intentions and the
+ * second one cannot be undone.
+ */
+export async function clearLook(lookId: string): Promise<{ cleared?: number; error?: string }> {
+  const admin = createAdminClient() as any
+  try {
+    const { count: decisions } = await admin
+      .from('pilot_look_feedback').select('feedback_id', { count: 'exact', head: true }).eq('look_id', lookId)
+    // Order matters: the feedback and taste rows are ON DELETE SET NULL, so
+    // dropping the look first would orphan them beyond reach.
+    await admin.from('pilot_look_feedback').delete().eq('look_id', lookId)
+    await admin.from('pilot_taste_event').delete().eq('look_id', lookId)
+    await admin.from('pilot_activity').delete().eq('look_id', lookId).eq('type', 'note')
+    const { error } = await admin.from('pilot_look').delete().eq('look_id', lookId)
+    if (error) return { error: error.message }
+    revalidatePath(PATH)
+    return { cleared: decisions ?? 0 }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Could not clear the look' }
+  }
+}
+
+/** Every look in a delivery, cleared the same way. */
+export async function clearDeliveryLooks(deliveryId: string): Promise<{ looks?: number; cleared?: number; error?: string }> {
+  const admin = createAdminClient() as any
+  try {
+    const { data: looks } = await admin.from('pilot_look').select('look_id').eq('delivery_id', deliveryId)
+    const ids = (looks ?? []).map((l: any) => l.look_id)
+    if (!ids.length) return { looks: 0, cleared: 0 }
+    const { count: decisions } = await admin
+      .from('pilot_look_feedback').select('feedback_id', { count: 'exact', head: true }).in('look_id', ids)
+    await admin.from('pilot_look_feedback').delete().in('look_id', ids)
+    await admin.from('pilot_taste_event').delete().in('look_id', ids)
+    await admin.from('pilot_activity').delete().in('look_id', ids).eq('type', 'note')
+    const { error } = await admin.from('pilot_look').delete().in('look_id', ids)
+    if (error) return { error: error.message }
+    revalidatePath(PATH)
+    return { looks: ids.length, cleared: decisions ?? 0 }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Could not clear the looks' }
+  }
+}
+
 // Stamp every buyable item in the delivery as stock-checked now.
 // "Stock checked 10am, moves fast."
 export async function markStockChecked(deliveryId: string): Promise<{ error?: string }> {

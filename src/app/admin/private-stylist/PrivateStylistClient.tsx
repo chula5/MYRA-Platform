@@ -51,6 +51,8 @@ import {
   deleteDelivery,
   saveLook,
   deleteLook,
+  clearLook,
+  clearDeliveryLooks,
   markStockChecked,
   sendDelivery,
   recordResponse,
@@ -1737,9 +1739,13 @@ function DeliveriesTab({ data, run, busy }: { data: PilotData; run: Run; busy: s
 
       {showNew && <NewDeliveryForm members={data.members} run={run} busy={busy} done={() => setShowNew(false)} />}
 
-      {/* Filter to one member → her screenshot lookbook sits right here on top */}
+      {/* Filter to one member → the numbers that decide whether she can be
+          scaled sit at the top, then her screenshot lookbook. */}
       {memberId !== 'all' && memberById[memberId] && (
-        <Lookbook deliveries={deliveries} memberName={memberById[memberId].name} activity={data.activity} run={run} busy={busy} />
+        <>
+          <ScoreStrip memberId={memberId} />
+          <Lookbook deliveries={deliveries} memberName={memberById[memberId].name} activity={data.activity} run={run} busy={busy} />
+        </>
       )}
 
       {deliveries.map((d) => (
@@ -1747,6 +1753,66 @@ function DeliveriesTab({ data, run, busy }: { data: PilotData; run: Run; busy: s
       ))}
       {deliveries.length === 0 && (
         <p className="text-[10px] tracking-[0.1em] text-[#A8A8A4]">NO DELIVERIES YET.</p>
+      )}
+    </div>
+  )
+}
+
+// ── SCORECARD STRIP ─────────────────────────────────────────────────────────
+// The numbers that decide whether a member can be scaled, sitting where the
+// work happens rather than behind a member card. Same read as the member
+// profile — derived from her looks and decisions, never stored.
+function ScoreStrip({ memberId }: { memberId: string }) {
+  const [t, setT] = useState<MemberTrust | null>(null)
+  useEffect(() => {
+    let live = true
+    loadMemberTrust(memberId).then((r) => { if (live && !('error' in r)) setT(r) })
+    return () => { live = false }
+  }, [memberId])
+  if (!t) return null
+
+  const pct = (n: number | null) => n == null ? '—' : `${Math.round(n * 100)}%`
+  const likes = t.responses ? Math.round((t.memberYesRate ?? 0) * t.responses) : 0
+  const cell = (label: string, value: string, note?: string, tone?: string) => (
+    <div className="min-w-[7.5rem]">
+      <p className="text-[8px] tracking-[0.12em] text-[#A8A8A4]">{label}</p>
+      <p className={`text-[13px] tracking-[0.06em] mt-0.5 ${tone ?? 'text-[#0A0A0A]'}`}>{value}</p>
+      {note && <p className="text-[8px] tracking-[0.08em] text-[#A8A8A4] mt-0.5">{note}</p>}
+    </div>
+  )
+
+  return (
+    <div className="border border-[#E2E0DB] bg-[#FCFCFA] px-4 py-3">
+      <div className="flex items-baseline justify-between mb-3">
+        <p className="text-[9px] tracking-[0.16em] text-[#0A0A0A]">
+          STAGE {t.stage} — {t.stage === 1 ? 'YOU REVIEW EVERY LOOK' : t.stage === 2 ? 'AUTO-SEND WITH A MORNING DIGEST' : 'COMPOSING AND SENDING ON SCHEDULE'}
+        </p>
+        <p className="text-[8px] tracking-[0.12em] text-[#A8A8A4]">
+          {t.looksComposed} COMPOSED · {t.sample} REVIEWED
+        </p>
+      </div>
+
+      <div className="flex flex-wrap gap-x-8 gap-y-3">
+        {cell('CLEAN — NO EDITS', pct(t.cleanRate), `TARGET 80%`,
+          t.cleanRate >= 0.8 ? 'text-[#3D7A50]' : 'text-[#0A0A0A]')}
+        {cell('CLEAN IN A ROW', `${t.streak} / 8`, 'UNLOCKS AUTO-SEND',
+          t.streak >= 8 ? 'text-[#3D7A50]' : 'text-[#0A0A0A]')}
+        {cell('SHE LIKED', `${likes} / ${t.responses}`, `${pct(t.memberYesRate)} · TARGET 60%`,
+          (t.memberYesRate ?? 0) >= 0.6 && t.responses >= 6 ? 'text-[#3D7A50]' : 'text-[#0A0A0A]')}
+        {cell('LOOKS YOU SWAPPED IN', pct(t.swapRate), 'A PIECE CHANGED')}
+        {cell('LOOKS YOU PULLED FROM', pct(t.removeRate), 'A PIECE TAKEN OUT')}
+        {cell('PIECES THAT DIDN’T LAST', pct(t.itemErrorRate), 'OF ALL COMPOSED')}
+      </div>
+
+      {t.trend && (
+        <p className="text-[9px] tracking-[0.06em] text-[#6B6B6B] mt-3">
+          {t.trend.delta > 0.05 ? 'IMPROVING' : t.trend.delta < -0.05 ? 'SLIPPING' : 'FLAT'} — {pct(t.trend.previous)} CLEAN OVER THE PREVIOUS 10, {pct(t.trend.recent)} OVER THE LAST 10
+        </p>
+      )}
+      {t.blockers.length > 0 && (
+        <p className="text-[9px] tracking-[0.06em] text-[#8B5E00] mt-2">
+          BEFORE SHE CAN BE SENT LOOKS UNREVIEWED — {t.blockers.join(' · ').toUpperCase()}
+        </p>
       )}
     </div>
   )
@@ -2055,8 +2121,23 @@ function DeliveryCard({
               >
                 {calibration ? 'MARK SHOWN' : 'SEND'}
               </button>
+              {/* Wrong brief, wrong weather, wrong day: clear the batch and
+                  compose again with nothing carried over. */}
+              {d.looks.length > 0 && (
+                <button
+                  className="text-[8px] tracking-[0.12em] text-[#8B5E00] hover:underline ml-auto"
+                  title="Empty this delivery and forget everything these looks taught"
+                  onClick={() => {
+                    if (window.confirm(`Clear all ${d.looks.length} looks and everything they taught the composer?\n\nThe delivery stays so you can compose again — the swaps, removals and taste signals are deleted. This cannot be undone.`)) {
+                      run(`clrd-${d.delivery_id}`, () => clearDeliveryLooks(d.delivery_id), 'LOOKS CLEARED — NOTHING LEARNED FROM THEM')
+                    }
+                  }}
+                >
+                  CLEAR LOOKS
+                </button>
+              )}
               <button
-                className="text-[8px] tracking-[0.12em] text-[#B83A3A] hover:underline ml-auto"
+                className={`text-[8px] tracking-[0.12em] text-[#B83A3A] hover:underline ${d.looks.length ? '' : 'ml-auto'}`}
                 onClick={() => {
                   if (window.confirm('Delete this delivery?')) {
                     run(`deld-${d.delivery_id}`, () => deleteDelivery(d.delivery_id), 'DELIVERY DELETED')
@@ -2543,8 +2624,24 @@ function LookRow({
               <button className={btnTiny} onClick={onEdit}>
                 EDIT
               </button>
+              {/* CLEAR is not the same as delete. Deleting leaves the swaps
+                  behind — they keep teaching the composer from a look that was
+                  thrown away. Clear removes the look and everything it taught,
+                  for the case where the composition was simply wrong. */}
               <button
                 className={btnTiny}
+                title="Remove this look and everything it taught the composer"
+                onClick={() => {
+                  if (window.confirm('Clear this look and everything it taught the composer?\n\nIts swaps, removals and taste signals are deleted, so nothing here shapes the next composition. This cannot be undone.')) {
+                    run(`clr-${l.look_id}`, () => clearLook(l.look_id), 'LOOK CLEARED — NOTHING LEARNED FROM IT')
+                  }
+                }}
+              >
+                CLEAR
+              </button>
+              <button
+                className={btnTiny}
+                title="Remove the look but keep what it taught"
                 onClick={() => {
                   if (window.confirm('Delete this look?')) run(`dell-${l.look_id}`, () => deleteLook(l.look_id), 'LOOK DELETED')
                 }}
