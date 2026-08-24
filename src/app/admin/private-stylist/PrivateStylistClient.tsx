@@ -1910,6 +1910,19 @@ function DeliveryCard({
                 {OCCASION_LABEL[d.occasion]}
               </span>
             )}
+            {/* The weather, stated on the card. A hot holiday that composed
+                wool had nothing on screen to say the climate never took —
+                a badge that is simply absent is the tell. */}
+            {(d as { climate?: string | null }).climate && (
+              <span className="text-[8px] tracking-[0.14em] text-[#8B5E00] border border-[#E8D9B8] px-2 py-0.5">
+                {CLIMATES.find((c) => c.id === (d as { climate?: string }).climate)?.label ?? ''}
+              </span>
+            )}
+            {d.occasion === 'travel' && !(d as { climate?: string | null }).climate && (
+              <span className="text-[8px] tracking-[0.14em] text-[#B4593A] border border-[#E8C4B8] px-2 py-0.5">
+                NO WEATHER SET — WILL COMPOSE FOR ANY SEASON
+              </span>
+            )}
             {calibration && (
               <span className="text-[8px] tracking-[0.14em] text-[#4A6FA5] border border-[#C7D4E8] px-2 py-0.5">
                 TASTE CALIBRATION

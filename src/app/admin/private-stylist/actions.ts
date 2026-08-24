@@ -758,12 +758,14 @@ export async function createDelivery(input: {
     dry_run_brief: input.dry_run_brief ?? null,
   }
   if (input.climate) row.climate = input.climate
-  let { data, error } = await admin.from('pilot_delivery' as any).insert(row).select('delivery_id').single()
-  // Pre-0051 the column is not there yet; the delivery is worth more than the
-  // climate, so save it without rather than failing outright.
+  const { data, error } = await admin.from('pilot_delivery' as any).insert(row).select('delivery_id').single()
+  // Saving the delivery WITHOUT the climate was the wrong trade. A hot holiday
+  // with the weather quietly dropped composes knee-high boots and a cashmere
+  // poncho, and nothing on screen says why — the single most important input
+  // for that delivery is the one thing that went missing. Fail, and name the
+  // migration.
   if (error && /schema cache|does not exist/i.test(error.message) && input.climate) {
-    delete row.climate
-    ;({ data, error } = await admin.from('pilot_delivery' as any).insert(row).select('delivery_id').single())
+    return { error: 'Run migration 0051 in Supabase first — the weather cannot be saved without it, and a hot holiday would come back in wool.' }
   }
   if (error) return { error: error.message }
   revalidatePath(PATH)
