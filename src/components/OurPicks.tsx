@@ -6,6 +6,7 @@
 // the curated bags edit at /picks/bags. No grid here — the collection lives on
 // the destination page.
 
+import FallbackImage from '@/components/FallbackImage'
 import type { OurPicksData } from '@/lib/our-picks'
 
 export default function OurPicks({ data }: { data: OurPicksData }) {
@@ -23,7 +24,7 @@ export default function OurPicks({ data }: { data: OurPicksData }) {
           threaded through the S at every viewport width. The bag sits BEHIND
           the letters so the S reads on top of the ring — its tail landing
           inside the ring hole, like the mock. */}
-      <div className="relative select-none" style={{ fontSize: 'clamp(84px, 14vw, 210px)' }}>
+      <div className="relative select-none" style={{ fontSize: 'clamp(70px, 14vw, 210px)' }}>
         <a
           href="/picks/bags"
           aria-label="The bags — our curated edit"
@@ -88,10 +89,14 @@ export default function OurPicks({ data }: { data: OurPicksData }) {
               {/* Lifted into the bag's band so both sit on one baseline. The
                   bag ends at ~3.8em and this row starts at ~3.88em, so a
                   1.9em box pulled up by 1.9em lands level with it. */}
-              <div className="flex items-end justify-center overflow-hidden" style={{ marginTop: '-1.9em', height: '1.9em' }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+              <div className="flex items-end justify-center overflow-hidden mt-0 md:-mt-[1.9em] h-[1.9em]">
+                {/* Cutout first; if Cloudinary can't serve the background
+                    removal the ladder drops to the untouched product photo
+                    rather than showing a broken tile. */}
+                <FallbackImage
                   src={c.artImageUrl}
+                  placeholder={c.rawImageUrl ?? c.artImageUrl}
+                  thumbWidth={640}
                   alt={c.label}
                   className="max-h-full w-auto object-contain transition-transform duration-500 group-hover/col:scale-[1.02]"
                   style={{ filter: 'drop-shadow(0 0.02em 0.05em rgba(0,0,0,0.10))' }}
