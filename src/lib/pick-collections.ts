@@ -41,7 +41,10 @@ export interface PickCollectionConfig {
 // It's kept ready for the next collection that should hold whole looks.
 export const PICK_COLLECTIONS: PickCollectionConfig[] = [
   { slug: 'bags', title: 'Summer Bags', label: 'SUMMER BAGS', kind: 'item', art: '/amun-cutout.png' },
-  { slug: 'mint', title: 'Mint Green', label: 'MINT GREEN', kind: 'item', cutout: true },
+  // The Proenza Schouler mint floral, background removed the same way the
+  // Amun was — a true transparent PNG rather than a Cloudinary effect, so the
+  // tile never depends on an add-on being enabled to read as a cutout.
+  { slug: 'mint', title: 'Mint Green', label: 'MINT GREEN', kind: 'item', art: '/mint-dress-cutout.png' },
 ]
 
 export function pickKind(slug: string): PickKind {

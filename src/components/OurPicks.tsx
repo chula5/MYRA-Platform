@@ -85,20 +85,24 @@ export default function OurPicks({ data }: { data: OurPicksData }) {
           </div>
 
           {extras.map((c) => (
-            <a key={c.slug} href={c.href} className="group/col block shrink-0" style={{ width: '1.55em' }}>
-              {/* Lifted into the bag's band so both sit on one baseline. The
-                  bag ends at ~3.8em and this row starts at ~3.88em, so a
-                  1.9em box pulled up by 1.9em lands level with it. */}
-              <div className="flex items-end justify-center overflow-hidden mt-0 md:-mt-[1.9em] h-[1.9em]">
+            <a key={c.slug} href={c.href} className="group/col block shrink-0" style={{ width: '1.6em' }}>
+              {/* Lifted into the bag's band so both hang from one baseline —
+                  the bag ends at ~3.8em and this row starts at ~3.88em, so a
+                  2.6em box pulled up by 2.6em lands level with it. Matching
+                  the bag's own 2.6em means the cutout reads as a second piece
+                  hanging off the lettering rather than a small thumbnail. */}
+              <div className="flex items-end justify-center overflow-hidden mt-0 md:-mt-[2.6em] h-[2.6em]">
                 {/* Cutout first; if Cloudinary can't serve the background
                     removal the ladder drops to the untouched product photo
-                    rather than showing a broken tile. */}
+                    rather than showing a broken tile. Capping BOTH dimensions
+                    means a wide piece scales down to fit instead of being
+                    cropped by the band. */}
                 <FallbackImage
                   src={c.artImageUrl}
                   placeholder={c.rawImageUrl ?? c.artImageUrl}
                   thumbWidth={640}
                   alt={c.label}
-                  className="max-h-full w-auto object-contain transition-transform duration-500 group-hover/col:scale-[1.02]"
+                  className="max-h-full max-w-full w-auto object-contain transition-transform duration-500 group-hover/col:scale-[1.02]"
                   style={{ filter: 'drop-shadow(0 0.02em 0.05em rgba(0,0,0,0.10))' }}
                 />
               </div>
