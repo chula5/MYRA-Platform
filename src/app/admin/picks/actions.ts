@@ -7,6 +7,10 @@
 
 import { createAdminClient } from '@/lib/supabase-server'
 import { revalidatePath } from 'next/cache'
+// The same colour synonym table the public search uses — "mint", "sage" and
+// "emerald" all resolve to the 'green' colour_family, so a piece whose product
+// name never says "green" still answers a green search.
+import { COLOUR, STOPWORDS } from '@/lib/search-taxonomy'
 
 export type PickCollection = 'picks' | 'bags' | 'mint'
 
@@ -119,12 +123,29 @@ export async function searchPickItems(
     // Ordering matters as much as the limit: without it Postgres returns an
     // arbitrary slice, so the same search could show a piece one time and not
     // the next. Newest first is both deterministic and the useful default.
+    //
+    // TOKENISED search. The whole query used to be matched as ONE substring,
+    // so a natural phrase found nothing: "proenza schoulder green dress" broke
+    // on the misspelt brand, and no product name contains all four words
+    // anyway. Each token now matches independently against product name, brand
+    // name or colour, and rows are ranked below by how many tokens they
+    // satisfy — so a typo simply contributes nothing instead of killing the
+    // whole search, and colour words work even though the colour lives in its
+    // own column.
+    const tokens = Array.from(
+      new Set(q.toLowerCase().split(/[^a-z0-9]+/i).filter((t) => t.length >= 2 && !STOPWORDS.has(t))),
+    ).slice(0, 6)
     let query = admin
       .from('item' as any)
       .select('item_id, product_name, image_url, item_type, status, colour_family, brand:brand_id(name)')
       .in('status', ['draft', 'ready', 'live', 'out_of_stock'])
       .order('created_at', { ascending: false })
-      .limit(200)
+      // A tokenised search is an OR, so one broad word ("dress") can match
+      // hundreds of rows. Truncating that at 200 BY DATE would drop the very
+      // piece the other tokens pinpoint, because relevance is only ranked
+      // afterwards, in memory. Take the widest page Supabase serves and let
+      // the ranking decide what she actually sees.
+      .limit(tokens.length ? 1000 : 200)
     // Brand filters SERVER-SIDE, before the row limit — filtering in memory
     // after a limit silently hid most of a brand's items. Case-insensitive so
     // near-duplicate brand rows still resolve.
@@ -139,22 +160,57 @@ export async function searchPickItems(
     }
     // The bags collection defaults to bag types unless a type/query overrides.
     if (collection === 'bags' && !q.trim() && !filters?.itemType) query = query.in('item_type', BAG_TYPES)
-    // Text search matches PRODUCT NAME OR BRAND NAME ("cult" finds Cult Gaia).
-    if (q.trim()) {
-      const needle = q.trim()
-      const { data: qBrands } = await admin
-        .from('brand' as any)
-        .select('brand_id')
-        .ilike('name', `%${needle}%`)
-      const qids = ((qBrands ?? []) as any[]).map((b) => b.brand_id)
-      query = qids.length
-        ? query.or(`product_name.ilike.%${needle}%,brand_id.in.(${qids.join(',')})`)
-        : query.ilike('product_name', `%${needle}%`)
+    const brandNamesByToken = new Map<string, string[]>()
+
+    if (tokens.length) {
+      const brandIds = new Set<string>()
+      for (const t of tokens) {
+        const { data: bs } = await admin
+          .from('brand' as any)
+          .select('brand_id, name')
+          .ilike('name', `%${t}%`)
+        const hits = (bs ?? []) as any[]
+        hits.forEach((b) => brandIds.add(b.brand_id))
+        brandNamesByToken.set(t, hits.map((b) => String(b.name ?? '').toLowerCase()))
+      }
+
+      const ors: string[] = []
+      for (const t of tokens) {
+        ors.push(`product_name.ilike.%${t}%`)
+        // colour_family holds one value from a controlled vocabulary, so match
+        // it by equality — ilike isn't even defined for it if the column is an
+        // enum, and the synonym table has already mapped the word.
+        const colour = COLOUR[t]
+        if (colour) ors.push(`colour_family.eq.${colour}`)
+      }
+      if (brandIds.size) ors.push(`brand_id.in.(${Array.from(brandIds).join(',')})`)
+      query = query.or(ors.join(','))
     }
     if (filters?.itemType) query = query.eq('item_type', filters.itemType)
     if (filters?.colour) query = query.eq('colour_family', filters.colour)
     const { data } = await query
-    const rows = (data ?? []) as any[]
+    let rows = (data ?? []) as any[]
+
+    if (tokens.length) {
+      // Rank by how much of the query a row actually answers. Sort is stable,
+      // so equally-relevant pieces stay in the newest-first order they arrived.
+      const score = (it: any) => {
+        const name = String(it.product_name ?? '').toLowerCase()
+        const brand = String(it.brand?.name ?? '').toLowerCase()
+        let n = 0
+        for (const t of tokens) {
+          const brandHit = brand.includes(t) || (brandNamesByToken.get(t) ?? []).includes(brand)
+          if (name.includes(t) || brandHit || (COLOUR[t] && it.colour_family === COLOUR[t])) n++
+        }
+        return n
+      }
+      rows = rows
+        .map((it) => ({ it, n: score(it) }))
+        .sort((a, b) => b.n - a.n)
+        .map((x) => x.it)
+        .slice(0, 200)
+    }
+
     return rows.map((it) => ({
       item_id: it.item_id,
       product_name: it.product_name,

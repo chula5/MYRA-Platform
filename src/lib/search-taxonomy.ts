@@ -9,8 +9,10 @@ import type { OutfitWithItems } from '@/types/database'
 
 // ── Controlled vocabulary / synonym dictionaries ─────────────────────────────
 
-// Colour word/phrase → colour_family enum value.
-const COLOUR: Record<string, string> = {
+// Colour word/phrase → colour_family value. Exported because the admin picks
+// search needs the same synonym table — "mint" has to find a piece whose
+// colour_family is 'green' there exactly as it does in the public search.
+export const COLOUR: Record<string, string> = {
   white: 'white', 'off-white': 'cream', 'off white': 'cream', ivory: 'cream', cream: 'cream', ecru: 'cream', oatmeal: 'cream', beige: 'camel',
   black: 'black', grey: 'grey', gray: 'grey', charcoal: 'grey', slate: 'grey',
   navy: 'navy', blue: 'blue', cobalt: 'blue', teal: 'blue', 'baby blue': 'blue', 'powder blue': 'blue', 'sky blue': 'blue', sky: 'blue', powder: 'blue',
@@ -22,6 +24,7 @@ const COLOUR: Record<string, string> = {
   yellow: 'yellow', mustard: 'yellow', lemon: 'yellow',
   orange: 'orange', rust: 'orange', terracotta: 'orange', coral: 'orange',
   purple: 'purple', lilac: 'purple', lavender: 'purple', violet: 'purple', plum: 'purple', mauve: 'purple',
+  multicolour: 'multicolour', multicolor: 'multicolour', multicoloured: 'multicolour', multicolored: 'multicolour',
 }
 
 const _DRESS = ['mini_dress', 'midi_dress', 'maxi_dress', 'shirt_dress', 'slip_dress']
@@ -134,7 +137,7 @@ const TIME: Record<string, number> = {
   evening: 4, dinner: 4, cocktail: 4, rooftop: 4, night: 5, 'date night': 4,
 }
 
-const STOPWORDS = new Set(['a', 'an', 'the', 'my', 'for', 'to', 'in', 'on', 'at', 'of', 'and', 'with', 'i', 'need', 'want', 'looking', 'some', 'something', 'outfit', 'outfits', 'look', 'wear', 'during', 'this', 'that', 'me'])
+export const STOPWORDS = new Set(['a', 'an', 'the', 'my', 'for', 'to', 'in', 'on', 'at', 'of', 'and', 'with', 'i', 'need', 'want', 'looking', 'some', 'something', 'outfit', 'outfits', 'look', 'wear', 'during', 'this', 'that', 'me'])
 
 // ── Normalisation + fuzzy matching ───────────────────────────────────────────
 
