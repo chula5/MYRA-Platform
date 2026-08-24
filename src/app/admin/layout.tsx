@@ -119,6 +119,12 @@ export default async function AdminLayout({
             THE EDIT
           </a>
           <a
+            href="/admin/picks"
+            className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
+          >
+            OUR PICKS
+          </a>
+          <a
             href="/admin/social"
             className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
           >
