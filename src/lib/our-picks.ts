@@ -4,6 +4,7 @@
 // piece types, statement pieces first — always shoppable (live items only).
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase-server'
+import { PICK_COLLECTIONS } from '@/lib/pick-collections'
 
 export interface OurPick {
   item_id: string
@@ -14,9 +15,20 @@ export interface OurPick {
   price: string
 }
 
+/** A curated collection surfaced as a tile in the OUR PICKS section. */
+export interface LandingCollection {
+  slug: string
+  label: string
+  href: string
+  /** Static cutout if the collection has one, else the lead item's photo. */
+  artImageUrl: string
+}
+
 export interface OurPicksData {
   artImageUrl: string | null
   picks: OurPick[]
+  /** Curated collections with at least one live item, in config order. */
+  collections: LandingCollection[]
 }
 
 function fmtPrice(price: string | null, currency: string | null): string {
@@ -101,6 +113,24 @@ export async function getPickCollection(collection: string): Promise<OurPick[]> 
   }
 }
 
+/**
+ * The collection tiles for the landing section. A collection only appears once
+ * it has at least one LIVE curated item — so a new slug can ship before it's
+ * curated without leaving a dead link on the homepage. Collections without a
+ * hand-made cutout borrow their lead item's product photo as the tile art.
+ */
+export async function getLandingCollections(): Promise<LandingCollection[]> {
+  const out: LandingCollection[] = []
+  for (const c of PICK_COLLECTIONS) {
+    const items = await getPickCollection(c.slug)
+    if (items.length === 0) continue
+    const art = c.art ?? items.find((i) => i.image_url)?.image_url
+    if (!art) continue
+    out.push({ slug: c.slug, label: c.label, href: `/picks/${c.slug}`, artImageUrl: art })
+  }
+  return out
+}
+
 export async function getOurPicks(limit = 6): Promise<OurPicksData> {
   try {
     const admin = createAdminClient()
@@ -110,13 +140,16 @@ export async function getOurPicks(limit = 6): Promise<OurPicksData> {
     // static transparent PNG, so the bare bag hangs off the lettering.
     const artImageUrl = '/amun-cutout.png'
 
+    // Curated collection tiles (bags, mint …) shown beside the headline.
+    const collections = await getLandingCollections()
+
     // THE CURATED COLLECTION FIRST (managed at /admin/picks). When Chloé has
     // hand-picked items, the section is exactly her collection — live items
     // only ever surface publicly. The automatic selection below is the
     // fallback until the collection exists.
     const curated = await getPickCollection('picks')
     if (curated.length > 0) {
-      return { artImageUrl, picks: curated }
+      return { artImageUrl, picks: curated, collections }
     }
 
     // Items inside the freshest live outfits.
@@ -164,9 +197,9 @@ export async function getOurPicks(limit = 6): Promise<OurPicksData> {
       })
     }
 
-    return { artImageUrl, picks }
+    return { artImageUrl, picks, collections }
   } catch (err) {
     console.error('[getOurPicks]', err)
-    return { artImageUrl: null, picks: [] }
+    return { artImageUrl: null, picks: [], collections: [] }
   }
 }

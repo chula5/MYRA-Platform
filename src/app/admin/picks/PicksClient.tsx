@@ -22,6 +22,10 @@ const COLLECTION_META: Record<PickCollection, { title: string; blurb: string }> 
     title: 'THE BAGS — HEADLINE BAG DESTINATION',
     blurb: 'What people see when they click the bag hanging from the OUR PICKS letters. Each bag shows the live outfits it appears in.',
   },
+  mint: {
+    title: 'MINT GREEN — COLLECTION',
+    blurb: 'The mint green edit, shown as a tile beside the bag in OUR PICKS. The FIRST item here becomes the tile image on the homepage, so lead with the piece you want people to see. Hidden entirely until at least one live item is added.',
+  },
 }
 
 export default function PicksClient({
@@ -70,7 +74,7 @@ export default function PicksClient({
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
-        {(['picks', 'bags'] as const).map((c) => (
+        {(['picks', 'bags', 'mint'] as const).map((c) => (
           <button
             key={c}
             onClick={() => { setActive(c); setQ('') }}
@@ -78,7 +82,11 @@ export default function PicksClient({
               active === c ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'text-[#6B6B6B] border-[#E2E0DB] hover:border-[#0A0A0A]'
             }`}
           >
-            {c === 'picks' ? `OUR PICKS (${initial.picks.length})` : `THE BAGS (${initial.bags.length})`}
+            {c === 'picks'
+              ? `OUR PICKS (${initial.picks.length})`
+              : c === 'bags'
+                ? `THE BAGS (${initial.bags.length})`
+                : `MINT GREEN (${initial.mint?.length ?? 0})`}
           </button>
         ))}
       </div>
@@ -92,7 +100,11 @@ export default function PicksClient({
         <p className="text-[10px] tracking-[0.135em] text-[#6B6B6B] mb-3">{COLLECTION_META[active].title}</p>
         {rows.length === 0 ? (
           <p className="text-[10px] tracking-[0.08em] text-[#A8A8A4] py-6 text-center">
-            {active === 'picks' ? 'EMPTY — THE SECTION IS USING THE AUTOMATIC SELECTION. ADD ITEMS BELOW TO CURATE IT.' : 'EMPTY — ADD BAGS BELOW.'}
+            {active === 'picks'
+              ? 'EMPTY — THE SECTION IS USING THE AUTOMATIC SELECTION. ADD ITEMS BELOW TO CURATE IT.'
+              : active === 'mint'
+                ? 'EMPTY — ADD MINT PIECES BELOW. THE FIRST ONE BECOMES THE HOMEPAGE TILE IMAGE.'
+                : 'EMPTY — ADD BAGS BELOW.'}
           </p>
         ) : (
           <div className="space-y-2">

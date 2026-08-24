@@ -8,7 +8,7 @@
 import { createAdminClient } from '@/lib/supabase-server'
 import { revalidatePath } from 'next/cache'
 
-export type PickCollection = 'picks' | 'bags'
+export type PickCollection = 'picks' | 'bags' | 'mint'
 
 export interface AdminPickRow {
   id: string
@@ -24,7 +24,7 @@ export interface AdminPickRow {
 }
 
 export async function listPicks(): Promise<Record<PickCollection, AdminPickRow[]>> {
-  const empty: Record<PickCollection, AdminPickRow[]> = { picks: [], bags: [] }
+  const empty: Record<PickCollection, AdminPickRow[]> = { picks: [], bags: [], mint: [] }
   try {
     const admin = createAdminClient()
     // Two-step join: our_pick has no FK to item, so PostgREST's embedded
@@ -55,6 +55,7 @@ export async function listPicks(): Promise<Record<PickCollection, AdminPickRow[]
         price: it?.price ?? null,
       }
       if (r.collection === 'bags') empty.bags.push(row)
+      else if (r.collection === 'mint') empty.mint.push(row)
       else empty.picks.push(row)
     }
     return empty
