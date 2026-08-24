@@ -855,61 +855,83 @@ export async function saveLook(input: {
   return error ? { error: error.message } : { look_id: (data as any).look_id }
 }
 
+async function wipeLookLearning(admin: any, lookIds: string[]): Promise<number> {
+  if (!lookIds.length) return 0
+  const { count } = await admin
+    .from('pilot_look_feedback').select('feedback_id', { count: 'exact', head: true }).in('look_id', lookIds)
+  await admin.from('pilot_look_feedback').delete().in('look_id', lookIds)
+  await admin.from('pilot_taste_event').delete().in('look_id', lookIds)
+  await admin.from('pilot_activity').delete().in('look_id', lookIds).eq('type', 'note')
+  return count ?? 0
+}
+
+/**
+ * Remove a look from the delivery entirely.
+ *
+ * Its learning goes with it. Deleting used to leave the feedback rows behind —
+ * they survive with a null look_id, because the foreign key is ON DELETE SET
+ * NULL, and carry on feeding the trait model. Alison had 197 of them: a third
+ * of everything the composer had learned came from looks that no longer exist.
+ * A look nobody kept is not a taste signal.
+ */
 export async function deleteLook(lookId: string) {
-  const admin = createAdminClient()
-  const { error } = await admin.from('pilot_look' as any).delete().eq('look_id', lookId)
+  const admin = createAdminClient() as any
+  await wipeLookLearning(admin, [lookId])
+  const { error } = await admin.from('pilot_look').delete().eq('look_id', lookId)
   revalidatePath(PATH)
   return error ? { error: error.message } : {}
 }
 
 /**
- * Clear a look AND everything it taught.
+ * Empty a look and undo everything it taught.
  *
- * Deleting a look leaves its decisions behind: the feedback rows survive with
- * a null look_id and keep feeding the trait model, so a composition she threw
- * away still shapes the next one. When a look is simply wrong — the wrong
- * brief, the wrong weather, a mistake — none of the fiddling that went into it
- * is a taste signal, and it should leave no trace.
+ * Not a delete: the look stays in the delivery, in position, ready to be
+ * composed into again. What goes is its contents — the items, the shoot, the
+ * approval, her verdict — and every trace it left in the learning: the swap
+ * and removal rows that feed the trait model, the taste events that move her
+ * vector, the notes.
  *
- * Deliberately separate from deleteLook: "remove this look, keep what I
- * learned" and "pretend this never happened" are different intentions and the
- * second one cannot be undone.
+ * The point is a look that was simply wrong — wrong brief, wrong weather, a
+ * mistake — leaving no mark at all. Deleting it was not enough on its own,
+ * because the feedback rows survive a delete with a null look_id and keep
+ * teaching from a composition that was thrown away.
  */
+// Everything a look holds, back to how it arrived.
+const EMPTY_LOOK = {
+  items: [],
+  image_url: null,
+  shoot_history: [],
+  approved_at: null,
+  response: null,
+  response_reason: null,
+  responded_at: null,
+}
+
 export async function clearLook(lookId: string): Promise<{ cleared?: number; error?: string }> {
   const admin = createAdminClient() as any
   try {
-    const { count: decisions } = await admin
-      .from('pilot_look_feedback').select('feedback_id', { count: 'exact', head: true }).eq('look_id', lookId)
-    // Order matters: the feedback and taste rows are ON DELETE SET NULL, so
-    // dropping the look first would orphan them beyond reach.
-    await admin.from('pilot_look_feedback').delete().eq('look_id', lookId)
-    await admin.from('pilot_taste_event').delete().eq('look_id', lookId)
-    await admin.from('pilot_activity').delete().eq('look_id', lookId).eq('type', 'note')
-    const { error } = await admin.from('pilot_look').delete().eq('look_id', lookId)
+    const cleared = await wipeLookLearning(admin, [lookId])
+    const { error } = await admin.from('pilot_look').update(EMPTY_LOOK).eq('look_id', lookId)
     if (error) return { error: error.message }
     revalidatePath(PATH)
-    return { cleared: decisions ?? 0 }
+    return { cleared }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Could not clear the look' }
   }
 }
 
-/** Every look in a delivery, cleared the same way. */
+/** Every look in a delivery, emptied the same way. The looks stay. */
 export async function clearDeliveryLooks(deliveryId: string): Promise<{ looks?: number; cleared?: number; error?: string }> {
   const admin = createAdminClient() as any
   try {
     const { data: looks } = await admin.from('pilot_look').select('look_id').eq('delivery_id', deliveryId)
     const ids = (looks ?? []).map((l: any) => l.look_id)
     if (!ids.length) return { looks: 0, cleared: 0 }
-    const { count: decisions } = await admin
-      .from('pilot_look_feedback').select('feedback_id', { count: 'exact', head: true }).in('look_id', ids)
-    await admin.from('pilot_look_feedback').delete().in('look_id', ids)
-    await admin.from('pilot_taste_event').delete().in('look_id', ids)
-    await admin.from('pilot_activity').delete().in('look_id', ids).eq('type', 'note')
-    const { error } = await admin.from('pilot_look').delete().in('look_id', ids)
+    const cleared = await wipeLookLearning(admin, ids)
+    const { error } = await admin.from('pilot_look').update(EMPTY_LOOK).in('look_id', ids)
     if (error) return { error: error.message }
     revalidatePath(PATH)
-    return { looks: ids.length, cleared: decisions ?? 0 }
+    return { looks: ids.length, cleared }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Could not clear the looks' }
   }

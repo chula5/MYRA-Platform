@@ -2126,10 +2126,10 @@ function DeliveryCard({
               {d.looks.length > 0 && (
                 <button
                   className="text-[8px] tracking-[0.12em] text-[#8B5E00] hover:underline ml-auto"
-                  title="Empty this delivery and forget everything these looks taught"
+                  title="Empty every look here — the slots stay, and nothing is learned"
                   onClick={() => {
-                    if (window.confirm(`Clear all ${d.looks.length} looks and everything they taught the composer?\n\nThe delivery stays so you can compose again — the swaps, removals and taste signals are deleted. This cannot be undone.`)) {
-                      run(`clrd-${d.delivery_id}`, () => clearDeliveryLooks(d.delivery_id), 'LOOKS CLEARED — NOTHING LEARNED FROM THEM')
+                    if (window.confirm(`Empty all ${d.looks.length} looks?\n\nTheir items, shoots and everything they taught the composer are removed, so this delivery has no effect on anything. The looks stay, ready to compose into again.`)) {
+                      run(`clrd-${d.delivery_id}`, () => clearDeliveryLooks(d.delivery_id), 'LOOKS EMPTIED — NOTHING LEARNED FROM THEM')
                     }
                   }}
                 >
@@ -2624,16 +2624,15 @@ function LookRow({
               <button className={btnTiny} onClick={onEdit}>
                 EDIT
               </button>
-              {/* CLEAR is not the same as delete. Deleting leaves the swaps
-                  behind — they keep teaching the composer from a look that was
-                  thrown away. Clear removes the look and everything it taught,
-                  for the case where the composition was simply wrong. */}
+              {/* CLEAR empties the look and leaves the slot; the × removes
+                  the slot too. Neither teaches the composer anything — a look
+                  nobody kept is not a taste signal. */}
               <button
                 className={btnTiny}
-                title="Remove this look and everything it taught the composer"
+                title="Empty this look — the slot stays, and nothing here is learned"
                 onClick={() => {
-                  if (window.confirm('Clear this look and everything it taught the composer?\n\nIts swaps, removals and taste signals are deleted, so nothing here shapes the next composition. This cannot be undone.')) {
-                    run(`clr-${l.look_id}`, () => clearLook(l.look_id), 'LOOK CLEARED — NOTHING LEARNED FROM IT')
+                  if (window.confirm('Empty this look?\n\nThe items, the shoot and everything it taught the composer are removed — swaps, removals and taste signals — so it has no effect on anything. The look stays, ready to compose into again.')) {
+                    run(`clr-${l.look_id}`, () => clearLook(l.look_id), 'LOOK EMPTIED — NOTHING LEARNED FROM IT')
                   }
                 }}
               >
@@ -2641,7 +2640,7 @@ function LookRow({
               </button>
               <button
                 className={btnTiny}
-                title="Remove the look but keep what it taught"
+                title="Remove the look from the delivery — nothing here is learned either"
                 onClick={() => {
                   if (window.confirm('Delete this look?')) run(`dell-${l.look_id}`, () => deleteLook(l.look_id), 'LOOK DELETED')
                 }}
