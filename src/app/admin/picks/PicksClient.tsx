@@ -53,6 +53,8 @@ export default function PicksClient({
   const [msg, setMsg] = useState<string | null>(null)
 
   const rows = initial[active]
+  // Only live entries reach the public pages (see getPickCollection).
+  const liveCount = rows.filter((r) => r.status === 'live').length
   // Mint Green curates complete LOOKS, not products — so its picker searches
   // outfits and the item-only filters (brand, type, colour) don't apply.
   const kind = pickKind(active)
@@ -109,6 +111,32 @@ export default function PicksClient({
         ))}
       </div>
       <p className="text-[9px] tracking-[0.06em] text-[#A8A8A4] max-w-2xl leading-relaxed">{COLLECTION_META[active].blurb.toUpperCase()}</p>
+
+      {/* Public visibility, stated outright. Draft pieces are deliberately
+          pickable here so a collection can be built ahead of going live, but
+          only LIVE ones ever reach the site — without this line a fully
+          curated collection that simply hasn't been published reads as broken. */}
+      {rows.length > 0 && (
+        liveCount === 0 ? (
+          <div className="border border-[#E8D9B4] bg-[#FBF6E9] rounded-[10px] px-4 py-3">
+            <p className="text-[10px] tracking-[0.1em] text-[#8A6D3B]">
+              NOT ON THE SITE YET — NONE OF THESE {rows.length} {isOutfitKind ? 'LOOKS ARE' : 'ITEMS ARE'} LIVE.
+            </p>
+            <p className="text-[9px] tracking-[0.06em] text-[#8A6D3B]/80 mt-1 leading-relaxed">
+              ONLY LIVE {isOutfitKind ? 'LOOKS' : 'ITEMS'} EVER SHOW PUBLICLY. SET THEM LIVE IN{' '}
+              <a href={isOutfitKind ? '/admin/the-edit' : '/admin/items'} className="underline">
+                {isOutfitKind ? 'THE EDIT' : 'ITEMS'}
+              </a>{' '}
+              AND THIS COLLECTION APPEARS ON THE HOMEPAGE.
+            </p>
+          </div>
+        ) : (
+          <p className="text-[9px] tracking-[0.1em] text-[#3D7A50]">
+            ✓ ON THE SITE — {liveCount} OF {rows.length} LIVE
+            {liveCount < rows.length && ` · ${rows.length - liveCount} HIDDEN UNTIL LIVE`}
+          </p>
+        )
+      )}
       {msg && (
         <p className={`text-[9px] tracking-[0.12em] ${msg.startsWith('✓') ? 'text-[#3D7A50]' : 'text-[#B83A3A]'}`}>{msg}</p>
       )}
