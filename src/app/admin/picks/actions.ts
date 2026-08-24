@@ -13,7 +13,11 @@ export type PickCollection = 'picks' | 'bags' | 'mint'
 export interface AdminPickRow {
   id: string
   collection: string
+  /** 'item' rows point at a product; 'outfit' rows at a complete look. */
+  kind: 'item' | 'outfit'
+  /** Empty string on outfit rows. */
   item_id: string
+  outfit_id?: string | null
   sort_order: number
   product_name: string
   brand_name: string | null
@@ -31,28 +35,46 @@ export async function listPicks(): Promise<Record<PickCollection, AdminPickRow[]
     // select can't resolve the relationship — fetch items separately.
     const { data } = await admin
       .from('our_pick' as any)
-      .select('id, collection, item_id, sort_order')
+      .select('id, collection, item_id, outfit_id, sort_order')
       .order('sort_order', { ascending: true })
     const rows = (data ?? []) as any[]
     if (!rows.length) return empty
-    const { data: items } = await admin
-      .from('item' as any)
-      .select('item_id, product_name, image_url, item_type, status, price, brand:brand_id(name)')
-      .in('item_id', rows.map((r) => r.item_id))
+    const itemIds = rows.map((r) => r.item_id).filter(Boolean)
+    const outfitIds = rows.map((r) => r.outfit_id).filter(Boolean)
+    const { data: items } = itemIds.length
+      ? await admin
+          .from('item' as any)
+          .select('item_id, product_name, image_url, item_type, status, price, brand:brand_id(name)')
+          .in('item_id', itemIds)
+      : { data: [] as any[] }
+    // Outfit picks (the look collections) resolve against outfit instead.
+    const { data: outfits } = outfitIds.length
+      ? await admin
+          .from('outfit' as any)
+          .select('outfit_id, aesthetic_label, image_url, status')
+          .in('outfit_id', outfitIds)
+      : { data: [] as any[] }
     const byId = new Map(((items ?? []) as any[]).map((it) => [it.item_id, it]))
+    const byOutfit = new Map(((outfits ?? []) as any[]).map((o) => [o.outfit_id, o]))
     for (const r of rows) {
+      const isOutfit = !!r.outfit_id
       const it = byId.get(r.item_id)
+      const of = byOutfit.get(r.outfit_id)
       const row: AdminPickRow = {
         id: r.id,
         collection: r.collection,
-        item_id: r.item_id,
+        kind: isOutfit ? 'outfit' : 'item',
+        item_id: r.item_id ?? '',
+        outfit_id: r.outfit_id ?? null,
         sort_order: r.sort_order,
-        product_name: it?.product_name ?? '—',
-        brand_name: it?.brand?.name ?? null,
-        image_url: it?.image_url ?? null,
-        item_type: String(it?.item_type ?? ''),
-        status: it?.status ?? 'unknown',
-        price: it?.price ?? null,
+        product_name: isOutfit
+          ? (String(of?.aesthetic_label ?? '').replace(/^COMPOSED\s*·\s*/i, '').trim() || 'UNTITLED LOOK')
+          : (it?.product_name ?? '—'),
+        brand_name: isOutfit ? null : (it?.brand?.name ?? null),
+        image_url: (isOutfit ? of?.image_url : it?.image_url) ?? null,
+        item_type: isOutfit ? 'outfit' : String(it?.item_type ?? ''),
+        status: (isOutfit ? of?.status : it?.status) ?? 'unknown',
+        price: isOutfit ? null : (it?.price ?? null),
       }
       if (r.collection === 'bags') empty.bags.push(row)
       else if (r.collection === 'mint') empty.mint.push(row)
@@ -144,6 +166,92 @@ export async function listPickBrands(): Promise<{ name: string; count: number }[
       .sort((a, b) => a.name.localeCompare(b.name))
   } catch {
     return []
+  }
+}
+
+/** Live/draft outfits for the outfit-based collections (e.g. Mint Green).
+ *  Matches the aesthetic label, or the name/brand of any item in the look, so
+ *  "proenza" or "mint" both find it. */
+export async function searchPickOutfits(
+  q: string,
+): Promise<{ outfit_id: string; label: string; image_url: string | null; status: string }[]> {
+  try {
+    const admin = createAdminClient()
+    const needle = q.trim()
+
+    let outfitIdsFromItems: string[] = []
+    if (needle) {
+      // Items whose product OR brand name matches, then the looks holding them.
+      const { data: brands } = await admin
+        .from('brand' as any).select('brand_id').ilike('name', `%${needle}%`)
+      const bids = ((brands ?? []) as any[]).map((b) => b.brand_id)
+      let itemQuery = admin.from('item' as any).select('item_id').limit(400)
+      itemQuery = bids.length
+        ? itemQuery.or(`product_name.ilike.%${needle}%,brand_id.in.(${bids.join(',')})`)
+        : itemQuery.ilike('product_name', `%${needle}%`)
+      const { data: items } = await itemQuery
+      const iids = ((items ?? []) as any[]).map((i) => i.item_id)
+      if (iids.length) {
+        const { data: links } = await admin
+          .from('outfit_item' as any).select('outfit_id').in('item_id', iids).limit(2000)
+        outfitIdsFromItems = Array.from(new Set(((links ?? []) as any[]).map((l) => l.outfit_id)))
+      }
+    }
+
+    let query = admin
+      .from('outfit' as any)
+      .select('outfit_id, aesthetic_label, image_url, status, created_at')
+      .in('status', ['live', 'draft', 'in_review'])
+      .order('created_at', { ascending: false })
+      .limit(120)
+    if (needle) {
+      query = outfitIdsFromItems.length
+        ? query.or(`aesthetic_label.ilike.%${needle}%,outfit_id.in.(${outfitIdsFromItems.join(',')})`)
+        : query.ilike('aesthetic_label', `%${needle}%`)
+    }
+    const { data } = await query
+    return ((data ?? []) as any[]).map((o) => ({
+      outfit_id: o.outfit_id,
+      label: String(o.aesthetic_label ?? '').replace(/^COMPOSED\s*·\s*/i, '').trim() || 'UNTITLED LOOK',
+      image_url: o.image_url ?? null,
+      status: o.status,
+    }))
+  } catch (err) {
+    console.error('[searchPickOutfits]', err)
+    return []
+  }
+}
+
+export async function addOutfitPick(
+  collection: PickCollection,
+  outfitId: string,
+): Promise<{ ok?: true; error?: string }> {
+  try {
+    const admin = createAdminClient()
+    const { data: max } = await admin
+      .from('our_pick' as any)
+      .select('sort_order')
+      .eq('collection', collection)
+      .order('sort_order', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const { error } = await (admin.from('our_pick') as any).insert({
+      collection,
+      outfit_id: outfitId,
+      sort_order: ((max as any)?.sort_order ?? -1) + 1,
+    })
+    if (error) throw error
+    revalidatePath('/admin/picks')
+    revalidatePath('/')
+    revalidatePath(`/picks/${collection}`)
+    return { ok: true }
+  } catch (err: any) {
+    const msg: string = err?.message ?? 'Add failed'
+    console.error('[addOutfitPick]', msg, err?.code ?? '')
+    if (/column .*outfit_id.* does not exist/i.test(msg)) {
+      return { error: 'Run migration 0051 first — our_pick has no outfit_id column yet.' }
+    }
+    return { error: /duplicate|unique/i.test(msg) ? 'Already in this collection' : msg }
   }
 }
 

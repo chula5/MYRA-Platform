@@ -113,18 +113,65 @@ export async function getPickCollection(collection: string): Promise<OurPick[]> 
   }
 }
 
+/** One curated look in an outfit-based collection (e.g. 'mint'). */
+export interface PickOutfit {
+  outfit_id: string
+  label: string
+  image_url: string | null
+}
+
+/**
+ * A curated collection of OUTFITS, in her order — live looks only, so a paused
+ * or draft outfit never reaches the public page.
+ */
+export async function getOutfitCollection(collection: string): Promise<PickOutfit[]> {
+  try {
+    const admin = createAdminClient()
+    const { data } = await admin
+      .from('our_pick' as any)
+      .select('outfit_id, sort_order')
+      .eq('collection', collection)
+      .not('outfit_id', 'is', null)
+      .order('sort_order', { ascending: true })
+    const rows = (data ?? []) as any[]
+    if (!rows.length) return []
+    const { data: outfits } = await admin
+      .from('outfit' as any)
+      .select('outfit_id, aesthetic_label, image_url, status')
+      .in('outfit_id', rows.map((r) => r.outfit_id))
+    const byId = new Map(((outfits ?? []) as any[]).map((o) => [o.outfit_id, o]))
+    return rows
+      .map((r) => byId.get(r.outfit_id))
+      .filter((o) => o && o.status === 'live')
+      .map((o: any) => ({
+        outfit_id: o.outfit_id,
+        label: String(o.aesthetic_label ?? '').replace(/^COMPOSED\s*·\s*/i, '').trim(),
+        image_url: o.image_url ?? null,
+      }))
+  } catch {
+    return [] // column not migrated yet
+  }
+}
+
 /**
  * The collection tiles for the landing section. A collection only appears once
- * it has at least one LIVE curated item — so a new slug can ship before it's
+ * it has at least one LIVE curated entry — so a new slug can ship before it's
  * curated without leaving a dead link on the homepage. Collections without a
- * hand-made cutout borrow their lead item's product photo as the tile art.
+ * hand-made cutout borrow their lead entry's photo as the tile art, which is
+ * the first product for an item collection and the first look for an outfit
+ * one.
  */
 export async function getLandingCollections(): Promise<LandingCollection[]> {
   const out: LandingCollection[] = []
   for (const c of PICK_COLLECTIONS) {
-    const items = await getPickCollection(c.slug)
-    if (items.length === 0) continue
-    const art = c.art ?? items.find((i) => i.image_url)?.image_url
+    // Static art alone is NOT enough to publish a tile — the destination has
+    // to have something in it, or the homepage links to an empty page.
+    const images =
+      c.kind === 'outfit'
+        ? (await getOutfitCollection(c.slug)).map((o) => o.image_url)
+        : (await getPickCollection(c.slug)).map((i) => i.image_url)
+    if (images.length === 0) continue
+    const art = c.art ?? images.find(Boolean)
     if (!art) continue
     out.push({ slug: c.slug, label: c.label, href: `/picks/${c.slug}`, artImageUrl: art })
   }
