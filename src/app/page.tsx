@@ -46,9 +46,10 @@ export default async function LandingPage({
 
       {/* ── Mirror glides into place, the manifesto + APPLY sit beneath it ── */}
       <main className="myra-texture">
-        <ArchiveCard heading={<ManifestoReveal />}>
+        <ArchiveCard>
           <></>
         </ArchiveCard>
+        <ManifestoReveal />
       </main>
 
       {/* The pop-out questionnaire every APPLY NOW opens. */}
