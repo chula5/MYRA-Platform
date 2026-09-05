@@ -40,22 +40,22 @@ export default async function OurStoryPage() {
       </section>
 
       {/* ── Manifesto ──── */}
-      <section className="pt-20 sm:pt-28 pb-12 sm:pb-16 px-6 sm:px-10">
-        <div className="max-w-6xl mx-auto text-center">
-          <p className="text-[#4A4E57] tracking-[0.045em] sm:tracking-[0.059em] leading-[1.5] text-[clamp(18px,2.6vw,34px)]">
+      <section className="pt-20 sm:pt-28 pb-12 sm:pb-16 px-6 lg:px-16">
+        <div className="max-w-[1600px] mx-auto text-center">
+          <p className="text-[#4A4E57] tracking-[0.045em] sm:tracking-[0.06em] leading-[1.35] text-[clamp(20px,3vw,46px)]">
             THE FIRST OUTFIT-LED SHOPPING PLATFORM. WE CURATE THE BRANDS AND
             BUILD THE OUTFITS, SO YOU DON&apos;T HAVE&nbsp;TO.
           </p>
         </div>
       </section>
 
-      {/* ── Our Take ──────────────────────────────────────────── */}
-      <section className="pb-24 sm:pb-32 px-6 sm:px-10">
-        <div className="max-w-5xl mx-auto text-center">
-          <p className="text-[11px] sm:text-[12px] lg:text-[13px] tracking-[0.135em] text-[#4A4E57] mb-10 sm:mb-12">
+      {/* ── Our Take — three columns spanning the width on desktop ── */}
+      <section className="pb-24 sm:pb-32 px-6 lg:px-16">
+        <div className="max-w-[1700px] mx-auto">
+          <p className="text-center text-[12px] sm:text-[14px] lg:text-[15px] tracking-[0.135em] text-[#4A4E57] mb-12 sm:mb-16">
             OUR TAKE
           </p>
-          <div className="text-[#4A4E57] tracking-[0.036em] sm:tracking-[0.045em] leading-[1.75] text-[clamp(16px,1.9vw,25px)] space-y-7 sm:space-y-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 lg:gap-16 text-[#4A4E57] tracking-[0.036em] sm:tracking-[0.045em] leading-[1.75] text-[clamp(17px,1.5vw,26px)] text-center lg:text-left">
             <p>
               SHOPPING HAS BECOME EXHAUSTING. NUMEROUS TABS, ENDLESS
               SCROLLING AND ALGORITHMS THAT FEED YOU MORE OF THE SAME. WE
@@ -68,15 +68,15 @@ export default async function OurStoryPage() {
               GENERATOR BUILT ON A CONSIDERED SET OF BRANDS, DESIGNED TO
               GIVE YOU CONFIDENCE IN WHAT YOU BUY AND HOW YOU WEAR IT.
             </p>
-            <p>IT&apos;S THE ANTIDOTE TO THE NOISE.</p>
+            <p className="lg:self-center">IT&apos;S THE ANTIDOTE TO THE NOISE.</p>
           </div>
         </div>
       </section>
 
-      {/* ── Staggered outfit photos ──────────────────────────── */}
-      <section className="pb-32 sm:pb-40 px-4 sm:px-10 lg:px-16">
-        <div className="max-w-[1800px] mx-auto">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8 lg:gap-10">
+      {/* ── Staggered outfit photos — full width across the screen ── */}
+      <section className="pb-32 sm:pb-40 px-6 lg:px-8">
+        <div className="w-full">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 lg:gap-8">
             <div className="sm:mt-0">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/VB.webp" alt="" loading="lazy" className="w-full h-auto block hover:opacity-90 transition-opacity duration-500" />
@@ -93,13 +93,13 @@ export default async function OurStoryPage() {
         </div>
       </section>
 
-      {/* ── Our Partners ──────────────────────────────────────── */}
-      <section className="pb-24 sm:pb-32 px-6 sm:px-10">
-        <div className="max-w-6xl mx-auto text-center">
-          <p className="text-[11px] sm:text-[12px] lg:text-[13px] tracking-[0.135em] text-[#4A4E57] mb-12 sm:mb-14">
+      {/* ── Our Partners — spread across the width on desktop ──── */}
+      <section className="pb-24 sm:pb-32 px-6 lg:px-16">
+        <div className="max-w-[1700px] mx-auto text-center">
+          <p className="text-[12px] sm:text-[14px] lg:text-[15px] tracking-[0.135em] text-[#4A4E57] mb-12 sm:mb-16">
             OUR PARTNERS
           </p>
-          <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-8 sm:gap-x-16 lg:gap-x-24 lg:gap-y-12">
+          <div className="flex flex-wrap items-center justify-center lg:justify-between gap-x-10 gap-y-10 sm:gap-x-16 lg:gap-y-14">
             {[
               { name: 'Isabel Marant', src: '/partners/isabel-marant.svg', h: 'h-5 sm:h-8 lg:h-10' },
               { name: 'Diesel', src: '/partners/diesel.svg', h: 'h-9 sm:h-12 lg:h-14' },
