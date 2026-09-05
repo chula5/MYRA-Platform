@@ -41,8 +41,8 @@ export default async function OurStoryPage() {
 
       {/* ── Manifesto ──── */}
       <section className="pt-20 sm:pt-28 pb-12 sm:pb-16 px-6 sm:px-10">
-        <div className="max-w-5xl mx-auto text-center">
-          <p className="text-[#4A4E57] tracking-[0.045em] sm:tracking-[0.059em] leading-[1.65] text-[clamp(15px,2vw,24px)]">
+        <div className="max-w-6xl mx-auto text-center">
+          <p className="text-[#4A4E57] tracking-[0.045em] sm:tracking-[0.059em] leading-[1.5] text-[clamp(18px,2.6vw,34px)]">
             THE FIRST OUTFIT-LED SHOPPING PLATFORM. WE CURATE THE BRANDS AND
             BUILD THE OUTFITS, SO YOU DON&apos;T HAVE&nbsp;TO.
           </p>
@@ -51,11 +51,11 @@ export default async function OurStoryPage() {
 
       {/* ── Our Take ──────────────────────────────────────────── */}
       <section className="pb-24 sm:pb-32 px-6 sm:px-10">
-        <div className="max-w-4xl mx-auto text-center">
-          <p className="text-[10px] sm:text-[11px] tracking-[0.135em] text-[#4A4E57] mb-10 sm:mb-12">
+        <div className="max-w-5xl mx-auto text-center">
+          <p className="text-[11px] sm:text-[12px] lg:text-[13px] tracking-[0.135em] text-[#4A4E57] mb-10 sm:mb-12">
             OUR TAKE
           </p>
-          <div className="text-[#4A4E57] tracking-[0.036em] sm:tracking-[0.045em] leading-[1.85] text-[clamp(14px,1.7vw,19px)] space-y-7 sm:space-y-8">
+          <div className="text-[#4A4E57] tracking-[0.036em] sm:tracking-[0.045em] leading-[1.75] text-[clamp(16px,1.9vw,25px)] space-y-7 sm:space-y-8">
             <p>
               SHOPPING HAS BECOME EXHAUSTING. NUMEROUS TABS, ENDLESS
               SCROLLING AND ALGORITHMS THAT FEED YOU MORE OF THE SAME. WE
@@ -74,9 +74,9 @@ export default async function OurStoryPage() {
       </section>
 
       {/* ── Staggered outfit photos ──────────────────────────── */}
-      <section className="pb-32 sm:pb-40 px-4 sm:px-10">
-        <div className="max-w-[1500px] mx-auto">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-6">
+      <section className="pb-32 sm:pb-40 px-4 sm:px-10 lg:px-16">
+        <div className="max-w-[1800px] mx-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8 lg:gap-10">
             <div className="sm:mt-0">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/VB.webp" alt="" loading="lazy" className="w-full h-auto block hover:opacity-90 transition-opacity duration-500" />
@@ -95,22 +95,22 @@ export default async function OurStoryPage() {
 
       {/* ── Our Partners ──────────────────────────────────────── */}
       <section className="pb-24 sm:pb-32 px-6 sm:px-10">
-        <div className="max-w-5xl mx-auto text-center">
-          <p className="text-[10px] sm:text-[11px] tracking-[0.135em] text-[#4A4E57] mb-12 sm:mb-14">
+        <div className="max-w-6xl mx-auto text-center">
+          <p className="text-[11px] sm:text-[12px] lg:text-[13px] tracking-[0.135em] text-[#4A4E57] mb-12 sm:mb-14">
             OUR PARTNERS
           </p>
-          <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-8 sm:gap-x-16">
+          <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-8 sm:gap-x-16 lg:gap-x-24 lg:gap-y-12">
             {[
-              { name: 'Isabel Marant', src: '/partners/isabel-marant.svg', h: 'h-5 sm:h-8' },
-              { name: 'Diesel', src: '/partners/diesel.svg', h: 'h-9 sm:h-12' },
-              { name: 'Twinset', src: '/partners/twinset.png', h: 'h-6 sm:h-9' },
-              { name: 'DeMellier London', src: '/partners/demellier.svg', h: 'h-4 sm:h-6' },
-              { name: 'Da Luna', src: '/partners/da-luna.png', h: 'h-5 sm:h-7' },
-              { name: 'Vivere London', src: '/partners/vivere.png', h: 'h-6 sm:h-8' },
+              { name: 'Isabel Marant', src: '/partners/isabel-marant.svg', h: 'h-5 sm:h-8 lg:h-10' },
+              { name: 'Diesel', src: '/partners/diesel.svg', h: 'h-9 sm:h-12 lg:h-14' },
+              { name: 'Twinset', src: '/partners/twinset.png', h: 'h-6 sm:h-9 lg:h-11' },
+              { name: 'DeMellier London', src: '/partners/demellier.svg', h: 'h-4 sm:h-6 lg:h-8' },
+              { name: 'Da Luna', src: '/partners/da-luna.png', h: 'h-5 sm:h-7 lg:h-9' },
+              { name: 'Vivere London', src: '/partners/vivere.png', h: 'h-6 sm:h-8 lg:h-10' },
               // Two-line lockup (CAMI over NYC) in a 1004×488 canvas, so the
               // wordmark is only ~half the box height — it needs roughly double
               // the height of the single-line marks to read at the same size.
-              { name: 'Cami NYC', src: '/partners/cami-nyc.png', h: 'h-8 sm:h-12' },
+              { name: 'Cami NYC', src: '/partners/cami-nyc.png', h: 'h-8 sm:h-12 lg:h-14' },
             ].map((b) => (
               // eslint-disable-next-line @next/next/no-img-element
               <img

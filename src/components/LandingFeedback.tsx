@@ -13,7 +13,7 @@ import { submitFeedback } from '@/app/actions/feedback'
 export default function LandingFeedback() {
   return (
     <section className="pb-28 sm:pb-36 px-3 sm:px-10">
-      <div className="max-w-4xl mx-auto text-center">
+      <div className="max-w-5xl mx-auto text-center">
         <p className="myra-field text-[#6B6B6B] mb-6">MORE OUTFITS ON THE WAY</p>
         <p className="myra-field leading-[1.75] max-w-[680px] mx-auto mb-12">
           We&rsquo;re working hard to bring you more outfits and more brands every week. If there&rsquo;s a label
