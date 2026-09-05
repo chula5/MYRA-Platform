@@ -5,7 +5,8 @@ import { submitApplication } from '@/app/apply/actions'
 
 // The APPLY NOW pop-out. Opens on the 'myra:open-apply' event (fired by every
 // ApplyButton). A few taste questions so Chloe can get a feel for the person's
-// style before accepting them into a personal edit.
+// style before accepting them into a personal edit. Answers (brands, price
+// range, inspirations) are saved via submitApplication → the application table.
 const PRICE_RANGES = [
   'Under £150 a piece',
   '£150 – 400 a piece',
@@ -14,11 +15,26 @@ const PRICE_RANGES = [
   'A mix — no set budget',
 ]
 
-const EMPTY = { name: '', email: '', brands: '', priceRange: '', inspiration: '', note: '' }
+// A starting list to click from; they can also type any brand not listed.
+const BRAND_OPTIONS = [
+  'Isabel Marant', 'The Row', 'Totême', 'Khaite', 'Ganni', 'Anine Bing',
+  'Reformation', 'Sézane', 'Zimmermann', 'Staud', 'Nanushka', 'Cult Gaia',
+  'Jacquemus', 'Loewe', 'Bottega Veneta', 'Saint Laurent', 'Chloé', 'Celine',
+  'Prada', 'Miu Miu', 'Max Mara', 'Frame', 'AGOLDE', 'Citizens of Humanity',
+  'Vince', 'Theory', 'Aritzia', 'Rouje', 'ME+EM', 'Sandro', 'Maje', 'Ba&sh',
+  'Rixo', 'Realisation Par', 'Faithfull the Brand', 'Posse', 'Djerf Avenue',
+  'COS', 'Arket', '& Other Stories', 'Massimo Dutti', 'Twinset', 'Diesel',
+  'DeMellier', 'Cami NYC', 'Skims', 'With Nothing Underneath',
+]
+
+const EMPTY = { name: '', email: '', priceRange: '', inspiration: '', note: '' }
 
 export default function ApplyModal() {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState({ ...EMPTY })
+  const [brands, setBrands] = useState<string[]>([])
+  const [q, setQ] = useState('')
+  const [listOpen, setListOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -42,13 +58,28 @@ export default function ApplyModal() {
   const set = (k: keyof typeof EMPTY) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }))
 
+  const addBrand = (b: string) => {
+    const v = b.trim()
+    if (v && !brands.some((x) => x.toLowerCase() === v.toLowerCase())) setBrands((s) => [...s, v])
+    setQ('')
+  }
+  const removeBrand = (b: string) => setBrands((s) => s.filter((x) => x !== b))
+  const query = q.trim().toLowerCase()
+  const matches = BRAND_OPTIONS.filter(
+    (b) => !brands.some((x) => x.toLowerCase() === b.toLowerCase()) && b.toLowerCase().includes(query),
+  ).slice(0, 8)
+  const canAddCustom =
+    q.trim().length > 1 &&
+    !BRAND_OPTIONS.some((b) => b.toLowerCase() === query) &&
+    !brands.some((b) => b.toLowerCase() === query)
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setBusy(true); setError(null)
-    const r = await submitApplication(form)
+    const r = await submitApplication({ ...form, brands: brands.join(', ') })
     setBusy(false)
     if (r.error) setError(r.error)
-    else { setDone(true); setForm({ ...EMPTY }) }
+    else { setDone(true); setForm({ ...EMPTY }); setBrands([]) }
   }
 
   const labelCls = 'block text-[13px] tracking-[0.14em] text-[#6B6B6B] mb-2 uppercase'
@@ -108,9 +139,69 @@ export default function ApplyModal() {
               </div>
             </div>
 
+            {/* Brands — click from the list or type your own */}
             <div>
               <label className={labelCls}>Brands you love</label>
-              <textarea className={`${inputCls} min-h-[68px] resize-none`} value={form.brands} onChange={set('brands')} placeholder="e.g. Khaite, Totême, The Row, Isabel Marant…" />
+              {brands.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-2.5">
+                  {brands.map((b) => (
+                    <button
+                      key={b}
+                      type="button"
+                      onClick={() => removeBrand(b)}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-[#0A0A0A] text-[#0A0A0A] px-3.5 py-1.5 text-[13px] tracking-[0.04em] hover:bg-[#0A0A0A] hover:text-white transition-colors"
+                    >
+                      {b} <span aria-hidden>×</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="relative">
+                <input
+                  className={inputCls}
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  onFocus={() => setListOpen(true)}
+                  onBlur={() => setTimeout(() => setListOpen(false), 150)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      const pick = matches[0] ?? (canAddCustom ? q.trim() : '')
+                      if (pick) addBrand(pick)
+                    }
+                  }}
+                  placeholder="Search a brand, or type your own and press Enter"
+                />
+                {listOpen && (query.length > 0 || matches.length > 0) && (
+                  <div
+                    className="absolute z-10 left-0 right-0 mt-1 max-h-60 overflow-y-auto border border-[#D8D5CE] bg-white shadow-[0_16px_40px_rgba(0,0,0,0.14)]"
+                    data-lenis-prevent
+                  >
+                    {matches.map((b) => (
+                      <button
+                        key={b}
+                        type="button"
+                        onMouseDown={(e) => { e.preventDefault(); addBrand(b) }}
+                        className="w-full text-left px-4 py-2.5 text-[15px] text-[#0A0A0A] hover:bg-[#F1F0EC] transition-colors"
+                      >
+                        {b}
+                      </button>
+                    ))}
+                    {canAddCustom && (
+                      <button
+                        type="button"
+                        onMouseDown={(e) => { e.preventDefault(); addBrand(q.trim()) }}
+                        className="w-full text-left px-4 py-2.5 text-[15px] text-[#8B5E00] hover:bg-[#F1F0EC] transition-colors"
+                      >
+                        + Add &ldquo;{q.trim()}&rdquo;
+                      </button>
+                    )}
+                    {!matches.length && !canAddCustom && (
+                      <p className="px-4 py-2.5 text-[14px] text-[#A8A8A4]">No matches — keep typing to add your own.</p>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div>

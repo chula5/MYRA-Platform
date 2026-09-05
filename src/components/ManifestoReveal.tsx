@@ -24,9 +24,9 @@ export default function ManifestoReveal() {
     const apply = () => {
       const total = section.offsetHeight - window.innerHeight
       const scrolled = -section.getBoundingClientRect().top
-      // Reveal finishes at ~half the pinned scroll, so the last word turns full
+      // Reveal plays over most of the pinned scroll (slower), finishing full
       // black while the paragraph is still centred; then it holds, fully lit.
-      const prog = scrolled / Math.max(1, total * 0.5)
+      const prog = scrolled / Math.max(1, total * 0.72)
       setP(Math.min(1, Math.max(0, prog)))
     }
     const onScroll = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(apply) }
@@ -41,7 +41,7 @@ export default function ManifestoReveal() {
   }, [])
 
   return (
-    <section ref={sectionRef} className="relative" style={{ height: '160vh' }}>
+    <section ref={sectionRef} className="relative" style={{ height: '240vh' }}>
       <div className="sticky top-0 h-screen flex flex-col items-center justify-center px-6 lg:px-12">
         <p className="max-w-[1600px] mx-auto text-center tracking-[0.02em] leading-[1.35] font-medium text-[clamp(28px,4.4vw,64px)]">
           {words.map((w, i) => {

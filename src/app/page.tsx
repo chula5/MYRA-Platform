@@ -39,7 +39,7 @@ export default async function LandingPage({
     <>
       {/* The nav is no longer transparent: it was only see-through so it could
           sit over the silver arrival screen, which has been removed. */}
-      <Navigation authed={!!user} />
+      <Navigation authed={!!user} showAuth={false} />
 
       {/* ── Scatter hero — images stack then spread, headline in the middle ── */}
       <ScatterHero />

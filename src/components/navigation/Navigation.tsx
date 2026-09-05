@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { trackLandingClick } from '@/components/analytics/LandingTracker'
 
-export default function Navigation({ transparent = false, authed = false }: { transparent?: boolean; authed?: boolean }) {
+export default function Navigation({ transparent = false, authed = false, showAuth = true }: { transparent?: boolean; authed?: boolean; showAuth?: boolean }) {
   const [scrolled, setScrolled] = useState(false)
 
   useEffect(() => {
@@ -34,14 +34,8 @@ export default function Navigation({ transparent = false, authed = false }: { tr
     >
       <div className="w-full px-3 md:px-10 h-[72px] md:h-28 lg:h-32 flex items-center justify-between gap-2 md:gap-4">
 
-        {/* Left — nav links. THE EDIT used to sit here too, but it pointed at
-            "/" exactly like the wordmark does, so the row carried the word
-            EDIT twice for one destination. The wordmark is the way home. */}
-        <div className="flex flex-1 min-w-0 items-center justify-start gap-3 sm:gap-5 md:gap-6">
-          <Link href="/our-story" className={`text-[13px] sm:text-[17px] lg:text-[20px] leading-none tracking-[0.06em] sm:tracking-[0.12em] hover:opacity-60 transition-colors duration-500 whitespace-nowrap ${textColor}`}>
-            OUR STORY
-          </Link>
-        </div>
+        {/* Left — kept as a flex spacer so the wordmark stays centred. */}
+        <div className="flex flex-1 min-w-0 items-center justify-start gap-3 sm:gap-5 md:gap-6" />
 
         {/* Centre — logo wordmark (white over the hero, black on the white nav) */}
         <div className="flex justify-center shrink-0">
@@ -83,13 +77,15 @@ export default function Navigation({ transparent = false, authed = false }: { tr
           >
             <TikTokIcon />
           </a>
-          {/* Constant auth link — plain text */}
-          <Link
-            href={authed ? '/edit' : '/signin'}
-            className={`whitespace-nowrap text-[13px] sm:text-[17px] lg:text-[20px] leading-none tracking-[0.06em] sm:tracking-[0.12em] hover:opacity-60 transition-colors duration-500 ${textColor}`}
-          >
-            {authed ? 'MY EDIT' : 'LOG IN / SIGN UP'}
-          </Link>
+          {/* Auth link — hidden on the invite-only landing (showAuth={false}). */}
+          {showAuth && (
+            <Link
+              href={authed ? '/edit' : '/signin'}
+              className={`whitespace-nowrap text-[13px] sm:text-[17px] lg:text-[20px] leading-none tracking-[0.06em] sm:tracking-[0.12em] hover:opacity-60 transition-colors duration-500 ${textColor}`}
+            >
+              {authed ? 'MY EDIT' : 'LOG IN / SIGN UP'}
+            </Link>
+          )}
         </div>
       </div>
     </nav>
