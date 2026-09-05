@@ -97,7 +97,7 @@ export default function ScatterHero() {
           className="absolute inset-0 z-20 flex flex-col items-center justify-center text-center px-6 pointer-events-none"
           style={{ opacity: 0 }}
         >
-          <h2 className="text-[#0A0A0A] font-semibold uppercase tracking-[0.02em] leading-[0.95] whitespace-nowrap text-[clamp(20px,6.5vw,104px)]">
+          <h2 className="text-[#0A0A0A] font-semibold uppercase tracking-[0.01em] leading-[0.95] whitespace-nowrap text-[clamp(24px,8.5vw,140px)]">
             OUTFITS, NOT ITEMS
           </h2>
           <ApplyButton className="pointer-events-auto mt-10 sm:mt-12 inline-flex items-center gap-3.5 rounded-full bg-[#0A0A0A] text-white px-12 sm:px-16 py-6 sm:py-7 text-[16px] sm:text-[19px] tracking-[0.2em] hover:opacity-85 transition-opacity" />
