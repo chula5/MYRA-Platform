@@ -9,8 +9,11 @@ import { useEffect, useRef, useState } from 'react'
 
 // How much scroll (as a fraction of the viewport) the shrink plays over. The
 // hero runway is 100vh + this, so the mirror finishes docking exactly as the
-// headline arrives.
-const SHRINK_VH = 0.45
+// headline arrives. Larger = the mirror moves more slowly as you scroll.
+const SHRINK_VH = 0.9
+// Where the mirror sits at p=0, as a fraction of the viewport above centre —
+// it starts a little high and glides down into place.
+const START_Y_VH = -0.1
 // Scale of the mirror on arrival and once docked (relative to its CSS size),
 // and the breathing room left between its foot and the headline.
 const START_SCALE = 2.3
@@ -33,6 +36,7 @@ export function ArchiveCard({
   // computed from the viewport and the mirror's rendered size, so its foot
   // always lands DOCK_GAP_PX above the headline regardless of screen height.
   const [endY, setEndY] = useState(0)
+  const [startY, setStartY] = useState(0)
   const imgRef = useRef<HTMLImageElement>(null)
   const runwayRef = useRef<HTMLDivElement>(null)
 
@@ -50,6 +54,7 @@ export function ArchiveCard({
     const measure = () => {
       const imgH = imgRef.current?.offsetHeight || 224
       setEndY(window.innerHeight * 0.5 - DOCK_GAP_PX - (imgH * END_SCALE) / 2)
+      setStartY(window.innerHeight * START_Y_VH)
       onScroll()
     }
     measure()
@@ -63,7 +68,8 @@ export function ArchiveCard({
 
   // Big and centred at p=0; docked size at p=1, eased down toward the headline.
   const scale = START_SCALE - (START_SCALE - END_SCALE) * p
-  const translateY = p * endY // px
+  // Starts a little above centre (startY) and glides down to its docked spot.
+  const translateY = startY + (endY - startY) * p // px
 
   return (
     // Borderless and transparent — the page's grey photoshoot texture shows
