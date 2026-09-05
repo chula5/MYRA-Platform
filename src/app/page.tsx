@@ -1,7 +1,9 @@
 import Link from 'next/link'
 import Navigation from '@/components/navigation/Navigation'
 import ScatterHero from '@/components/ScatterHero'
-import FeedClient from '@/app/feed/FeedClient'
+import { ArchiveCard } from '@/components/ArchiveCard'
+import ApplyButton from '@/components/ApplyButton'
+import ApplyModal from '@/components/ApplyModal'
 import SignupPrompt from '@/components/SignupPrompt'
 import LandingFeedback from '@/components/LandingFeedback'
 import LandingTracker from '@/components/analytics/LandingTracker'
@@ -28,34 +30,10 @@ export default async function LandingPage({
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  // Live outfits power the Edit at the top of the page (service-role so items
-  // show despite RLS) — for everyone, signed in or not.
-  const admin = createAdminClient()
-  const { data: liveRaw } = await admin
-    .from('outfit')
-    .select('*, outfit_item(*, item(*, brand(*)))')
-    .eq('status', 'live')
-    .order('published_at', { ascending: false })
-  const liveOutfits = (liveRaw ?? []) as unknown as OutfitWithItems[]
-
-  // Personalisation only for signed-in users.
-  let savedIds: string[] = []
-  let recommended: OutfitWithItems[] = []
-  let tasteVector: number[] | undefined
-  let brandRows: BrandRow[] = []
-  let occasionOrder: string[] | undefined
-  if (user) {
-    const [s, r, v] = await Promise.all([
-      getSavedOutfitIds(),
-      getTasteRecommendations(user.id),
-      getUserTasteVector(user.id),
-    ])
-    savedIds = s
-    recommended = r
-    tasteVector = v
-    brandRows = await getBrandAffinityRows(user.id, liveOutfits, v)
-    occasionOrder = getOccasionOrder(v, liveOutfits)
-  }
+  // The landing is now a sign-up page for the private-stylist model: the scatter
+  // hero, the mirror, the manifesto and APPLY. The feed (search + occasions +
+  // recommendations) is no longer shown here — it lives on /edit for accepted
+  // members, each with their own refined edit.
 
   return (
     <>
@@ -66,24 +44,28 @@ export default async function LandingPage({
       {/* ── Scatter hero — images stack then spread, headline in the middle ── */}
       <ScatterHero />
 
-      {/* ── The Edit ────────────────────────────────────────────── */}
-      <main className="myra-texture pt-6">
-        <FeedClient
-          injectedOutfits={liveOutfits}
-          detailHrefBase={user ? '/edit' : '/outfit'}
-          canSave={!!user}
-          savedOutfitIds={savedIds}
-          recommendedOutfits={recommended}
-          tasteVector={tasteVector}
-          brandRows={brandRows}
-          occasionOrder={occasionOrder}
-          signupHref={user ? undefined : '/signin'}
-          defaultSizeUk={(user?.user_metadata?.clothing_uk as number | undefined) ?? null}
-          ourPicks={await getOurPicks()}
-          hideViewTabs
-        />
+      {/* ── Mirror glides into place, the manifesto + APPLY sit beneath it ── */}
+      <main className="myra-texture">
+        <ArchiveCard
+          heading={
+            <div className="max-w-[880px] mx-auto text-center px-6">
+              <p className="text-[#4A4E57] tracking-[0.045em] sm:tracking-[0.06em] leading-[1.7] text-[clamp(15px,1.7vw,23px)]">
+                FED UP WITH THE NOISE? SO WERE WE. TOO MANY TABS, TOO MANY OPTIONS,
+                AND A WARDROBE THAT STILL NEVER WORKS. WE WANT YOU SEEING LESS, BUT
+                MORE OF WHAT YOU LIKE. SMALLER COLLECTIONS, REFINED TO YOUR TASTE.
+              </p>
+              <div className="mt-10 sm:mt-12">
+                <ApplyButton className="inline-flex items-center gap-3 rounded-full bg-[#0A0A0A] text-white px-12 py-5 text-[13px] sm:text-[14px] tracking-[0.2em] hover:opacity-85 transition-opacity" />
+              </div>
+            </div>
+          }
+        >
+          <></>
+        </ArchiveCard>
       </main>
-      {!user && <SignupPrompt href="/signin" />}
+
+      {/* The pop-out questionnaire every APPLY NOW opens. */}
+      <ApplyModal />
 
       {/* Pageview analytics (no more waitlist popup) */}
       <LandingTracker initialRef={ref ?? null} />

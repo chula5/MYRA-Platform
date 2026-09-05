@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import Link from 'next/link'
+import ApplyButton from '@/components/ApplyButton'
 
 // Scroll-driven collage: the images begin as a tight stack in the centre and,
 // as the section scrolls past, spread out to their scattered resting places,
@@ -100,12 +100,7 @@ export default function ScatterHero() {
           <h2 className="text-[#0A0A0A] font-semibold uppercase tracking-[0.02em] leading-[0.95] whitespace-nowrap text-[clamp(20px,6.5vw,104px)]">
             OUTFITS, NOT ITEMS
           </h2>
-          <Link
-            href="/earlyaccess/join"
-            className="pointer-events-auto mt-10 sm:mt-12 inline-flex items-center gap-3.5 rounded-full bg-[#0A0A0A] text-white px-11 sm:px-14 py-5 sm:py-6 text-[14px] sm:text-[16px] tracking-[0.2em] hover:opacity-85 transition-opacity"
-          >
-            APPLY NOW <span aria-hidden>→</span>
-          </Link>
+          <ApplyButton className="pointer-events-auto mt-10 sm:mt-12 inline-flex items-center gap-3.5 rounded-full bg-[#0A0A0A] text-white px-11 sm:px-14 py-5 sm:py-6 text-[14px] sm:text-[16px] tracking-[0.2em] hover:opacity-85 transition-opacity" />
         </div>
       </div>
     </section>
