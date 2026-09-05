@@ -14,13 +14,13 @@ type Piece = { src: string; x: number; y: number; r: number; wvw: number; wpx: n
 
 const PIECES: Piece[] = [
   { src: '/scatter/1.webp', x: -20, y: -32, r: -3, wvw: 46, wpx: 560, z: 9 },
-  { src: '/scatter/2.webp', x: -37, y: -16, r: -5, wvw: 22, wpx: 330, z: 3 },
-  { src: '/scatter/3.webp', x: 15, y: -32, r: 3, wvw: 22, wpx: 330, z: 5 },
-  { src: '/scatter/4.webp', x: 36, y: -16, r: 6, wvw: 23, wpx: 345, z: 6 },
-  { src: '/scatter/5.webp', x: -35, y: 23, r: -4, wvw: 23, wpx: 345, z: 4 },
-  { src: '/scatter/6.webp', x: -9, y: 35, r: 2, wvw: 22, wpx: 330, z: 7 },
-  { src: '/scatter/7.webp', x: 34, y: 23, r: 4, wvw: 23, wpx: 345, z: 6 },
-  { src: '/scatter/8.webp', x: 38, y: 34, r: 7, wvw: 20, wpx: 310, z: 5 },
+  { src: '/scatter/2.webp', x: -36, y: -15, r: -5, wvw: 27, wpx: 410, z: 3 },
+  { src: '/scatter/3.webp', x: 15, y: -30, r: 3, wvw: 27, wpx: 410, z: 5 },
+  { src: '/scatter/4.webp', x: 35, y: -15, r: 6, wvw: 28, wpx: 425, z: 6 },
+  { src: '/scatter/5.webp', x: -34, y: 24, r: -4, wvw: 28, wpx: 425, z: 4 },
+  { src: '/scatter/6.webp', x: -9, y: 35, r: 2, wvw: 26, wpx: 400, z: 7 },
+  { src: '/scatter/7.webp', x: 34, y: 24, r: 4, wvw: 28, wpx: 425, z: 6 },
+  { src: '/scatter/8.webp', x: 38, y: 34, r: 7, wvw: 25, wpx: 385, z: 5 },
 ]
 
 export default function ScatterHero() {
