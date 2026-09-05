@@ -48,14 +48,14 @@ export default async function LandingPage({
       <main className="myra-texture">
         <ArchiveCard
           heading={
-            <div className="max-w-[880px] mx-auto text-center px-6">
-              <p className="text-[#4A4E57] tracking-[0.045em] sm:tracking-[0.06em] leading-[1.7] text-[clamp(15px,1.7vw,23px)]">
+            <div className="max-w-[1400px] mx-auto text-center px-6 lg:px-12">
+              <p className="text-[#4A4E57] tracking-[0.04em] sm:tracking-[0.055em] leading-[1.55] text-[clamp(20px,2.4vw,36px)]">
                 FED UP WITH THE NOISE? SO WERE WE. TOO MANY TABS, TOO MANY OPTIONS,
                 AND A WARDROBE THAT STILL NEVER WORKS. WE WANT YOU SEEING LESS, BUT
                 MORE OF WHAT YOU LIKE. SMALLER COLLECTIONS, REFINED TO YOUR TASTE.
               </p>
-              <div className="mt-10 sm:mt-12">
-                <ApplyButton className="inline-flex items-center gap-3 rounded-full bg-[#0A0A0A] text-white px-12 py-5 text-[13px] sm:text-[14px] tracking-[0.2em] hover:opacity-85 transition-opacity" />
+              <div className="mt-12 sm:mt-14">
+                <ApplyButton className="inline-flex items-center gap-3.5 rounded-full bg-[#0A0A0A] text-white px-14 py-6 text-[16px] sm:text-[18px] tracking-[0.2em] hover:opacity-85 transition-opacity" />
               </div>
             </div>
           }

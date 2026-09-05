@@ -51,9 +51,9 @@ export default function ApplyModal() {
     else { setDone(true); setForm({ ...EMPTY }) }
   }
 
-  const labelCls = 'block text-[11px] tracking-[0.14em] text-[#6B6B6B] mb-2 uppercase'
+  const labelCls = 'block text-[13px] tracking-[0.14em] text-[#6B6B6B] mb-2 uppercase'
   const inputCls =
-    'w-full border border-[#D8D5CE] bg-white px-4 py-3 text-[14px] text-[#0A0A0A] tracking-[0.02em] outline-none focus:border-[#0A0A0A] transition-colors placeholder:text-[#B4B4AE]'
+    'w-full border border-[#D8D5CE] bg-white px-4 py-3.5 text-[16px] text-[#0A0A0A] tracking-[0.02em] outline-none focus:border-[#0A0A0A] transition-colors placeholder:text-[#B4B4AE]'
 
   return (
     <div
@@ -61,7 +61,7 @@ export default function ApplyModal() {
       onClick={() => setOpen(false)}
     >
       <div
-        className="relative w-full max-w-[580px] my-6 bg-[#FBFAF8] border border-[#2B2B2B] shadow-[0_30px_80px_rgba(0,0,0,0.25)] p-7 sm:p-10"
+        className="relative w-full max-w-[760px] my-6 bg-[#FBFAF8] border border-[#2B2B2B] shadow-[0_30px_80px_rgba(0,0,0,0.25)] p-9 sm:p-14"
         onClick={(e) => e.stopPropagation()}
         data-lenis-prevent
       >
@@ -90,8 +90,8 @@ export default function ApplyModal() {
         ) : (
           <form onSubmit={submit} className="flex flex-col gap-5">
             <div>
-              <p className="text-[17px] tracking-[0.1em] text-[#0A0A0A] mb-2">APPLY FOR YOUR PERSONAL EDIT</p>
-              <p className="text-[13px] text-[#6B6B6B] leading-[1.65]">
+              <p className="text-[24px] sm:text-[27px] tracking-[0.06em] text-[#0A0A0A] mb-2.5">APPLY FOR YOUR PERSONAL EDIT</p>
+              <p className="text-[15px] text-[#6B6B6B] leading-[1.65]">
                 A few questions so we can get a feel for your style. If it&rsquo;s a fit, we&rsquo;ll
                 build you a refined edit of your own.
               </p>
@@ -136,7 +136,7 @@ export default function ApplyModal() {
             <button
               type="submit"
               disabled={busy}
-              className="mt-1 rounded-full bg-[#0A0A0A] text-white px-8 py-4 text-[13px] tracking-[0.2em] hover:opacity-85 transition-opacity disabled:opacity-40"
+              className="mt-2 rounded-full bg-[#0A0A0A] text-white px-9 py-5 text-[15px] tracking-[0.2em] hover:opacity-85 transition-opacity disabled:opacity-40"
             >
               {busy ? 'SENDING…' : 'SUBMIT APPLICATION →'}
             </button>
