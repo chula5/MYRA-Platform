@@ -34,10 +34,19 @@ export function ArchiveCard({
   // always lands DOCK_GAP_PX above the headline regardless of screen height.
   const [endY, setEndY] = useState(0)
   const imgRef = useRef<HTMLImageElement>(null)
+  const runwayRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const onScroll = () =>
-      setP(Math.min(1, Math.max(0, window.scrollY / (window.innerHeight * SHRINK_VH))))
+    // Progress is measured against THIS runway's own position, not the page's
+    // absolute scroll — so the mirror plays its arrival wherever the card sits
+    // (e.g. below the scatter hero), rather than being used up by everything
+    // scrolled through above it.
+    const onScroll = () => {
+      const el = runwayRef.current
+      if (!el) return
+      const top = el.getBoundingClientRect().top
+      setP(Math.min(1, Math.max(0, -top / (window.innerHeight * SHRINK_VH))))
+    }
     const measure = () => {
       const imgH = imgRef.current?.offsetHeight || 224
       setEndY(window.innerHeight * 0.5 - DOCK_GAP_PX - (imgH * END_SCALE) / 2)
@@ -64,7 +73,7 @@ export function ArchiveCard({
         {/* Hero runway: one viewport of pure grey with the mirror pinned in
             the middle, plus the shrink distance. The mirror scales down and
             drifts to the runway's foot, where the headline takes over. */}
-        <div className="relative" style={{ height: `${(1 + SHRINK_VH) * 100}vh` }}>
+        <div ref={runwayRef} className="relative" style={{ height: `${(1 + SHRINK_VH) * 100}vh` }}>
           <div className="sticky top-0 h-screen flex items-center justify-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img

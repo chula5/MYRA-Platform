@@ -349,6 +349,7 @@ export default function FeedClient({
   sizeInfo,
   stylists = [],
   ourPicks,
+  hideViewTabs = false,
 }: {
   showAllOption?: boolean
   injectedOutfits?: OutfitWithItems[]
@@ -377,6 +378,8 @@ export default function FeedClient({
   // viewer's own taste vector keeps learning regardless of the active lens.
   stylists?: { stylist_id: string; name: string; slug: string }[]
   ourPicks?: import('@/lib/our-picks').OurPicksData
+  // Hide the THE ARCHIVE / OUR RECOMMENDATIONS toggle (used on the landing).
+  hideViewTabs?: boolean
 }) {
   // Lenis-aware scroll (see lib/smooth-scroll) — the feed jumps back to the top
   // whenever the view changes underneath it.
@@ -787,7 +790,7 @@ export default function FeedClient({
   }
 
   // ── View tabs (signed-in only): THE ARCHIVE / OUR RECOMMENDATIONS ─────────
-  const viewTabs = canSave ? (
+  const viewTabs = canSave && !hideViewTabs ? (
     <div className="flex items-center justify-center gap-8 md:gap-12">
       {([
         { label: 'THE ARCHIVE', active: !recsView, go: () => setRecsView(false) },

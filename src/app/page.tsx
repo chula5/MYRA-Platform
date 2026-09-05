@@ -80,6 +80,7 @@ export default async function LandingPage({
           signupHref={user ? undefined : '/signin'}
           defaultSizeUk={(user?.user_metadata?.clothing_uk as number | undefined) ?? null}
           ourPicks={await getOurPicks()}
+          hideViewTabs
         />
       </main>
       {!user && <SignupPrompt href="/signin" />}
