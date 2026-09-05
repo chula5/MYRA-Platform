@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import Navigation from '@/components/navigation/Navigation'
+import ScatterHero from '@/components/ScatterHero'
 import FeedClient from '@/app/feed/FeedClient'
 import SignupPrompt from '@/components/SignupPrompt'
 import LandingFeedback from '@/components/LandingFeedback'
@@ -61,6 +62,9 @@ export default async function LandingPage({
       {/* The nav is no longer transparent: it was only see-through so it could
           sit over the silver arrival screen, which has been removed. */}
       <Navigation authed={!!user} />
+
+      {/* ── Scatter hero — images stack then spread, headline in the middle ── */}
+      <ScatterHero />
 
       {/* ── The Edit ────────────────────────────────────────────── */}
       <main className="myra-texture pt-6">
