@@ -2,7 +2,7 @@ import Link from 'next/link'
 import Navigation from '@/components/navigation/Navigation'
 import ScatterHero from '@/components/ScatterHero'
 import { ArchiveCard } from '@/components/ArchiveCard'
-import ApplyButton from '@/components/ApplyButton'
+import ManifestoReveal from '@/components/ManifestoReveal'
 import ApplyModal from '@/components/ApplyModal'
 import SignupPrompt from '@/components/SignupPrompt'
 import LandingFeedback from '@/components/LandingFeedback'
@@ -46,20 +46,7 @@ export default async function LandingPage({
 
       {/* ── Mirror glides into place, the manifesto + APPLY sit beneath it ── */}
       <main className="myra-texture">
-        <ArchiveCard
-          heading={
-            <div className="max-w-[1400px] mx-auto text-center px-6 lg:px-12">
-              <p className="text-[#4A4E57] tracking-[0.04em] sm:tracking-[0.055em] leading-[1.55] text-[clamp(20px,2.4vw,36px)]">
-                FED UP WITH THE NOISE? SO WERE WE. TOO MANY TABS, TOO MANY OPTIONS,
-                AND A WARDROBE THAT STILL NEVER WORKS. WE WANT YOU SEEING LESS, BUT
-                MORE OF WHAT YOU LIKE. SMALLER COLLECTIONS, REFINED TO YOUR TASTE.
-              </p>
-              <div className="mt-12 sm:mt-14">
-                <ApplyButton className="inline-flex items-center gap-3.5 rounded-full bg-[#0A0A0A] text-white px-14 py-6 text-[16px] sm:text-[18px] tracking-[0.2em] hover:opacity-85 transition-opacity" />
-              </div>
-            </div>
-          }
-        >
+        <ArchiveCard heading={<ManifestoReveal />}>
           <></>
         </ArchiveCard>
       </main>
