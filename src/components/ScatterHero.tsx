@@ -13,14 +13,14 @@ import Link from 'next/link'
 type Piece = { src: string; x: number; y: number; r: number; wvw: number; wpx: number; z: number }
 
 const PIECES: Piece[] = [
-  { src: '/scatter/1.webp', x: -13, y: -30, r: -3, wvw: 16, wpx: 240, z: 9 },
-  { src: '/scatter/2.webp', x: -37, y: -20, r: -5, wvw: 13, wpx: 200, z: 3 },
-  { src: '/scatter/3.webp', x: 13, y: -32, r: 3, wvw: 13.5, wpx: 205, z: 5 },
-  { src: '/scatter/4.webp', x: 34, y: -18, r: 6, wvw: 14, wpx: 210, z: 6 },
-  { src: '/scatter/5.webp', x: -34, y: 20, r: -4, wvw: 14, wpx: 210, z: 4 },
-  { src: '/scatter/6.webp', x: -7, y: 33, r: 2, wvw: 13, wpx: 195, z: 7 },
-  { src: '/scatter/7.webp', x: 32, y: 20, r: 4, wvw: 14, wpx: 210, z: 6 },
-  { src: '/scatter/8.webp', x: 38, y: 34, r: 7, wvw: 11.5, wpx: 175, z: 5 },
+  { src: '/scatter/1.webp', x: -14, y: -30, r: -3, wvw: 30, wpx: 460, z: 9 },
+  { src: '/scatter/2.webp', x: -36, y: -18, r: -5, wvw: 19, wpx: 290, z: 3 },
+  { src: '/scatter/3.webp', x: 14, y: -31, r: 3, wvw: 19, wpx: 290, z: 5 },
+  { src: '/scatter/4.webp', x: 35, y: -17, r: 6, wvw: 20, wpx: 300, z: 6 },
+  { src: '/scatter/5.webp', x: -34, y: 22, r: -4, wvw: 20, wpx: 300, z: 4 },
+  { src: '/scatter/6.webp', x: -8, y: 34, r: 2, wvw: 19, wpx: 285, z: 7 },
+  { src: '/scatter/7.webp', x: 33, y: 22, r: 4, wvw: 20, wpx: 300, z: 6 },
+  { src: '/scatter/8.webp', x: 37, y: 33, r: 7, wvw: 18, wpx: 270, z: 5 },
 ]
 
 export default function ScatterHero() {
@@ -40,12 +40,15 @@ export default function ScatterHero() {
       // easeInOutCubic — slow start, so the stack holds a beat before it opens.
       const e = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2
 
+      // Big at the start (a hero image), a touch smaller once spread so the
+      // scattered pieces sit clear of the headline.
+      const scale = 1 - 0.2 * e
       for (let i = 0; i < PIECES.length; i++) {
         const el = pieceRefs.current[i]
         if (!el) continue
         const pc = PIECES[i]
         el.style.transform =
-          `translate(-50%, -50%) translate(${pc.x * e}vw, ${pc.y * e}vh) rotate(${pc.r * e}deg)`
+          `translate(-50%, -50%) translate(${pc.x * e}vw, ${pc.y * e}vh) rotate(${pc.r * e}deg) scale(${scale})`
       }
       if (textRef.current) {
         // Headline fades in over the middle third of the spread.
@@ -69,7 +72,7 @@ export default function ScatterHero() {
   }, [])
 
   return (
-    <section ref={sectionRef} className="relative bg-white" style={{ height: '230vh' }}>
+    <section ref={sectionRef} className="myra-texture relative" style={{ height: '230vh' }}>
       <div className="sticky top-0 h-screen overflow-hidden">
         {PIECES.map((pc, i) => (
           <div
