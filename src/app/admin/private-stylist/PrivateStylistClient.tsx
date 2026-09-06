@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { loadClientAttribution, loadTransferSeries, tagLookScope, loadInheritanceReport, runPromotionPass, type ClientAttribution, type InheritanceReport } from './attribution-actions'
+import { loadClientAttribution, loadTransferSeries, tagLookScope, loadInheritanceReport, runPromotionPass, alignStylistLayers, type ClientAttribution, type InheritanceReport } from './attribution-actions'
 import { SCOPE_LABEL, type Scope } from '@/lib/learning-scope'
 import type { TransferPoint } from '@/lib/learning-scope'
 import { CLIMATES, type ClimateId } from '@/lib/climate'
@@ -1776,7 +1776,15 @@ function DeliveriesTab({ data, run, busy }: { data: PilotData; run: Run; busy: s
   return (
     <div className="space-y-6">
       <TransferSeries />
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <button
+          className={btnTiny}
+          disabled={busy === 'align'}
+          title="Put the constitution on Chloe and persona profiles under her"
+          onClick={() => run('align', () => alignStylistLayers(), 'LAYERS ALIGNED')}
+        >
+          {busy === 'align' ? 'ALIGNING…' : 'ALIGN LAYERS'}
+        </button>
         <button
           className={btnLight}
           disabled={busy === 'promote'}

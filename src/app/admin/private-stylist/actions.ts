@@ -1279,8 +1279,8 @@ export async function recordMemberLookFeedback(
     if (it.item_id) fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action, slot: it.slot ?? null, item_in: it.item_id, brand_in: it.brand_id ?? null })
   }
   if (fb.length) {
-    const { error: fbErr } = await admin.from('pilot_look_feedback').insert(fb)
-    if (fbErr) return { error: fbErr.message }
+    const { error: fbErr } = await insertFeedback(admin, fb)
+    if (fbErr) return { error: fbErr }
   }
 
   return recordResponse(lookId, response, response === 'no' ? (reason ?? 'not_my_style') : reason)
@@ -1388,6 +1388,24 @@ export async function recomputeWeights(memberId: string): Promise<{ weights?: Ro
 //   swap item row   — item_out was wrong for HER (penalised next compose)
 //   pair rows       — which brand pairings survive review (accept +1, swap −1)
 // Brand affinities also nudge through the shared applyBrandSignals learning.
+
+/**
+ * Insert feedback rows, tolerating a database that has not had 0052 yet.
+ *
+ * Every capture writes its scope explicitly rather than relying on the column
+ * default — but a column that does not exist yet rejects the whole insert, and
+ * losing a swap is far worse than losing its scope. The rows go in either way;
+ * the scope is dropped only if the schema cannot hold it.
+ */
+async function insertFeedback(admin: any, rows: any[]): Promise<{ error?: string }> {
+  if (!rows.length) return {}
+  const { error } = await admin.from('pilot_look_feedback').insert(rows)
+  if (!error) return {}
+  if (!/schema cache|does not exist/i.test(error.message)) return { error: error.message }
+  const stripped = rows.map(({ scope, scope_source, ...rest }: any) => rest)
+  const retry = await admin.from('pilot_look_feedback').insert(stripped)
+  return retry.error ? { error: retry.error.message } : {}
+}
 
 const pairKeyOrdered = (a: string, b: string): [string, string] => (a < b ? [a, b] : [b, a])
 
@@ -1912,7 +1930,7 @@ export async function addComposedLookItem(lookId: string, newItemId: string): Pr
       fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action: 'accept', scope: DEFAULT_SCOPE, brand_out: a, brand_in: b })
     }
   }
-  await admin.from('pilot_look_feedback').insert(fb)
+  await insertFeedback(admin, fb)
 
   try {
     if (incoming.brand) await applyBrandSignals(admin, delivery.member_id, [incoming.brand], 'yes')
@@ -1959,7 +1977,7 @@ export async function swapComposedLookItem(lookId: string, itemIndex: number, ne
       fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action: 'swap', scope: DEFAULT_SCOPE, brand_out: a, brand_in: b })
     }
   }
-  await admin.from('pilot_look_feedback').insert(fb)
+  await insertFeedback(admin, fb)
 
   // Brand affinity learning (member-scoped, shared machinery with the feed).
   try {
@@ -2002,7 +2020,7 @@ export async function removeComposedLookItem(lookId: string, itemIndex: number):
       fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action: 'remove', scope: DEFAULT_SCOPE, brand_out: a, brand_in: b })
     }
   }
-  await admin.from('pilot_look_feedback').insert(fb)
+  await insertFeedback(admin, fb)
 
   try {
     if (outgoing.brand) await applyBrandSignals(admin, delivery.member_id, [outgoing.brand], 'no')
@@ -2034,7 +2052,7 @@ export async function approveComposedLook(lookId: string): Promise<{ error?: str
       fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action: 'accept', scope: DEFAULT_SCOPE, brand_out: a, brand_in: b })
     }
   }
-  if (fb.length) await admin.from('pilot_look_feedback').insert(fb)
+  if (fb.length) await insertFeedback(admin, fb)
 
   try {
     const brandNames = Array.from(new Set(items.map((it) => it.brand).filter(Boolean)))
@@ -2073,8 +2091,8 @@ export async function skipComposedLook(lookId: string): Promise<{ error?: string
     }
   }
   if (fb.length) {
-    const { error: fbErr } = await admin.from('pilot_look_feedback').insert(fb)
-    if (fbErr) return { error: fbErr.message }
+    const { error: fbErr } = await insertFeedback(admin, fb)
+    if (fbErr) return { error: fbErr }
   }
 
   try {

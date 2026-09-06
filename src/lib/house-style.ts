@@ -306,6 +306,46 @@ export function occasionGuidance(occasion?: string | null): OccasionGuidance {
   }
 }
 
+// ── WHOSE CONSTITUTION IS THIS? ─────────────────────────────────────────────
+//
+// Chloe's. Every rule below is her taste written down, not a universal fact
+// about clothes, and that distinction is the whole point of the learning
+// layers: a Chloe client inherits all of it, a client under another stylist
+// inherits none of it. It lives in code because it started here; the catalogue
+// is published so the stylist RECORD can own it, be versioned, and be compared
+// against another stylist's.
+//
+// Global scope holds only what has no opinion — in stock, in her size, no
+// duplicate slots, vector scoring, brand families.
+export interface ConstitutionRule { code: string; family: string; kind: 'violation' | 'penalty' }
+
+export const CONSTITUTION_RULES: ConstitutionRule[] = [
+  { code: 'category.activewear', family: 'Category bans', kind: 'violation' },
+  { code: 'category.print', family: 'Category bans', kind: 'violation' },
+  { code: 'colour.fuchsia', family: 'Colour engine', kind: 'violation' },
+  { code: 'colour.rainbow', family: 'Colour engine', kind: 'violation' },
+  { code: 'colour.exploratory', family: 'Colour engine', kind: 'violation' },
+  { code: 'colour.complementary_balanced', family: 'Colour engine', kind: 'penalty' },
+  { code: 'colour.discordant', family: 'Colour engine', kind: 'penalty' },
+  { code: 'colour.white_cream', family: 'Colour engine', kind: 'penalty' },
+  { code: 'colour.learned_skip', family: 'Colour engine', kind: 'penalty' },
+  { code: 'statement.multiple', family: 'Statement budget', kind: 'violation' },
+  { code: 'statement.none', family: 'Statement budget', kind: 'violation' },
+  { code: 'texture.budget', family: 'Statement budget', kind: 'violation' },
+  { code: 'echo.none', family: 'Echo rule', kind: 'violation' },
+  { code: 'silhouette.loose_on_loose', family: 'Silhouette balance', kind: 'violation' },
+  { code: 'material.rejected', family: 'Material pairing', kind: 'violation' },
+  { code: 'material.formality_gap', family: 'Material pairing', kind: 'violation' },
+  { code: 'jewellery.loud_on_busy', family: 'Jewellery logic', kind: 'violation' },
+  { code: 'price.spread', family: 'Price integrity', kind: 'violation' },
+  { code: 'price.tier_skip', family: 'Price integrity', kind: 'violation' },
+  { code: 'occasion.literal_whites', family: 'Occasion notes', kind: 'penalty' },
+  { code: 'occasion.no_layer', family: 'Occasion notes', kind: 'penalty' },
+  { code: 'occasion.not_cute', family: 'Occasion notes', kind: 'penalty' },
+]
+
+export const CONSTITUTION_FAMILIES = Array.from(new Set(CONSTITUTION_RULES.map((r) => r.family)))
+
 // ── THE CONSTITUTION ──────────────────────────────────────────────────────────
 
 export interface EvaluateOpts {

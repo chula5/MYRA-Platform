@@ -12,6 +12,8 @@
 // layer. Every Chloe client inherits it in full; another stylist has their own.
 
 import { createAdminClient } from '@/lib/supabase-server'
+import { CONSTITUTION_RULES, CONSTITUTION_FAMILIES } from '@/lib/house-style'
+import { checkPatternAgainstMoodboard } from '@/app/admin/ai/check-pattern-moodboard'
 import { revalidatePath } from 'next/cache'
 import {
   gatherPatterns, promotions, attribution, stylistFit, transferSeries,
@@ -116,6 +118,8 @@ export interface PromotionRun {
   promoted: number
   toStyle: number
   toStylist: number
+  /** Patterns the moodboard contradicted — her drift, not the style's. */
+  heldBack?: number
   details: string[]
   error?: string
 }
@@ -126,12 +130,9 @@ export interface PromotionRun {
  * Idempotent: a rule already recorded is refreshed with its new counts rather
  * than duplicated, so this is safe to run on every review.
  *
- * NOTE ON THE VISION CHECK: promotion to style scope is specified to require
- * the pattern to be consistent with the profile's reference images. That check
- * is not applied here yet — the moodboard comparison needs the vision pass,
- * which is currently out of API credit. Rules land as `source: 'auto'` and the
- * attribution view shows them, so nothing is hidden; but a style rule at this
- * moment rests on recurrence alone.
+ * A style rule must also agree with the profile's reference images — checked
+ * against the moodboard below — so a client drifting from her profile cannot
+ * write that drift into it.
  */
 export async function runPromotionPass(): Promise<PromotionRun> {
   const admin = createAdminClient() as any
@@ -140,8 +141,36 @@ export async function runPromotionPass(): Promise<PromotionRun> {
     const found = promotions(gatherPatterns(signals))
     const details: string[] = []
     let toStyle = 0, toStylist = 0
+    let rejected = 0
+
+    // Reference images per profile, for the consistency check below.
+    const moodboards = new Map<string, string[]>()
+    const profileIds = Array.from(new Set(found.map((p) => p.profileId).filter(Boolean))) as string[]
+    for (const pid of profileIds) {
+      const { data: prof } = await admin.from('style_profile')
+        .select('moodboard_persona_id').eq('profile_id', pid).maybeSingle()
+      if (!prof?.moodboard_persona_id) continue
+      const { data: imgs } = await admin.from('inspiration_image')
+        .select('image_url').eq('persona_id', prof.moodboard_persona_id).eq('status', 'scored').limit(4)
+      moodboards.set(pid, (imgs ?? []).map((i: any) => i.image_url).filter(Boolean))
+    }
 
     for (const p of found) {
+      // A style rule has to agree with what the style LOOKS like, or a client
+      // drifting from her profile writes her drift into it — and the next
+      // client matched to that profile inherits one person's change of mind.
+      // A moodboard that is silent on the pattern is not a contradiction.
+      if (p.scope === 'style' && p.profileId) {
+        const refs = moodboards.get(p.profileId) ?? []
+        if (refs.length) {
+          const { verdict } = await checkPatternAgainstMoodboard(p.label, refs)
+          if (verdict === 'inconsistent') {
+            rejected++
+            details.push(`HELD BACK · ${p.label} — contradicts the moodboard for this style`)
+            continue
+          }
+        }
+      }
       const row = {
         scope: p.scope,
         stylist_id: p.stylistId,
@@ -170,9 +199,9 @@ export async function runPromotionPass(): Promise<PromotionRun> {
     }
 
     revalidatePath(PATH)
-    return { promoted: found.length, toStyle, toStylist, details: details.slice(0, 20) }
+    return { promoted: toStyle + toStylist, toStyle, toStylist, details: details.slice(0, 20), heldBack: rejected }
   } catch (err) {
-    return { promoted: 0, toStyle: 0, toStylist: 0, details: [], error: err instanceof Error ? err.message : 'Promotion pass failed' }
+    return { promoted: 0, toStyle: 0, toStylist: 0, heldBack: 0, details: [], error: err instanceof Error ? err.message : 'Promotion pass failed' }
   }
 }
 
@@ -360,5 +389,110 @@ export async function loadInheritanceReport(memberId: string): Promise<Inheritan
     }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Could not build the report' }
+  }
+}
+
+// ── Putting the layers where they belong ────────────────────────────────────
+
+export interface AlignResult {
+  constitutionWritten: boolean
+  constitutionVersion: number
+  ruleCount: number
+  outfitEvidence: number
+  profilesCreated: string[]
+  membersRepointed: number
+  notes: string[]
+  error?: string
+}
+
+/**
+ * Make the layering true in the database, not just in principle.
+ *
+ * Two things were wrong. Chloe's constitution row was EMPTY while the rules
+ * ran from code, so nothing recorded that they are hers rather than everyone's
+ * — and a second stylist would silently have inherited them. And "Scandi mum"
+ * was modelled as a STYLIST when it is a style profile under Chloe: a
+ * reference several of her clients can share, not a different pair of eyes.
+ *
+ * Chloe's evidence is her published work. The 444 outfits she built before the
+ * private stylist existed are the clearest statement of her taste there is, so
+ * the constitution record cites them rather than pretending the rules appeared
+ * from nowhere.
+ *
+ * Idempotent: safe to run whenever the layers look wrong.
+ */
+export async function alignStylistLayers(): Promise<AlignResult> {
+  const admin = createAdminClient() as any
+  const notes: string[] = []
+  try {
+    const { data: stylists } = await admin.from('stylist').select('*')
+    const chloe = (stylists ?? []).find((s: any) => s.slug === 'chloe')
+    if (!chloe) return { constitutionWritten: false, constitutionVersion: 0, ruleCount: 0, outfitEvidence: 0, profilesCreated: [], membersRepointed: 0, notes: [], error: 'No stylist with slug "chloe"' }
+
+    // Her published work is the evidence the constitution rests on.
+    const { count: outfitEvidence } = await admin
+      .from('outfit').select('outfit_id', { count: 'exact', head: true })
+      .eq('stylist_id', chloe.stylist_id).in('status', ['live', 'paused'])
+
+    const version = (chloe.constitution_version ?? 1)
+    const constitution = {
+      owner: 'chloe',
+      version,
+      source: 'src/lib/house-style.ts — evaluateHouseStyle',
+      families: CONSTITUTION_FAMILIES,
+      rules: CONSTITUTION_RULES,
+      evidence: { published_outfits: outfitEvidence ?? 0 },
+      note: 'Chloe is stylist 001. Every Chloe client inherits these in full; a client under another stylist inherits none of them.',
+    }
+    const { error: cErr } = await admin.from('stylist')
+      .update({ constitution }).eq('stylist_id', chloe.stylist_id)
+    if (cErr) notes.push(`constitution not written: ${cErr.message}`)
+
+    // Persona stylists are style profiles under Chloe, not stylists.
+    const profilesCreated: string[] = []
+    let membersRepointed = 0
+    for (const s of (stylists ?? []).filter((x: any) => x.type === 'persona')) {
+      const { data: existing } = await admin.from('style_profile')
+        .select('profile_id').eq('moodboard_persona_id', s.stylist_id).maybeSingle()
+      let profileId = existing?.profile_id
+      if (!profileId) {
+        const { data: created, error } = await admin.from('style_profile').insert({
+          stylist_id: chloe.stylist_id,
+          name: s.name,
+          moodboard_persona_id: s.stylist_id,
+          vector: s.centroid ?? null,
+          envelope: s.envelope ?? s.vector_range ?? null,
+        }).select('profile_id').single()
+        if (error) { notes.push(`${s.name}: ${error.message}`); continue }
+        profileId = created.profile_id
+        profilesCreated.push(s.name)
+      }
+      // Anyone assigned to the persona now sits under Chloe, ON that profile.
+      const { data: moved } = await admin.from('pilot_member')
+        .update({ stylist_id: chloe.stylist_id, style_profile_id: profileId })
+        .eq('stylist_id', s.stylist_id).select('member_id')
+      membersRepointed += (moved ?? []).length
+    }
+
+    // Everyone else belongs to Chloe, and records the version they started on.
+    const { data: unassigned } = await admin.from('pilot_member')
+      .update({ stylist_id: chloe.stylist_id }).is('stylist_id', null).select('member_id')
+    membersRepointed += (unassigned ?? []).length
+    await admin.from('pilot_member')
+      .update({ inherited_constitution_version: version })
+      .is('inherited_constitution_version', null)
+
+    revalidatePath(PATH)
+    return {
+      constitutionWritten: !cErr,
+      constitutionVersion: version,
+      ruleCount: CONSTITUTION_RULES.length,
+      outfitEvidence: outfitEvidence ?? 0,
+      profilesCreated,
+      membersRepointed,
+      notes,
+    }
+  } catch (err) {
+    return { constitutionWritten: false, constitutionVersion: 0, ruleCount: 0, outfitEvidence: 0, profilesCreated: [], membersRepointed: 0, notes, error: err instanceof Error ? err.message : 'Alignment failed' }
   }
 }
