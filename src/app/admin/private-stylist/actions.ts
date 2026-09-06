@@ -77,6 +77,7 @@ import { buildTraitModel, type TraitModel, type TraitItem, type TraitDecision } 
 import { readTrust, trustHeadline, TRAILING, type LookOutcome, type TrustRead } from '@/lib/member-trust'
 import { explainTraits } from '@/lib/member-traits'
 import { type ClimateId } from '@/lib/climate'
+import { DEFAULT_SCOPE } from '@/lib/learning-scope'
 
 const PATH = '/admin/private-stylist'
 
@@ -1899,7 +1900,7 @@ export async function addComposedLookItem(lookId: string, newItemId: string): Pr
     member_id: delivery.member_id,
     delivery_id: look.delivery_id,
     look_id: lookId,
-    action: 'accept',
+    action: 'accept', scope: DEFAULT_SCOPE,
     slot: incoming.slot ?? null,
     item_in: incoming.item_id ?? null,
     brand_in: incoming.brand_id ?? null,
@@ -1908,7 +1909,7 @@ export async function addComposedLookItem(lookId: string, newItemId: string): Pr
     for (const other of items) {
       if (other === incoming || !other.brand_id || other.brand_id === incoming.brand_id) continue
       const [a, b] = pairKeyOrdered(incoming.brand_id, other.brand_id)
-      fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action: 'accept', brand_out: a, brand_in: b })
+      fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action: 'accept', scope: DEFAULT_SCOPE, brand_out: a, brand_in: b })
     }
   }
   await admin.from('pilot_look_feedback').insert(fb)
@@ -1944,7 +1945,7 @@ export async function swapComposedLookItem(lookId: string, itemIndex: number, ne
     member_id: delivery.member_id,
     delivery_id: look.delivery_id,
     look_id: lookId,
-    action: 'swap',
+    action: 'swap', scope: DEFAULT_SCOPE,
     slot: outgoing.slot ?? null,
     item_out: outgoing.item_id ?? null,
     item_in: incoming.item_id ?? null,
@@ -1955,7 +1956,7 @@ export async function swapComposedLookItem(lookId: string, itemIndex: number, ne
     for (const other of items) {
       if (other === incoming || !other.brand_id || other.brand_id === outgoing.brand_id) continue
       const [a, b] = pairKeyOrdered(outgoing.brand_id, other.brand_id)
-      fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action: 'swap', brand_out: a, brand_in: b })
+      fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action: 'swap', scope: DEFAULT_SCOPE, brand_out: a, brand_in: b })
     }
   }
   await admin.from('pilot_look_feedback').insert(fb)
@@ -1989,7 +1990,7 @@ export async function removeComposedLookItem(lookId: string, itemIndex: number):
     member_id: delivery.member_id,
     delivery_id: look.delivery_id,
     look_id: lookId,
-    action: 'remove',
+    action: 'remove', scope: DEFAULT_SCOPE,
     slot: outgoing.slot ?? null,
     item_out: outgoing.item_id ?? null,
     brand_out: outgoing.brand_id ?? null,
@@ -1998,7 +1999,7 @@ export async function removeComposedLookItem(lookId: string, itemIndex: number):
     for (const other of items) {
       if (!other.brand_id || other.brand_id === outgoing.brand_id) continue
       const [a, b] = pairKeyOrdered(outgoing.brand_id, other.brand_id)
-      fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action: 'remove', brand_out: a, brand_in: b })
+      fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action: 'remove', scope: DEFAULT_SCOPE, brand_out: a, brand_in: b })
     }
   }
   await admin.from('pilot_look_feedback').insert(fb)
@@ -2024,13 +2025,13 @@ export async function approveComposedLook(lookId: string): Promise<{ error?: str
   const items: LookItem[] = look.items ?? []
   const fb: any[] = []
   for (const it of items) {
-    if (it.item_id) fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action: 'accept', slot: it.slot ?? null, item_in: it.item_id, brand_in: it.brand_id ?? null })
+    if (it.item_id) fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action: 'accept', scope: DEFAULT_SCOPE, slot: it.slot ?? null, item_in: it.item_id, brand_in: it.brand_id ?? null })
   }
   const brandIds = Array.from(new Set(items.map((it) => it.brand_id).filter(Boolean))) as string[]
   for (let i = 0; i < brandIds.length; i++) {
     for (let j = i + 1; j < brandIds.length; j++) {
       const [a, b] = pairKeyOrdered(brandIds[i], brandIds[j])
-      fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action: 'accept', brand_out: a, brand_in: b })
+      fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action: 'accept', scope: DEFAULT_SCOPE, brand_out: a, brand_in: b })
     }
   }
   if (fb.length) await admin.from('pilot_look_feedback').insert(fb)
@@ -2062,13 +2063,13 @@ export async function skipComposedLook(lookId: string): Promise<{ error?: string
     // as item_in — the column that means "she chose this" — so the strongest
     // rejection in the system was invisible to the learning that reads
     // item_out. 197 of Alison's skips taught nothing.
-    if (it.item_id) fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action: 'remove', slot: it.slot ?? null, item_out: it.item_id, brand_out: it.brand_id ?? null })
+    if (it.item_id) fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action: 'remove', scope: DEFAULT_SCOPE, slot: it.slot ?? null, item_out: it.item_id, brand_out: it.brand_id ?? null })
   }
   const brandIds = Array.from(new Set(items.map((it) => it.brand_id).filter(Boolean))) as string[]
   for (let i = 0; i < brandIds.length; i++) {
     for (let j = i + 1; j < brandIds.length; j++) {
       const [a, b] = pairKeyOrdered(brandIds[i], brandIds[j])
-      fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action: 'remove', brand_out: a, brand_in: b })
+      fb.push({ member_id: delivery.member_id, delivery_id: look.delivery_id, look_id: lookId, action: 'remove', scope: DEFAULT_SCOPE, brand_out: a, brand_in: b })
     }
   }
   if (fb.length) {

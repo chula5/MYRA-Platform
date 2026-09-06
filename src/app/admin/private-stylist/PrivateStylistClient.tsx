@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { loadClientAttribution, loadTransferSeries, tagLookScope, loadInheritanceReport, runPromotionPass, type ClientAttribution, type InheritanceReport } from './attribution-actions'
+import { SCOPE_LABEL, type Scope } from '@/lib/learning-scope'
+import type { TransferPoint } from '@/lib/learning-scope'
 import { CLIMATES, type ClimateId } from '@/lib/climate'
 import { HIGGSFIELD_POSE_OPTIONS } from '@/lib/higgsfield-shoot'
 import { lookSpend, formatLookSpend } from '@/lib/wardrobe/owned-items'
@@ -1694,6 +1697,8 @@ function MemberCard({
 
           <PriceBandsEditor member={m} run={run} busy={busy} ready={bandsReady} />
           <TrustPanel memberId={m.member_id} />
+          <InheritancePanel memberId={m.member_id} />
+          <AttributionPanel memberId={m.member_id} />
           <StylePreferences member={m} run={run} busy={busy} ready={prefsReady} />
 
           {/* Wardrobe */}
@@ -1770,6 +1775,17 @@ function DeliveriesTab({ data, run, busy }: { data: PilotData; run: Run; busy: s
 
   return (
     <div className="space-y-6">
+      <TransferSeries />
+      <div className="flex justify-end">
+        <button
+          className={btnLight}
+          disabled={busy === 'promote'}
+          title="Widen the scope of any pattern that has earned it"
+          onClick={() => run('promote', () => runPromotionPass(), 'PROMOTION PASS RUN')}
+        >
+          {busy === 'promote' ? 'CHECKING…' : 'RUN PROMOTION PASS'}
+        </button>
+      </div>
       <div className="flex items-center justify-between">
         <div className="flex gap-1.5">
           <button
@@ -1800,6 +1816,7 @@ function DeliveriesTab({ data, run, busy }: { data: PilotData; run: Run; busy: s
       {memberId !== 'all' && memberById[memberId] && (
         <>
           <ScoreStrip memberId={memberId} />
+          <AttributionPanel memberId={memberId} />
           <Lookbook deliveries={deliveries} memberName={memberById[memberId].name} activity={data.activity} run={run} busy={busy} />
         </>
       )}
@@ -1818,6 +1835,191 @@ function DeliveriesTab({ data, run, busy }: { data: PilotData; run: Run; busy: s
 // The numbers that decide whether a member can be scaled, sitting where the
 // work happens rather than behind a member card. Same read as the member
 // profile — derived from her looks and decisions, never stored.
+// ── ATTRIBUTION ─────────────────────────────────────────────────────────────
+// Which layer this client's lessons reached. The most important view for
+// judging whether the harness compounds: if everything stays at CLIENT scope,
+// MYRA is learning to style one person rather than learning to style.
+// ── HARNESS TRANSFER ────────────────────────────────────────────────────────
+// First-ten clean rate per client, in onboarding order, per stylist. The
+// single number that says whether MYRA is learning to style, or learning to
+// style one person. Each client after the first should start above her.
+// ── INHERITANCE ─────────────────────────────────────────────────────────────
+// What a new client starts with, on one screen. The prediction is the point:
+// if she is not expected to start meaningfully above the last client's actual
+// first ten, the harness is not transferring, and that is worth knowing before
+// her first delivery rather than after it.
+function InheritancePanel({ memberId }: { memberId: string }) {
+  const [r, setR] = useState<InheritanceReport | null>(null)
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    if (!open) return
+    let live = true
+    loadInheritanceReport(memberId).then((x) => { if (live && !('error' in x)) setR(x) })
+    return () => { live = false }
+  }, [memberId, open])
+
+  const pct = (n: number | null | undefined) => n == null ? '—' : `${Math.round(n * 100)}%`
+  const row = (label: string, value: string) => (
+    <div className="flex gap-3">
+      <span className="text-[8px] tracking-[0.12em] text-[#A8A8A4] w-44 shrink-0 pt-0.5">{label}</span>
+      <span className="text-[9px] tracking-[0.06em] text-[#0A0A0A]">{value}</span>
+    </div>
+  )
+
+  return (
+    <div className="border border-[#E2E0DB] bg-[#FCFCFA] p-4">
+      <button onClick={() => setOpen((v) => !v)} className="w-full flex items-baseline justify-between">
+        <span className="text-[9px] tracking-[0.16em] text-[#0A0A0A]">WHAT SHE INHERITED</span>
+        <span className="text-[8px] tracking-[0.14em] text-[#A8A8A4]">{open ? 'HIDE' : 'OPEN REPORT'}</span>
+      </button>
+      {open && r && (
+        <div className="mt-3 space-y-2">
+          {row('STYLIST', `${r.stylistName.toUpperCase()} · CONSTITUTION v${r.constitutionVersion} — INHERITED IN FULL`)}
+          {row('STYLE PROFILE', r.styleProfile ? `${r.styleProfile.name.toUpperCase()} — ${r.styleProfile.matched ? 'MATCHED TO AN EXISTING PROFILE' : 'CREATED FROM HER MOODBOARD'}` : 'NONE YET — ONE WILL BE BUILT FROM HER MOODBOARD')}
+          {row('GLOBAL LAYER', `${r.globalLayer.brandsCoded} BRANDS CODED · ${r.globalLayer.itemsInStock} PIECES IN STOCK · ${r.globalLayer.enginePasses.join(', ').toUpperCase()}`)}
+          {row('RULES CARRIED IN', `${r.inheritedRules.stylist} STYLIST · ${r.inheritedRules.style} STYLE`)}
+          {r.inheritedRules.labels.map((l, i) => (
+            <p key={i} className="text-[9px] tracking-[0.06em] text-[#6B6B6B] ml-[11.5rem]">· {l.toUpperCase()}</p>
+          ))}
+          {row('STARTS EMPTY', r.startsEmpty.join(', ').toUpperCase())}
+
+          {r.brandReadiness.length > 0 && (
+            <div className="border-t border-[#EFEDE8] pt-2 mt-2">
+              <p className="text-[8px] tracking-[0.14em] text-[#B4593A] mb-1">
+                BRANDS TO RESOLVE BEFORE HER FIRST DELIVERY
+              </p>
+              {r.brandReadiness.map((b, i) => (
+                <p key={i} className="text-[9px] tracking-[0.06em] text-[#6B6B6B]">· {b.name.toUpperCase()} — {b.issue.toUpperCase()}</p>
+              ))}
+            </div>
+          )}
+
+          <div className="border-t border-[#EFEDE8] pt-2 mt-2">
+            <p className="text-[8px] tracking-[0.14em] text-[#6B6B6B] mb-1">PREDICTED START</p>
+            <p className="text-[12px] tracking-[0.06em] text-[#0A0A0A]">
+              {pct(r.predicted.predicted)} CLEAN OVER HER FIRST TEN
+              {r.baseline && <span className="text-[#A8A8A4]"> · {r.baseline.name.toUpperCase()} ACTUALLY MANAGED {pct(r.baseline.cleanRate)}</span>}
+            </p>
+            <p className="text-[8px] tracking-[0.08em] text-[#A8A8A4] mt-0.5">BASIS — {r.predicted.basis.toUpperCase()}</p>
+            <p className={`text-[9px] tracking-[0.06em] mt-1.5 ${r.verdict.startsWith('NOT TRANSFERRING') ? 'text-[#B4593A]' : 'text-[#3D7A50]'}`}>
+              {r.verdict.toUpperCase()}
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TransferSeries() {
+  const [points, setPoints] = useState<TransferPoint[] | null>(null)
+  useEffect(() => {
+    let live = true
+    loadTransferSeries().then((r) => { if (live) setPoints(r.points) })
+    return () => { live = false }
+  }, [])
+  if (!points?.length) return null
+  const pct = (n: number | null) => n == null ? '—' : `${Math.round(n * 100)}%`
+
+  return (
+    <div className="border border-[#E2E0DB] bg-[#FCFCFA] p-4">
+      <p className="text-[9px] tracking-[0.16em] text-[#0A0A0A]">DOES THE HARNESS TRANSFER?</p>
+      <p className="text-[8px] tracking-[0.1em] text-[#A8A8A4] mt-1 mb-3">
+        FIRST TEN LOOKS, CLEAN RATE, IN ONBOARDING ORDER · EACH CLIENT SHOULD START ABOVE THE ONE BEFORE
+      </p>
+      <div className="space-y-2">
+        {points.map((p) => (
+          <div key={p.memberId} className="flex items-center gap-3">
+            <span className="text-[9px] tracking-[0.1em] text-[#6B6B6B] w-40 shrink-0">
+              {p.order}. {p.name.toUpperCase()}
+            </span>
+            <div className="h-2.5 bg-[#EFEDE8] flex-1">
+              <div className="h-2.5 bg-[#C4A882]" style={{ width: `${(p.cleanRate ?? 0) * 100}%` }} />
+            </div>
+            <span className="text-[10px] tracking-[0.08em] text-[#0A0A0A] w-14 text-right">{pct(p.cleanRate)}</span>
+            <span className={`text-[9px] tracking-[0.08em] w-24 ${(p.deltaVsBaseline ?? 0) > 0 ? 'text-[#3D7A50]' : (p.deltaVsBaseline ?? 0) < 0 ? 'text-[#B4593A]' : 'text-[#A8A8A4]'}`}>
+              {p.deltaVsBaseline == null ? 'BASELINE' : `${p.deltaVsBaseline > 0 ? '+' : ''}${Math.round(p.deltaVsBaseline * 100)} PTS`}
+            </span>
+            <span className="text-[8px] tracking-[0.08em] text-[#A8A8A4] w-16">{p.looks} LOOKS</span>
+          </div>
+        ))}
+      </div>
+      {points.length === 1 && (
+        <p className="text-[9px] tracking-[0.06em] text-[#8B5E00] mt-3">
+          ONE CLIENT ONLY — SHE IS THE BASELINE. THE METRIC MEANS NOTHING UNTIL A SECOND CLIENT STARTS.
+        </p>
+      )}
+    </div>
+  )
+}
+
+function AttributionPanel({ memberId }: { memberId: string }) {
+  const [a, setA] = useState<ClientAttribution | null>(null)
+  useEffect(() => {
+    let live = true
+    loadClientAttribution(memberId).then((r) => { if (live && !('error' in r)) setA(r) })
+    return () => { live = false }
+  }, [memberId])
+  if (!a) return null
+
+  const pct = (n: number) => `${Math.round(n * 100)}%`
+  const { byScope, total } = a.attribution
+  const bars: [string, number, string][] = [
+    ['JUST HER', byScope.client, '#C08A6A'],
+    ['HER STYLE PROFILE', byScope.style, '#C4A882'],
+    ["THE STYLIST'S RULES", byScope.stylist, '#8B9E7E'],
+    ['THE ENGINE', byScope.global, '#8B98A8'],
+  ]
+
+  return (
+    <div className="border border-[#E2E0DB] bg-[#FCFCFA] p-4 space-y-3">
+      <div>
+        <p className="text-[9px] tracking-[0.16em] text-[#0A0A0A]">WHERE HER LESSONS LANDED</p>
+        <p className="text-[8px] tracking-[0.1em] text-[#A8A8A4] mt-1">
+          {total} DECISIONS · {pct(a.attribution.promotedShare)} REACHED A WIDER LAYER THAN HER
+        </p>
+      </div>
+
+      <div className="space-y-1.5">
+        {bars.map(([label, n, colour]) => (
+          <div key={label} className="flex items-center gap-3">
+            <span className="text-[8px] tracking-[0.12em] text-[#6B6B6B] w-40 shrink-0">{label}</span>
+            <div className="h-2 bg-[#EFEDE8] flex-1">
+              <div className="h-2" style={{ width: `${total ? (n / total) * 100 : 0}%`, background: colour }} />
+            </div>
+            <span className="text-[9px] tracking-[0.08em] text-[#0A0A0A] w-16 text-right">{n} · {pct(total ? n / total : 0)}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Is the STYLIST wrong for her, or is the composer just making mistakes?
+          Only the second one is fixed by more learning. */}
+      <div className="border-t border-[#EFEDE8] pt-3">
+        <p className="text-[8px] tracking-[0.14em] text-[#6B6B6B] mb-1">STYLIST FIT</p>
+        <p className="text-[10px] tracking-[0.06em] text-[#0A0A0A]">
+          {pct(a.fit.constitutionShare)} OF HER EDITS OVERRULE RULES THE COMPOSER APPLIED CORRECTLY
+          <span className="text-[#A8A8A4]"> · {a.fit.composerEdits} WERE COMPOSER MISTAKES · {a.fit.looks} LOOKS</span>
+        </p>
+        <p className={`text-[9px] tracking-[0.06em] mt-1 ${a.fit.mismatch ? 'text-[#B4593A]' : 'text-[#6B6B6B]'}`}>
+          {a.fit.note.toUpperCase()}
+        </p>
+      </div>
+
+      {a.rules.length > 0 && (
+        <div className="border-t border-[#EFEDE8] pt-3">
+          <p className="text-[8px] tracking-[0.14em] text-[#6B6B6B] mb-1">RULES HER HISTORY HAS PRODUCED</p>
+          {a.rules.map((r, i) => (
+            <p key={i} className="text-[9px] tracking-[0.06em] text-[#6B6B6B]">
+              <span className={r.scope === 'stylist' ? 'text-[#3D7A50]' : 'text-[#8B5E00]'}>{r.scope.toUpperCase()}</span>
+              {' · '}{r.label.toUpperCase()} <span className="text-[#A8A8A4]">({r.reason})</span>
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ScoreStrip({ memberId }: { memberId: string }) {
   const [t, setT] = useState<MemberTrust | null>(null)
   useEffect(() => {
@@ -2844,6 +3046,18 @@ function LookRow({
               {/* CLEAR empties the look and leaves the slot; the × removes
                   the slot too. Neither teaches the composer anything — a look
                   nobody kept is not a taste signal. */}
+              {/* One tap after a swap sets where the lesson belongs, and skips
+                  the wait for the promotion rules to accumulate evidence. */}
+              {(['client', 'style', 'stylist', 'global'] as Scope[]).map((sc) => (
+                <button
+                  key={sc}
+                  className={`${btnTiny} !px-2`}
+                  title={`This edit is ${SCOPE_LABEL[sc].toLowerCase()}`}
+                  onClick={() => run(`tag-${l.look_id}`, () => tagLookScope(l.look_id, sc), `TAGGED · ${SCOPE_LABEL[sc]}`)}
+                >
+                  {SCOPE_LABEL[sc]}
+                </button>
+              ))}
               <button
                 className={btnTiny}
                 title="Empty this look — the slot stays, and nothing here is learned"
