@@ -38,17 +38,17 @@ export default function StylingAssistant() {
       {/* Heading + first box pinned together → their gap is fixed (mb below).
           Each row's (sticky top + height) is kept EQUAL so all three release at
           the same scroll point and leave together — the stack never falls apart. */}
-      <div className="myra-texture sticky top-[26vh] min-h-[calc(40vh+28.5rem)] px-6 lg:px-16">
+      <div className="myra-texture sticky top-[26vh] min-h-[calc(40vh+30.5rem)] px-6 lg:px-16">
         <h2 className="uppercase font-semibold tracking-[0.03em] leading-[1.0] text-[#4A4E57] text-[clamp(36px,5.2vw,82px)] mb-10 sm:mb-14">
           Your Styling Assistant
         </h2>
         <Row {...ROWS[0]} />
       </div>
 
-      <div className="myra-texture sticky min-h-[calc(40vh+10rem)] px-6 lg:px-16" style={{ top: 'calc(26vh + 18.5rem)' }}>
+      <div className="myra-texture sticky min-h-[calc(40vh+11rem)] px-6 lg:px-16" style={{ top: 'calc(26vh + 19.5rem)' }}>
         <Row {...ROWS[1]} />
       </div>
-      <div className="myra-texture sticky min-h-[40vh] px-6 lg:px-16" style={{ top: 'calc(26vh + 28.5rem)' }}>
+      <div className="myra-texture sticky min-h-[40vh] px-6 lg:px-16" style={{ top: 'calc(26vh + 30.5rem)' }}>
         <Row {...ROWS[2]} />
       </div>
     </section>
