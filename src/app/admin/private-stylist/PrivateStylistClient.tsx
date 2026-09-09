@@ -2220,6 +2220,14 @@ const STATUS_TONE: Record<string, string> = {
   responded: 'text-[#3D7A50] border-[#C9E0CF]',
 }
 
+// What kind of piece this is, in words. item_type is the real answer and every
+// stored look item carries one; the slot is the fallback for anything added by
+// hand before the type was resolved.
+function itemTypeLabel(it: { item_type?: string | null; slot?: string | null }): string {
+  const raw = it.item_type ?? it.slot
+  return raw ? String(raw).replace(/_/g, ' ').toUpperCase() : ''
+}
+
 function DeliveryCard({
   delivery: d,
   member,
@@ -2690,7 +2698,16 @@ function LookRow({
                     </div>
                   )}
                   <div className="px-2.5 py-2">
-                    <p className="text-[9px] tracking-[0.12em] text-[#A8A8A4]">{it.brand.toUpperCase()}</p>
+                    {/* What KIND of piece this is. A product name alone does
+                        not say it — "Alyora Espresso" and "Vapouri Nature"
+                        could be anything — and the slot a piece fills is the
+                        first thing you check when reading a look. */}
+                    <p className="text-[9px] tracking-[0.12em] text-[#A8A8A4] flex items-baseline justify-between gap-2">
+                      <span className="truncate">{it.brand.toUpperCase()}</span>
+                      {itemTypeLabel(it) && (
+                        <span className="text-[#8B5E00] shrink-0">{itemTypeLabel(it)}</span>
+                      )}
+                    </p>
                     <p className="text-[10px] tracking-[0.08em] text-[#0A0A0A] mt-0.5">
                       {it.owned ? '◈ OWNED — ' : ''}
                       {it.product_name.toUpperCase()}
@@ -2850,6 +2867,7 @@ function LookRow({
                 <p key={i} className="text-[9px] tracking-[0.06em] text-[#6B6B6B]">
                   {it.owned ? '◈ OWNED — ' : ''}
                   {it.brand.toUpperCase()} {it.product_name.toUpperCase()}
+                  {itemTypeLabel(it) && <span className="text-[#8B5E00]"> · {itemTypeLabel(it)}</span>}
                   {typeof it.price_gbp === 'number' && ` · £${it.price_gbp}`}
                   {it.size && ` · ${it.size.toUpperCase()}`}
                   {!it.owned && (it.stock_checked_at ? ' · STOCK ✓' : ' · STOCK UNCHECKED')}
