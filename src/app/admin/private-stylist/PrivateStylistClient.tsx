@@ -2223,6 +2223,12 @@ const STATUS_TONE: Record<string, string> = {
 // What kind of piece this is, in words. item_type is the real answer and every
 // stored look item carries one; the slot is the fallback for anything added by
 // hand before the type was resolved.
+// A converted price is a float, and a float rendered raw reads as a bug:
+// £197.10999999999999. Whole pounds unless the pennies are real.
+function gbp(n: number): string {
+  return Number.isInteger(n) ? `£${n}` : `£${n.toFixed(2).replace(/\.00$/, '')}`
+}
+
 function itemTypeLabel(it: { item_type?: string | null; slot?: string | null }): string {
   const raw = it.item_type ?? it.slot
   return raw ? String(raw).replace(/_/g, ' ').toUpperCase() : ''
@@ -2715,7 +2721,7 @@ function LookRow({
                     <p className={`text-[9px] tracking-[0.08em] mt-0.5 ${it.owned ? 'text-[#8B5E00]' : 'text-[#6B6B6B]'}`}>
                       {it.owned
                         ? `IN HER WARDROBE${typeof it.estimated_value_gbp === 'number' ? ` · WORTH ~£${it.estimated_value_gbp}` : ''}`
-                        : typeof it.price_gbp === 'number' ? `£${it.price_gbp}` : ''}
+                        : typeof it.price_gbp === 'number' ? gbp(it.price_gbp) : ''}
                       {it.size && ` · ${it.size.toUpperCase()}`}
                       {!it.owned && (it.stock_checked_at ? ' · STOCK ✓' : ' · STOCK UNCHECKED')}
                     </p>
@@ -2868,7 +2874,7 @@ function LookRow({
                   {it.owned ? '◈ OWNED — ' : ''}
                   {it.brand.toUpperCase()} {it.product_name.toUpperCase()}
                   {itemTypeLabel(it) && <span className="text-[#8B5E00]"> · {itemTypeLabel(it)}</span>}
-                  {typeof it.price_gbp === 'number' && ` · £${it.price_gbp}`}
+                  {typeof it.price_gbp === 'number' && ` · ${gbp(it.price_gbp)}`}
                   {it.size && ` · ${it.size.toUpperCase()}`}
                   {!it.owned && (it.stock_checked_at ? ' · STOCK ✓' : ' · STOCK UNCHECKED')}
                 </p>
@@ -2958,7 +2964,7 @@ function LookRow({
                       )}
                       <p className="text-[9px] tracking-[0.1em] text-[#6B6B6B] px-1.5 py-1.5 truncate">
                         {(o.brand_name ?? '').toUpperCase()} {o.product_name.toUpperCase()}
-                        {typeof o.price_gbp === 'number' && ` £${o.price_gbp}`}
+                        {typeof o.price_gbp === 'number' && ` ${gbp(o.price_gbp)}`}
                       </p>
                     </button>
                   ))}
@@ -3024,8 +3030,29 @@ function LookRow({
             </div>
           )}
           {l.notes && <p className="text-[9px] tracking-[0.06em] text-[#A8A8A4] mt-1">{l.notes.toUpperCase()}</p>}
+          {/* One tap after a swap says where the lesson belongs and skips the
+              wait for the promotion rules to gather evidence. Kept away from
+              the actions above: it is a note about an edit, not an edit. */}
+          {composed && !sent && (
+            <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+              <span className="text-[8px] tracking-[0.14em] text-[#A8A8A4]">THIS EDIT WAS…</span>
+              {(['client', 'style', 'stylist', 'global'] as Scope[]).map((sc) => (
+                <button
+                  key={sc}
+                  className="text-[8px] tracking-[0.12em] text-[#6B6B6B] border border-[#E2E0DB] px-2 py-0.5 hover:border-[#0A0A0A] transition-colors"
+                  title={`Tag every decision on this look as ${SCOPE_LABEL[sc].toLowerCase()}`}
+                  onClick={() => run(`tag-${l.look_id}`, () => tagLookScope(l.look_id, sc), `TAGGED · ${SCOPE_LABEL[sc]}`)}
+                >
+                  {SCOPE_LABEL[sc]}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-        <div className="shrink-0 flex flex-col items-end gap-2">
+        {/* Capped, so the header wraps instead of stealing the row. Eleven
+            buttons at shrink-0 squeezed the item grid down to a single column
+            — the pieces are the point of this card, not the controls. */}
+        <div className="shrink-0 flex flex-col items-end gap-2 max-w-[19rem]">
           {!sent && (
             <div className="flex gap-2 flex-wrap justify-end">
               {composed && !l.approved_at && (
@@ -3072,18 +3099,6 @@ function LookRow({
               {/* CLEAR empties the look and leaves the slot; the × removes
                   the slot too. Neither teaches the composer anything — a look
                   nobody kept is not a taste signal. */}
-              {/* One tap after a swap sets where the lesson belongs, and skips
-                  the wait for the promotion rules to accumulate evidence. */}
-              {(['client', 'style', 'stylist', 'global'] as Scope[]).map((sc) => (
-                <button
-                  key={sc}
-                  className={`${btnTiny} !px-2`}
-                  title={`This edit is ${SCOPE_LABEL[sc].toLowerCase()}`}
-                  onClick={() => run(`tag-${l.look_id}`, () => tagLookScope(l.look_id, sc), `TAGGED · ${SCOPE_LABEL[sc]}`)}
-                >
-                  {SCOPE_LABEL[sc]}
-                </button>
-              ))}
               <button
                 className={btnTiny}
                 title="Empty this look — the slot stays, and nothing here is learned"
