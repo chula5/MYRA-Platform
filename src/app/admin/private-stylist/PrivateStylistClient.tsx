@@ -2407,17 +2407,28 @@ function DeliveryCard({
               ) : (
                 <LookRow key={l.look_id} look={l} member={member} sent={d.status !== 'draft'} calibration={calibration} run={run} onEdit={() => setEditingLook(l.look_id)} />
               )
-            return order.map((key) => {
+            // Finished looks first. A shot look is the deliverable; the ones
+            // still being built are work in progress, and having to scroll
+            // past the work to see the result is backwards.
+            const done = (k: string) => (groups.get(k) ?? []).some((l) => l.image_url)
+            const ordered = [...order].sort((a, b) => Number(done(b)) - Number(done(a)))
+            return ordered.map((key) => {
               const set = groups.get(key)!.slice().sort((a, b) => a.position - b.position)
               if (set.length < 2) return renderLook(set[0])
               const heroName = set[0].items.find((it) => it.item_id)?.product_name ?? 'THIS PIECE'
+              // The lead is the finished one if there is one. The other ways
+              // of wearing the same piece sit behind a button rather than
+              // filling the page.
+              const lead = set.find((l) => l.image_url) ?? set[0]
+              const rest = set.filter((l) => l.look_id !== lead.look_id)
               return (
-                <div key={key} className="border-l-2 border-[#C4A882] pl-3">
-                  <p className="text-[8px] tracking-[0.16em] text-[#8B5E00] mb-1.5">
-                    ◆ {set.length} WAYS TO WEAR {heroName.toUpperCase()}
-                  </p>
-                  {set.map(renderLook)}
-                </div>
+                <VariantGroup
+                  key={key}
+                  heroName={heroName}
+                  count={set.length}
+                  lead={renderLook(lead)}
+                  rest={rest.map(renderLook)}
+                />
               )
             })
           })()}
@@ -2591,6 +2602,31 @@ function DeliveryCard({
   )
 }
 
+// A hero piece and every way it has been styled. The finished look leads; the
+// alternatives are one click away rather than laid out down the page.
+function VariantGroup({
+  heroName, count, lead, rest,
+}: {
+  heroName: string
+  count: number
+  lead: React.ReactNode
+  rest: React.ReactNode[]
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="border-l-2 border-[#C4A882] pl-3">
+      {lead}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="mt-1.5 mb-2 text-[8px] tracking-[0.16em] text-[#8B5E00] hover:underline"
+      >
+        ◆ {open ? 'HIDE THE OTHER WAYS' : `SEE ${heroName.toUpperCase()} STYLED ${count - 1} OTHER WAY${count - 1 === 1 ? '' : 'S'}`}
+      </button>
+      {open && rest}
+    </div>
+  )
+}
+
 function LookRow({
   look: l,
   member,
@@ -2613,6 +2649,11 @@ function LookRow({
   const [addSlot, setAddSlot] = useState<string | null>(null)
   const [poseOpen, setPoseOpen] = useState(false)
   const [shooting, setShooting] = useState(false)
+  // A finished look shows its photograph and nothing else until asked. The
+  // pieces are still there — one click — but the shoot IS the look, and
+  // scrolling past five product cards to reach the next one is the wrong way
+  // round once the work is done.
+  const [piecesOpen, setPiecesOpen] = useState(false)
   const shootHistory = l.shoot_history ?? []
   type Shoot = (typeof shootHistory)[number] & {
     flagged?: boolean
@@ -2692,7 +2733,19 @@ function LookRow({
               </span>
             )}
           </p>
-          {composed ? (
+          {composed && l.image_url && !piecesOpen ? (
+            <div className="mt-3">
+              <button onClick={() => setPiecesOpen(true)} className="block text-left" title="Show the pieces that make it up">
+                <div className="w-64 border-2 border-[#C4A882] bg-white">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={l.image_url} alt="Higgsfield shoot" className="w-full aspect-[3/4] object-cover" />
+                  <p className="text-[9px] tracking-[0.12em] text-[#8B5E00] px-2.5 py-2">
+                    ✦ SHOT · {l.items.length} PIECE{l.items.length === 1 ? '' : 'S'} — TAP TO SEE THEM
+                  </p>
+                </div>
+              </button>
+            </div>
+          ) : composed ? (
             <div className="mt-3 flex gap-3 flex-wrap items-start">
               {l.items.map((it, i) => (
                 <div key={i} className="w-56 border border-[#E2E0DB] bg-white">
@@ -2777,6 +2830,12 @@ function LookRow({
               )}
               {l.image_url && (
                 <div className="w-56 border-2 border-[#C4A882] bg-white">
+                  <button
+                    onClick={() => setPiecesOpen(false)}
+                    className="w-full text-left text-[8px] tracking-[0.14em] text-[#A8A8A4] px-2.5 pt-2 hover:text-[#0A0A0A]"
+                  >
+                    HIDE THE PIECES
+                  </button>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={l.image_url} alt="Higgsfield shoot" className="w-full aspect-[3/4] object-cover" />
                   <p className="text-[9px] tracking-[0.12em] text-[#8B5E00] px-2.5 pt-2">✦ HIGGSFIELD SHOOT</p>
