@@ -1,8 +1,11 @@
-// YOUR STYLING ASSISTANT — an editorial numbered list whose rows STACK as you
-// scroll: each row is sticky at an increasing top offset, so an earlier row
-// collapses to its header strip while the next opens beneath it (the "Our
-// Services" effect). Pure CSS — no JS. White section for contrast with the grey
-// manifesto above it.
+// YOUR STYLING ASSISTANT — three ideas as full-width rows that STACK as you
+// scroll: each row is sticky at an increasing top offset and tall enough to
+// give scroll room, so an earlier row collapses to its header strip while the
+// next rises and pins beneath it (the "Our Services" effect). Pure CSS, no JS.
+//
+// Both the section and every row use `myra-texture`; because that texture is a
+// viewport-fixed background, the stacked rows cover each other seamlessly and
+// the whole block matches the rest of the (grey) landing page.
 const ROWS = [
   {
     n: '01',
@@ -23,32 +26,32 @@ const ROWS = [
 
 export default function StylingAssistant() {
   return (
-    <section className="bg-white text-[#0A0A0A]">
-      <div className="max-w-[1600px] mx-auto px-6 lg:px-12 pt-24 sm:pt-32 pb-4 sm:pb-8">
-        <h2 className="font-serif leading-[0.95] tracking-[-0.01em] text-[clamp(46px,8vw,118px)]">
+    <section className="myra-texture text-[#4A4E57]">
+      <div className="px-6 lg:px-16 pt-24 sm:pt-32 pb-6 sm:pb-10">
+        <h2 className="uppercase font-semibold tracking-[0.03em] leading-[1.0] text-[#4A4E57] text-[clamp(30px,5vw,72px)]">
           Your Styling Assistant
         </h2>
       </div>
 
-      <div className="max-w-[1600px] mx-auto px-6 lg:px-12 pb-[14vh]">
-        {ROWS.map((r, i) => (
-          <div
-            key={r.n}
-            className="sticky bg-white"
-            style={{ top: `${8 + i * 6}rem` }}
-          >
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-8 items-start border-t border-black/15 pt-7 pb-14 sm:pt-9 sm:pb-20">
-              <div className="md:col-span-2 text-[clamp(22px,2.2vw,34px)] tracking-[0.02em]">{r.n}</div>
-              <div className="md:col-span-5 text-[clamp(26px,3vw,46px)] font-semibold tracking-[0.005em] leading-[1.02]">
-                {r.title}
-              </div>
-              <div className="md:col-span-5 text-[clamp(16px,1.35vw,23px)] leading-[1.55] text-[#4A4E57] md:pt-1">
-                {r.text}
-              </div>
+      {ROWS.map((r, i) => (
+        <div
+          key={r.n}
+          className="myra-texture sticky min-h-[54vh] px-6 lg:px-16"
+          style={{ top: `${8 + i * 6}rem` }}
+        >
+          <div className="grid grid-cols-12 gap-x-6 gap-y-3 border-t border-[#4A4E57]/25 pt-8 sm:pt-10">
+            <div className="col-span-2 sm:col-span-1 text-[clamp(18px,1.6vw,28px)] tracking-[0.06em] text-[#4A4E57]">
+              {r.n}
+            </div>
+            <div className="col-span-10 sm:col-span-6 uppercase font-semibold tracking-[0.03em] leading-[1.05] text-[#4A4E57] text-[clamp(24px,2.7vw,46px)]">
+              {r.title}
+            </div>
+            <div className="col-span-12 sm:col-span-5 sm:col-start-8 uppercase tracking-[0.05em] leading-[1.6] text-[#6B6B6B] text-[clamp(14px,1.15vw,19px)] sm:pt-2">
+              {r.text}
             </div>
           </div>
-        ))}
-      </div>
+        </div>
+      ))}
     </section>
   )
 }
