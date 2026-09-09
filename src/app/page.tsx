@@ -3,6 +3,7 @@ import Navigation from '@/components/navigation/Navigation'
 import ScatterHero from '@/components/ScatterHero'
 import { ArchiveCard } from '@/components/ArchiveCard'
 import ManifestoReveal from '@/components/ManifestoReveal'
+import StylingAssistant from '@/components/StylingAssistant'
 import ApplyModal from '@/components/ApplyModal'
 import SignupPrompt from '@/components/SignupPrompt'
 import LandingFeedback from '@/components/LandingFeedback'
@@ -51,6 +52,9 @@ export default async function LandingPage({
         </ArchiveCard>
         <ManifestoReveal />
       </main>
+
+      {/* ── Your Styling Assistant — the three ideas, stacking on scroll ── */}
+      <StylingAssistant />
 
       {/* The pop-out questionnaire every APPLY NOW opens. */}
       <ApplyModal />
