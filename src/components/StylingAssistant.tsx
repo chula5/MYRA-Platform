@@ -36,7 +36,7 @@ export default function StylingAssistant() {
         <div
           key={r.n}
           className="myra-texture sticky min-h-[42vh] px-6 lg:px-16"
-          style={{ top: `calc(14rem + ${i * 11}rem)` }}
+          style={{ top: `calc(14rem + ${i * 13}rem)` }}
         >
           <div className="grid grid-cols-12 gap-x-6 gap-y-3 border-t border-[#4A4E57]/25 pt-7 sm:pt-9">
             <div className="col-span-2 sm:col-span-1 text-[clamp(24px,2.2vw,40px)] tracking-[0.05em] text-[#4A4E57]">
@@ -45,7 +45,7 @@ export default function StylingAssistant() {
             <div className="col-span-10 sm:col-span-5 uppercase font-semibold tracking-[0.02em] leading-[1.02] text-[#4A4E57] text-[clamp(34px,4vw,66px)]">
               {r.title}
             </div>
-            <div className="col-span-12 sm:col-span-6 uppercase tracking-[0.04em] leading-[1.5] text-[#6B6B6B] text-[clamp(20px,1.6vw,30px)] sm:pt-2">
+            <div className="col-span-12 sm:col-span-6 uppercase tracking-[0.03em] leading-[1.45] text-[#6B6B6B] text-[clamp(23px,2.1vw,40px)] sm:pt-1">
               {r.text}
             </div>
           </div>
