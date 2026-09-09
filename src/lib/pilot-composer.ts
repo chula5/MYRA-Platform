@@ -323,19 +323,51 @@ export function lookHasOwned(items: { owned?: boolean }[]): boolean {
   return items.some((i) => i.owned)
 }
 
-// What this member has already been shown, so composition explores instead
-// of replaying its own greedy argmax delivery after delivery.
+// What this member has already been shown — so composition explores rather
+// than replaying its own argmax, WITHOUT walking away from the pieces that
+// worked.
 export interface ComposeHistory {
-  seenCounts: Map<string, number> // item_id → times already featured in her looks
-  rejected: Set<string> // item_ids she skipped / had removed
+  /** Shown before and not kept. A nudge toward variety, nothing more. */
+  seenCounts: Map<string, number>
+  /** She approved a look containing it. Evidence FOR the piece. */
+  keptCounts?: Map<string, number>
+  rejected: Set<string>
+  /** How many times it was swapped away, removed or skipped. */
+  rejectedCounts?: Map<string, number>
 }
 
+/** Rejected this many times, it should stop being offered at all. */
+export const HARD_REJECT_COUNT = 2
+
+export function rejectedEnoughToBlock(h: ComposeHistory | undefined, itemId: string): boolean {
+  if (!h) return false
+  const n = h.rejectedCounts?.get(itemId) ?? (h.rejected.has(itemId) ? 1 : 0)
+  return n >= HARD_REJECT_COUNT
+}
+
+/**
+ * The variety nudge, the reward for a piece that worked, and the penalty for
+ * one that did not.
+ *
+ * These were the wrong way round. Every accepted item incremented seenCounts,
+ * so a piece she had approved twice carried −0.9 while a piece she had
+ * REJECTED carried −0.5: the composer walked away from what worked harder than
+ * from what failed, and reached further into the long tail with every good
+ * delivery. That is what "the outfits have got worse" looks like from the
+ * inside.
+ *
+ * Now: being shown is a small nudge, being KEPT is a credit, and being
+ * rejected compounds until the piece is gone.
+ */
 function historyPenalty(h: ComposeHistory | undefined, itemId: string): number {
   if (!h) return 0
   let p = 0
-  const n = h.seenCounts.get(itemId) ?? 0
-  if (n) p += 0.3 * Math.min(n, 3) // shown before — rank down, don't ban (small library)
-  if (h.rejected.has(itemId)) p += 0.5 // she said no to it
+  const shown = h.seenCounts.get(itemId) ?? 0
+  if (shown) p += 0.15 * Math.min(shown, 3)
+  const kept = h.keptCounts?.get(itemId) ?? 0
+  if (kept) p -= Math.min(0.3, 0.15 * kept)
+  const rejected = h.rejectedCounts?.get(itemId) ?? (h.rejected.has(itemId) ? 1 : 0)
+  if (rejected) p += Math.min(1.5, 0.8 * rejected)
   return p
 }
 
@@ -401,7 +433,11 @@ export function composeMemberLooks(
       itemPriceVerdict(t, i) !== 'over' &&
       // A description she has rejected and never once kept — "MUNTHE
       // structured bag" — is treated exactly like an authored avoid.
-      !(t.traits && traitBlocked(t.traits, i as any)),
+      !(t.traits && traitBlocked(t.traits, i as any)) &&
+      // Rejected twice is an answer. "I skipped it one or two times and it
+      // keeps showing up" was a soft −0.5 losing to brand affinity; it is now
+      // a gate, released only by the same starvation net.
+      !rejectedEnoughToBlock(history, i.item_id),
   )
   // Relax her preferences before the weather, and only fall past the weather
   // when the library genuinely has nothing for it — at which point the caller

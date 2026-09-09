@@ -44,3 +44,20 @@ describe('names that must not be mistyped', () => {
     expect(classifyExternalProduct(parsed2('Cashmere Stole')).itemType).toBe('scarf')
   })
 })
+
+describe('combined retailer categories', () => {
+  const parsed3 = (title: string, url: string) => ({
+    url, title, brand: 'Sessùn', description: '', category: '',
+    price: 100, currency: 'GBP', images: ['https://x/i.jpg'], available: true,
+  })
+  it('does not let "skirts-and-shorts" decide the type', () => {
+    // Sessùn files a knit midi SKIRT under /catalogue/skirts-and-shorts/ and
+    // it came out shorts, because the shorts rule is tested first.
+    const c = classifyExternalProduct(parsed3('ALYORA Espresso', 'https://www.sessun.co.uk/catalogue/skirts-and-shorts/alyora-espresso.html'))
+    expect(c.itemType).not.toBe('shorts')
+  })
+  it('still reads the type when the piece names it itself', () => {
+    expect(classifyExternalProduct(parsed3('Violetta Cotton Skirt', 'https://www.sessun.co.uk/catalogue/skirts-and-shorts/violetta.html')).itemType).toBe('skirt')
+    expect(classifyExternalProduct(parsed3('Tallulah Shorts', 'https://x.com/catalogue/skirts-and-shorts/tallulah.html')).itemType).toBe('shorts')
+  })
+})

@@ -156,6 +156,12 @@ const MEN_RE = /\b(men|mens|men's|man|menswear|homme|hommes|herren|uomo|hombre|m
 
 // ---------------------------------------------------------------- taxonomy mapping
 
+// A retailer's combined category — "skirts-and-shorts", "tops-and-blouses" —
+// names two types at once, and whichever rule is tested first wins. Sessùn
+// files a knit midi skirt under /skirts-and-shorts/ and it came out SHORTS.
+// Stripped from every category haystack so the piece's own words decide.
+const AMBIGUOUS_CATEGORY = /\b[a-z]+s[-_ ]and[-_ ][a-z]+s\b/gi
+
 const TYPE_RULES: Array<[RegExp, string]> = [
   [/\btrench/, 'trench'], [/\bcoat|parka|puffer/, 'coat'], [/\bblazer/, 'blazer'],
   [/\bgilet|waistcoat|\bvest\b/, 'gilet'], [/\bcape|poncho/, 'cape'],
@@ -350,17 +356,23 @@ function classifyAndScore(p: {
     tagValue(p.tags, 'category') ?? '', tagValue(p.tags, 'main category') ?? '',
     tagValue(p.tags, 'sub category') ?? '', p.product_type, p.title,
     String(p.handle ?? '').replace(/-/g, ' '), // handles carry the category on many stores
-  ].join(' ').toLowerCase()
+  ].join(' ').toLowerCase().replace(AMBIGUOUS_CATEGORY, ' ')
 
   let itemType: string | null = null
   for (const tier of p.categoryTiers ?? []) {
-    const tierHay = tier.toLowerCase()
+    // The same combined-category trap applies to the source's own category
+    // label and URL path, which are read BEFORE anything else.
+    const tierHay = tier.toLowerCase().replace(AMBIGUOUS_CATEGORY, ' ')
     if (!tierHay.trim()) continue
     for (const [re, t] of TYPE_RULES) { if (re.test(tierHay)) { itemType = t; break } }
     if (itemType) break
   }
   if (!itemType) for (const [re, t] of TYPE_RULES) { if (re.test(catHay)) { itemType = t; break } }
-  if (!itemType) for (const [re, t] of TYPE_RULES) { if (re.test(hay)) { itemType = t; break } }
+  // The last-resort haystack carries the URL path on browser-route products,
+  // so the combined category has to be stripped here too or it decides the
+  // type after all.
+  const typeHay = hay.replace(AMBIGUOUS_CATEGORY, ' ')
+  if (!itemType) for (const [re, t] of TYPE_RULES) { if (re.test(typeHay)) { itemType = t; break } }
 
   const colTag = (tagValue(p.tags, 'color') ?? tagValue(p.tags, 'colour') ?? '').toLowerCase()
   const optCol = p.optionColours.join(' ').toLowerCase()

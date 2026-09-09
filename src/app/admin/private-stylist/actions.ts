@@ -1682,17 +1682,26 @@ export async function composeDeliveryLooks(deliveryId: string, options: ComposeD
       if (it.item_id) seenCounts.set(it.item_id, (seenCounts.get(it.item_id) ?? 0) + 1)
     }
   }
+  // Kept and rejected are counted SEPARATELY. An accepted piece used to be
+  // added to seenCounts — the variety penalty — so approving a look taught
+  // the composer to avoid the very pieces that worked.
+  const keptCounts = new Map<string, number>()
+  const rejectedCounts = new Map<string, number>()
   const rejected = new Set<string>()
+  const bump = (m: Map<string, number>, id?: string | null) => { if (id) m.set(id, (m.get(id) ?? 0) + 1) }
   for (const f of fb ?? []) {
     // Both shapes: a removed piece is item_out, a skipped one used to be
     // item_in. Reading only item_in meant every ordinary removal was missed.
-    if (f.action === 'remove') { const id = f.item_out ?? f.item_in; if (id) rejected.add(id) }
-    if (f.action === 'swap' && f.item_out) rejected.add(f.item_out)
-    if (f.item_in && f.action === 'accept') seenCounts.set(f.item_in, (seenCounts.get(f.item_in) ?? 0) + 1)
+    if (f.action === 'remove') { const id = f.item_out ?? f.item_in; if (id) { rejected.add(id); bump(rejectedCounts, id) } }
+    if (f.action === 'swap' && f.item_out) { rejected.add(f.item_out); bump(rejectedCounts, f.item_out) }
+    if (f.action === 'accept' && f.item_in) bump(keptCounts, f.item_in)
   }
+  // A piece she kept AND later rejected is not a keeper — the rejection is the
+  // more recent answer, and counting both would cancel it out.
+  for (const id of Array.from(rejectedCounts.keys())) keptCounts.delete(id)
 
   const lookCount = Math.max(1, Math.min(6, options.count ?? 3))
-  const looks = composeMemberLooks(taste, library, lookCount, occ, lens, { seenCounts, rejected }, {
+  const looks = composeMemberLooks(taste, library, lookCount, occ, lens, { seenCounts, keptCounts, rejected, rejectedCounts }, {
     ownedMode: options.ownedMode ?? 'blend',
     ownedTargetShare: options.ownedTargetShare ?? DEFAULT_OWNED_TARGET_SHARE,
   })
