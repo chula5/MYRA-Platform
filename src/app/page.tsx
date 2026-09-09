@@ -66,7 +66,7 @@ export default async function LandingPage({
       <footer className="myra-texture pt-16 pb-24 px-6 lg:px-16">
         <div className="w-full">
           <div className="text-center mb-10">
-            <Link href="/" className="tracking-[0.11em] text-[#4A4E57] hover:opacity-60 transition-opacity duration-300 text-[clamp(30px,3.4vw,56px)]">
+            <Link href="/" className="tracking-[0.11em] text-[#4A4E57] hover:opacity-60 transition-opacity duration-300 text-[clamp(15px,1.4vw,22px)]">
               MYRA
             </Link>
           </div>
