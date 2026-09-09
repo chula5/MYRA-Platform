@@ -334,6 +334,15 @@ export interface ComposeHistory {
   rejected: Set<string>
   /** How many times it was swapped away, removed or skipped. */
   rejectedCounts?: Map<string, number>
+  /**
+   * Pieces that have already ANCHORED a look she approved.
+   *
+   * A piece that has had its look does not need another one built around it —
+   * that is what "style 3 ways" is for. It stays available as a supporting
+   * piece, and stays findable by name in the swap picker; it simply stops
+   * being the seed of a fresh composition.
+   */
+  anchoredIds?: Set<string>
 }
 
 /** Rejected this many times, it should stop being offered at all. */
@@ -453,11 +462,17 @@ export function composeMemberLooks(
       - historyPenalty(history, i.item_id) + varietyJitter(i.item_id, seed)
 
   // Regular anchors: dresses and tops (owned or retail, in blend mode).
-  const anchors = usable
-    .filter((i) => {
-      const slot = slotForItemType(i.item_type)
-      return slot === 'dress' || slot === 'top'
-    })
+  const anchorPool = usable.filter((i) => {
+    const slot = slotForItemType(i.item_type)
+    return slot === 'dress' || slot === 'top'
+  })
+  // A piece that already anchored an approved look has had its outfit. Styling
+  // it again is what STYLE 3 WAYS does, deliberately; a fresh delivery should
+  // be finding her something new. Relaxed only if nothing is left to anchor.
+  const unusedAnchors = history?.anchoredIds?.size
+    ? anchorPool.filter((i) => !history.anchoredIds!.has(i.item_id))
+    : anchorPool
+  const anchors = (unusedAnchors.length ? unusedAnchors : anchorPool)
     .map((i) => ({ item: i, score: itemScore(i) }))
     .sort((a, b) => b.score - a.score)
 
@@ -658,6 +673,32 @@ export function composeMemberVariants(
 
 // Ranked alternates for one slot of a look — what the SWAP picker shows.
 // Half member taste, half coherence with the rest of the look.
+/** A sibling look has to be a different OUTFIT, not the same one in other shoes. */
+export const MIN_SUPPORTING_DIFFERENCE = 0.6
+
+/**
+ * True when two ways of styling the same hero are really one way.
+ *
+ * The hero is shared by definition, so only the supporting pieces can carry
+ * the difference. Requiring the sets to be identical before rejecting a
+ * variant let a look through that changed one sandal — "style 3 ways" returned
+ * the same outfit twice, which is worse than returning one.
+ */
+export function tooSimilarVariant(
+  a: (string | null | undefined)[],
+  b: (string | null | undefined)[],
+  heroId?: string | null,
+): boolean {
+  const supporting = (ids: (string | null | undefined)[]) =>
+    new Set(ids.filter((id): id is string => !!id && id !== heroId))
+  const A = supporting(a)
+  const B = supporting(b)
+  if (!A.size && !B.size) return true
+  const shared = Array.from(A).filter((id) => B.has(id)).length
+  const different = 1 - shared / Math.max(A.size, B.size)
+  return different < MIN_SUPPORTING_DIFFERENCE
+}
+
 export function rankAlternates(
   t: MemberTaste,
   library: ItemWithBrand[],
@@ -668,15 +709,27 @@ export function rankAlternates(
   occ?: OccasionContext,
   lens?: PersonaLens,
 ): Array<{ item: ItemWithBrand; score: number }> {
-  return library
-    .filter(
-      (i) =>
-        slotForItemType(i.item_type) === slot &&
-        !excludeIds.has(i.item_id) &&
-        i.image_url &&
-        i.stock_status !== 'out_of_stock' &&
-        (isOwnedItem(i as any) || !(i.brand?.name && t.inputOnlyBrands.has(i.brand.name.toLowerCase()))),
-    )
+  const inSlot = library.filter(
+    (i) =>
+      slotForItemType(i.item_type) === slot &&
+      !excludeIds.has(i.item_id) &&
+      i.image_url &&
+      i.stock_status !== 'out_of_stock' &&
+      (isOwnedItem(i as any) || !(i.brand?.name && t.inputOnlyBrands.has(i.brand.name.toLowerCase()))),
+  )
+  // The swap and add pickers were offering everything the COMPOSER refuses:
+  // heels she has said she never wears, pieces over her ceiling, descriptions
+  // she has rejected repeatedly, wool for a hot holiday. "I am still being
+  // shown heels" was this list, not the composed looks. Same gates, same
+  // starvation relief — an empty slot picker is worse than an imperfect one.
+  const allowed = inSlot.filter(
+    (i) =>
+      avoidReasons(t.prefs, i as any).length === 0 &&
+      itemPriceVerdict(t, i) !== 'over' &&
+      !(t.traits && traitBlocked(t.traits, i as any)) &&
+      !climateReason(occ?.climate, i as any),
+  )
+  return (allowed.length ? allowed : inSlot)
     .map((i) => {
       const compat =
         keepItems.length > 0

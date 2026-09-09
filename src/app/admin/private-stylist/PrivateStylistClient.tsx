@@ -2995,7 +2995,7 @@ function LookRow({
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ lookId: l.look_id, poseKey: c.key }),
                         }).then((r) => r.json()),
-                        `HIGGSFIELD SHOOT (${c.label}) ATTACHED — TAKES A FEW MINUTES`)
+                        `HIGGSFIELD SHOOT (${c.label}) ATTACHED — TAKES A FEW MINUTES${l.approved_at ? ', THEN STYLED SEVERAL WAYS' : ''}`)
                     }}
                   >
                     <span className="block text-[9px] tracking-[0.1em] text-[#0A0A0A]">{c.label}</span>

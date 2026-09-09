@@ -78,6 +78,7 @@ import { readTrust, trustHeadline, TRAILING, type LookOutcome, type TrustRead } 
 import { explainTraits } from '@/lib/member-traits'
 import { type ClimateId } from '@/lib/climate'
 import { DEFAULT_SCOPE } from '@/lib/learning-scope'
+import { tooSimilarVariant } from '@/lib/pilot-composer'
 
 const PATH = '/admin/private-stylist'
 
@@ -1700,8 +1701,22 @@ export async function composeDeliveryLooks(deliveryId: string, options: ComposeD
   // more recent answer, and counting both would cancel it out.
   for (const id of Array.from(rejectedCounts.keys())) keptCounts.delete(id)
 
+  // Pieces that have already anchored an APPROVED look. The anchor is the
+  // dress if there is one, otherwise the top — the composer's own rule — since
+  // hero_item_id is only written on variant rows.
+  const { data: approvedLooks } = await admin
+    .from('pilot_look').select('items, hero_item_id, delivery:delivery_id!inner(member_id)')
+    .eq('delivery.member_id', delivery.member_id).not('approved_at', 'is', null)
+  const anchoredIds = new Set<string>()
+  for (const l of approvedLooks ?? []) {
+    if (l.hero_item_id) { anchoredIds.add(l.hero_item_id); continue }
+    const its = (l.items ?? []) as any[]
+    const anchor = its.find((it) => it.slot === 'dress') ?? its.find((it) => it.slot === 'top')
+    if (anchor?.item_id) anchoredIds.add(anchor.item_id)
+  }
+
   const lookCount = Math.max(1, Math.min(6, options.count ?? 3))
-  const looks = composeMemberLooks(taste, library, lookCount, occ, lens, { seenCounts, keptCounts, rejected, rejectedCounts }, {
+  const looks = composeMemberLooks(taste, library, lookCount, occ, lens, { seenCounts, keptCounts, rejected, rejectedCounts, anchoredIds }, {
     ownedMode: options.ownedMode ?? 'blend',
     ownedTargetShare: options.ownedTargetShare ?? DEFAULT_OWNED_TARGET_SHARE,
   })
@@ -1784,8 +1799,11 @@ export async function composeLookVariants(
     : { data: [{ items }] }
   const existingSets = (groupLooks ?? []).map((l: any) =>
     new Set(((l.items ?? []) as any[]).map((it) => it.item_id).filter(Boolean)))
+  // Not "is it identical" but "is it a different outfit". Two looks that share
+  // the blouse, the trousers and the bag and differ by one sandal are the same
+  // way of styling the piece.
   const sameSet = (a: Set<string>, b: Set<string>) =>
-    a.size === b.size && Array.from(a).every((id) => b.has(id))
+    tooSimilarVariant(Array.from(a), Array.from(b), hero.item_id)
 
   const need = Math.max(1, target - existingSets.length)
   const variants = composeMemberVariants(
@@ -2120,7 +2138,7 @@ export async function skipComposedLook(lookId: string): Promise<{ error?: string
  * appended to shoot_history, so a redo never destroys the previous image —
  * pick a different pose, compare the two, keep the better one.
  */
-export async function higgsfieldShootForLook(lookId: string, poseKey = 'E5'): Promise<{ imageUrl?: string; error?: string }> {
+export async function higgsfieldShootForLook(lookId: string, poseKey = 'E5'): Promise<{ imageUrl?: string; variants?: number; error?: string }> {
   const admin = createAdminClient() as any
   const { data: look, error: lerr } = await admin.from('pilot_look').select('*').eq('look_id', lookId).single()
   if (lerr || !look) return { error: lerr?.message ?? 'Look not found' }
@@ -2228,8 +2246,23 @@ export async function higgsfieldShootForLook(lookId: string, poseKey = 'E5'): Pr
   await admin.from('pilot_look')
     .update({ image_url: gen.imageUrl, shoot_history: history.slice(-12) })
     .eq('look_id', lookId)
+
+  // A shoot on an APPROVED look means this one is settled — so build the
+  // sibling ways of wearing the same piece now, rather than waiting for the
+  // button. Best-effort: a look that cannot be styled another way has still
+  // been shot successfully, and saying so is the shoot's job, not this.
+  let variants = 0
+  if (look.approved_at) {
+    try {
+      const r = await composeLookVariants(lookId)
+      variants = r.created ?? 0
+    } catch (err) {
+      console.error('[higgsfieldShootForLook] variants after shoot', err)
+    }
+  }
+
   revalidatePath(PATH)
-  return gen
+  return { ...gen, variants }
 }
 
 /** Put a previous shoot back as the look's image. Nothing is deleted. */
