@@ -2247,18 +2247,18 @@ export async function higgsfieldShootForLook(lookId: string, poseKey = 'E5'): Pr
     .update({ image_url: gen.imageUrl, shoot_history: history.slice(-12) })
     .eq('look_id', lookId)
 
-  // A shoot on an APPROVED look means this one is settled — so build the
-  // sibling ways of wearing the same piece now, rather than waiting for the
-  // button. Best-effort: a look that cannot be styled another way has still
-  // been shot successfully, and saying so is the shoot's job, not this.
+  // Shooting a look is committing to it — nobody spends a Higgsfield
+  // generation on an outfit they are about to bin — so the sibling ways of
+  // wearing the same piece are built here rather than waiting for the button.
+  // Gating this on approved_at meant it never fired: the shoot usually comes
+  // BEFORE the approval, not after.
   let variants = 0
-  if (look.approved_at) {
-    try {
-      const r = await composeLookVariants(lookId)
-      variants = r.created ?? 0
-    } catch (err) {
-      console.error('[higgsfieldShootForLook] variants after shoot', err)
-    }
+  try {
+    const r = await composeLookVariants(lookId)
+    variants = r.created ?? 0
+  } catch (err) {
+    // Best-effort. A look with no second way to wear it has still been shot.
+    console.error('[higgsfieldShootForLook] variants after shoot', err)
   }
 
   revalidatePath(PATH)

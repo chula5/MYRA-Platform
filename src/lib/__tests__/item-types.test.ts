@@ -61,3 +61,25 @@ describe('combined retailer categories', () => {
     expect(classifyExternalProduct(parsed3('Tallulah Shorts', 'https://x.com/catalogue/skirts-and-shorts/tallulah.html')).itemType).toBe('shorts')
   })
 })
+
+describe('what MYRA does not style', () => {
+  const p = (title: string) => ({
+    url: 'https://x.com/p', title, brand: 'X', description: '', category: '',
+    price: 100, currency: 'GBP', images: ['https://x/i.jpg'], available: true,
+  })
+  it('keeps swimwear and underwear out of the queue entirely', () => {
+    // A bikini top has no swimwear type to go to, so it fell through to the
+    // untyped default and was composed as a BLOUSE in a client's outfit.
+    for (const t of [
+      'EXCLUSIVE: Astella swimsuit', 'Astra Triangle bikini top',
+      'Knotted-strap one-piece swimsuit', 'Thin Strap Lingerie Top',
+    ]) {
+      expect(classifyExternalProduct(p(t)).nonFashion).toBe(true)
+    }
+  })
+  it('still lets ordinary clothes through', () => {
+    for (const t of ['Silk Cami Top', 'Wide Leg Trouser', 'Wool Coat']) {
+      expect(classifyExternalProduct(p(t)).nonFashion).toBe(false)
+    }
+  })
+})

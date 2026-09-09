@@ -121,6 +121,12 @@ const HOUSE_STYLE = {
     'care kit', 'shoe care', 'cleaner', 'insole', 'shoelace', 'protector',
     'keyring', 'key ring', 'keychain', 'key chain', 'phone case', 'card holder', 'cardholder',
     'passport holder', 'luggage tag', 'kids', 'child', 'children', 'baby', 'bib',
+    // Swimwear is real fashion and MYRA does not style it into outfits. With
+    // no swimwear type in the taxonomy, a bikini top fell through to the
+    // untyped default and was composed as a BLOUSE.
+    'swimsuit', 'swimwear', 'swim suit', 'bikini', 'swim short', 'swim shorts',
+    'swimming costume', 'bathing suit', 'tankini', 'beachwear', 'sarong',
+    'underwear', 'lingerie', 'thong', 'bra ', 'briefs', 'nightwear', 'pyjama', 'pajama',
     // beauty and fragrance
     'beauty', 'skincare', 'skin care', 'cosmetic', 'fragrance', 'perfume', 'parfum',
     'parfume', 'eau de parfum', 'eau de toilette', 'cologne', 'scent', 'diffuser',

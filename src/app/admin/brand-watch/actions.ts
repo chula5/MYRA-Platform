@@ -286,6 +286,7 @@ export async function checkAllBrandsNow(): Promise<{ results: BrandCheckResult[]
 // skipped decision — it never enters the item library and never resurfaces.
 async function keepQueueRows(admin: any, queueIds: string[]): Promise<number> {
   let created = 0
+  const skippedUntyped: string[] = []
   for (let i = 0; i < queueIds.length; i += 100) {
     const chunk = queueIds.slice(i, i + 100)
     const { data: rows, error } = await admin
@@ -295,11 +296,22 @@ async function keepQueueRows(admin: any, queueIds: string[]): Promise<number> {
       .eq('status', 'queued')
     if (error) throw new Error(error.message)
     for (const q of rows ?? []) {
+      if (!q.item_type) {
+        // Left in the queue rather than kept as the wrong thing — the type can
+        // be set by hand and it can be kept again.
+        skippedUntyped.push(q.product_name)
+        continue
+      }
       const { data: item, error: ierr } = await admin
         .from('item')
         .insert([{
           brand_id: q.brand_id,
-          item_type: q.item_type ?? 'blouse',
+          // NEVER default. item_type is a NOT NULL enum, so an untyped piece
+          // used to be silently filed as a blouse — which is how a swimsuit
+          // and a bikini top ended up composed as tops in a client's outfits.
+          // An item nobody could type is not a blouse; it is an item nobody
+          // could type, and it is refused below.
+          item_type: q.item_type,
           product_name: q.product_name,
           retailer_url: q.retailer_url,
           image_url: q.image_url,
@@ -332,6 +344,9 @@ async function keepQueueRows(admin: any, queueIds: string[]): Promise<number> {
         .eq('queue_id', q.queue_id)
       created++
     }
+  }
+  if (skippedUntyped.length) {
+    console.warn('[keepQueueRows] left in the queue, no item type:', skippedUntyped.join(', '))
   }
   return created
 }
