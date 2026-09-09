@@ -62,20 +62,20 @@ export default async function LandingPage({
       {/* Pageview analytics (no more waitlist popup) */}
       <LandingTracker initialRef={ref ?? null} />
 
-      {/* ── Footer ──── */}
-      <footer className="myra-texture pt-16 pb-24 px-10">
-        <div className="max-w-[1440px] mx-auto">
+      {/* ── Footer — full width, wordmark centred, links to the right ──── */}
+      <footer className="myra-texture pt-16 pb-24 px-6 lg:px-16">
+        <div className="w-full">
           <div className="text-center mb-10">
-            <Link href="/" className="text-[20px] tracking-[0.113em] text-[#4A4E57] hover:opacity-60 transition-opacity duration-300">
+            <Link href="/" className="tracking-[0.11em] text-[#4A4E57] hover:opacity-60 transition-opacity duration-300 text-[clamp(30px,3.4vw,56px)]">
               MYRA
             </Link>
           </div>
           <div className="border-t border-[#E2E0DB] mb-8" />
-          <div className="flex justify-end items-center flex-wrap gap-8">
-            <a href="/privacy" className="text-[11px] tracking-[0.099em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300">
+          <div className="flex justify-end items-center flex-wrap gap-10">
+            <a href="/privacy" className="tracking-[0.1em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300 text-[clamp(15px,1.4vw,22px)]">
               PRIVACY
             </a>
-            <a href="#" className="text-[11px] tracking-[0.099em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300">
+            <a href="#" className="tracking-[0.1em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300 text-[clamp(15px,1.4vw,22px)]">
               TERMS
             </a>
           </div>
