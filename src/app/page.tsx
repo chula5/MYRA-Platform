@@ -64,14 +64,11 @@ export default async function LandingPage({
 
       {/* ── Footer — full width, wordmark centred, links to the right ──── */}
       <footer className="myra-texture pt-16 pb-24 px-6 lg:px-16">
-        <div className="w-full">
-          <div className="text-center mb-10">
-            <Link href="/" className="tracking-[0.11em] text-[#4A4E57] hover:opacity-60 transition-opacity duration-300 text-[clamp(15px,1.4vw,22px)]">
-              MYRA
-            </Link>
-          </div>
-          <div className="border-t border-[#E2E0DB] mb-8" />
-          <div className="flex justify-end items-center flex-wrap gap-10">
+        <div className="w-full flex items-center justify-between gap-6">
+          <Link href="/" className="tracking-[0.11em] text-[#4A4E57] hover:opacity-60 transition-opacity duration-300 text-[clamp(15px,1.4vw,22px)]">
+            MYRA
+          </Link>
+          <div className="flex items-center gap-8 sm:gap-10">
             <a href="/privacy" className="tracking-[0.1em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300 text-[clamp(15px,1.4vw,22px)]">
               PRIVACY
             </a>
