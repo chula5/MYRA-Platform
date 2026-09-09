@@ -74,6 +74,7 @@ import {
   skipComposedLook,
   composeLookVariants,
   restoreLookShoot,
+  deleteLookShoot,
   loadMemberTrust,
   type MemberTrust,
   recordMemberLookFeedback,
@@ -2789,15 +2790,25 @@ function LookRow({
                       </p>
                       <div className="flex gap-1.5 flex-wrap">
                         {shootHistory.map((h) => (
-                          <button
-                            key={h.url}
-                            disabled={shooting || h.url === l.image_url}
-                            onClick={() => run(`rs-${l.look_id}`, () => restoreLookShoot(l.look_id, h.url), 'SHOOT SWITCHED')}
-                            className={`border ${h.url === l.image_url ? 'border-[#C4A882]' : 'border-[#E2E0DB] hover:border-[#0A0A0A]'} transition-colors`}
-                          >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={h.url} alt="" className="w-12 aspect-[3/4] object-cover" />
-                          </button>
+                          <div key={h.url} className="relative group">
+                            <button
+                              disabled={shooting || h.url === l.image_url}
+                              onClick={() => run(`rs-${l.look_id}`, () => restoreLookShoot(l.look_id, h.url), 'SHOOT SWITCHED')}
+                              className={`block border ${h.url === l.image_url ? 'border-[#C4A882]' : 'border-[#E2E0DB] hover:border-[#0A0A0A]'} transition-colors`}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={h.url} alt="" className="w-12 aspect-[3/4] object-cover" />
+                            </button>
+                            {/* Most frames of a generation are not the one. */}
+                            <button
+                              disabled={shooting}
+                              title="Delete this frame"
+                              onClick={() => run(`df-${l.look_id}`, () => deleteLookShoot(l.look_id, h.url), 'FRAME DELETED')}
+                              className="absolute -top-1.5 -right-1.5 bg-white border border-[#E2E0DB] text-[#B4593A] text-[8px] leading-none w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity hover:border-[#B4593A]"
+                            >
+                              ×
+                            </button>
+                          </div>
                         ))}
                       </div>
                     </div>
@@ -2830,10 +2841,10 @@ function LookRow({
                     {heldBack.length > 1 && (
                       <div className="flex gap-1.5 mt-2">
                         {heldBack.map((h, i) => (
+                          <div key={h.url} className="relative group">
                           <button
-                            key={h.url}
                             onClick={() => setHeldPick(i)}
-                            className={`border ${i === heldPick ? 'border-[#0A0A0A]' : 'border-[#E2E0DB]'}`}
+                            className={`block border ${i === heldPick ? 'border-[#0A0A0A]' : 'border-[#E2E0DB]'}`}
                             title={typeof h.fidelity?.score === 'number' ? `Checked attempt ${h.attempt ?? i + 1}` : 'Another frame from the same shoot — not checked'}
                           >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -2844,6 +2855,15 @@ function LookRow({
                                 : `FRAME ${h.frame ?? i + 1}`}
                             </span>
                           </button>
+                          <button
+                            disabled={shooting}
+                            title="Delete this frame"
+                            onClick={() => { setHeldPick(0); run(`df-${l.look_id}`, () => deleteLookShoot(l.look_id, h.url), 'FRAME DELETED') }}
+                            className="absolute -top-1.5 -right-1.5 bg-white border border-[#E2E0DB] text-[#B4593A] text-[8px] leading-none w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity hover:border-[#B4593A]"
+                          >
+                            ×
+                          </button>
+                          </div>
                         ))}
                       </div>
                     )}

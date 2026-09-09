@@ -2265,6 +2265,41 @@ export async function higgsfieldShootForLook(lookId: string, poseKey = 'E5'): Pr
   return { ...gen, variants }
 }
 
+/**
+ * Drop one frame from a look's shoot history.
+ *
+ * A generation returns several frames and most of them are not the one. The
+ * file stays on Cloudinary — this removes the reference, which is what
+ * "delete the unwanted frames" means here; nothing that another look might be
+ * using is destroyed.
+ *
+ * Deleting the frame currently in use promotes the best remaining one rather
+ * than leaving the look with no picture.
+ */
+export async function deleteLookShoot(lookId: string, url: string): Promise<{ remaining?: number; error?: string }> {
+  const admin = createAdminClient() as any
+  const { data: look, error } = await admin
+    .from('pilot_look').select('shoot_history, image_url').eq('look_id', lookId).single()
+  if (error || !look) return { error: error?.message ?? 'Look not found' }
+
+  const history: any[] = Array.isArray(look.shoot_history) ? look.shoot_history : []
+  const kept = history.filter((h) => h?.url !== url)
+  if (kept.length === history.length) return { error: 'That frame is not on this look' }
+
+  const patch: Record<string, unknown> = { shoot_history: kept }
+  if (look.image_url === url) {
+    // Best of what is left: a checked frame with the highest score, else the
+    // most recent.
+    const scored = kept.filter((h) => typeof h?.fidelity?.score === 'number')
+      .sort((a, b) => (b.fidelity.score ?? 0) - (a.fidelity.score ?? 0))
+    patch.image_url = scored[0]?.url ?? kept[kept.length - 1]?.url ?? null
+  }
+  const { error: uerr } = await admin.from('pilot_look').update(patch).eq('look_id', lookId)
+  if (uerr) return { error: uerr.message }
+  revalidatePath(PATH)
+  return { remaining: kept.length }
+}
+
 /** Put a previous shoot back as the look's image. Nothing is deleted. */
 export async function restoreLookShoot(lookId: string, url: string): Promise<{ error?: string }> {
   const admin = createAdminClient() as any
