@@ -230,15 +230,15 @@ const PREF_TYPES: { value: string; label: string }[] = [
   { value: 'sandal', label: 'SANDALS' },
 ]
 
-const label = 'text-[11px] tracking-[0.18em] text-[#6B6B6B]'
+const label = 'text-[20px] tracking-[0.18em] text-[#6B6B6B]'
 const input =
-  'border border-[#E2E0DB] bg-white px-3 py-2 text-[13px] tracking-[0.04em] text-[#0A0A0A] outline-none focus:border-[#0A0A0A] w-full'
+  'border border-[#E2E0DB] bg-white px-3 py-2 text-[20px] tracking-[0.04em] text-[#0A0A0A] outline-none focus:border-[#0A0A0A] w-full'
 const btnDark =
-  'bg-[#0A0A0A] text-white text-[12px] tracking-[0.18em] px-5 py-2.5 hover:opacity-85 transition-opacity duration-300 disabled:opacity-40'
+  'bg-[#0A0A0A] text-white text-[20px] tracking-[0.18em] px-5 py-2.5 hover:opacity-85 transition-opacity duration-300 disabled:opacity-40'
 const btnLight =
-  'border border-[#0A0A0A] text-[#0A0A0A] text-[12px] tracking-[0.18em] px-5 py-2.5 hover:bg-[#F2F2F2] transition-colors duration-300 disabled:opacity-40'
+  'border border-[#0A0A0A] text-[#0A0A0A] text-[20px] tracking-[0.18em] px-5 py-2.5 hover:bg-[#F2F2F2] transition-colors duration-300 disabled:opacity-40'
 const btnTiny =
-  'border border-[#E2E0DB] text-[#6B6B6B] text-[11px] tracking-[0.12em] px-2.5 py-1 hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors duration-300'
+  'border border-[#E2E0DB] text-[#6B6B6B] text-[20px] tracking-[0.12em] px-2.5 py-1 hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors duration-300'
 
 // ── Shared bits ─────────────────────────────────────────────────────────────
 
@@ -252,7 +252,7 @@ function WeightBar({ weights, compact }: { weights: RoomWeights; compact?: boole
         ))}
       </div>
       {!compact && (
-        <p className="text-[11px] tracking-[0.14em] text-[#6B6B6B] mt-1.5">{formatRoomMix(w)}</p>
+        <p className="text-[20px] tracking-[0.14em] text-[#6B6B6B] mt-1.5">{formatRoomMix(w)}</p>
       )}
     </div>
   )
@@ -275,7 +275,7 @@ function OccasionPicker({
       <div className="space-y-1.5">
         {OCCASION_TYPES.map((o) => (
           <div key={o.id} className="flex items-center justify-between gap-3">
-            <span className="text-[12px] tracking-[0.1em] text-[#0A0A0A] w-64 shrink-0">{o.label}</span>
+            <span className="text-[20px] tracking-[0.1em] text-[#0A0A0A] w-64 shrink-0">{o.label}</span>
             <div className="flex gap-1.5">
               {FREQUENCY_OPTIONS.map((f) => {
                 const active = (value[o.id] ?? 'never') === f
@@ -284,7 +284,7 @@ function OccasionPicker({
                     key={f}
                     type="button"
                     onClick={() => onChange({ ...value, [o.id]: f })}
-                    className={`text-[11px] tracking-[0.1em] px-2.5 py-1.5 border transition-colors duration-300 ${
+                    className={`text-[20px] tracking-[0.1em] px-2.5 py-1.5 border transition-colors duration-300 ${
                       active
                         ? 'border-[#0A0A0A] bg-[#0A0A0A] text-white'
                         : 'border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A]'
@@ -307,7 +307,7 @@ function OccasionPicker({
                 key={d.id}
                 type="button"
                 onClick={() => onDressCode(d.id)}
-                className={`text-[11px] tracking-[0.1em] px-2.5 py-1.5 border transition-colors duration-300 ${
+                className={`text-[20px] tracking-[0.1em] px-2.5 py-1.5 border transition-colors duration-300 ${
                   dressCode === d.id
                     ? 'border-[#0A0A0A] bg-[#0A0A0A] text-white'
                     : 'border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A]'
@@ -358,7 +358,7 @@ export default function PrivateStylistClient({ data }: { data: PilotData }) {
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`pb-3 text-[12px] tracking-[0.18em] transition-colors duration-300 ${
+            className={`pb-3 text-[20px] tracking-[0.18em] transition-colors duration-300 ${
               tab === t ? 'text-[#0A0A0A] border-b border-[#0A0A0A] -mb-px' : 'text-[#A8A8A4] hover:text-[#0A0A0A]'
             }`}
           >
@@ -367,7 +367,7 @@ export default function PrivateStylistClient({ data }: { data: PilotData }) {
         ))}
       </div>
 
-      {msg && <p className="text-[11px] tracking-[0.12em] text-[#C4A882] mb-6">{msg}</p>}
+      {msg && <p className="text-[20px] tracking-[0.12em] text-[#C4A882] mb-6">{msg}</p>}
 
       {tab === 'MEMBERS' && <MembersTab data={data} run={run} busy={busy} />}
       {tab === 'DELIVERIES' && <DeliveriesTab data={data} run={run} busy={busy} />}
@@ -397,7 +397,7 @@ function MembersTab({ data, run, busy }: { data: PilotData; run: Run; busy: stri
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <p className="text-[12px] tracking-[0.14em] text-[#6B6B6B]">
+        <p className="text-[20px] tracking-[0.14em] text-[#6B6B6B]">
           {data.members.length} MEMBER{data.members.length === 1 ? '' : 'S'}
         </p>
         <button className={btnLight} onClick={() => setShowNew((s) => !s)}>
@@ -422,7 +422,7 @@ function MembersTab({ data, run, busy }: { data: PilotData; run: Run; busy: stri
       ))}
 
       {data.members.length === 0 && !showNew && (
-        <p className="text-[12px] tracking-[0.1em] text-[#A8A8A4]">
+        <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4]">
           NO MEMBERS YET — ONBOARD A PILOT, OR SEED THE SYNTHETIC PERSONAS FROM THE DRY RUN TAB.
         </p>
       )}
@@ -434,10 +434,10 @@ function MembersTab({ data, run, busy }: { data: PilotData; run: Run; busy: stri
             <div key={k}>
               <div className="flex items-center gap-2 mb-1">
                 <span className="inline-block w-2 h-2" style={{ background: ROOM_COLOUR[k] }} />
-                <span className="text-[13px] tracking-[0.14em] text-[#0A0A0A]">{ROOMS[k].label}</span>
+                <span className="text-[20px] tracking-[0.14em] text-[#0A0A0A]">{ROOMS[k].label}</span>
               </div>
-              <p className="text-[11px] tracking-[0.06em] text-[#6B6B6B]">{ROOMS[k].axis}</p>
-              <p className="text-[11px] tracking-[0.06em] text-[#A8A8A4] mt-1">{ROOMS[k].palette.join(' · ')}</p>
+              <p className="text-[20px] tracking-[0.06em] text-[#6B6B6B]">{ROOMS[k].axis}</p>
+              <p className="text-[20px] tracking-[0.06em] text-[#A8A8A4] mt-1">{ROOMS[k].palette.join(' · ')}</p>
             </div>
           ))}
         </div>
@@ -462,7 +462,7 @@ function NewMemberForm({ run, busy, done }: { run: Run; busy: string | null; don
 
   return (
     <div className="border border-[#0A0A0A] px-6 py-6 space-y-5">
-      <p className="text-[13px] tracking-[0.18em] text-[#0A0A0A]">ONBOARDING — DO IT IN PERSON, ~45 MIN</p>
+      <p className="text-[20px] tracking-[0.18em] text-[#0A0A0A]">ONBOARDING — DO IT IN PERSON, ~45 MIN</p>
       <div>
         <p className={`${label} mb-1.5`}>NAME</p>
         <input className={input} value={name} onChange={(e) => setName(e.target.value)} />
@@ -584,8 +584,8 @@ function Lookbook({ deliveries, memberName, activity, run, busy }: {
   if (!shot.length) {
     return (
       <div>
-        <p className="text-[11px] tracking-[0.18em] text-[#6B6B6B] mb-2">LOOKBOOK — SHARE &amp; SCREENSHOT</p>
-        <p className="text-[11px] tracking-[0.08em] text-[#A8A8A4]">
+        <p className="text-[20px] tracking-[0.18em] text-[#6B6B6B] mb-2">LOOKBOOK — SHARE &amp; SCREENSHOT</p>
+        <p className="text-[20px] tracking-[0.08em] text-[#A8A8A4]">
           NO SHOT LOOKS YET — COMPOSE A DELIVERY, THEN ✦ HIGGSFIELD EACH LOOK AND THEY APPEAR HERE.
         </p>
       </div>
@@ -600,13 +600,13 @@ function Lookbook({ deliveries, memberName, activity, run, busy }: {
         onClick={() => setOpen((v) => !v)}
         className="w-full flex items-baseline gap-2 text-left border-b border-[#E2E0DB] pb-2 mb-3 group"
       >
-        <span className="text-[11px] tracking-[0.18em] text-[#0A0A0A] group-hover:text-[#8B5E00] transition-colors">
+        <span className="text-[20px] tracking-[0.18em] text-[#0A0A0A] group-hover:text-[#8B5E00] transition-colors">
           {open ? '−' : '+'} {memberName.toUpperCase()}
         </span>
-        <span className="text-[11px] tracking-[0.14em] text-[#A8A8A4]">
+        <span className="text-[20px] tracking-[0.14em] text-[#A8A8A4]">
           LOOKBOOK · {shot.length} SHOT LOOK{shot.length === 1 ? '' : 'S'}
         </span>
-        <span className="ml-auto text-[10px] tracking-[0.14em] text-[#A8A8A4]">
+        <span className="ml-auto text-[20px] tracking-[0.14em] text-[#A8A8A4]">
           {open ? 'HIDE' : 'OPEN OUTFIT IMAGES'}
         </span>
       </button>
@@ -622,15 +622,15 @@ function Lookbook({ deliveries, memberName, activity, run, busy }: {
             <div className="relative aspect-[4/5] overflow-hidden bg-[#EDEDED]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={l.image_url!} alt="" className="absolute inset-0 w-full h-full object-cover" />
-              <div className="absolute top-2.5 right-2.5 bg-black/55 text-white text-[11px] tracking-[0.1em] px-2 py-1 rounded-full">
+              <div className="absolute top-2.5 right-2.5 bg-black/55 text-white text-[20px] tracking-[0.1em] px-2 py-1 rounded-full">
                 {idx + 1} / {shot.length}
               </div>
               <div className="absolute left-2.5 top-2.5 z-10 w-[27%] max-w-[110px] max-h-[calc(100%-1.25rem)] overflow-hidden pr-1">
                 <div className="flex items-center gap-1.5 mb-2">
-                  <span className="text-white text-[10px] sm:text-[11px] tracking-[0.081em] drop-shadow-[0_1px_3px_rgba(0,0,0,0.55)]">
+                  <span className="text-white text-[20px] sm:text-[20px] tracking-[0.081em] drop-shadow-[0_1px_3px_rgba(0,0,0,0.55)]">
                     LOOK {idx + 1}
                   </span>
-                  <span className="bg-white/90 text-[#4A4E57] text-[10px] tracking-[0.036em] rounded-full px-1.5 py-0.5 leading-none">
+                  <span className="bg-white/90 text-[#4A4E57] text-[20px] tracking-[0.036em] rounded-full px-1.5 py-0.5 leading-none">
                     {withImg.length}
                   </span>
                 </div>
@@ -641,12 +641,12 @@ function Lookbook({ deliveries, memberName, activity, run, busy }: {
                       <img src={`${it.image_url}${it.image_url!.includes('?') ? '&' : '?'}width=500`} alt={it.product_name} loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
                       {/* same caption treatment as the live site's item cards */}
                       <div className="absolute inset-x-0 bottom-0 z-10 pt-8 pb-1.5 px-1.5 bg-gradient-to-t from-black/70 via-black/25 to-transparent">
-                        <p className="text-white/75 text-[9px] tracking-[0.06em] uppercase truncate">{it.brand ?? 'BRAND'}</p>
-                        <p className="text-white text-[9px] leading-[1.15] line-clamp-2 mt-0.5">{it.product_name}</p>
+                        <p className="text-white/75 text-[20px] tracking-[0.06em] uppercase truncate">{it.brand ?? 'BRAND'}</p>
+                        <p className="text-white text-[20px] leading-[1.15] line-clamp-2 mt-0.5">{it.product_name}</p>
                         {it.owned ? (
-                          <p className="text-[#F3E3C3] text-[9px] tracking-[0.08em] mt-0.5 uppercase">◈ In your wardrobe</p>
+                          <p className="text-[#F3E3C3] text-[20px] tracking-[0.08em] mt-0.5 uppercase">◈ In your wardrobe</p>
                         ) : typeof it.price_gbp === 'number' ? (
-                          <p className="text-white/90 text-[9px] tracking-[0.03em] mt-0.5">£{it.price_gbp}</p>
+                          <p className="text-white/90 text-[20px] tracking-[0.03em] mt-0.5">£{it.price_gbp}</p>
                         ) : null}
                       </div>
                     </div>
@@ -655,13 +655,13 @@ function Lookbook({ deliveries, memberName, activity, run, busy }: {
                 {(() => {
                   const sp = lookSpend(l.items)
                   return (
-                    <p className="mt-2 text-white text-[9px] tracking-[0.08em] leading-[1.3] drop-shadow-[0_1px_3px_rgba(0,0,0,0.55)] uppercase">
+                    <p className="mt-2 text-white text-[20px] tracking-[0.08em] leading-[1.3] drop-shadow-[0_1px_3px_rgba(0,0,0,0.55)] uppercase">
                       {formatLookSpend(sp)}
                     </p>
                   )
                 })()}
               </div>
-              <p className="absolute bottom-2 right-2.5 text-white text-[9.5px] tracking-[0.14em] drop-shadow-[0_1px_3px_rgba(0,0,0,0.55)]">
+              <p className="absolute bottom-2 right-2.5 text-white text-[20px] tracking-[0.14em] drop-shadow-[0_1px_3px_rgba(0,0,0,0.55)]">
                 MYRA · STYLED FOR {memberName.split(' ')[0].toUpperCase()}
               </p>
             </div>
@@ -711,7 +711,7 @@ function LookFeedbackStrip({ look, notes, run, busy, firstName }: {
 
   const verdictBtn = (value: 'yes' | 'no', text2: string) => (
     <button
-      className={`text-[10px] tracking-[0.14em] px-2.5 py-1.5 border transition-colors ${
+      className={`text-[20px] tracking-[0.14em] px-2.5 py-1.5 border transition-colors ${
         resp === value ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A]'
       }`}
       disabled={busy === key}
@@ -724,20 +724,20 @@ function LookFeedbackStrip({ look, notes, run, busy, firstName }: {
   return (
     <div className="border border-t-0 border-[#E2E0DB] bg-white px-2.5 py-2 space-y-1.5">
       {look.response && (
-        <p className="text-[10px] tracking-[0.16em] text-[#6B6B6B]">
+        <p className="text-[20px] tracking-[0.16em] text-[#6B6B6B]">
           {first} SAID {look.response === 'yes' ? 'YES' : 'NO'}
           {look.response === 'no' && look.response_reason ? ` — ${look.response_reason.replace(/_/g, ' ').toUpperCase()}` : ''} · LEARNED
         </p>
       )}
       {notes.map((n) => (
-        <p key={n.activity_id} className="text-[13px] leading-snug text-[#0A0A0A]">&ldquo;{n.detail}&rdquo;</p>
+        <p key={n.activity_id} className="text-[20px] leading-snug text-[#0A0A0A]">&ldquo;{n.detail}&rdquo;</p>
       ))}
       <div className="flex flex-wrap items-center gap-1.5">
         {verdictBtn('yes', 'SHE LIKES IT')}
         {verdictBtn('no', 'NOT FOR HER')}
         {resp === 'no' && (
           <select
-            className="border border-[#E2E0DB] bg-white px-1.5 py-1.5 text-[10px] tracking-[0.1em] text-[#0A0A0A] outline-none"
+            className="border border-[#E2E0DB] bg-white px-1.5 py-1.5 text-[20px] tracking-[0.1em] text-[#0A0A0A] outline-none"
             value={reason}
             disabled={busy === key}
             onChange={(e) => changeReason(e.target.value as ResponseReason)}
@@ -747,19 +747,19 @@ function LookFeedbackStrip({ look, notes, run, busy, firstName }: {
             ))}
           </select>
         )}
-        <span className={`text-[10px] tracking-[0.12em] ${flash === 'NOT SAVED' ? 'text-[#B83A3A]' : 'text-[#3D6B45]'}`}>
+        <span className={`text-[20px] tracking-[0.12em] ${flash === 'NOT SAVED' ? 'text-[#B83A3A]' : 'text-[#3D6B45]'}`}>
           {busy === key ? 'SAVING…' : flash ?? ''}
         </span>
       </div>
       <div className="flex gap-1.5">
         <input
-          className={`${input} !px-2 !py-1.5 !text-[12px]`}
+          className={`${input} !px-2 !py-1.5 !text-[20px]`}
           placeholder={resp ? `ADD ${first}'S WORDS (OPTIONAL)` : `PICK A VERDICT FIRST, THEN ADD ${first}'S WORDS`}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') logNote() }}
         />
-        <button className={`${btnDark} !px-3 !py-1.5 !text-[10px] whitespace-nowrap`} disabled={!resp || !text.trim() || busy === key} onClick={logNote}>
+        <button className={`${btnDark} !px-3 !py-1.5 !text-[20px] whitespace-nowrap`} disabled={!resp || !text.trim() || busy === key} onClick={logNote}>
           {busy === key ? '…' : 'ADD WORDS'}
         </button>
       </div>
@@ -821,16 +821,16 @@ function MemberBrandMapView({ memberId, name, run, busy }: { memberId: string; n
       <div className="flex items-center justify-between">
         <div>
           <p className={label}>BRAND MAP — WHAT IS REACHING {name.split(' ')[0].toUpperCase()}&rsquo;S COMPOSER</p>
-          <p className="text-[10px] tracking-[0.1em] text-[#A8A8A4] mt-1">
+          <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4] mt-1">
             SAME AXES AS THE TASTE INSPECTOR · ACROSS = AESTHETIC (BRAND CODES) · UP = PRICE
           </p>
         </div>
-        <button className={`${btnLight} !px-4 !py-1.5 !text-[11px]`} disabled={loading} onClick={load}>
+        <button className={`${btnLight} !px-4 !py-1.5 !text-[20px]`} disabled={loading} onClick={load}>
           {loading ? 'LOADING…' : data ? 'REFRESH' : 'SHOW MAP'}
         </button>
       </div>
 
-      {data?.error && <p className="text-[11px] tracking-[0.08em] text-[#B83A3A] mt-3">{data.error.toUpperCase()}</p>}
+      {data?.error && <p className="text-[20px] tracking-[0.08em] text-[#B83A3A] mt-3">{data.error.toUpperCase()}</p>}
 
       {data && !data.error && (
         <>
@@ -839,7 +839,7 @@ function MemberBrandMapView({ memberId, name, run, busy }: { memberId: string; n
               <button
                 key={r.role}
                 onClick={() => toggle(r.role)}
-                className={`flex items-center gap-1.5 text-[10px] tracking-[0.12em] transition-opacity ${show.has(r.role) ? '' : 'opacity-35'}`}
+                className={`flex items-center gap-1.5 text-[20px] tracking-[0.12em] transition-opacity ${show.has(r.role) ? '' : 'opacity-35'}`}
               >
                 <span className="w-2.5 h-2.5 rounded-full border border-[#D8D6D1]" style={{ background: r.colour }} />
                 {r.label} · {data.counts[r.role] ?? 0}
@@ -892,14 +892,14 @@ function MemberBrandMapView({ memberId, name, run, busy }: { memberId: string; n
               )}
             </svg>
           ) : (
-            <p className="text-[12px] tracking-[0.1em] text-[#A8A8A4] mt-3">
+            <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4] mt-3">
               NO BRAND IS POSITIONED YET — A DOT NEEDS BRAND CODES (OR ENOUGH SCORED ITEMS) AND A PRICE.
             </p>
           )}
 
           <div className="min-h-[34px] mt-1">
             {hover ? (
-              <p className="text-[11px] tracking-[0.06em] text-[#0A0A0A]">
+              <p className="text-[20px] tracking-[0.06em] text-[#0A0A0A]">
                 {hover.name.toUpperCase()} · AFFINITY {hover.affinity.toFixed(2)} ·{' '}
                 {DOT_ROLES.find((r) => r.role === hover.role)!.label}
                 {hover.medianPrice ? ` · MEDIAN £${Math.round(hover.medianPrice)}` : ''}
@@ -907,7 +907,7 @@ function MemberBrandMapView({ memberId, name, run, busy }: { memberId: string; n
                 {hover.trace ? <span className="text-[#6B6B6B]"> — {hover.trace.toUpperCase()}</span> : null}
               </p>
             ) : (
-              <p className="text-[11px] tracking-[0.06em] text-[#A8A8A4]">HOVER A DOT FOR THE BRAND AND WHY IT IS THERE.</p>
+              <p className="text-[20px] tracking-[0.06em] text-[#A8A8A4]">HOVER A DOT FOR THE BRAND AND WHY IT IS THERE.</p>
             )}
           </div>
 
@@ -915,7 +915,7 @@ function MemberBrandMapView({ memberId, name, run, busy }: { memberId: string; n
           <div className="flex flex-wrap items-center gap-2 mt-1 border-t border-[#EFEDE9] pt-2">
             {sel ? (
               <>
-                <span className="text-[13px] tracking-[0.06em] text-[#0A0A0A]">
+                <span className="text-[20px] tracking-[0.06em] text-[#0A0A0A]">
                   {sel.name.toUpperCase()}
                   <span className="text-[#6B6B6B]">
                     {' '}· {DOT_ROLES.find((r) => r.role === sel.role)!.label}
@@ -924,7 +924,7 @@ function MemberBrandMapView({ memberId, name, run, busy }: { memberId: string; n
                 </span>
                 {sel.role === 'hidden' ? (
                   <button
-                    className={`${btnTiny} !text-[12px]`}
+                    className={`${btnTiny} !text-[20px]`}
                     disabled={busy === `mb-${sel.brand_id}`}
                     onClick={async () => { await run(`mb-${sel.brand_id}`, () => restoreMemberBrand(memberId, sel.brand_id), 'BRAND RESTORED'); setSel(null); load() }}
                   >
@@ -932,28 +932,28 @@ function MemberBrandMapView({ memberId, name, run, busy }: { memberId: string; n
                   </button>
                 ) : (
                   <button
-                    className={`${btnTiny} !text-[12px] !text-[#B83A3A] !border-[#E8C4C4]`}
+                    className={`${btnTiny} !text-[20px] !text-[#B83A3A] !border-[#E8C4C4]`}
                     disabled={busy === `mb-${sel.brand_id}`}
                     onClick={async () => { await run(`mb-${sel.brand_id}`, () => removeMemberBrand(memberId, sel.brand_id), 'BRAND REMOVED FROM HER WORLD'); setSel(null); load() }}
                   >
                     NOT FOR HER — REMOVE
                   </button>
                 )}
-                <button className={`${btnTiny} !text-[12px]`} onClick={() => setSel(null)}>CLEAR</button>
+                <button className={`${btnTiny} !text-[20px]`} onClick={() => setSel(null)}>CLEAR</button>
               </>
             ) : (
-              <span className="text-[13px] tracking-[0.06em] text-[#A8A8A4]">CLICK A DOT TO REMOVE THAT BRAND FROM HER WORLD.</span>
+              <span className="text-[20px] tracking-[0.06em] text-[#A8A8A4]">CLICK A DOT TO REMOVE THAT BRAND FROM HER WORLD.</span>
             )}
             <span className="ml-auto flex items-center gap-1.5">
               <input
-                className={`${input} !py-1 !text-[13px] !w-44`}
+                className={`${input} !py-1 !text-[20px] !w-44`}
                 placeholder="ADD A BRAND FOR HER"
                 value={newBrand}
                 onChange={(e) => setNewBrand(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter' && newBrand.trim()) (async () => { await run(`mba-${memberId}`, () => addMemberBrand(memberId, newBrand), 'BRAND ADDED AT FULL AFFINITY'); setNewBrand(''); load() })() }}
               />
               <button
-                className={`${btnTiny} !text-[12px]`}
+                className={`${btnTiny} !text-[20px]`}
                 disabled={!newBrand.trim() || busy === `mba-${memberId}`}
                 onClick={async () => { await run(`mba-${memberId}`, () => addMemberBrand(memberId, newBrand), 'BRAND ADDED AT FULL AFFINITY'); setNewBrand(''); load() }}
               >
@@ -962,11 +962,11 @@ function MemberBrandMapView({ memberId, name, run, busy }: { memberId: string; n
             </span>
           </div>
 
-          <p className="text-[13px] tracking-[0.1em] text-[#A8A8A4] mt-1">
+          <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4] mt-1">
             {plotted.length} OF {data.dots.length} BRANDS POSITIONED · THE REST HAVE NO CODES OR NO PRICE YET
           </p>
           {data.unmatched.length > 0 && (
-            <p className="text-[11px] tracking-[0.08em] text-[#B83A3A] mt-1">
+            <p className="text-[20px] tracking-[0.08em] text-[#B83A3A] mt-1">
               NAMED BUT NOT IN MYRA&rsquo;S BRAND TABLE, SO THEY REACH NOTHING: {data.unmatched.join(' · ').toUpperCase()}
             </p>
           )}
@@ -1017,7 +1017,7 @@ function MemberBrands({ member: m, run, busy }: { member: PilotMember; run: Run;
     <div>
       <div className="flex items-center justify-between mb-2">
         <p className={label}>BRANDS — RANKED, WITH THE INFERRED WHY</p>
-        <button className={`${btnDark} !px-4 !py-1.5 !text-[11px]`} disabled={!dirty || busy === key} onClick={save}>
+        <button className={`${btnDark} !px-4 !py-1.5 !text-[20px]`} disabled={!dirty || busy === key} onClick={save}>
           {busy === key ? 'SAVING…' : dirty ? 'SAVE BRANDS' : 'SAVED'}
         </button>
       </div>
@@ -1025,14 +1025,14 @@ function MemberBrands({ member: m, run, busy }: { member: PilotMember; run: Run;
       <div className="space-y-1">
         {brands.map((b, i) => (
           <div key={`${b.name}-${i}`} className="flex items-center gap-2">
-            <span className="text-[12px] tracking-[0.06em] text-[#A8A8A4] w-4">{i + 1}.</span>
+            <span className="text-[20px] tracking-[0.06em] text-[#A8A8A4] w-4">{i + 1}.</span>
             <input
-              className={`${input} !py-1 !text-[12px] max-w-[190px]`}
+              className={`${input} !py-1 !text-[20px] max-w-[190px]`}
               value={b.name}
               onChange={(e) => setBrands(brands.map((x, k) => (k === i ? { ...x, name: e.target.value } : x)))}
             />
             <input
-              className={`${input} !py-1 !text-[12px] max-w-sm`}
+              className={`${input} !py-1 !text-[20px] max-w-sm`}
               placeholder="THE INFERRED WHY (OPTIONAL)"
               value={b.inferred_why ?? ''}
               onChange={(e) => setBrands(brands.map((x, k) => (k === i ? { ...x, inferred_why: e.target.value } : x)))}
@@ -1042,15 +1042,15 @@ function MemberBrands({ member: m, run, busy }: { member: PilotMember; run: Run;
             <button className={btnTiny} onClick={() => setBrands(brands.filter((_, k) => k !== i).map((x, k) => ({ ...x, rank: k + 1 })))}>×</button>
           </div>
         ))}
-        {brands.length === 0 && <p className="text-[12px] tracking-[0.1em] text-[#A8A8A4]">NO BRANDS YET.</p>}
+        {brands.length === 0 && <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4]">NO BRANDS YET.</p>}
       </div>
 
       {inputOnly.length > 0 && (
         <div className="mt-2">
-          <p className="text-[11px] tracking-[0.1em] text-[#8B5E00] mb-1">INPUT ONLY (TASTE SIGNAL, NEVER RECOMMENDED)</p>
+          <p className="text-[20px] tracking-[0.1em] text-[#8B5E00] mb-1">INPUT ONLY (TASTE SIGNAL, NEVER RECOMMENDED)</p>
           <div className="flex flex-wrap gap-1.5">
             {inputOnly.map((n, i) => (
-              <span key={`${n}-${i}`} className="flex items-center gap-1.5 text-[11px] tracking-[0.1em] text-[#8B5E00] border border-[#E8DCC0] bg-[#FFFBEF] px-2 py-1">
+              <span key={`${n}-${i}`} className="flex items-center gap-1.5 text-[20px] tracking-[0.1em] text-[#8B5E00] border border-[#E8DCC0] bg-[#FFFBEF] px-2 py-1">
                 {n.toUpperCase()}
                 <button className="text-[#8B5E00] hover:opacity-60" onClick={() => setInputOnly(inputOnly.filter((_, k) => k !== i))}>×</button>
               </span>
@@ -1061,28 +1061,28 @@ function MemberBrands({ member: m, run, busy }: { member: PilotMember; run: Run;
 
       <div className="flex flex-wrap items-center gap-2 mt-3">
         <input
-          className={`${input} !py-1.5 !text-[12px] max-w-[190px]`}
+          className={`${input} !py-1.5 !text-[20px] max-w-[190px]`}
           placeholder="ADD A BRAND"
           value={newBrand.name}
           onChange={(e) => setNewBrand({ ...newBrand, name: e.target.value })}
           onKeyDown={(e) => { if (e.key === 'Enter') add() }}
         />
         <input
-          className={`${input} !py-1.5 !text-[12px] max-w-sm`}
+          className={`${input} !py-1.5 !text-[20px] max-w-sm`}
           placeholder="WHY SHE WEARS IT (OPTIONAL)"
           value={newBrand.why}
           onChange={(e) => setNewBrand({ ...newBrand, why: e.target.value })}
           onKeyDown={(e) => { if (e.key === 'Enter') add() }}
         />
-        <label className="flex items-center gap-1.5 text-[11px] tracking-[0.1em] text-[#6B6B6B]">
+        <label className="flex items-center gap-1.5 text-[20px] tracking-[0.1em] text-[#6B6B6B]">
           <input type="checkbox" checked={newBrand.inputOnly} onChange={(e) => setNewBrand({ ...newBrand, inputOnly: e.target.checked })} />
           INPUT ONLY
         </label>
         <button className={btnTiny} disabled={!newBrand.name.trim()} onClick={add}>ADD</button>
-        {dirty && <span className="text-[10px] tracking-[0.12em] text-[#B83A3A]">UNSAVED</span>}
+        {dirty && <span className="text-[20px] tracking-[0.12em] text-[#B83A3A]">UNSAVED</span>}
       </div>
 
-      {warn && <p className="text-[11px] tracking-[0.08em] text-[#B83A3A] mt-2">{warn}</p>}
+      {warn && <p className="text-[20px] tracking-[0.08em] text-[#B83A3A] mt-2">{warn}</p>}
     </div>
   )
 }
@@ -1109,25 +1109,25 @@ function PriceBandsEditor({ member: m, run, busy, ready = true }: { member: Pilo
     const bad = b.min != null && b.max != null && b.min > b.max
     return (
       <div key={id} className="flex items-center gap-2 py-1">
-        <span className="text-[11px] tracking-[0.1em] text-[#4A4E57] w-52 shrink-0">
+        <span className="text-[20px] tracking-[0.1em] text-[#4A4E57] w-52 shrink-0">
           {labelText}
           {hint && <span className="text-[#A8A8A4]"> · {hint}</span>}
         </span>
-        <span className="text-[11px] text-[#A8A8A4]">£</span>
+        <span className="text-[20px] text-[#A8A8A4]">£</span>
         <input
-          className={`${input} !py-1 !text-[12px] !w-20`}
+          className={`${input} !py-1 !text-[20px] !w-20`}
           placeholder="MIN"
           value={b.min ?? ''}
           onChange={(e) => set(id, 'min', e.target.value)}
         />
-        <span className="text-[11px] text-[#A8A8A4]">TO £</span>
+        <span className="text-[20px] text-[#A8A8A4]">TO £</span>
         <input
-          className={`${input} !py-1 !text-[12px] !w-20`}
+          className={`${input} !py-1 !text-[20px] !w-20`}
           placeholder="MAX"
           value={b.max ?? ''}
           onChange={(e) => set(id, 'max', e.target.value)}
         />
-        {bad && <span className="text-[10px] tracking-[0.12em] text-[#B83A3A]">MIN IS ABOVE MAX</span>}
+        {bad && <span className="text-[20px] tracking-[0.12em] text-[#B83A3A]">MIN IS ABOVE MAX</span>}
       </div>
     )
   }
@@ -1139,16 +1139,16 @@ function PriceBandsEditor({ member: m, run, busy, ready = true }: { member: Pilo
       <div className="flex items-center justify-between mb-1">
         <div>
           <p className={label}>WHAT SHE SPENDS — OVER THE MAX IS NEVER COMPOSED</p>
-          <p className="text-[10px] tracking-[0.1em] text-[#A8A8A4] mt-1">
+          <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4] mt-1">
             LOVING A BRAND IS NOT THE SAME AS BUYING EVERY PRICE IT SELLS · LEAVE BLANK FOR NO OPINION
           </p>
         </div>
         <div className="flex items-center gap-3">
           {result && (
-            <span className={`text-[10px] tracking-[0.12em] ${result.startsWith('SAVED') ? 'text-[#3D6B45]' : 'text-[#B83A3A]'}`}>{result}</span>
+            <span className={`text-[20px] tracking-[0.12em] ${result.startsWith('SAVED') ? 'text-[#3D6B45]' : 'text-[#B83A3A]'}`}>{result}</span>
           )}
           <button
-            className={`${btnDark} !px-4 !py-1.5 !text-[11px]`}
+            className={`${btnDark} !px-4 !py-1.5 !text-[20px]`}
             disabled={!dirty || busy === key || !ready || anyBad}
             onClick={async () => {
               setResult(null)
@@ -1163,8 +1163,8 @@ function PriceBandsEditor({ member: m, run, busy, ready = true }: { member: Pilo
 
       {!ready && (
         <div className="border border-[#E4C97E] bg-[#FFFBEF] px-3 py-2.5 my-2">
-          <p className="text-[11px] tracking-[0.14em] text-[#8A6D1F]">MIGRATION 0049 NOT RUN — NOTHING HERE CAN SAVE YET</p>
-          <p className="text-[11px] tracking-[0.04em] text-[#8A6D1F] mt-1">
+          <p className="text-[20px] tracking-[0.14em] text-[#8A6D1F]">MIGRATION 0049 NOT RUN — NOTHING HERE CAN SAVE YET</p>
+          <p className="text-[20px] tracking-[0.04em] text-[#8A6D1F] mt-1">
             Run <span className="font-mono">supabase/migrations/0049_pilot_price_bands.sql</span>, then reload.
           </p>
         </div>
@@ -1172,18 +1172,18 @@ function PriceBandsEditor({ member: m, run, busy, ready = true }: { member: Pilo
 
       <div className="mt-2 grid gap-3 lg:grid-cols-2">
         <div>
-          <p className="text-[10px] tracking-[0.14em] text-[#6B6B6B] mb-1">CLOTHING</p>
+          <p className="text-[20px] tracking-[0.14em] text-[#6B6B6B] mb-1">CLOTHING</p>
           {row('default', 'ANYTHING NOT LISTED BELOW')}
           {PRICE_BUCKETS.filter((b) => !['bag', 'shoes', 'jewellery'].includes(b.id)).map((b) => row(b.id, b.label))}
         </div>
         <div>
-          <p className="text-[10px] tracking-[0.14em] text-[#6B6B6B] mb-1">
+          <p className="text-[20px] tracking-[0.14em] text-[#6B6B6B] mb-1">
             ACCESSORIES — SET SEPARATELY, THEY NEVER INHERIT THE CLOTHING RANGE
           </p>
           {PRICE_BUCKETS.filter((b) => ['shoes', 'bag', 'jewellery'].includes(b.id)).map((b) =>
             row(b.id, b.label, 'OFTEN ABOVE HER CLOTHING RANGE'),
           )}
-          <p className="text-[10px] tracking-[0.04em] text-[#A8A8A4] mt-2 leading-relaxed normal-case">
+          <p className="text-[20px] tracking-[0.04em] text-[#A8A8A4] mt-2 leading-relaxed normal-case">
             Left blank, MYRA has no price opinion on that bucket at all — it will not fall back to the clothing
             range, because what someone pays for a bag says nothing about what they pay for a top.
           </p>
@@ -1240,7 +1240,7 @@ function StylePreferences({ member: m, run, busy, ready = true }: { member: Pilo
             key={o.value}
             onClick={() => toggle(listKey, otherKey, o.value)}
             title={dimmed ? 'CURRENTLY ON THE OTHER LIST — CLICK TO MOVE IT HERE' : undefined}
-            className={`flex items-center gap-1.5 text-[11px] tracking-[0.1em] px-2 py-1.5 border transition-colors ${
+            className={`flex items-center gap-1.5 text-[20px] tracking-[0.1em] px-2 py-1.5 border transition-colors ${
               on
                 ? tone === 'plus'
                   ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]'
@@ -1271,17 +1271,17 @@ function StylePreferences({ member: m, run, busy, ready = true }: { member: Pilo
     body: (listKey: keyof StylePrefs, otherKey: keyof StylePrefs, tone: 'plus' | 'minus') => React.ReactNode,
   ) => (
     <div>
-      <p className="text-[10px] tracking-[0.14em] text-[#6B6B6B] mb-2">{title}</p>
+      <p className="text-[20px] tracking-[0.14em] text-[#6B6B6B] mb-2">{title}</p>
       <div className="grid gap-3 lg:grid-cols-2">
         <div className="border border-[#E2E0DB] bg-white p-2.5">
-          <p className="text-[10px] tracking-[0.14em] text-[#0A0A0A] mb-2">
+          <p className="text-[20px] tracking-[0.14em] text-[#0A0A0A] mb-2">
             + {plusLabel}
             <span className="text-[#A8A8A4]"> · {count(lovedKey)} SELECTED · SCORED UP</span>
           </p>
           {body(lovedKey, avoidKey, 'plus')}
         </div>
         <div className="border border-[#EAD9D9] bg-white p-2.5">
-          <p className="text-[10px] tracking-[0.14em] text-[#B83A3A] mb-2">
+          <p className="text-[20px] tracking-[0.14em] text-[#B83A3A] mb-2">
             − {minusLabel}
             <span className="text-[#A8A8A4]"> · {count(avoidKey)} SELECTED · NEVER COMPOSED</span>
           </p>
@@ -1296,18 +1296,18 @@ function StylePreferences({ member: m, run, busy, ready = true }: { member: Pilo
       <div className="flex items-center justify-between">
         <div>
           <p className={label}>STYLE PREFERENCES — WHAT SHE SAYS</p>
-          <p className="text-[10px] tracking-[0.1em] text-[#A8A8A4] mt-1">
+          <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4] mt-1">
             LEFT COLUMN LIFTS A PIECE · RIGHT COLUMN BLOCKS IT ENTIRELY · CLICK AGAIN TO UNDO
           </p>
         </div>
         <div className="flex items-center gap-3">
           {result && (
-            <span className={`text-[10px] tracking-[0.12em] ${result.startsWith('SAVED') ? 'text-[#3D6B45]' : 'text-[#B83A3A]'}`}>
+            <span className={`text-[20px] tracking-[0.12em] ${result.startsWith('SAVED') ? 'text-[#3D6B45]' : 'text-[#B83A3A]'}`}>
               {result}
             </span>
           )}
           <button
-            className={`${btnDark} !px-4 !py-1.5 !text-[11px]`}
+            className={`${btnDark} !px-4 !py-1.5 !text-[20px]`}
             disabled={!dirty || busy === key || !ready}
             onClick={async () => {
               setResult(null)
@@ -1322,10 +1322,10 @@ function StylePreferences({ member: m, run, busy, ready = true }: { member: Pilo
 
       {!ready && (
         <div className="border border-[#E4C97E] bg-[#FFFBEF] px-3 py-2.5">
-          <p className="text-[11px] tracking-[0.14em] text-[#8A6D1F]">
+          <p className="text-[20px] tracking-[0.14em] text-[#8A6D1F]">
             MIGRATION 0045 NOT RUN — NOTHING PICKED HERE CAN SAVE YET
           </p>
-          <p className="text-[11px] tracking-[0.04em] text-[#8A6D1F] mt-1 leading-relaxed">
+          <p className="text-[20px] tracking-[0.04em] text-[#8A6D1F] mt-1 leading-relaxed">
             Run <span className="font-mono">supabase/migrations/0045_pilot_style_preferences.sql</span> in the Supabase
             SQL editor, then reload this page. Your picks below will be lost on reload until then.
           </p>
@@ -1339,7 +1339,7 @@ function StylePreferences({ member: m, run, busy, ready = true }: { member: Pilo
               {chipRow(listKey, otherKey, tone, [{ value: g.family, label: g.label, swatch: g.swatch }])}
               {SHADES_BY_FAMILY[g.family].length > 0 && (
                 <>
-                  <span className="text-[#D8D6D1] text-[11px]">/</span>
+                  <span className="text-[#D8D6D1] text-[20px]">/</span>
                   {chipRow(listKey, otherKey, tone, SHADES_BY_FAMILY[g.family])}
                 </>
               )}
@@ -1382,7 +1382,7 @@ function TrustPanel({ memberId }: { memberId: string }) {
   }, [memberId])
 
   if (loading && !state) return null
-  if (err) return <p className="text-[11px] tracking-[0.1em] text-[#B83A3A]">TRUST READ FAILED — {err.toUpperCase()}</p>
+  if (err) return <p className="text-[20px] tracking-[0.1em] text-[#B83A3A]">TRUST READ FAILED — {err.toUpperCase()}</p>
   if (!state) return null
 
   const pct = (n: number | null) => n == null ? '—' : `${Math.round(n * 100)}%`
@@ -1395,51 +1395,51 @@ function TrustPanel({ memberId }: { memberId: string }) {
   return (
     <div className="border border-[#E2E0DB] bg-[#FCFCFA] p-4 space-y-3">
       <div>
-        <p className="text-[11px] tracking-[0.16em] text-[#0A0A0A]">
+        <p className="text-[20px] tracking-[0.16em] text-[#0A0A0A]">
           STAGE {state.stage} — {state.headline}
         </p>
-        <p className="text-[10px] tracking-[0.1em] text-[#A8A8A4] mt-1">
+        <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4] mt-1">
           A LOOK IS CLEAN WHEN IT GOES OUT WITH NO SWAP AND NO REMOVAL · {state.looksComposed} COMPOSED FOR HER
         </p>
       </div>
 
       <div className="grid grid-cols-3 gap-3">
         <div>
-          <p className="text-[10px] tracking-[0.12em] text-[#6B6B6B] mb-1">CLEAN RATE · LAST {state.sample}</p>
+          <p className="text-[20px] tracking-[0.12em] text-[#6B6B6B] mb-1">CLEAN RATE · LAST {state.sample}</p>
           {bar(state.cleanRate)}
-          <p className="text-[13px] tracking-[0.08em] text-[#0A0A0A] mt-1">{pct(state.cleanRate)}</p>
+          <p className="text-[20px] tracking-[0.08em] text-[#0A0A0A] mt-1">{pct(state.cleanRate)}</p>
         </div>
         <div>
-          <p className="text-[10px] tracking-[0.12em] text-[#6B6B6B] mb-1">CLEAN IN A ROW</p>
+          <p className="text-[20px] tracking-[0.12em] text-[#6B6B6B] mb-1">CLEAN IN A ROW</p>
           {bar(state.streak / 8)}
-          <p className="text-[13px] tracking-[0.08em] text-[#0A0A0A] mt-1">{state.streak} / 8</p>
+          <p className="text-[20px] tracking-[0.08em] text-[#0A0A0A] mt-1">{state.streak} / 8</p>
         </div>
         <div>
-          <p className="text-[10px] tracking-[0.12em] text-[#6B6B6B] mb-1">SHE SAYS YES · {state.responses} VERDICTS</p>
+          <p className="text-[20px] tracking-[0.12em] text-[#6B6B6B] mb-1">SHE SAYS YES · {state.responses} VERDICTS</p>
           {bar(state.memberYesRate ?? 0)}
-          <p className="text-[13px] tracking-[0.08em] text-[#0A0A0A] mt-1">{pct(state.memberYesRate)}</p>
+          <p className="text-[20px] tracking-[0.08em] text-[#0A0A0A] mt-1">{pct(state.memberYesRate)}</p>
         </div>
       </div>
 
       <div className="grid grid-cols-3 gap-3 border-t border-[#EFEDE8] pt-3">
         <div>
-          <p className="text-[10px] tracking-[0.12em] text-[#6B6B6B]">SWAPPED A PIECE</p>
-          <p className="text-[13px] tracking-[0.08em] text-[#0A0A0A] mt-0.5">{pct(state.swapRate)} OF LOOKS</p>
+          <p className="text-[20px] tracking-[0.12em] text-[#6B6B6B]">SWAPPED A PIECE</p>
+          <p className="text-[20px] tracking-[0.08em] text-[#0A0A0A] mt-0.5">{pct(state.swapRate)} OF LOOKS</p>
         </div>
         <div>
-          <p className="text-[10px] tracking-[0.12em] text-[#6B6B6B]">PULLED A PIECE OUT</p>
-          <p className="text-[13px] tracking-[0.08em] text-[#0A0A0A] mt-0.5">{pct(state.removeRate)} OF LOOKS</p>
+          <p className="text-[20px] tracking-[0.12em] text-[#6B6B6B]">PULLED A PIECE OUT</p>
+          <p className="text-[20px] tracking-[0.08em] text-[#0A0A0A] mt-0.5">{pct(state.removeRate)} OF LOOKS</p>
         </div>
         <div>
           {/* The sharpest read on the composing itself: one wrong piece in
               five spoils a look, and a per-look rate hides that. */}
-          <p className="text-[10px] tracking-[0.12em] text-[#6B6B6B]">PIECES THAT DIDN’T SURVIVE</p>
-          <p className="text-[13px] tracking-[0.08em] text-[#0A0A0A] mt-0.5">{pct(state.itemErrorRate)} OF ALL COMPOSED</p>
+          <p className="text-[20px] tracking-[0.12em] text-[#6B6B6B]">PIECES THAT DIDN’T SURVIVE</p>
+          <p className="text-[20px] tracking-[0.08em] text-[#0A0A0A] mt-0.5">{pct(state.itemErrorRate)} OF ALL COMPOSED</p>
         </div>
       </div>
 
       {state.trend && (
-        <p className="text-[11px] tracking-[0.06em] text-[#6B6B6B]">
+        <p className="text-[20px] tracking-[0.06em] text-[#6B6B6B]">
           {state.trend.delta > 0.05
             ? `IMPROVING — ${pct(state.trend.previous)} CLEAN OVER THE PREVIOUS 10, ${pct(state.trend.recent)} OVER THE LAST 10`
             : state.trend.delta < -0.05
@@ -1450,22 +1450,22 @@ function TrustPanel({ memberId }: { memberId: string }) {
 
       {state.blockers.length > 0 && (
         <div>
-          <p className="text-[10px] tracking-[0.14em] text-[#8B5E00] mb-1">
+          <p className="text-[20px] tracking-[0.14em] text-[#8B5E00] mb-1">
             BEFORE SHE CAN BE SENT LOOKS UNREVIEWED
           </p>
           {state.blockers.map((b, i) => (
-            <p key={i} className="text-[11px] tracking-[0.06em] text-[#6B6B6B]">· {b.toUpperCase()}</p>
+            <p key={i} className="text-[20px] tracking-[0.06em] text-[#6B6B6B]">· {b.toUpperCase()}</p>
           ))}
         </div>
       )}
 
       {state.learned.length > 0 && (
         <div>
-          <p className="text-[10px] tracking-[0.14em] text-[#6B6B6B] mb-1">
+          <p className="text-[20px] tracking-[0.14em] text-[#6B6B6B] mb-1">
             WHAT HER SWAPS HAVE TAUGHT THE COMPOSER
           </p>
           {state.learned.map((l, i) => (
-            <p key={i} className={`text-[11px] tracking-[0.06em] ${l.includes('BLOCKED') ? 'text-[#B83A3A]' : 'text-[#A8A8A4]'}`}>
+            <p key={i} className={`text-[20px] tracking-[0.06em] ${l.includes('BLOCKED') ? 'text-[#B83A3A]' : 'text-[#A8A8A4]'}`}>
               · {l}
             </p>
           ))}
@@ -1508,9 +1508,9 @@ function MemberCard({
       <div className="flex items-start justify-between gap-6">
         <div className="min-w-0">
           <div className="flex items-center gap-3">
-            <p className="text-[15px] tracking-[0.12em] text-[#0A0A0A]">{m.name}</p>
+            <p className="text-[20px] tracking-[0.12em] text-[#0A0A0A]">{m.name}</p>
             {m.is_synthetic && (
-              <span className="text-[10px] tracking-[0.14em] text-[#8B5E00] border border-[#E8D9B8] px-2 py-0.5">
+              <span className="text-[20px] tracking-[0.14em] text-[#8B5E00] border border-[#E8D9B8] px-2 py-0.5">
                 SYNTHETIC — NEVER TRAINS TASTE
               </span>
             )}
@@ -1526,7 +1526,7 @@ function MemberCard({
                   <WeightBar weights={read} />
                 </div>
               ) : (
-                <p className="text-[10px] tracking-[0.12em] text-[#A8A8A4] mt-2">
+                <p className="text-[20px] tracking-[0.12em] text-[#A8A8A4] mt-2">
                   NO TASTE VECTOR YET — BUILDS FROM HER FIRST YES / SAVE / CLICK / PURCHASE
                 </p>
               )
@@ -1568,7 +1568,7 @@ function MemberCard({
               run(`persona-${m.member_id}`, () => assignMemberPersona(m.member_id, e.target.value),
                 e.target.value ? 'PERSONA ASSIGNED — LOOKS NOW COMPOSED THROUGH ITS MOODBOARD' : 'PERSONA REMOVED')
             }
-            className="border border-[#E2E0DB] bg-white px-2 py-1.5 text-[11px] tracking-[0.08em] text-[#4A4E57] outline-none focus:border-[#0A0A0A]"
+            className="border border-[#E2E0DB] bg-white px-2 py-1.5 text-[20px] tracking-[0.08em] text-[#4A4E57] outline-none focus:border-[#0A0A0A]"
             title="Compose her looks through this persona's moodboard envelope"
           >
             <option value="">NO PERSONA</option>
@@ -1580,7 +1580,7 @@ function MemberCard({
           </select>
           {m.persona_id && (
             <span
-              className={`text-[11px] tracking-[0.1em] ${m.persona_has_envelope ? 'text-[#4A6FA5]' : 'text-[#B83A3A]'}`}
+              className={`text-[20px] tracking-[0.1em] ${m.persona_has_envelope ? 'text-[#4A6FA5]' : 'text-[#B83A3A]'}`}
               title={m.persona_has_envelope
                 ? 'Persona weight — falls as she responds, until her own taste leads'
                 : 'This persona has no envelope yet — confirm its moodboard images and compute the envelope, or it has no effect'}
@@ -1629,7 +1629,7 @@ function MemberCard({
                 <button
                   key={o.id}
                   onClick={() => setPreviewOccasion(o.id)}
-                  className={`text-[10px] tracking-[0.1em] px-2 py-1 border transition-colors duration-300 ${
+                  className={`text-[20px] tracking-[0.1em] px-2 py-1 border transition-colors duration-300 ${
                     previewOccasion === o.id
                       ? 'border-[#0A0A0A] bg-[#0A0A0A] text-white'
                       : 'border-[#E2E0DB] text-[#6B6B6B]'
@@ -1641,7 +1641,7 @@ function MemberCard({
             </div>
             <WeightBar weights={eff} />
             {WORK_OCCASIONS.includes(previewOccasion) && m.work_dress_code && (
-              <p className="text-[10px] tracking-[0.1em] text-[#8B5E00] mt-1.5">FORMALITY FLOOR APPLIED — OVERRIDES TASTE</p>
+              <p className="text-[20px] tracking-[0.1em] text-[#8B5E00] mt-1.5">FORMALITY FLOOR APPLIED — OVERRIDES TASTE</p>
             )}
           </div>
 
@@ -1659,7 +1659,7 @@ function MemberCard({
               }).map((c) => (
                 <p
                   key={c.label}
-                  className={`text-[11px] tracking-[0.1em] ${c.have >= c.target ? 'text-[#3D7A50]' : 'text-[#6B6B6B]'}`}
+                  className={`text-[20px] tracking-[0.1em] ${c.have >= c.target ? 'text-[#3D7A50]' : 'text-[#6B6B6B]'}`}
                 >
                   {c.have >= c.target ? '✓' : '·'} {c.label} {c.have}/{c.target}
                 </p>
@@ -1672,7 +1672,7 @@ function MemberCard({
             <p className={`${label} mb-2`}>KNOWN EVENTS — THESE DRIVE THE ANTICIPATION MOVES</p>
             {m.events.map((e) => (
               <div key={e.event_id} className="flex items-center gap-3 mb-1">
-                <p className="text-[12px] tracking-[0.06em] text-[#0A0A0A]">
+                <p className="text-[20px] tracking-[0.06em] text-[#0A0A0A]">
                   {e.label.toUpperCase()} — {e.event_date}
                 </p>
                 <button className={btnTiny} onClick={() => run(`ev-${e.event_id}`, () => removeKnownEvent(e.event_id), 'EVENT REMOVED')}>
@@ -1712,7 +1712,7 @@ function MemberCard({
             </p>
             {m.wardrobe.map((w) => (
               <div key={w.wardrobe_id} className="flex items-center gap-3 mb-1">
-                <p className="text-[12px] tracking-[0.06em] text-[#0A0A0A]">
+                <p className="text-[20px] tracking-[0.06em] text-[#0A0A0A]">
                   {w.label.toUpperCase()}
                   {w.brand && <span className="text-[#6B6B6B]"> · {w.brand.toUpperCase()}</span>}
                 </p>
@@ -1739,7 +1739,7 @@ function MemberCard({
 
           {/* Meta + delete */}
           <div className="flex items-end justify-between">
-            <div className="text-[11px] tracking-[0.08em] text-[#6B6B6B] space-y-0.5">
+            <div className="text-[20px] tracking-[0.08em] text-[#6B6B6B] space-y-0.5">
               {Object.keys(m.sizes).length > 0 && (
                 <p>SIZES: {Object.entries(m.sizes).map(([k, v]) => `${k.toUpperCase()} ${v}`).join(' · ')}</p>
               )}
@@ -1750,7 +1750,7 @@ function MemberCard({
               {m.notes && <p className="max-w-xl">NOTES: {m.notes.toUpperCase()}</p>}
             </div>
             <button
-              className="text-[10px] tracking-[0.12em] text-[#B83A3A] hover:underline"
+              className="text-[20px] tracking-[0.12em] text-[#B83A3A] hover:underline"
               onClick={() => {
                 if (window.confirm(`Delete ${m.name} and all their pilot data?`)) {
                   run(`del-${m.member_id}`, () => deleteMember(m.member_id), 'MEMBER DELETED')
@@ -1804,7 +1804,7 @@ function DeliveriesTab({ data, run, busy }: { data: PilotData; run: Run; busy: s
             <button
               key={m.member_id}
               onClick={() => setMemberId(m.member_id)}
-              className={`${btnTiny} !text-[13px] !px-4 !py-2 ${memberId === m.member_id ? '!border-[#0A0A0A] !text-[#0A0A0A]' : ''}`}
+              className={`${btnTiny} !text-[20px] !px-4 !py-2 ${memberId === m.member_id ? '!border-[#0A0A0A] !text-[#0A0A0A]' : ''}`}
             >
               {m.name}
             </button>
@@ -1837,7 +1837,7 @@ function DeliveriesTab({ data, run, busy }: { data: PilotData; run: Run; busy: s
         <DeliveryCard key={d.delivery_id} delivery={d} member={memberById[d.member_id]} run={run} busy={busy} />
       ))}
       {deliveries.length === 0 && (
-        <p className="text-[12px] tracking-[0.1em] text-[#A8A8A4]">NO DELIVERIES YET.</p>
+        <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4]">NO DELIVERIES YET.</p>
       )}
     </div>
   )
@@ -1873,16 +1873,16 @@ function InheritancePanel({ memberId }: { memberId: string }) {
   const pct = (n: number | null | undefined) => n == null ? '—' : `${Math.round(n * 100)}%`
   const row = (label: string, value: string) => (
     <div className="flex gap-3">
-      <span className="text-[10px] tracking-[0.12em] text-[#A8A8A4] w-44 shrink-0 pt-0.5">{label}</span>
-      <span className="text-[11px] tracking-[0.06em] text-[#0A0A0A]">{value}</span>
+      <span className="text-[20px] tracking-[0.12em] text-[#A8A8A4] w-44 shrink-0 pt-0.5">{label}</span>
+      <span className="text-[20px] tracking-[0.06em] text-[#0A0A0A]">{value}</span>
     </div>
   )
 
   return (
     <div className="border border-[#E2E0DB] bg-[#FCFCFA] p-4">
       <button onClick={() => setOpen((v) => !v)} className="w-full flex items-baseline justify-between">
-        <span className="text-[11px] tracking-[0.16em] text-[#0A0A0A]">WHAT SHE INHERITED</span>
-        <span className="text-[10px] tracking-[0.14em] text-[#A8A8A4]">{open ? 'HIDE' : 'OPEN REPORT'}</span>
+        <span className="text-[20px] tracking-[0.16em] text-[#0A0A0A]">WHAT SHE INHERITED</span>
+        <span className="text-[20px] tracking-[0.14em] text-[#A8A8A4]">{open ? 'HIDE' : 'OPEN REPORT'}</span>
       </button>
       {open && r && (
         <div className="mt-3 space-y-2">
@@ -1891,29 +1891,29 @@ function InheritancePanel({ memberId }: { memberId: string }) {
           {row('GLOBAL LAYER', `${r.globalLayer.brandsCoded} BRANDS CODED · ${r.globalLayer.itemsInStock} PIECES IN STOCK · ${r.globalLayer.enginePasses.join(', ').toUpperCase()}`)}
           {row('RULES CARRIED IN', `${r.inheritedRules.stylist} STYLIST · ${r.inheritedRules.style} STYLE`)}
           {r.inheritedRules.labels.map((l, i) => (
-            <p key={i} className="text-[11px] tracking-[0.06em] text-[#6B6B6B] ml-[11.5rem]">· {l.toUpperCase()}</p>
+            <p key={i} className="text-[20px] tracking-[0.06em] text-[#6B6B6B] ml-[11.5rem]">· {l.toUpperCase()}</p>
           ))}
           {row('STARTS EMPTY', r.startsEmpty.join(', ').toUpperCase())}
 
           {r.brandReadiness.length > 0 && (
             <div className="border-t border-[#EFEDE8] pt-2 mt-2">
-              <p className="text-[10px] tracking-[0.14em] text-[#B4593A] mb-1">
+              <p className="text-[20px] tracking-[0.14em] text-[#B4593A] mb-1">
                 BRANDS TO RESOLVE BEFORE HER FIRST DELIVERY
               </p>
               {r.brandReadiness.map((b, i) => (
-                <p key={i} className="text-[11px] tracking-[0.06em] text-[#6B6B6B]">· {b.name.toUpperCase()} — {b.issue.toUpperCase()}</p>
+                <p key={i} className="text-[20px] tracking-[0.06em] text-[#6B6B6B]">· {b.name.toUpperCase()} — {b.issue.toUpperCase()}</p>
               ))}
             </div>
           )}
 
           <div className="border-t border-[#EFEDE8] pt-2 mt-2">
-            <p className="text-[10px] tracking-[0.14em] text-[#6B6B6B] mb-1">PREDICTED START</p>
-            <p className="text-[14px] tracking-[0.06em] text-[#0A0A0A]">
+            <p className="text-[20px] tracking-[0.14em] text-[#6B6B6B] mb-1">PREDICTED START</p>
+            <p className="text-[20px] tracking-[0.06em] text-[#0A0A0A]">
               {pct(r.predicted.predicted)} CLEAN OVER HER FIRST TEN
               {r.baseline && <span className="text-[#A8A8A4]"> · {r.baseline.name.toUpperCase()} ACTUALLY MANAGED {pct(r.baseline.cleanRate)}</span>}
             </p>
-            <p className="text-[10px] tracking-[0.08em] text-[#A8A8A4] mt-0.5">BASIS — {r.predicted.basis.toUpperCase()}</p>
-            <p className={`text-[11px] tracking-[0.06em] mt-1.5 ${r.verdict.startsWith('NOT TRANSFERRING') ? 'text-[#B4593A]' : 'text-[#3D7A50]'}`}>
+            <p className="text-[20px] tracking-[0.08em] text-[#A8A8A4] mt-0.5">BASIS — {r.predicted.basis.toUpperCase()}</p>
+            <p className={`text-[20px] tracking-[0.06em] mt-1.5 ${r.verdict.startsWith('NOT TRANSFERRING') ? 'text-[#B4593A]' : 'text-[#3D7A50]'}`}>
               {r.verdict.toUpperCase()}
             </p>
           </div>
@@ -1935,29 +1935,29 @@ function TransferSeries() {
 
   return (
     <div className="border border-[#E2E0DB] bg-[#FCFCFA] p-4">
-      <p className="text-[11px] tracking-[0.16em] text-[#0A0A0A]">DOES THE HARNESS TRANSFER?</p>
-      <p className="text-[10px] tracking-[0.1em] text-[#A8A8A4] mt-1 mb-3">
+      <p className="text-[20px] tracking-[0.16em] text-[#0A0A0A]">DOES THE HARNESS TRANSFER?</p>
+      <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4] mt-1 mb-3">
         FIRST TEN LOOKS, CLEAN RATE, IN ONBOARDING ORDER · EACH CLIENT SHOULD START ABOVE THE ONE BEFORE
       </p>
       <div className="space-y-2">
         {points.map((p) => (
           <div key={p.memberId} className="flex items-center gap-3">
-            <span className="text-[11px] tracking-[0.1em] text-[#6B6B6B] w-40 shrink-0">
+            <span className="text-[20px] tracking-[0.1em] text-[#6B6B6B] w-40 shrink-0">
               {p.order}. {p.name.toUpperCase()}
             </span>
             <div className="h-2.5 bg-[#EFEDE8] flex-1">
               <div className="h-2.5 bg-[#C4A882]" style={{ width: `${(p.cleanRate ?? 0) * 100}%` }} />
             </div>
-            <span className="text-[12px] tracking-[0.08em] text-[#0A0A0A] w-14 text-right">{pct(p.cleanRate)}</span>
-            <span className={`text-[11px] tracking-[0.08em] w-24 ${(p.deltaVsBaseline ?? 0) > 0 ? 'text-[#3D7A50]' : (p.deltaVsBaseline ?? 0) < 0 ? 'text-[#B4593A]' : 'text-[#A8A8A4]'}`}>
+            <span className="text-[20px] tracking-[0.08em] text-[#0A0A0A] w-14 text-right">{pct(p.cleanRate)}</span>
+            <span className={`text-[20px] tracking-[0.08em] w-24 ${(p.deltaVsBaseline ?? 0) > 0 ? 'text-[#3D7A50]' : (p.deltaVsBaseline ?? 0) < 0 ? 'text-[#B4593A]' : 'text-[#A8A8A4]'}`}>
               {p.deltaVsBaseline == null ? 'BASELINE' : `${p.deltaVsBaseline > 0 ? '+' : ''}${Math.round(p.deltaVsBaseline * 100)} PTS`}
             </span>
-            <span className="text-[10px] tracking-[0.08em] text-[#A8A8A4] w-16">{p.looks} LOOKS</span>
+            <span className="text-[20px] tracking-[0.08em] text-[#A8A8A4] w-16">{p.looks} LOOKS</span>
           </div>
         ))}
       </div>
       {points.length === 1 && (
-        <p className="text-[11px] tracking-[0.06em] text-[#8B5E00] mt-3">
+        <p className="text-[20px] tracking-[0.06em] text-[#8B5E00] mt-3">
           ONE CLIENT ONLY — SHE IS THE BASELINE. THE METRIC MEANS NOTHING UNTIL A SECOND CLIENT STARTS.
         </p>
       )}
@@ -1986,8 +1986,8 @@ function AttributionPanel({ memberId }: { memberId: string }) {
   return (
     <div className="border border-[#E2E0DB] bg-[#FCFCFA] p-4 space-y-3">
       <div>
-        <p className="text-[11px] tracking-[0.16em] text-[#0A0A0A]">WHERE HER LESSONS LANDED</p>
-        <p className="text-[10px] tracking-[0.1em] text-[#A8A8A4] mt-1">
+        <p className="text-[20px] tracking-[0.16em] text-[#0A0A0A]">WHERE HER LESSONS LANDED</p>
+        <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4] mt-1">
           {total} DECISIONS · {pct(a.attribution.promotedShare)} REACHED A WIDER LAYER THAN HER
         </p>
       </div>
@@ -1995,11 +1995,11 @@ function AttributionPanel({ memberId }: { memberId: string }) {
       <div className="space-y-1.5">
         {bars.map(([label, n, colour]) => (
           <div key={label} className="flex items-center gap-3">
-            <span className="text-[10px] tracking-[0.12em] text-[#6B6B6B] w-40 shrink-0">{label}</span>
+            <span className="text-[20px] tracking-[0.12em] text-[#6B6B6B] w-40 shrink-0">{label}</span>
             <div className="h-2 bg-[#EFEDE8] flex-1">
               <div className="h-2" style={{ width: `${total ? (n / total) * 100 : 0}%`, background: colour }} />
             </div>
-            <span className="text-[11px] tracking-[0.08em] text-[#0A0A0A] w-16 text-right">{n} · {pct(total ? n / total : 0)}</span>
+            <span className="text-[20px] tracking-[0.08em] text-[#0A0A0A] w-16 text-right">{n} · {pct(total ? n / total : 0)}</span>
           </div>
         ))}
       </div>
@@ -2007,21 +2007,21 @@ function AttributionPanel({ memberId }: { memberId: string }) {
       {/* Is the STYLIST wrong for her, or is the composer just making mistakes?
           Only the second one is fixed by more learning. */}
       <div className="border-t border-[#EFEDE8] pt-3">
-        <p className="text-[10px] tracking-[0.14em] text-[#6B6B6B] mb-1">STYLIST FIT</p>
-        <p className="text-[12px] tracking-[0.06em] text-[#0A0A0A]">
+        <p className="text-[20px] tracking-[0.14em] text-[#6B6B6B] mb-1">STYLIST FIT</p>
+        <p className="text-[20px] tracking-[0.06em] text-[#0A0A0A]">
           {pct(a.fit.constitutionShare)} OF HER EDITS OVERRULE RULES THE COMPOSER APPLIED CORRECTLY
           <span className="text-[#A8A8A4]"> · {a.fit.composerEdits} WERE COMPOSER MISTAKES · {a.fit.looks} LOOKS</span>
         </p>
-        <p className={`text-[11px] tracking-[0.06em] mt-1 ${a.fit.mismatch ? 'text-[#B4593A]' : 'text-[#6B6B6B]'}`}>
+        <p className={`text-[20px] tracking-[0.06em] mt-1 ${a.fit.mismatch ? 'text-[#B4593A]' : 'text-[#6B6B6B]'}`}>
           {a.fit.note.toUpperCase()}
         </p>
       </div>
 
       {a.rules.length > 0 && (
         <div className="border-t border-[#EFEDE8] pt-3">
-          <p className="text-[10px] tracking-[0.14em] text-[#6B6B6B] mb-1">RULES HER HISTORY HAS PRODUCED</p>
+          <p className="text-[20px] tracking-[0.14em] text-[#6B6B6B] mb-1">RULES HER HISTORY HAS PRODUCED</p>
           {a.rules.map((r, i) => (
-            <p key={i} className="text-[11px] tracking-[0.06em] text-[#6B6B6B]">
+            <p key={i} className="text-[20px] tracking-[0.06em] text-[#6B6B6B]">
               <span className={r.scope === 'stylist' ? 'text-[#3D7A50]' : 'text-[#8B5E00]'}>{r.scope.toUpperCase()}</span>
               {' · '}{r.label.toUpperCase()} <span className="text-[#A8A8A4]">({r.reason})</span>
             </p>
@@ -2060,14 +2060,14 @@ function FinishedWall({
 
   return (
     <div className="border border-[#E2E0DB] bg-white p-6">
-      <p className="text-[15px] tracking-[0.14em] text-[#0A0A0A]">{memberName.toUpperCase()}</p>
-      <p className="text-[12px] tracking-[0.12em] text-[#A8A8A4] mt-1 mb-5">
+      <p className="text-[20px] tracking-[0.14em] text-[#0A0A0A]">{memberName.toUpperCase()}</p>
+      <p className="text-[20px] tracking-[0.12em] text-[#A8A8A4] mt-1 mb-5">
         {total} FINISHED LOOK{total === 1 ? '' : 'S'} · BY OCCASION
       </p>
 
       {Array.from(byOccasion.entries()).map(([occasion, entries]) => (
         <div key={occasion} className="mb-7 last:mb-0">
-          <p className="text-[13px] tracking-[0.16em] text-[#8B5E00] mb-3 pb-2 border-b border-[#EFEDE8]">
+          <p className="text-[20px] tracking-[0.16em] text-[#8B5E00] mb-3 pb-2 border-b border-[#EFEDE8]">
             {occasion} · {entries.length}
           </p>
           <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
@@ -2080,7 +2080,7 @@ function FinishedWall({
                     alt=""
                     className={`w-full aspect-[3/4] object-cover border-2 transition-colors ${openLook === l.look_id ? 'border-[#C4A882]' : 'border-transparent hover:border-[#E2E0DB]'}`}
                   />
-                  <p className="text-[12px] tracking-[0.08em] text-[#0A0A0A] mt-1.5">
+                  <p className="text-[20px] tracking-[0.08em] text-[#0A0A0A] mt-1.5">
                     LOOK {l.position}
                     <span className="text-[#A8A8A4]"> · {formatLookSpend(lookSpend(l.items)).toUpperCase()}</span>
                   </p>
@@ -2095,10 +2095,10 @@ function FinishedWall({
                           <img src={it.image_url as string} alt="" className="w-12 aspect-[3/4] object-cover shrink-0" />
                         )}
                         <div className="min-w-0">
-                          <p className="text-[11px] tracking-[0.1em] text-[#A8A8A4] truncate">
+                          <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4] truncate">
                             {it.brand.toUpperCase()}{itemTypeLabel(it) && <span className="text-[#8B5E00]"> · {itemTypeLabel(it)}</span>}
                           </p>
-                          <p className="text-[12px] tracking-[0.06em] text-[#0A0A0A] truncate">
+                          <p className="text-[20px] tracking-[0.06em] text-[#0A0A0A] truncate">
                             {it.product_name.toUpperCase()}
                             {typeof it.price_gbp === 'number' && <span className="text-[#6B6B6B]"> {gbp(it.price_gbp)}</span>}
                           </p>
@@ -2106,7 +2106,7 @@ function FinishedWall({
                       </div>
                     ))}
                     <button
-                      className="mt-2 w-full text-[11px] tracking-[0.14em] text-[#8B5E00] border border-[#E8D9B8] py-1.5 hover:bg-[#FBF8F2]"
+                      className="mt-2 w-full text-[20px] tracking-[0.14em] text-[#8B5E00] border border-[#E8D9B8] py-1.5 hover:bg-[#FBF8F2]"
                       disabled={busy === `var-${l.look_id}`}
                       onClick={() => run(`var-${l.look_id}`, () => composeLookVariants(l.look_id), 'STYLED ANOTHER WAY')}
                     >
@@ -2136,19 +2136,19 @@ function ScoreStrip({ memberId }: { memberId: string }) {
   const likes = t.responses ? Math.round((t.memberYesRate ?? 0) * t.responses) : 0
   const cell = (label: string, value: string, note?: string, tone?: string) => (
     <div className="min-w-[7.5rem]">
-      <p className="text-[10px] tracking-[0.12em] text-[#A8A8A4]">{label}</p>
-      <p className={`text-[15px] tracking-[0.06em] mt-0.5 ${tone ?? 'text-[#0A0A0A]'}`}>{value}</p>
-      {note && <p className="text-[10px] tracking-[0.08em] text-[#A8A8A4] mt-0.5">{note}</p>}
+      <p className="text-[20px] tracking-[0.12em] text-[#A8A8A4]">{label}</p>
+      <p className={`text-[20px] tracking-[0.06em] mt-0.5 ${tone ?? 'text-[#0A0A0A]'}`}>{value}</p>
+      {note && <p className="text-[20px] tracking-[0.08em] text-[#A8A8A4] mt-0.5">{note}</p>}
     </div>
   )
 
   return (
     <div className="border border-[#E2E0DB] bg-[#FCFCFA] px-4 py-3">
       <div className="flex items-baseline justify-between mb-3">
-        <p className="text-[11px] tracking-[0.16em] text-[#0A0A0A]">
+        <p className="text-[20px] tracking-[0.16em] text-[#0A0A0A]">
           STAGE {t.stage} — {t.stage === 1 ? 'YOU REVIEW EVERY LOOK' : t.stage === 2 ? 'AUTO-SEND WITH A MORNING DIGEST' : 'COMPOSING AND SENDING ON SCHEDULE'}
         </p>
-        <p className="text-[10px] tracking-[0.12em] text-[#A8A8A4]">
+        <p className="text-[20px] tracking-[0.12em] text-[#A8A8A4]">
           {t.looksComposed} COMPOSED · {t.sample} REVIEWED
         </p>
       </div>
@@ -2166,7 +2166,7 @@ function ScoreStrip({ memberId }: { memberId: string }) {
       </div>
 
       {t.slotEdits.length > 0 && (
-        <p className="text-[11px] tracking-[0.06em] text-[#6B6B6B] mt-3">
+        <p className="text-[20px] tracking-[0.06em] text-[#6B6B6B] mt-3">
           WHERE THE EDITS LAND (OF {t.sample} REVIEWED) — {t.slotEdits.map((s) => {
             const bits: string[] = []
             if (s.swapped) bits.push(`${s.swapped} SWAPPED`)
@@ -2177,12 +2177,12 @@ function ScoreStrip({ memberId }: { memberId: string }) {
       )}
 
       {t.trend && (
-        <p className="text-[11px] tracking-[0.06em] text-[#6B6B6B] mt-3">
+        <p className="text-[20px] tracking-[0.06em] text-[#6B6B6B] mt-3">
           {t.trend.delta > 0.05 ? 'IMPROVING' : t.trend.delta < -0.05 ? 'SLIPPING' : 'FLAT'} — {pct(t.trend.previous)} CLEAN OVER THE PREVIOUS 10, {pct(t.trend.recent)} OVER THE LAST 10
         </p>
       )}
       {t.blockers.length > 0 && (
-        <p className="text-[11px] tracking-[0.06em] text-[#8B5E00] mt-2">
+        <p className="text-[20px] tracking-[0.06em] text-[#8B5E00] mt-2">
           BEFORE SHE CAN BE SENT LOOKS UNREVIEWED — {t.blockers.join(' · ').toUpperCase()}
         </p>
       )}
@@ -2231,7 +2231,7 @@ function NewDeliveryForm({
               <button
                 key={t}
                 onClick={() => setTrigger(t)}
-                className={`text-[11px] tracking-[0.1em] px-3 py-2 border transition-colors duration-300 ${
+                className={`text-[20px] tracking-[0.1em] px-3 py-2 border transition-colors duration-300 ${
                   trigger === t ? 'border-[#0A0A0A] bg-[#0A0A0A] text-white' : 'border-[#E2E0DB] text-[#6B6B6B]'
                 }`}
               >
@@ -2265,8 +2265,8 @@ function NewDeliveryForm({
                 climate === c.id ? 'border-[#0A0A0A] bg-[#0A0A0A] text-white' : 'border-[#E2E0DB] text-[#6B6B6B]'
               }`}
             >
-              <span className="block text-[11px] tracking-[0.1em]">{c.label}</span>
-              <span className={`block text-[10px] tracking-[0.08em] ${climate === c.id ? 'text-[#C4A882]' : 'text-[#A8A8A4]'}`}>
+              <span className="block text-[20px] tracking-[0.1em]">{c.label}</span>
+              <span className={`block text-[20px] tracking-[0.08em] ${climate === c.id ? 'text-[#C4A882]' : 'text-[#A8A8A4]'}`}>
                 {c.hint.toUpperCase()}
               </span>
             </button>
@@ -2359,10 +2359,10 @@ function DeliveryCard({
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-3 flex-wrap">
-            <p className="text-[14px] tracking-[0.12em] text-[#0A0A0A]">{member?.name ?? '—'}</p>
-            <span className={`text-[10px] tracking-[0.14em] border px-2 py-0.5 ${STATUS_TONE[d.status]}`}>{d.status.toUpperCase()}</span>
+            <p className="text-[20px] tracking-[0.12em] text-[#0A0A0A]">{member?.name ?? '—'}</p>
+            <span className={`text-[20px] tracking-[0.14em] border px-2 py-0.5 ${STATUS_TONE[d.status]}`}>{d.status.toUpperCase()}</span>
             {d.occasion && (
-              <span className="text-[10px] tracking-[0.14em] text-[#6B6B6B] border border-[#E2E0DB] px-2 py-0.5">
+              <span className="text-[20px] tracking-[0.14em] text-[#6B6B6B] border border-[#E2E0DB] px-2 py-0.5">
                 {OCCASION_LABEL[d.occasion]}
               </span>
             )}
@@ -2370,29 +2370,29 @@ function DeliveryCard({
                 wool had nothing on screen to say the climate never took —
                 a badge that is simply absent is the tell. */}
             {(d as { climate?: string | null }).climate && (
-              <span className="text-[10px] tracking-[0.14em] text-[#8B5E00] border border-[#E8D9B8] px-2 py-0.5">
+              <span className="text-[20px] tracking-[0.14em] text-[#8B5E00] border border-[#E8D9B8] px-2 py-0.5">
                 {CLIMATES.find((c) => c.id === (d as { climate?: string }).climate)?.label ?? ''}
               </span>
             )}
             {d.occasion === 'travel' && !(d as { climate?: string | null }).climate && (
-              <span className="text-[10px] tracking-[0.14em] text-[#B4593A] border border-[#E8C4B8] px-2 py-0.5">
+              <span className="text-[20px] tracking-[0.14em] text-[#B4593A] border border-[#E8C4B8] px-2 py-0.5">
                 NO WEATHER SET — WILL COMPOSE FOR ANY SEASON
               </span>
             )}
             {calibration && (
-              <span className="text-[10px] tracking-[0.14em] text-[#4A6FA5] border border-[#C7D4E8] px-2 py-0.5">
+              <span className="text-[20px] tracking-[0.14em] text-[#4A6FA5] border border-[#C7D4E8] px-2 py-0.5">
                 TASTE CALIBRATION
               </span>
             )}
             {d.trigger === 'anticipation' && (
-              <span className="text-[10px] tracking-[0.14em] text-[#C4A882] border border-[#E8D9B8] px-2 py-0.5">ANTICIPATION MOVE</span>
+              <span className="text-[20px] tracking-[0.14em] text-[#C4A882] border border-[#E8D9B8] px-2 py-0.5">ANTICIPATION MOVE</span>
             )}
             {d.is_synthetic && (
-              <span className="text-[10px] tracking-[0.14em] text-[#8B5E00] border border-[#E8D9B8] px-2 py-0.5">DRY RUN</span>
+              <span className="text-[20px] tracking-[0.14em] text-[#8B5E00] border border-[#E8D9B8] px-2 py-0.5">DRY RUN</span>
             )}
           </div>
-          {d.request_text && <p className="text-[12px] tracking-[0.06em] text-[#6B6B6B] mt-1.5">“{d.request_text.toUpperCase()}”</p>}
-          <p className="text-[11px] tracking-[0.14em] text-[#6B6B6B] mt-2">
+          {d.request_text && <p className="text-[20px] tracking-[0.06em] text-[#6B6B6B] mt-1.5">“{d.request_text.toUpperCase()}”</p>}
+          <p className="text-[20px] tracking-[0.14em] text-[#6B6B6B] mt-2">
             {formatRoomMix(d.effective_weights)}
             {calibration && ' — RAW WEIGHTING, NO OCCASION TILT'}
           </p>
@@ -2416,26 +2416,26 @@ function DeliveryCard({
               her words were half-remembered, the occasion was wrong. */}
           {setupOpen && (
             <div className="border border-[#E2E0DB] bg-[#FCFCFA] p-4 space-y-3">
-              <p className="text-[11px] tracking-[0.16em] text-[#0A0A0A]">THE BRIEF</p>
+              <p className="text-[20px] tracking-[0.16em] text-[#0A0A0A]">THE BRIEF</p>
               <div>
-                <p className="text-[10px] tracking-[0.12em] text-[#A8A8A4] mb-1">HER WORDS</p>
+                <p className="text-[20px] tracking-[0.12em] text-[#A8A8A4] mb-1">HER WORDS</p>
                 <input className={input} value={setupText} onChange={(e) => setSetupText(e.target.value)} />
               </div>
               <div className="flex flex-wrap gap-4">
                 <div>
-                  <p className="text-[10px] tracking-[0.12em] text-[#A8A8A4] mb-1">OCCASION</p>
+                  <p className="text-[20px] tracking-[0.12em] text-[#A8A8A4] mb-1">OCCASION</p>
                   <select className={`${input} !w-auto`} value={setupOccasion} onChange={(e) => setSetupOccasion(e.target.value as OccasionId)}>
                     {OCCASION_TYPES.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
                   </select>
                 </div>
                 <div>
-                  <p className="text-[10px] tracking-[0.12em] text-[#A8A8A4] mb-1">WEATHER</p>
+                  <p className="text-[20px] tracking-[0.12em] text-[#A8A8A4] mb-1">WEATHER</p>
                   <div className="flex gap-1.5">
                     {CLIMATES.map((c) => (
                       <button
                         key={c.id}
                         onClick={() => setSetupClimate(setupClimate === c.id ? null : c.id)}
-                        className={`text-[11px] tracking-[0.1em] px-2.5 py-1.5 border transition-colors ${
+                        className={`text-[20px] tracking-[0.1em] px-2.5 py-1.5 border transition-colors ${
                           setupClimate === c.id ? 'border-[#0A0A0A] bg-[#0A0A0A] text-white' : 'border-[#E2E0DB] text-[#6B6B6B]'
                         }`}
                       >
@@ -2445,7 +2445,7 @@ function DeliveryCard({
                   </div>
                 </div>
               </div>
-              <p className="text-[10px] tracking-[0.1em] text-[#A8A8A4]">
+              <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4]">
                 CHANGING THE OCCASION RE-DERIVES THE ROOM MIX. LOOKS ALREADY COMPOSED STAY AS THEY ARE — COMPOSE AGAIN TO APPLY IT.
               </p>
               <div className="flex gap-2">
@@ -2466,7 +2466,7 @@ function DeliveryCard({
           )}
 
           {/* Non-negotiables tracker — calibration sets only need the 3 probes */}
-          <div className="flex gap-4 text-[10px] tracking-[0.12em]">
+          <div className="flex gap-4 text-[20px] tracking-[0.12em]">
             <span className={d.looks.length >= 3 ? 'text-[#3D7A50]' : 'text-[#B83A3A]'}>
               {d.looks.length >= 3 ? '✓' : '✗'} 3 LOOKS
             </span>
@@ -2533,7 +2533,7 @@ function DeliveryCard({
             d.status === 'draft' && (
               <div className="flex gap-2">
                 <button
-                  className="text-[11px] tracking-[0.12em] px-3 py-1.5 bg-[#C4A882] text-white hover:opacity-85 disabled:opacity-40"
+                  className="text-[20px] tracking-[0.12em] px-3 py-1.5 bg-[#C4A882] text-white hover:opacity-85 disabled:opacity-40"
                   disabled={busy === `compose-${d.delivery_id}`}
                   title="Build 3 looks from the item library, weighted by her brand affinities, brand families and past swaps"
                   onClick={() =>
@@ -2547,7 +2547,7 @@ function DeliveryCard({
                   {busy === `compose-${d.delivery_id}` ? 'COMPOSING…' : '✦ COMPOSE 3 LOOKS'}
                 </button>
                 <button
-                  className="text-[11px] tracking-[0.12em] px-3 py-1.5 border border-[#C4A882] text-[#8B5E00] hover:bg-[#C4A882] hover:text-white disabled:opacity-40"
+                  className="text-[20px] tracking-[0.12em] px-3 py-1.5 border border-[#C4A882] text-[#8B5E00] hover:bg-[#C4A882] hover:text-white disabled:opacity-40"
                   disabled={busy === `compose-owned-${d.delivery_id}`}
                   title={`Style what she owns: at least ${Math.round(ownedShare * 100)}% of the looks are built around a piece from her wardrobe (owned pieces are £0 of new spend). Needs approved wardrobe pieces — see /admin/wardrobe.`}
                   onClick={() =>
@@ -2560,7 +2560,7 @@ function DeliveryCard({
                 >
                   {busy === `compose-owned-${d.delivery_id}` ? 'COMPOSING…' : '◈ STYLE WHAT SHE OWNS'}
                 </button>
-                <label className="flex items-center gap-1 text-[10px] tracking-[0.12em] text-[#6B6B6B]" title="Share of looks that must contain at least one owned piece">
+                <label className="flex items-center gap-1 text-[20px] tracking-[0.12em] text-[#6B6B6B]" title="Share of looks that must contain at least one owned piece">
                   <input
                     type="number"
                     min={10}
@@ -2568,7 +2568,7 @@ function DeliveryCard({
                     step={10}
                     value={Math.round(ownedShare * 100)}
                     onChange={(e) => setOwnedShare(Math.max(0.1, Math.min(1, Number(e.target.value) / 100)))}
-                    className="w-12 border border-[#E2E0DB] px-1.5 py-1 text-[11px] text-[#0A0A0A] bg-white"
+                    className="w-12 border border-[#E2E0DB] px-1.5 py-1 text-[20px] text-[#0A0A0A] bg-white"
                   />
                   % OWNED
                 </label>
@@ -2609,7 +2609,7 @@ function DeliveryCard({
                   compose again with nothing carried over. */}
               {d.looks.length > 0 && (
                 <button
-                  className="text-[10px] tracking-[0.12em] text-[#8B5E00] hover:underline ml-auto"
+                  className="text-[20px] tracking-[0.12em] text-[#8B5E00] hover:underline ml-auto"
                   title="Empty every look here — the slots stay, and nothing is learned"
                   onClick={() => {
                     if (window.confirm(`Empty all ${d.looks.length} looks?\n\nTheir items, shoots and everything they taught the composer are removed, so this delivery has no effect on anything. The looks stay, ready to compose into again.`)) {
@@ -2625,7 +2625,7 @@ function DeliveryCard({
                   decisions stay; a delivery that was a mistake should leave
                   nothing behind. */}
               <button
-                className={`text-[10px] tracking-[0.12em] text-[#B83A3A] hover:underline ${d.looks.length ? '' : 'ml-auto'}`}
+                className={`text-[20px] tracking-[0.12em] text-[#B83A3A] hover:underline ${d.looks.length ? '' : 'ml-auto'}`}
                 title="Remove the delivery — what it taught the composer stays"
                 onClick={() => {
                   if (window.confirm('Delete this delivery?\n\nWhat it taught the composer stays — her swaps and verdicts here were real decisions.')) {
@@ -2636,7 +2636,7 @@ function DeliveryCard({
                 DELETE
               </button>
               <button
-                className="text-[10px] tracking-[0.12em] text-[#B83A3A] hover:underline"
+                className="text-[20px] tracking-[0.12em] text-[#B83A3A] hover:underline"
                 title="Remove the delivery and everything it taught"
                 onClick={() => {
                   if (window.confirm('Delete this delivery AND forget it?\n\nEvery swap, removal, verdict and note from it is deleted, so it shapes nothing. For a delivery that was a mistake — wrong brief, wrong weather, a test. This cannot be undone.')) {
@@ -2712,7 +2712,7 @@ function VariantGroup({
       {lead}
       <button
         onClick={() => setOpen((v) => !v)}
-        className="mt-1.5 mb-2 text-[10px] tracking-[0.16em] text-[#8B5E00] hover:underline"
+        className="mt-1.5 mb-2 text-[20px] tracking-[0.16em] text-[#8B5E00] hover:underline"
       >
         ◆ {open ? 'HIDE THE OTHER WAYS' : `SEE ${heroName.toUpperCase()} STYLED ${count - 1} OTHER WAY${count - 1 === 1 ? '' : 'S'}`}
       </button>
@@ -2818,7 +2818,7 @@ function LookRow({
     <div className="border border-[#E2E0DB] px-4 py-3">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <p className="text-[13px] tracking-[0.14em] text-[#0A0A0A]">
+          <p className="text-[20px] tracking-[0.14em] text-[#0A0A0A]">
             LOOK {l.position} — {formatRoomMix(l.room_mix) || 'NO ROOM MIX'}
             {l.approved_at && <span className="ml-2 text-[#3D7A50]">· APPROVED ✓</span>}
             {composed && (
@@ -2830,10 +2830,10 @@ function LookRow({
           {composed && l.image_url && !piecesOpen ? (
             <div className="mt-3">
               <button onClick={() => setPiecesOpen(true)} className="block text-left" title="Show the pieces that make it up">
-                <div className="w-80 border-2 border-[#C4A882] bg-white">
+                <div className="w-96 border-2 border-[#C4A882] bg-white">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={l.image_url} alt="Higgsfield shoot" className="w-full aspect-[3/4] object-cover" />
-                  <p className="text-[11px] tracking-[0.12em] text-[#8B5E00] px-2.5 py-2">
+                  <p className="text-[20px] tracking-[0.12em] text-[#8B5E00] px-2.5 py-2">
                     ✦ SHOT · {l.items.length} PIECE{l.items.length === 1 ? '' : 'S'} — TAP TO SEE THEM
                   </p>
                 </div>
@@ -2842,13 +2842,13 @@ function LookRow({
           ) : composed ? (
             <div className="mt-3 flex gap-3 flex-wrap items-start">
               {l.items.map((it, i) => (
-                <div key={i} className="w-72 border border-[#E2E0DB] bg-white">
+                <div key={i} className="w-80 border border-[#E2E0DB] bg-white">
                   {it.image_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={it.image_url as string} alt={it.product_name} className="w-full aspect-[3/4] object-cover bg-[#F8F8F6]" />
                   ) : (
                     <div className="w-full aspect-[3/4] bg-[#F8F8F6] flex items-center justify-center">
-                      <span className="text-[11px] tracking-[0.1em] text-[#A8A8A4]">NO IMAGE</span>
+                      <span className="text-[20px] tracking-[0.1em] text-[#A8A8A4]">NO IMAGE</span>
                     </div>
                   )}
                   <div className="px-2.5 py-2">
@@ -2856,17 +2856,17 @@ function LookRow({
                         not say it — "Alyora Espresso" and "Vapouri Nature"
                         could be anything — and the slot a piece fills is the
                         first thing you check when reading a look. */}
-                    <p className="text-[11px] tracking-[0.12em] text-[#A8A8A4] flex items-baseline justify-between gap-2">
+                    <p className="text-[20px] tracking-[0.12em] text-[#A8A8A4] flex items-baseline justify-between gap-2">
                       <span className="truncate">{it.brand.toUpperCase()}</span>
                       {itemTypeLabel(it) && (
                         <span className="text-[#8B5E00] shrink-0">{itemTypeLabel(it)}</span>
                       )}
                     </p>
-                    <p className="text-[12px] tracking-[0.08em] text-[#0A0A0A] mt-0.5">
+                    <p className="text-[20px] tracking-[0.08em] text-[#0A0A0A] mt-0.5">
                       {it.owned ? '◈ OWNED — ' : ''}
                       {it.product_name.toUpperCase()}
                     </p>
-                    <p className={`text-[11px] tracking-[0.08em] mt-0.5 ${it.owned ? 'text-[#8B5E00]' : 'text-[#6B6B6B]'}`}>
+                    <p className={`text-[20px] tracking-[0.08em] mt-0.5 ${it.owned ? 'text-[#8B5E00]' : 'text-[#6B6B6B]'}`}>
                       {it.owned
                         ? `IN HER WARDROBE${typeof it.estimated_value_gbp === 'number' ? ` · WORTH ~£${it.estimated_value_gbp}` : ''}`
                         : typeof it.price_gbp === 'number' ? gbp(it.price_gbp) : ''}
@@ -2877,14 +2877,14 @@ function LookRow({
                       <div className="mt-1.5 flex items-center gap-3">
                         {it.slot && (
                           <button
-                            className="text-[11px] tracking-[0.12em] text-[#C4A882] hover:underline"
+                            className="text-[20px] tracking-[0.12em] text-[#C4A882] hover:underline"
                             onClick={() => (swapIdx === i ? setSwapIdx(null) : openSwap(i))}
                           >
                             {swapIdx === i ? 'CLOSE' : '⇄ SWAP'}
                           </button>
                         )}
                         <button
-                          className="text-[11px] tracking-[0.12em] text-[#B83A3A] hover:underline"
+                          className="text-[20px] tracking-[0.12em] text-[#B83A3A] hover:underline"
                           title="Remove from the look — teaches the system this piece was wrong for her"
                           onClick={() => {
                             setSwapIdx(null)
@@ -2900,12 +2900,12 @@ function LookRow({
               ))}
               {!sent && (
                 <div className="w-56 border border-dashed border-[#D8D5CE] bg-[#FCFCFA] px-3 py-3">
-                  <p className="text-[11px] tracking-[0.14em] text-[#6B6B6B] mb-2">+ ADD TO THIS LOOK</p>
+                  <p className="text-[20px] tracking-[0.14em] text-[#6B6B6B] mb-2">+ ADD TO THIS LOOK</p>
                   <div className="flex flex-wrap gap-1.5">
                     {ADD_SLOTS.map((sl) => (
                       <button
                         key={sl.value}
-                        className={`text-[11px] tracking-[0.1em] px-2 py-1 border transition-colors ${
+                        className={`text-[20px] tracking-[0.1em] px-2 py-1 border transition-colors ${
                           addSlot === sl.value
                             ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]'
                             : presentSlots.has(sl.value)
@@ -2923,22 +2923,22 @@ function LookRow({
                 </div>
               )}
               {l.image_url && (
-                <div className="w-72 border-2 border-[#C4A882] bg-white">
+                <div className="w-80 border-2 border-[#C4A882] bg-white">
                   <button
                     onClick={() => setPiecesOpen(false)}
-                    className="w-full text-left text-[10px] tracking-[0.14em] text-[#A8A8A4] px-2.5 pt-2 hover:text-[#0A0A0A]"
+                    className="w-full text-left text-[20px] tracking-[0.14em] text-[#A8A8A4] px-2.5 pt-2 hover:text-[#0A0A0A]"
                   >
                     HIDE THE PIECES
                   </button>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={l.image_url} alt="Higgsfield shoot" className="w-full aspect-[3/4] object-cover" />
-                  <p className="text-[11px] tracking-[0.12em] text-[#8B5E00] px-2.5 pt-2">✦ HIGGSFIELD SHOOT</p>
+                  <p className="text-[20px] tracking-[0.12em] text-[#8B5E00] px-2.5 pt-2">✦ HIGGSFIELD SHOOT</p>
                   {/* One generation returns several frames. They used to be
                       thrown away — now the alternatives sit under the one in
                       use, so picking a different shot is one tap. */}
                   {shootHistory.length > 1 && (
                     <div className="px-2.5 pb-2 pt-1.5">
-                      <p className="text-[10px] tracking-[0.12em] text-[#A8A8A4] mb-1.5">
+                      <p className="text-[20px] tracking-[0.12em] text-[#A8A8A4] mb-1.5">
                         {shootHistory.length} FRAMES — TAP TO USE ANOTHER
                       </p>
                       <div className="flex gap-1.5 flex-wrap">
@@ -2957,7 +2957,7 @@ function LookRow({
                               disabled={shooting}
                               title="Delete this frame"
                               onClick={() => run(`df-${l.look_id}`, () => deleteLookShoot(l.look_id, h.url), 'FRAME DELETED')}
-                              className="absolute -top-1.5 -right-1.5 bg-white border border-[#E2E0DB] text-[#B4593A] text-[10px] leading-none w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity hover:border-[#B4593A]"
+                              className="absolute -top-1.5 -right-1.5 bg-white border border-[#E2E0DB] text-[#B4593A] text-[20px] leading-none w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity hover:border-[#B4593A]"
                             >
                               ×
                             </button>
@@ -2973,21 +2973,21 @@ function LookRow({
                   image, so it read as "the shoot didn't work". Show it, say
                   why, and let her overrule the check. */}
               {!l.image_url && rejectedShoot && (
-                <div className="w-72 border-2 border-dashed border-[#C08A6A] bg-white">
+                <div className="w-80 border-2 border-dashed border-[#C08A6A] bg-white">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={rejectedShoot.url} alt="Rejected shoot" className="w-full aspect-[3/4] object-cover opacity-80" />
                   <div className="px-2.5 py-2">
-                    <p className="text-[11px] tracking-[0.12em] text-[#B4593A]">
+                    <p className="text-[20px] tracking-[0.12em] text-[#B4593A]">
                       SHOOT HELD BACK{typeof rejectedShoot.fidelity?.score === 'number' ? ` — ${Math.round(rejectedShoot.fidelity.score * 100)}% FAITHFUL` : ''}
                       {heldBack.length > 1 && <span className="text-[#A8A8A4]"> · {heldBack.length} FRAMES TO CHOOSE FROM</span>}
                     </p>
                     {!rejectedShoot.fidelity && (
-                      <p className="text-[10px] tracking-[0.08em] text-[#A8A8A4] mt-1">
+                      <p className="text-[20px] tracking-[0.08em] text-[#A8A8A4] mt-1">
                         ANOTHER FRAME FROM THE SAME SHOOT — NOT CHECKED AGAINST THE CLOTHES
                       </p>
                     )}
                     {(rejectedShoot.fidelity?.issues ?? []).slice(0, 3).map((iss, i) => (
-                      <p key={i} className="text-[10px] tracking-[0.06em] text-[#6B6B6B] mt-1 leading-snug">
+                      <p key={i} className="text-[20px] tracking-[0.06em] text-[#6B6B6B] mt-1 leading-snug">
                         {String(iss.field).toUpperCase()} · {iss.item}: {iss.seen}
                       </p>
                     ))}
@@ -3002,7 +3002,7 @@ function LookRow({
                           >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={h.url} alt="" className="w-14 aspect-[3/4] object-cover" />
-                            <span className="block text-[9px] tracking-[0.08em] text-[#6B6B6B] py-0.5">
+                            <span className="block text-[20px] tracking-[0.08em] text-[#6B6B6B] py-0.5">
                               {typeof h.fidelity?.score === 'number'
                                 ? `${Math.round(h.fidelity.score * 100)}%`
                                 : `FRAME ${h.frame ?? i + 1}`}
@@ -3012,7 +3012,7 @@ function LookRow({
                             disabled={shooting}
                             title="Delete this frame"
                             onClick={() => { setHeldPick(0); run(`df-${l.look_id}`, () => deleteLookShoot(l.look_id, h.url), 'FRAME DELETED') }}
-                            className="absolute -top-1.5 -right-1.5 bg-white border border-[#E2E0DB] text-[#B4593A] text-[10px] leading-none w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity hover:border-[#B4593A]"
+                            className="absolute -top-1.5 -right-1.5 bg-white border border-[#E2E0DB] text-[#B4593A] text-[20px] leading-none w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity hover:border-[#B4593A]"
                           >
                             ×
                           </button>
@@ -3024,14 +3024,14 @@ function LookRow({
                       <button
                         disabled={shooting}
                         onClick={() => run(`rs-${l.look_id}`, () => restoreLookShoot(l.look_id, rejectedShoot.url), 'SHOOT USED ANYWAY')}
-                        className="text-[10px] tracking-[0.14em] text-[#0A0A0A] border border-[#E2E0DB] px-2 py-1 hover:border-[#0A0A0A] disabled:opacity-40"
+                        className="text-[20px] tracking-[0.14em] text-[#0A0A0A] border border-[#E2E0DB] px-2 py-1 hover:border-[#0A0A0A] disabled:opacity-40"
                       >
                         USE IT ANYWAY
                       </button>
                       <button
                         disabled={shooting}
                         onClick={() => setPoseOpen(true)}
-                        className="text-[10px] tracking-[0.14em] text-[#8B5E00] border border-[#E8D9B8] px-2 py-1 hover:border-[#8B5E00] disabled:opacity-40"
+                        className="text-[20px] tracking-[0.14em] text-[#8B5E00] border border-[#E8D9B8] px-2 py-1 hover:border-[#8B5E00] disabled:opacity-40"
                       >
                         ✦ SHOOT AGAIN
                       </button>
@@ -3043,7 +3043,7 @@ function LookRow({
           ) : (
             <div className="mt-1.5 space-y-0.5">
               {l.items.map((it, i) => (
-                <p key={i} className="text-[11px] tracking-[0.06em] text-[#6B6B6B]">
+                <p key={i} className="text-[20px] tracking-[0.06em] text-[#6B6B6B]">
                   {it.owned ? '◈ OWNED — ' : ''}
                   {it.brand.toUpperCase()} {it.product_name.toUpperCase()}
                   {itemTypeLabel(it) && <span className="text-[#8B5E00]"> · {itemTypeLabel(it)}</span>}
@@ -3056,14 +3056,14 @@ function LookRow({
           )}
           {(swapIdx !== null || addSlot !== null) && (
             <div className="mt-2 border border-[#E8D9B8] bg-[#FBF8F2] p-3">
-              <p className="text-[10px] tracking-[0.14em] text-[#8B5E00] mb-2">
+              <p className="text-[20px] tracking-[0.14em] text-[#8B5E00] mb-2">
                 {swapIdx !== null
                   ? `SWAP ${l.items[swapIdx]?.product_name?.toUpperCase()}`
                   : `ADD ${(ADD_SLOTS.find((x) => x.value === addSlot)?.label ?? addSlot ?? '').toUpperCase()}`}
                 {' '}— RANKED FOR {member?.name?.toUpperCase() ?? 'HER'} (TASTE × COHERENCE × OCCASION). YOUR PICK TEACHES THE SYSTEM.
               </p>
-              {swapBusy && <p className="text-[11px] tracking-[0.1em] text-[#A8A8A4]">FINDING ALTERNATES…</p>}
-              {swapOptions && swapOptions.length === 0 && <p className="text-[11px] tracking-[0.1em] text-[#A8A8A4]">NOTHING IN STOCK FOR THIS SLOT IN THE LIBRARY.</p>}
+              {swapBusy && <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4]">FINDING ALTERNATES…</p>}
+              {swapOptions && swapOptions.length === 0 && <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4]">NOTHING IN STOCK FOR THIS SLOT IN THE LIBRARY.</p>}
               {swapOptions && swapOptions.length > 0 && (() => {
                 const q = swapQuery.trim()
                 const brandChoices = Array.from(new Set(swapOptions.map((o) => o.brand_name).filter(Boolean) as string[])).sort()
@@ -3079,7 +3079,7 @@ function LookRow({
                 })
                 const active = !!(q || swapBrand || swapColour)
                 const shownOptions = filtered.slice(0, active ? 48 : 12)
-                const selectCls = 'border border-[#E2E0DB] bg-white px-2 py-2 text-[11px] tracking-[0.08em] outline-none focus:border-[#0A0A0A] uppercase text-[#4A4E57]'
+                const selectCls = 'border border-[#E2E0DB] bg-white px-2 py-2 text-[20px] tracking-[0.08em] outline-none focus:border-[#0A0A0A] uppercase text-[#4A4E57]'
                 return (
                   <>
                     <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -3087,7 +3087,7 @@ function LookRow({
                         value={swapQuery}
                         onChange={(e) => setSwapQuery(e.target.value)}
                         placeholder={`SEARCH ${swapOptions.length} IN STOCK — NAME, TYPE (E.G. TRAINERS), BRAND OR COLOUR`}
-                        className="flex-1 min-w-[200px] max-w-md border border-[#E2E0DB] bg-white px-3 py-2 text-[11px] tracking-[0.08em] outline-none focus:border-[#0A0A0A] uppercase placeholder:text-[#A8A8A4]"
+                        className="flex-1 min-w-[200px] max-w-md border border-[#E2E0DB] bg-white px-3 py-2 text-[20px] tracking-[0.08em] outline-none focus:border-[#0A0A0A] uppercase placeholder:text-[#A8A8A4]"
                       />
                       {brandChoices.length > 1 && (
                         <select value={swapBrand} onChange={(e) => setSwapBrand(e.target.value)} className={selectCls}>
@@ -3105,14 +3105,14 @@ function LookRow({
                         <button
                           type="button"
                           onClick={() => { setSwapQuery(''); setSwapBrand(''); setSwapColour('') }}
-                          className="text-[11px] tracking-[0.12em] text-[#8B5E00] hover:underline px-1"
+                          className="text-[20px] tracking-[0.12em] text-[#8B5E00] hover:underline px-1"
                         >
                           CLEAR
                         </button>
                       )}
                     </div>
                     {active && shownOptions.length === 0 && (
-                      <p className="text-[11px] tracking-[0.1em] text-[#A8A8A4] mb-2">NO MATCH — TRY A DIFFERENT WORD, BRAND OR COLOUR.</p>
+                      <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4] mb-2">NO MATCH — TRY A DIFFERENT WORD, BRAND OR COLOUR.</p>
                     )}
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                   {shownOptions.map((o) => (
@@ -3135,7 +3135,7 @@ function LookRow({
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={o.image_url} alt={o.product_name} className="w-full aspect-[3/4] object-cover" />
                       )}
-                      <p className="text-[11px] tracking-[0.1em] text-[#6B6B6B] px-1.5 py-1.5 truncate">
+                      <p className="text-[20px] tracking-[0.1em] text-[#6B6B6B] px-1.5 py-1.5 truncate">
                         {(o.brand_name ?? '').toUpperCase()} {o.product_name.toUpperCase()}
                         {typeof o.price_gbp === 'number' && ` ${gbp(o.price_gbp)}`}
                       </p>
@@ -3149,7 +3149,7 @@ function LookRow({
           )}
           {poseOpen && !sent && (
             <div className="mt-2 border border-[#E8D9B8] bg-[#FBF8F2] p-3">
-              <p className="text-[10px] tracking-[0.14em] text-[#8B5E00] mb-2">
+              <p className="text-[20px] tracking-[0.14em] text-[#8B5E00] mb-2">
                 {l.image_url ? 'SHOOT AGAIN — PICK A POSE AND LIGHTING. THE CURRENT SHOOT IS KEPT.' : 'PICK A POSE AND LIGHTING'}
               </p>
               <div className="flex flex-wrap gap-1.5">
@@ -3171,14 +3171,14 @@ function LookRow({
                         `HIGGSFIELD SHOOT (${c.label}) ATTACHED — TAKES A FEW MINUTES, THEN STYLED SEVERAL WAYS`)
                     }}
                   >
-                    <span className="block text-[11px] tracking-[0.1em] text-[#0A0A0A]">{c.label}</span>
-                    <span className="block text-[10px] tracking-[0.08em] text-[#A8A8A4]">{c.sublabel}</span>
+                    <span className="block text-[20px] tracking-[0.1em] text-[#0A0A0A]">{c.label}</span>
+                    <span className="block text-[20px] tracking-[0.08em] text-[#A8A8A4]">{c.sublabel}</span>
                   </button>
                 ))}
               </div>
               {shootHistory.length > 1 && (
                 <>
-                  <p className="text-[10px] tracking-[0.14em] text-[#8B5E00] mt-3 mb-1.5">
+                  <p className="text-[20px] tracking-[0.14em] text-[#8B5E00] mt-3 mb-1.5">
                     OTHER FRAMES AND EARLIER SHOOTS — TAP TO USE ONE
                   </p>
                   <div className="flex gap-2 flex-wrap">
@@ -3192,7 +3192,7 @@ function LookRow({
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={h.url} alt="" className="w-16 aspect-[3/4] object-cover" />
-                        <span className="block text-[9px] tracking-[0.1em] text-[#6B6B6B] py-0.5">
+                        <span className="block text-[20px] tracking-[0.1em] text-[#6B6B6B] py-0.5">
                           {h.url === l.image_url ? 'CURRENT' : (h.pose ?? 'SHOOT')}
                         </span>
                       </button>
@@ -3202,17 +3202,17 @@ function LookRow({
               )}
             </div>
           )}
-          {l.notes && <p className="text-[11px] tracking-[0.06em] text-[#A8A8A4] mt-1">{l.notes.toUpperCase()}</p>}
+          {l.notes && <p className="text-[20px] tracking-[0.06em] text-[#A8A8A4] mt-1">{l.notes.toUpperCase()}</p>}
           {/* One tap after a swap says where the lesson belongs and skips the
               wait for the promotion rules to gather evidence. Kept away from
               the actions above: it is a note about an edit, not an edit. */}
           {composed && !sent && (
             <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-              <span className="text-[10px] tracking-[0.14em] text-[#A8A8A4]">THIS EDIT WAS…</span>
+              <span className="text-[20px] tracking-[0.14em] text-[#A8A8A4]">THIS EDIT WAS…</span>
               {(['client', 'style', 'stylist', 'global'] as Scope[]).map((sc) => (
                 <button
                   key={sc}
-                  className="text-[10px] tracking-[0.12em] text-[#6B6B6B] border border-[#E2E0DB] px-2 py-0.5 hover:border-[#0A0A0A] transition-colors"
+                  className="text-[20px] tracking-[0.12em] text-[#6B6B6B] border border-[#E2E0DB] px-2 py-0.5 hover:border-[#0A0A0A] transition-colors"
                   title={`Tag every decision on this look as ${SCOPE_LABEL[sc].toLowerCase()}`}
                   onClick={() => run(`tag-${l.look_id}`, () => tagLookScope(l.look_id, sc), `TAGGED · ${SCOPE_LABEL[sc]}`)}
                 >
@@ -3230,7 +3230,7 @@ function LookRow({
             <div className="flex gap-2 flex-wrap justify-end">
               {composed && !l.approved_at && (
                 <button
-                  className="text-[11px] tracking-[0.12em] px-3 py-1.5 bg-[#0A0A0A] text-white hover:opacity-85"
+                  className="text-[20px] tracking-[0.12em] px-3 py-1.5 bg-[#0A0A0A] text-white hover:opacity-85"
                   title="Approve this composition — logs every item and brand pairing as a win for her taste"
                   onClick={() => run(`appr-${l.look_id}`, () => approveComposedLook(l.look_id), 'APPROVED — TASTE UPDATED')}
                 >
@@ -3239,7 +3239,7 @@ function LookRow({
               )}
               {composed && !l.approved_at && (
                 <button
-                  className="text-[11px] tracking-[0.12em] px-3 py-1.5 border border-[#0A0A0A] text-[#0A0A0A] hover:bg-[#0A0A0A] hover:text-white transition-colors"
+                  className="text-[20px] tracking-[0.12em] px-3 py-1.5 border border-[#0A0A0A] text-[#0A0A0A] hover:bg-[#0A0A0A] hover:text-white transition-colors"
                   title="Skip this composition — logs every item and brand pairing as a miss for her taste, then removes the look. × deletes without teaching anything."
                   onClick={() => run(`skip-${l.look_id}`, () => skipComposedLook(l.look_id), 'SKIPPED — TASTE UPDATED, LOOK REMOVED')}
                 >
@@ -3248,7 +3248,7 @@ function LookRow({
               )}
               {composed && (
                 <button
-                  className="text-[11px] tracking-[0.12em] px-3 py-1.5 border border-[#C4A882] text-[#8B5E00] hover:bg-[#C4A882] hover:text-white transition-colors"
+                  className="text-[20px] tracking-[0.12em] px-3 py-1.5 border border-[#C4A882] text-[#8B5E00] hover:bg-[#C4A882] hover:text-white transition-colors"
                   title={l.image_url
                     ? 'Shoot it again — pick a different pose and lighting. The current shoot is kept.'
                     : 'Generate an editorial shoot of this look via the local Higgsfield CLI'}
@@ -3259,7 +3259,7 @@ function LookRow({
               )}
               {composed && (
                 <button
-                  className="text-[11px] tracking-[0.12em] px-3 py-1.5 border border-[#C4A882] text-[#8B5E00] hover:bg-[#C4A882] hover:text-white transition-colors"
+                  className="text-[20px] tracking-[0.12em] px-3 py-1.5 border border-[#C4A882] text-[#8B5E00] hover:bg-[#C4A882] hover:text-white transition-colors"
                   title="Style this same hero piece several ways — composes distinct sibling looks around it, so she sees what else it goes with. Each becomes its own approvable look."
                   onClick={() => run(`var-${l.look_id}`, () => composeLookVariants(l.look_id), 'STYLED SEVERAL WAYS — NEW LOOKS ADDED')}
                 >
@@ -3297,14 +3297,14 @@ function LookRow({
           {sent && !l.response && (
             <div className="flex items-center gap-1.5">
               <button
-                className="text-[11px] tracking-[0.12em] px-3 py-1.5 bg-[#0A0A0A] text-white hover:opacity-85"
+                className="text-[20px] tracking-[0.12em] px-3 py-1.5 bg-[#0A0A0A] text-white hover:opacity-85"
                 onClick={() =>
                   run(`resp-${l.look_id}`, () => recordResponse(l.look_id, 'yes', null), `${calibration ? 'LIKE' : 'YES'} LOGGED — TASTE UPDATED`)
                 }
               >
                 {calibration ? 'LIKE' : 'YES'}
               </button>
-              <select className={`${input} !w-auto !py-1.5 !text-[11px]`} value={reason} onChange={(e) => setReason(e.target.value as ResponseReason)}>
+              <select className={`${input} !w-auto !py-1.5 !text-[20px]`} value={reason} onChange={(e) => setReason(e.target.value as ResponseReason)}>
                 {RESPONSE_REASONS.map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.label}
@@ -3312,7 +3312,7 @@ function LookRow({
                 ))}
               </select>
               <button
-                className="text-[11px] tracking-[0.12em] px-3 py-1.5 border border-[#0A0A0A] hover:bg-[#F2F2F2]"
+                className="text-[20px] tracking-[0.12em] px-3 py-1.5 border border-[#0A0A0A] hover:bg-[#F2F2F2]"
                 onClick={() =>
                   run(`resp-${l.look_id}`, () => recordResponse(l.look_id, 'no', reason), `${calibration ? 'DISLIKE' : 'NO'} LOGGED — TASTE UPDATED`)
                 }
@@ -3322,7 +3322,7 @@ function LookRow({
             </div>
           )}
           {l.response && (
-            <p className={`text-[11px] tracking-[0.14em] ${l.response === 'yes' ? 'text-[#3D7A50]' : 'text-[#B83A3A]'}`}>
+            <p className={`text-[20px] tracking-[0.14em] ${l.response === 'yes' ? 'text-[#3D7A50]' : 'text-[#B83A3A]'}`}>
               {l.response.toUpperCase()}
               {l.response_reason && ` — ${l.response_reason.replace(/_/g, ' ').toUpperCase()}`}
             </p>
@@ -3392,14 +3392,14 @@ function LookEditor({
 
   return (
     <div className="border border-[#0A0A0A] px-4 py-4 space-y-3">
-      <p className="text-[12px] tracking-[0.16em] text-[#0A0A0A]">LOOK {look?.position ?? position}</p>
+      <p className="text-[20px] tracking-[0.16em] text-[#0A0A0A]">LOOK {look?.position ?? position}</p>
       <div>
         <p className={`${label} mb-1.5`}>ROOM MIX % — EVERY OUTFIT NAMES ITS MIX</p>
         <div className="flex gap-2 max-w-sm">
           {ROOM_KEYS.map((k) => (
             <div key={k} className="flex-1">
               <input className={input} value={mix[k]} onChange={(e) => setMix({ ...mix, [k]: e.target.value })} />
-              <p className="text-[10px] tracking-[0.12em] text-[#6B6B6B] mt-1">{ROOMS[k].label}</p>
+              <p className="text-[20px] tracking-[0.12em] text-[#6B6B6B] mt-1">{ROOMS[k].label}</p>
             </div>
           ))}
         </div>
@@ -3414,15 +3414,15 @@ function LookEditor({
             <input className={input} placeholder="£" value={it.price_gbp ?? ''} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, price_gbp: e.target.value ? Number(e.target.value) : null } : x)))} />
             <input className={input} placeholder="URL" value={it.url ?? ''} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, url: e.target.value } : x)))} />
             <input className={input} placeholder="SIZE" value={it.size ?? ''} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, size: e.target.value } : x)))} />
-            <label className="text-[10px] tracking-[0.1em] text-[#6B6B6B] flex items-center gap-1">
+            <label className="text-[20px] tracking-[0.1em] text-[#6B6B6B] flex items-center gap-1">
               <input type="checkbox" checked={it.owned} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, owned: e.target.checked } : x)))} />
               OWNED
             </label>
-            <label className="text-[10px] tracking-[0.1em] text-[#6B6B6B] flex items-center gap-1">
+            <label className="text-[20px] tracking-[0.1em] text-[#6B6B6B] flex items-center gap-1">
               <input type="checkbox" checked={it.in_stock !== false} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, in_stock: e.target.checked } : x)))} />
               STOCK
             </label>
-            <button className="text-[#B83A3A] text-[13px]" onClick={() => setItems(items.filter((_, j) => j !== i))}>
+            <button className="text-[#B83A3A] text-[20px]" onClick={() => setItems(items.filter((_, j) => j !== i))}>
               ×
             </button>
           </div>
@@ -3434,7 +3434,7 @@ function LookEditor({
           + ITEM
         </button>
         {fastFashionWarning && (
-          <p className="text-[11px] tracking-[0.1em] text-[#B83A3A] mt-2">
+          <p className="text-[20px] tracking-[0.1em] text-[#B83A3A] mt-2">
             FAST FASHION IN A RECOMMENDED SLOT — INPUT, NEVER OUTPUT. TICK OWNED OR SWAP THE BRAND.
           </p>
         )}
@@ -3502,8 +3502,8 @@ function DryRunTab({
   return (
     <div className="space-y-6">
       <div className="border border-[#E8D9B8] bg-[#FDFBF6] px-5 py-4">
-        <p className="text-[12px] tracking-[0.14em] text-[#8B5E00] mb-1">CONTAMINATION RULE — THE ONE THAT BITES LATER</p>
-        <p className="text-[11px] tracking-[0.06em] text-[#6B6B6B] leading-relaxed max-w-3xl">
+        <p className="text-[20px] tracking-[0.14em] text-[#8B5E00] mb-1">CONTAMINATION RULE — THE ONE THAT BITES LATER</p>
+        <p className="text-[20px] tracking-[0.06em] text-[#6B6B6B] leading-relaxed max-w-3xl">
           SYNTHETIC RESPONSES ARE YOUR GUESSES ABOUT THEIR TASTE, NOT THEIR TASTE. EVERYTHING HERE CARRIES
           IS_SYNTHETIC AND IS EXCLUDED FROM ALL REAL TASTE UPDATES AND ANY FUTURE TRAINING DATA. WHEN THE REAL
           DEVIKA ONBOARDS, SHE STARTS FROM THE INTAKE — NOT FROM THE SYNTHETIC PROFILE. KEEP THE RECORDS THOUGH:
@@ -3520,7 +3520,7 @@ function DryRunTab({
           SEED SYNTHETIC PERSONAS — DEVIKA + MUM
         </button>
       ) : (
-        <p className="text-[11px] tracking-[0.14em] text-[#3D7A50]">✓ SYNTHETIC PERSONAS SEEDED</p>
+        <p className="text-[20px] tracking-[0.14em] text-[#3D7A50]">✓ SYNTHETIC PERSONAS SEEDED</p>
       )}
 
       <div>
@@ -3533,12 +3533,12 @@ function DryRunTab({
             return (
               <div key={b.id} className="border border-[#E2E0DB] px-4 py-3 flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <p className="text-[12px] tracking-[0.1em] text-[#0A0A0A]">
+                  <p className="text-[20px] tracking-[0.1em] text-[#0A0A0A]">
                     {i + 1}. “{b.brief.toUpperCase()}” — {b.persona}
                   </p>
-                  <p className="text-[11px] tracking-[0.06em] text-[#6B6B6B] mt-1">{b.tests.toUpperCase()}</p>
+                  <p className="text-[20px] tracking-[0.06em] text-[#6B6B6B] mt-1">{b.tests.toUpperCase()}</p>
                   {eff && (
-                    <p className="text-[11px] tracking-[0.14em] text-[#C4A882] mt-1.5">→ {formatRoomMix(eff)}</p>
+                    <p className="text-[20px] tracking-[0.14em] text-[#C4A882] mt-1.5">→ {formatRoomMix(eff)}</p>
                   )}
                 </div>
                 <div className="shrink-0">
@@ -3578,7 +3578,7 @@ function DryRunTab({
       <div className="border border-[#E2E0DB] px-5 py-4">
         <p className={`${label} mb-2`}>PASS CRITERIA</p>
         {DRY_RUN_PASS_CRITERIA.map((c) => (
-          <p key={c} className="text-[11px] tracking-[0.08em] text-[#0A0A0A] mb-1">
+          <p key={c} className="text-[20px] tracking-[0.08em] text-[#0A0A0A] mb-1">
             — {c}
           </p>
         ))}
@@ -3594,7 +3594,7 @@ function ArtefactTab({ data }: { data: PilotData }) {
   const members = real.length > 0 ? real : data.members
   return (
     <div className="space-y-6">
-      <p className="text-[11px] tracking-[0.08em] text-[#6B6B6B] max-w-2xl leading-relaxed">
+      <p className="text-[20px] tracking-[0.08em] text-[#6B6B6B] max-w-2xl leading-relaxed">
         THE ONE-PAGER PER PILOT. SUCCESS HIERARCHY: UNPROMPTED RETURN &gt; PURCHASE &gt; DISCOVERY-CLICK &gt;
         SAVES &gt; QUERY COUNT. IF THE PILOTS PRODUCE THE FIRST TWO, YOU HAVE A COMPANY.
       </p>
@@ -3607,15 +3607,15 @@ function ArtefactTab({ data }: { data: PilotData }) {
         return (
           <div key={m.member_id} className="border border-[#E2E0DB] px-6 py-5">
             <div className="flex items-center gap-3 mb-4">
-              <p className="text-[15px] tracking-[0.12em] text-[#0A0A0A]">{m.name}</p>
+              <p className="text-[20px] tracking-[0.12em] text-[#0A0A0A]">{m.name}</p>
               {m.is_synthetic && (
-                <span className="text-[10px] tracking-[0.14em] text-[#8B5E00] border border-[#E8D9B8] px-2 py-0.5">SYNTHETIC</span>
+                <span className="text-[20px] tracking-[0.14em] text-[#8B5E00] border border-[#E8D9B8] px-2 py-0.5">SYNTHETIC</span>
               )}
             </div>
             <div className="grid grid-cols-3 gap-8 mb-5 max-w-3xl">
               <div>
                 <p className={`${label} mb-1.5`}>ROOM WEIGHTING AT INTAKE</p>
-                {a.intakeWeights ? <WeightBar weights={a.intakeWeights} /> : <p className="text-[11px] text-[#A8A8A4]">NO INTAKE SNAPSHOT</p>}
+                {a.intakeWeights ? <WeightBar weights={a.intakeWeights} /> : <p className="text-[20px] text-[#A8A8A4]">NO INTAKE SNAPSHOT</p>}
               </div>
               <div>
                 <p className={`${label} mb-1.5`}>NOW — DID THE READ OF HER MOVE?</p>
@@ -3625,7 +3625,7 @@ function ArtefactTab({ data }: { data: PilotData }) {
                 <p className={`${label} mb-1.5`}>34-DIM VECTOR READ — AGREES?</p>
                 {(() => {
                   const read = vectorRoomRead(m.taste_vector)
-                  return read ? <WeightBar weights={read} /> : <p className="text-[11px] text-[#A8A8A4]">NO VECTOR YET</p>
+                  return read ? <WeightBar weights={read} /> : <p className="text-[20px] text-[#A8A8A4]">NO VECTOR YET</p>
                 })()}
               </div>
             </div>
@@ -3642,7 +3642,7 @@ function ArtefactTab({ data }: { data: PilotData }) {
           </div>
         )
       })}
-      {members.length === 0 && <p className="text-[12px] tracking-[0.1em] text-[#A8A8A4]">NO MEMBERS YET.</p>}
+      {members.length === 0 && <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4]">NO MEMBERS YET.</p>}
     </div>
   )
 }
@@ -3650,12 +3650,12 @@ function ArtefactTab({ data }: { data: PilotData }) {
 function Stat({ label: l, value, sub, rank }: { label: string; value: string; sub?: string; rank?: string }) {
   return (
     <div>
-      <p className="text-[10px] tracking-[0.16em] text-[#6B6B6B]">
+      <p className="text-[20px] tracking-[0.16em] text-[#6B6B6B]">
         {rank && <span className="text-[#C4A882]">#{rank} </span>}
         {l}
       </p>
-      <p className="text-[18px] tracking-[0.04em] text-[#0A0A0A] mt-0.5">{value}</p>
-      {sub && <p className="text-[10px] tracking-[0.1em] text-[#A8A8A4]">{sub}</p>}
+      <p className="text-[20px] tracking-[0.04em] text-[#0A0A0A] mt-0.5">{value}</p>
+      {sub && <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4]">{sub}</p>}
     </div>
   )
 }
