@@ -1009,6 +1009,26 @@ export async function updateDelivery(
   }
 }
 
+/**
+ * Put a finished delivery back into draft so it can be worked on again.
+ *
+ * A brief that landed well is the best starting point there is — the occasion,
+ * the weighting and her verdicts are all still right, and the only thing
+ * missing is more looks. Sending used to be one-way, so the alternative was
+ * recreating the brief from memory and losing the thread that made it good.
+ *
+ * Nothing is undone: her responses, the shoots and every recorded decision
+ * stay exactly as they are. Only the status moves.
+ */
+export async function reopenDelivery(deliveryId: string): Promise<{ error?: string }> {
+  const admin = createAdminClient() as any
+  const { error } = await admin.from('pilot_delivery')
+    .update({ status: 'draft' }).eq('delivery_id', deliveryId)
+  if (error) return { error: error.message }
+  revalidatePath(PATH)
+  return {}
+}
+
 export async function markStockChecked(deliveryId: string): Promise<{ error?: string }> {
   const admin = createAdminClient()
   const { data: looks, error } = await admin

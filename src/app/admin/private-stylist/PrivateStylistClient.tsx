@@ -52,6 +52,7 @@ import {
   createDelivery,
   createCalibrationSet,
   deleteDelivery,
+  reopenDelivery,
   deleteDeliveryAndMemory,
   updateDelivery,
   saveLook,
@@ -2401,6 +2402,18 @@ function DeliveryCard({
           {!calibration && (
             <button className={btnTiny} onClick={() => { setSetupOpen((v) => !v); setOpen(true) }}>
               {setupOpen ? 'CLOSE BRIEF' : 'EDIT BRIEF'}
+            </button>
+          )}
+          {/* A brief that worked is the best starting point there is — the
+              occasion, the weighting and her verdicts are all still right and
+              only the looks are missing. Sending was one-way until now. */}
+          {d.status !== 'draft' && (
+            <button
+              className={btnTiny}
+              title="Put this brief back in draft so you can compose more looks for it — nothing she has said is undone"
+              onClick={() => { setOpen(true); run(`reopen-${d.delivery_id}`, () => reopenDelivery(d.delivery_id), 'BRIEF REOPENED — COMPOSE MORE LOOKS') }}
+            >
+              REOPEN
             </button>
           )}
           <button className={btnTiny} onClick={() => setOpen((s) => !s)}>
