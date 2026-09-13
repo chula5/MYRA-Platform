@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { lookSimilarity, mostSimilar } from '../look-similarity'
+import { lookSimilarity, mostSimilar, relatedLooks, looksWearing } from '../look-similarity'
 
 const look = (id: string, items: [string, string][], occasion = 'Casual day') => ({
   look_id: id,
@@ -35,7 +35,7 @@ describe('lookSimilarity', () => {
     const a = look('a', [['i1', 'Varley'], ['i2', 'Posse']])
     const b = look('b', [['i1', 'Varley'], ['i3', 'Ganni']])
     expect(lookSimilarity(a, b)).toBeCloseTo(lookSimilarity(b, a), 10)
-    expect(lookSimilarity(a, { ...a, look_id: 'x' })).toBeCloseTo(1, 5)
+    expect(lookSimilarity(a, look('x', [['i1', 'Varley'], ['i2', 'Posse']]))).toBeCloseTo(1, 5)
   })
 
   it('does not reward a look with no pieces in common and no brand overlap', () => {
@@ -71,5 +71,55 @@ describe('mostSimilar', () => {
 
   it('honours the count', () => {
     expect(mostSimilar(pool[0], pool, 1).map((l) => l.look_id)).toEqual(['b'])
+  })
+})
+
+describe('relatedLooks — the feed rule, on her own looks', () => {
+  const dressLong = (id: string, occ = 'Dinner & drinks') => ({
+    look_id: id, occasion_label: occ,
+    items: [{ item_id: `${id}-a`, brand: 'Ganni', item_type: 'maxi_dress' }],
+  })
+  const trousers = (id: string, occ = 'Dinner & drinks') => ({
+    look_id: id, occasion_label: occ,
+    items: [{ item_id: `${id}-a`, brand: 'Ganni', item_type: 'trousers' }],
+  })
+
+  const pool = [
+    dressLong('a'), dressLong('b'), trousers('c'),
+    trousers('d', 'Travel'), dressLong('e', 'Travel'),
+  ]
+
+  it('SIMILAR keeps the silhouette and the occasion', () => {
+    expect(relatedLooks(pool[0], pool, 'similar').map((l) => l.look_id)).toEqual(['b'])
+  })
+
+  it('EXPLORE changes the silhouette but keeps the occasion', () => {
+    expect(relatedLooks(pool[0], pool, 'explore').map((l) => l.look_id)).toEqual(['c'])
+  })
+
+  it('the two rows never overlap', () => {
+    const sim = relatedLooks(pool[0], pool, 'similar').map((l) => l.look_id)
+    const exp = relatedLooks(pool[0], pool, 'explore').map((l) => l.look_id)
+    expect(sim.filter((id) => exp.includes(id))).toEqual([])
+  })
+
+  it('never returns the anchor itself', () => {
+    for (const mode of ['similar', 'explore'] as const) {
+      expect(relatedLooks(pool[0], pool, mode).map((l) => l.look_id)).not.toContain('a')
+    }
+  })
+})
+
+describe('looksWearing', () => {
+  const pool = [
+    { look_id: 'a', items: [{ item_id: 'i1', brand: 'Varley' }] },
+    { look_id: 'b', items: [{ item_id: 'i1', brand: 'Ganni' }] },
+    { look_id: 'c', items: [{ item_id: 'i2', brand: 'Ganni' }] },
+  ]
+  it('finds her other looks wearing the piece, not the one she is on', () => {
+    expect(looksWearing('i1', pool, 'a').map((l) => l.look_id)).toEqual(['b'])
+  })
+  it('is empty when nothing else wears it', () => {
+    expect(looksWearing('i2', pool, 'c')).toEqual([])
   })
 })

@@ -8,9 +8,11 @@
  * occasion is a tiebreak, not a claim of similarity on its own.
  */
 
+import { silhouetteOf } from './look-silhouette'
+
 export interface SimilarityLook {
   occasion_label?: string
-  items: { item_id?: string | null; brand?: string | null }[]
+  items: { item_id?: string | null; brand?: string | null; item_type?: string | null }[]
 }
 
 const PIECE_WEIGHT = 0.6
@@ -20,7 +22,7 @@ const OCCASION_WEIGHT = 0.1
 function overlap(a: Set<string>, b: Set<string>): number {
   if (!a.size || !b.size) return 0
   let shared = 0
-  for (const v of a) if (b.has(v)) shared += 1
+  a.forEach((v) => { if (b.has(v)) shared += 1 })
   return shared / Math.max(a.size, b.size)
 }
 
@@ -48,4 +50,43 @@ export function mostSimilar<T extends SimilarityLook & { look_id: string }>(
     .sort((a, b) => b.s - a.s)
     .slice(0, n)
     .map((x) => x.l)
+}
+
+
+/**
+ * SIMILAR LOOKS and EXPLORE STYLES, by the feed's rule.
+ *
+ * Both stay within the anchor's occasion; SIMILAR keeps the silhouette,
+ * EXPLORE deliberately changes it. The two sets are disjoint, so the buttons
+ * never show her the same row twice. Ordering inside each set falls back to
+ * lookSimilarity, which is the only part the feed does differently — it has a
+ * whole live library to rank against, she has her own looks.
+ */
+export function relatedLooks<T extends SimilarityLook & { look_id: string }>(
+  look: T,
+  pool: T[],
+  mode: 'similar' | 'explore',
+  n = 6,
+): T[] {
+  const anchor = silhouetteOf(look.items.map((i) => i.item_type))
+  return pool
+    .filter((l) => l.look_id !== look.look_id)
+    .filter((l) => !look.occasion_label || l.occasion_label === look.occasion_label)
+    .filter((l) => {
+      const sig = silhouetteOf(l.items.map((i) => i.item_type))
+      return mode === 'similar' ? sig === anchor : sig !== anchor
+    })
+    .sort((a, b) => lookSimilarity(look, b) - lookSimilarity(look, a))
+    .slice(0, n)
+}
+
+/** Her other looks wearing one particular piece — "style this item". */
+export function looksWearing<T extends SimilarityLook & { look_id: string }>(
+  itemId: string,
+  pool: T[],
+  excludeLookId?: string,
+): T[] {
+  return pool.filter(
+    (l) => l.look_id !== excludeLookId && l.items.some((i) => i.item_id === itemId),
+  )
 }

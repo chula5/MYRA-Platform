@@ -21,6 +21,8 @@ export interface ClientLookItem {
   brand: string
   product_name: string
   item_type: string | null
+  /** Where it sits on the body — drives the Style Item hotspot position. */
+  slot: string | null
   price_gbp: number | null
   image_url: string | null
   url: string | null
@@ -110,6 +112,7 @@ async function loadLooksFor(memberId: string): Promise<ClientView> {
             brand: it.brand ?? '',
             product_name: it.product_name ?? '',
             item_type: it.item_type ?? it.slot ?? null,
+            slot: it.slot ?? null,
             price_gbp: typeof it.price_gbp === 'number' ? it.price_gbp : null,
             image_url: it.image_url ?? null,
             url: it.url ?? null,

@@ -1,33 +1,18 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase-server'
+import { silhouetteOf } from '@/lib/look-silhouette'
 import type { OutfitWithItems } from '@/types/database'
 
 const SELECT = '*, outfit_item(*, item(*, brand(*)))'
 
-// Reduce an outfit to a single silhouette key from its items. This is the axis
-// SIMILAR matches on and EXPLORE deliberately differs on, so the two sets never
-// overlap. A long dress → 'dress-long' (similar = other long dresses); a skirt
-// outfit → 'skirt'; trousers → 'trousers'; etc.
+// Reduce an outfit to a single silhouette key from its items. The rule itself
+// lives in @/lib/look-silhouette so the client area matches SIMILAR and EXPLORE
+// the same way this page does.
 function outfitSilhouette(outfit: any): string {
-  const types: string[] = ((outfit?.outfit_item ?? []) as any[])
-    .filter((oi) => oi.item)
-    .map((oi) => String(oi.item.item_type))
-
-  const dress = types.find((t) =>
-    ['mini_dress', 'midi_dress', 'maxi_dress', 'shirt_dress', 'slip_dress'].includes(t),
+  return silhouetteOf(
+    ((outfit?.outfit_item ?? []) as any[]).filter((oi) => oi.item).map((oi) => oi.item.item_type),
   )
-  if (dress) {
-    if (dress === 'maxi_dress' || dress === 'midi_dress' || dress === 'shirt_dress') return 'dress-long'
-    return 'dress-short' // mini / slip
-  }
-
-  const bottom = types.find((t) => ['skirt', 'trousers', 'jeans', 'shorts'].includes(t))
-  if (bottom === 'skirt') return 'skirt'
-  if (bottom === 'shorts') return 'shorts'
-  if (bottom === 'trousers' || bottom === 'jeans') return 'trousers'
-
-  return 'other'
 }
 
 /**
