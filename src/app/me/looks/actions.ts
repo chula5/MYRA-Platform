@@ -183,3 +183,89 @@ export async function markNotificationsRead(): Promise<void> {
     .update({ read_at: new Date().toISOString() })
     .eq('member_id', me.memberId).is('read_at', null)
 }
+
+// ── Asking for something ────────────────────────────────────────────────────
+
+export const CLIENT_OCCASIONS = [
+  { id: 'casual_day', label: 'A normal day' },
+  { id: 'dinner_drinks', label: 'Dinner or drinks' },
+  { id: 'work_standard', label: 'Work' },
+  { id: 'work_elevated', label: 'Something important at work' },
+  { id: 'event', label: 'An occasion' },
+  { id: 'travel', label: 'A trip' },
+] as const
+
+export const CLIENT_CLIMATES = [
+  { id: 'hot', label: 'Somewhere hot' },
+  { id: 'temperate', label: 'Mild' },
+  { id: 'cold', label: 'Cold' },
+] as const
+
+/**
+ * She asks; MYRA composes.
+ *
+ * The looks do NOT go straight to her. The confidence score is better than
+ * chance on her history but not yet on enough looks to publish unwatched, so
+ * what she gets back is "I'm working on these" and the looks land in the
+ * stylist's queue. She is told the truth about that rather than shown a
+ * spinner that implies something else.
+ */
+export async function requestLooks(
+  occasion: string,
+  climate: string | null,
+  words: string,
+): Promise<{ ok?: boolean; error?: string }> {
+  const me = await memberForCurrentUser()
+  if (!me) return { error: 'Not signed in' }
+  if (!CLIENT_OCCASIONS.some((o) => o.id === occasion)) return { error: 'Pick what it is for' }
+
+  try {
+    const admin = createAdminClient() as any
+    const { data: member } = await admin
+      .from('pilot_member').select('room_weights, work_dress_code, is_synthetic').eq('member_id', me.memberId).single()
+
+    const { effectiveWeights } = await import('@/lib/pilot-stylist')
+    const row: Record<string, unknown> = {
+      member_id: me.memberId,
+      trigger: 'request',
+      request_text: words.trim() || CLIENT_OCCASIONS.find((o) => o.id === occasion)?.label || '',
+      occasion,
+      effective_weights: effectiveWeights(member?.room_weights, occasion as any, member?.work_dress_code),
+      is_synthetic: !!member?.is_synthetic,
+    }
+    if (climate) row.climate = climate
+
+    const { data: created, error } = await admin
+      .from('pilot_delivery').insert(row).select('delivery_id').single()
+    if (error) return { error: error.message }
+
+    await admin.from('pilot_chat_message').insert({
+      member_id: me.memberId,
+      role: 'client',
+      body: words.trim() || `Something for ${CLIENT_OCCASIONS.find((o) => o.id === occasion)?.label?.toLowerCase()}`,
+      intent: { occasion, climate },
+    })
+
+    // Composing takes a while and must not block her page.
+    const { composeDeliveryLooks } = await import('@/app/admin/private-stylist/actions')
+    composeDeliveryLooks(created.delivery_id).catch((e) =>
+      console.error('[requestLooks] compose', e))
+
+    revalidatePath('/me/looks')
+    return { ok: true }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Could not send that' }
+  }
+}
+
+/** What she has asked for, and whether it has come back yet. */
+export async function myRequests(): Promise<{ body: string; when: string; answered: boolean }[]> {
+  const me = await memberForCurrentUser()
+  if (!me) return []
+  const admin = createAdminClient() as any
+  const { data } = await admin
+    .from('pilot_chat_message').select('body, created_at')
+    .eq('member_id', me.memberId).eq('role', 'client')
+    .order('created_at', { ascending: false }).limit(5)
+  return (data ?? []).map((m: any) => ({ body: m.body, when: m.created_at, answered: false }))
+}
