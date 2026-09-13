@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { loadMemberConfidence, type MemberConfidence } from './confidence-actions'
 import { loadClientAttribution, loadTransferSeries, tagLookScope, loadInheritanceReport, runPromotionPass, alignStylistLayers, type ClientAttribution, type InheritanceReport } from './attribution-actions'
 import { SCOPE_LABEL, type Scope } from '@/lib/learning-scope'
 import type { TransferPoint } from '@/lib/learning-scope'
@@ -1829,6 +1830,7 @@ function DeliveriesTab({ data, run, busy }: { data: PilotData; run: Run; busy: s
             busy={busy}
           />
           <ScoreStrip memberId={memberId} />
+          <ConfidencePanel memberId={memberId} />
           <AttributionPanel memberId={memberId} />
           <Lookbook deliveries={deliveries} memberName={memberById[memberId].name} activity={data.activity} run={run} busy={busy} />
         </>
@@ -2038,6 +2040,71 @@ function AttributionPanel({ memberId }: { memberId: string }) {
 // the occasion the delivery was for. This is what the client is being sent —
 // it should be the first thing on the page and readable at a glance, not
 // something reached by scrolling past the pieces that built it.
+// ── CONFIDENCE ──────────────────────────────────────────────────────────────
+// Whether a look can be sent to her without review, and — the part that
+// matters — whether that judgement is any good. Every look she has is scored
+// from the looks that came before it, so the score can be checked against
+// outcomes already known instead of taken on trust.
+function ConfidencePanel({ memberId }: { memberId: string }) {
+  const [c, setC] = useState<MemberConfidence | null>(null)
+  useEffect(() => {
+    let live = true
+    loadMemberConfidence(memberId).then((r) => { if (live) setC(r) })
+    return () => { live = false }
+  }, [memberId])
+  if (!c || !c.calibration.sample) return null
+  const pct = (n: number) => `${Math.round(n * 100)}%`
+  const cal = c.calibration
+  const base = cal.precision - cal.lift
+
+  return (
+    <div className="border border-[#E2E0DB] bg-[#FCFCFA] p-4 space-y-3">
+      <div className="flex items-baseline justify-between">
+        <p className="text-[20px] tracking-[0.16em] text-[#0A0A0A]">CAN A LOOK BE SENT WITHOUT YOU?</p>
+        <p className="text-[20px] tracking-[0.12em] text-[#A8A8A4]">
+          SCORED ON {cal.sample} LOOKS YOU HAVE ALREADY DECIDED
+        </p>
+      </div>
+
+      <div className="flex flex-wrap gap-x-10 gap-y-3">
+        <div>
+          <p className="text-[20px] tracking-[0.12em] text-[#A8A8A4]">THRESHOLD</p>
+          <p className="text-[20px] tracking-[0.06em] text-[#0A0A0A] mt-0.5">{c.threshold}</p>
+        </div>
+        <div>
+          <p className="text-[20px] tracking-[0.12em] text-[#A8A8A4]">WOULD REACH HER</p>
+          <p className="text-[20px] tracking-[0.06em] text-[#0A0A0A] mt-0.5">{cal.reaching} OF {cal.sample}</p>
+        </div>
+        <div>
+          <p className="text-[20px] tracking-[0.12em] text-[#A8A8A4]">OF THOSE, CLEAN</p>
+          <p className={`text-[20px] tracking-[0.06em] mt-0.5 ${cal.usable ? 'text-[#3D7A50]' : 'text-[#0A0A0A]'}`}>
+            {pct(cal.precision)}
+          </p>
+        </div>
+        <div>
+          <p className="text-[20px] tracking-[0.12em] text-[#A8A8A4]">IF PICKED AT RANDOM</p>
+          <p className="text-[20px] tracking-[0.06em] text-[#6B6B6B] mt-0.5">{pct(base)}</p>
+        </div>
+        <div>
+          <p className="text-[20px] tracking-[0.12em] text-[#A8A8A4]">BETTER BY</p>
+          <p className={`text-[20px] tracking-[0.06em] mt-0.5 ${cal.lift > 0 ? 'text-[#3D7A50]' : 'text-[#B4593A]'}`}>
+            {cal.lift > 0 ? '+' : ''}{Math.round(cal.lift * 100)} PTS
+          </p>
+        </div>
+      </div>
+
+      <p className={`text-[20px] tracking-[0.06em] ${cal.usable ? 'text-[#3D7A50]' : 'text-[#8B5E00]'}`}>
+        {cal.usable
+          ? 'GOOD ENOUGH TO SEND ON — LOOKS ABOVE THE THRESHOLD CAN GO TO HER UNREVIEWED'
+          : 'NOT YET GOOD ENOUGH TO SEND ON — EVERY LOOK STILL WAITS FOR YOU'}
+      </p>
+      <p className="text-[20px] tracking-[0.06em] text-[#A8A8A4]">
+        A LOOK SCORES ON HOW MUCH OF IT SHE HAS ALREADY KEPT — SO EVERY YES MAKES THE NEXT JUDGEMENT BETTER
+      </p>
+    </div>
+  )
+}
+
 function FinishedWall({
   memberName, deliveries, run, busy,
 }: {
