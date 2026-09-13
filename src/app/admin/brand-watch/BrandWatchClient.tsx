@@ -112,8 +112,12 @@ export default function BrandWatchClient(props: Props) {
     setGone((g) => new Set(Array.from(g).concat(ids)))
     setSelected((s) => new Set(Array.from(s).filter((id) => !ids.includes(id))))
     if (!keep) setLastSkip(ids)
-    act(() => (keep ? keepItems(ids) : skipItems(ids)),
-      (r) => setNotice(`${r.updated} ${keep ? 'KEPT → ADDED TO LIBRARY AS READY' : 'SKIPPED — NEVER ENTERS THE LIBRARY'} — LEARNING UPDATES ON NEXT LOAD`))
+    // Fire-and-forget, OUTSIDE the shared transition: the card is already hidden
+    // optimistically, so a decision must never block the next one. Each skip/keep
+    // fires its own independent request, so rapid tapping never freezes the grid.
+    ;(keep ? keepItems(ids) : skipItems(ids))
+      .then((r) => setNotice(`${r.updated} ${keep ? 'KEPT → ADDED TO LIBRARY AS READY' : 'SKIPPED — NEVER ENTERS THE LIBRARY'} — LEARNING UPDATES ON NEXT LOAD`))
+      .catch((e) => setNotice(e instanceof Error ? e.message : String(e)))
   }
 
   const undoLastSkip = () => {
@@ -441,14 +445,12 @@ export default function BrandWatchClient(props: Props) {
                   <p className="text-[10px] tracking-[0.06em] text-[#4A4E57]">{fmtPrice(q.price, q.currency, q.price_gbp)}</p>
                   <div className="mt-auto pt-2 flex gap-2">
                     <button
-                      disabled={pending}
                       onClick={() => decide([q.item_id], true)}
                       className="flex-1 bg-[#0A0A0A] text-white rounded-full py-1.5 text-[8px] tracking-[0.14em] hover:opacity-85 transition-opacity disabled:opacity-40"
                     >
                       KEEP
                     </button>
                     <button
-                      disabled={pending}
                       onClick={() => decide([q.item_id], false)}
                       className="flex-1 border border-[#E2E0DB] text-[#6B6B6B] rounded-full py-1.5 text-[8px] tracking-[0.14em] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors disabled:opacity-40"
                     >

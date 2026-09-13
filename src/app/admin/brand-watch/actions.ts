@@ -355,7 +355,10 @@ export async function keepItems(itemIds: string[]): Promise<{ updated: number }>
   if (!itemIds.length) return { updated: 0 }
   const admin = createAdminClient() as any
   const updated = await keepQueueRows(admin, itemIds)
-  revalidatePath('/admin/brand-watch')
+  // No revalidatePath: the client hides the card optimistically and re-queries
+  // fresh (with retrained learning) on the next queue load. Revalidating here
+  // re-rendered the whole heavy admin page on every single click, which froze
+  // rapid keep/skip.
   return { updated }
 }
 
@@ -415,6 +418,7 @@ export async function skipItems(itemIds: string[]): Promise<{ updated: number }>
     .in('queue_id', itemIds)
     .eq('status', 'queued')
     .select('queue_id')
-  revalidatePath('/admin/brand-watch')
+  // No revalidatePath — see keepItems. The optimistic hide + next-load re-query
+  // keep the queue correct without re-rendering the whole page on every skip.
   return { updated: (data ?? []).length }
 }
