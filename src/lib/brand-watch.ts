@@ -1145,31 +1145,39 @@ async function saveColourReads(admin: any, rows: Array<{ image_url: string; colo
  * signal at all — a feed that labels its women's pieces never pays for this.
  */
 async function applyVisionGender(products: ScannedProduct[]): Promise<number> {
-  const anySignal = products.some((p) => p.menswear) ||
-    products.some((p) => WOMEN_RE.test([p.productType, p.tags.join(' '), p.title, p.handle].join(' ')))
-  if (anySignal) return 0
+  // PER-PRODUCT, not all-or-nothing. A product with a textual signal is already
+  // decided — WOMEN by text stays, MEN by text is already flagged menswear — so
+  // it never pays for a vision call. Only products with NO textual gender signal
+  // get the image read. The old batch-wide "any signal → skip everything" let a
+  // mixed feed (e.g. Adolfo Domínguez, whose women's pieces are labelled but
+  // whose men's come through unlabelled) wave the unlabelled menswear straight
+  // in: one laballed women's item suppressed the check for the whole scan.
+  const needsVision: number[] = []
+  products.forEach((p, i) => {
+    if (p.menswear) return // already excluded by text
+    if (WOMEN_RE.test([p.productType, p.tags.join(' '), p.title, p.handle].join(' '))) return // women by text
+    needsVision.push(i)
+  })
+  if (!needsVision.length) return 0
 
-  // On a site that states gender NOWHERE, only a positive women's read gets
-  // through. Excluding the confirmed men's reads was not enough: a flat-lay
-  // trench or a cropped shot returns "unclear", and Adolfo Domínguez's queue
-  // filled with menswear again. MYRA is womenswear only — an item nobody can
-  // confirm as women's is not worth showing, and a brand that labels its
-  // sections never reaches this code at all.
-  // Read everything first, decide afterwards. "Not confirmed women's" only
-  // means menswear when the reader was actually working — and when it is not,
-  // this rule excludes an ENTIRE catalogue. Bimba y Lola scanned 350 pages and
-  // queued nothing because the API was out of credit and every call came back
-  // as an error, which this then read as 350 men's products.
+  // On a piece that states gender NOWHERE the image is the only evidence, and
+  // only a positive women's read gets through: a flat-lay trench or a cropped
+  // shot returns "unclear", and MYRA is womenswear only, so an item nobody can
+  // confirm as women's is not worth showing.
   const verdicts: Array<{ gender: GenderRead; error?: string }> = []
   const CONC = 6
-  for (let i = 0; i < products.length; i += CONC) {
-    const chunk = products.slice(i, i + CONC)
-    verdicts.push(...await Promise.all(chunk.map((p) =>
-      p.images[0] ? classifyProductGender(p.images[0]) : Promise.resolve({ gender: 'unclear' as const, error: 'no image' }))))
+  for (let i = 0; i < needsVision.length; i += CONC) {
+    const chunk = needsVision.slice(i, i + CONC)
+    verdicts.push(...await Promise.all(chunk.map((idx) => {
+      const p = products[idx]
+      return p.images[0] ? classifyProductGender(p.images[0]) : Promise.resolve({ gender: 'unclear' as const, error: 'no image' })
+    })))
   }
 
   // Infrastructure failures — no credit, no key, a timeout — are not evidence
-  // about a garment. If the pass is broadly broken, it gets no vote at all.
+  // about a garment. If the pass is broadly broken, it gets no vote at all,
+  // rather than reading a whole catalogue as menswear (Bimba y Lola once queued
+  // nothing because every call came back as an out-of-credit error).
   const infraFailed = verdicts.filter((v) => v.error && !/no image/i.test(v.error)).length
   if (verdicts.length && infraFailed / verdicts.length > 0.25) {
     throw new Error(
@@ -1179,8 +1187,8 @@ async function applyVisionGender(products: ScannedProduct[]): Promise<number> {
   }
 
   let excluded = 0
-  verdicts.forEach((r, j) => {
-    if (r.gender !== 'women') { products[j].menswear = true; excluded++ }
+  verdicts.forEach((r, k) => {
+    if (r.gender !== 'women') { products[needsVision[k]].menswear = true; excluded++ }
   })
   return excluded
 }
