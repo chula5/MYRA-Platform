@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { loadMemberConfidence, type MemberConfidence } from './confidence-actions'
+import { loadMemberConfidence, sendLookToClient, unsendLook, sendAllShotLooks, createClientLogin, type MemberConfidence } from './confidence-actions'
 import { loadClientAttribution, loadTransferSeries, tagLookScope, loadInheritanceReport, runPromotionPass, alignStylistLayers, type ClientAttribution, type InheritanceReport } from './attribution-actions'
 import { SCOPE_LABEL, type Scope } from '@/lib/learning-scope'
 import type { TransferPoint } from '@/lib/learning-scope'
@@ -1831,6 +1831,7 @@ function DeliveriesTab({ data, run, busy }: { data: PilotData; run: Run; busy: s
           />
           <ScoreStrip memberId={memberId} />
           <ConfidencePanel memberId={memberId} />
+          <ClientAccess memberId={memberId} memberName={memberById[memberId].name} run={run} busy={busy} />
           <AttributionPanel memberId={memberId} />
           <Lookbook deliveries={deliveries} memberName={memberById[memberId].name} activity={data.activity} run={run} busy={busy} />
         </>
@@ -2045,6 +2046,71 @@ function AttributionPanel({ memberId }: { memberId: string }) {
 // matters — whether that judgement is any good. Every look she has is scored
 // from the looks that came before it, so the score can be checked against
 // outcomes already known instead of taken on trust.
+// ── HER ACCOUNT ─────────────────────────────────────────────────────────────
+// The join that did not exist: every look lives under a member, and nothing
+// connected a member to somebody who could log in and look at them.
+function ClientAccess({ memberId, memberName, run, busy }: { memberId: string; memberName: string; run: Run; busy: string | null }) {
+  const [email, setEmail] = useState('')
+  const [made, setMade] = useState<{ email?: string; password?: string; url?: string } | null>(null)
+  const [sent, setSent] = useState<number | null>(null)
+
+  return (
+    <div className="border border-[#E8D9B8] bg-[#FBF8F2] p-4 space-y-3">
+      <p className="text-[20px] tracking-[0.16em] text-[#8B5E00]">HER ACCESS</p>
+
+      {made?.password ? (
+        <div className="space-y-1">
+          <p className="text-[20px] tracking-[0.06em] text-[#0A0A0A]">
+            {made.email} · {made.password}
+          </p>
+          <p className="text-[20px] tracking-[0.06em] text-[#6B6B6B]">
+            SEND HER THESE AND THE LINK — {made.url}/… THEN /me/looks
+          </p>
+          <p className="text-[20px] tracking-[0.06em] text-[#A8A8A4]">
+            SHOWN ONCE. THE PASSWORD IS NOT RECOVERABLE FROM HERE.
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            className={`${input} !w-auto`}
+            placeholder="her email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <button
+            className={btnTiny}
+            disabled={!email || busy === `login-${memberId}`}
+            onClick={async () => {
+              const r = await run(`login-${memberId}`, () => createClientLogin(memberId, email), 'LOGIN CREATED')
+              if (r && !r.error) setMade(r as any)
+            }}
+          >
+            GIVE {memberName.split(' ')[0].toUpperCase()} A LOGIN
+          </button>
+        </div>
+      )}
+
+      <div className="flex items-center gap-3 flex-wrap">
+        <button
+          className={btnTiny}
+          disabled={busy === `sendall-${memberId}`}
+          title="Every shot look she has not been sent yet"
+          onClick={async () => {
+            const r = await run(`sendall-${memberId}`, () => sendAllShotLooks(memberId), 'SENT')
+            if (r && !r.error) setSent((r as any).sent ?? 0)
+          }}
+        >
+          SEND HER EVERY SHOT LOOK
+        </button>
+        {sent !== null && (
+          <span className="text-[20px] tracking-[0.06em] text-[#3D7A50]">{sent} SENT</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function ConfidencePanel({ memberId }: { memberId: string }) {
   const [c, setC] = useState<MemberConfidence | null>(null)
   useEffect(() => {
@@ -3352,6 +3418,27 @@ function LookRow({
               {/* CLEAR empties the look and leaves the slot; the × removes
                   the slot too. Neither teaches the composer anything — a look
                   nobody kept is not a taste signal. */}
+              {/* One tap to put a look in front of her. Gated on the shoot:
+                  a client should be shown the look, not its parts. */}
+              {composed && l.image_url && (
+                (l as { visible_to_client?: boolean }).visible_to_client ? (
+                  <button
+                    className={`${btnTiny} !text-[#3D7A50] !border-[#B8CBBE]`}
+                    title="She can see this. Click to take it back — nothing she has said is undone."
+                    onClick={() => run(`unsend-${l.look_id}`, () => unsendLook(l.look_id), 'TAKEN BACK')}
+                  >
+                    ✓ SHE CAN SEE THIS
+                  </button>
+                ) : (
+                  <button
+                    className={`${btnTiny} !text-[#8B5E00] !border-[#E8D9B8]`}
+                    title="Send this look to her and tell her it is there"
+                    onClick={() => run(`send-${l.look_id}`, () => sendLookToClient(l.look_id), 'SENT TO HER')}
+                  >
+                    SEND TO HER
+                  </button>
+                )
+              )}
               <button
                 className={btnTiny}
                 title="Empty this look — the slot stays, and nothing here is learned"

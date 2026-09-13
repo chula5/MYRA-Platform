@@ -147,6 +147,9 @@ export interface PilotLook {
   shoot_history: { url: string; pose?: string; created_at?: string }[]
   /** Looks that style the same hero several ways share a variant_group. */
   variant_group: string | null
+  /** She can see this one in her own area. */
+  visible_to_client?: boolean
+  published_at?: string | null
   hero_item_id: string | null
 }
 

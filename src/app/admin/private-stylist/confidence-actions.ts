@@ -11,10 +11,13 @@
 // so the number can never disagree with the looks it came from.
 
 import { createAdminClient } from '@/lib/supabase-server'
+import { revalidatePath } from 'next/cache'
 import {
   lookConfidence, calibrateThreshold, indexHistory, historySignals,
   HIGH_CONFIDENCE, type LookRecord, type Calibration,
 } from '@/lib/look-confidence'
+
+const PATH = '/admin/private-stylist'
 
 export interface LookConfidenceRow {
   look_id: string
@@ -101,5 +104,118 @@ export async function loadMemberConfidence(memberId: string): Promise<MemberConf
     return { byLook, calibration: calibrateThreshold(history), threshold: HIGH_CONFIDENCE }
   } catch (err) {
     return { ...empty, error: err instanceof Error ? err.message : 'Could not score her looks' }
+  }
+}
+
+// ── Sending looks to her ────────────────────────────────────────────────────
+
+/**
+ * Give a client an account, and point it at her member record.
+ *
+ * pilot_member.auth_user_id is the join that did not exist: every look lives
+ * under a member, and nothing connected a member to somebody who could log in.
+ */
+export async function createClientLogin(
+  memberId: string,
+  email: string,
+): Promise<{ email?: string; password?: string; url?: string; error?: string }> {
+  const clean = (email ?? '').trim().toLowerCase()
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(clean)) return { error: 'Enter a valid email address' }
+  const admin = createAdminClient() as any
+  try {
+    const { data: member } = await admin.from('pilot_member').select('name, auth_user_id').eq('member_id', memberId).single()
+    if (!member) return { error: 'Member not found' }
+    if (member.auth_user_id) return { error: 'She already has a login' }
+
+    const words = ['linen', 'atelier', 'ivory', 'camel', 'poplin', 'saison']
+    const password = `${words[Math.floor(Math.random() * words.length)]}-${Math.floor(1000 + Math.random() * 9000)}-myra`
+    const { data: created, error } = await admin.auth.admin.createUser({
+      email: clean,
+      password,
+      email_confirm: true, // no email step for a pilot of one
+      user_metadata: { role: 'client', name: member.name },
+    })
+    if (error) return { error: /already|registered/i.test(error.message) ? 'An account with that email already exists' : error.message }
+
+    await admin.from('pilot_member').update({ auth_user_id: created.user!.id }).eq('member_id', memberId)
+    await admin.from('client_profile').upsert(
+      { user_id: created.user!.id, name: member.name, email: clean },
+      { onConflict: 'user_id' },
+    )
+    revalidatePath(PATH)
+    const base = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+    return { email: clean, password, url: `${base}/signin` }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Could not create the login' }
+  }
+}
+
+/**
+ * Send a look to her, and tell her it is there.
+ *
+ * One tap rather than an automatic gate: the confidence score is measurably
+ * better than chance on her history but not yet on enough looks to publish
+ * unwatched, so publishing stays a decision until it is.
+ */
+export async function sendLookToClient(lookId: string): Promise<{ error?: string }> {
+  const admin = createAdminClient() as any
+  try {
+    const { data: look } = await admin
+      .from('pilot_look').select('look_id, image_url, delivery:delivery_id!inner(member_id)')
+      .eq('look_id', lookId).maybeSingle()
+    if (!look) return { error: 'Look not found' }
+    if (!look.image_url) return { error: 'Shoot it first — she should see the look, not the parts' }
+
+    await admin.from('pilot_look')
+      .update({ visible_to_client: true, published_at: new Date().toISOString() })
+      .eq('look_id', lookId)
+    await admin.from('pilot_notification').insert({
+      member_id: (look.delivery as any).member_id,
+      kind: 'looks_ready',
+      body: 'A new look is waiting for you.',
+      look_ids: [lookId],
+    })
+    revalidatePath(PATH)
+    return {}
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Could not send it' }
+  }
+}
+
+/** Take a look back — she stops seeing it, and nothing she said is undone. */
+export async function unsendLook(lookId: string): Promise<{ error?: string }> {
+  const admin = createAdminClient() as any
+  const { error } = await admin.from('pilot_look')
+    .update({ visible_to_client: false }).eq('look_id', lookId)
+  if (error) return { error: error.message }
+  revalidatePath(PATH)
+  return {}
+}
+
+/** Every shot look she has not been sent yet, sent at once. */
+export async function sendAllShotLooks(memberId: string): Promise<{ sent: number; error?: string }> {
+  const admin = createAdminClient() as any
+  try {
+    const { data: dels } = await admin.from('pilot_delivery').select('delivery_id').eq('member_id', memberId)
+    const ids = (dels ?? []).map((d: any) => d.delivery_id)
+    if (!ids.length) return { sent: 0 }
+    const { data: looks } = await admin.from('pilot_look')
+      .select('look_id').in('delivery_id', ids)
+      .not('image_url', 'is', null).eq('visible_to_client', false)
+    const lookIds = (looks ?? []).map((l: any) => l.look_id)
+    if (!lookIds.length) return { sent: 0 }
+    await admin.from('pilot_look')
+      .update({ visible_to_client: true, published_at: new Date().toISOString() })
+      .in('look_id', lookIds)
+    await admin.from('pilot_notification').insert({
+      member_id: memberId,
+      kind: 'looks_ready',
+      body: `${lookIds.length} looks are waiting for you.`,
+      look_ids: lookIds,
+    })
+    revalidatePath(PATH)
+    return { sent: lookIds.length }
+  } catch (err) {
+    return { sent: 0, error: err instanceof Error ? err.message : 'Could not send them' }
   }
 }
