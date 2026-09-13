@@ -21,7 +21,7 @@ const REASONS = [
   { id: 'other', label: 'Something else' },
 ]
 
-export default function MyLooksClient({ view }: { view: ClientView }) {
+export default function MyLooksClient({ view, readOnly = false }: { view: ClientView; readOnly?: boolean }) {
   if (!view.memberId) {
     return (
       <p className="text-[17px] leading-relaxed text-[#4A4E57]">
@@ -52,7 +52,7 @@ export default function MyLooksClient({ view }: { view: ClientView }) {
         <section key={occasion}>
           <h2 className="text-[15px] tracking-[0.12em] text-[#8B5E00] uppercase mb-5">{occasion}</h2>
           <div className="grid gap-8 sm:grid-cols-2">
-            {looks.map((l) => <LookCard key={l.look_id} look={l} />)}
+            {looks.map((l) => <LookCard key={l.look_id} look={l} readOnly={readOnly} />)}
           </div>
         </section>
       ))}
@@ -60,7 +60,7 @@ export default function MyLooksClient({ view }: { view: ClientView }) {
   )
 }
 
-function LookCard({ look }: { look: ClientLook }) {
+function LookCard({ look, readOnly }: { look: ClientLook; readOnly?: boolean }) {
   const [open, setOpen] = useState(false)
   const [verdict, setVerdict] = useState<'yes' | 'no' | null>(look.response)
   const [reason, setReason] = useState<string | null>(null)
@@ -123,7 +123,13 @@ function LookCard({ look }: { look: ClientLook }) {
 
       {/* The question. Never behind a tap — it is the only thing being asked. */}
       <div className="mt-5 border-t border-[#E2E0DB] pt-4">
-        {saved || (look.response && !verdict) ? (
+        {readOnly ? (
+          <p className="text-[15px] text-[#A8A8A4]">
+            {look.response === 'yes' ? 'She said she would wear this'
+              : look.response === 'no' ? 'She said not for her'
+              : 'She has not answered yet'}
+          </p>
+        ) : saved || (look.response && !verdict) ? (
           <p className="text-[16px] text-[#3D7A50]">Thank you — noted.</p>
         ) : (
           <>

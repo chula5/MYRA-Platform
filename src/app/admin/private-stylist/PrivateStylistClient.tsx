@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import HerViewTab from './HerViewTab'
 import { loadMemberConfidence, sendLookToClient, unsendLook, sendAllShotLooks, createClientLogin, type MemberConfidence } from './confidence-actions'
 import { loadClientAttribution, loadTransferSeries, tagLookScope, loadInheritanceReport, runPromotionPass, alignStylistLayers, type ClientAttribution, type InheritanceReport } from './attribution-actions'
 import { SCOPE_LABEL, type Scope } from '@/lib/learning-scope'
@@ -101,7 +102,7 @@ const ROOM_COLOUR: Record<RoomKey, string> = {
   ease: '#A8A8A4',
 }
 
-const TABS = ['MEMBERS', 'DELIVERIES', 'DRY RUN', 'EXIT ARTEFACT'] as const
+const TABS = ['MEMBERS', 'DELIVERIES', 'HER VIEW', 'DRY RUN', 'EXIT ARTEFACT'] as const
 type Tab = (typeof TABS)[number]
 
 const OCCASION_LABEL: Record<string, string> = Object.fromEntries(
@@ -330,6 +331,7 @@ function OccasionPicker({
 export default function PrivateStylistClient({ data }: { data: PilotData }) {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('MEMBERS')
+  const [herViewMember, setHerViewMember] = useState<string>('')
   const [msg, setMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
 
@@ -372,6 +374,13 @@ export default function PrivateStylistClient({ data }: { data: PilotData }) {
       {msg && <p className="text-[20px] tracking-[0.12em] text-[#C4A882] mb-6">{msg}</p>}
 
       {tab === 'MEMBERS' && <MembersTab data={data} run={run} busy={busy} />}
+      {tab === 'HER VIEW' && (
+        <HerViewTab
+          members={data.members.map((m) => ({ member_id: m.member_id, name: m.name }))}
+          memberId={herViewMember || (data.members[0]?.member_id ?? '')}
+          setMemberId={setHerViewMember}
+        />
+      )}
       {tab === 'DELIVERIES' && <DeliveriesTab data={data} run={run} busy={busy} />}
       {tab === 'DRY RUN' && <DryRunTab data={data} run={run} busy={busy} goDeliveries={() => setTab('DELIVERIES')} />}
       {tab === 'EXIT ARTEFACT' && <ArtefactTab data={data} />}

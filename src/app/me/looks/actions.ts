@@ -63,11 +63,18 @@ export async function memberForCurrentUser(): Promise<{ memberId: string; name: 
 }
 
 export async function loadMyLooks(): Promise<ClientView> {
+  const me = await memberForCurrentUser()
+  if (!me) return { memberId: null, name: '', looks: [], unread: 0 }
+  return loadLooksFor(me.memberId)
+}
+
+async function loadLooksFor(memberId: string): Promise<ClientView> {
   const empty: ClientView = { memberId: null, name: '', looks: [], unread: 0 }
   try {
-    const me = await memberForCurrentUser()
-    if (!me) return empty
     const admin = createAdminClient() as any
+    const { data: member } = await admin.from('pilot_member').select('member_id, name').eq('member_id', memberId).maybeSingle()
+    if (!member) return empty
+    const me = { memberId: member.member_id as string, name: member.name as string }
 
     const { data: dels } = await admin
       .from('pilot_delivery').select('delivery_id, occasion, request_text').eq('member_id', me.memberId)
@@ -149,6 +156,22 @@ export async function reactToLook(
   if (r?.error) return { error: r.error }
   revalidatePath('/me/looks')
   return {}
+}
+
+/**
+ * The same view, for one member, readable by admin.
+ *
+ * Deliberately the same function shape feeding the same component: a mirror
+ * that is rebuilt separately drifts, and then what Chloe checks stops being
+ * what Alison sees.
+ */
+export async function loadLooksForMember(memberId: string): Promise<ClientView> {
+  const supabase = await createServerClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user || user.id !== process.env.ADMIN_USER_ID) {
+    return { memberId: null, name: '', looks: [], unread: 0, error: 'Not authorised' }
+  }
+  return loadLooksFor(memberId)
 }
 
 /** Mark her notifications read once she has seen the page. */
