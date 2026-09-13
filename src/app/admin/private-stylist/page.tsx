@@ -6,7 +6,10 @@ export const dynamic = 'force-dynamic'
 export default async function PrivateStylistPage() {
   const data = await loadPilotData()
   return (
-    <div>
+    // This page is a gallery of outfits, not a form. It breaks out of the
+    // admin shell's 1440px column and uses the whole screen, so finished
+    // looks sit six across instead of stacked in the middle of a wide monitor.
+    <div className="mx-[calc(50%-50vw)] w-screen px-8">
       <div className="mb-8">
         <p className="text-[10px] tracking-[0.2em] text-[#C4A882] mb-1">ONE HOUSE · THREE ROOMS</p>
         <h1 className="text-[22px] tracking-[0.06em] text-[#0A0A0A]">PRIVATE STYLIST</h1>

@@ -1769,9 +1769,10 @@ function MemberCard({
 // ── DELIVERIES ──────────────────────────────────────────────────────────────
 
 function DeliveriesTab({ data, run, busy }: { data: PilotData; run: Run; busy: string | null }) {
-  const [memberId, setMemberId] = useState<string>('all')
+  // Always a person. There is no useful view across clients.
+  const [memberId, setMemberId] = useState<string>(data.members[0]?.member_id ?? '')
   const [showNew, setShowNew] = useState(false)
-  const deliveries = data.deliveries.filter((d) => memberId === 'all' || d.member_id === memberId)
+  const deliveries = data.deliveries.filter((d) => d.member_id === memberId)
   const memberById = Object.fromEntries(data.members.map((m) => [m.member_id, m]))
 
   return (
@@ -1797,17 +1798,13 @@ function DeliveriesTab({ data, run, busy }: { data: PilotData; run: Run; busy: s
       </div>
       <div className="flex items-center justify-between">
         <div className="flex gap-1.5">
-          <button
-            onClick={() => setMemberId('all')}
-            className={`${btnTiny} ${memberId === 'all' ? '!border-[#0A0A0A] !text-[#0A0A0A]' : ''}`}
-          >
-            ALL
-          </button>
+          {/* No ALL. Every client is a different person with a different
+              stylist, profile and history; the union of them describes nobody. */}
           {data.members.map((m) => (
             <button
               key={m.member_id}
               onClick={() => setMemberId(m.member_id)}
-              className={`${btnTiny} ${memberId === m.member_id ? '!border-[#0A0A0A] !text-[#0A0A0A]' : ''}`}
+              className={`${btnTiny} !text-[11px] !px-4 !py-2 ${memberId === m.member_id ? '!border-[#0A0A0A] !text-[#0A0A0A]' : ''}`}
             >
               {m.name}
             </button>
@@ -1822,8 +1819,14 @@ function DeliveriesTab({ data, run, busy }: { data: PilotData; run: Run; busy: s
 
       {/* Filter to one member → the numbers that decide whether she can be
           scaled sit at the top, then her screenshot lookbook. */}
-      {memberId !== 'all' && memberById[memberId] && (
+      {memberById[memberId] && (
         <>
+          <FinishedWall
+            memberName={memberById[memberId].name}
+            deliveries={deliveries}
+            run={run}
+            busy={busy}
+          />
           <ScoreStrip memberId={memberId} />
           <AttributionPanel memberId={memberId} />
           <Lookbook deliveries={deliveries} memberName={memberById[memberId].name} activity={data.activity} run={run} busy={busy} />
@@ -2025,6 +2028,97 @@ function AttributionPanel({ memberId }: { memberId: string }) {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+// ── HER FINISHED WORK ───────────────────────────────────────────────────────
+// Every shot look she has, at the top, in rows rather than a column, split by
+// the occasion the delivery was for. This is what the client is being sent —
+// it should be the first thing on the page and readable at a glance, not
+// something reached by scrolling past the pieces that built it.
+function FinishedWall({
+  memberName, deliveries, run, busy,
+}: {
+  memberName: string
+  deliveries: PilotDelivery[]
+  run: Run
+  busy: string | null
+}) {
+  const [openLook, setOpenLook] = useState<string | null>(null)
+
+  const byOccasion = new Map<string, { look: PilotLook; occasion: string | null }[]>()
+  for (const d of deliveries) {
+    for (const l of d.looks ?? []) {
+      if (!l.image_url) continue
+      const key = d.occasion ? OCCASION_LABEL[d.occasion] ?? d.occasion : 'NO OCCASION SET'
+      byOccasion.set(key, [...(byOccasion.get(key) ?? []), { look: l, occasion: d.occasion }])
+    }
+  }
+  const total = Array.from(byOccasion.values()).reduce((n, v) => n + v.length, 0)
+  if (!total) return null
+
+  return (
+    <div className="border border-[#E2E0DB] bg-white p-6">
+      <p className="text-[13px] tracking-[0.14em] text-[#0A0A0A]">{memberName.toUpperCase()}</p>
+      <p className="text-[10px] tracking-[0.12em] text-[#A8A8A4] mt-1 mb-5">
+        {total} FINISHED LOOK{total === 1 ? '' : 'S'} · BY OCCASION
+      </p>
+
+      {Array.from(byOccasion.entries()).map(([occasion, entries]) => (
+        <div key={occasion} className="mb-7 last:mb-0">
+          <p className="text-[11px] tracking-[0.16em] text-[#8B5E00] mb-3 pb-2 border-b border-[#EFEDE8]">
+            {occasion} · {entries.length}
+          </p>
+          <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
+            {entries.map(({ look: l }) => (
+              <div key={l.look_id}>
+                <button onClick={() => setOpenLook(openLook === l.look_id ? null : l.look_id)} className="block w-full text-left">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={l.image_url!}
+                    alt=""
+                    className={`w-full aspect-[3/4] object-cover border-2 transition-colors ${openLook === l.look_id ? 'border-[#C4A882]' : 'border-transparent hover:border-[#E2E0DB]'}`}
+                  />
+                  <p className="text-[10px] tracking-[0.08em] text-[#0A0A0A] mt-1.5">
+                    LOOK {l.position}
+                    <span className="text-[#A8A8A4]"> · {formatLookSpend(lookSpend(l.items)).toUpperCase()}</span>
+                  </p>
+                </button>
+
+                {openLook === l.look_id && (
+                  <div className="mt-2 border border-[#E2E0DB] bg-[#FCFCFA] p-2.5">
+                    {l.items.map((it, i) => (
+                      <div key={i} className="flex items-center gap-2 py-1">
+                        {it.image_url && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={it.image_url as string} alt="" className="w-9 aspect-[3/4] object-cover shrink-0" />
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-[9px] tracking-[0.1em] text-[#A8A8A4] truncate">
+                            {it.brand.toUpperCase()}{itemTypeLabel(it) && <span className="text-[#8B5E00]"> · {itemTypeLabel(it)}</span>}
+                          </p>
+                          <p className="text-[10px] tracking-[0.06em] text-[#0A0A0A] truncate">
+                            {it.product_name.toUpperCase()}
+                            {typeof it.price_gbp === 'number' && <span className="text-[#6B6B6B]"> {gbp(it.price_gbp)}</span>}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                    <button
+                      className="mt-2 w-full text-[9px] tracking-[0.14em] text-[#8B5E00] border border-[#E8D9B8] py-1.5 hover:bg-[#FBF8F2]"
+                      disabled={busy === `var-${l.look_id}`}
+                      onClick={() => run(`var-${l.look_id}`, () => composeLookVariants(l.look_id), 'STYLED ANOTHER WAY')}
+                    >
+                      ◆ STYLE THE ANCHOR ANOTHER WAY
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -2724,7 +2818,7 @@ function LookRow({
     <div className="border border-[#E2E0DB] px-4 py-3">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] tracking-[0.14em] text-[#0A0A0A]">
+          <p className="text-[11px] tracking-[0.14em] text-[#0A0A0A]">
             LOOK {l.position} — {formatRoomMix(l.room_mix) || 'NO ROOM MIX'}
             {l.approved_at && <span className="ml-2 text-[#3D7A50]">· APPROVED ✓</span>}
             {composed && (
