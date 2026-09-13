@@ -12,10 +12,8 @@
 // answer, what she has already loved, and a way to ask for something new.
 
 import { useMemo, useState } from 'react'
-import {
-  reactToLook, requestLooks, CLIENT_OCCASIONS, CLIENT_CLIMATES,
-  type ClientView, type ClientLook,
-} from './actions'
+import { reactToLook, requestLooks, type ClientView, type ClientLook } from './actions'
+import { CLIENT_OCCASIONS, CLIENT_CLIMATES } from '@/lib/client-occasions'
 
 const REASONS = [
   { id: 'not_my_style', label: 'Not my style' },

@@ -14,6 +14,7 @@
 import { createServerClient, createAdminClient } from '@/lib/supabase-server'
 import { revalidatePath } from 'next/cache'
 import { recordMemberLookFeedback } from '@/app/admin/private-stylist/actions'
+import { CLIENT_OCCASIONS, OCCASION_LABEL } from '@/lib/client-occasions'
 
 export interface ClientLookItem {
   item_id: string | null
@@ -45,11 +46,6 @@ export interface ClientView {
   error?: string
 }
 
-const OCCASION_LABEL: Record<string, string> = {
-  work_standard: 'Work', work_elevated: 'Work — client days',
-  casual_day: 'Daytime', dinner_drinks: 'Dinners and drinks',
-  event: 'Occasions', travel: 'Trips',
-}
 
 /** The member record behind the signed-in client, or null if she has none. */
 export async function memberForCurrentUser(): Promise<{ memberId: string; name: string } | null> {
@@ -186,20 +182,6 @@ export async function markNotificationsRead(): Promise<void> {
 
 // ── Asking for something ────────────────────────────────────────────────────
 
-export const CLIENT_OCCASIONS = [
-  { id: 'casual_day', label: 'A normal day' },
-  { id: 'dinner_drinks', label: 'Dinner or drinks' },
-  { id: 'work_standard', label: 'Work' },
-  { id: 'work_elevated', label: 'Something important at work' },
-  { id: 'event', label: 'An occasion' },
-  { id: 'travel', label: 'A trip' },
-] as const
-
-export const CLIENT_CLIMATES = [
-  { id: 'hot', label: 'Somewhere hot' },
-  { id: 'temperate', label: 'Mild' },
-  { id: 'cold', label: 'Cold' },
-] as const
 
 /**
  * She asks; MYRA composes.
