@@ -166,7 +166,11 @@ const MEN_RE = /\b(men|mens|men's|man|menswear|homme|hommes|herren|uomo|hombre|m
 // names two types at once, and whichever rule is tested first wins. Sessùn
 // files a knit midi skirt under /skirts-and-shorts/ and it came out SHORTS.
 // Stripped from every category haystack so the piece's own words decide.
-const AMBIGUOUS_CATEGORY = /\b[a-z]+s[-_ ]and[-_ ][a-z]+s\b/gi
+// A combined-category label ("skirts and shorts", "skirts & shorts",
+// "tops / knitwear") must never decide the type — the piece's own name does.
+// Strip such pairs so a skirt filed under "skirts & shorts" isn't read as
+// shorts. Connectors: the word "and" OR a symbol (& / , +).
+const AMBIGUOUS_CATEGORY = /\b[a-z]+s(?:[-_ ]and[-_ ]|[-_ ]*[&/,+][-_ ]*)[a-z]+s\b/gi
 
 const TYPE_RULES: Array<[RegExp, string]> = [
   [/\btrench/, 'trench'], [/\bcoat|parka|puffer/, 'coat'], [/\bblazer/, 'blazer'],
