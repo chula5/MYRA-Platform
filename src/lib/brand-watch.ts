@@ -170,7 +170,14 @@ const AMBIGUOUS_CATEGORY = /\b[a-z]+s[-_ ]and[-_ ][a-z]+s\b/gi
 
 const TYPE_RULES: Array<[RegExp, string]> = [
   [/\btrench/, 'trench'], [/\bcoat|parka|puffer/, 'coat'], [/\bblazer/, 'blazer'],
-  [/\bgilet|waistcoat|\bvest\b/, 'gilet'], [/\bcape|poncho/, 'cape'],
+  // "Vest" is the trap. In British retail it usually means a sleeveless TOP —
+  // a knit vest, a ribbed vest, a cashmere vest — and only outerwear when
+  // something else in the name says so. Matching it bare filed 10 of the 22
+  // gilets in the library as coats: Tura Top, High Neck Knit Tank, Amara
+  // v-neck vest, every Mos Mosh knit vest. Sleeveless tops are handled lower
+  // down, where the piece's own words decide.
+  [/\bgilet|waistcoat|(?:quilted|padded|puffer|shearling|utility|down|fleece|duffle|hunting|field)[\s-]*vest/, 'gilet'],
+  [/\bcape|poncho/, 'cape'],
   [/\bouterwear/, 'jacket'], // umbrella category (Munthe et al) — jacket as the safe default
   // "Runner" is what activewear brands call a sneaker — Varley sells six and
   // two of them came through with no type at all.
@@ -185,8 +192,13 @@ const TYPE_RULES: Array<[RegExp, string]> = [
   [/midi.?dress/, 'midi_dress'], [/\bdress/, 'midi_dress'],
   [/\bcorset/, 'corset'], [/bodysuit/, 'bodysuit'],
   [/t.?shirt|\btee\b|polo shirt|\bpolo\b(?!.*\bneck\b)/, 't-shirt'],
+  // A knit vest is a sleeveless jumper, not a coat.
+  // The fibre word is rarely adjacent: "relaxed cashmere HIGH NECK vest".
+  // Bounded so it cannot reach across a whole description.
+  [/(?:knit|ribbed|cashmere|merino|wool|sweater|jumper)[\s\w-]{0,20}vest/, 'knitwear'],
   [/knit|sweater|jumper|cardigan|pullover|turtleneck|roll.?neck|polo.?neck/, 'knitwear'],
-  [/\bblouse|camisole|\bcami\b|\btop\b|\btops\b|\btank\b/, 'blouse'], [/\bovershirt|\bshirt/, 'shirt'],
+  // Everything else called a vest: a sleeveless top.
+  [/\bblouse|camisole|\bcami\b|\btop\b|\btops\b|\btank\b|\bvest\b/, 'blouse'], [/\bovershirt|\bshirt/, 'shirt'],
   [/\bjeans|\bdenim\b/, 'jeans'], [/trouser|\bpants|chino|legging/, 'trousers'],
   [/\bshorts|bermuda/, 'shorts'], [/\bskirt/, 'skirt'],
   [/\bjacket|bomber|anorak|windbreaker/, 'jacket'],

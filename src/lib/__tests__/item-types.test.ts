@@ -83,3 +83,38 @@ describe('what MYRA does not style', () => {
     }
   })
 })
+
+describe('vest is a top unless something says otherwise', () => {
+  const p = (title: string, url = 'https://x.com/products/x') => ({
+    url, title, brand: 'X', description: '', category: '',
+    price: 100, currency: 'GBP', images: ['https://x/i.jpg'], available: true,
+  })
+  const t = (title: string, url?: string) => classifyExternalProduct(p(title, url)).itemType
+
+  it('reads a knit vest as knitwear, not outerwear', () => {
+    expect(t('MMAyana Wool Knit Vest')).toBe('knitwear')
+    expect(t('Relaxed Cashmere High Neck Vest')).toBe('knitwear')
+  })
+
+  it('puts an unqualified vest on the top half, whatever else it decides', () => {
+    // "Amara v-neck vest" could be knit or woven and the name does not say.
+    // Blouse is a fair read; what matters is that it is not her coat.
+    const vneck = t('Amara v-neck vest', 'https://uk.skallstudio.com/products/amara-v-neck-vest-light-green')
+    expect(vneck).not.toBe('gilet')
+    expect(['blouse', 'knitwear']).toContain(vneck)
+  })
+
+  it('reads a plain vest as a sleeveless top', () => {
+    // The URL says vest, the name says top — either way it is not a coat.
+    expect(t('Tura Top - NAVY', 'https://mkdtstudio.com/products/tura-soft-denim-vest-navy')).toBe('blouse')
+    expect(t('Elle Ribbed Vest - White')).toBe('knitwear')
+  })
+
+  it('still reads real outerwear as a gilet', () => {
+    expect(t('Sheepskin Gilet')).toBe('gilet')
+    expect(t('Merino Wool Gilet')).toBe('gilet')
+    expect(t('Carina Duffle Gilet - Cocoa')).toBe('gilet')
+    expect(t('Merlin waistcoat')).toBe('gilet')
+    expect(t('Quilted Vest')).toBe('gilet')
+  })
+})
