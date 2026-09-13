@@ -11,9 +11,9 @@ export default async function PrivateStylistPage() {
     // looks sit six across instead of stacked in the middle of a wide monitor.
     <div className="mx-[calc(50%-50vw)] w-screen px-8">
       <div className="mb-8">
-        <p className="text-[10px] tracking-[0.2em] text-[#C4A882] mb-1">ONE HOUSE · THREE ROOMS</p>
-        <h1 className="text-[22px] tracking-[0.06em] text-[#0A0A0A]">PRIVATE STYLIST</h1>
-        <p className="text-[11px] tracking-[0.06em] text-[#6B6B6B] mt-2 max-w-2xl leading-relaxed">
+        <p className="text-[12px] tracking-[0.2em] text-[#C4A882] mb-1">ONE HOUSE · THREE ROOMS</p>
+        <h1 className="text-[26px] tracking-[0.06em] text-[#0A0A0A]">PRIVATE STYLIST</h1>
+        <p className="text-[13px] tracking-[0.06em] text-[#6B6B6B] mt-2 max-w-3xl leading-relaxed">
           The always-on stylist pilot. A member is never assigned to a room — she has a weighting
           across all three, tilted by occasion, clamped by the formality floor on work days.
           Nothing here is visible on the live site.
