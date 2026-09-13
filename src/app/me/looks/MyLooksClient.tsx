@@ -29,6 +29,8 @@ export default function MyLooksClient({ view, readOnly = false }: { view: Client
   const [query, setQuery] = useState('')
   const [brand, setBrand] = useState('')
   const [occasion, setOccasion] = useState('')
+  const [styling, setStyling] = useState<ClientLook | null>(null)
+  const [exploring, setExploring] = useState<ClientLook | null>(null)
 
   const brands = useMemo(() => {
     const s = new Set<string>()
@@ -110,14 +112,39 @@ export default function MyLooksClient({ view, readOnly = false }: { view: Client
 
         {waiting.length > 0 && (
           <Section title="Waiting for you" subtitle="Tell me which you would actually wear">
-            {waiting.map((l) => <LookCard key={l.look_id} look={l} readOnly={readOnly} />)}
+            {waiting.map((l) => (
+              <LookCard key={l.look_id} look={l} readOnly={readOnly}
+                onStyleThis={() => setStyling(l)} onExplore={() => setExploring(l)} />
+            ))}
           </Section>
         )}
 
         {loved.length > 0 && (
           <Section title="Looks you loved" subtitle="Kept, and shaping what comes next">
-            {loved.map((l) => <LookCard key={l.look_id} look={l} readOnly={readOnly} />)}
+            {loved.map((l) => (
+              <LookCard key={l.look_id} look={l} readOnly={readOnly}
+                onStyleThis={() => setStyling(l)} onExplore={() => setExploring(l)} />
+            ))}
           </Section>
+        )}
+
+        {/* STYLE ITEMS — she picks a piece and asks for it worn another way.
+            EXPLORE STYLES — more like this one. Both are the same request in
+            the end: her stylist composes and checks before it lands here. */}
+        {styling && (
+          <RequestModal
+            title={`Which piece would you like styled another way?`}
+            look={styling}
+            onClose={() => setStyling(null)}
+          />
+        )}
+        {exploring && (
+          <RequestModal
+            title="More like this one?"
+            look={exploring}
+            exploring
+            onClose={() => setExploring(null)}
+          />
         )}
 
         {matching.length === 0 && (
@@ -226,7 +253,95 @@ function AskPanel() {
   )
 }
 
-function LookCard({ look, readOnly }: { look: ClientLook; readOnly?: boolean }) {
+/** She asks for a piece styled again, or for more like a look she has. Both
+ *  go the same way: composed on request, checked, then sent. */
+function RequestModal({
+  title, look, exploring, onClose,
+}: {
+  title: string
+  look: ClientLook
+  exploring?: boolean
+  onClose: () => void
+}) {
+  const [picked, setPicked] = useState<string | null>(exploring ? 'all' : null)
+  const [sent, setSent] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  const ask = async () => {
+    setBusy(true)
+    const piece = look.items.find((i) => i.item_id === picked)
+    const words = exploring
+      ? `More looks like the one with the ${look.items[0]?.product_name ?? 'pieces'} — ${look.occasion_label}`
+      : `Style my ${piece?.product_name ?? 'piece'} another way`
+    await requestLooks(look.occasion_id ?? 'casual_day', null, words)
+    setBusy(false)
+    setSent(true)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-[#EDEBE7] max-w-[520px] w-full p-6" onClick={(e) => e.stopPropagation()}>
+        {sent ? (
+          <>
+            <p className="text-[17px] text-[#2B2B2B]">
+              MYRA is working on it. Your stylist checks the looks before they land here.
+            </p>
+            <button onClick={onClose} className="mt-5 text-[16px] px-5 py-2.5 bg-[#2B2B2B] text-white">Close</button>
+          </>
+        ) : (
+          <>
+            <p className="text-[17px] text-[#2B2B2B] mb-4">{title}</p>
+            {!exploring && (
+              <div className="space-y-2 mb-5 max-h-[45vh] overflow-y-auto">
+                {look.items.filter((i) => i.item_id).map((it) => (
+                  <button
+                    key={it.item_id}
+                    onClick={() => setPicked(it.item_id)}
+                    className={`w-full flex items-center gap-3 p-2 border text-left transition-colors ${picked === it.item_id ? 'border-[#2B2B2B]' : 'border-[#C3BFB8]'}`}
+                  >
+                    {it.image_url && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={it.image_url} alt="" className="w-12 aspect-[3/4] object-cover shrink-0" />
+                    )}
+                    <span className="min-w-0">
+                      <span className="block text-[11px] tracking-[0.09em] text-[#6E6B65] uppercase truncate">{it.brand}</span>
+                      <span className="block text-[15px] text-[#2B2B2B] truncate">{it.product_name}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-3">
+              <button
+                disabled={!picked || busy}
+                onClick={ask}
+                className="text-[16px] px-5 py-2.5 bg-[#2B2B2B] text-white disabled:opacity-40"
+              >
+                {busy ? 'Asking…' : 'Ask MYRA'}
+              </button>
+              <button onClick={onClose} className="text-[16px] px-5 py-2.5 border border-[#9B978F] text-[#40403C]">
+                Not now
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Same treatment as the feed's cards: white, uppercase, tracked, over a
+// gradient — the actions belong to the photograph, not to a toolbar.
+const ACTION = 'pointer-events-auto text-white text-[11px] tracking-[0.1em] uppercase font-light hover:opacity-70 transition-opacity'
+
+function LookCard({
+  look, readOnly, onStyleThis, onExplore,
+}: {
+  look: ClientLook
+  readOnly?: boolean
+  onStyleThis?: (l: ClientLook) => void
+  onExplore?: (l: ClientLook) => void
+}) {
   const [open, setOpen] = useState(false)
   const [verdict, setVerdict] = useState<'yes' | 'no' | null>(look.response)
   const [reason, setReason] = useState<string | null>(null)
@@ -247,42 +362,70 @@ function LookCard({ look, readOnly }: { look: ClientLook; readOnly?: boolean }) 
 
   return (
     <div className="bg-[#EDEBE7] border border-[#C3BFB8]">
-      {look.image_url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={look.image_url} alt="" className="w-full aspect-[3/4] object-cover bg-[#EDEDED]" />
-      ) : (
-        <div className="w-full aspect-[3/4] bg-[#EDEDED]" />
-      )}
+      {/* The photo carries the actions, the way the feed does it: white text
+          over a gradient rather than a row of admin buttons underneath. */}
+      <div className="relative group">
+        {look.image_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={look.image_url} alt="" className="w-full aspect-[3/4] object-cover bg-[#EDEDED]" />
+        ) : (
+          <div className="w-full aspect-[3/4] bg-[#EDEDED]" />
+        )}
+
+        {/* Shop-the-look panel, overlaid when she asks to source the pieces. */}
+        {open && look.items.length > 0 && (
+          <div className="absolute inset-0 z-30 bg-black/45 overflow-y-auto p-3">
+            <div className="space-y-2">
+              {look.items.map((it, i) => (
+                <div key={i} className="flex items-center gap-3 bg-white/95 p-2">
+                  {it.image_url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={it.image_url} alt="" className="w-12 aspect-[3/4] object-cover shrink-0 bg-[#E3E1DD]" />
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-[11px] tracking-[0.09em] text-[#6E6B65] uppercase truncate">
+                      {it.brand}{it.item_type && ` · ${it.item_type.replace(/_/g, ' ')}`}
+                    </p>
+                    <p className="text-[14px] text-[#2B2B2B] truncate">
+                      {it.owned && <span className="text-[#8B5E00]">Yours · </span>}
+                      {it.product_name}
+                      {!it.owned && typeof it.price_gbp === 'number' && <span className="text-[#55534E]"> £{Math.round(it.price_gbp)}</span>}
+                    </p>
+                    {it.url && !it.owned && (
+                      <a
+                        href={it.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[12px] tracking-[0.09em] uppercase text-[#2B2B2B] underline underline-offset-2"
+                      >
+                        Shop it
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="absolute inset-x-0 bottom-0 z-40 pt-10 pb-3.5 px-3 bg-gradient-to-t from-black/55 via-black/20 to-transparent pointer-events-none">
+          <div className="flex items-center justify-center gap-x-4">
+            <button onClick={() => setOpen((v) => !v)} className={ACTION}>
+              {open ? 'Hide Items' : 'Source Items'}
+            </button>
+            <button onClick={() => onStyleThis?.(look)} className={ACTION}>Style Items</button>
+          </div>
+          <div className="flex justify-center mt-1.5">
+            <button onClick={() => onExplore?.(look)} className={ACTION}>Explore Styles</button>
+          </div>
+        </div>
+      </div>
 
       <div className="px-4 py-4">
-        <button onClick={() => setOpen((v) => !v)} className="text-[15px] text-[#40403C] underline underline-offset-4">
-          {open ? 'Hide the pieces' : `See the ${look.items.length} pieces`}
-          {total > 0 && <span className="text-[#6E6B65] no-underline"> · £{Math.round(total)}</span>}
-        </button>
-
-        {open && (
-          <div className="mt-3 space-y-3">
-            {look.items.map((it, i) => (
-              <div key={i} className="flex items-center gap-3">
-                {it.image_url && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={it.image_url} alt="" className="w-12 aspect-[3/4] object-cover shrink-0 bg-[#E3E1DD]" />
-                )}
-                <div className="min-w-0">
-                  <p className="text-[12px] tracking-[0.08em] text-[#6E6B65] uppercase truncate">
-                    {it.brand}{it.item_type && ` · ${it.item_type.replace(/_/g, ' ')}`}
-                  </p>
-                  <p className="text-[15px] text-[#2B2B2B] truncate">
-                    {it.owned && <span className="text-[#8B5E00]">Yours · </span>}
-                    {it.url ? (
-                      <a href={it.url} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">{it.product_name}</a>
-                    ) : it.product_name}
-                    {!it.owned && typeof it.price_gbp === 'number' && <span className="text-[#55534E]"> £{Math.round(it.price_gbp)}</span>}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
+        {total > 0 && (
+          <p className="text-[14px] text-[#6E6B65]">
+            {look.items.length} pieces · £{Math.round(total)}
+          </p>
         )}
 
         <div className="mt-4 border-t border-[#C3BFB8] pt-4">

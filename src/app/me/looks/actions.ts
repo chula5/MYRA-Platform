@@ -31,6 +31,7 @@ export interface ClientLook {
   look_id: string
   position: number
   image_url: string | null
+  occasion_id: string | null
   occasion_label: string
   request_text: string | null
   items: ClientLookItem[]
@@ -99,6 +100,7 @@ async function loadLooksFor(memberId: string): Promise<ClientView> {
           look_id: l.look_id,
           position: l.position,
           image_url: l.image_url,
+          occasion_id: d?.occasion ?? null,
           occasion_label: d?.occasion ? (OCCASION_LABEL[d.occasion] ?? d.occasion) : 'For you',
           request_text: d?.request_text ?? null,
           response: l.response ?? null,
