@@ -79,6 +79,7 @@ import { explainTraits } from '@/lib/member-traits'
 import { type ClimateId } from '@/lib/climate'
 import { DEFAULT_SCOPE } from '@/lib/learning-scope'
 import { tooSimilarVariant } from '@/lib/pilot-composer'
+import { pieceVerdicts } from '@/lib/piece-verdicts'
 
 const PATH = '/admin/private-stylist'
 
@@ -1679,6 +1680,23 @@ export interface ComposeDeliveryOptions {
   count?: number
 }
 
+/**
+ * Every feedback row for a member, oldest first. PostgREST returns at most
+ * 1,000 rows however high .limit() is set, and Alison already has more than
+ * that — so the composer was learning from her oldest 1,000 answers only.
+ */
+async function allFeedbackRows(admin: any, memberId: string, columns: string): Promise<{ data: any[] }> {
+  const out: any[] = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await admin.from('pilot_look_feedback').select(columns)
+      .eq('member_id', memberId).order('created_at', { ascending: true }).range(from, from + 999)
+    if (error) throw new Error(error.message)
+    out.push(...(data ?? []))
+    if (!data || data.length < 1000) break
+  }
+  return { data: out }
+}
+
 type PlannedLooks = ReturnType<typeof composeMemberLooks>
 
 /**
@@ -1708,7 +1726,7 @@ async function planDeliveryLooks(
   // explores the library instead of regenerating the same argmax looks.
   const [{ data: priorLooks }, { data: fb }] = await Promise.all([
     admin.from('pilot_look').select('items, delivery:delivery_id!inner(member_id)').eq('delivery.member_id', delivery.member_id),
-    admin.from('pilot_look_feedback').select('item_in, item_out, action').eq('member_id', delivery.member_id).limit(5000),
+    allFeedbackRows(admin, delivery.member_id, 'item_in, item_out, action, created_at'),
   ])
   const seenCounts = new Map<string, number>()
   for (const l of priorLooks ?? []) {
@@ -1716,23 +1734,16 @@ async function planDeliveryLooks(
       if (it.item_id) seenCounts.set(it.item_id, (seenCounts.get(it.item_id) ?? 0) + 1)
     }
   }
-  // Kept and rejected are counted SEPARATELY. An accepted piece used to be
-  // added to seenCounts — the variety penalty — so approving a look taught
-  // the composer to avoid the very pieces that worked.
-  const keptCounts = new Map<string, number>()
+  // Kept and rejected are counted SEPARATELY, and the MOST RECENT answer on a
+  // piece decides which side it is on (lib/piece-verdicts). This used to drop
+  // all credit for a kept piece the moment any rejection existed — including a
+  // swap-out undone a minute later.
+  const verdicts = pieceVerdicts(fb ?? [])
+  const rejected = verdicts.rejected
   const rejectedCounts = new Map<string, number>()
-  const rejected = new Set<string>()
-  const bump = (m: Map<string, number>, id?: string | null) => { if (id) m.set(id, (m.get(id) ?? 0) + 1) }
-  for (const f of fb ?? []) {
-    // Both shapes: a removed piece is item_out, a skipped one used to be
-    // item_in. Reading only item_in meant every ordinary removal was missed.
-    if (f.action === 'remove') { const id = f.item_out ?? f.item_in; if (id) { rejected.add(id); bump(rejectedCounts, id) } }
-    if (f.action === 'swap' && f.item_out) { rejected.add(f.item_out); bump(rejectedCounts, f.item_out) }
-    if (f.action === 'accept' && f.item_in) bump(keptCounts, f.item_in)
-  }
-  // A piece she kept AND later rejected is not a keeper — the rejection is the
-  // more recent answer, and counting both would cancel it out.
-  for (const id of Array.from(rejectedCounts.keys())) keptCounts.delete(id)
+  verdicts.rejectedCounts.forEach((n, id) => { if (rejected.has(id)) rejectedCounts.set(id, n) })
+  const keptCounts = new Map<string, number>()
+  verdicts.keptCounts.forEach((n, id) => { if (!rejected.has(id)) keptCounts.set(id, n) })
 
   // Pieces that have already anchored an APPROVED look. The anchor is the
   // dress if there is one, otherwise the top — the composer's own rule — since
@@ -1906,17 +1917,14 @@ export async function composeLookVariants(
   // Same history read as a fresh delivery, so variants avoid pieces she's rejected.
   const [{ data: priorLooks }, { data: fb }] = await Promise.all([
     admin.from('pilot_look').select('items, delivery:delivery_id!inner(member_id)').eq('delivery.member_id', delivery.member_id),
-    admin.from('pilot_look_feedback').select('item_in, item_out, action').eq('member_id', delivery.member_id).limit(5000),
+    allFeedbackRows(admin, delivery.member_id, 'item_in, item_out, action, created_at'),
   ])
   const seenCounts = new Map<string, number>()
   for (const l of priorLooks ?? []) for (const it of (l.items ?? []) as any[]) {
     if (it.item_id) seenCounts.set(it.item_id, (seenCounts.get(it.item_id) ?? 0) + 1)
   }
-  const rejected = new Set<string>()
-  for (const f of fb ?? []) {
-    if (f.action === 'remove') { const id = f.item_out ?? f.item_in; if (id) rejected.add(id) }
-    if (f.action === 'swap' && f.item_out) rejected.add(f.item_out)
-  }
+  // Same definition as a fresh delivery: only pieces whose latest answer is a rejection.
+  const rejected = pieceVerdicts(fb ?? []).rejected
 
   const groupId: string = look.variant_group ?? look.look_id
   // Every look already in this group (this look included), so we don't repeat one.

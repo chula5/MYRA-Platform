@@ -22,6 +22,7 @@ import {
 } from '@/lib/composer'
 import type { LookItem, StylePrefs, PriceBands } from '@/lib/pilot-stylist'
 import { avoidReasons, lovedScore, priceVerdict } from '@/lib/pilot-stylist'
+import { mixesWhiteAndCream } from '@/lib/pale-tone'
 import { priceOfItem } from '@/lib/brand-affinity'
 import { itemPseudoVector } from '@/lib/brand-affinity'
 import { cosine } from '@/lib/taste-vector'
@@ -237,6 +238,33 @@ export function memberComboBonus(
   return Math.max(-1, Math.min(1, s / Math.max(1, n + pairs * 0.5)))
 }
 
+const SHOE_TYPES = new Set(['sneaker', 'flat', 'boot', 'heel', 'sandal', 'mule'])
+/** How many usable pieces a shoe type needs before it can own the slot alone. */
+export const SHOE_PREFERENCE_MIN = 4
+
+/**
+ * Her shoes, not the anchor's. The shoe bucket is filled by pairwise
+ * compatibility with the anchor, so an authored "loves trainers" (+0.15 on the
+ * piece) never reached it — boots won on compatibility. When she loves shoe
+ * types, the shoe slot is drawn from those; trainers lead outright when she
+ * loves them and there are enough to vary. Falls back to every loved shoe type,
+ * then to all shoes, so a thin library still dresses her.
+ */
+export function preferLovedShoes(t: MemberTaste, pool: ItemWithBrand[]): ItemWithBrand[] {
+  const loved = new Set((t.prefs?.types_loved ?? []).filter((x) => SHOE_TYPES.has(x)))
+  if (!loved.size) return pool
+  const isShoe = (i: ItemWithBrand) => slotForItemType(i.item_type) === 'shoe'
+  const shoes = pool.filter(isShoe)
+  const rest = pool.filter((i) => !isShoe(i))
+  if (loved.has('sneaker')) {
+    const sneakers = shoes.filter((i) => i.item_type === 'sneaker')
+    if (sneakers.length >= SHOE_PREFERENCE_MIN) return [...rest, ...sneakers]
+  }
+  const lovedShoes = shoes.filter((i) => i.item_type && loved.has(i.item_type))
+  if (lovedShoes.length >= SHOE_PREFERENCE_MIN) return [...rest, ...lovedShoes]
+  return pool
+}
+
 // Hard gate: excluded brand pairs and input-only brands never appear.
 export function memberGate(
   t: MemberTaste,
@@ -258,6 +286,10 @@ export function memberGate(
       if (a && b && a !== b && t.excludedPairs.has(pairKey(a, b))) return false
     }
   }
+  // White and cream do not go together — a house rule the constitution only
+  // penalised, and never applied to member looks at all. Read from the colour
+  // itself: half the "cream" library is white (lib/pale-tone).
+  if (mixesWhiteAndCream(all as any)) return false
   return true
 }
 
@@ -345,13 +377,18 @@ export interface ComposeHistory {
   anchoredIds?: Set<string>
 }
 
-/** Rejected this many times, it should stop being offered at all. */
-export const HARD_REJECT_COUNT = 2
-
+/**
+ * Her latest answer on this piece was a rejection, so it is not offered.
+ *
+ * This used to need two rejections, because `rejected` counted every rejection
+ * ever made — a swap undone a minute later included. Now `rejected` holds only
+ * pieces whose MOST RECENT answer is a rejection (lib/piece-verdicts), so one
+ * unreversed "no" is her answer. Composing the DIVIO PHONE bag she removed and
+ * never kept, while the confidence score marked the same look 0% for it, was
+ * the two halves disagreeing. The starvation net still releases the gate.
+ */
 export function rejectedEnoughToBlock(h: ComposeHistory | undefined, itemId: string): boolean {
-  if (!h) return false
-  const n = h.rejectedCounts?.get(itemId) ?? (h.rejected.has(itemId) ? 1 : 0)
-  return n >= HARD_REJECT_COUNT
+  return !!h && h.rejected.has(itemId)
 }
 
 /**
@@ -451,11 +488,12 @@ export function composeMemberLooks(
   // Relax her preferences before the weather, and only fall past the weather
   // when the library genuinely has nothing for it — at which point the caller
   // says so rather than quietly dressing her for the wrong season.
-  const usable = canBuildLooks(preferred)
+  const usableBase = canBuildLooks(preferred)
     ? preferred
     : canBuildLooks(weatherOk)
       ? weatherOk
       : inStock
+  const usable = preferLovedShoes(t, usableBase)
 
   const itemScore = (i: ItemWithBrand) =>
     memberItemScore(t, i) + occasionItemScore(occ, i) + climateScore(occ?.climate, i as any) + personaFitScore(lens, i)
@@ -608,9 +646,11 @@ export function composeMemberVariants(
   const weatherOk = inStock.filter((i) => !climateReason(occ?.climate, i as any))
   const preferred = weatherOk.filter(
     (i) => avoidReasons(t.prefs, i as any).length === 0 && itemPriceVerdict(t, i) !== 'over' &&
-      !(t.traits && traitBlocked(t.traits, i as any)),
+      !(t.traits && traitBlocked(t.traits, i as any)) &&
+      // Same as a fresh delivery: a piece she last rejected is not styled in.
+      (i.item_id === heroId || !rejectedEnoughToBlock(history, i.item_id)),
   )
-  const usable = canBuildLooks(preferred) ? preferred : canBuildLooks(weatherOk) ? weatherOk : inStock
+  const usable = preferLovedShoes(t, canBuildLooks(preferred) ? preferred : canBuildLooks(weatherOk) ? weatherOk : inStock)
 
   const anchor = usable.find((i) => i.item_id === heroId)
     ?? inStock.find((i) => i.item_id === heroId)

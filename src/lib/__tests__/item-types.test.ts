@@ -118,3 +118,28 @@ describe('vest is a top unless something says otherwise', () => {
     expect(t('Quilted Vest')).toBe('gilet')
   })
 })
+
+describe('names the classifier was mistyping (found composing for Alison)', () => {
+  it('reads earrings as earrings even when they mention a chain', () => {
+    expect(typeOf('Fine chain earrings with stones')).toBe('earrings')
+    expect(typeOf('Damita gold-tone faux pearl earrings')).toBe('earrings')
+    expect(typeOf('Layered T-Bar Necklace')).toBe('necklace')
+  })
+
+  it('does not read a shirt as a tee because a word ends in t', () => {
+    expect(typeOf('Draped funnel neck cross-front shirt')).toBe('shirt')
+    expect(typeOf('Asymmetric spread collar short shirt')).toBe('shirt')
+    expect(typeOf('Sunday Best Shirt - WHITE')).toBe('shirt')
+    expect(typeOf('Organic Cotton T-Shirt')).toBe('t-shirt')
+    expect(typeOf('Boxy Tee')).toBe('t-shirt')
+  })
+
+  it('reads a sweatshirt as knitwear, not a tee', () => {
+    expect(typeOf('Carala organic cotton sweatshirt')).toBe('knitwear')
+  })
+
+  it('does not put a flat bag in the shoe slot', () => {
+    expect(typeOf('Raffia texture flat bag')).not.toBe('flat')
+    expect(typeOf('Leather Ballet Flat')).toBe('flat')
+  })
+})

@@ -188,14 +188,18 @@ const TYPE_RULES: Array<[RegExp, string]> = [
   [/\bboot/, 'boot'], [/sneaker|trainer|\brunner\b|plimsoll/, 'sneaker'], [/\bmule/, 'mule'],
   [/\bsandal|\bslide\b|flip.?flop/, 'sandal'],
   [/\bpump|stiletto|\bheel|slingback/, 'heel'],
-  [/ballerina|ballet|mary.?jane|loafer|espadrille|\bflat\b|\bflats\b/, 'flat'],
+  // "Raffia Texture Flat Bag" is a bag: a flat followed by a bag word is not a shoe.
+  [/ballerina|ballet|mary.?jane|loafer|espadrille|\bflat\b(?!\s*(?:bag|pouch|clutch|purse|wallet|tote|cross.?body|cap)\b)|\bflats\b/, 'flat'],
   [/\btote/, 'tote'], [/\bclutch|\bpouch/, 'clutch'], [/cross.?body/, 'crossbody'],
   [/shoulder bag/, 'shoulder_bag'], [/\bhandbag|\bbag\b|\bbags\b/, 'structured_bag'],
   [/shirt.?dress/, 'shirt_dress'], [/slip.?dress/, 'slip_dress'],
   [/maxi.?dress|\bgown/, 'maxi_dress'], [/mini.?dress/, 'mini_dress'],
   [/midi.?dress/, 'midi_dress'], [/\bdress/, 'midi_dress'],
   [/\bcorset/, 'corset'], [/bodysuit/, 'bodysuit'],
-  [/t.?shirt|\btee\b|polo shirt|\bpolo\b(?!.*\bneck\b)/, 't-shirt'],
+  // Word-bounded: an unbounded t.?shirt fired inside "sweaTSHIRT", "fronT SHIRT",
+  // "shorT SHIRT" and "besT SHIRT", filing 14 shirts as tees.
+  [/\bt[\s-]?shirts?\b|\btee\b|polo shirt|\bpolo\b(?!.*\bneck\b)/, 't-shirt'],
+  [/sweatshirt|\bhoodie/, 'knitwear'],
   // A knit vest is a sleeveless jumper, not a coat.
   // The fibre word is rarely adjacent: "relaxed cashmere HIGH NECK vest".
   // Bounded so it cannot reach across a whole description.
@@ -207,7 +211,9 @@ const TYPE_RULES: Array<[RegExp, string]> = [
   [/\bshorts|bermuda/, 'shorts'], [/\bskirt/, 'skirt'],
   [/\bjacket|bomber|anorak|windbreaker/, 'jacket'],
   [/\bbelt/, 'belt'], [/\bscarf|shawl|bandana|\bstole\b|\bsnood\b/, 'scarf'],
-  [/necklace|pendant|choker|\bchain\b/, 'necklace'], [/earring|ear cuff|\bhoop/, 'earrings'],
+  // Earrings first: "Fine chain earrings with stones" was a necklace, because
+  // the bare word "chain" was tested before "earring".
+  [/earring|ear cuff|\bhoop/, 'earrings'], [/necklace|pendant|choker|\bchain\b/, 'necklace'],
   [/bracelet|bangle|\bcuff\b/, 'bracelet'], [/brooch/, 'brooch'], [/\bring\b|\brings\b/, 'ring'],
   [/hair/, 'hair_accessory'], [/\bhat\b|beanie|\bcap\b|beret/, 'hat'],
   [/glove/, 'gloves'], [/sunglass|eyewear|glasses/, 'sunglasses'],

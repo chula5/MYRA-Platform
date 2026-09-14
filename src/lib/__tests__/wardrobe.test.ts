@@ -217,6 +217,48 @@ describe('pilot composer with owned items', () => {
     const ownedZara = looks.flatMap((l) => l.items).filter((i) => i.product_name === 'Her jeans')
     expect(ownedZara.every((i) => i.owned)).toBe(true)
   })
+  // ── her rules ──────────────────────────────────────────────────────────
+  it('never composes white with cream, even when the white is labelled cream', () => {
+    const taste = emptyTaste()
+    const lib = [
+      ...library(),
+      item({ item_type: 'blouse', product_name: 'White halter top', colour_family: 'cream', colour_hex: '#F5F5F0' }),
+      item({ item_type: 'skirt', product_name: 'Cream pleated skirt', colour_family: 'cream', colour_hex: '#F3E6CC' }),
+      item({ item_type: 'blazer', product_name: 'Cream blazer', colour_family: 'cream', colour_hex: '#EFE0C2' }),
+    ]
+    const looks = composeMemberLooks(taste, lib, 3)
+    for (const l of looks) {
+      const names = l.items.map((i) => i.product_name)
+      expect(names.includes('White halter top') && (names.includes('Cream pleated skirt') || names.includes('Cream blazer'))).toBe(false)
+    }
+  })
+
+  it('puts trainers in the shoe slot when she loves them and there are enough', () => {
+    const taste = emptyTaste()
+    taste.prefs = { ...EMPTY_STYLE_PREFS, types_loved: ['sneaker', 'flat'] }
+    const sneakers = [1, 2, 3, 4, 5].map((n) => item({ item_type: 'sneaker', product_name: `Trainer ${n}` }))
+    const boots = [1, 2, 3, 4, 5, 6].map((n) => item({ item_type: 'boot', product_name: `Boot ${n}` }))
+    const looks = composeMemberLooks(taste, [...library(), ...boots, ...sneakers], 3)
+    const shoes = looks.flatMap((l) => l.items).filter((i) => i.slot === 'shoe')
+    expect(shoes.length).toBeGreaterThan(0)
+    expect(shoes.every((i) => i.item_type === 'sneaker')).toBe(true)
+  })
+
+  it('falls back to her other loved shoes, then any shoe, when trainers are too few', () => {
+    const taste = emptyTaste()
+    taste.prefs = { ...EMPTY_STYLE_PREFS, types_loved: ['sneaker', 'flat'] }
+    const flats = [1, 2, 3, 4].map((n) => item({ item_type: 'flat', product_name: `Flat ${n}` }))
+    const looks = composeMemberLooks(taste, [...library(), item({ item_type: 'sneaker', product_name: 'Only trainer' }), ...flats], 3)
+    const shoes = looks.flatMap((l) => l.items).filter((i) => i.slot === 'shoe')
+    expect(shoes.every((i) => i.item_type === 'flat' || i.item_type === 'sneaker')).toBe(true)
+  })
+  it('does not compose a piece whose latest answer was a rejection', () => {
+    const bag = item({ item_type: 'structured_bag', product_name: 'DIVIO PHONE Tobacco', item_id: 'divio' })
+    const looks = composeMemberLooks(emptyTaste(), [...library(), bag], 3, undefined, undefined,
+      { seenCounts: new Map(), rejected: new Set(['divio']), rejectedCounts: new Map([['divio', 1]]) })
+    expect(looks.length).toBeGreaterThan(0)
+    expect(looks.every((l) => !l.items.some((i) => i.item_id === 'divio'))).toBe(true)
+  })
 })
 
 // ── unlock ranking ──────────────────────────────────────────────────────────
@@ -281,3 +323,4 @@ describe('what to buy', () => {
     expect(gated).toEqual([])
   })
 })
+

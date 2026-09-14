@@ -12,6 +12,7 @@
 
 import { createAdminClient, createServerClient } from '@/lib/supabase-server'
 import { previewAskLooks, type AskPreviewLook } from './actions'
+import { pieceVerdicts } from '@/lib/piece-verdicts'
 import { revalidatePath } from 'next/cache'
 import {
   lookConfidence, calibrateThreshold, indexHistory, historySignals,
@@ -19,6 +20,20 @@ import {
 } from '@/lib/look-confidence'
 
 const PATH = '/admin/private-stylist'
+
+/** Every feedback row, oldest first — paged past PostgREST's 1,000-row cap. */
+async function feedbackRows(admin: any, memberId: string): Promise<{ data: any[] }> {
+  const out: any[] = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await admin.from('pilot_look_feedback')
+      .select('look_id, action, item_out, item_in, created_at')
+      .eq('member_id', memberId).order('created_at', { ascending: true }).range(from, from + 999)
+    if (error) throw new Error(error.message)
+    out.push(...(data ?? []))
+    if (!data || data.length < 1000) break
+  }
+  return { data: out }
+}
 
 export interface LookConfidenceRow {
   look_id: string
@@ -57,11 +72,12 @@ export async function loadMemberConfidence(memberId: string): Promise<MemberConf
 
     const [{ data: looks }, { data: fb }] = await Promise.all([
       admin.from('pilot_look').select('look_id, items, approved_at, response, created_at').in('delivery_id', ids).order('created_at'),
-      admin.from('pilot_look_feedback').select('look_id, action, item_out, item_in').eq('member_id', memberId).limit(10000),
+      feedbackRows(admin, memberId),
     ])
     const edited = new Set((fb ?? []).filter((f: any) => f.look_id && f.action !== 'accept').map((f: any) => f.look_id))
-    const rejected = new Set((fb ?? [])
-      .map((f: any) => (f.action !== 'accept' ? (f.item_out ?? f.item_in) : null)).filter(Boolean))
+    // Only pieces whose MOST RECENT answer was a rejection — a piece swapped
+    // out and straight back in, or kept since, is not held against a look.
+    const rejected = pieceVerdicts(fb ?? []).rejected
 
     // Which pieces the composer was blind on — no scored dimensions.
     const allIds = new Set<string>()
@@ -258,11 +274,12 @@ export async function previewAskForMember(
       ids.length
         ? admin.from('pilot_look').select('look_id, items, approved_at, response').in('delivery_id', ids)
         : Promise.resolve({ data: [] }),
-      admin.from('pilot_look_feedback').select('look_id, action, item_out, item_in').eq('member_id', memberId).limit(10000),
+      feedbackRows(admin, memberId),
     ])
     const edited = new Set((fb ?? []).filter((f: any) => f.look_id && f.action !== 'accept').map((f: any) => f.look_id))
-    const rejected = new Set((fb ?? [])
-      .map((f: any) => (f.action !== 'accept' ? (f.item_out ?? f.item_in) : null)).filter(Boolean))
+    // Only pieces whose MOST RECENT answer was a rejection — a piece swapped
+    // out and straight back in, or kept since, is not held against a look.
+    const rejected = pieceVerdicts(fb ?? []).rejected
 
     // Everything she has decided, as evidence for looks nobody has seen yet.
     const past: LookRecord[] = []
