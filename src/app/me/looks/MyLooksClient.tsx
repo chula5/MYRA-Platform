@@ -212,7 +212,9 @@ export default function MyLooksClient({ view, readOnly = false }: { view: Client
 
             {/* ASK MYRA — right under the search, where she will see it. In the
                 admin mirror it runs as a test for this member. */}
-            <div className="mx-auto w-full max-w-[900px] mb-8 md:mb-10">
+            {/* Full width, not a column: the test results lay six pieces per
+                look across the screen and need the room. */}
+            <div className="w-full mb-8 md:mb-10">
               {asking ? (
                 <AskPanel
                   onDone={() => setAsking(false)}
