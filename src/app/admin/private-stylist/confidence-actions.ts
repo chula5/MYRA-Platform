@@ -267,53 +267,74 @@ export async function previewAskForMember(
   if (planned.error || !planned.looks) return { ...empty, error: planned.error ?? 'Could not compose' }
 
   try {
-    const admin = createAdminClient() as any
-    const { data: dels } = await admin.from('pilot_delivery').select('delivery_id').eq('member_id', memberId)
-    const ids = (dels ?? []).map((d: any) => d.delivery_id)
-    const [{ data: looks }, { data: fb }] = await Promise.all([
-      ids.length
-        ? admin.from('pilot_look').select('look_id, items, approved_at, response').in('delivery_id', ids)
-        : Promise.resolve({ data: [] }),
-      feedbackRows(admin, memberId),
-    ])
-    const edited = new Set((fb ?? []).filter((f: any) => f.look_id && f.action !== 'accept').map((f: any) => f.look_id))
-    // Only pieces whose MOST RECENT answer was a rejection — a piece swapped
-    // out and straight back in, or kept since, is not held against a look.
-    const rejected = pieceVerdicts(fb ?? []).rejected
-
-    // Everything she has decided, as evidence for looks nobody has seen yet.
-    const past: LookRecord[] = []
-    for (const l of (looks ?? []) as any[]) {
-      const decided = !!l.approved_at || edited.has(l.look_id) || !!l.response
-      if (!decided) continue
-      const items = (l.items ?? []) as any[]
-      past.push({
-        itemIds: items.map((i) => i.item_id).filter(Boolean),
-        brandIds: items.map((i) => i.brand_id).filter(Boolean),
-        kept: !edited.has(l.look_id) && l.response !== 'no' && (!!l.approved_at || l.response === 'yes'),
-      })
-    }
-    const h = indexHistory(past)
+    const scored = await scoreLooksAgainstHistory(memberId, planned.looks)
     const calibration = (await loadMemberConfidence(memberId)).calibration
-
-    return {
-      mix: planned.mix ?? {},
-      scoreUsable: calibration.usable,
-      looks: planned.looks.map((l) => {
-        const itemIds = l.items.map((i: any) => i.item_id).filter(Boolean)
-        const brandIds = l.items.map((i: any) => i.brand_id).filter(Boolean)
-        const c = lookConfidence({
-          constitutionPassed: true,
-          containsRejected: itemIds.some((id: string) => rejected.has(id)),
-          containsBlockedTrait: false,
-          ...historySignals(h, itemIds, brandIds),
-          usedFallbackPool: false,
-          unscoredShare: 0,
-        })
-        return { ...l, score: c.score, high: c.high, reasons: c.reasons }
-      }),
-    }
+    return { mix: planned.mix ?? {}, scoreUsable: calibration.usable, looks: scored }
   } catch (err) {
     return { ...empty, error: err instanceof Error ? err.message : 'Could not score the test looks' }
+  }
+}
+
+
+/**
+ * Score unsaved looks against everything she has decided so far — the same
+ * score the send gate uses. Shared by the test run and its rescore-after-swap,
+ * so a swapped look is judged exactly as a composed one.
+ */
+async function scoreLooksAgainstHistory(
+  memberId: string,
+  looks: AskPreviewLook[],
+): Promise<(AskPreviewLook & { score: number; high: boolean; reasons: string[] })[]> {
+  const admin = createAdminClient() as any
+  const { data: dels } = await admin.from('pilot_delivery').select('delivery_id').eq('member_id', memberId)
+  const ids = (dels ?? []).map((d: any) => d.delivery_id)
+  const [{ data: past }, { data: fb }] = await Promise.all([
+    ids.length
+      ? admin.from('pilot_look').select('look_id, items, approved_at, response').in('delivery_id', ids)
+      : Promise.resolve({ data: [] }),
+    feedbackRows(admin, memberId),
+  ])
+  const edited = new Set((fb ?? []).filter((f: any) => f.look_id && f.action !== 'accept').map((f: any) => f.look_id))
+  const rejected = pieceVerdicts(fb ?? []).rejected
+  const records: LookRecord[] = []
+  for (const l of (past ?? []) as any[]) {
+    const decided = !!l.approved_at || edited.has(l.look_id) || !!l.response
+    if (!decided) continue
+    const items = (l.items ?? []) as any[]
+    records.push({
+      itemIds: items.map((i) => i.item_id).filter(Boolean),
+      brandIds: items.map((i) => i.brand_id).filter(Boolean),
+      kept: !edited.has(l.look_id) && l.response !== 'no' && (!!l.approved_at || l.response === 'yes'),
+    })
+  }
+  const h = indexHistory(records)
+  return looks.map((l) => {
+    const itemIds = l.items.map((i: any) => i.item_id).filter(Boolean)
+    const brandIds = l.items.map((i: any) => i.brand_id).filter(Boolean)
+    const c = lookConfidence({
+      constitutionPassed: true,
+      containsRejected: itemIds.some((id: string) => rejected.has(id)),
+      containsBlockedTrait: false,
+      ...historySignals(h, itemIds, brandIds),
+      usedFallbackPool: false,
+      unscoredShare: 0,
+    })
+    return { ...l, score: c.score, high: c.high, reasons: c.reasons }
+  })
+}
+
+/** TEST: rescore one look after a swap in the test panel. Writes nothing. */
+export async function rescoreAskLook(
+  memberId: string,
+  look: AskPreviewLook,
+): Promise<{ score?: number; high?: boolean; reasons?: string[]; error?: string }> {
+  const supabase = await createServerClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user || user.id !== process.env.ADMIN_USER_ID) return { error: 'Not authorised' }
+  try {
+    const [scored] = await scoreLooksAgainstHistory(memberId, [look])
+    return { score: scored.score, high: scored.high, reasons: scored.reasons }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Could not rescore' }
   }
 }

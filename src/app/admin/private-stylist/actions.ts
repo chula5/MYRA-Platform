@@ -1846,6 +1846,60 @@ export async function previewAskLooks(
   }
 }
 
+export interface AskSwapOption extends SwapOption {
+  /** Ready to drop straight into the unsaved look. */
+  lookItem: LookItem
+}
+
+/**
+ * TEST: swap options for one piece of an UNSAVED test look.
+ *
+ * Same ranking as ⇄ SWAP on a composed look (rankAlternates: her taste, the
+ * pieces staying in the look, the occasion, her gates) — but it takes the look
+ * as it stands in the test panel rather than a saved look id, and writes
+ * nothing: no swap is recorded and nothing is learned. Admin only.
+ */
+export async function askPreviewAlternates(
+  memberId: string,
+  occasion: string,
+  climate: string | null,
+  items: LookItem[],
+  itemIndex: number,
+): Promise<{ options?: AskSwapOption[]; error?: string }> {
+  if (!(await requireAdmin())) return { error: 'Not authorised' }
+  const target = items[itemIndex]
+  if (!target) return { error: 'No piece at that position' }
+  const slot = (target.slot as Slot | null) ?? null
+  if (!slot) return { error: 'This piece has no slot to swap within' }
+
+  const admin = createAdminClient() as any
+  const { data: member } = await admin.from('pilot_member').select('*').eq('member_id', memberId).single()
+  if (!member) return { error: 'Member not found' }
+  const { effectiveWeights } = await import('@/lib/pilot-stylist')
+  const taste = await loadMemberTaste(admin, member)
+  const library = await loadComposableLibrary(member)
+  const keepIds = items.filter((it, i) => i !== itemIndex && it.item_id).map((it) => it.item_id as string)
+  const keepItems = library.filter((i) => keepIds.includes(i.item_id))
+  const exclude = new Set(items.filter((it) => it.item_id).map((it) => it.item_id as string))
+  const mix = normalise(effectiveWeights(member.room_weights, occasion as any, member.work_dress_code))
+  const occ: OccasionContext = { id: occasion, vector: lookTasteVector(mix), climate: (climate as ClimateId | null) ?? null }
+  const lens = await loadPersonaLens(admin, memberId)
+  const ranked = rankAlternates(taste, library, slot, keepItems, exclude, 24, occ, lens)
+  return {
+    options: ranked.map(({ item, score }) => ({
+      item_id: item.item_id,
+      product_name: item.product_name,
+      brand_name: item.brand?.name ?? null,
+      colour_family: item.colour_family ?? null,
+      item_type: (item as any).item_type ?? null,
+      image_url: item.image_url ?? null,
+      price_gbp: (item as any).price_gbp != null ? Number((item as any).price_gbp) : item.price != null ? Number(item.price) : null,
+      score: Math.round(score * 100) / 100,
+      lookItem: toLookItem(item),
+    })),
+  }
+}
+
 /**
  * Keep a test run: save exactly those looks as a real draft delivery, so they
  * can be shot and sent like any other. Still nothing reaches her until sent.

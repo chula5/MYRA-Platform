@@ -24,8 +24,8 @@ import ShopTheLookOverlay from '@/components/source-panel/ShopTheLookOverlay'
 import { getSavedItemIds, toggleSaveItem } from '@/app/edit/save-actions'
 import type { Item, Brand, ItemType } from '@/types/database'
 import { ArchiveCard } from '@/components/ArchiveCard'
-import { previewAskForMember, type AskPreviewResult } from '@/app/admin/private-stylist/confidence-actions'
-import { keepAskPreview } from '@/app/admin/private-stylist/actions'
+import { previewAskForMember, rescoreAskLook, type AskPreviewResult } from '@/app/admin/private-stylist/confidence-actions'
+import { keepAskPreview, askPreviewAlternates, type AskSwapOption } from '@/app/admin/private-stylist/actions'
 
 // The feed's section heading pair, so her page reads at the feed's scale.
 function SectionHead({ label, note, heart = false }: { label: string; note?: string; heart?: boolean }) {
@@ -698,6 +698,36 @@ function AskPanel({
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<AskPreviewResult | null>(null)
   const [kept, setKept] = useState(false)
+  // Which test looks you have accepted — only these are kept.
+  const [accepted, setAccepted] = useState<Set<number>>(new Set())
+  // The open swap: which look, which piece, and its options.
+  const [swap, setSwap] = useState<{ look: number; piece: number; options: AskSwapOption[] | null } | null>(null)
+  const [swapError, setSwapError] = useState<string | null>(null)
+
+  async function openSwap(look: number, piece: number) {
+    if (!preview) return
+    if (swap && swap.look === look && swap.piece === piece) { setSwap(null); return }
+    setSwapError(null)
+    setSwap({ look, piece, options: null })
+    const r = await askPreviewAlternates(testMemberId!, occasion, climate, preview.looks[look].items, piece)
+    if (r.error) { setSwapError(r.error); setSwap(null); return }
+    setSwap({ look, piece, options: r.options ?? [] })
+  }
+
+  async function useOption(look: number, piece: number, opt: AskSwapOption) {
+    if (!preview) return
+    const items = preview.looks[look].items.map((it: any, j: number) => (j === piece ? opt.lookItem : it))
+    const nextLooks = preview.looks.map((l, i) => (i === look ? { ...l, items } : l))
+    setPreview({ ...preview, looks: nextLooks })
+    setSwap(null)
+    setKept(false)
+    const r = await rescoreAskLook(testMemberId!, { items, notes: preview.looks[look].notes })
+    if (r.error) return
+    setPreview((cur) => cur && {
+      ...cur,
+      looks: cur.looks.map((l, i) => (i === look ? { ...l, score: r.score ?? l.score, high: r.high ?? l.high, reasons: r.reasons ?? l.reasons } : l)),
+    })
+  }
 
   const testing = !!testMemberId
   const chip = (on: boolean) =>
@@ -707,6 +737,8 @@ function AskPanel({
     setBusy(true)
     setError(null)
     setKept(false)
+    setAccepted(new Set())
+    setSwap(null)
     if (testing) {
       const r = await previewAskForMember(testMemberId!, occasion, climate)
       if (r.error) setError(r.error)
@@ -788,7 +820,22 @@ function AskPanel({
           {preview.looks.map((l, i) => (
             <div key={i} className="border border-[#2B2B2B] bg-[#EDEBE7]">
               <div className="flex items-center justify-between gap-4 flex-wrap px-5 py-4 border-b border-[#C3BFB8]">
-                <p className="text-[20px] text-[#2B2B2B]">LOOK {i + 1}</p>
+                <div className="flex items-center gap-4">
+                  <p className="text-[20px] text-[#2B2B2B]">LOOK {i + 1}</p>
+                  <button
+                    onClick={() => {
+                      setKept(false)
+                      setAccepted((prev) => {
+                        const next = new Set(prev)
+                        if (next.has(i)) next.delete(i); else next.add(i)
+                        return next
+                      })
+                    }}
+                    className={`text-[18px] tracking-[0.08em] px-4 py-2 border transition-colors ${accepted.has(i) ? 'bg-[#3D6B45] border-[#3D6B45] text-white' : 'border-[#6E6B65] text-[#2B2B2B] hover:border-[#2B2B2B]'}`}
+                  >
+                    {accepted.has(i) ? '✓ ACCEPTED' : 'ACCEPT THIS LOOK'}
+                  </button>
+                </div>
                 <p className={`text-[20px] tracking-[0.06em] ${l.high ? 'text-[#3D6B45]' : 'text-[#8B5E00]'}`}>
                   {Math.round(l.score * 100)}% · {l.high ? 'HIGH CONFIDENCE' : 'WOULD GO TO YOUR REVIEW QUEUE'}
                 </p>
@@ -810,10 +857,48 @@ function AskPanel({
                         <p className="text-[20px] text-[#55534E]">£{Math.round(it.price_gbp)}</p>
                       )}
                       {it.owned && <p className="text-[18px] text-[#8B5E00]">Already hers</p>}
+                      {it.slot && (
+                        <button
+                          onClick={() => openSwap(i, j)}
+                          className={`mt-2 text-[18px] tracking-[0.1em] underline underline-offset-4 ${swap?.look === i && swap?.piece === j ? 'text-[#2B2B2B]' : 'text-[#8B5E00]'}`}
+                        >
+                          {swap?.look === i && swap?.piece === j ? 'CLOSE' : '⇄ SWAP'}
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
               </div>
+
+              {/* Swap options for the open piece — the same ranking as ⇄ SWAP
+                  on a composed look. Choosing one replaces it here only. */}
+              {swap?.look === i && (
+                <div className="border-t border-[#C3BFB8] px-[6px] pb-[6px]">
+                  <p className="text-[20px] text-[#2B2B2B] px-2 py-4">
+                    {swap.options === null
+                      ? 'Finding alternatives…'
+                      : swap.options.length
+                        ? `Swap ${l.items[swap.piece]?.product_name} for:`
+                        : 'Nothing else fits this slot for her.'}
+                  </p>
+                  {swap.options && swap.options.length > 0 && (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-[6px]">
+                      {swap.options.map((o) => (
+                        <button key={o.item_id} onClick={() => useOption(i, swap.piece, o)} className="bg-white text-left hover:outline hover:outline-2 hover:outline-[#2B2B2B]">
+                          <div className="relative aspect-[3/4] bg-[#EDEDED] overflow-hidden">
+                            {o.image_url && <FallbackImage src={o.image_url} thumbWidth={400} alt={o.product_name} className="absolute inset-0 w-full h-full object-cover" />}
+                          </div>
+                          <div className="px-2.5 py-2">
+                            <p className="text-[14px] tracking-[0.08em] text-[#6E6B65] uppercase truncate">{o.brand_name}{o.item_type ? ` · ${String(o.item_type).replace(/_/g, ' ')}` : ''}</p>
+                            <p className="text-[18px] text-[#2B2B2B] leading-tight line-clamp-2">{o.product_name}</p>
+                            {typeof o.price_gbp === 'number' && <p className="text-[18px] text-[#55534E]">£{Math.round(o.price_gbp)}</p>}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               {l.reasons.length > 0 && (
                 <p className="text-[18px] text-[#55534E] px-5 py-4 border-t border-[#C3BFB8]">
                   WHY: {l.reasons.join(' · ')}
@@ -823,19 +908,27 @@ function AskPanel({
           ))}
           <div className="flex flex-wrap items-center gap-4">
             <button
-              disabled={busy || kept}
+              disabled={busy || kept || accepted.size === 0}
               onClick={async () => {
                 setBusy(true)
-                const r = await keepAskPreview(testMemberId!, occasion, climate, words, preview.mix, preview.looks.map((l) => ({ items: l.items, notes: l.notes })))
+                const chosen = preview.looks
+                  .filter((_, i) => accepted.has(i))
+                  .map((l) => ({ items: l.items, notes: l.notes }))
+                const r = await keepAskPreview(testMemberId!, occasion, climate, words, preview.mix, chosen)
                 setBusy(false)
                 if (r.error) setError(r.error)
                 else setKept(true)
               }}
               className="text-[20px] px-7 py-3.5 border border-[#2B2B2B] text-[#2B2B2B] hover:bg-[#2B2B2B] hover:text-white transition-colors disabled:opacity-40"
             >
-              {kept ? 'Kept — in DELIVERIES as a draft' : 'Keep these as a draft delivery'}
+              {kept
+                ? `Kept ${accepted.size} — in DELIVERIES as a draft`
+                : accepted.size
+                  ? `Keep ${accepted.size} accepted look${accepted.size === 1 ? '' : 's'} as a draft delivery`
+                  : 'Accept a look to keep it'}
             </button>
-            <p className="text-[18px] text-[#6E6B65]">Keeping saves them for you to shoot and send. She still sees nothing until you send.</p>
+            <p className="text-[18px] text-[#6E6B65]">Only accepted looks are kept, with your swaps. She still sees nothing until you send.</p>
+            {swapError && <p className="text-[20px] text-[#B83A3A] w-full">{swapError}</p>}
           </div>
         </div>
       )}
