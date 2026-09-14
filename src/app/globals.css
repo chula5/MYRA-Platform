@@ -46,6 +46,10 @@ body {
   color: #4A4E57;
   margin: 0;
   padding: 0;
+  /* Full-width views break out of their containers with 100vw, which includes
+     the scrollbar. clip (not hidden) stops the sideways scroll without
+     breaking position: sticky — the mirror depends on sticky. */
+  overflow-x: clip;
 }
 
 /* ── Selection colour ─────────────────────────────────────────── */

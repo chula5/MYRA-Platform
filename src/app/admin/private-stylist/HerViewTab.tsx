@@ -65,13 +65,16 @@ export default function HerViewTab({
         </div>
       )}
 
-      {/* Her page, her styling, in a frame that says it is hers. */}
+      {/* Her page, full width of the screen — it is a preview of a front-end
+          view, so it breaks out of the admin's 1440px column exactly as her
+          own browser would show it. No transform: that would break the
+          wardrobe drawer's position: fixed. */}
       {view && view.looks.length > 0 && (
-        <div className="border border-[#E2E0DB] bg-white">
-          <p className="text-[20px] tracking-[0.14em] text-[#A8A8A4] border-b border-[#E2E0DB] px-5 py-3">
-            HER SCREEN — READ ONLY. HER ANSWERS SHOW UNDER EACH LOOK; YOU CANNOT ANSWER FOR HER.
+        <div>
+          <p className="text-[20px] tracking-[0.14em] text-[#A8A8A4] border-y border-[#E2E0DB] py-3 mb-0">
+            HER SCREEN — READ ONLY. HER ANSWERS SHOW UNDER EACH LOOK. ASK MYRA RUNS AS A TEST: NOTHING IS SENT TO HER OR LEARNED.
           </p>
-          <div className="px-5 py-8 max-w-[1100px] mx-auto">
+          <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen">
             <MyLooksClient view={view} readOnly />
           </div>
         </div>

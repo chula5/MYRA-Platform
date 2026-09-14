@@ -79,12 +79,12 @@ export default function ClientWardrobe({
         <button
           onClick={() => setOpen(true)}
           aria-label="Open my wardrobe"
-          className="fixed right-0 top-1/2 -translate-y-1/2 z-[55] flex flex-col items-center gap-2 bg-white border border-r-0 border-[#E2E0DB] rounded-l-[16px] px-2.5 py-4 shadow-[-4px_0_14px_rgba(0,0,0,0.07)] hover:pr-3.5 transition-all duration-300"
+          className="fixed right-0 top-1/2 -translate-y-1/2 z-[55] flex flex-col items-center gap-2 bg-white border border-r-0 border-[#E2E0DB] rounded-l-[16px] px-3.5 py-5 shadow-[-4px_0_14px_rgba(0,0,0,0.07)] hover:pr-3.5 transition-all duration-300"
         >
-          <HangerIcon className="w-4 h-4 text-[#4A4E57]" />
-          <span className="text-[9px] tracking-[0.16em] text-[#4A4E57] [writing-mode:vertical-rl] rotate-180">WARDROBE</span>
+          <HangerIcon className="w-6 h-6 text-[#4A4E57]" />
+          <span className="text-[13px] tracking-[0.16em] text-[#4A4E57] [writing-mode:vertical-rl] rotate-180">WARDROBE</span>
           {count > 0 && (
-            <span className="text-[9px] text-white bg-[#C8302A] rounded-full min-w-[16px] h-[16px] px-1 flex items-center justify-center leading-none">
+            <span className="text-[13px] text-white bg-[#C8302A] rounded-full min-w-[22px] h-[22px] px-1 flex items-center justify-center leading-none">
               {count}
             </span>
           )}
@@ -97,22 +97,22 @@ export default function ClientWardrobe({
           className={`absolute inset-0 bg-black/30 transition-opacity duration-300 ${open ? 'opacity-100' : 'opacity-0'}`}
         />
         <aside
-          className={`absolute right-0 top-0 h-full w-[min(390px,92vw)] bg-[#FAFAF8] shadow-2xl flex flex-col transition-transform duration-300 ${open ? 'translate-x-0' : 'translate-x-full'}`}
+          className={`absolute right-0 top-0 h-full w-[min(520px,94vw)] bg-[#FAFAF8] shadow-2xl flex flex-col transition-transform duration-300 ${open ? 'translate-x-0' : 'translate-x-full'}`}
         >
-          <div className="bg-[#2B2B2B] text-white px-5 h-12 flex items-center justify-between flex-shrink-0">
-            <span className="text-[13px] tracking-[0.18em] inline-flex items-center gap-2">
+          <div className="bg-[#2B2B2B] text-white px-6 h-16 flex items-center justify-between flex-shrink-0">
+            <span className="text-[20px] tracking-[0.18em] inline-flex items-center gap-2">
               <HangerIcon className="w-4 h-4" /> MY WARDROBE
             </span>
-            <button onClick={() => setOpen(false)} aria-label="Close" className="text-white/70 hover:text-white text-[22px] leading-none">×</button>
+            <button onClick={() => setOpen(false)} aria-label="Close" className="text-white/70 hover:text-white text-[30px] leading-none">×</button>
           </div>
 
           <div data-lenis-prevent className="flex-1 overflow-y-auto px-5 py-5">
             {loading && count === 0 ? (
-              <p className="text-[14px] text-[#A8A8A4] py-16 text-center">Opening your wardrobe…</p>
+              <p className="text-[20px] text-[#A8A8A4] py-16 text-center">Opening your wardrobe…</p>
             ) : count === 0 ? (
               <div className="py-16 text-center">
                 <HangerIcon className="w-7 h-7 text-[#D8D2C6] mx-auto mb-4" />
-                <p className="text-[14px] text-[#8C8A85] leading-relaxed max-w-[240px] mx-auto">
+                <p className="text-[20px] text-[#8C8A85] leading-relaxed max-w-[340px] mx-auto">
                   Your wardrobe is empty. Say you would wear a look, or tap the{' '}
                   <span className="text-[#C8302A]">♥</span> on a piece in Source Items, to hang it here.
                 </p>
@@ -121,7 +121,7 @@ export default function ClientWardrobe({
               <>
                 {loved.length > 0 && (
                   <section className="mb-8">
-                    <p className="text-[13px] tracking-[0.14em] text-[#8C8A85] uppercase mb-3">
+                    <p className="text-[18px] tracking-[0.14em] text-[#8C8A85] uppercase mb-4">
                       Looks you loved · {loved.length}
                     </p>
                     <div className="grid grid-cols-2 gap-2.5">
@@ -135,7 +135,7 @@ export default function ClientWardrobe({
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={l.image_url} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
                           )}
-                          <span className="absolute inset-x-0 bottom-0 px-2 py-1.5 bg-gradient-to-t from-black/60 to-transparent text-white text-[12px] tracking-[0.08em]">
+                          <span className="absolute inset-x-0 bottom-0 px-2 py-1.5 bg-gradient-to-t from-black/60 to-transparent text-white text-[17px] tracking-[0.08em]">
                             {l.occasion_label}
                           </span>
                         </button>
@@ -146,7 +146,7 @@ export default function ClientWardrobe({
 
                 {items.length > 0 && !readOnly && (
                   <section>
-                    <p className="text-[13px] tracking-[0.14em] text-[#8C8A85] uppercase mb-3">
+                    <p className="text-[18px] tracking-[0.14em] text-[#8C8A85] uppercase mb-4">
                       Pieces you saved · {items.length}
                     </p>
                     <div className="space-y-3">
@@ -154,21 +154,21 @@ export default function ClientWardrobe({
                         <div key={it.item_id} className="flex items-center gap-3">
                           {it.image_url && (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={it.image_url} alt="" className="w-14 aspect-[3/4] object-cover shrink-0 bg-[#EDEDED]" />
+                            <img src={it.image_url} alt="" className="w-20 aspect-[3/4] object-cover shrink-0 bg-[#EDEDED]" />
                           )}
                           <div className="min-w-0 flex-1">
                             {it.brand_name && (
-                              <p className="text-[12px] tracking-[0.1em] text-[#8C8A85] uppercase truncate">{it.brand_name}</p>
+                              <p className="text-[16px] tracking-[0.1em] text-[#8C8A85] uppercase truncate">{it.brand_name}</p>
                             )}
-                            <p className={`text-[15px] text-[#2B2B2B] truncate ${it.sold ? 'line-through opacity-60' : ''}`}>
+                            <p className={`text-[20px] text-[#2B2B2B] truncate ${it.sold ? 'line-through opacity-60' : ''}`}>
                               {it.product_name}
                             </p>
-                            <p className="text-[14px] text-[#55534E]">
+                            <p className="text-[20px] text-[#55534E]">
                               {it.sold ? 'Sold' : fmtPrice(it.price, it.currency)}
                               {it.unique && !it.sold && <span className="text-[#8A7340]"> · one of one</span>}
                             </p>
                             {it.retailer_url && !it.sold && (
-                              <a href={it.retailer_url} target="_blank" rel="noopener noreferrer" className="text-[13px] tracking-[0.08em] uppercase text-[#2B2B2B] underline underline-offset-2">
+                              <a href={it.retailer_url} target="_blank" rel="noopener noreferrer" className="text-[17px] tracking-[0.08em] uppercase text-[#2B2B2B] underline underline-offset-2">
                                 Shop it
                               </a>
                             )}
@@ -176,7 +176,7 @@ export default function ClientWardrobe({
                           <button
                             onClick={() => removeItem(it.item_id)}
                             aria-label="Remove from wardrobe"
-                            className="text-[#C8302A] text-[17px] leading-none shrink-0 hover:opacity-60"
+                            className="text-[#C8302A] text-[24px] leading-none shrink-0 hover:opacity-60"
                           >
                             ♥
                           </button>

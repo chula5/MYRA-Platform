@@ -24,6 +24,7 @@ export default function ShopTheLookOverlay({
   sizeInfo,
   soldItemId,
   onFindSimilar,
+  size = 'feed',
 }: {
   items: SourceItem[]
   outfitId?: string
@@ -40,29 +41,34 @@ export default function ShopTheLookOverlay({
   // On the detail view the mobile header (BACK + arrows) overlays the image top,
   // so push the panel down on mobile to clear it (desktop has no such header).
   offsetTop?: boolean
+  /** 'feed' is the editorial micro-type of the public feed. 'large' is the
+   *  client area — a wider column and 20px product text, for reading on a
+   *  phone. The feed never passes it, so /feed and /edit are unchanged. */
+  size?: 'feed' | 'large'
 }) {
+  const large = size === 'large'
   const savedSet = new Set(savedItemIds)
   // Click logging + affiliate routing is handled entirely by ShopLink
   // (redirect via /go/ for most merchants, beacon for Awin ones).
 
   return (
-    <div data-lenis-prevent className={`absolute left-2.5 z-30 w-[27%] max-w-[100px] sm:w-[34%] sm:max-w-[176px] overflow-y-auto pr-1 ${
+    <div data-lenis-prevent className={`absolute left-2.5 z-30 ${large ? 'w-[48%] max-w-[340px]' : 'w-[27%] max-w-[100px] sm:w-[34%] sm:max-w-[176px]'} overflow-y-auto pr-1 ${
       offsetTop
         ? 'top-12 sm:top-2.5 max-h-[calc(100%-3.75rem)] sm:max-h-[calc(100%-1.25rem)]'
         : 'top-2.5 max-h-[calc(100%-1.25rem)]'
     }`}>
       {/* Header */}
       <div className="flex items-center gap-1.5 mb-2">
-        <span className="text-white text-[8px] sm:text-[9px] tracking-[0.081em] drop-shadow-[0_1px_3px_rgba(0,0,0,0.55)]">
+        <span className={`text-white ${large ? 'text-[16px]' : 'text-[8px] sm:text-[9px]'} tracking-[0.081em] drop-shadow-[0_1px_3px_rgba(0,0,0,0.55)]`}>
           SHOP THE LOOK
         </span>
-        <span className="bg-white/90 text-[#4A4E57] text-[8px] tracking-[0.036em] rounded-full px-1.5 py-0.5 leading-none">
+        <span className={`bg-white/90 text-[#4A4E57] ${large ? 'text-[14px] px-2.5 py-1' : 'text-[8px] px-1.5 py-0.5'} tracking-[0.036em] rounded-full leading-none`}>
           {items.length}
         </span>
         <button
           onClick={onClose}
           aria-label="Hide shop the look"
-          className="ml-auto bg-white/90 text-[#4A4E57] w-4 h-4 rounded-full text-[10px] leading-none flex items-center justify-center hover:bg-white"
+          className={`ml-auto bg-white/90 text-[#4A4E57] ${large ? 'w-8 h-8 text-[18px]' : 'w-4 h-4 text-[10px]'} rounded-full leading-none flex items-center justify-center hover:bg-white`}
         >
           ×
         </button>
@@ -81,6 +87,7 @@ export default function ShopTheLookOverlay({
             size={sizeInfo?.[item.item_id]}
             sold={item.item_id === soldItemId || (item as any).status === 'sold'}
             onFindSimilar={onFindSimilar ? () => onFindSimilar(item.item_id) : undefined}
+            large={large}
           />
         ))}
       </div>
@@ -97,6 +104,7 @@ function ItemCard({
   size,
   sold = false,
   onFindSimilar,
+  large = false,
 }: {
   item: SourceItem
   outfitId?: string
@@ -106,7 +114,12 @@ function ItemCard({
   size?: ItemSizeInfo
   sold?: boolean
   onFindSimilar?: () => void
+  large?: boolean
 }) {
+  // Type steps for the two sizes, so each line of the card moves together.
+  const t = large
+    ? { badge: 'text-[12px]', brand: 'text-[15px]', name: 'text-[20px]', price: 'text-[20px]', small: 'text-[14px]', action: 'text-[17px]', pad: 'pt-16 pb-3 px-3' }
+    : { badge: 'text-[6px] sm:text-[7px]', brand: 'text-[6px] sm:text-[7px]', name: 'text-[7px] sm:text-[9px]', price: 'text-[7px] sm:text-[8px]', small: 'text-[6px] sm:text-[7px]', action: 'text-[7px] sm:text-[8px]', pad: 'pt-8 pb-1.5 px-1.5 sm:pt-10 sm:pb-2 sm:px-2' }
   const [imgFailed, setImgFailed] = useState(false)
   const [watching, setWatching] = useState(false)
   const brandInitial = (item.brand?.name ?? 'M').trim().charAt(0).toUpperCase()
@@ -153,7 +166,7 @@ function ItemCard({
       {/* Scarcity + size badges — top-left, over the photo */}
       {badge && (
         <span
-          className={`absolute top-1.5 left-1.5 z-10 rounded-full px-1.5 py-0.5 text-[6px] sm:text-[7px] tracking-[0.09em] leading-none ${
+          className={`absolute top-1.5 left-1.5 z-10 rounded-full px-1.5 py-0.5 ${t.badge} tracking-[0.09em] leading-none ${
             sold
               ? 'bg-[#4A4E57] text-white'
               : size?.lowInHerSize
@@ -170,23 +183,23 @@ function ItemCard({
         <button
           onClick={(e) => { e.stopPropagation(); onToggle() }}
           aria-label={saved ? 'Remove item from wardrobe' : 'Save item to wardrobe'}
-          className="absolute top-1.5 right-1.5 z-10 w-5 h-5 rounded-full bg-white/85 flex items-center justify-center"
+          className={`absolute top-1.5 right-1.5 z-10 ${large ? 'w-9 h-9' : 'w-5 h-5'} rounded-full bg-white/85 flex items-center justify-center`}
         >
-          <span className={`text-[10px] leading-none ${saved ? 'text-[#C8302A]' : 'text-[#6B6B6B]'}`}>{saved ? '♥' : '♡'}</span>
+          <span className={`${large ? 'text-[18px]' : 'text-[10px]'} leading-none ${saved ? 'text-[#C8302A]' : 'text-[#6B6B6B]'}`}>{saved ? '♥' : '♡'}</span>
         </button>
       )}
 
       {/* Text overlay — brand/name/price bottom-left, SHOP bottom-right */}
-      <div className="absolute inset-x-0 bottom-0 z-10 pt-8 pb-1.5 px-1.5 sm:pt-10 sm:pb-2 sm:px-2 bg-gradient-to-t from-black/70 via-black/25 to-transparent">
+      <div className={`absolute inset-x-0 bottom-0 z-10 ${t.pad} bg-gradient-to-t from-black/70 via-black/25 to-transparent`}>
         <div className="flex items-end justify-between gap-1.5">
           <div className="min-w-0">
-            <p className="text-white/75 text-[6px] sm:text-[7px] tracking-[0.06em] uppercase truncate">{item.brand?.name ?? 'BRAND'}</p>
-            <p className={`text-white text-[7px] sm:text-[9px] leading-[1.15] line-clamp-2 mt-0.5 ${sold ? 'line-through opacity-70' : ''}`}>
+            <p className={`text-white/75 ${t.brand} tracking-[0.06em] uppercase truncate`}>{item.brand?.name ?? 'BRAND'}</p>
+            <p className={`text-white ${t.name} leading-[1.15] line-clamp-2 mt-0.5 ${sold ? 'line-through opacity-70' : ''}`}>
               {item.product_name}
             </p>
-            <p className="text-white/90 text-[7px] sm:text-[8px] tracking-[0.03em] mt-0.5">{price || '—'}</p>
+            <p className={`text-white/90 ${t.price} tracking-[0.03em] mt-0.5`}>{price || '—'}</p>
             {size?.herSizeLabel && !sold && !size.outOfHerSize && (
-              <p className="text-white/70 text-[6px] sm:text-[7px] tracking-[0.06em] mt-0.5">
+              <p className={`text-white/70 ${t.small} tracking-[0.06em] mt-0.5`}>
                 YOUR SIZE · {size.herSizeLabel.toUpperCase()}
               </p>
             )}
@@ -194,23 +207,23 @@ function ItemCard({
               <button
                 onClick={watch}
                 disabled={watching}
-                className="text-left text-white/85 text-[6px] sm:text-[7px] tracking-[0.06em] mt-0.5 underline underline-offset-2 disabled:no-underline"
+                className={`text-left text-white/85 ${t.small} tracking-[0.06em] mt-0.5 underline underline-offset-2 disabled:no-underline`}
               >
                 {watching ? 'WE’LL TELL YOU WHEN IT’S BACK' : `${NOT_IN_SIZE_LABEL} · NOTIFY ME`}
               </button>
             )}
             {size?.overrideNote && (
-              <p className="text-white/70 text-[6px] sm:text-[7px] tracking-[0.05em] mt-0.5 italic">{size.overrideNote}</p>
+              <p className={`text-white/70 ${t.small} tracking-[0.05em] mt-0.5 italic`}>{size.overrideNote}</p>
             )}
             {proof && !sold && (
-              <p className="text-white/60 text-[6px] sm:text-[7px] tracking-[0.06em] mt-0.5">{proof}</p>
+              <p className={`text-white/60 ${t.small} tracking-[0.06em] mt-0.5`}>{proof}</p>
             )}
           </div>
           {sold ? (
             onFindSimilar && (
               <button
                 onClick={(e) => { e.stopPropagation(); onFindSimilar() }}
-                className="flex-shrink-0 text-white text-[7px] sm:text-[8px] tracking-[0.1em] uppercase underline underline-offset-2 hover:opacity-70 transition-opacity pb-0.5"
+                className={`flex-shrink-0 text-white ${t.action} tracking-[0.1em] uppercase underline underline-offset-2 hover:opacity-70 transition-opacity pb-0.5`}
               >
                 Find similar
               </button>
@@ -219,7 +232,7 @@ function ItemCard({
             <ShopLink
               item={item}
               outfitId={outfitId}
-              className="flex-shrink-0 text-white text-[7px] sm:text-[8px] tracking-[0.12em] uppercase underline underline-offset-2 hover:opacity-70 transition-opacity pb-0.5"
+              className={`flex-shrink-0 text-white ${t.action} tracking-[0.12em] uppercase underline underline-offset-2 hover:opacity-70 transition-opacity pb-0.5`}
             >
               Shop
             </ShopLink>

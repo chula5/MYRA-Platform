@@ -1679,11 +1679,21 @@ export interface ComposeDeliveryOptions {
   count?: number
 }
 
-export async function composeDeliveryLooks(deliveryId: string, options: ComposeDeliveryOptions = {}): Promise<{ created?: number; ownedLooks?: number; error?: string }> {
-  const admin = createAdminClient() as any
-  const { data: delivery, error: derr } = await admin.from('pilot_delivery').select('*').eq('delivery_id', deliveryId).single()
-  if (derr || !delivery) return { error: derr?.message ?? 'Delivery not found' }
-  if (delivery.status !== 'draft') return { error: 'Only draft deliveries can be composed into' }
+type PlannedLooks = ReturnType<typeof composeMemberLooks>
+
+/**
+ * Compose looks for a delivery-shaped brief WITHOUT writing anything.
+ *
+ * Split out of composeDeliveryLooks so the same composer — same history, same
+ * rejections, same anchors — can answer "what would MYRA make if she asked
+ * for this?" as a test, with nothing saved, sent or learned. Not exported: a
+ * 'use server' export is a public endpoint, and this takes any member_id.
+ */
+async function planDeliveryLooks(
+  admin: any,
+  delivery: { member_id: string; occasion: string | null; climate?: ClimateId | null; effective_weights?: any },
+  options: ComposeDeliveryOptions = {},
+): Promise<{ looks?: PlannedLooks; mix?: RoomWeights; error?: string }> {
   const { data: member, error: merr } = await admin.from('pilot_member').select('*').eq('member_id', delivery.member_id).single()
   if (merr || !member) return { error: merr?.message ?? 'Member not found' }
 
@@ -1750,6 +1760,18 @@ export async function composeDeliveryLooks(deliveryId: string, options: ComposeD
         : 'Could not compose — not enough compatible in-stock items in the library',
     }
   }
+  return { looks, mix }
+}
+
+export async function composeDeliveryLooks(deliveryId: string, options: ComposeDeliveryOptions = {}): Promise<{ created?: number; ownedLooks?: number; error?: string }> {
+  const admin = createAdminClient() as any
+  const { data: delivery, error: derr } = await admin.from('pilot_delivery').select('*').eq('delivery_id', deliveryId).single()
+  if (derr || !delivery) return { error: derr?.message ?? 'Delivery not found' }
+  if (delivery.status !== 'draft') return { error: 'Only draft deliveries can be composed into' }
+
+  const planned = await planDeliveryLooks(admin, delivery, options)
+  if (planned.error || !planned.looks || !planned.mix) return { error: planned.error ?? 'Could not compose' }
+  const { looks, mix } = planned
 
   const { count } = await admin
     .from('pilot_look')
@@ -1769,6 +1791,87 @@ export async function composeDeliveryLooks(deliveryId: string, options: ComposeD
   if (error) return { error: error.message }
   revalidatePath(PATH)
   return { created: rows.length, ownedLooks: looks.filter((l) => l.ownedCount > 0).length }
+}
+
+async function requireAdmin(): Promise<boolean> {
+  const { createServerClient } = await import('@/lib/supabase-server')
+  const supabase = await createServerClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  return !!user && user.id === process.env.ADMIN_USER_ID
+}
+
+export interface AskPreviewLook {
+  items: LookItem[]
+  notes: string | null
+}
+
+/**
+ * TEST: what would MYRA make if this member asked for this?
+ *
+ * Runs the real composer against her real history and returns the looks —
+ * nothing is inserted, nothing reaches her, nothing is learned. Admin only.
+ */
+export async function previewAskLooks(
+  memberId: string,
+  occasion: string,
+  climate: string | null,
+): Promise<{ looks?: AskPreviewLook[]; mix?: Record<string, number>; error?: string }> {
+  if (!(await requireAdmin())) return { error: 'Not authorised' }
+  const admin = createAdminClient() as any
+  const { data: member } = await admin
+    .from('pilot_member').select('room_weights, work_dress_code').eq('member_id', memberId).single()
+  if (!member) return { error: 'Member not found' }
+  const { effectiveWeights } = await import('@/lib/pilot-stylist')
+  const planned = await planDeliveryLooks(admin, {
+    member_id: memberId,
+    occasion,
+    climate: climate as ClimateId | null,
+    effective_weights: effectiveWeights(member.room_weights, occasion as any, member.work_dress_code),
+  })
+  if (planned.error || !planned.looks) return { error: planned.error ?? 'Could not compose' }
+  return {
+    looks: planned.looks.map((l: any) => ({ items: l.items, notes: l.notes ?? null })),
+    mix: planned.mix as unknown as Record<string, number>,
+  }
+}
+
+/**
+ * Keep a test run: save exactly those looks as a real draft delivery, so they
+ * can be shot and sent like any other. Still nothing reaches her until sent.
+ */
+export async function keepAskPreview(
+  memberId: string,
+  occasion: string,
+  climate: string | null,
+  words: string,
+  mix: Record<string, number>,
+  looks: AskPreviewLook[],
+): Promise<{ deliveryId?: string; error?: string }> {
+  if (!(await requireAdmin())) return { error: 'Not authorised' }
+  if (!looks.length) return { error: 'Nothing to keep' }
+  const admin = createAdminClient() as any
+  const row: Record<string, unknown> = {
+    member_id: memberId,
+    trigger: 'request',
+    request_text: words.trim() || null,
+    occasion,
+    effective_weights: mix,
+  }
+  if (climate) row.climate = climate
+  const { data: created, error } = await admin.from('pilot_delivery').insert(row).select('delivery_id').single()
+  if (error || !created) return { error: error?.message ?? 'Could not create the delivery' }
+  const norm = normalise(mix as unknown as RoomWeights)
+  const { error: lerr } = await admin.from('pilot_look').insert(looks.map((l, i) => ({
+    delivery_id: created.delivery_id,
+    position: i + 1,
+    room_mix: norm,
+    taste_vector: lookTasteVector(norm),
+    items: l.items,
+    notes: l.notes,
+  })))
+  if (lerr) return { error: lerr.message }
+  revalidatePath(PATH)
+  return { deliveryId: created.delivery_id }
 }
 
 // Style ONE hero several ways. Takes a composed look, holds its hero (the first

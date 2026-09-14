@@ -10,7 +10,8 @@
 // Everything here is derived on read from her own history. Nothing is stored,
 // so the number can never disagree with the looks it came from.
 
-import { createAdminClient } from '@/lib/supabase-server'
+import { createAdminClient, createServerClient } from '@/lib/supabase-server'
+import { previewAskLooks, type AskPreviewLook } from './actions'
 import { revalidatePath } from 'next/cache'
 import {
   lookConfidence, calibrateThreshold, indexHistory, historySignals,
@@ -217,5 +218,85 @@ export async function sendAllShotLooks(memberId: string): Promise<{ sent: number
     return { sent: lookIds.length }
   } catch (err) {
     return { sent: 0, error: err instanceof Error ? err.message : 'Could not send them' }
+  }
+}
+
+
+export interface AskPreviewResult {
+  looks: (AskPreviewLook & { score: number; high: boolean; reasons: string[] })[]
+  mix: Record<string, number>
+  /** Whether her history is yet good enough for the score to mean anything. */
+  scoreUsable: boolean
+  error?: string
+}
+
+/**
+ * TEST RUN of "Ask MYRA" for one member, from the admin mirror.
+ *
+ * The real composer on her real history, each look scored against everything
+ * she has decided so far — the same score the send gate will use. Nothing is
+ * written: no delivery, no look rows, no notification, no learning.
+ */
+export async function previewAskForMember(
+  memberId: string,
+  occasion: string,
+  climate: string | null,
+): Promise<AskPreviewResult> {
+  const empty: AskPreviewResult = { looks: [], mix: {}, scoreUsable: false }
+  const supabase = await createServerClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user || user.id !== process.env.ADMIN_USER_ID) return { ...empty, error: 'Not authorised' }
+
+  const planned = await previewAskLooks(memberId, occasion, climate)
+  if (planned.error || !planned.looks) return { ...empty, error: planned.error ?? 'Could not compose' }
+
+  try {
+    const admin = createAdminClient() as any
+    const { data: dels } = await admin.from('pilot_delivery').select('delivery_id').eq('member_id', memberId)
+    const ids = (dels ?? []).map((d: any) => d.delivery_id)
+    const [{ data: looks }, { data: fb }] = await Promise.all([
+      ids.length
+        ? admin.from('pilot_look').select('look_id, items, approved_at, response').in('delivery_id', ids)
+        : Promise.resolve({ data: [] }),
+      admin.from('pilot_look_feedback').select('look_id, action, item_out, item_in').eq('member_id', memberId).limit(10000),
+    ])
+    const edited = new Set((fb ?? []).filter((f: any) => f.look_id && f.action !== 'accept').map((f: any) => f.look_id))
+    const rejected = new Set((fb ?? [])
+      .map((f: any) => (f.action !== 'accept' ? (f.item_out ?? f.item_in) : null)).filter(Boolean))
+
+    // Everything she has decided, as evidence for looks nobody has seen yet.
+    const past: LookRecord[] = []
+    for (const l of (looks ?? []) as any[]) {
+      const decided = !!l.approved_at || edited.has(l.look_id) || !!l.response
+      if (!decided) continue
+      const items = (l.items ?? []) as any[]
+      past.push({
+        itemIds: items.map((i) => i.item_id).filter(Boolean),
+        brandIds: items.map((i) => i.brand_id).filter(Boolean),
+        kept: !edited.has(l.look_id) && l.response !== 'no' && (!!l.approved_at || l.response === 'yes'),
+      })
+    }
+    const h = indexHistory(past)
+    const calibration = (await loadMemberConfidence(memberId)).calibration
+
+    return {
+      mix: planned.mix ?? {},
+      scoreUsable: calibration.usable,
+      looks: planned.looks.map((l) => {
+        const itemIds = l.items.map((i: any) => i.item_id).filter(Boolean)
+        const brandIds = l.items.map((i: any) => i.brand_id).filter(Boolean)
+        const c = lookConfidence({
+          constitutionPassed: true,
+          containsRejected: itemIds.some((id: string) => rejected.has(id)),
+          containsBlockedTrait: false,
+          ...historySignals(h, itemIds, brandIds),
+          usedFallbackPool: false,
+          unscoredShare: 0,
+        })
+        return { ...l, score: c.score, high: c.high, reasons: c.reasons }
+      }),
+    }
+  } catch (err) {
+    return { ...empty, error: err instanceof Error ? err.message : 'Could not score the test looks' }
   }
 }

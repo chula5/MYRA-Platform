@@ -19,19 +19,19 @@ export default async function MeLayout({ children }: { children: React.ReactNode
 
   return (
     <div className="min-h-screen bg-white">
-      <header className="sticky top-0 z-30 flex items-center justify-between px-5 h-14 border-b border-[#E2E0DB] bg-white">
-        <Link href="/me" className="text-[13px] tracking-[0.135em] text-[#4A4E57]">MYRA</Link>
-        <nav className="flex items-center gap-4">
-          <Link href="/me/looks" className="text-[13px] tracking-[0.1em] text-[#0A0A0A] hover:opacity-70 transition-opacity">YOUR LOOKS</Link>
-          <Link href="/me" className="text-[13px] tracking-[0.1em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors">PROFILE</Link>
-          <Link href="/me/inspiration" className="text-[13px] tracking-[0.1em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors">INSPIRATION</Link>
-          <Link href="/me/wardrobe" className="text-[13px] tracking-[0.1em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors">WARDROBE</Link>
+      <header className="sticky top-0 z-30 flex items-center justify-between px-6 sm:px-10 h-16 border-b border-[#E2E0DB] bg-white">
+        <Link href="/me" className="text-[20px] tracking-[0.2em] text-[#4A4E57]">MYRA</Link>
+        <nav className="flex items-center gap-5 sm:gap-8">
+          <Link href="/me/looks" className="text-[16px] sm:text-[18px] tracking-[0.1em] text-[#0A0A0A] hover:opacity-70 transition-opacity">YOUR LOOKS</Link>
+          <Link href="/me" className="text-[16px] sm:text-[18px] tracking-[0.1em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors">PROFILE</Link>
+          <Link href="/me/inspiration" className="text-[16px] sm:text-[18px] tracking-[0.1em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors">INSPIRATION</Link>
+          <Link href="/me/wardrobe" className="text-[16px] sm:text-[18px] tracking-[0.1em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors">WARDROBE</Link>
           <form action={earlyAccessSignOut}>
-            <button type="submit" className="text-[13px] tracking-[0.1em] text-[#A8A8A4] hover:text-[#4A4E57] transition-colors">OUT</button>
+            <button type="submit" className="text-[16px] sm:text-[18px] tracking-[0.1em] text-[#A8A8A4] hover:text-[#4A4E57] transition-colors">OUT</button>
           </form>
         </nav>
       </header>
-      <main className="max-w-[1100px] mx-auto px-5 py-10">{children}</main>
+      <main className="w-full px-6 sm:px-10 py-10">{children}</main>
     </div>
   )
 }
