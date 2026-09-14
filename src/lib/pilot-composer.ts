@@ -23,6 +23,10 @@ import {
 import type { LookItem, StylePrefs, PriceBands } from '@/lib/pilot-stylist'
 import { avoidReasons, lovedScore, priceVerdict } from '@/lib/pilot-stylist'
 import { mixesWhiteAndCream } from '@/lib/pale-tone'
+import { judgeLook, type MemberRules } from '@/lib/style-rules'
+import { toHouseItem } from '@/lib/house-item'
+import { learnedBonus, blendStrength, type StyleModel, type FeatureItem } from '@/lib/style-brain'
+import { isExcluded, formalityBand, hardSkipPairs, type EjectionConstraints } from '@/lib/pipeline'
 import { priceOfItem } from '@/lib/brand-affinity'
 import { itemPseudoVector } from '@/lib/brand-affinity'
 import { cosine } from '@/lib/taste-vector'
@@ -158,6 +162,51 @@ export interface MemberTaste {
   // What she actually spends, per kind of piece. Over her ceiling is a gate;
   // below her floor is a nudge, not a veto.
   priceBands?: PriceBands
+  // The rules her looks are held to, by layer (lib/style-rules): global bans,
+  // her house style, or Chloe style. Absent = no rules beyond her own gates.
+  rules?: MemberRules
+  // What Chloe's rejections have taught: Style Brain learning, Composer
+  // ejections and learned material pairings. Shared by every client so the
+  // system keeps getting smarter from what she turns down.
+  styleModel?: StyleModel
+  ejections?: EjectionConstraints
+  learnedPairs?: { approved: Set<string>; rejected: Set<string> }
+}
+
+/** A library piece as the Style Brain reads it — same fields as the Composer. */
+function toFeature(it: ItemWithBrand): FeatureItem {
+  return {
+    item_type: it.item_type,
+    colour_family: (it as any).colour_family ?? null,
+    pattern: (it as any).pattern ?? null,
+    material_formality: (it as any).material_formality ?? null,
+    brand_name: it.brand?.name ?? null,
+    price_tier: (it.brand as any)?.price_tier ?? null,
+  }
+}
+
+/** Her rules for this look, with what Chloe's decisions have taught folded in. */
+function judgeMemberLook(t: MemberTaste, all: ItemWithBrand[], slots?: (string | undefined)[]) {
+  if (!t.rules) return null
+  return judgeLook(all.map((it, i) => toHouseItem(it, slots?.[i])), t.rules, {
+    learnedApprovedPairs: t.learnedPairs?.approved,
+    learnedRejectedPairs: t.learnedPairs?.rejected,
+    softSkipPairs: t.styleModel ? hardSkipPairs(t.styleModel) : undefined,
+  })
+}
+
+/**
+ * The learned part of a look's score: Style Brain approval of the combination,
+ * minus the weight of any soft rule it breaks (a missing statement piece for a
+ * Chloe-style client, say). Zero when nothing has been learned yet.
+ */
+export function styleLearningBonus(t: MemberTaste, anchor: ItemWithBrand, items: { item: ItemWithBrand; slot: Slot }[]): number {
+  const all = [anchor, ...items.map((x) => x.item)]
+  let b = 0
+  if (t.styleModel) b += blendStrength(t.styleModel) * learnedBonus(t.styleModel, all.map(toFeature))
+  const j = judgeMemberLook(t, all, [undefined, ...items.map((x) => x.slot)])
+  if (j) b -= j.penalty
+  return b
 }
 
 const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`)
@@ -270,6 +319,8 @@ export function memberGate(
   t: MemberTaste,
   anchor: ItemWithBrand,
   items: { item: ItemWithBrand; slot: Slot }[],
+  /** false = her house-style / Chloe-style rules are relaxed; global bans still hold. */
+  strict = true,
 ): boolean {
   const all = [anchor, ...items.map((i) => i.item)]
   for (const it of all) {
@@ -290,8 +341,22 @@ export function memberGate(
   // penalised, and never applied to member looks at all. Read from the colour
   // itself: half the "cream" library is white (lib/pale-tone).
   if (mixesWhiteAndCream(all as any)) return false
+  // Pieces Chloe has ejected from this kind of look in the Composer.
+  if (t.ejections) {
+    const band = formalityBand(all as any)
+    for (const x of [{ item: anchor, slot: slotForItemType(anchor.item_type) }, ...items]) {
+      if (isExcluded(t.ejections, x.item.item_id, x.slot, band)) return false
+    }
+  }
+  const j = judgeMemberLook(t, all, [undefined, ...items.map((x) => x.slot)])
+  if (j?.blocked) {
+    // Relaxed pass: only the global bans still block.
+    if (strict || j.violations.some((v) => GLOBAL_BAN_CODES.has(v.code))) return false
+  }
   return true
 }
+
+const GLOBAL_BAN_CODES = new Set(['colour.fuchsia', 'colour.discordant', 'category.activewear'])
 
 export function toLookItem(item: ItemWithBrand): LookItem {
   const owned = isOwnedItem(item as any)
@@ -527,6 +592,9 @@ export function composeMemberLooks(
   const usedItems = new Set<string>()
   const usedAnchorBrands = new Set<string>()
   let ownedLooks = 0
+  // Her style rules hold first; only if they leave the delivery short are they
+  // relaxed for the remaining looks, and those looks say so in their notes.
+  let strictRules = true
 
   const tryAnchor = (a: { item: ItemWithBrand; score: number }, anchorsInPhase: number): boolean => {
     if (usedItems.has(a.item.item_id)) return false
@@ -545,12 +613,12 @@ export function composeMemberLooks(
       minScore: 0.5,
       excludeItemIds: Array.from(usedItems),
       learnedBonus: (items) =>
-        memberComboBonus(t, a.item, items) +
+        memberComboBonus(t, a.item, items) + styleLearningBonus(t, a.item, items) +
         items.reduce((sum, i) => sum + occasionItemScore(occ, i.item) + personaFitScore(lens, i.item)
           - historyPenalty(history, i.item.item_id) + varietyJitter(i.item.item_id, seed), 0) /
           Math.max(1, items.length),
       learnedBlend: 0.4,
-      houseGate: (items) => memberGate(t, a.item, items),
+      houseGate: (items) => memberGate(t, a.item, items, strictRules),
     })
     const best = cands[0]
     if (!best) return false
@@ -591,6 +659,7 @@ export function composeMemberLooks(
         : null,
       `coherence ${best.score.toFixed(2)}`,
       ownedCount ? `◈ ${ownedCount} from her wardrobe` : null,
+      !strictRules && t.rules?.source !== 'global_only' ? `${t.rules?.styleName ?? 'house style'} rules relaxed — too few looks passed them` : null,
       famPairs.length ? `family pairing: ${Array.from(new Set(famPairs)).join(', ')}` : null,
     ]
       .filter(Boolean)
@@ -610,6 +679,14 @@ export function composeMemberLooks(
   for (const a of anchors) {
     if (looks.length >= count) break
     tryAnchor(a, anchors.length)
+  }
+  // Phase 3 — still short: relax her style rules (never the global bans).
+  if (looks.length < count && t.rules && t.rules.source !== 'global_only') {
+    strictRules = false
+    for (const a of anchors) {
+      if (looks.length >= count) break
+      tryAnchor(a, anchors.length)
+    }
   }
 
   return looks
@@ -665,7 +742,7 @@ export function composeMemberVariants(
     minScore: 0.45,
     excludeItemIds: [],
     learnedBonus: (items) =>
-      memberComboBonus(t, anchor, items) +
+      memberComboBonus(t, anchor, items) + styleLearningBonus(t, anchor, items) +
       items.reduce((sum, i) => sum + occasionItemScore(occ, i.item) + personaFitScore(lens, i.item)
         - historyPenalty(history, i.item.item_id) + varietyJitter(i.item.item_id, seed), 0) /
         Math.max(1, items.length),

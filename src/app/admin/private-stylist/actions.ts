@@ -80,6 +80,10 @@ import { type ClimateId } from '@/lib/climate'
 import { DEFAULT_SCOPE } from '@/lib/learning-scope'
 import { tooSimilarVariant } from '@/lib/pilot-composer'
 import { pieceVerdicts } from '@/lib/piece-verdicts'
+import { rulesForMember, type MemberRules } from '@/lib/style-rules'
+import { loadStyleModel } from '@/lib/style-brain-store'
+import { loadEjectionConstraints } from '@/lib/pipeline-store'
+import { loadLearnedMaterialPairs } from '@/lib/house-style-store'
 
 const PATH = '/admin/private-stylist'
 
@@ -1483,6 +1487,28 @@ async function buildMemberTraitModel(admin: any, rows: any[]): Promise<TraitMode
   return decisions.length ? buildTraitModel(decisions) : undefined
 }
 
+/**
+ * Which rules her looks are held to (lib/style-rules). Her assigned house style
+ * (a persona in user_persona) wins; with none, a Chloe client gets Chloe style.
+ */
+async function loadMemberRules(admin: any, member: { member_id: string; stylist_id?: string | null }): Promise<MemberRules> {
+  const { data: assignment } = await admin
+    .from('user_persona').select('persona_id').eq('user_id', member.member_id).maybeSingle()
+  if (assignment?.persona_id) {
+    const { data: style } = await admin
+      .from('stylist').select('name, constitution').eq('stylist_id', assignment.persona_id).maybeSingle()
+    if (style?.constitution?.articles?.length) {
+      return rulesForMember({ name: style.name ?? null, constitution: style.constitution }, false)
+    }
+  }
+  let chloeStyle = false
+  if (member.stylist_id) {
+    const { data: stylist } = await admin.from('stylist').select('name, type').eq('stylist_id', member.stylist_id).maybeSingle()
+    chloeStyle = stylist?.type === 'real' && /^chlo/i.test(stylist?.name ?? '')
+  }
+  return rulesForMember(null, chloeStyle)
+}
+
 async function loadMemberTaste(admin: any, member: { member_id: string; brands: RankedBrand[]; brands_input_only: string[] } & Partial<StylePrefs>): Promise<MemberTaste> {
   const t: MemberTaste = {
     affinity: new Map(),
@@ -1496,6 +1522,23 @@ async function loadMemberTaste(admin: any, member: { member_id: string; brands: 
     // simply have none.
     prefs: readStylePrefs(member),
     priceBands: readPriceBands(member as any),
+  }
+
+  // Her rules by layer, and what Chloe's rejections have taught everyone.
+  try {
+    const [rules, styleModel, ejections, learnedPairs] = await Promise.all([
+      loadMemberRules(admin, member as any),
+      loadStyleModel((member as any).stylist_id ?? null),
+      loadEjectionConstraints(),
+      loadLearnedMaterialPairs(),
+    ])
+    t.rules = rules
+    t.styleModel = styleModel
+    t.ejections = ejections
+    t.learnedPairs = learnedPairs
+  } catch (err) {
+    // Her own gates still apply if this fails; the error is logged, not hidden.
+    console.error('[loadMemberTaste] rules/learning', err)
   }
 
   const [affRes, famRes, exclRes, fbRes] = await Promise.all([
@@ -1859,13 +1902,21 @@ export interface AskSwapOption extends SwapOption {
  * as it stands in the test panel rather than a saved look id, and writes
  * nothing: no swap is recorded and nothing is learned. Admin only.
  */
+export interface AskSwapFilters {
+  q?: string
+  brand?: string
+  colour?: string
+  itemType?: string
+}
+
 export async function askPreviewAlternates(
   memberId: string,
   occasion: string,
   climate: string | null,
   items: LookItem[],
   itemIndex: number,
-): Promise<{ options?: AskSwapOption[]; error?: string }> {
+  filters: AskSwapFilters = {},
+): Promise<{ options?: AskSwapOption[]; brands?: { name: string; count: number }[]; types?: string[]; error?: string }> {
   if (!(await requireAdmin())) return { error: 'Not authorised' }
   const target = items[itemIndex]
   if (!target) return { error: 'No piece at that position' }
@@ -1884,8 +1935,32 @@ export async function askPreviewAlternates(
   const mix = normalise(effectiveWeights(member.room_weights, occasion as any, member.work_dress_code))
   const occ: OccasionContext = { id: occasion, vector: lookTasteVector(mix), climate: (climate as ClimateId | null) ?? null }
   const lens = await loadPersonaLens(admin, memberId)
-  const ranked = rankAlternates(taste, library, slot, keepItems, exclude, 24, occ, lens)
+  // Rank everything her gates allow in this slot, then filter — so a search
+  // never offers a piece the composer would refuse, and the brand list is
+  // exactly what is on offer.
+  const allRanked = rankAlternates(taste, library, slot, keepItems, exclude, 2000, occ, lens)
+  const brandCounts = new Map<string, number>()
+  const typeSet = new Set<string>()
+  for (const { item } of allRanked) {
+    const b = item.brand?.name
+    if (b) brandCounts.set(b, (brandCounts.get(b) ?? 0) + 1)
+    if (item.item_type) typeSet.add(item.item_type)
+  }
+  const fold = (x: string) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  const terms = fold(filters.q ?? '').split(/\s+/).filter(Boolean)
+  const ranked = allRanked.filter(({ item }) => {
+    if (filters.brand && item.brand?.name !== filters.brand) return false
+    if (filters.colour && (item.colour_family ?? '').toLowerCase() !== filters.colour) return false
+    if (filters.itemType && item.item_type !== filters.itemType) return false
+    if (terms.length) {
+      const hay = fold(`${item.brand?.name ?? ''} ${item.product_name} ${item.item_type ?? ''} ${item.colour_family ?? ''}`)
+      if (!terms.every((term) => hay.includes(term))) return false
+    }
+    return true
+  }).slice(0, 48)
   return {
+    brands: Array.from(brandCounts.entries()).map(([name, count]) => ({ name, count })).sort((x, y) => x.name.localeCompare(y.name)),
+    types: Array.from(typeSet).sort(),
     options: ranked.map(({ item, score }) => ({
       item_id: item.item_id,
       product_name: item.product_name,
@@ -1904,6 +1979,12 @@ export async function askPreviewAlternates(
  * Keep a test run: save exactly those looks as a real draft delivery, so they
  * can be shot and sent like any other. Still nothing reaches her until sent.
  */
+/** What was changed on a test look before it was kept — recorded as learning. */
+export interface AskLookEdits {
+  swaps: { slot: string | null; out: LookItem; in: LookItem }[]
+  removes: { slot: string | null; out: LookItem }[]
+}
+
 export async function keepAskPreview(
   memberId: string,
   occasion: string,
@@ -1911,7 +1992,8 @@ export async function keepAskPreview(
   words: string,
   mix: Record<string, number>,
   looks: AskPreviewLook[],
-): Promise<{ deliveryId?: string; error?: string }> {
+  edits: AskLookEdits[] = [],
+): Promise<{ deliveryId?: string; learned?: number; error?: string }> {
   if (!(await requireAdmin())) return { error: 'Not authorised' }
   if (!looks.length) return { error: 'Nothing to keep' }
   const admin = createAdminClient() as any
@@ -1926,17 +2008,53 @@ export async function keepAskPreview(
   const { data: created, error } = await admin.from('pilot_delivery').insert(row).select('delivery_id').single()
   if (error || !created) return { error: error?.message ?? 'Could not create the delivery' }
   const norm = normalise(mix as unknown as RoomWeights)
-  const { error: lerr } = await admin.from('pilot_look').insert(looks.map((l, i) => ({
+  const { data: inserted, error: lerr } = await admin.from('pilot_look').insert(looks.map((l, i) => ({
     delivery_id: created.delivery_id,
     position: i + 1,
     room_mix: norm,
     taste_vector: lookTasteVector(norm),
     items: l.items,
     notes: l.notes,
-  })))
+  }))).select('look_id, position')
   if (lerr) return { error: lerr.message }
+
+  // Kept — so the swaps and removals made in the test teach the composer
+  // exactly as they would on a delivery (swapComposedLookItem /
+  // removeComposedLookItem write the same rows).
+  const lookIdAt = new Map(((inserted ?? []) as any[]).map((r) => [r.position, r.look_id]))
+  const fb: any[] = []
+  const brandsOut: string[] = []
+  const brandsIn: string[] = []
+  edits.forEach((e, i) => {
+    const look_id = lookIdAt.get(i + 1)
+    if (!look_id || !e) return
+    for (const sw of e.swaps ?? []) {
+      fb.push({
+        member_id: memberId, delivery_id: created.delivery_id, look_id, action: 'swap', scope: DEFAULT_SCOPE,
+        slot: sw.slot, item_out: sw.out.item_id ?? null, item_in: sw.in.item_id ?? null,
+        brand_out: sw.out.brand_id ?? null, brand_in: sw.in.brand_id ?? null,
+      })
+      if (sw.out.brand) brandsOut.push(sw.out.brand)
+      if (sw.in.brand) brandsIn.push(sw.in.brand)
+    }
+    for (const rm of e.removes ?? []) {
+      fb.push({
+        member_id: memberId, delivery_id: created.delivery_id, look_id, action: 'remove', scope: DEFAULT_SCOPE,
+        slot: rm.slot, item_out: rm.out.item_id ?? null, brand_out: rm.out.brand_id ?? null,
+      })
+      if (rm.out.brand) brandsOut.push(rm.out.brand)
+    }
+  })
+  if (fb.length) {
+    const r = await insertFeedback(admin, fb)
+    if (r.error) return { deliveryId: created.delivery_id, error: `Looks kept, but the edits were not learned: ${r.error}` }
+    try {
+      if (brandsOut.length) await applyBrandSignals(admin, memberId, brandsOut, 'no')
+      if (brandsIn.length) await applyBrandSignals(admin, memberId, brandsIn, 'yes')
+    } catch { /* affinity nudge is best-effort, as on a delivery */ }
+  }
   revalidatePath(PATH)
-  return { deliveryId: created.delivery_id }
+  return { deliveryId: created.delivery_id, learned: fb.length }
 }
 
 // Style ONE hero several ways. Takes a composed look, holds its hero (the first

@@ -259,6 +259,29 @@ describe('pilot composer with owned items', () => {
     expect(looks.length).toBeGreaterThan(0)
     expect(looks.every((l) => !l.items.some((i) => i.item_id === 'divio'))).toBe(true)
   })
+  it('never composes a globally banned piece, whatever her house style', () => {
+    const taste = emptyTaste()
+    taste.rules = { source: 'global_only', styleName: null, codes: new Set(['category.activewear', 'colour.fuchsia', 'colour.discordant']) }
+    const gym = item({ item_type: 'jacket', product_name: 'Gym track jacket', is_activewear: true })
+    const looks = composeMemberLooks(taste, [...library(), gym], 3)
+    expect(looks.length).toBeGreaterThan(0)
+    expect(looks.every((l) => !l.items.some((i) => i.product_name === 'Gym track jacket'))).toBe(true)
+  })
+
+  it('keeps out a piece Chloe has quarantined in the Composer', () => {
+    const taste = emptyTaste()
+    const bad = item({ item_type: 'skirt', product_name: 'Ejected skirt', item_id: 'ejected' })
+    taste.ejections = { excludedContexts: new Map(), quarantined: new Set(['ejected']), counts: new Map([['ejected', 3]]), contextCounts: new Map() }
+    const looks = composeMemberLooks(taste, [...library(), bad], 3)
+    expect(looks.every((l) => !l.items.some((i) => i.item_id === 'ejected'))).toBe(true)
+  })
+
+  it('relaxes her house-style rules rather than send nothing', () => {
+    const taste = emptyTaste()
+    taste.rules = { source: 'house_style', styleName: 'Strict', codes: new Set(['echo.none', 'statement.multiple', 'texture.budget', 'silhouette.loose_on_loose', 'material.formality_gap']) }
+    const looks = composeMemberLooks(taste, library(), 3)
+    expect(looks.length).toBeGreaterThan(0)
+  })
 })
 
 // ── unlock ranking ──────────────────────────────────────────────────────────

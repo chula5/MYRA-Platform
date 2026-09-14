@@ -25,7 +25,8 @@ import { getSavedItemIds, toggleSaveItem } from '@/app/edit/save-actions'
 import type { Item, Brand, ItemType } from '@/types/database'
 import { ArchiveCard } from '@/components/ArchiveCard'
 import { previewAskForMember, rescoreAskLook, type AskPreviewResult } from '@/app/admin/private-stylist/confidence-actions'
-import { keepAskPreview, askPreviewAlternates, type AskSwapOption } from '@/app/admin/private-stylist/actions'
+import { keepAskPreview, askPreviewAlternates, type AskSwapOption, type AskLookEdits } from '@/app/admin/private-stylist/actions'
+import { PICKER_COLOURS, PICKER_TYPES } from '@/components/admin/ItemPickerModal'
 
 // The feed's section heading pair, so her page reads at the feed's scale.
 function SectionHead({ label, note, heart = false }: { label: string; note?: string; heart?: boolean }) {
@@ -700,33 +701,79 @@ function AskPanel({
   const [kept, setKept] = useState(false)
   // Which test looks you have accepted — only these are kept.
   const [accepted, setAccepted] = useState<Set<number>>(new Set())
-  // The open swap: which look, which piece, and its options.
-  const [swap, setSwap] = useState<{ look: number; piece: number; options: AskSwapOption[] | null } | null>(null)
+  // The open swap: which look, which piece, its options and the picker filters.
+  const [swap, setSwap] = useState<{ look: number; piece: number; options: AskSwapOption[] | null; brands: { name: string; count: number }[]; types: string[] } | null>(null)
   const [swapError, setSwapError] = useState<string | null>(null)
+  const [swapQ, setSwapQ] = useState('')
+  const [swapBrand, setSwapBrand] = useState('')
+  const [swapColour, setSwapColour] = useState('')
+  const [swapType, setSwapType] = useState('')
+  // What was changed on each test look — recorded as learning if it is kept.
+  const [edits, setEdits] = useState<AskLookEdits[]>([])
 
-  async function openSwap(look: number, piece: number) {
+  async function loadOptions(look: number, piece: number, f: { q: string; brand: string; colour: string; itemType: string }) {
     if (!preview) return
-    if (swap && swap.look === look && swap.piece === piece) { setSwap(null); return }
-    setSwapError(null)
-    setSwap({ look, piece, options: null })
-    const r = await askPreviewAlternates(testMemberId!, occasion, climate, preview.looks[look].items, piece)
+    setSwap((cur) => ({ look, piece, options: null, brands: cur?.look === look && cur?.piece === piece ? cur.brands : [], types: cur?.look === look && cur?.piece === piece ? cur.types : [] }))
+    const r = await askPreviewAlternates(testMemberId!, occasion, climate, preview.looks[look].items, piece, f)
     if (r.error) { setSwapError(r.error); setSwap(null); return }
-    setSwap({ look, piece, options: r.options ?? [] })
+    setSwap({ look, piece, options: r.options ?? [], brands: r.brands ?? [], types: r.types ?? [] })
   }
 
-  async function useOption(look: number, piece: number, opt: AskSwapOption) {
+  function openSwap(look: number, piece: number) {
+    if (swap && swap.look === look && swap.piece === piece) { setSwap(null); return }
+    setSwapError(null)
+    setSwapQ(''); setSwapBrand(''); setSwapColour(''); setSwapType('')
+    void loadOptions(look, piece, { q: '', brand: '', colour: '', itemType: '' })
+  }
+
+  // Filters re-query after a short pause, like the item picker.
+  useEffect(() => {
+    if (!swap) return
+    const timer = setTimeout(() => {
+      void loadOptions(swap.look, swap.piece, { q: swapQ, brand: swapBrand, colour: swapColour, itemType: swapType })
+    }, 250)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [swapQ, swapBrand, swapColour, swapType])
+
+  async function rescore(look: number, items: any[]) {
     if (!preview) return
-    const items = preview.looks[look].items.map((it: any, j: number) => (j === piece ? opt.lookItem : it))
-    const nextLooks = preview.looks.map((l, i) => (i === look ? { ...l, items } : l))
-    setPreview({ ...preview, looks: nextLooks })
-    setSwap(null)
-    setKept(false)
     const r = await rescoreAskLook(testMemberId!, { items, notes: preview.looks[look].notes })
     if (r.error) return
     setPreview((cur) => cur && {
       ...cur,
       looks: cur.looks.map((l, i) => (i === look ? { ...l, score: r.score ?? l.score, high: r.high ?? l.high, reasons: r.reasons ?? l.reasons } : l)),
     })
+  }
+
+  function recordEdit(look: number, apply: (e: AskLookEdits) => AskLookEdits) {
+    setEdits((prev) => {
+      const next = [...prev]
+      next[look] = apply(next[look] ?? { swaps: [], removes: [] })
+      return next
+    })
+  }
+
+  async function useOption(look: number, piece: number, opt: AskSwapOption) {
+    if (!preview) return
+    const out = preview.looks[look].items[piece] as any
+    const items = preview.looks[look].items.map((it: any, j: number) => (j === piece ? opt.lookItem : it))
+    setPreview({ ...preview, looks: preview.looks.map((l, i) => (i === look ? { ...l, items } : l)) })
+    recordEdit(look, (e) => ({ ...e, swaps: [...e.swaps, { slot: out?.slot ?? null, out, in: opt.lookItem }] }))
+    setSwap(null)
+    setKept(false)
+    await rescore(look, items)
+  }
+
+  async function removePiece(look: number, piece: number) {
+    if (!preview) return
+    const out = preview.looks[look].items[piece] as any
+    const items = preview.looks[look].items.filter((_: any, j: number) => j !== piece)
+    setPreview({ ...preview, looks: preview.looks.map((l, i) => (i === look ? { ...l, items } : l)) })
+    recordEdit(look, (e) => ({ ...e, removes: [...e.removes, { slot: out?.slot ?? null, out }] }))
+    if (swap?.look === look) setSwap(null)
+    setKept(false)
+    await rescore(look, items)
   }
 
   const testing = !!testMemberId
@@ -739,6 +786,7 @@ function AskPanel({
     setKept(false)
     setAccepted(new Set())
     setSwap(null)
+    setEdits([])
     if (testing) {
       const r = await previewAskForMember(testMemberId!, occasion, climate)
       if (r.error) setError(r.error)
@@ -765,7 +813,7 @@ function AskPanel({
     <div className="border border-[#2B2B2B] bg-[rgba(255,255,255,0.18)] px-5 md:px-8 py-6 md:py-8 space-y-6">
       {testing && (
         <p className="text-[18px] tracking-[0.1em] text-[#8B5E00]">
-          TEST AS {firstName.toUpperCase()} — THE REAL COMPOSER ON HER REAL HISTORY. NOTHING IS SENT TO HER, SAVED OR LEARNED.
+          TEST AS {firstName.toUpperCase()} — THE REAL COMPOSER ON HER REAL HISTORY. NOTHING IS SENT TO HER, SAVED OR LEARNED UNTIL YOU KEEP A LOOK.
         </p>
       )}
       <div>
@@ -857,14 +905,22 @@ function AskPanel({
                         <p className="text-[20px] text-[#55534E]">£{Math.round(it.price_gbp)}</p>
                       )}
                       {it.owned && <p className="text-[18px] text-[#8B5E00]">Already hers</p>}
-                      {it.slot && (
+                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                        {it.slot && (
+                          <button
+                            onClick={() => openSwap(i, j)}
+                            className={`text-[18px] tracking-[0.1em] underline underline-offset-4 ${swap?.look === i && swap?.piece === j ? 'text-[#2B2B2B]' : 'text-[#8B5E00]'}`}
+                          >
+                            {swap?.look === i && swap?.piece === j ? 'CLOSE' : '⇄ SWAP'}
+                          </button>
+                        )}
                         <button
-                          onClick={() => openSwap(i, j)}
-                          className={`mt-2 text-[18px] tracking-[0.1em] underline underline-offset-4 ${swap?.look === i && swap?.piece === j ? 'text-[#2B2B2B]' : 'text-[#8B5E00]'}`}
+                          onClick={() => removePiece(i, j)}
+                          className="text-[18px] tracking-[0.1em] underline underline-offset-4 text-[#B83A3A]"
                         >
-                          {swap?.look === i && swap?.piece === j ? 'CLOSE' : '⇄ SWAP'}
+                          ✕ REMOVE
                         </button>
-                      )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -874,13 +930,54 @@ function AskPanel({
                   on a composed look. Choosing one replaces it here only. */}
               {swap?.look === i && (
                 <div className="border-t border-[#C3BFB8] px-[6px] pb-[6px]">
-                  <p className="text-[20px] text-[#2B2B2B] px-2 py-4">
-                    {swap.options === null
-                      ? 'Finding alternatives…'
-                      : swap.options.length
-                        ? `Swap ${l.items[swap.piece]?.product_name} for:`
-                        : 'Nothing else fits this slot for her.'}
+                  <p className="text-[20px] text-[#2B2B2B] px-2 pt-4 pb-3">
+                    Swap {l.items[swap.piece]?.product_name} for:
                   </p>
+                  {/* Search + brand, type and colour — the item picker's filters. */}
+                  <div className="px-2 pb-4 space-y-3">
+                    <div className="flex flex-wrap gap-3">
+                      <input
+                        value={swapQ}
+                        onChange={(e) => setSwapQ(e.target.value)}
+                        placeholder="Search pieces — brand, name, colour"
+                        className="flex-1 min-w-[240px] text-[20px] bg-white border border-[#6E6B65] px-4 py-2.5 placeholder:text-[#8C8A85] focus:outline-none focus:border-[#2B2B2B]"
+                      />
+                      <select
+                        value={swapBrand}
+                        onChange={(e) => setSwapBrand(e.target.value)}
+                        className="text-[20px] bg-white border border-[#6E6B65] px-3 py-2.5 focus:outline-none"
+                      >
+                        <option value="">All brands</option>
+                        {swap.brands.map((b) => <option key={b.name} value={b.name}>{b.name} ({b.count})</option>)}
+                      </select>
+                    </div>
+                    {swap.types.length > 1 && (
+                      <div className="flex flex-wrap gap-2">
+                        <button onClick={() => setSwapType('')} className={`text-[16px] tracking-[0.08em] px-3 py-1.5 border ${!swapType ? 'bg-[#2B2B2B] border-[#2B2B2B] text-white' : 'border-[#9B978F] text-[#2B2B2B]'}`}>ALL TYPES</button>
+                        {swap.types.map((ty) => (
+                          <button key={ty} onClick={() => setSwapType(swapType === ty ? '' : ty)} className={`text-[16px] tracking-[0.08em] px-3 py-1.5 border ${swapType === ty ? 'bg-[#2B2B2B] border-[#2B2B2B] text-white' : 'border-[#9B978F] text-[#2B2B2B]'}`}>
+                            {PICKER_TYPES.find((p) => p.value === ty)?.label ?? ty.replace(/_/g, ' ').toUpperCase()}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      {PICKER_COLOURS.map((c) => (
+                        <button
+                          key={c.value}
+                          onClick={() => setSwapColour(swapColour === c.value ? '' : c.value)}
+                          title={c.label}
+                          className={`flex items-center gap-2 text-[16px] tracking-[0.08em] px-3 py-1.5 border ${swapColour === c.value ? 'border-[#2B2B2B] bg-white' : 'border-[#C3BFB8]'}`}
+                        >
+                          <span className="w-4 h-4 rounded-full border border-[#9B978F]" style={{ background: c.swatch }} />
+                          {c.label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[18px] text-[#55534E]">
+                      {swap.options === null ? 'Finding pieces…' : swap.options.length ? `${swap.options.length} piece${swap.options.length === 1 ? '' : 's'} she can wear here` : 'Nothing matches — clear a filter.'}
+                    </p>
+                  </div>
                   {swap.options && swap.options.length > 0 && (
                     <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-[6px]">
                       {swap.options.map((o) => (
@@ -911,10 +1008,10 @@ function AskPanel({
               disabled={busy || kept || accepted.size === 0}
               onClick={async () => {
                 setBusy(true)
-                const chosen = preview.looks
-                  .filter((_, i) => accepted.has(i))
-                  .map((l) => ({ items: l.items, notes: l.notes }))
-                const r = await keepAskPreview(testMemberId!, occasion, climate, words, preview.mix, chosen)
+                const keptIdx = preview.looks.map((_, i) => i).filter((i) => accepted.has(i))
+                const chosen = keptIdx.map((i) => ({ items: preview.looks[i].items, notes: preview.looks[i].notes }))
+                const chosenEdits = keptIdx.map((i) => edits[i] ?? { swaps: [], removes: [] })
+                const r = await keepAskPreview(testMemberId!, occasion, climate, words, preview.mix, chosen, chosenEdits)
                 setBusy(false)
                 if (r.error) setError(r.error)
                 else setKept(true)
@@ -927,7 +1024,7 @@ function AskPanel({
                   ? `Keep ${accepted.size} accepted look${accepted.size === 1 ? '' : 's'} as a draft delivery`
                   : 'Accept a look to keep it'}
             </button>
-            <p className="text-[18px] text-[#6E6B65]">Only accepted looks are kept, with your swaps. She still sees nothing until you send.</p>
+            <p className="text-[18px] text-[#6E6B65]">Only accepted looks are kept. Swaps and removals on a kept look teach the composer, as on a delivery. She still sees nothing until you send.</p>
             {swapError && <p className="text-[20px] text-[#B83A3A] w-full">{swapError}</p>}
           </div>
         </div>

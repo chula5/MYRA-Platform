@@ -337,6 +337,10 @@ export const SHAPE_PREFERENCES: {
   { id: 'low_rise', label: 'LOW / MID RISE', group: 'LINE', match: (i) => i.rise != null && i.rise <= 2 },
   { id: 'long_length', label: 'MIDI / MAXI LENGTH', group: 'LENGTH', match: (i) => (i.length ?? 0) >= 4 },
   { id: 'short_length', label: 'CROPPED / SHORT LENGTH', group: 'LENGTH', match: (i) => i.length != null && i.length <= 2 },
+  // Skirts and dresses only. "No short skirts" is not "no cropped jackets" —
+  // short_length above catches both, which is wrong for most clients who ask
+  // for this. A slip/cami dress at mini length is caught here too.
+  { id: 'mini_length', label: 'MINI LENGTH — SKIRTS & DRESSES', group: 'LENGTH', match: (i) => ['skirt', 'mini_dress', 'midi_dress', 'maxi_dress', 'shirt_dress', 'slip_dress'].includes(i.item_type ?? '') && (i.item_type === 'mini_dress' || (i.length != null && i.length <= 2)) },
   { id: 'unstructured', label: 'SOFT / UNSTRUCTURED', group: 'LINE', match: (i) => (i.structure ?? 0) >= 4 },
   { id: 'structured_shoulder', label: 'STRUCTURED SHOULDER', group: 'LINE', match: (i) => i.shoulder != null && i.shoulder <= 2 },
   { id: 'bare_shoulder', label: 'OFF / BARE SHOULDER', group: 'DETAIL', match: (i) => (i.shoulder ?? 0) >= 4 },

@@ -106,3 +106,23 @@ describe('colour shades', () => {
     expect(lovedScore(p, { colour_family: 'navy', product_name: 'Serge navy' })).toBeCloseTo(0.18)
   })
 })
+
+describe('mini length — skirts and dresses only', () => {
+  it('catches a short skirt, a mini dress and a cami dress at mini length', () => {
+    expect(matchesShape('mini_length', { item_type: 'skirt', length: 1 })).toBe(true)
+    expect(matchesShape('mini_length', { item_type: 'mini_dress' })).toBe(true)
+    expect(matchesShape('mini_length', { item_type: 'slip_dress', length: 2 })).toBe(true)
+  })
+
+  it('leaves longer skirts, midi slip dresses and cropped jackets alone', () => {
+    expect(matchesShape('mini_length', { item_type: 'skirt', length: 4 })).toBe(false)
+    expect(matchesShape('mini_length', { item_type: 'slip_dress', length: 4 })).toBe(false)
+    expect(matchesShape('mini_length', { item_type: 'jacket', length: 1 })).toBe(false)
+  })
+
+  it('is an authored avoid like any other shape', () => {
+    const p = prefs({ shapes_avoided: ['mini_length'] })
+    expect(avoidReasons(p, { item_type: 'skirt', length: 1 }).length).toBe(1)
+    expect(avoidReasons(p, { item_type: 'skirt', length: 5 })).toEqual([])
+  })
+})
