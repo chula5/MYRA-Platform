@@ -220,6 +220,7 @@ export default function MyLooksClient({ view, readOnly = false }: { view: Client
                   onDone={() => setAsking(false)}
                   testMemberId={readOnly ? view.memberId ?? undefined : undefined}
                   firstName={view.name.split(' ')[0] || 'her'}
+                  occasionIds={view.occasions}
                 />
               ) : (
                 <button
@@ -679,9 +680,11 @@ function StyleItemPrompt({ item, look }: { item: ClientLookItem; look: ClientLoo
 }
 
 function AskPanel({
-  onDone, testMemberId, firstName,
+  onDone, testMemberId, firstName, occasionIds,
 }: {
   onDone: () => void
+  /** Her occasions, most often first. Anything she never dresses for is not offered. */
+  occasionIds?: string[]
   /** Set in the admin mirror: runs the composer as a test for this member —
    *  nothing is saved, sent or learned unless KEEP is pressed. */
   testMemberId?: string
@@ -736,7 +739,10 @@ function AskPanel({
       <div>
         <p className="text-[20px] text-[#2B2B2B] mb-3">What is it for?</p>
         <div className="flex flex-wrap gap-2.5">
-          {CLIENT_OCCASIONS.map((o) => (
+          {(occasionIds?.length
+            ? occasionIds.map((id) => CLIENT_OCCASIONS.find((o) => o.id === id)).filter((o): o is (typeof CLIENT_OCCASIONS)[number] => !!o)
+            : CLIENT_OCCASIONS
+          ).map((o) => (
             <button key={o.id} onClick={() => setOccasion(o.id)} className={chip(occasion === o.id)}>{o.label}</button>
           ))}
         </div>

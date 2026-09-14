@@ -14,7 +14,7 @@
 import { createServerClient, createAdminClient } from '@/lib/supabase-server'
 import { revalidatePath } from 'next/cache'
 import { recordMemberLookFeedback } from '@/app/admin/private-stylist/actions'
-import { CLIENT_OCCASIONS, OCCASION_LABEL } from '@/lib/client-occasions'
+import { CLIENT_OCCASIONS, OCCASION_LABEL, occasionsForMember } from '@/lib/client-occasions'
 
 export interface ClientLookItem {
   item_id: string | null
@@ -46,6 +46,8 @@ export interface ClientView {
   name: string
   looks: ClientLook[]
   unread: number
+  /** Occasion ids to offer her, most often first — from her occasion profile. */
+  occasions?: string[]
   error?: string
 }
 
@@ -71,7 +73,7 @@ async function loadLooksFor(memberId: string): Promise<ClientView> {
   const empty: ClientView = { memberId: null, name: '', looks: [], unread: 0 }
   try {
     const admin = createAdminClient() as any
-    const { data: member } = await admin.from('pilot_member').select('member_id, name').eq('member_id', memberId).maybeSingle()
+    const { data: member } = await admin.from('pilot_member').select('member_id, name, occasions').eq('member_id', memberId).maybeSingle()
     if (!member) return empty
     const me = { memberId: member.member_id as string, name: member.name as string }
 
@@ -96,6 +98,7 @@ async function loadLooksFor(memberId: string): Promise<ClientView> {
       memberId: me.memberId,
       name: me.name,
       unread: unread ?? 0,
+      occasions: occasionsForMember(member.occasions),
       looks: (looks ?? []).map((l: any) => {
         const d: any = byDelivery.get(l.delivery_id)
         return {
