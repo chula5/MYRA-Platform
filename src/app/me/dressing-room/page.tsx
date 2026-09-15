@@ -1,18 +1,17 @@
 import { redirect } from 'next/navigation'
 import { createServerClient } from '@/lib/supabase-server'
-import { loadForYou } from './for-you-actions'
-import ForYouClient from './ForYouClient'
+import { loadMyDressingRoom } from './actions'
+import DressingRoomClient from './DressingRoomClient'
 
 export const dynamic = 'force-dynamic'
 
-// FOR YOU — her home. A client without a private-stylist record (the older
-// persona flow) keeps her profile as home.
-export default async function ForYouPage() {
+// DRESSING ROOM — her own pieces.
+export default async function DressingRoomPage() {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/signin')
 
-  const view = await loadForYou()
+  const view = await loadMyDressingRoom()
   if (!view.memberId) redirect('/me/profile')
-  return <ForYouClient view={view} />
+  return <DressingRoomClient view={view} />
 }

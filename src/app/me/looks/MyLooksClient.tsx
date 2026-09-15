@@ -188,6 +188,9 @@ export default function MyLooksClient({ view, readOnly = false }: { view: Client
         <div className="mb-14 -mx-6 sm:-mx-10 px-2 sm:px-10">
           <ArchiveCard
             className="w-full"
+            // The mirror wiggles in, then settles near the top — no scrolling
+            // to reach the question (Chloe, 2026-09-15).
+            intro="settle"
             heading={
               <div className="text-center">
                 <h1 className="text-[clamp(30px,5vw,86px)] tracking-[0.045em] text-[#4A4E57] leading-[1.05]">

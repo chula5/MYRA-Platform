@@ -21,11 +21,13 @@ export default async function MeLayout({ children }: { children: React.ReactNode
     <div className="min-h-screen bg-white">
       <header className="sticky top-0 z-30 flex items-center justify-between px-6 sm:px-10 h-16 border-b border-[#E2E0DB] bg-white">
         <Link href="/me" className="text-[20px] tracking-[0.2em] text-[#4A4E57]">MYRA</Link>
-        <nav className="flex items-center gap-5 sm:gap-8">
-          <Link href="/me/looks" className="text-[16px] sm:text-[18px] tracking-[0.1em] text-[#0A0A0A] hover:opacity-70 transition-opacity">YOUR LOOKS</Link>
-          <Link href="/me" className="text-[16px] sm:text-[18px] tracking-[0.1em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors">PROFILE</Link>
+        {/* Her four rooms. Scrolls sideways on a phone rather than wrapping. */}
+        <nav data-lenis-prevent className="flex items-center gap-5 sm:gap-8 overflow-x-auto whitespace-nowrap">
+          <Link href="/me" className="text-[16px] sm:text-[18px] tracking-[0.1em] text-[#0A0A0A] hover:opacity-70 transition-opacity">FOR YOU</Link>
+          <Link href="/me/looks" className="text-[16px] sm:text-[18px] tracking-[0.1em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors">ALL LOOKS</Link>
+          <Link href="/me/dressing-room" className="text-[16px] sm:text-[18px] tracking-[0.1em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors">DRESSING ROOM</Link>
           <Link href="/me/inspiration" className="text-[16px] sm:text-[18px] tracking-[0.1em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors">INSPIRATION</Link>
-          <Link href="/me/wardrobe" className="text-[16px] sm:text-[18px] tracking-[0.1em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors">WARDROBE</Link>
+          <Link href="/me/profile" className="text-[16px] sm:text-[18px] tracking-[0.1em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors">PROFILE</Link>
           <form action={earlyAccessSignOut}>
             <button type="submit" className="text-[16px] sm:text-[18px] tracking-[0.1em] text-[#A8A8A4] hover:text-[#4A4E57] transition-colors">OUT</button>
           </form>

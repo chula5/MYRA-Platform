@@ -29,6 +29,7 @@ import {
   type InspirationSource,
 } from '@/lib/inspiration'
 import { assertAdmin } from '@/lib/admin-audit'
+import { scorePendingInspiration } from '@/lib/inspiration-scoring'
 
 const PATH = '/admin/stylists'
 
@@ -183,50 +184,11 @@ export async function scoreInspirationImages(
   limit = 40,
 ): Promise<{ scored?: number; failed?: number; error?: string }> {
   await assertAdmin()
-  try {
-    const admin = createAdminClient() as any
-    const { data: pending, error } = await admin
-      .from('inspiration_image')
-      .select('image_id, image_url')
-      .eq('persona_id', personaId)
-      .eq('status', 'pending_scoring')
-      .limit(limit)
-    if (error) return { error: error.message }
-    if (!pending?.length) return { scored: 0, failed: 0 }
-
-    let scored = 0
-    let failed = 0
-    for (const row of pending) {
-      const { data: a, error: verr } = await analyseInspirationImage(row.image_url)
-      if (verr || !a) {
-        failed++
-        await admin.from('inspiration_image')
-          .update({ scoring_error: verr ?? 'Vision pass returned nothing', updated_at: new Date().toISOString() })
-          .eq('image_id', row.image_id)
-        continue
-      }
-      const scores: InspirationScores = {
-        construction: a.construction, volume: a.volume, colour_story: a.colour_story,
-        surface_story: a.surface_story, pattern: a.pattern, colour_depth: a.colour_depth,
-        sheen: a.sheen, formality: a.formality, item_types: a.item_types,
-      }
-      await admin.from('inspiration_image').update({
-        status: 'scored',
-        scores,
-        scores_original: scores, // frozen: corrections stay measurable against it
-        occasion_read: a.occasion_read,
-        score_confidence: a.score_confidence,
-        vector: vectorFromInspiration(scores, a.occasion_read),
-        scoring_error: null,
-        updated_at: new Date().toISOString(),
-      }).eq('image_id', row.image_id)
-      scored++
-    }
-    revalidatePath(PATH)
-    return { scored, failed }
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Scoring failed' }
-  }
+  // The scoring itself lives in a plain module, so a member-checked /me action
+  // can score a client's own pictures without this admin gate.
+  const r = await scorePendingInspiration(createAdminClient() as any, personaId, limit)
+  if (!r.error) revalidatePath(PATH)
+  return r
 }
 
 /**

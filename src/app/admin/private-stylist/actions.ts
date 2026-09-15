@@ -61,9 +61,13 @@ import {
   type MemberTaste,
   type OccasionContext,
   type PersonaLens,
+  type ComposeHistory,
 } from '@/lib/pilot-composer'
 import { listOwnedItems, looksUsingItems } from '@/lib/wardrobe/store'
-import { ownerRefsForMember } from '@/lib/wardrobe/owned-items'
+import { ownerRefsForMember, isOwnedItem, styledInCounts } from '@/lib/wardrobe/owned-items'
+import { resolveClientMember, firstNameOf } from '@/lib/client-member'
+import { whyThisSuitsHer } from '@/lib/look-why'
+import { CLIENT_OCCASIONS, occasionsForMember } from '@/lib/client-occasions'
 import { checkRenderFidelity } from '@/app/admin/ai/render-fidelity'
 import { loadMemberSizeProfile, filterItemsForShopper } from '@/lib/size-availability'
 import { checkSizesForMember } from '@/lib/look-size-check'
@@ -1874,28 +1878,19 @@ type PlannedLooks = ReturnType<typeof composeMemberLooks>
  * for this?" as a test, with nothing saved, sent or learned. Not exported: a
  * 'use server' export is a public endpoint, and this takes any member_id.
  */
-async function planDeliveryLooks(
-  admin: any,
-  delivery: { member_id: string; occasion: string | null; climate?: ClimateId | null; effective_weights?: any },
-  options: ComposeDeliveryOptions = {},
-): Promise<{ looks?: PlannedLooks; mix?: RoomWeights; error?: string }> {
-  const { data: member, error: merr } = await admin.from('pilot_member').select('*').eq('member_id', delivery.member_id).single()
-  if (merr || !member) return { error: merr?.message ?? 'Member not found' }
-
-  const taste = await loadMemberTaste(admin, member)
-  const library = await loadComposableLibrary(member)
-  // A pale piece added today is read before the nightly sweep can reach it.
-  await correctPaleColour(admin, library as any, 20)
-  const mix = normalise(delivery.effective_weights ?? {})
-  const occ: OccasionContext = { id: delivery.occasion ?? null, vector: lookTasteVector(mix), climate: delivery.climate ?? null }
-  const lens = await loadPersonaLens(admin, delivery.member_id)
-
+/**
+ * Her look history, read once for any composer: everything already composed for
+ * her plus her latest answer on each piece (lib/piece-verdicts), and the pieces
+ * that have already anchored an approved look. Shared by fresh deliveries and
+ * the Dressing Room, so both explore rather than replaying the same looks.
+ */
+async function loadComposeHistory(admin: any, memberId: string): Promise<ComposeHistory> {
   // Her look history: everything already composed for her (any delivery) plus
   // her explicit rejections — the composer ranks those down so each delivery
   // explores the library instead of regenerating the same argmax looks.
   const [{ data: priorLooks }, { data: fb }] = await Promise.all([
-    admin.from('pilot_look').select('items, delivery:delivery_id!inner(member_id)').eq('delivery.member_id', delivery.member_id),
-    allFeedbackRows(admin, delivery.member_id, 'item_in, item_out, action, created_at'),
+    admin.from('pilot_look').select('items, delivery:delivery_id!inner(member_id)').eq('memberId', memberId),
+    allFeedbackRows(admin, memberId, 'item_in, item_out, action, created_at'),
   ])
   const seenCounts = new Map<string, number>()
   for (const l of priorLooks ?? []) {
@@ -1919,7 +1914,7 @@ async function planDeliveryLooks(
   // hero_item_id is only written on variant rows.
   const { data: approvedLooks } = await admin
     .from('pilot_look').select('items, hero_item_id, delivery:delivery_id!inner(member_id)')
-    .eq('delivery.member_id', delivery.member_id).not('approved_at', 'is', null)
+    .eq('memberId', memberId).not('approved_at', 'is', null)
   const anchoredIds = new Set<string>()
   for (const l of approvedLooks ?? []) {
     if (l.hero_item_id) { anchoredIds.add(l.hero_item_id); continue }
@@ -1927,9 +1922,29 @@ async function planDeliveryLooks(
     const anchor = its.find((it) => it.slot === 'dress') ?? its.find((it) => it.slot === 'top')
     if (anchor?.item_id) anchoredIds.add(anchor.item_id)
   }
+  return { seenCounts, keptCounts, rejected, rejectedCounts, anchoredIds }
+}
+
+async function planDeliveryLooks(
+  admin: any,
+  delivery: { member_id: string; occasion: string | null; climate?: ClimateId | null; effective_weights?: any },
+  options: ComposeDeliveryOptions = {},
+): Promise<{ looks?: PlannedLooks; mix?: RoomWeights; error?: string }> {
+  const { data: member, error: merr } = await admin.from('pilot_member').select('*').eq('member_id', delivery.member_id).single()
+  if (merr || !member) return { error: merr?.message ?? 'Member not found' }
+
+  const taste = await loadMemberTaste(admin, member)
+  const library = await loadComposableLibrary(member)
+  // A pale piece added today is read before the nightly sweep can reach it.
+  await correctPaleColour(admin, library as any, 20)
+  const mix = normalise(delivery.effective_weights ?? {})
+  const occ: OccasionContext = { id: delivery.occasion ?? null, vector: lookTasteVector(mix), climate: delivery.climate ?? null }
+  const lens = await loadPersonaLens(admin, delivery.member_id)
+
+  const history = await loadComposeHistory(admin, delivery.member_id)
 
   const lookCount = Math.max(1, Math.min(6, options.count ?? 3))
-  const looks = composeMemberLooks(taste, library, lookCount, occ, lens, { seenCounts, keptCounts, rejected, rejectedCounts, anchoredIds }, {
+  const looks = composeMemberLooks(taste, library, lookCount, occ, lens, history, {
     ownedMode: options.ownedMode ?? 'blend',
     ownedTargetShare: options.ownedTargetShare ?? DEFAULT_OWNED_TARGET_SHARE,
   })
@@ -3030,5 +3045,214 @@ export async function loadMemberTrust(memberId: string): Promise<MemberTrust | {
     return { ...trust, headline: trustHeadline(trust), learned, slotEdits }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Could not read trust' }
+  }
+}
+
+
+// ── DRESSING ROOM ────────────────────────────────────────────────────────────
+// Her own pieces, styled. Every function resolves the member on the server —
+// her session, or the member Chloe names when testing from HER VIEW — and the
+// outfits come from the same composer and the same look check as a delivery.
+// Nothing here is saved.
+
+export interface DressingRoomPiece {
+  item_id: string
+  product_name: string
+  item_type: string | null
+  slot: string | null
+  image_url: string | null
+  colour_family: string | null
+  /** Looks she has been sent (or, testing, every look) that use this piece. */
+  styled_in: number
+}
+
+export interface DressingRoomView {
+  memberId: string | null
+  firstName: string
+  test: boolean
+  pieces: DressingRoomPiece[]
+  error?: string
+}
+
+export interface StyledLook {
+  look_id: string | null
+  image_url: string | null
+  items: LookItem[]
+  why: string
+}
+
+export interface OwnedPieceView extends DressingRoomView {
+  piece: DressingRoomPiece | null
+  styled: StyledLook[]
+  /** "Find skirts to go with it" — types in her library that complete this piece. */
+  finders: { itemType: string; label: string; count: number }[]
+  occasions: { id: string; label: string }[]
+}
+
+// The piece types that complete an outfit around each kind of piece.
+const FINDER_TYPES: Partial<Record<Slot, string[]>> = {
+  top: ['skirt', 'trousers', 'jeans', 'shorts'],
+  bottom: ['shirt', 'blouse', 'knitwear', 't-shirt'],
+  outerwear: ['skirt', 'trousers', 'jeans', 'midi_dress', 'maxi_dress'],
+  dress: ['sneaker', 'flat', 'boot', 'sandal'],
+  shoe: ['skirt', 'trousers', 'jeans'],
+}
+const FINDER_LABEL: Record<string, string> = {
+  skirt: 'skirts', trousers: 'trousers', jeans: 'jeans', shorts: 'shorts',
+  shirt: 'shirts', blouse: 'blouses', knitwear: 'knitwear', 't-shirt': 'T-shirts',
+  midi_dress: 'midi dresses', maxi_dress: 'maxi dresses',
+  sneaker: 'trainers', flat: 'flats', boot: 'boots', sandal: 'sandals',
+}
+const STYLE_THIS_LOOKS = 3
+const WHY_DIMS = 'item_id, item_type, colour_family, product_name, fit, leg_opening, length, structure, neckline, sleeve, rise, shoulder, waist_definition, pattern'
+
+function toPiece(it: ItemWithBrand, styled: Map<string, number>): DressingRoomPiece {
+  const a = it as any
+  return {
+    item_id: it.item_id,
+    product_name: it.product_name,
+    item_type: (it.item_type as string) ?? null,
+    slot: it.item_type ? slotForItemType(it.item_type) : null,
+    image_url: it.image_url ?? null,
+    colour_family: a.colour_family ?? null,
+    styled_in: styled.get(it.item_id) ?? 0,
+  }
+}
+
+async function memberLooksFor(admin: any, memberId: string, test: boolean): Promise<any[]> {
+  const { data } = await admin.from('pilot_look')
+    .select('look_id, image_url, items, visible_to_client, delivery:delivery_id!inner(member_id)')
+    .eq('delivery.member_id', memberId)
+  return ((data ?? []) as any[]).filter((l) => test || l.visible_to_client)
+}
+
+export async function loadDressingRoom(asMemberId?: string): Promise<DressingRoomView> {
+  const me = await resolveClientMember(asMemberId)
+  if (!me) return { memberId: null, firstName: '', test: false, pieces: [] }
+  const base = { memberId: me.memberId, firstName: firstNameOf(me.name), test: me.test }
+  try {
+    const admin = createAdminClient() as any
+    const [pieces, looks] = await Promise.all([
+      listOwnedItems(ownerRefsForMember({ member_id: me.memberId, auth_user_id: me.authUserId })),
+      memberLooksFor(admin, me.memberId, me.test),
+    ])
+    const styled = styledInCounts(looks)
+    return { ...base, pieces: pieces.map((p) => toPiece(p, styled)) }
+  } catch (err) {
+    return { ...base, pieces: [], error: err instanceof Error ? err.message : 'Could not load your wardrobe' }
+  }
+}
+
+export async function loadOwnedPiece(itemId: string, asMemberId?: string): Promise<OwnedPieceView> {
+  const empty: OwnedPieceView = { memberId: null, firstName: '', test: false, pieces: [], piece: null, styled: [], finders: [], occasions: [] }
+  const me = await resolveClientMember(asMemberId)
+  if (!me) return empty
+  const base = { ...empty, memberId: me.memberId, firstName: firstNameOf(me.name), test: me.test }
+  try {
+    const admin = createAdminClient() as any
+    const { data: member } = await admin.from('pilot_member').select('*').eq('member_id', me.memberId).single()
+    const [owned, looks, library] = await Promise.all([
+      listOwnedItems(ownerRefsForMember({ member_id: me.memberId, auth_user_id: me.authUserId })),
+      memberLooksFor(admin, me.memberId, me.test),
+      loadComposableLibrary(member),
+    ])
+    const hero = owned.find((p) => p.item_id === itemId)
+    if (!hero) return { ...base, error: 'That piece is not in your wardrobe' }
+    const styled = styledInCounts(looks)
+    const prefs = readStylePrefs(member)
+
+    // How it has been styled: her looks that use it, each with its reason.
+    const using = looks.filter((l) => ((l.items ?? []) as any[]).some((i) => i.item_id === itemId))
+    const ids = Array.from(new Set(using.flatMap((l) => (l.items ?? []).map((i: any) => i.item_id)).filter(Boolean)))
+    const { data: rows } = ids.length ? await admin.from('item').select(WHY_DIMS).in('item_id', ids) : { data: [] }
+    const dims = new Map<string, any>(((rows ?? []) as any[]).map((r) => [r.item_id, r]))
+    const styledLooks: StyledLook[] = using.map((l) => ({
+      look_id: l.look_id,
+      image_url: l.image_url ?? null,
+      items: l.items ?? [],
+      why: whyThisSuitsHer((l.items ?? []).map((it: any) => ({ ...(dims.get(it.item_id) ?? {}), product_name: it.product_name, owned: !!it.owned })), prefs),
+    }))
+
+    const slot = hero.item_type ? slotForItemType(hero.item_type) : null
+    const avoided = new Set(prefs.types_avoided)
+    const finders = (slot ? FINDER_TYPES[slot] ?? [] : [])
+      .filter((t) => !avoided.has(t))
+      .map((t) => ({ itemType: t, label: FINDER_LABEL[t] ?? t, count: library.filter((i) => i.item_type === t && !isOwnedItem(i as any)).length }))
+      .filter((f) => f.count >= 2)
+    const occasions = occasionsForMember(member?.occasions)
+      .map((id) => CLIENT_OCCASIONS.find((o) => o.id === id))
+      .filter((o): o is (typeof CLIENT_OCCASIONS)[number] => !!o)
+      .map((o) => ({ id: o.id as string, label: o.label as string }))
+
+    return { ...base, piece: toPiece(hero, styled), styled: styledLooks, finders, occasions }
+  } catch (err) {
+    return { ...base, error: err instanceof Error ? err.message : 'Could not load this piece' }
+  }
+}
+
+/**
+ * STYLE THIS — outfits built around one of her own pieces, for an occasion or
+ * with a kind of piece ("find skirts to go with this top"). The same composer
+ * and look check as a delivery; looks that clash or hold a piece not in her
+ * size are never shown. Nothing is saved.
+ */
+export async function styleOwnedPiece(
+  itemId: string,
+  opts: { occasion?: string | null; withType?: string | null } = {},
+  asMemberId?: string,
+): Promise<{ looks: StyledLook[]; hidden?: number; error?: string }> {
+  const me = await resolveClientMember(asMemberId)
+  if (!me) return { looks: [], error: 'Not signed in' }
+  try {
+    const admin = createAdminClient() as any
+    const { data: member } = await admin.from('pilot_member').select('*').eq('member_id', me.memberId).single()
+    const library = await loadComposableLibrary(member)
+    const hero = library.find((i) => i.item_id === itemId && isOwnedItem(i as any))
+    if (!hero) return { looks: [], error: 'That piece is not in your wardrobe' }
+
+    let pool = library
+    if (opts.withType) {
+      // Only that kind of piece in its place: a top styled with skirts keeps
+      // every other slot open but offers no trousers or jeans.
+      const want = opts.withType
+      const wantSlot = slotForItemType(want as any)
+      pool = library.filter((i) => i.item_id === itemId || slotForItemType(i.item_type) !== wantSlot || i.item_type === want)
+      if (pool.filter((i) => i.item_type === want && i.item_id !== itemId).length < 2) {
+        return { looks: [], error: `Not enough ${FINDER_LABEL[want] ?? want} in your size right now` }
+      }
+    }
+
+    const [taste, lens, history] = await Promise.all([
+      loadMemberTaste(admin, member),
+      loadPersonaLens(admin, me.memberId),
+      loadComposeHistory(admin, me.memberId),
+    ])
+    let occ: OccasionContext | undefined
+    if (opts.occasion) {
+      const mix = normalise(effectiveWeights(member.room_weights, opts.occasion as any, member.work_dress_code))
+      occ = { id: opts.occasion as any, vector: lookTasteVector(mix), climate: null }
+    }
+
+    const composed = composeMemberVariants(taste, pool, itemId, STYLE_THIS_LOOKS + 2, occ, lens, history, { ownedMode: 'blend' })
+    if (!composed.length) return { looks: [], error: 'Nothing goes with this piece in your size right now' }
+    const judged = await judgeLooksForMember(admin, me.memberId, composed, 'unknown')
+    const rank = (i: number) => (judged[i].check?.verdict === 'works' ? 0 : judged[i].check ? 1 : 2)
+    const passing = composed.map((_, i) => i)
+      .filter((i) => judged[i].check?.verdict !== 'clashes' && !hasPieceOutOfSize(judged[i]))
+      .sort((a, b) => rank(a) - rank(b) || a - b)
+    const dims = new Map<string, any>(library.map((i) => [i.item_id, i]))
+    const prefs = readStylePrefs(member)
+    return {
+      hidden: composed.length - passing.length,
+      looks: passing.slice(0, STYLE_THIS_LOOKS).map((i) => ({
+        look_id: null,
+        image_url: null,
+        items: composed[i].items,
+        why: whyThisSuitsHer(composed[i].items.map((it) => ({ ...(dims.get(it.item_id ?? '') ?? {}), product_name: it.product_name, owned: !!it.owned })), prefs),
+      })),
+      ...(passing.length ? {} : { error: 'Nothing passed the check for this piece right now — try another occasion' }),
+    }
+  } catch (err) {
+    return { looks: [], error: err instanceof Error ? err.message : 'Could not style this piece' }
   }
 }

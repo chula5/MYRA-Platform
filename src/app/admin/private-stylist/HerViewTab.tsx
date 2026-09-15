@@ -2,13 +2,33 @@
 
 // WHAT SHE SEES.
 //
-// The same component her browser renders, with the same data shape, in
-// read-only. Not a mock and not a second implementation: a mirror rebuilt
+// The same components her browser renders, with the same data shapes, loaded
+// AS her. Not a mock and not a second implementation: a mirror rebuilt
 // separately drifts, and then what Chloe checks stops being what Alison sees.
+// Each of her rooms is a tab; in all of them Chloe's taps are tests — outfits
+// are composed and checked for real, but nothing she would record is saved.
 
 import { useEffect, useState } from 'react'
 import MyLooksClient from '@/app/me/looks/MyLooksClient'
+import ForYouClient from '@/app/me/ForYouClient'
+import DressingRoomClient from '@/app/me/dressing-room/DressingRoomClient'
+import PieceClient from '@/app/me/dressing-room/PieceClient'
+import InspirationBoard from '@/app/me/inspiration/InspirationBoard'
+import { MirrorLoading } from '@/components/ArchiveCard'
 import { loadLooksForMember, type ClientView } from '@/app/me/looks/actions'
+import { loadForYou, type ForYouView } from '@/app/me/for-you-actions'
+import { loadMyDressingRoom, loadMyPiece } from '@/app/me/dressing-room/actions'
+import { loadMyInspiration, type InspirationBoardView } from '@/app/me/inspiration/board-actions'
+import type { DressingRoomView, OwnedPieceView } from '@/app/admin/private-stylist/actions'
+
+type Room = 'for_you' | 'all_looks' | 'dressing_room' | 'inspiration'
+
+const ROOMS: { id: Room; label: string }[] = [
+  { id: 'for_you', label: 'FOR YOU' },
+  { id: 'all_looks', label: 'ALL LOOKS' },
+  { id: 'dressing_room', label: 'DRESSING ROOM' },
+  { id: 'inspiration', label: 'INSPIRATION' },
+]
 
 export default function HerViewTab({
   members, memberId, setMemberId,
@@ -17,18 +37,38 @@ export default function HerViewTab({
   memberId: string
   setMemberId: (id: string) => void
 }) {
-  const [view, setView] = useState<ClientView | null>(null)
+  const [room, setRoom] = useState<Room>('for_you')
+  const [looksView, setLooksView] = useState<ClientView | null>(null)
+  const [forYou, setForYou] = useState<ForYouView | null>(null)
+  const [dressing, setDressing] = useState<DressingRoomView | null>(null)
+  const [piece, setPiece] = useState<OwnedPieceView | null>(null)
+  const [inspiration, setInspiration] = useState<InspirationBoardView | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // A different member starts every room afresh.
+  useEffect(() => {
+    setLooksView(null); setForYou(null); setDressing(null); setPiece(null); setInspiration(null)
+  }, [memberId])
 
   useEffect(() => {
     if (!memberId) return
     let live = true
+    const load = async () => {
+      if (room === 'all_looks' && !looksView) setLooksView(await loadLooksForMember(memberId))
+      if (room === 'for_you' && !forYou) setForYou(await loadForYou(memberId))
+      if (room === 'dressing_room' && !dressing) setDressing(await loadMyDressingRoom(memberId))
+      if (room === 'inspiration' && !inspiration) setInspiration(await loadMyInspiration(memberId))
+    }
     setLoading(true)
-    loadLooksForMember(memberId)
-      .then((v) => { if (live) setView(v) })
-      .finally(() => { if (live) setLoading(false) })
+    load().finally(() => { if (live) setLoading(false) })
     return () => { live = false }
-  }, [memberId])
+  }, [memberId, room, looksView, forYou, dressing, inspiration])
+
+  async function openPiece(itemId: string) {
+    setLoading(true)
+    setPiece(await loadMyPiece(itemId, memberId))
+    setLoading(false)
+  }
 
   const name = members.find((m) => m.member_id === memberId)?.name ?? ''
 
@@ -47,36 +87,67 @@ export default function HerViewTab({
           ))}
         </div>
         <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4]">
-          {view ? `${view.looks.length} LOOKS SENT` : ''}
+          {looksView ? `${looksView.looks.length} LOOKS SENT` : ''}
         </p>
       </div>
 
-      {loading && <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4]">LOADING HER VIEW…</p>}
+      {/* Her rooms, as she would move between them. */}
+      <div className="flex gap-1.5 flex-wrap border-y border-[#E2E0DB] py-3">
+        {ROOMS.map((r) => (
+          <button
+            key={r.id}
+            onClick={() => { setRoom(r.id); setPiece(null) }}
+            className={`text-[20px] tracking-[0.1em] px-4 py-2 border transition-colors ${room === r.id ? 'bg-[#0A0A0A] border-[#0A0A0A] text-white' : 'border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A]'}`}
+          >
+            {r.label}
+          </button>
+        ))}
+        <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4] self-center ml-3">
+          HER SCREEN, LOADED AS {name.toUpperCase()} — YOUR TAPS ARE TESTS: NOTHING IS SENT TO HER OR SAVED
+        </p>
+      </div>
 
-      {view && !view.looks.length && !loading && (
-        <div className="border border-[#E8D9B8] bg-[#FBF8F2] p-5">
-          <p className="text-[20px] tracking-[0.08em] text-[#8B5E00]">
-            {name.toUpperCase()} HAS NOT BEEN SENT ANYTHING YET
-          </p>
-          <p className="text-[20px] tracking-[0.06em] text-[#6B6B6B] mt-2">
-            THIS IS EXACTLY WHAT SHE WOULD SEE ON SIGNING IN. USE SEND TO HER ON A SHOT
-            LOOK, OR SEND HER EVERY SHOT LOOK, IN DELIVERIES.
-          </p>
+      {loading && <MirrorLoading label={`LOADING ${name.toUpperCase()}'S ${ROOMS.find((r) => r.id === room)?.label ?? ''}`} />}
+
+      {/* Her pages, full width of the screen — previews of front-end views, so
+          they break out of the admin's column exactly as her browser shows them.
+          No transform: that would break the wardrobe drawer's position: fixed. */}
+      {!loading && room === 'for_you' && forYou && (
+        <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen">
+          <ForYouClient view={forYou} testMemberId={memberId} />
         </div>
       )}
 
-      {/* Her page, full width of the screen — it is a preview of a front-end
-          view, so it breaks out of the admin's 1440px column exactly as her
-          own browser would show it. No transform: that would break the
-          wardrobe drawer's position: fixed. */}
-      {view && view.looks.length > 0 && (
-        <div>
-          <p className="text-[20px] tracking-[0.14em] text-[#A8A8A4] border-y border-[#E2E0DB] py-3 mb-0">
-            HER SCREEN — READ ONLY. HER ANSWERS SHOW UNDER EACH LOOK. ASK MYRA RUNS AS A TEST: NOTHING IS SENT TO HER OR LEARNED.
-          </p>
+      {!loading && room === 'all_looks' && looksView && (
+        looksView.looks.length ? (
           <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen">
-            <MyLooksClient view={view} readOnly />
+            <MyLooksClient view={looksView} readOnly />
           </div>
+        ) : (
+          <div className="border border-[#E8D9B8] bg-[#FBF8F2] p-5">
+            <p className="text-[20px] tracking-[0.08em] text-[#8B5E00]">{name.toUpperCase()} HAS NOT BEEN SENT ANYTHING YET</p>
+            <p className="text-[20px] tracking-[0.06em] text-[#6B6B6B] mt-2">
+              THIS IS EXACTLY WHAT SHE WOULD SEE ON SIGNING IN. USE SEND TO HER ON A SHOT LOOK, OR SEND HER EVERY SHOT LOOK, IN DELIVERIES.
+            </p>
+          </div>
+        )
+      )}
+
+      {!loading && room === 'dressing_room' && !piece && dressing && (
+        <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen">
+          <DressingRoomClient view={dressing} testMemberId={memberId} onOpenPiece={openPiece} />
+        </div>
+      )}
+
+      {!loading && room === 'inspiration' && inspiration && (
+        <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen">
+          <InspirationBoard view={inspiration} testMemberId={memberId} />
+        </div>
+      )}
+
+      {!loading && room === 'dressing_room' && piece && (
+        <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen">
+          <PieceClient view={piece} testMemberId={memberId} onBack={() => setPiece(null)} />
         </div>
       )}
     </div>
