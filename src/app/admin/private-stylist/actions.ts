@@ -2007,6 +2007,7 @@ export async function previewAskLooks(
   memberId: string,
   occasion: string,
   climate: string | null,
+  count = 3,
 ): Promise<{ looks?: AskPreviewLook[]; mix?: Record<string, number>; error?: string }> {
   if (!(await requireAdmin())) return { error: 'Not authorised' }
   const admin = createAdminClient() as any
@@ -2019,7 +2020,7 @@ export async function previewAskLooks(
     occasion,
     climate: climate as ClimateId | null,
     effective_weights: effectiveWeights(member.room_weights, occasion as any, member.work_dress_code),
-  })
+  }, { count })
   if (planned.error || !planned.looks) return { error: planned.error ?? 'Could not compose' }
   return {
     looks: planned.looks.map((l: any) => ({ items: l.items, notes: l.notes ?? null })),
@@ -2131,7 +2132,8 @@ export async function keepAskPreview(
   mix: Record<string, number>,
   looks: AskPreviewLook[],
   edits: AskLookEdits[] = [],
-): Promise<{ deliveryId?: string; learned?: number; error?: string }> {
+  shoot = false,
+): Promise<{ deliveryId?: string; learned?: number; shooting?: number; error?: string }> {
   if (!(await requireAdmin())) return { error: 'Not authorised' }
   if (!looks.length) return { error: 'Nothing to keep' }
   const admin = createAdminClient() as any
@@ -2218,7 +2220,25 @@ export async function keepAskPreview(
   // Keeping a look is approving it, for the style as for a delivery.
   for (const l of looks) await teachHouseStyle(admin, memberId, l.items, 'approve', 'review')
   revalidatePath(PATH)
-  return { deliveryId: created.delivery_id, learned: fb.length }
+
+  // A light Higgsfield shoot for every kept look, started in the background: a
+  // shoot takes minutes, and awaiting it would hold every other action on the
+  // page behind it. Pictures land on the draft in DELIVERIES as they finish.
+  const lookIds = ((inserted ?? []) as any[]).sort((a, b) => a.position - b.position).map((r) => r.look_id as string)
+  if (shoot && lookIds.length) {
+    void (async () => {
+      for (const id of lookIds) {
+        try {
+          const r = await higgsfieldShootForLook(id, 'E5', { light: true })
+          if (r.error) console.error('[keepAskPreview] light shoot', id, r.error)
+        } catch (err) {
+          // revalidatePath can throw once the request has ended — the image is already saved by then.
+          console.error('[keepAskPreview] light shoot', id, err)
+        }
+      }
+    })()
+  }
+  return { deliveryId: created.delivery_id, learned: fb.length, shooting: shoot ? lookIds.length : 0 }
 }
 
 // Style ONE hero several ways. Takes a composed look, holds its hero (the first
@@ -2612,7 +2632,12 @@ export async function skipComposedLook(lookId: string): Promise<{ error?: string
  * appended to shoot_history, so a redo never destroys the previous image —
  * pick a different pose, compare the two, keep the better one.
  */
-export async function higgsfieldShootForLook(lookId: string, poseKey = 'E5'): Promise<{ imageUrl?: string; variants?: number; error?: string }> {
+/**
+ * light: one generation for a first picture of a look just accepted. Still
+ * fidelity-checked, but no corrective re-render and no "ways to wear it"
+ * variant looks — those belong to a full shoot from DELIVERIES.
+ */
+export async function higgsfieldShootForLook(lookId: string, poseKey = 'E5', opts: { light?: boolean } = {}): Promise<{ imageUrl?: string; variants?: number; error?: string }> {
   const admin = createAdminClient() as any
   const { data: look, error: lerr } = await admin.from('pilot_look').select('*').eq('look_id', lookId).single()
   if (lerr || !look) return { error: lerr?.message ?? 'Look not found' }
@@ -2668,7 +2693,7 @@ export async function higgsfieldShootForLook(lookId: string, poseKey = 'E5'): Pr
       .map((i) => ({ label: [i.brand_name, i.product_name].filter(Boolean).join(' — ') || String(i.item_type), image_url: i.image_url }))
     const first = await checkRenderFidelity(gen.imageUrl, fidelityItems)
     fidelity = { score: first.score, passed: first.passed, issues: first.issues }
-    if (!first.passed && !first.error) {
+    if (!first.passed && !first.error && !opts.light) {
       const retryPrompt = first.correctiveNotes
         ? `${prompt}\n\nMANDATORY CORRECTIONS — the previous render misrepresented the clothes: ${first.correctiveNotes}`
         : prompt
@@ -2728,8 +2753,10 @@ export async function higgsfieldShootForLook(lookId: string, poseKey = 'E5'): Pr
   // BEFORE the approval, not after.
   let variants = 0
   try {
-    const r = await composeLookVariants(lookId)
-    variants = r.created ?? 0
+    if (!opts.light) {
+      const r = await composeLookVariants(lookId)
+      variants = r.created ?? 0
+    }
   } catch (err) {
     // Best-effort. A look with no second way to wear it has still been shot.
     console.error('[higgsfieldShootForLook] variants after shoot', err)

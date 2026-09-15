@@ -4,9 +4,10 @@ import { useMemo, useState, useTransition } from 'react'
 import { PICKER_COLOURS, PICKER_TYPES } from '@/components/admin/ItemPickerModal'
 import { findSimilarToSkipped } from '@/lib/brand-watch-similar'
 import type { WatchedBrandRow } from '@/lib/brand-watch'
+import type { BrandTrust } from '@/lib/brand-watch-trust'
 import {
   addWatchedBrand, checkAllBrandsNow, checkBrandNow, fullScanBrand, keepAllForBrand,
-  keepItems, loadQueuePage, removeWatchedBrand, setWatchedBrandActive,
+  keepItems, loadQueuePage, removeWatchedBrand, setWatchedBrandActive, setWatchedBrandAutoKeep,
   setWatchedBrandMinScore, skipItems, undoSkip, setSkipReason, type QueueFilters, type QueueItemRow, type QueuePage,
 } from './actions'
 
@@ -49,6 +50,7 @@ function chipsFor<T extends { value: string; label: string }>(
 
 interface Props extends QueuePage {
   watched: WatchedBrandRow[]
+  trust: Record<string, BrandTrust>
 }
 
 // A scan writes { running: true } and clears it when it finishes or fails. If
@@ -64,7 +66,7 @@ function staleScan(state: { running?: boolean; started_at?: string } | null | un
 }
 
 export default function BrandWatchClient(props: Props) {
-  const { watched } = props
+  const { watched, trust } = props
   const [pending, startTransition] = useTransition()
   const [url, setUrl] = useState('')
   const [notice, setNotice] = useState<string | null>(null)
@@ -237,7 +239,7 @@ export default function BrandWatchClient(props: Props) {
                   <span className="flex gap-1.5 flex-shrink-0">
                     <button
                       disabled={pending}
-                      onClick={() => { setBusyBrand(w.watched_brand_id); act(() => checkBrandNow(w.watched_brand_id), (r) => { setNotice(r.error ?? `${r.result.name}: ${r.result.newProducts} NEW, ${r.result.queued} QUEUED, ${r.result.skippedStock} HELD FOR STOCK, ${r.result.suppressedByLearning ?? 0} SUPPRESSED BY LEARNING, ${r.result.restocked} RESTOCKED${r.result.visionColours ? `, ${r.result.visionColours} COLOURS READ FROM THE IMAGES` : ''}`); if (!r.error) reloadQueue() }) }}
+                      onClick={() => { setBusyBrand(w.watched_brand_id); act(() => checkBrandNow(w.watched_brand_id), (r) => { setNotice(r.error ?? `${r.result.name}: ${r.result.newProducts} NEW, ${r.result.queued} QUEUED, ${r.result.skippedStock} HELD FOR STOCK, ${r.result.suppressedByLearning ?? 0} SUPPRESSED BY LEARNING, ${r.result.restocked} RESTOCKED${r.result.visionColours ? `, ${r.result.visionColours} COLOURS READ FROM THE IMAGES` : ''}${r.result.autoKept ? `, ${r.result.autoKept} AUTO-KEPT` : ''}${r.result.autoNote ? ` — ${r.result.autoNote}` : ''}`); if (!r.error) reloadQueue() }) }}
                       className="text-[8px] tracking-[0.1em] text-[#4A4E57] border border-[#E2E0DB] rounded-full px-2.5 py-1 hover:border-[#0A0A0A] transition-colors disabled:opacity-40"
                     >
                       {busyBrand === w.watched_brand_id ? <span className="text-[#C4A882]">WORKING…</span> : 'CHECK NOW'}
@@ -264,6 +266,22 @@ export default function BrandWatchClient(props: Props) {
                   <button disabled={pending} onClick={() => act(() => setWatchedBrandActive(w.watched_brand_id, !w.active))} className="hover:text-[#4A4E57] transition-colors">
                     {w.active ? 'PAUSE' : 'RESUME'}
                   </button>
+                  {/* AUTOMATE unlocks only once this brand's learning has proven
+                      it keeps what you keep; it can always be switched off. */}
+                  <button
+                    disabled={pending || (!w.auto_keep && !trust[w.watched_brand_id]?.trusted)}
+                    onClick={() => act(() => setWatchedBrandAutoKeep(w.watched_brand_id, !w.auto_keep), (r) =>
+                      setNotice(r.error ?? (w.auto_keep
+                        ? `${w.name.toUpperCase()}: AUTOMATE OFF — NEW PIECES WAIT IN THE QUEUE FOR YOU`
+                        : `${w.name.toUpperCase()}: AUTOMATED — FROM THE NEXT SCAN, NEW PIECES IT WOULD KEEP GO STRAIGHT TO THE LIBRARY`)))}
+                    className={`transition-colors disabled:cursor-not-allowed ${w.auto_keep ? 'text-[#3D6B45] font-bold' : trust[w.watched_brand_id]?.trusted ? 'text-[#0A0A0A] underline underline-offset-2' : 'text-[#C9C7C2]'}`}
+                    title={w.auto_keep ? 'Switch off — new pieces wait for you again' : trust[w.watched_brand_id]?.trusted ? 'Let new pieces this brand’s learning would keep go straight to the library' : 'Unlocks when this brand’s learning has proven itself on your one-by-one decisions'}
+                  >
+                    {w.auto_keep ? 'AUTOMATED ✓' : 'AUTOMATE'}
+                  </button>
+                </div>
+                <div className={`mt-1 text-[8px] tracking-[0.1em] ${w.auto_keep && !trust[w.watched_brand_id]?.trusted ? 'text-[#B4593A]' : trust[w.watched_brand_id]?.trusted ? 'text-[#3D6B45]' : 'text-[#A8A8A4]'}`}>
+                  {w.auto_keep && !trust[w.watched_brand_id]?.trusted ? 'AUTOMATE PAUSED — ' : ''}{trust[w.watched_brand_id]?.summary ?? 'NO ONE-BY-ONE DECISIONS YET'}
                   <button
                     disabled={pending}
                     onClick={() => { if (confirm(`Stop watching ${w.name}? Seen history is deleted too.`)) act(() => removeWatchedBrand(w.watched_brand_id)) }}

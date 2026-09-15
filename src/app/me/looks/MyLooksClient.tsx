@@ -739,10 +739,40 @@ function AskPanel({
   // Which looks are being re-checked after an edit (Claude's eye takes a few seconds).
   const [checking, setChecking] = useState<Set<number>>(new Set())
 
+  // UNDO: each look keeps what it was before every swap or remove — the pieces,
+  // its score and check, and its recorded edits — so undo is instant and the
+  // learning never records a change that was taken back.
+  type Snapshot = { kind: 'swap' | 'remove'; look: AskPreviewResult['looks'][number]; edits: AskLookEdits }
+  const [history, setHistory] = useState<Record<number, Snapshot[]>>({})
+  // Bumped on every edit and undo, so a re-check that finishes late never
+  // overwrites a look that has changed since.
+  const versions = useRef<Record<number, number>>({})
+
+  function pushHistory(look: number, kind: Snapshot['kind']) {
+    if (!preview) return
+    const snap: Snapshot = { kind, look: preview.looks[look], edits: edits[look] ?? { swaps: [], removes: [] } }
+    setHistory((h) => ({ ...h, [look]: [...(h[look] ?? []), snap] }))
+  }
+
+  function undo(look: number) {
+    const stack = history[look]
+    if (!stack?.length) return
+    const snap = stack[stack.length - 1]
+    versions.current[look] = (versions.current[look] ?? 0) + 1
+    setHistory((h) => ({ ...h, [look]: stack.slice(0, -1) }))
+    setPreview((cur) => cur && { ...cur, looks: cur.looks.map((l, i) => (i === look ? snap.look : l)) })
+    setEdits((prev) => { const next = [...prev]; next[look] = snap.edits; return next })
+    setChecking((s) => { const n = new Set(s); n.delete(look); return n })
+    if (swap?.look === look) setSwap(null)
+    setKept(false)
+  }
+
   async function rescore(look: number, items: any[]) {
     if (!preview) return
+    const v = (versions.current[look] = (versions.current[look] ?? 0) + 1)
     setChecking((s) => new Set(s).add(look))
     const r = await rescoreAskLook(testMemberId!, { items, notes: preview.looks[look].notes })
+    if (versions.current[look] !== v) return
     setChecking((s) => { const n = new Set(s); n.delete(look); return n })
     if (r.error) return
     setPreview((cur) => cur && {
@@ -765,6 +795,7 @@ function AskPanel({
 
   async function useOption(look: number, piece: number, opt: AskSwapOption) {
     if (!preview) return
+    pushHistory(look, 'swap')
     const out = preview.looks[look].items[piece] as any
     const items = preview.looks[look].items.map((it: any, j: number) => (j === piece ? opt.lookItem : it))
     setPreview({ ...preview, looks: preview.looks.map((l, i) => (i === look ? { ...l, items } : l)) })
@@ -776,6 +807,7 @@ function AskPanel({
 
   async function removePiece(look: number, piece: number) {
     if (!preview) return
+    pushHistory(look, 'remove')
     const out = preview.looks[look].items[piece] as any
     const items = preview.looks[look].items.filter((_: any, j: number) => j !== piece)
     setPreview({ ...preview, looks: preview.looks.map((l, i) => (i === look ? { ...l, items } : l)) })
@@ -796,6 +828,7 @@ function AskPanel({
     setAccepted(new Set())
     setSwap(null)
     setEdits([])
+    setHistory({})
     if (testing) {
       const r = await previewAskForMember(testMemberId!, occasion, climate)
       if (r.error) setError(r.error)
@@ -875,6 +908,11 @@ function AskPanel({
                 ? 'EACH % IS CLAUDE LOOKING AT THE PHOTOS TOGETHER — COLOURS, PIECES, HER RULES — AND EVERY PIECE CHECKED IN HER SIZE'
                 : 'THE LOOK CHECK DID NOT RUN — % IS FROM HER HISTORY ONLY AND IS NOT YET RELIABLE'}
             </p>
+            {(preview.hiddenByCheck ?? 0) > 0 && (
+              <p className="text-[18px] text-[#8B5E00] mt-3">
+                {preview.hiddenByCheck} more look{preview.hiddenByCheck === 1 ? ' was' : 's were'} composed and not shown — the check caught: {preview.hiddenIssues?.join(' · ')}
+              </p>
+            )}
           </div>
           {preview.looks.map((l, i) => (
             <div key={i} className="border border-[#2B2B2B] bg-[#EDEBE7]">
@@ -894,6 +932,15 @@ function AskPanel({
                   >
                     {accepted.has(i) ? '✓ ACCEPTED' : 'ACCEPT THIS LOOK'}
                   </button>
+                  {(history[i]?.length ?? 0) > 0 && (
+                    <button
+                      onClick={() => undo(i)}
+                      className="text-[18px] tracking-[0.08em] px-4 py-2 border border-[#6E6B65] text-[#2B2B2B] hover:border-[#2B2B2B] transition-colors"
+                      title="Put the look back as it was before your last change"
+                    >
+                      ↶ UNDO {history[i][history[i].length - 1].kind === 'swap' ? 'SWAP' : 'REMOVE'}
+                    </button>
+                  )}
                 </div>
                 <p className={`text-[20px] tracking-[0.06em] ${checking.has(i) ? 'text-[#6E6B65]' : l.check?.verdict === 'clashes' ? 'text-[#B83A3A]' : l.high ? 'text-[#3D6B45]' : 'text-[#8B5E00]'}`}>
                   {checking.has(i)
@@ -1033,7 +1080,8 @@ function AskPanel({
                 const keptIdx = preview.looks.map((_, i) => i).filter((i) => accepted.has(i))
                 const chosen = keptIdx.map((i) => ({ items: preview.looks[i].items, notes: preview.looks[i].notes }))
                 const chosenEdits = keptIdx.map((i) => edits[i] ?? { swaps: [], removes: [] })
-                const r = await keepAskPreview(testMemberId!, occasion, climate, words, preview.mix, chosen, chosenEdits)
+                // Kept looks get a light Higgsfield shoot straight away.
+                const r = await keepAskPreview(testMemberId!, occasion, climate, words, preview.mix, chosen, chosenEdits, true)
                 setBusy(false)
                 if (r.error) setError(r.error)
                 else setKept(true)
@@ -1041,12 +1089,12 @@ function AskPanel({
               className="text-[20px] px-7 py-3.5 border border-[#2B2B2B] text-[#2B2B2B] hover:bg-[#2B2B2B] hover:text-white transition-colors disabled:opacity-40"
             >
               {kept
-                ? `Kept ${accepted.size} — in DELIVERIES as a draft`
+                ? `Kept ${accepted.size} — light shoot${accepted.size === 1 ? '' : 's'} started, in DELIVERIES as a draft`
                 : accepted.size
-                  ? `Keep ${accepted.size} accepted look${accepted.size === 1 ? '' : 's'} as a draft delivery`
+                  ? `Keep ${accepted.size} accepted look${accepted.size === 1 ? '' : 's'} and shoot ${accepted.size === 1 ? 'it' : 'them'}`
                   : 'Accept a look to keep it'}
             </button>
-            <p className="text-[18px] text-[#6E6B65]">Only accepted looks are kept. Swaps and removals on a kept look teach the composer, as on a delivery. She still sees nothing until you send.</p>
+            <p className="text-[18px] text-[#6E6B65]">Only accepted looks are kept, each with a light Higgsfield shoot — one picture, which lands on the draft in DELIVERIES in a few minutes. Swaps and removals on a kept look teach the composer, as on a delivery. She still sees nothing until you send.</p>
             {swapError && <p className="text-[20px] text-[#B83A3A] w-full">{swapError}</p>}
           </div>
         </div>

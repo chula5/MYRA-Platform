@@ -1,7 +1,9 @@
 'use server'
 
 import { houseBanOf } from '@/lib/brand-watch-bans'
-import { recordStyleDecision } from '@/lib/style-brain-store'
+import { keepQueueRows, teachStyleBrain } from '@/lib/brand-watch-keep'
+import { autoKeepForBrand, loadBrandTrust, trustFor } from '@/lib/brand-watch-auto'
+import type { BrandTrust } from '@/lib/brand-watch-trust'
 
 import { createAdminClient } from '@/lib/supabase-server'
 import {
@@ -57,6 +59,8 @@ export interface QueueFilters {
 
 export interface BrandWatchData extends QueuePage {
   watched: WatchedBrandRow[]
+  /** Whether each brand's learning can be trusted to keep on its own, by watched_brand_id. */
+  trust?: Record<string, BrandTrust>
   migrationNeeded?: boolean
 }
 
@@ -215,12 +219,35 @@ export async function loadBrandWatch(): Promise<BrandWatchData> {
     return { watched: [], queue: [], queueTotal: 0, predictedSkipTotal: 0, decidedCount: 0, brandCounts: {}, migrationNeeded, error: werr.message }
   }
 
-  const page = await loadQueuePage(0)
+  const [page, trustData] = await Promise.all([loadQueuePage(0), loadBrandTrust(admin as any)])
   if (page.error && (/brand_watch_queue/.test(page.error) || /42P01/.test(page.error))) {
     // Queue table missing → migration 0033 hasn't been run yet.
     return { watched: (watched ?? []) as unknown as WatchedBrandRow[], ...page, migrationNeeded: true }
   }
-  return { watched: (watched ?? []) as unknown as WatchedBrandRow[], ...page }
+  const rows = (watched ?? []) as unknown as WatchedBrandRow[]
+  const trust = Object.fromEntries(rows.map((w) => [w.watched_brand_id, trustFor(trustData, w)]))
+  return { watched: rows, ...page, trust }
+}
+
+/**
+ * AUTOMATE for one brand. Switching on requires the brand's trust to be earned
+ * — checked here, not just greyed out in the page. From now on, only pieces
+ * discovered after this moment can be kept automatically.
+ */
+export async function setWatchedBrandAutoKeep(watchedBrandId: string, on: boolean): Promise<{ error?: string }> {
+  const admin = createAdminClient() as any
+  const { data: w } = await admin.from('watched_brand').select('*').eq('watched_brand_id', watchedBrandId).single()
+  if (!w) return { error: 'Watchlist row not found' }
+  if (on) {
+    const trust = trustFor(await loadBrandTrust(admin), w)
+    if (!trust.trusted) return { error: `NOT YET TRUSTED — ${trust.summary}` }
+  }
+  const { error } = await admin.from('watched_brand')
+    .update({ auto_keep: on, auto_keep_since: on ? new Date().toISOString() : null })
+    .eq('watched_brand_id', watchedBrandId)
+  if (error) return { error: /auto_keep/.test(error.message) ? 'RUN MIGRATION 0056_brand_watch_automate.sql IN SUPABASE FIRST' : error.message }
+  revalidatePath('/admin/brand-watch')
+  return {}
 }
 
 
@@ -323,6 +350,8 @@ export async function checkBrandNow(watchedBrandId: string): Promise<{ result?: 
   if (!data) return { error: 'Watchlist row not found' }
   try {
     const result = await checkWatchedBrand(data as unknown as WatchedBrandRow)
+    const auto = await autoKeepForBrand(admin as any, data as unknown as WatchedBrandRow)
+    if (auto) { result.autoKept = auto.autoKept; result.autoNote = auto.note }
     revalidatePath('/admin/brand-watch')
     return { result }
   } catch (e) {
@@ -336,88 +365,6 @@ export async function checkAllBrandsNow(): Promise<{ results: BrandCheckResult[]
   return { results }
 }
 
-// Keep: the queue row becomes a real library item (ready — the scored 1–5
-// dimensions still need a pass). Skip: the row stays in the queue table as a
-// skipped decision — it never enters the item library and never resurfaces.
-async function keepQueueRows(admin: any, queueIds: string[]): Promise<number> {
-  let created = 0
-  const skippedUntyped: string[] = []
-  for (let i = 0; i < queueIds.length; i += 100) {
-    const chunk = queueIds.slice(i, i + 100)
-    const { data: rows, error } = await admin
-      .from('brand_watch_queue')
-      .select('*')
-      .in('queue_id', chunk)
-      .eq('status', 'queued')
-    if (error) throw new Error(error.message)
-    for (const q of rows ?? []) {
-      // A house ban (fuchsia, activewear, leopard, polka dot) is never kept —
-      // it is skipped, which also teaches the learning.
-      const ban = houseBanOf({ title: q.product_name, materialPrimary: q.material_primary, itemType: q.item_type })
-      if (ban) {
-        await admin.from('brand_watch_queue')
-          .update({ status: 'skipped', decided_at: new Date().toISOString() })
-          .eq('queue_id', q.queue_id)
-        console.warn(`[keepQueueRows] ${q.product_name}: not kept — ${ban}`)
-        continue
-      }
-      if (!q.item_type) {
-        // Left in the queue rather than kept as the wrong thing — the type can
-        // be set by hand and it can be kept again.
-        skippedUntyped.push(q.product_name)
-        continue
-      }
-      const { data: item, error: ierr } = await admin
-        .from('item')
-        .insert([{
-          brand_id: q.brand_id,
-          // NEVER default. item_type is a NOT NULL enum, so an untyped piece
-          // used to be silently filed as a blouse — which is how a swimsuit
-          // and a bikini top ended up composed as tops in a client's outfits.
-          // An item nobody could type is not a blouse; it is an item nobody
-          // could type, and it is refused below.
-          item_type: q.item_type,
-          product_name: q.product_name,
-          retailer_url: q.retailer_url,
-          image_url: q.image_url,
-          price: q.price,
-          currency: q.currency,
-          price_gbp: q.price_gbp,
-          colour_family: q.colour_family,
-          material_category: q.material_category,
-          material_primary: q.material_primary,
-          shopify_product_id: q.shopify_product_id,
-          shopify_handle: q.shopify_handle,
-          stock_status: q.stock_status,
-          stock_sizes: q.stock_sizes,
-          stock_checked_at: new Date().toISOString(),
-          available: q.stock_status !== 'out_of_stock',
-          status: 'ready',
-          source: 'retailer_api',
-          in_inventory: false,
-          discovery_source: 'brand_watch',
-          discovery_score: q.discovery_score,
-          discovered_at: q.discovered_at,
-          admin_notes: q.admin_notes,
-        }])
-        .select('item_id')
-        .single()
-      if (ierr) throw new Error(`item insert failed: ${ierr.message}`)
-      await admin
-        .from('brand_watch_queue')
-        .update({ status: 'kept', decided_at: new Date().toISOString(), item_id: item.item_id })
-        .eq('queue_id', q.queue_id)
-      created++
-      // What goes on the site teaches Chloe's Style Brain too — a single piece,
-      // so at half the weight of a whole outfit decision.
-      await teachStyleBrain(q, 'approve', item.item_id)
-    }
-  }
-  if (skippedUntyped.length) {
-    console.warn('[keepQueueRows] left in the queue, no item type:', skippedUntyped.join(', '))
-  }
-  return created
-}
 
 export async function keepItems(itemIds: string[]): Promise<{ updated: number }> {
   if (!itemIds.length) return { updated: 0 }
@@ -492,26 +439,6 @@ export async function setSkipReason(itemIds: string[], reason: string): Promise<
 }
 
 /** One Brand Watch decision into Chloe's Style Brain. Never throws. */
-async function teachStyleBrain(q: any, decision: 'approve' | 'skip', itemId?: string): Promise<void> {
-  try {
-    await recordStyleDecision({
-      items: [{
-        item_type: q.item_type ?? null,
-        colour_family: q.colour_family ?? null,
-        pattern: null,
-        material_formality: null,
-        brand_name: q.brand?.name ?? null,
-        price_tier: null,
-      }],
-      decision,
-      source: 'brand_watch',
-      itemIds: itemId ? [itemId] : [],
-      weight: 0.5,
-    })
-  } catch (err) {
-    console.error('[teachStyleBrain]', err)
-  }
-}
 
 export async function skipItems(itemIds: string[]): Promise<{ updated: number }> {
   if (!itemIds.length) return { updated: 0 }

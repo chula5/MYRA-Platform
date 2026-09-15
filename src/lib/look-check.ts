@@ -47,11 +47,18 @@ const SCHEMA = {
   },
 } as const
 
-const prompt = (client: string) => `You are the final eye of a private stylist, checking one outfit before the client sees it. The image shows every piece of the outfit, product photos side by side.
+// Product photos are often worn on a model styled with OTHER clothes. On
+// Alison's real looks the first version blamed a "cobalt shirt" and "navy
+// scarf" that were not in the outfit at all — so the pieces are named, in
+// order, and everything else in a photo is to be ignored.
+const prompt = (client: string, pieces: CheckPiece[]) => `You are the final eye of a private stylist, checking one outfit before the client sees it. The image shows the outfit's ${pieces.length} pieces as product photos side by side, left to right:
+${pieces.map((p, i) => `${i + 1}. ${p.product_name ?? 'piece'}${p.item_type ? ` (${String(p.item_type).replace(/_/g, ' ')})` : ''}`).join('\n')}
+
+Product photos are often worn by a model with other clothes and accessories. Judge ONLY the ${pieces.length} pieces listed — in each photo, the piece named for that position — and ignore everything else the model is wearing or holding.
 
 The client: ${client}
 
-House rules for every client: white and cream (or ivory next to butter or ecru cream) never go together; no fuchsia or hot pink; no clashing colours; the pieces must read as one outfit.
+House rules for every client: white and cream (or ivory next to butter or ecru cream) never go together; no fuchsia or hot pink; no clashing colours; the pieces must read as one outfit; at most one statement print, pattern or strong texture — a look with too much going on (e.g. a mustard textured top, a patterned navy trouser and a grey tweed jacket together) clashes.
 
 Judge only what you can see. Rate colour_harmony and pieces_go_together from 1 to 5. verdict: works (you would send it as it is), borderline (one piece needs changing — name it), clashes (breaks a rule or does not go together). issues: short and specific, naming the piece; empty when it works.`
 
@@ -90,10 +97,11 @@ export function confidenceFromCheck(verdict: LookVerdict, colourHarmony: number,
 }
 
 /** Lay the pieces' photos side by side on white, in a single image. */
-async function lookSheet(pieces: CheckPiece[]): Promise<Buffer | null> {
+async function lookSheet(pieces: CheckPiece[]): Promise<{ sheet: Buffer; shown: CheckPiece[] } | null> {
   const sharp = (await import('sharp')).default
   const TILE_W = 420, TILE_H = 560, GAP = 16
   const tiles: Buffer[] = []
+  const shown: CheckPiece[] = []
   for (const p of pieces) {
     if (!p.image_url) continue
     const url = p.image_url.includes('res.cloudinary.com') ? p.image_url.replace('/upload/', '/upload/c_limit,w_700/') : p.image_url
@@ -101,22 +109,25 @@ async function lookSheet(pieces: CheckPiece[]): Promise<Buffer | null> {
       const r = await fetch(url)
       if (!r.ok) continue
       tiles.push(await sharp(Buffer.from(await r.arrayBuffer())).resize(TILE_W, TILE_H, { fit: 'contain', background: '#ffffff' }).jpeg().toBuffer())
+      shown.push(p)
     } catch { /* a missing photo is left out, not fatal */ }
   }
   if (tiles.length < 2) return null
   const width = tiles.length * TILE_W + (tiles.length + 1) * GAP
-  return sharp({ create: { width, height: TILE_H + 2 * GAP, channels: 3, background: '#ffffff' } })
+  const sheet = await sharp({ create: { width, height: TILE_H + 2 * GAP, channels: 3, background: '#ffffff' } })
     .composite(tiles.map((input, i) => ({ input, left: GAP + i * (TILE_W + GAP), top: GAP })))
     .jpeg({ quality: 88 })
     .toBuffer()
+  return { sheet, shown }
 }
 
 /** Check one outfit. Returns null when it cannot be checked (no photos, no key, API error). */
 export async function checkLook(pieces: CheckPiece[], clientDescription: string): Promise<LookCheck | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return null
-  const sheet = await lookSheet(pieces)
-  if (!sheet) return null
+  const built = await lookSheet(pieces)
+  if (!built) return null
+  const { sheet, shown } = built
   try {
     const client = new Anthropic({ apiKey })
     const res = await client.beta.messages.create({
@@ -130,7 +141,7 @@ export async function checkLook(pieces: CheckPiece[], clientDescription: string)
         role: 'user',
         content: [
           { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: sheet.toString('base64') } },
-          { type: 'text', text: prompt(clientDescription) },
+          { type: 'text', text: prompt(clientDescription, shown) },
         ],
       }],
     } as any) as Anthropic.Beta.BetaMessage

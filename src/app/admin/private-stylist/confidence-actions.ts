@@ -255,8 +255,16 @@ export interface AskPreviewResult {
   mix: Record<string, number>
   /** Whether the look check ran, so the % means something. */
   scoreUsable: boolean
+  /** Looks composed but not shown because they clashed or held a piece not in her size. */
+  hiddenByCheck?: number
+  /** Why, in the check's words. */
+  hiddenIssues?: string[]
   error?: string
 }
+
+/** Looks the test shows. Two spares are composed so a failed look is replaced, not shown. */
+const ASK_LOOKS = 3
+const ASK_SPARES = 2
 
 /**
  * TEST RUN of "Ask MYRA" for one member, from the admin mirror.
@@ -275,12 +283,26 @@ export async function previewAskForMember(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user || user.id !== process.env.ADMIN_USER_ID) return { ...empty, error: 'Not authorised' }
 
-  const planned = await previewAskLooks(memberId, occasion, climate)
+  const planned = await previewAskLooks(memberId, occasion, climate, ASK_LOOKS + ASK_SPARES)
   if (planned.error || !planned.looks) return { ...empty, error: planned.error ?? 'Could not compose' }
 
   try {
+    // The check runs BEFORE anything is shown: a look that clashes, or holds a
+    // piece not in her size, is replaced by a spare rather than put in front of
+    // you. Best verdicts first. If nothing passes, all are shown, flagged.
     const scored = await scoreLooksAgainstHistory(memberId, planned.looks)
-    return { mix: planned.mix ?? {}, scoreUsable: scored.some((l) => l.check), looks: scored }
+    const fails = (l: ScoredAskLook) => l.check?.verdict === 'clashes' || hasPieceOutOfSize({ check: l.check, sizes: l.sizes })
+    const rank = (l: ScoredAskLook) => (l.check?.verdict === 'works' ? 0 : l.check ? 1 : 2)
+    const passing = scored.filter((l) => !fails(l)).sort((a, b) => rank(a) - rank(b) || b.score - a.score)
+    const failed = scored.filter(fails)
+    const looks = passing.length ? passing.slice(0, ASK_LOOKS) : scored.slice(0, ASK_LOOKS)
+    return {
+      mix: planned.mix ?? {},
+      scoreUsable: scored.some((l) => l.check),
+      looks,
+      hiddenByCheck: passing.length ? failed.length : 0,
+      hiddenIssues: passing.length ? failed.flatMap((l) => l.reasons.slice(0, 1)) : [],
+    }
   } catch (err) {
     return { ...empty, error: err instanceof Error ? err.message : 'Could not score the test looks' }
   }

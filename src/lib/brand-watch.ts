@@ -54,6 +54,9 @@ export interface WatchedBrandRow {
   last_new_count: number
   platform?: 'shopify' | 'browser'
   scan_state?: { running?: boolean; done?: number; total?: number; remaining?: number; started_at?: string } | null
+  /** AUTOMATE: new pieces the learning would keep go straight to the library (migration 0056). */
+  auto_keep?: boolean
+  auto_keep_since?: string | null
 }
 
 export interface BrandCheckResult {
@@ -67,6 +70,8 @@ export interface BrandCheckResult {
   restocked: number // existing library items that went out-of-stock → back in stock
   visionColours?: number // colours read from the product image because the feed stated none
   note?: string // e.g. browser scan chunking: "350 of 812 pages this run"
+  autoKept?: number // AUTOMATE: new pieces kept straight into the library
+  autoNote?: string | null // e.g. "AUTOMATE PAUSED — NOT YET — RIGHT 6 OF 11"
   error?: string
 }
 
@@ -1407,9 +1412,18 @@ export async function runBrandWatch(): Promise<BrandCheckResult[]> {
     .eq('active', true)
     .order('name')
   const results: BrandCheckResult[] = []
-  for (const w of (data ?? []) as unknown as WatchedBrandRow[]) {
+  const brands = (data ?? []) as unknown as WatchedBrandRow[]
+  // Loaded here, not at the top: AUTOMATE reaches the Style Brain store, which
+  // is server-only and would break every test that imports this file.
+  const { autoKeepForBrand, loadBrandTrust } = await import('./brand-watch-auto')
+  // Trust is measured once per run, from decisions made before this scan.
+  const trust =brands.some((w) => w.auto_keep) ? await loadBrandTrust(admin as any) : undefined
+  for (const w of brands) {
     try {
-      results.push(await checkWatchedBrand(w))
+      const result = await checkWatchedBrand(w)
+      const auto = await autoKeepForBrand(admin as any, w, trust)
+      if (auto) { result.autoKept = auto.autoKept; result.autoNote = auto.note }
+      results.push(result)
     } catch (e) {
       results.push({ name: w.name, scanned: 0, newProducts: 0, queued: 0, belowScore: 0, skippedStock: 0, suppressedByLearning: 0, restocked: 0, error: e instanceof Error ? e.message : String(e) })
     }
