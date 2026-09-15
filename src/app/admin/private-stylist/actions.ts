@@ -63,6 +63,8 @@ import { listOwnedItems, looksUsingItems } from '@/lib/wardrobe/store'
 import { ownerRefsForMember } from '@/lib/wardrobe/owned-items'
 import { checkRenderFidelity } from '@/app/admin/ai/render-fidelity'
 import { loadMemberSizeProfile, filterItemsForShopper } from '@/lib/size-availability'
+import { checkSizesForMember } from '@/lib/look-size-check'
+import { judgeLooksForMember, hasPieceOutOfSize } from '@/lib/look-check'
 import { pendingAlertsForUser, markDelivered, ALERT_COPY } from '@/lib/stock-alerts'
 import { personaWeight, PERSONA_START_WEIGHT } from '@/lib/user-persona'
 import { slotForItemType, type Slot } from '@/lib/composer'
@@ -1040,21 +1042,37 @@ export async function reopenDelivery(deliveryId: string): Promise<{ error?: stri
   return {}
 }
 
+// STOCK CHECK used to stamp the date without checking anything. It now reads
+// every piece's sizes from the retailer and records what it found — a size
+// sold out since the look was built is exactly what this button is for.
 export async function markStockChecked(deliveryId: string): Promise<{ error?: string }> {
-  const admin = createAdminClient()
-  const { data: looks, error } = await admin
-    .from('pilot_look' as any)
-    .select('look_id, items')
-    .eq('delivery_id', deliveryId)
+  const admin = createAdminClient() as any
+  const [{ data: delivery }, { data: looks, error }] = await Promise.all([
+    admin.from('pilot_delivery').select('member_id').eq('delivery_id', deliveryId).single(),
+    admin.from('pilot_look').select('look_id, items').eq('delivery_id', deliveryId),
+  ])
   if (error) return { error: error.message }
+  if (!delivery) return { error: 'Delivery not found' }
+  const all = ((looks ?? []) as any[]).flatMap((l) => l.items as LookItem[])
+  const sizes = await checkSizesForMember(admin, delivery.member_id, all, 'all')
   const now = new Date().toISOString()
+  const gone: string[] = []
   for (const l of (looks ?? []) as any[]) {
-    const items = (l.items as LookItem[]).map((it) =>
-      it.owned ? it : { ...it, stock_checked_at: now, in_stock: it.in_stock !== false },
-    )
-    await admin.from('pilot_look' as any).update({ items }).eq('look_id', l.look_id)
+    const items = (l.items as LookItem[]).map((it) => {
+      if (it.owned) return it
+      const s = it.item_id ? sizes.get(it.item_id) : undefined
+      if (s?.verdict === 'not_in_size') gone.push(it.product_name)
+      return {
+        ...it,
+        stock_checked_at: now,
+        in_stock: s ? s.verdict !== 'not_in_size' : it.in_stock !== false,
+        ...(s?.label ? { size: s.label } : {}),
+      }
+    })
+    await admin.from('pilot_look').update({ items }).eq('look_id', l.look_id)
   }
   revalidatePath(PATH)
+  if (gone.length) return { error: `${gone.length} PIECE${gone.length === 1 ? '' : 'S'} NO LONGER IN HER SIZE — SWAP BEFORE SENDING: ${gone.join(' · ').toUpperCase()}` }
   return {}
 }
 
@@ -1079,6 +1097,17 @@ export async function sendDelivery(deliveryId: string): Promise<{ errors?: strin
     { calibration: (delivery as any).trigger === 'calibration' },
   )
   if (errors.length > 0) return { errors }
+
+  // Every piece must still be in her size at the moment it is sent — read from
+  // the retailer now, not trusted from when the look was built.
+  if ((delivery as any).trigger !== 'calibration') {
+    const sendLooks = (looks ?? []) as any[]
+    const sizes = await checkSizesForMember(admin, (delivery as any).member_id, sendLooks.flatMap((l) => l.items), 'all')
+    const sizeErrors = sendLooks.flatMap((l, i) => (l.items as LookItem[])
+      .filter((it) => it.item_id && sizes.get(it.item_id)?.verdict === 'not_in_size')
+      .map((it) => `LOOK ${i + 1}: ${it.product_name.toUpperCase()} IS NO LONGER IN HER SIZE — SWAP IT`))
+    if (sizeErrors.length) return { errors: sizeErrors }
+  }
 
   // Her stock news rides INSIDE this delivery rather than arriving as a second
   // email from the same brand on the same day (see stock-alerts.ts, which
@@ -1911,15 +1940,30 @@ async function planDeliveryLooks(
   return { looks, mix }
 }
 
-export async function composeDeliveryLooks(deliveryId: string, options: ComposeDeliveryOptions = {}): Promise<{ created?: number; ownedLooks?: number; error?: string }> {
+export async function composeDeliveryLooks(deliveryId: string, options: ComposeDeliveryOptions = {}): Promise<{ created?: number; ownedLooks?: number; droppedByCheck?: number; error?: string }> {
   const admin = createAdminClient() as any
   const { data: delivery, error: derr } = await admin.from('pilot_delivery').select('*').eq('delivery_id', deliveryId).single()
   if (derr || !delivery) return { error: derr?.message ?? 'Delivery not found' }
   if (delivery.status !== 'draft') return { error: 'Only draft deliveries can be composed into' }
 
-  const planned = await planDeliveryLooks(admin, delivery, options)
+  // Compose two spare looks, then check every look before it is saved: Claude's
+  // eye on the photos, and each piece's size against the retailer. A look that
+  // clashes, or holds a piece no longer in her size, never reaches the draft.
+  const want = Math.max(1, Math.min(6, options.count ?? 3))
+  const planned = await planDeliveryLooks(admin, delivery, { ...options, count: Math.min(6, want + 2) })
   if (planned.error || !planned.looks || !planned.mix) return { error: planned.error ?? 'Could not compose' }
-  const { looks, mix } = planned
+  const { mix } = planned
+  const judged = await judgeLooksForMember(admin, delivery.member_id, planned.looks, 'unknown')
+  const rank = (i: number) => (judged[i].check?.verdict === 'works' ? 0 : judged[i].check ? 1 : 2)
+  const passing = planned.looks.map((_, i) => i)
+    .filter((i) => judged[i].check?.verdict !== 'clashes' && !hasPieceOutOfSize(judged[i]))
+    .sort((a, b) => rank(a) - rank(b) || a - b)
+  if (!passing.length) {
+    const why = judged.flatMap((j) => j.check?.issues ?? []).slice(0, 3).join(' · ')
+    return { error: `Every composed look failed the check${why ? ` — ${why}` : ''}. Compose again.` }
+  }
+  const looks = passing.slice(0, want).map((i) => planned.looks![i])
+  const droppedByCheck = planned.looks.length - passing.length
 
   const { count } = await admin
     .from('pilot_look')
@@ -1938,7 +1982,7 @@ export async function composeDeliveryLooks(deliveryId: string, options: ComposeD
   const { error } = await admin.from('pilot_look').insert(rows)
   if (error) return { error: error.message }
   revalidatePath(PATH)
-  return { created: rows.length, ownedLooks: looks.filter((l) => l.ownedCount > 0).length }
+  return { created: rows.length, ownedLooks: looks.filter((l) => l.ownedCount > 0).length, droppedByCheck }
 }
 
 async function requireAdmin(): Promise<boolean> {
@@ -2102,6 +2146,11 @@ export async function keepAskPreview(
   const { data: created, error } = await admin.from('pilot_delivery').insert(row).select('delivery_id').single()
   if (error || !created) return { error: error?.message ?? 'Could not create the delivery' }
   const norm = normalise(mix as unknown as RoomWeights)
+  // Keeping a test look IS accepting it: saved approved, so the confidence
+  // score and the composer count it exactly like an approval in DELIVERIES.
+  // Without this, every look Chloe accepted straight away was invisible to the
+  // score that is meant to predict which looks she accepts.
+  const approvedAt = new Date().toISOString()
   const { data: inserted, error: lerr } = await admin.from('pilot_look').insert(looks.map((l, i) => ({
     delivery_id: created.delivery_id,
     position: i + 1,
@@ -2109,6 +2158,7 @@ export async function keepAskPreview(
     taste_vector: lookTasteVector(norm),
     items: l.items,
     notes: l.notes,
+    approved_at: approvedAt,
   }))).select('look_id, position')
   if (lerr) return { error: lerr.message }
 
@@ -2137,6 +2187,20 @@ export async function keepAskPreview(
         slot: rm.slot, item_out: rm.out.item_id ?? null, brand_out: rm.out.brand_id ?? null,
       })
       if (rm.out.brand) brandsOut.push(rm.out.brand)
+    }
+  })
+  // The pieces in each kept look were accepted — same rows as approveComposedLook,
+  // written after the swaps so the latest answer on each piece is 'kept'.
+  looks.forEach((l, i) => {
+    const look_id = lookIdAt.get(i + 1)
+    if (!look_id) return
+    for (const it of l.items) {
+      if (it.item_id) fb.push({ member_id: memberId, delivery_id: created.delivery_id, look_id, action: 'accept', scope: DEFAULT_SCOPE, slot: it.slot ?? null, item_in: it.item_id, brand_in: it.brand_id ?? null })
+    }
+    const bIds = Array.from(new Set(l.items.map((it) => it.brand_id).filter(Boolean))) as string[]
+    for (let a = 0; a < bIds.length; a++) for (let b = a + 1; b < bIds.length; b++) {
+      const [x, y] = pairKeyOrdered(bIds[a], bIds[b])
+      fb.push({ member_id: memberId, delivery_id: created.delivery_id, look_id, action: 'accept', scope: DEFAULT_SCOPE, brand_out: x, brand_in: y })
     }
   })
   if (fb.length) {

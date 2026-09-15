@@ -401,6 +401,7 @@ export async function getReviewAddOptions(
   excludeItemIds: string[],
   query: string,
   brand: string | null = null,
+  filters: PickerFilters = {},
 ): Promise<{ options: ReviewItem[]; missingSlots: string[]; brands: { name: string; count: number }[] }> {
   try {
     const anchor: any = await getItem(anchorItemId)
@@ -419,9 +420,10 @@ export async function getReviewAddOptions(
       pool = pool.filter((it: any) =>
         `${it.product_name} ${it.brand?.name ?? ''} ${String(it.item_type).replace(/_/g, ' ')}`.toLowerCase().includes(q),
       )
-    } else {
+    } else if (!filters.itemType) {
       pool = pool.filter((it: any) => missing.includes(slotForItemType(it.item_type)))
     }
+    pool = applyPickerFilters(pool, filters)
     pool = pool.filter((it: any) => !tierBandViolation([anchorTier, it.brand?.price_tier ?? null]))
 
     const brands = brandsFromPool(pool)
@@ -450,6 +452,21 @@ export async function getReviewAddOptions(
   }
 }
 
+/** The picker's one-tap colour and type chips. */
+export interface PickerFilters {
+  colour?: string
+  itemType?: string
+}
+
+// The picker always sent colour and type, but nothing read them, so those
+// chips did nothing. A chosen type widens past the slot (sneakers from a
+// heel's slot); colour narrows whatever the pool is.
+function applyPickerFilters(pool: any[], filters: PickerFilters): any[] {
+  return pool.filter((it: any) =>
+    (!filters.itemType || it.item_type === filters.itemType) &&
+    (!filters.colour || String(it.colour_family ?? '').toLowerCase() === filters.colour))
+}
+
 // Distinct brands present in a pool, with counts, alphabetically. Used to
 // populate the swap/add brand filter dropdown.
 function brandsFromPool(pool: any[]): { name: string; count: number }[] {
@@ -469,6 +486,7 @@ export async function getReviewSwapOptions(
   excludeItemIds: string[],
   query: string,
   brand: string | null = null,
+  filters: PickerFilters = {},
 ): Promise<{ options: ReviewItem[]; brands: { name: string; count: number }[] }> {
   try {
     const anchor: any = await getItem(anchorItemId)
@@ -483,9 +501,10 @@ export async function getReviewSwapOptions(
       pool = pool.filter((it: any) =>
         `${it.product_name} ${it.brand?.name ?? ''} ${String(it.item_type).replace(/_/g, ' ')}`.toLowerCase().includes(q),
       )
-    } else {
+    } else if (!filters.itemType) {
       pool = pool.filter((it: any) => slotForItemType(it.item_type) === slot)
     }
+    pool = applyPickerFilters(pool, filters)
 
     pool = pool.filter((it: any) => !tierBandViolation([anchorTier, it.brand?.price_tier ?? null]))
 

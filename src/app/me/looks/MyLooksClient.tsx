@@ -736,13 +736,22 @@ function AskPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [swapQ, swapBrand, swapColour, swapType])
 
+  // Which looks are being re-checked after an edit (Claude's eye takes a few seconds).
+  const [checking, setChecking] = useState<Set<number>>(new Set())
+
   async function rescore(look: number, items: any[]) {
     if (!preview) return
+    setChecking((s) => new Set(s).add(look))
     const r = await rescoreAskLook(testMemberId!, { items, notes: preview.looks[look].notes })
+    setChecking((s) => { const n = new Set(s); n.delete(look); return n })
     if (r.error) return
     setPreview((cur) => cur && {
       ...cur,
-      looks: cur.looks.map((l, i) => (i === look ? { ...l, score: r.score ?? l.score, high: r.high ?? l.high, reasons: r.reasons ?? l.reasons } : l)),
+      looks: cur.looks.map((l, i) => (i === look ? {
+        ...l,
+        score: r.score ?? l.score, high: r.high ?? l.high, reasons: r.reasons ?? l.reasons,
+        check: r.check !== undefined ? r.check : l.check, sizes: r.sizes ?? l.sizes,
+      } : l)),
     })
   }
 
@@ -861,8 +870,10 @@ function AskPanel({
           <div>
             <p className="myra-section-label">WHAT MYRA WOULD MAKE</p>
             <p className="myra-section-note mt-3">
-              {preview.looks.length} LOOKS · {preview.looks.filter((l) => l.high).length} HIGH CONFIDENCE ·{' '}
-              {preview.scoreUsable ? 'SCORE IS CALIBRATED ON HER HISTORY' : 'SCORE NOT YET RELIABLE — EVERY LOOK WOULD WAIT FOR YOUR REVIEW'}
+              {preview.looks.length} LOOKS · {preview.looks.filter((l) => l.check?.verdict === 'works').length} PASS MYRA&rsquo;S EYE ·{' '}
+              {preview.scoreUsable
+                ? 'EACH % IS CLAUDE LOOKING AT THE PHOTOS TOGETHER — COLOURS, PIECES, HER RULES — AND EVERY PIECE CHECKED IN HER SIZE'
+                : 'THE LOOK CHECK DID NOT RUN — % IS FROM HER HISTORY ONLY AND IS NOT YET RELIABLE'}
             </p>
           </div>
           {preview.looks.map((l, i) => (
@@ -884,8 +895,12 @@ function AskPanel({
                     {accepted.has(i) ? '✓ ACCEPTED' : 'ACCEPT THIS LOOK'}
                   </button>
                 </div>
-                <p className={`text-[20px] tracking-[0.06em] ${l.high ? 'text-[#3D6B45]' : 'text-[#8B5E00]'}`}>
-                  {Math.round(l.score * 100)}% · {l.high ? 'HIGH CONFIDENCE' : 'WOULD GO TO YOUR REVIEW QUEUE'}
+                <p className={`text-[20px] tracking-[0.06em] ${checking.has(i) ? 'text-[#6E6B65]' : l.check?.verdict === 'clashes' ? 'text-[#B83A3A]' : l.high ? 'text-[#3D6B45]' : 'text-[#8B5E00]'}`}>
+                  {checking.has(i)
+                    ? 'CHECKING THE LOOK…'
+                    : `${Math.round(l.score * 100)}% · ${l.check
+                      ? l.check.verdict === 'works' ? 'PASSES MYRA’S EYE' : l.check.verdict === 'borderline' ? 'ONE PIECE NEEDS A LOOK' : 'CLASHES'
+                      : l.high ? 'HIGH CONFIDENCE' : 'NOT CHECKED'}`}
                 </p>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-[6px] p-[6px]">
@@ -905,6 +920,13 @@ function AskPanel({
                         <p className="text-[20px] text-[#55534E]">£{Math.round(it.price_gbp)}</p>
                       )}
                       {it.owned && <p className="text-[18px] text-[#8B5E00]">Already hers</p>}
+                      {!it.owned && it.item_id && l.sizes?.[it.item_id] && (
+                        <p className={`text-[18px] ${l.sizes[it.item_id].verdict === 'in_size' ? 'text-[#3D6B45]' : l.sizes[it.item_id].verdict === 'not_in_size' ? 'text-[#B83A3A]' : 'text-[#8B5E00]'}`}>
+                          {l.sizes[it.item_id].verdict === 'in_size'
+                            ? `In her size${l.sizes[it.item_id].label ? ` · ${l.sizes[it.item_id].label}` : ''}`
+                            : l.sizes[it.item_id].verdict === 'not_in_size' ? 'Not in her size' : 'Size not confirmed'}
+                        </p>
+                      )}
                       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
                         {it.slot && (
                           <button

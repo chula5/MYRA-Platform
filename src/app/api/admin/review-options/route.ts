@@ -23,14 +23,16 @@ export async function GET(req: NextRequest) {
   const query = sp.get('q') ?? ''
   const brand = sp.get('brand') ?? ''
   const exclude = (sp.get('exclude') ?? '').split(',').filter(Boolean)
+  // The picker's colour and type chips — sent all along, never read until now.
+  const filters = { colour: sp.get('colour') ?? '', itemType: sp.get('type') ?? '' }
 
   if (mode === 'add') {
     const present = (sp.get('present') ?? '').split(',').filter(Boolean)
-    const res = await getReviewAddOptions(anchor, present, exclude, query, brand)
+    const res = await getReviewAddOptions(anchor, present, exclude, query, brand, filters)
     return NextResponse.json(res)
   }
 
   const slot = sp.get('slot') ?? ''
-  const res = await getReviewSwapOptions(anchor, slot, exclude, query, brand)
+  const res = await getReviewSwapOptions(anchor, slot, exclude, query, brand, filters)
   return NextResponse.json(res)
 }

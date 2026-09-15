@@ -7,7 +7,7 @@ import type { WatchedBrandRow } from '@/lib/brand-watch'
 import {
   addWatchedBrand, checkAllBrandsNow, checkBrandNow, fullScanBrand, keepAllForBrand,
   keepItems, loadQueuePage, removeWatchedBrand, setWatchedBrandActive,
-  setWatchedBrandMinScore, skipItems, undoSkip, setSkipReason, type QueueItemRow, type QueuePage,
+  setWatchedBrandMinScore, skipItems, undoSkip, setSkipReason, type QueueFilters, type QueueItemRow, type QueuePage,
 } from './actions'
 
 const CHIP = 'px-3 py-1.5 rounded-full text-[9px] tracking-[0.12em] border transition-colors'
@@ -26,6 +26,25 @@ function fmtPrice(price: string | null, currency: string | null, priceGbp?: numb
   const gbp = `£${Math.round(priceGbp)}`
   if (!native || (currency ?? 'GBP') === 'GBP') return gbp
   return `${gbp} (${native})`
+}
+
+/**
+ * Chips for every value the queue actually holds, in picker order, with a
+ * count. A value the picker list doesn't know still gets a chip, and the
+ * selected chip stays visible even when another filter takes its count to 0 —
+ * no piece in the queue is ever unreachable by filter.
+ */
+function chipsFor<T extends { value: string; label: string }>(
+  known: readonly T[], counts: Record<string, number>, selected: string,
+): { value: string; label: string; count: number; known?: T }[] {
+  const out: { value: string; label: string; count: number; known?: T }[] = known
+    .filter((k) => (counts[k.value] ?? 0) > 0 || k.value === selected)
+    .map((k) => ({ value: k.value, label: k.label, count: counts[k.value] ?? 0, known: k }))
+  const listed = new Set(known.map((k) => k.value))
+  for (const value of Object.keys(counts).sort()) {
+    if (!listed.has(value) && counts[value] > 0) out.push({ value, label: value.replace(/[_-]/g, ' ').toUpperCase(), count: counts[value] })
+  }
+  return out
 }
 
 interface Props extends QueuePage {
@@ -70,18 +89,16 @@ export default function BrandWatchClient(props: Props) {
   const [minScore, setMinScore] = useState<number | null>(null)
 
   const queue = page.queue
-  const typesInQueue = useMemo(() => new Set(queue.map((q) => q.item_type)), [queue])
-  const coloursInQueue = useMemo(() => new Set(queue.map((q) => q.colour_family)), [queue])
+  // Type, colour, score and predicted-skip filters run on the SERVER over the
+  // whole queue, and the chips come from its counts. Built from the loaded page
+  // they vanished — SNEAKER disappeared under ALL BRANDS whenever the top 200
+  // held none — and a filter could only search what happened to be loaded.
+  const typeCounts = page.typeCounts ?? {}
+  const colourCounts = page.colourCounts ?? {}
+  const typeChips = useMemo(() => chipsFor(PICKER_TYPES, typeCounts, fType), [typeCounts, fType])
+  const colourChips = useMemo(() => chipsFor(PICKER_COLOURS, colourCounts, fColour), [colourCounts, fColour])
 
-  const shown = useMemo(
-    () => queue.filter((q) =>
-      !gone.has(q.item_id) &&
-      (showPredicted || !q.predicted_skip) &&
-      (!fType || q.item_type === fType) &&
-      (!fColour || q.colour_family === fColour) &&
-      (minScore === null || (q.discovery_score ?? -99) >= minScore)),
-    [queue, gone, showPredicted, fType, fColour, minScore],
-  )
+  const shown = useMemo(() => queue.filter((q) => !gone.has(q.item_id)), [queue, gone])
 
   const act = (fn: () => Promise<unknown>, done?: (r: any) => void) =>
     startTransition(async () => {
@@ -90,14 +107,27 @@ export default function BrandWatchClient(props: Props) {
       finally { setBusyBrand(null) }
     })
 
+  const filtersNow = (over: Partial<QueueFilters> = {}): QueueFilters =>
+    ({ itemType: fType, colour: fColour, minScore, showPredicted, ...over })
+
+  const load = (brand: string, filters: QueueFilters) =>
+    act(() => loadQueuePage(0, brand || undefined, filters), (r: QueuePage) => { setPage(r); setGone(new Set()) })
+
   const selectBrand = (name: string) => {
     const next = fBrand === name ? '' : name
     setFBrand(next)
-    act(() => loadQueuePage(0, next || undefined), (r: QueuePage) => { setPage(r); setGone(new Set()) })
+    load(next, filtersNow())
   }
 
-  const reloadQueue = () =>
-    act(() => loadQueuePage(0, fBrand || undefined), (r: QueuePage) => { setPage(r); setGone(new Set()) })
+  const setFilter = (over: Partial<QueueFilters>) => {
+    if ('itemType' in over) setFType(over.itemType ?? '')
+    if ('colour' in over) setFColour(over.colour ?? '')
+    if ('minScore' in over) setMinScore(over.minScore ?? null)
+    if ('showPredicted' in over) setShowPredicted(!!over.showPredicted)
+    load(fBrand, filtersNow(over))
+  }
+
+  const reloadQueue = () => load(fBrand, filtersNow())
 
   const decide = (ids: string[], keep: boolean) => {
     // A single-card skip looks for its near-twins still on screen — same brand
@@ -273,29 +303,29 @@ export default function BrandWatchClient(props: Props) {
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-2 mb-2">
-          <button onClick={() => setFType('')} className={fType === '' ? CHIP_ON : CHIP_OFF}>ALL TYPES</button>
-          {PICKER_TYPES.filter((t) => typesInQueue.has(t.value)).map((t) => (
-            <button key={t.value} onClick={() => setFType(fType === t.value ? '' : t.value)} className={fType === t.value ? CHIP_ON : CHIP_OFF}>{t.label}</button>
+          <button onClick={() => setFilter({ itemType: '' })} className={fType === '' ? CHIP_ON : CHIP_OFF}>ALL TYPES</button>
+          {typeChips.map((t) => (
+            <button key={t.value} onClick={() => setFilter({ itemType: fType === t.value ? '' : t.value })} className={fType === t.value ? CHIP_ON : CHIP_OFF}>{t.label} · {t.count}</button>
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-2 mb-4">
-          <button onClick={() => setFColour('')} className={fColour === '' ? CHIP_ON : CHIP_OFF}>ALL COLOURS</button>
-          {PICKER_COLOURS.filter((c) => coloursInQueue.has(c.value)).map((c) => (
-            <button key={c.value} onClick={() => setFColour(fColour === c.value ? '' : c.value)} className={`${fColour === c.value ? CHIP_ON : CHIP_OFF} flex items-center gap-1.5`}>
-              <span className="w-2.5 h-2.5 rounded-full border border-[#E2E0DB]" style={{ background: c.swatch }} />
-              {c.label}
+          <button onClick={() => setFilter({ colour: '' })} className={fColour === '' ? CHIP_ON : CHIP_OFF}>ALL COLOURS</button>
+          {colourChips.map((c) => (
+            <button key={c.value} onClick={() => setFilter({ colour: fColour === c.value ? '' : c.value })} className={`${fColour === c.value ? CHIP_ON : CHIP_OFF} flex items-center gap-1.5`}>
+              <span className="w-2.5 h-2.5 rounded-full border border-[#E2E0DB]" style={{ background: (c.known as any)?.swatch ?? 'transparent' }} />
+              {c.label} · {c.count}
             </button>
           ))}
           <span className="mx-2 h-4 w-px bg-[#E2E0DB]" />
           {[null, 5, 7].map((s) => (
-            <button key={String(s)} onClick={() => setMinScore(s)} className={minScore === s ? CHIP_ON : CHIP_OFF}>
+            <button key={String(s)} onClick={() => setFilter({ minScore: s })} className={minScore === s ? CHIP_ON : CHIP_OFF}>
               {s === null ? 'ALL SCORES' : `+${s} AND UP`}
             </button>
           ))}
-          {page.predictedSkipTotal > 0 && (
+          {(page.predictedSkipTotal > 0 || showPredicted) && (
             <>
               <span className="mx-2 h-4 w-px bg-[#E2E0DB]" />
-              <button onClick={() => setShowPredicted(!showPredicted)} className={showPredicted ? CHIP_ON : CHIP_OFF} title="Pieces the keep/skip learning expects you to skip — hidden by default, never deleted">
+              <button onClick={() => setFilter({ showPredicted: !showPredicted })} className={showPredicted ? CHIP_ON : CHIP_OFF} title="Pieces the keep/skip learning expects you to skip — hidden by default, never deleted">
                 PREDICTED SKIPS · {page.predictedSkipTotal}
               </button>
             </>
@@ -418,8 +448,19 @@ export default function BrandWatchClient(props: Props) {
         {shown.length === 0 ? (
           <div className="border border-[#E2E0DB] rounded-[10px] p-10 text-center">
             <p className="text-[10px] tracking-[0.12em] text-[#A8A8A4]">
-              {queue.length === 0 ? 'QUEUE IS EMPTY — NEW DROPS LAND HERE AFTER THE MONDAY CHECK.' : 'NOTHING MATCHES THESE FILTERS.'}
+              {page.queueTotal === 0 && !fType && !fColour && minScore === null
+                ? 'QUEUE IS EMPTY — NEW DROPS LAND HERE AFTER THE MONDAY CHECK.'
+                : page.queueTotal - gone.size > 0 ? 'ALL LOADED PIECES DECIDED.' : 'NOTHING MATCHES THESE FILTERS.'}
             </p>
+            {page.queueTotal - gone.size > 0 && (
+              <button
+                disabled={pending}
+                onClick={reloadQueue}
+                className="mt-4 border border-[#0A0A0A] rounded-full px-6 py-2 text-[9px] tracking-[0.14em] text-[#0A0A0A] hover:bg-[#0A0A0A] hover:text-white transition-colors disabled:opacity-40"
+              >
+                LOAD THE NEXT {Math.min(200, page.queueTotal - gone.size)}
+              </button>
+            )}
           </div>
         ) : (
           <>
@@ -488,7 +529,7 @@ export default function BrandWatchClient(props: Props) {
             <div className="mt-6 text-center">
               <button
                 disabled={pending}
-                onClick={() => act(() => loadQueuePage(queue.length, fBrand || undefined), (r: QueuePage) => setPage((p) => ({ ...r, queue: p.queue.concat(r.queue.filter((n) => !p.queue.some((e) => e.item_id === n.item_id))) })))}
+                onClick={() => act(() => loadQueuePage(queue.length, fBrand || undefined, filtersNow()), (r: QueuePage) => setPage((p) => ({ ...r, queue: p.queue.concat(r.queue.filter((n) => !p.queue.some((e) => e.item_id === n.item_id))) })))}
                 className="border border-[#0A0A0A] rounded-full px-6 py-2 text-[9px] tracking-[0.14em] text-[#0A0A0A] hover:bg-[#0A0A0A] hover:text-white transition-colors disabled:opacity-40"
               >
                 LOAD MORE ({page.queueTotal - queue.length} REMAINING)

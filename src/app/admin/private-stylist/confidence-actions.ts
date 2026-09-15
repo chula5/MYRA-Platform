@@ -13,6 +13,8 @@
 import { createAdminClient, createServerClient } from '@/lib/supabase-server'
 import { previewAskLooks, type AskPreviewLook } from './actions'
 import { pieceVerdicts } from '@/lib/piece-verdicts'
+import { judgeLooksForMember, hasPieceOutOfSize, type LookCheck } from '@/lib/look-check'
+import type { PieceSize } from '@/lib/look-size-check'
 import { revalidatePath } from 'next/cache'
 import {
   lookConfidence, calibrateThreshold, indexHistory, historySignals,
@@ -238,10 +240,20 @@ export async function sendAllShotLooks(memberId: string): Promise<{ sent: number
 }
 
 
+export type ScoredAskLook = AskPreviewLook & {
+  score: number
+  high: boolean
+  reasons: string[]
+  /** Claude's eye on the photos — null when it could not run. */
+  check: LookCheck | null
+  /** Each piece's size verdict, by item_id. */
+  sizes: Record<string, PieceSize>
+}
+
 export interface AskPreviewResult {
-  looks: (AskPreviewLook & { score: number; high: boolean; reasons: string[] })[]
+  looks: ScoredAskLook[]
   mix: Record<string, number>
-  /** Whether her history is yet good enough for the score to mean anything. */
+  /** Whether the look check ran, so the % means something. */
   scoreUsable: boolean
   error?: string
 }
@@ -268,8 +280,7 @@ export async function previewAskForMember(
 
   try {
     const scored = await scoreLooksAgainstHistory(memberId, planned.looks)
-    const calibration = (await loadMemberConfidence(memberId)).calibration
-    return { mix: planned.mix ?? {}, scoreUsable: calibration.usable, looks: scored }
+    return { mix: planned.mix ?? {}, scoreUsable: scored.some((l) => l.check), looks: scored }
   } catch (err) {
     return { ...empty, error: err instanceof Error ? err.message : 'Could not score the test looks' }
   }
@@ -277,15 +288,21 @@ export async function previewAskForMember(
 
 
 /**
- * Score unsaved looks against everything she has decided so far — the same
- * score the send gate uses. Shared by the test run and its rescore-after-swap,
- * so a swapped look is judged exactly as a composed one.
+ * Score unsaved looks — shared by the test run and its rescore-after-swap, so a
+ * swapped look is judged exactly as a composed one.
+ *
+ * The % is Claude's eye on the photos (look-check). History alone could not
+ * predict what Chloe accepts: walk-forward on 60 of Alison's looks the history
+ * score correlated 0.06 with acceptance, and the looks she accepted straight
+ * away scored 28–40%. The history signals stay as reasons, and a piece no
+ * longer in her size caps the look at 30%.
  */
 async function scoreLooksAgainstHistory(
   memberId: string,
   looks: AskPreviewLook[],
-): Promise<(AskPreviewLook & { score: number; high: boolean; reasons: string[] })[]> {
+): Promise<ScoredAskLook[]> {
   const admin = createAdminClient() as any
+  const judged = await judgeLooksForMember(admin, memberId, looks, 'unknown')
   const { data: dels } = await admin.from('pilot_delivery').select('delivery_id').eq('member_id', memberId)
   const ids = (dels ?? []).map((d: any) => d.delivery_id)
   const [{ data: past }, { data: fb }] = await Promise.all([
@@ -308,7 +325,7 @@ async function scoreLooksAgainstHistory(
     })
   }
   const h = indexHistory(records)
-  return looks.map((l) => {
+  return looks.map((l, i) => {
     const itemIds = l.items.map((i: any) => i.item_id).filter(Boolean)
     const brandIds = l.items.map((i: any) => i.brand_id).filter(Boolean)
     const c = lookConfidence({
@@ -319,7 +336,21 @@ async function scoreLooksAgainstHistory(
       usedFallbackPool: false,
       unscoredShare: 0,
     })
-    return { ...l, score: c.score, high: c.high, reasons: c.reasons }
+    const j = judged[i]
+    const outOfSize = hasPieceOutOfSize(j)
+    let score = j.check ? j.check.confidence : c.score
+    if (outOfSize) score = Math.min(score, 0.3)
+    const sizeReasons = l.items
+      .filter((it: any) => it.item_id && j.sizes[it.item_id]?.verdict === 'not_in_size')
+      .map((it: any) => `${it.product_name} is not in her size`)
+    return {
+      ...l,
+      score,
+      high: !!j.check && j.check.verdict === 'works' && score >= HIGH_CONFIDENCE && !outOfSize,
+      reasons: [...sizeReasons, ...(j.check?.issues ?? []), ...c.reasons],
+      check: j.check,
+      sizes: j.sizes,
+    }
   })
 }
 
@@ -327,13 +358,13 @@ async function scoreLooksAgainstHistory(
 export async function rescoreAskLook(
   memberId: string,
   look: AskPreviewLook,
-): Promise<{ score?: number; high?: boolean; reasons?: string[]; error?: string }> {
+): Promise<{ score?: number; high?: boolean; reasons?: string[]; check?: LookCheck | null; sizes?: Record<string, PieceSize>; error?: string }> {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user || user.id !== process.env.ADMIN_USER_ID) return { error: 'Not authorised' }
   try {
     const [scored] = await scoreLooksAgainstHistory(memberId, [look])
-    return { score: scored.score, high: scored.high, reasons: scored.reasons }
+    return { score: scored.score, high: scored.high, reasons: scored.reasons, check: scored.check, sizes: scored.sizes }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Could not rescore' }
   }

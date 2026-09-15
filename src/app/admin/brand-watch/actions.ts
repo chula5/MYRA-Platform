@@ -41,7 +41,18 @@ export interface QueuePage {
   predictedSkipTotal: number
   decidedCount: number
   brandCounts: Record<string, number>
+  /** Pieces per type / colour across the WHOLE queue in scope — not just the loaded page. */
+  typeCounts?: Record<string, number>
+  colourCounts?: Record<string, number>
   error?: string
+}
+
+/** Queue filters, applied server-side so they search every queued piece. */
+export interface QueueFilters {
+  itemType?: string
+  colour?: string
+  minScore?: number | null
+  showPredicted?: boolean
 }
 
 export interface BrandWatchData extends QueuePage {
@@ -107,7 +118,7 @@ async function fetchBrandWatchRows(admin: any, statuses: string[]): Promise<any[
 // One page of the queue, ranked by style score + learned keep/skip adjustment.
 // The learning re-trains on every load from all decisions made so far, so the
 // ranking sharpens each time you come back to a brand.
-export async function loadQueuePage(offset: number, brandName?: string | null): Promise<QueuePage> {
+export async function loadQueuePage(offset: number, brandName?: string | null, filters: QueueFilters = {}): Promise<QueuePage> {
   const admin = createAdminClient() as any
   let drafts: any[]
   let decidedRows: any[]
@@ -158,15 +169,37 @@ export async function loadQueuePage(offset: number, brandName?: string | null): 
     brandCounts[b] = (brandCounts[b] ?? 0) + 1
   }
 
+  // Filters run over the whole queue, not the loaded page: filtering the page
+  // hid the SNEAKER chip under ALL BRANDS whenever the top 200 pieces held no
+  // sneakers, and a colour filter could only find what happened to be loaded.
   const scope = brandName ? annotated.filter((q) => q.brand_name === brandName) : annotated
-  scope.sort((a, b) => (b.adjusted - a.adjusted) || String(b.discovered_at ?? '').localeCompare(String(a.discovered_at ?? '')))
+  const { itemType = '', colour = '', minScore = null, showPredicted = false } = filters
+  const passes = (q: QueueItemRow, skip: 'type' | 'colour' | 'predicted' | null) =>
+    (skip === 'type' || !itemType || q.item_type === itemType) &&
+    (skip === 'colour' || !colour || q.colour_family === colour) &&
+    (minScore === null || (q.discovery_score ?? -99) >= minScore) &&
+    (skip === 'predicted' || showPredicted || !q.predicted_skip)
+
+  // Each chip row counts with the OTHER filters applied, so picking a colour
+  // never hides a type that exists in that colour (and vice versa).
+  const typeCounts: Record<string, number> = {}
+  const colourCounts: Record<string, number> = {}
+  for (const q of scope) {
+    if (q.item_type && passes(q, 'type')) typeCounts[q.item_type] = (typeCounts[q.item_type] ?? 0) + 1
+    if (q.colour_family && passes(q, 'colour')) colourCounts[q.colour_family] = (colourCounts[q.colour_family] ?? 0) + 1
+  }
+
+  const filtered = scope.filter((q) => passes(q, null))
+  filtered.sort((a, b) => (b.adjusted - a.adjusted) || String(b.discovered_at ?? '').localeCompare(String(a.discovered_at ?? '')))
 
   return {
-    queue: scope.slice(offset, offset + QUEUE_PAGE),
-    queueTotal: scope.length,
-    predictedSkipTotal: scope.filter((q) => q.predicted_skip).length,
+    queue: filtered.slice(offset, offset + QUEUE_PAGE),
+    queueTotal: filtered.length,
+    predictedSkipTotal: scope.filter((q) => q.predicted_skip && passes(q, 'predicted')).length,
     decidedCount: decided.length,
     brandCounts,
+    typeCounts,
+    colourCounts,
   }
 }
 
