@@ -14,6 +14,7 @@
 import { createAdminClient } from '@/lib/supabase-server'
 import { revalidatePath } from 'next/cache'
 import { persistImageToCloudinary } from '@/lib/cloudinary-persist'
+import { picturesFromForm, intakePictures } from '@/lib/picture-intake'
 import { analyseInspirationImage } from '@/app/admin/ai/analyse-inspiration'
 import { getStylist } from '@/lib/stylist-store'
 import {
@@ -129,6 +130,46 @@ export async function ingestInspirationImages(
     return { added: rows.length, failed }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Ingest failed' }
+  }
+}
+
+/**
+ * Step 1, from a moodboard: pasted screenshots, dropped files and links. A
+ * Pinterest board is split into one image per outfit, each scored on its own,
+ * so every outfit is logged against the style rather than the collage.
+ */
+export async function addInspirationPictures(formData: FormData): Promise<{
+  added?: number
+  screenshots?: number
+  failed?: number
+  notes?: string[]
+  error?: string
+}> {
+  try {
+    const personaId = String(formData.get('personaId') ?? '')
+    if (!personaId) return { error: 'No style' }
+    const folder = `inspiration/${personaId}`
+    const { inputs, failed: unread } = await picturesFromForm(formData, folder)
+    if (!inputs.length) return { added: 0, failed: unread, error: unread ? 'Could not save those pictures' : 'Paste, drop or link some pictures' }
+    const { rows, screenshots, failed: unsaved, notes } = await intakePictures(inputs, folder)
+    const failed = unread + unsaved
+    if (!rows.length) return { added: 0, failed, error: 'Could not save those pictures' }
+
+    const admin = createAdminClient() as any
+    const { error } = await admin.from('inspiration_image').insert(rows.map((r) => ({
+      persona_id: personaId,
+      user_id: null,
+      image_url: r.image_url,
+      source_url: r.source_url,
+      source: 'curator_seed',
+      status: 'pending_scoring',
+    })))
+    if (error) return { error: error.message }
+    await scoreInspirationImages(personaId, Math.max(40, rows.length))
+    revalidatePath(PATH)
+    return { added: rows.length, screenshots, failed, notes }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Could not add those pictures' }
   }
 }
 

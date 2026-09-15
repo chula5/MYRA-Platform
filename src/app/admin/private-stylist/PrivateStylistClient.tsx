@@ -1496,7 +1496,7 @@ function ReferencePictures({ memberId, memberName, hasStyle }: { memberId: strin
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [urls, setUrls] = useState('')
-  const [files, setFiles] = useState<File[]>([])
+  const [dragging, setDragging] = useState(false)
   const first = memberName.split(' ')[0] || 'her'
 
   async function refresh() {
@@ -1508,51 +1508,92 @@ function ReferencePictures({ memberId, memberName, hasStyle }: { memberId: strin
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { void refresh() }, [memberId])
 
-  async function add() {
+  async function add(files: File[], links = '') {
+    if (!files.length && !links.trim()) return
     setBusy(true)
-    setMsg(null)
+    setMsg(files.length ? `READING ${files.length} PICTURE${files.length === 1 ? '' : 'S'} — FINDING EACH OUTFIT…` : 'SAVING…')
     const fd = new FormData()
     fd.set('memberId', memberId)
-    fd.set('urls', urls)
+    fd.set('urls', links)
     for (const f of files) fd.append('files', f)
     const r = await addMemberReferencePictures(fd)
     setBusy(false)
-    setMsg(r.error ? r.error.toUpperCase() : `${r.added} ADDED AND SCORED${r.failed ? ` · ${r.failed} COULD NOT BE SAVED` : ''} — NOW SHAPING ${first.toUpperCase()}'S LOOKS`)
-    if (!r.error) { setUrls(''); setFiles([]) }
+    if (r.error) setMsg(r.error.toUpperCase())
+    else {
+      const parts = [`${r.added} OUTFIT${r.added === 1 ? '' : 'S'} ADDED AND SCORED`]
+      if (r.screenshots) parts.push(`FROM ${r.screenshots} SCREENSHOT${r.screenshots === 1 ? '' : 'S'}`)
+      if (r.failed) parts.push(`${r.failed} COULD NOT BE SAVED`)
+      setMsg(`${parts.join(' · ')} — NOW SHAPING ${first.toUpperCase()}'S LOOKS`)
+      setUrls('')
+    }
     await refresh()
   }
+
+  const imagesFrom = (list: DataTransferItemList | FileList | null | undefined): File[] => {
+    if (!list) return []
+    const out: File[] = []
+    for (let i = 0; i < list.length; i++) {
+      const it = list[i] as DataTransferItem | File
+      const f = 'getAsFile' in it ? (it.kind === 'file' ? it.getAsFile() : null) : it
+      if (f && f.type.startsWith('image/')) out.push(f)
+    }
+    return out
+  }
+
+  // ⌘V anywhere while her profile is open: a pasted screenshot is added at once.
+  // Pasting text into a field still works — only image pastes are taken.
+  useEffect(() => {
+    if (!hasStyle) return
+    const onPaste = (e: ClipboardEvent) => {
+      const files = imagesFrom(e.clipboardData?.items)
+      if (!files.length || busy) return
+      e.preventDefault()
+      void add(files)
+    }
+    document.addEventListener('paste', onPaste)
+    return () => document.removeEventListener('paste', onPaste)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasStyle, busy, memberId])
 
   return (
     <div>
       <p className={`${label} mb-1`}>{first.toUpperCase()}&apos;S REFERENCE PICTURES — LOOKS SHE LIKES</p>
       <p className="text-[20px] tracking-[0.04em] text-[#6B6B6B] mb-3 max-w-3xl">
-        Scored like a moodboard. They pull her looks toward what she likes, never fade, and never change the house style other clients share.
+        Paste a screenshot (⌘V) — a single outfit or a whole Pinterest board. Each outfit is found, cut out and scored on its own, and pulls her looks toward what she likes. They never change the house style other clients share.
       </p>
       {!hasStyle ? (
         <p className="text-[20px] tracking-[0.08em] text-[#8B5E00]">ASSIGN HER A HOUSE STYLE FIRST — HER PICTURES ARE STORED ALONGSIDE IT.</p>
       ) : (
         <>
-          <div className="flex flex-wrap items-start gap-3 mb-4">
-            <label className={`${btnTiny} cursor-pointer`}>
-              {files.length ? `${files.length} PICTURE${files.length === 1 ? '' : 'S'} CHOSEN` : 'CHOOSE PICTURES'}
+          <div
+            tabIndex={0}
+            onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => { e.preventDefault(); setDragging(false); void add(imagesFrom(e.dataTransfer.files)) }}
+            className={`border-2 border-dashed px-6 py-8 mb-4 text-center outline-none transition-colors ${dragging ? 'border-[#0A0A0A] bg-[#F4F3F0]' : 'border-[#C3BFB8] focus:border-[#0A0A0A]'}`}
+          >
+            <p className="text-[20px] tracking-[0.1em] text-[#0A0A0A]">
+              {busy ? 'WORKING…' : 'PASTE A SCREENSHOT HERE (⌘V) · OR DROP PICTURES'}
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-3 mt-4">
+              <label className={`${btnTiny} cursor-pointer`}>
+                CHOOSE PICTURES
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => { void add(Array.from(e.target.files ?? [])); e.target.value = '' }}
+                />
+              </label>
               <input
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+                value={urls}
+                onChange={(e) => setUrls(e.target.value)}
+                placeholder="OR PASTE IMAGE LINKS"
+                className={`${input} min-w-[280px]`}
               />
-            </label>
-            <textarea
-              value={urls}
-              onChange={(e) => setUrls(e.target.value)}
-              rows={1}
-              placeholder="OR PASTE IMAGE LINKS"
-              className={`${input} flex-1 min-w-[280px]`}
-            />
-            <button className={btnTiny} disabled={busy || (!files.length && !urls.trim())} onClick={add}>
-              {busy ? 'SAVING + SCORING…' : 'ADD PICTURES'}
-            </button>
+              <button className={btnTiny} disabled={busy || !urls.trim()} onClick={() => add([], urls)}>ADD LINKS</button>
+            </div>
           </div>
           {msg && <p className="text-[20px] tracking-[0.1em] text-[#C4A882] mb-3">{msg}</p>}
           {loading ? (
@@ -1560,28 +1601,38 @@ function ReferencePictures({ memberId, memberName, hasStyle }: { memberId: strin
           ) : pictures.length === 0 ? (
             <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4]">NO PICTURES YET</p>
           ) : (
-            <div className="grid grid-cols-3 md:grid-cols-6 gap-[6px]">
-              {pictures.map((pic) => (
-                <div key={pic.image_id} className="border border-[#E2E0DB] bg-white">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={pic.image_url} alt="" className="w-full aspect-[3/4] object-cover bg-[#F2F2F0]" />
-                  <div className="px-2 py-2">
-                    <p className={`text-[16px] tracking-[0.06em] ${pic.status === 'pending_scoring' ? 'text-[#8B5E00]' : 'text-[#3D7A50]'}`}>
-                      {pic.status === 'pending_scoring' ? (pic.scoringError ? 'COULD NOT READ' : 'SCORING…') : 'SCORED'}
-                    </p>
-                    {pic.itemTypes.length > 0 && (
-                      <p className="text-[15px] text-[#6B6B6B] line-clamp-2">{pic.itemTypes.slice(0, 4).join(' · ').replace(/_/g, ' ')}</p>
-                    )}
-                    <button
-                      className="text-[16px] tracking-[0.1em] text-[#B83A3A] underline underline-offset-4 mt-1"
-                      onClick={async () => { await removeMemberReferencePicture(pic.image_id); await refresh() }}
-                    >
-                      ✕ REMOVE
-                    </button>
+            <>
+              <p className="text-[20px] tracking-[0.1em] text-[#6B6B6B] mb-2">
+                {pictures.length} OUTFIT{pictures.length === 1 ? '' : 'S'} LOGGED
+                {(() => {
+                  const sheets = new Set(pictures.map((p) => p.fromScreenshot).filter(Boolean)).size
+                  return sheets ? ` · ${sheets} FROM SCREENSHOTS` : ''
+                })()}
+              </p>
+              <div className="grid grid-cols-3 md:grid-cols-6 gap-[6px]">
+                {pictures.map((pic) => (
+                  <div key={pic.image_id} className="border border-[#E2E0DB] bg-white">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={pic.image_url} alt="" className="w-full aspect-[3/4] object-cover bg-[#F2F2F0]" />
+                    <div className="px-2 py-2">
+                      <p className={`text-[16px] tracking-[0.06em] ${pic.status === 'pending_scoring' ? 'text-[#8B5E00]' : 'text-[#3D7A50]'}`}>
+                        {pic.status === 'pending_scoring' ? (pic.scoringError ? 'COULD NOT READ' : 'SCORING…') : 'SCORED'}
+                        {pic.fromScreenshot ? ' · FROM A SCREENSHOT' : ''}
+                      </p>
+                      {pic.itemTypes.length > 0 && (
+                        <p className="text-[15px] text-[#6B6B6B] line-clamp-2">{pic.itemTypes.slice(0, 4).join(' · ').replace(/_/g, ' ')}</p>
+                      )}
+                      <button
+                        className="text-[16px] tracking-[0.1em] text-[#B83A3A] underline underline-offset-4 mt-1"
+                        onClick={async () => { await removeMemberReferencePicture(pic.image_id); await refresh() }}
+                      >
+                        ✕ REMOVE
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </>
           )}
         </>
       )}

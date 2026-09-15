@@ -11,11 +11,10 @@
 
 import { createAdminClient, createServerClient } from '@/lib/supabase-server'
 import { revalidatePath } from 'next/cache'
-import { persistImageToCloudinary, uploadImageBytesToCloudinary } from '@/lib/cloudinary-persist'
 import { scoreInspirationImages } from '@/app/admin/stylists/inspiration-actions'
+import { picturesFromForm, intakePictures } from '@/lib/picture-intake'
 
 const PATH = '/admin/private-stylist'
-const MAX_FILE_BYTES = 9 * 1024 * 1024
 
 async function isAdmin(): Promise<boolean> {
   const supabase = await createServerClient()
@@ -27,6 +26,8 @@ export interface ReferencePicture {
   image_id: string
   image_url: string
   status: string
+  /** The screenshot it was cut from, when it came from a collection. */
+  fromScreenshot: string | null
   itemTypes: string[]
   occasions: string[]
   scoringError: string | null
@@ -51,7 +52,7 @@ export async function listMemberReferencePictures(memberId: string): Promise<{
   }
   const owners = [memberId, member?.auth_user_id].filter(Boolean)
   const { data, error } = await admin.from('inspiration_image')
-    .select('image_id, image_url, status, scores, occasion_read, scoring_error, created_at')
+    .select('image_id, image_url, source_url, status, scores, occasion_read, scoring_error, created_at')
     .in('user_id', owners).neq('status', 'rejected').order('created_at', { ascending: false })
   if (error) return { pictures: [], styleName, error: error.message }
   return {
@@ -60,6 +61,7 @@ export async function listMemberReferencePictures(memberId: string): Promise<{
       image_id: r.image_id,
       image_url: r.image_url,
       status: r.status,
+      fromScreenshot: r.source_url && r.source_url !== r.image_url ? r.source_url : null,
       itemTypes: r.scores?.item_types ?? [],
       occasions: r.occasion_read ?? [],
       scoringError: r.scoring_error ?? null,
@@ -68,8 +70,18 @@ export async function listMemberReferencePictures(memberId: string): Promise<{
   }
 }
 
-/** Add pictures from files and/or image links, then score them. */
-export async function addMemberReferencePictures(formData: FormData): Promise<{ added?: number; failed?: number; error?: string }> {
+/**
+ * Add pictures from files, pasted screenshots and/or image links. A screenshot
+ * of several outfits (a Pinterest board) is split so each outfit is saved and
+ * scored on its own; every piece keeps the screenshot it came from.
+ */
+export async function addMemberReferencePictures(formData: FormData): Promise<{
+  added?: number
+  screenshots?: number
+  failed?: number
+  notes?: string[]
+  error?: string
+}> {
   if (!(await isAdmin())) return { error: 'Not authorised' }
   const memberId = String(formData.get('memberId') ?? '')
   if (!memberId) return { error: 'No member' }
@@ -80,42 +92,26 @@ export async function addMemberReferencePictures(formData: FormData): Promise<{ 
   if (!personaId) return { error: 'Assign her a house style first — her pictures are stored alongside it' }
 
   const folder = `inspiration/${personaId}/client-${memberId.slice(0, 8)}`
-  const urls: string[] = []
-  let failed = 0
+  const { inputs, failed: unread } = await picturesFromForm(formData, folder)
+  if (!inputs.length) return { added: 0, failed: unread, error: unread ? 'Could not save those pictures' : 'Paste, choose or link some pictures' }
+  const { rows, screenshots, failed: unsaved, notes } = await intakePictures(inputs, folder)
+  const failed = unread + unsaved
+  if (!rows.length) return { added: 0, failed, error: 'Could not save those pictures' }
 
-  const files = formData.getAll('files').filter((f): f is File => f instanceof File && f.size > 0)
-  for (let i = 0; i < files.length; i++) {
-    const f = files[i]
-    if (f.size > MAX_FILE_BYTES) { failed++; continue }
-    const hosted = await uploadImageBytesToCloudinary(Buffer.from(await f.arrayBuffer()), f.type || 'image/jpeg', {
-      folder, publicId: `ref-${memberId.slice(0, 8)}-${Date.now()}-${i}`,
-    })
-    if (hosted) urls.push(hosted); else failed++
-  }
-
-  const links = String(formData.get('urls') ?? '').split(/[\s,]+/).map((u) => u.trim()).filter((u) => /^https?:\/\//i.test(u))
-  for (let i = 0; i < links.length; i++) {
-    const link = links[i]
-    const hosted = await persistImageToCloudinary(link, { folder, publicId: `ref-${memberId.slice(0, 8)}-${Date.now()}-l${i}` })
-    if (hosted) urls.push(hosted); else failed++
-  }
-
-  if (!urls.length) return { added: 0, failed, error: failed ? 'Could not save those pictures' : 'Choose pictures or paste image links' }
-
-  const { error } = await admin.from('inspiration_image').insert(urls.map((u) => ({
+  const { error } = await admin.from('inspiration_image').insert(rows.map((r) => ({
     persona_id: personaId,
     user_id: memberId,
-    image_url: u,
-    source_url: u,
+    image_url: r.image_url,
+    source_url: r.source_url,
     source: 'user_upload',
     status: 'pending_scoring',
   })))
   if (error) return { error: error.message }
 
-  // Score now: an unscored picture has no vector, so it cannot shape her looks.
-  await scoreInspirationImages(personaId, 40)
+  // Score each outfit now: an unscored picture has no vector, so it cannot shape her looks.
+  await scoreInspirationImages(personaId, Math.max(40, rows.length))
   revalidatePath(PATH)
-  return { added: urls.length, failed }
+  return { added: rows.length, screenshots, failed, notes }
 }
 
 export async function removeMemberReferencePicture(imageId: string): Promise<{ error?: string }> {

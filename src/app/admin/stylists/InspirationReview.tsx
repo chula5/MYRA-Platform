@@ -16,7 +16,7 @@ import {
   setInspirationStatus,
   confirmAllScored,
   recomputeEnvelope,
-  ingestInspirationImages,
+  addInspirationPictures,
 } from './inspiration-actions'
 import {
   SCORE_DIMENSIONS,
@@ -49,6 +49,53 @@ export default function InspirationReview({
   const [loaded, setLoaded] = useState(false)
   const [addUrls, setAddUrls] = useState('')
   const [openId, setOpenId] = useState<string | null>(null)
+  const [dragging, setDragging] = useState(false)
+
+  async function addPictures(files: File[], links = '') {
+    if (!files.length && !links.trim()) return
+    setBusy('add')
+    setMsg(files.length ? `READING ${files.length} PICTURE${files.length === 1 ? '' : 'S'} — FINDING EACH OUTFIT…` : 'SAVING…')
+    const fd = new FormData()
+    fd.set('personaId', personaId)
+    fd.set('urls', links)
+    for (const f of files) fd.append('files', f)
+    const r = await addInspirationPictures(fd)
+    setBusy(null)
+    if (r.error) setMsg(r.error.toUpperCase())
+    else {
+      const parts = [`${r.added} OUTFIT${r.added === 1 ? '' : 'S'} LOGGED AND SCORED`]
+      if (r.screenshots) parts.push(`FROM ${r.screenshots} SCREENSHOT${r.screenshots === 1 ? '' : 'S'}`)
+      if (r.failed) parts.push(`${r.failed} COULD NOT BE SAVED`)
+      setMsg(`${parts.join(' · ')} — CONFIRM THE ONES THAT ARE THE STYLE`)
+      setAddUrls('')
+    }
+    await refresh()
+    router.refresh()
+  }
+
+  const imagesFrom = (list: DataTransferItemList | FileList | null | undefined): File[] => {
+    if (!list) return []
+    const out: File[] = []
+    for (let i = 0; i < list.length; i++) {
+      const it = list[i] as DataTransferItem | File
+      const f = 'getAsFile' in it ? (it.kind === 'file' ? it.getAsFile() : null) : it
+      if (f && f.type.startsWith('image/')) out.push(f)
+    }
+    return out
+  }
+
+  // ⌘V anywhere while this moodboard is open: pasted screenshots are added at once.
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const files = imagesFrom(e.clipboardData?.items)
+      if (!files.length || busy) return
+      e.preventDefault()
+      void addPictures(files)
+    }
+    document.addEventListener('paste', onPaste)
+    return () => document.removeEventListener('paste', onPaste)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busy, personaId])
 
   async function refresh() {
     const r = await loadInspirationImages(personaId)
@@ -126,27 +173,41 @@ export default function InspirationReview({
         {msg && <span className="text-[9px] tracking-[0.1em] text-[#C4A882]">{msg}</span>}
       </div>
 
-      {/* Append more images — allowed after go-live; flags the persona instead
-          of moving the envelope underneath it. */}
-      <div className="flex gap-2 mb-4">
-        <input
-          value={addUrls}
-          onChange={(e) => setAddUrls(e.target.value)}
-          placeholder="ADD IMAGE URLS, ONE PER LINE OR COMMA-SEPARATED"
-          className="flex-1 border border-[#E2E0DB] px-3 py-2 text-[10px] tracking-[0.05em] outline-none focus:border-[#0A0A0A]"
-        />
-        <button
-          disabled={!!busy || !addUrls.trim()}
-          onClick={() =>
-            act('add', () => ingestInspirationImages(personaId, addUrls.split(/[\n,]/)), (r) => {
-              setAddUrls('')
-              return `ADDED ${r.added} (${r.failed ?? 0} FAILED) — RE-HOSTED, NOW PENDING SCORING`
-            })
-          }
-          className="border border-[#E2E0DB] px-4 py-2 text-[9px] tracking-[0.1em] text-[#6B6B6B] hover:border-[#0A0A0A] disabled:opacity-40"
-        >
-          + ADD
-        </button>
+      {/* Moodboard intake — paste a screenshot, drop pictures, or link them. A
+          Pinterest board is split into one image per outfit. Allowed after
+          go-live; a live style is flagged rather than moved underneath clients. */}
+      <div
+        tabIndex={0}
+        onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => { e.preventDefault(); setDragging(false); void addPictures(imagesFrom(e.dataTransfer.files)) }}
+        className={`border-2 border-dashed rounded-[12px] px-6 py-7 mb-4 text-center outline-none transition-colors ${dragging ? 'border-[#0A0A0A] bg-[#F4F3F0]' : 'border-[#C3BFB8] focus:border-[#0A0A0A]'}`}
+      >
+        <p className="text-[18px] tracking-[0.1em] text-[#0A0A0A]">
+          {busy === 'add' ? 'WORKING…' : 'PASTE A SCREENSHOT (⌘V) · OR DROP PICTURES'}
+        </p>
+        <p className="text-[15px] tracking-[0.04em] text-[#6B6B6B] mt-1">
+          A single outfit or a whole Pinterest board — each outfit is found, cut out and scored on its own.
+        </p>
+        <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
+          <label className="border border-[#0A0A0A] px-4 py-2 text-[14px] tracking-[0.1em] text-[#0A0A0A] cursor-pointer hover:bg-[#0A0A0A] hover:text-white">
+            CHOOSE PICTURES
+            <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { void addPictures(Array.from(e.target.files ?? [])); e.target.value = '' }} />
+          </label>
+          <input
+            value={addUrls}
+            onChange={(e) => setAddUrls(e.target.value)}
+            placeholder="OR PASTE IMAGE LINKS"
+            className="min-w-[280px] border border-[#E2E0DB] px-3 py-2 text-[14px] tracking-[0.05em] outline-none focus:border-[#0A0A0A]"
+          />
+          <button
+            disabled={!!busy || !addUrls.trim()}
+            onClick={() => addPictures([], addUrls)}
+            className="border border-[#E2E0DB] px-4 py-2 text-[14px] tracking-[0.1em] text-[#6B6B6B] hover:border-[#0A0A0A] disabled:opacity-40"
+          >
+            ADD LINKS
+          </button>
+        </div>
       </div>
 
       {!loaded && <p className="text-[9px] tracking-[0.1em] text-[#A8A8A4]">LOADING…</p>}
