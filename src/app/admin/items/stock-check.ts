@@ -2,6 +2,9 @@
 
 import { createAdminClient } from '@/lib/supabase-server'
 import { revalidatePath } from 'next/cache'
+import {
+  myshopifyDomainIn, normaliseSizeLabel, sizeLabelFromVariant, sizesFromPage,
+} from '@/lib/retailer-sizes'
 
 type StockStatus = 'in_stock' | 'low_stock' | 'out_of_stock' | 'unknown'
 
@@ -11,22 +14,28 @@ interface StockResult {
   notes: string | null
 }
 
+const UA =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
+
+async function fetchPage(url: string): Promise<{ ok: boolean; status: number; html: string; finalUrl: string }> {
+  const res = await fetch(url, {
+    headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9' },
+    redirect: 'follow',
+  })
+  return { ok: res.ok, status: res.status, html: res.ok ? await res.text() : '', finalUrl: res.url || url }
+}
+
 // Fetch the product page and infer stock status.
 // Detection order: JSON-LD Product.availability -> text regex -> unknown.
 async function detectStock(url: string): Promise<StockResult> {
-  const res = await fetch(url, {
-    headers: {
-      'User-Agent':
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
-      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9',
-    },
-    redirect: 'follow',
-  })
-  if (!res.ok) {
-    return { status: 'unknown', signal: `http:${res.status}`, notes: `Fetch failed: ${res.status}` }
+  const page = await fetchPage(url)
+  if (!page.ok) {
+    return { status: 'unknown', signal: `http:${page.status}`, notes: `Fetch failed: ${page.status}` }
   }
-  const html = await res.text()
+  return stockFromHtml(page.html)
+}
 
+function stockFromHtml(html: string): StockResult {
   // 1. JSON-LD Product.availability — the gold standard. A product can have MANY
   // offers (one per size/colour) with MIXED availability (e.g. Tory Burch: size M
   // in stock, S sold out). Aggregate ALL of them: in stock if ANY variant is
@@ -103,22 +112,9 @@ function collectAvailabilities(node: unknown, out: string[]): void {
   }
 }
 
-// Best-effort extraction of the IN-STOCK size labels from a product page.
-// Most of the brands here run Shopify, whose product JSON (`<url>.js`) lists
-// variants with an `available` flag and size in `option1`/`title`. Returns e.g.
-// ['S','M','L'] or ['37','39']; empty when sizes can't be parsed (non-Shopify,
-// no variants, or a fetch error) — the coarse stock_status still applies.
-// True size labels only — S/M/L family, one-size, or numeric (incl. UK/US/EU
-// shoe sizes). Rejects colours and other variant option values.
-const SIZE_RE = /^(x{0,3}s|x{0,3}l|xl|m|o\/?s|one[\s-]?size|onesize|free[\s-]?size|\d{1,3}(\.\d)?|(uk|us|eu|it|fr)[\s-]?\d{1,3}|\d{1,3}[\s-]?(uk|us|eu|it|fr))$/i
-
-function sizeFromVariant(v: any): string | null {
-  for (const key of ['option1', 'option2', 'option3']) {
-    const val = String(v?.[key] ?? '').trim()
-    if (val && val.toLowerCase() !== 'default title' && SIZE_RE.test(val)) return val.toUpperCase()
-  }
-  return null
-}
+// Size labels come from sizeLabelFromVariant (src/lib/retailer-sizes.ts): true
+// sizes only — S/M/L family incl. "XS/S", one-size, numeric, UK/US/EU shoe
+// sizes, and host-annotated labels like Wyse's "1R (UK 8)". Colours rejected.
 
 // AUTHORITATIVE stock from a Shopify store's product JSON (`<url>.js`). The
 // per-variant `available` flag is the source of truth — far more reliable than
@@ -131,11 +127,7 @@ async function shopifyStock(url: string): Promise<{ status: StockStatus; sizes: 
     const clean = url.split('#')[0].split('?')[0].replace(/\/$/, '')
     if (!/\/products\//.test(clean)) return null
     const res = await fetch(`${clean}.js`, {
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
-        Accept: 'application/json',
-      },
+      headers: { 'User-Agent': UA, Accept: 'application/json' },
       redirect: 'follow',
     })
     if (!res.ok) return null
@@ -146,7 +138,7 @@ async function shopifyStock(url: string): Promise<{ status: StockStatus; sizes: 
     const available = variants.filter((v: any) => v && v.available)
     // In-stock size labels (reject colours like "Luwak"; keep true sizes only).
     const sizes = Array.from(new Set<string>(
-      available.map((v: any) => sizeFromVariant(v)).filter((s: string | null): s is string => !!s),
+      available.map((v: any) => sizeLabelFromVariant(v, url)).filter((s: string | null): s is string => !!s),
     )).slice(0, 16)
 
     let status: StockStatus
@@ -278,14 +270,43 @@ export async function checkStockDetailed(url: string): Promise<DetailedStock> {
     const shop = await shopifyVariants(url)
     if (shop) return shop
 
-    // 2. Page HTML: JSON-LD offers (often carry size + availability), else text.
-    const r = await detectStock(url)
-    const sizes = r.status === 'unknown' ? [] : await sizesFromJsonLd(url)
+    // 2. The page itself, fetched ONCE for everything below.
+    const page = await fetchPage(url)
+    if (!page.ok) {
+      return { status: 'unknown', signal: `http:${page.status}`, source: 'error', sizes: [] }
+    }
+
+    // 2a. Headless Shopify (Varley): the storefront 404s `.js`, but the page
+    // names the myshopify domain, which serves it.
+    if (/\/products\//.test(url)) {
+      const domain = myshopifyDomainIn(page.html)
+      if (domain) {
+        const alt = await shopifyVariants(url, domain)
+        if (alt) return { ...alt, signal: `${alt.signal}:via-myshopify` }
+      }
+    }
+
+    // 2b. Per-size availability the page carries in its own markup or embedded
+    // data (Salesforce Commerce selectors, a Next.js variant list, the Kleep
+    // widget config). Explicit per size — so the verdict comes from the sizes,
+    // not from a "sold out" string somewhere in a template. Reported as a page
+    // reading ('regex'), not a merchant statement: a whole-product sold verdict
+    // from markup still waits for a second reading on one-of-one stock.
+    const structured = sizesFromPage(page.html, page.finalUrl)
+    if (structured) {
+      const sizes = structured.sizes
+      const status = statusFromSizes(sizes)
+      markSurvivorsLow(sizes)
+      return { status, signal: `page:${structured.via}:${status}`, source: 'regex', sizes }
+    }
+
+    // 2c. JSON-LD offers (often carry size + availability), else text.
+    const r = stockFromHtml(page.html)
     return {
       status: r.status,
       signal: r.signal,
-      source: r.signal.startsWith('jsonld') ? 'jsonld' : r.signal.startsWith('http:') ? 'error' : 'regex',
-      sizes,
+      source: r.signal.startsWith('jsonld') ? 'jsonld' : 'regex',
+      sizes: sizesFromJsonLd(page.html, url),
     }
   } catch (err) {
     return {
@@ -297,17 +318,33 @@ export async function checkStockDetailed(url: string): Promise<DetailedStock> {
   }
 }
 
-/** Shopify `<url>.js`, keeping SOLD-OUT variants — a size going is the event. */
-async function shopifyVariants(url: string): Promise<DetailedStock | null> {
+function statusFromSizes(sizes: DetailedStock['sizes']): StockStatus {
+  const inStock = sizes.filter((s) => s.inStock)
+  if (inStock.length === 0) return 'out_of_stock'
+  if (sizes.length >= 4 && inStock.length <= 2) return 'low_stock'
+  return 'in_stock'
+}
+
+/** Down to one or two sizes: the survivors are low, so "only a few left in your size" is true of the size. */
+function markSurvivorsLow(sizes: DetailedStock['sizes']): void {
+  const inStockSizes = sizes.filter((s) => s.inStock)
+  if (inStockSizes.length > 0 && inStockSizes.length <= 2 && sizes.length >= 4) {
+    for (const s of inStockSizes) s.level = 'low'
+  }
+}
+
+/**
+ * Shopify `<url>.js`, keeping SOLD-OUT variants — a size going is the event.
+ * `domain` reads the same product path from another host (a headless store's
+ * myshopify domain); labels are still read against the original URL.
+ */
+async function shopifyVariants(url: string, domain?: string): Promise<DetailedStock | null> {
   try {
     const clean = url.split('#')[0].split('?')[0].replace(/\/$/, '')
     if (!/\/products\//.test(clean)) return null
-    const res = await fetch(`${clean}.js`, {
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
-        Accept: 'application/json',
-      },
+    const target = domain ? `https://${domain}${new URL(clean).pathname}` : clean
+    const res = await fetch(`${target}.js`, {
+      headers: { 'User-Agent': UA, Accept: 'application/json' },
       redirect: 'follow',
     })
     if (!res.ok) return null
@@ -317,7 +354,7 @@ async function shopifyVariants(url: string): Promise<DetailedStock | null> {
 
     const seen = new Map<string, boolean>()
     for (const v of variants) {
-      const label = sizeFromVariant(v)
+      const label = sizeLabelFromVariant(v, url)
       if (!label) continue
       // A size can appear on more than one variant (colourways). Available in
       // any of them means available.
@@ -326,7 +363,7 @@ async function shopifyVariants(url: string): Promise<DetailedStock | null> {
     const sizes = Array.from(seen.entries()).map(([label, inStock]) => ({
       label,
       inStock,
-      level: (inStock ? 'in_stock' : 'sold_out') as 'in_stock' | 'sold_out',
+      level: (inStock ? 'in_stock' : 'sold_out') as DetailedStock['sizes'][number]['level'],
     }))
 
     const available = variants.filter((v) => v?.available)
@@ -335,13 +372,7 @@ async function shopifyVariants(url: string): Promise<DetailedStock | null> {
     else if (variants.length >= 4 && available.length <= 2) status = 'low_stock'
     else status = 'in_stock'
 
-    // Down to one or two sizes: mark the survivors low, so "only a few left in
-    // your size" is true of the size rather than of the product page.
-    const inStockSizes = sizes.filter((s) => s.inStock)
-    if (inStockSizes.length > 0 && inStockSizes.length <= 2 && sizes.length >= 4) {
-      for (const s of inStockSizes) (s as any).level = 'low'
-    }
-
+    markSurvivorsLow(sizes)
     return { status, signal: `shopify:${status}`, source: 'shopify', sizes }
   } catch {
     return null
@@ -349,51 +380,37 @@ async function shopifyVariants(url: string): Promise<DetailedStock | null> {
 }
 
 /** JSON-LD offers sometimes name the size — pick it up where they do. */
-async function sizesFromJsonLd(url: string): Promise<DetailedStock['sizes']> {
-  try {
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
-        Accept: 'text/html,application/xhtml+xml',
-      },
-      redirect: 'follow',
-    })
-    if (!res.ok) return []
-    const html = await res.text()
-    const out = new Map<string, boolean>()
-    const blocks = Array.from(html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi))
-    for (const match of blocks) {
-      try {
-        collectSizedOffers(JSON.parse(match[1].trim()), out)
-      } catch {
-        // a malformed block is not worth failing the check over
-      }
+function sizesFromJsonLd(html: string, url: string): DetailedStock['sizes'] {
+  const out = new Map<string, boolean>()
+  const blocks = Array.from(html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi))
+  for (const match of blocks) {
+    try {
+      collectSizedOffers(JSON.parse(match[1].trim()), url, out)
+    } catch {
+      // a malformed block is not worth failing the check over
     }
-    return Array.from(out.entries()).map(([label, inStock]) => ({
-      label,
-      inStock,
-      level: (inStock ? 'in_stock' : 'sold_out') as 'in_stock' | 'sold_out',
-    }))
-  } catch {
-    return []
   }
+  return Array.from(out.entries()).map(([label, inStock]) => ({
+    label,
+    inStock,
+    level: (inStock ? 'in_stock' : 'sold_out') as 'in_stock' | 'sold_out',
+  }))
 }
 
-function collectSizedOffers(node: unknown, out: Map<string, boolean>): void {
+function collectSizedOffers(node: unknown, url: string, out: Map<string, boolean>): void {
   if (!node || typeof node !== 'object') return
-  if (Array.isArray(node)) { for (const n of node) collectSizedOffers(n, out); return }
+  if (Array.isArray(node)) { for (const n of node) collectSizedOffers(n, url, out); return }
   const obj = node as Record<string, any>
   const rawSize = obj.size ?? obj.sku_size ?? obj.variesBy
   const availability = typeof obj.availability === 'string' ? obj.availability.toLowerCase() : null
   if (rawSize && availability) {
-    const label = String(rawSize).trim().toUpperCase()
-    if (label && SIZE_RE.test(label)) {
+    const label = normaliseSizeLabel(String(rawSize), url)
+    if (label) {
       const inStock = /instock|onlineonly|preorder|instoreonly|limitedavailability|lowstock|presale|backorder/.test(availability)
       out.set(label, (out.get(label) ?? false) || inStock)
     }
   }
   for (const value of Object.values(obj)) {
-    if (value && typeof value === 'object') collectSizedOffers(value, out)
+    if (value && typeof value === 'object') collectSizedOffers(value, url, out)
   }
 }

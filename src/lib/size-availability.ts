@@ -209,23 +209,37 @@ export async function upsertSizeAvailability(
   return { changed: after, previous: before }
 }
 
-/** Size rows for a batch of items, keyed by item_id. Paged — a busy feed can exceed 1000. */
+/**
+ * Size rows for a batch of items, keyed by item_id.
+ *
+ * Chunked by id AND paged within each chunk: PostgREST caps a response at 1,000
+ * rows, and 200 items can carry far more (a shoe lists 14 sizes). Unpaged, the
+ * overflow was dropped silently and those pieces read as "unconfirmed" — seen on
+ * Alison's looks once the library's size coverage grew (2026-09-15).
+ */
 export async function loadSizeRowsFor(itemIds: string[]): Promise<Map<string, SizeRow[]>> {
   const out = new Map<string, SizeRow[]>()
   if (!itemIds.length) return out
   const admin = createAdminClient()
   const CHUNK = 200
+  const PAGE = 1000
   for (let i = 0; i < itemIds.length; i += CHUNK) {
     const slice = itemIds.slice(i, i + CHUNK)
-    const { data, error } = await admin
-      .from('item_size_availability' as any)
-      .select('item_id, size_label, size_system, canonical_category, canonical_value, canonical_values, in_stock, stock_level')
-      .in('item_id', slice)
-    if (error) { console.error('[loadSizeRowsFor]', error); continue }
-    for (const r of (data ?? []) as any[]) {
-      const list = out.get(r.item_id) ?? []
-      list.push(r as SizeRow)
-      out.set(r.item_id, list)
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await admin
+        .from('item_size_availability' as any)
+        .select('item_id, size_label, size_system, canonical_category, canonical_value, canonical_values, in_stock, stock_level')
+        .in('item_id', slice)
+        .order('item_id')
+        .order('size_label')
+        .range(from, from + PAGE - 1)
+      if (error) { console.error('[loadSizeRowsFor]', error); break }
+      for (const r of (data ?? []) as any[]) {
+        const list = out.get(r.item_id) ?? []
+        list.push(r as SizeRow)
+        out.set(r.item_id, list)
+      }
+      if (!data || data.length < PAGE) break
     }
   }
   return out
