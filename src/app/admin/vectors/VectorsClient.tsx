@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { thumbUrl } from '@/lib/image-utils'
 import type { OutfitWithItems } from '@/types/database'
 import { buildOutfitVector, cosine } from '@/lib/taste-vector'
-import { rescoreOutfitFromImage } from './actions'
+import { rescoreOutfitFromImage } from './actions.gated'
 import { useScrollTo } from '@/lib/smooth-scroll'
 
 // Human labels for each of the 34 vector dimensions (order matches

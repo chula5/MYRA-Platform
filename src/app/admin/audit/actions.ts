@@ -7,6 +7,7 @@
 import { createAdminClient } from '@/lib/supabase-server'
 import { foldAuditIntervention } from '@/lib/stylist-store'
 import { revalidatePath } from 'next/cache'
+import { assertAdmin } from '@/lib/admin-audit'
 
 export interface AuditEntry {
   id: string
@@ -22,6 +23,7 @@ export interface AuditEntry {
 }
 
 export async function loadAuditEntries(sinceHours = 72): Promise<AuditEntry[]> {
+  await assertAdmin()
   try {
     const admin = createAdminClient()
     const since = new Date(Date.now() - sinceHours * 3600000).toISOString()
@@ -61,6 +63,7 @@ export async function loadAuditEntries(sinceHours = 72): Promise<AuditEntry[]> {
 // PULL: unpublish immediately (back to draft) + demote. The one-tap link from
 // the digest lands here.
 export async function auditPull(logId: string): Promise<{ ok?: true; error?: string }> {
+  await assertAdmin()
   try {
     const admin = createAdminClient()
     const { data: log } = await admin.from('auto_publish_log' as any).select('*').eq('id', logId).maybeSingle()
@@ -84,6 +87,7 @@ export async function auditPull(logId: string): Promise<{ ok?: true; error?: str
 // SWAP-flag: she's about to edit the outfit — count the intervention and send
 // her to the draft's swap sheet. The outfit is unpublished while edited.
 export async function auditSwap(logId: string): Promise<{ ok?: true; outfitId?: string; projectId?: string | null; error?: string }> {
+  await assertAdmin()
   try {
     const admin = createAdminClient()
     const { data: log } = await admin.from('auto_publish_log' as any).select('*').eq('id', logId).maybeSingle()
@@ -106,6 +110,7 @@ export async function auditSwap(logId: string): Promise<{ ok?: true; outfitId?: 
 }
 
 export async function auditKeep(logId: string): Promise<{ ok: true }> {
+  await assertAdmin()
   try {
     const admin = createAdminClient()
     await (admin.from('auto_publish_log') as any)

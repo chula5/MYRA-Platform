@@ -1,4 +1,5 @@
 'use server'
+import { assertAdmin } from '@/lib/admin-audit'
 
 export interface ProductInfo {
   productName: string
@@ -6,6 +7,7 @@ export interface ProductInfo {
 }
 
 export async function scrapeProductInfo(url: string): Promise<{ data?: ProductInfo; error?: string }> {
+  await assertAdmin()
   if (!url) return { error: 'No URL provided' }
 
   try {

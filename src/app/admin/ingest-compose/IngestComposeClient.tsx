@@ -3,8 +3,9 @@
 import { useState } from 'react'
 import { thumbUrl } from '@/lib/image-utils'
 import { ingestAndComposeUrl, type IngestComposeResult } from './actions'
-import { approveCandidate, rescoreCandidate, recordSkipDecision, recordSwap } from '@/app/admin/composer/actions'
-import { getReviewSwapOptions, getReviewAddOptions, type ReviewItem } from '@/app/admin/outfit-review/actions'
+import { approveCandidate, rescoreCandidate, recordSkipDecision, recordSwap } from '@/app/admin/composer/actions.gated'
+import { getReviewSwapOptions, getReviewAddOptions } from '@/app/admin/outfit-review/actions.gated'
+import type { ReviewItem } from '@/app/admin/outfit-review/actions'
 import type { Slot } from '@/lib/composer'
 
 const SLOT_LABEL: Record<string, string> = {

@@ -13,6 +13,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { fetchImageForVision } from '@/lib/vision-image'
+import { assertAdmin } from '@/lib/admin-audit'
 
 export type PatternVerdict = 'consistent' | 'inconsistent' | 'unclear'
 
@@ -35,6 +36,7 @@ export async function checkPatternAgainstMoodboard(
   patternLabel: string,
   imageUrls: string[],
 ): Promise<{ verdict: PatternVerdict; error?: string }> {
+  await assertAdmin()
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return { verdict: 'unclear', error: 'ANTHROPIC_API_KEY not configured' }
   const urls = imageUrls.filter(Boolean).slice(0, 4)

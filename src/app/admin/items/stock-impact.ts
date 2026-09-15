@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase-server'
 import { revalidatePath } from 'next/cache'
+import { assertAdmin } from '@/lib/admin-audit'
 
 export type StockStatus = 'in_stock' | 'low_stock' | 'out_of_stock' | 'unknown' | null
 
@@ -30,6 +31,7 @@ export interface StockOutfit {
 // what's still in stock vs what needs swapping. Sorted most-urgent first: live
 // before draft, out-of-stock before low.
 export async function getStockFlaggedOutfits(): Promise<{ outfits: StockOutfit[]; error?: string }> {
+  await assertAdmin()
   const admin = createAdminClient()
   try {
     const { data: flagged } = await admin
@@ -99,6 +101,7 @@ export async function addItemToOutfitForStock(
   itemId: string,
   slot: string,
 ): Promise<{ outfitItemId?: string; error?: string }> {
+  await assertAdmin()
   const admin = createAdminClient()
   try {
     const { data, error } = await (admin.from('outfit_item') as any)
@@ -124,6 +127,7 @@ export async function swapOutfitItemForStock(
   newItemId: string,
   slot: string,
 ): Promise<{ outfitItemId?: string; error?: string }> {
+  await assertAdmin()
   const admin = createAdminClient()
   try {
     const { error: delErr } = await admin.from('outfit_item').delete().eq('outfit_item_id', outfitItemId)

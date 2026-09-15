@@ -2,6 +2,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { createAdminClient } from '@/lib/supabase-server'
+import { assertAdmin } from '@/lib/admin-audit'
 
 export interface ScannableBrand {
   brand_id: string
@@ -31,6 +32,7 @@ export interface CollectionScan {
 // Brands the user has actually added (have ≥1 item in the library), most-stocked
 // first. These are the clickable list to scan for new collections.
 export async function listBrandsForScan(): Promise<{ brands: ScannableBrand[]; error?: string }> {
+  await assertAdmin()
   const admin = createAdminClient()
   try {
     const { data: items } = await admin.from('item').select('brand_id').not('brand_id', 'is', null).limit(50000)
@@ -140,6 +142,7 @@ Return up to 8 candidates, each with a unique product URL. If you genuinely cann
 // pieces. NOT persisted — the caller holds them in session and the user accepts
 // the ones they like (which then run through the ingest→compose pipeline).
 export async function scanBrandCollection(brandName: string): Promise<CollectionScan> {
+  await assertAdmin()
   const name = (brandName ?? '').trim()
   if (!name) return { brand: name, collection_name: null, is_new: false, note: null, candidates: [], error: 'No brand' }
 
@@ -232,6 +235,7 @@ export async function markCollectionCandidateSelected(
   retailerUrl: string,
   itemId?: string | null,
 ): Promise<{ ok: true }> {
+  await assertAdmin()
   try {
     const admin = createAdminClient()
     const { data } = await admin

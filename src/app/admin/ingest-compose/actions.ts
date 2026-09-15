@@ -5,6 +5,7 @@ import { analyseProductUrl } from '@/app/admin/items/analyse-url'
 import { scrapeAndUploadToCloudinary } from '@/app/admin/items/cloudinary-upload'
 import { composeForAnchor, type ComposedCandidatePayload, type SlotPlanPayload } from '@/app/admin/composer/actions'
 import { revalidatePath } from 'next/cache'
+import { assertAdmin } from '@/lib/admin-audit'
 
 export interface IngestComposeResult {
   sourceUrl: string
@@ -50,6 +51,7 @@ function fmtPrice(price: string | null, currency: string | null): string | null 
 // Analyse a product URL, create a READY item from it, and immediately compose
 // outfit options anchored on it (same engine as the Composer).
 export async function ingestAndComposeUrl(url: string): Promise<IngestComposeResult> {
+  await assertAdmin()
   const sourceUrl = (url ?? '').trim()
   try {
     if (!/^https?:\/\//i.test(sourceUrl)) return { sourceUrl, error: 'Not a valid URL' }

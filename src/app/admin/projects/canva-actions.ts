@@ -8,6 +8,7 @@ import {
   startAutofill,
   getAutofillJob,
 } from '@/lib/canva'
+import { assertAdmin } from '@/lib/admin-audit'
 
 /**
  * Kick off a Canva autofill job for an outfit. Returns immediately with a
@@ -23,6 +24,7 @@ import {
 export async function generateCanvaDeck(
   outfitId: string
 ): Promise<{ job_id?: string; error?: string }> {
+  await assertAdmin()
   const connected = await isConnected()
   if (!connected) {
     return { error: 'Canva not connected. Visit /admin/canva to authorise.' }

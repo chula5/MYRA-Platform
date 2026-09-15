@@ -3,6 +3,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { createAdminClient } from '@/lib/supabase-server'
 import { revalidatePath } from 'next/cache'
+import { assertAdmin } from '@/lib/admin-audit'
 
 interface DiscoveryCandidate {
   title: string
@@ -35,6 +36,7 @@ Return ONLY valid JSON, no markdown, no code fences:
 export async function discoverSimilarForItem(
   itemId: string,
 ): Promise<{ discovered?: number; error?: string }> {
+  await assertAdmin()
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return { error: 'ANTHROPIC_API_KEY not configured' }
 
@@ -146,6 +148,7 @@ export async function updateDiscoveryStatus(
   discoveredId: string,
   status: 'new' | 'saved' | 'dismissed',
 ): Promise<{ error?: string }> {
+  await assertAdmin()
   const supabase = createAdminClient()
   try {
     const { error } = await supabase
@@ -168,6 +171,7 @@ export async function updateDiscoveryStatus(
 export async function saveDiscoveryAsItem(
   discoveredId: string,
 ): Promise<{ itemId?: string; error?: string }> {
+  await assertAdmin()
   const supabase = createAdminClient()
   try {
     const { data: discovery, error: fetchErr } = await supabase
@@ -291,6 +295,7 @@ export async function saveDiscoveryAsItem(
 // Reads the taste_log, builds a prompt around the user's emerging pattern,
 // and asks Claude to find new interesting pieces.
 export async function discoverFromTasteProfile(): Promise<{ discovered?: number; error?: string }> {
+  await assertAdmin()
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return { error: 'ANTHROPIC_API_KEY not configured' }
 

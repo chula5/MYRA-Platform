@@ -6,7 +6,7 @@ import Link from 'next/link'
 import StatusBadge from '@/components/admin/StatusBadge'
 import TagChips from '@/components/admin/TagChips'
 import { thumbUrl } from '@/lib/image-utils'
-import { generateHiggsfieldShootForOutfit } from '@/app/admin/projects/higgsfield-actions'
+import { generateHiggsfieldShootForOutfit } from '@/app/admin/projects/higgsfield-actions.gated'
 
 // Status changes go through a route handler (not a server action) so they aren't
 // queued behind a long-running Higgsfield shoot — server actions run one-at-a-time.

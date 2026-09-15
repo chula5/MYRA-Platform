@@ -25,7 +25,8 @@ import { getSavedItemIds, toggleSaveItem } from '@/app/edit/save-actions'
 import type { Item, Brand, ItemType } from '@/types/database'
 import { ArchiveCard } from '@/components/ArchiveCard'
 import { previewAskForMember, rescoreAskLook, type AskPreviewResult } from '@/app/admin/private-stylist/confidence-actions'
-import { keepAskPreview, askPreviewAlternates, type AskSwapOption, type AskLookEdits } from '@/app/admin/private-stylist/actions'
+import { keepAskPreview, askPreviewAlternates } from '@/app/admin/private-stylist/actions.gated'
+import type { AskSwapOption, AskLookEdits } from '@/app/admin/private-stylist/actions'
 import { PICKER_COLOURS, PICKER_TYPES } from '@/components/admin/ItemPickerModal'
 
 // The feed's section heading pair, so her page reads at the feed's scale.

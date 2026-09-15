@@ -2,15 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { thumbUrl } from '@/lib/image-utils'
-import {
-  composeForReview,
-  getReviewQueue,
-  type ReviewAnchor,
-  type ReviewCandidate,
-  type ReviewItem,
-} from './actions'
-import { approveCandidate, rescoreCandidate, recordSkipDecision, recordSwap, recordFastLaneOutcome, recordReviewOutcome } from '@/app/admin/composer/actions'
-import { generateHiggsfieldShootForOutfit } from '@/app/admin/projects/higgsfield-actions'
+import { composeForReview, getReviewQueue } from './actions.gated'
+import type { ReviewAnchor, ReviewCandidate, ReviewItem } from './actions'
+import { approveCandidate, rescoreCandidate, recordSkipDecision, recordSwap, recordFastLaneOutcome, recordReviewOutcome } from '@/app/admin/composer/actions.gated'
+import { generateHiggsfieldShootForOutfit } from '@/app/admin/projects/higgsfield-actions.gated'
 import type { Slot } from '@/lib/composer'
 
 // Swap/add item search via a ROUTE HANDLER rather than a server action. Server

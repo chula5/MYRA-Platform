@@ -1,6 +1,7 @@
 'use server'
 
 import Anthropic from '@anthropic-ai/sdk'
+import { assertAdmin } from '@/lib/admin-audit'
 
 export interface AnalysedProduct {
   product_name: string | null
@@ -34,6 +35,7 @@ export interface AnalysedProduct {
 export async function analyseProductUrl(
   url: string
 ): Promise<{ data?: AnalysedProduct; error?: string }> {
+  await assertAdmin()
   if (!url) return { error: 'No URL provided' }
 
   const apiKey = process.env.ANTHROPIC_API_KEY

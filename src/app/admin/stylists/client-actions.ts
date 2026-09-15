@@ -17,6 +17,7 @@ import {
 } from '@/lib/user-persona'
 import { CONSTRAINED_DIMS } from '@/lib/inspiration'
 import { normaliseProfile, type ClientStyleProfile } from '@/lib/style-profile'
+import { assertAdmin } from '@/lib/admin-audit'
 
 const CLIENT_ROLE = 'client'
 const PATH = '/admin/stylists'
@@ -52,6 +53,7 @@ export async function createClient(
   email: string,
   personaId: string,
 ): Promise<{ userId?: string; inviteUrl?: string; password?: string; error?: string }> {
+  await assertAdmin()
   const cleanName = (name ?? '').trim()
   const cleanEmail = (email ?? '').trim().toLowerCase()
   if (!cleanName) return { error: 'Name required' }
@@ -96,6 +98,7 @@ export async function createClient(
 
 /** Every pilot client, with their current persona weight and activity. */
 export async function listClients(): Promise<{ clients: ClientRow[]; error?: string }> {
+  await assertAdmin()
   try {
     const admin = createAdminClient() as any
     const { data: profiles, error } = await admin
@@ -163,6 +166,7 @@ export interface ClientDetail {
  * important output: it says where the assignment was wrong.
  */
 export async function loadClientDetail(userId: string): Promise<ClientDetail> {
+  await assertAdmin()
   const empty: ClientDetail = { profile: null, uploads: [], weightHistory: [], personaName: null, weight: null }
   try {
     const admin = createAdminClient() as any
@@ -207,6 +211,7 @@ export async function loadClientDetail(userId: string): Promise<ClientDetail> {
 
 /** Move a client to a different persona — resets the prior to full strength. */
 export async function reassignClientPersona(userId: string, personaId: string): Promise<{ error?: string }> {
+  await assertAdmin()
   try {
     const admin = createAdminClient() as any
     await admin.from('client_profile').update({ persona_id: personaId }).eq('user_id', userId)

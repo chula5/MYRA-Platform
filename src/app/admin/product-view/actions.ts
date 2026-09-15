@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase-server'
+import { assertAdmin } from '@/lib/admin-audit'
 
 export interface ClipInput {
   title: string
@@ -12,6 +13,7 @@ export interface ClipInput {
 }
 
 export async function addClip(input: ClipInput): Promise<{ error?: string }> {
+  await assertAdmin()
   try {
     if (!input.title.trim() || !input.videoUrl.trim()) return { error: 'Title and video link are required' }
     const admin = createAdminClient()
@@ -32,6 +34,7 @@ export async function addClip(input: ClipInput): Promise<{ error?: string }> {
 }
 
 export async function updateClip(clipId: string, input: ClipInput): Promise<{ error?: string }> {
+  await assertAdmin()
   try {
     if (!input.title.trim() || !input.videoUrl.trim()) return { error: 'Title and video link are required' }
     const admin = createAdminClient()
@@ -54,6 +57,7 @@ export async function updateClip(clipId: string, input: ClipInput): Promise<{ er
 }
 
 export async function deleteClip(clipId: string): Promise<{ error?: string }> {
+  await assertAdmin()
   try {
     const admin = createAdminClient()
     const { error } = await admin.from('product_view_clip').delete().eq('clip_id', clipId)

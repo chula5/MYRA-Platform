@@ -9,7 +9,7 @@
 import { revalidatePath } from 'next/cache'
 import { waitUntil } from '@vercel/functions'
 import { createAdminClient } from '@/lib/supabase-server'
-import { requireAdminUser, writeAudit } from '@/lib/admin-audit'
+import { assertAdmin, requireAdminUser, writeAudit } from '@/lib/admin-audit'
 import { slotForItemType } from '@/lib/composer'
 import { openAiConfigured, WARDROBE_CONFIG } from '@/lib/wardrobe/config'
 import { processWardrobeQueue } from '@/lib/wardrobe/queue'
@@ -81,6 +81,7 @@ export interface WardrobeData {
 // ── Load ────────────────────────────────────────────────────────────────────
 
 export async function loadWardrobeData(memberId?: string | null): Promise<WardrobeData> {
+  await assertAdmin()
   const admin = createAdminClient() as any
   const base: WardrobeData = {
     ready: true,

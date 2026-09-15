@@ -10,6 +10,7 @@ import {
 } from '@/lib/composer'
 import type { ItemWithBrand } from '@/lib/admin-queries'
 import { isCloudinaryUrl, persistImageToCloudinary } from '@/lib/cloudinary-persist'
+import { assertAdmin } from '@/lib/admin-audit'
 
 // Supabase PostgrestError objects aren't Error instances, so the default
 // `err instanceof Error ? err.message : ...` pattern silently buries them as
@@ -138,6 +139,7 @@ async function logTasteEvent(
 }
 
 export async function createItem(formData: FormData): Promise<{ error?: string }> {
+  await assertAdmin()
   const supabase = createAdminClient()
   try {
     const fields = extractItemFields(formData)
@@ -157,6 +159,7 @@ export async function createItem(formData: FormData): Promise<{ error?: string }
 }
 
 export async function updateItem(itemId: string, formData: FormData): Promise<{ error?: string }> {
+  await assertAdmin()
   const supabase = createAdminClient()
   try {
     const fields = extractItemFields(formData)
@@ -176,6 +179,7 @@ export async function updateItemStatus(
   itemId: string,
   status: 'draft' | 'ready' | 'live' | 'archived'
 ): Promise<{ error?: string }> {
+  await assertAdmin()
   const supabase = createAdminClient()
   try {
     const { error } = await supabase.from('item').update({ status }).eq('item_id', itemId)
@@ -192,6 +196,7 @@ export async function updateItemStatus(
 export async function createBrand(
   formData: FormData
 ): Promise<{ brandId?: string; error?: string }> {
+  await assertAdmin()
   const supabase = createAdminClient()
   try {
     const { data, error } = await supabase
@@ -223,6 +228,7 @@ export async function updateBrand(
   brandId: string,
   formData: FormData
 ): Promise<{ error?: string }> {
+  await assertAdmin()
   const supabase = createAdminClient()
   try {
     const { error } = await supabase
@@ -252,6 +258,7 @@ const QUICKBUILD_PROJECT_TITLE = 'Library drafts'
 export async function createOutfitFromSelectedItems(
   itemIds: string[],
 ): Promise<{ outfitId?: string; projectId?: string; error?: string }> {
+  await assertAdmin()
   if (!itemIds || itemIds.length === 0) return { error: 'Select at least one item' }
 
   const supabase = createAdminClient()
@@ -398,6 +405,7 @@ export async function createOutfitFromSelectedItems(
 // from any outfits it was part of), then deletes the item rows.
 
 export async function deleteItems(itemIds: string[]): Promise<{ ok?: boolean; count?: number; error?: string }> {
+  await assertAdmin()
   const ids = (itemIds ?? []).filter(Boolean)
   if (ids.length === 0) return { error: 'No items selected' }
 
@@ -419,6 +427,7 @@ export async function deleteItems(itemIds: string[]): Promise<{ ok?: boolean; co
 }
 
 export async function deleteItem(itemId: string): Promise<{ ok?: boolean; error?: string }> {
+  await assertAdmin()
   if (!itemId) return { error: 'No item id' }
   return deleteItems([itemId])
 }

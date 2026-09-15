@@ -1,4 +1,7 @@
-'use server'
+// NOT a 'use server' module, on purpose: every export of a 'use server' file is
+// callable by anyone from the browser, and these run without an admin session
+// (cron, src/lib pipelines, /me client actions). Browser-facing callers must go
+// through an admin-gated 'use server' wrapper. Don't add 'use server' here.
 
 // RENDER FIDELITY CHECK — mandatory after every Higgsfield render.
 //

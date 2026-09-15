@@ -28,6 +28,7 @@ import {
   type InspirationScores,
   type InspirationSource,
 } from '@/lib/inspiration'
+import { assertAdmin } from '@/lib/admin-audit'
 
 const PATH = '/admin/stylists'
 
@@ -59,6 +60,7 @@ export async function loadInspirationImages(personaId: string): Promise<{
   minRequired: number
   error?: string
 }> {
+  await assertAdmin()
   try {
     const admin = createAdminClient() as any
     const { data, error } = await admin
@@ -92,6 +94,7 @@ export async function ingestInspirationImages(
   source: InspirationSource = 'curator_seed',
   userId?: string | null,
 ): Promise<{ added?: number; failed?: number; error?: string }> {
+  await assertAdmin()
   try {
     const clean = urls.map((u) => u.trim()).filter((u) => /^https?:\/\//i.test(u))
     if (!clean.length) return { error: 'No usable image URLs' }
@@ -145,6 +148,7 @@ export async function addInspirationPictures(formData: FormData): Promise<{
   notes?: string[]
   error?: string
 }> {
+  await assertAdmin()
   try {
     const personaId = String(formData.get('personaId') ?? '')
     if (!personaId) return { error: 'No style' }
@@ -178,6 +182,7 @@ export async function scoreInspirationImages(
   personaId: string,
   limit = 40,
 ): Promise<{ scored?: number; failed?: number; error?: string }> {
+  await assertAdmin()
   try {
     const admin = createAdminClient() as any
     const { data: pending, error } = await admin
@@ -233,6 +238,7 @@ export async function correctInspirationScores(
   imageId: string,
   patch: Partial<InspirationScores>,
 ): Promise<{ error?: string }> {
+  await assertAdmin()
   try {
     const admin = createAdminClient() as any
     const { data: row, error } = await admin
@@ -272,6 +278,7 @@ export async function setInspirationStatus(
   imageId: string,
   status: 'confirmed' | 'rejected' | 'scored',
 ): Promise<{ error?: string }> {
+  await assertAdmin()
   try {
     const admin = createAdminClient() as any
     const { data: row } = await admin
@@ -293,6 +300,7 @@ export async function setInspirationStatus(
 
 /** Bulk confirm — for a grid where most reads were right. */
 export async function confirmAllScored(personaId: string): Promise<{ confirmed?: number; error?: string }> {
+  await assertAdmin()
   try {
     const admin = createAdminClient() as any
     const { data, error } = await admin.from('inspiration_image')
@@ -344,6 +352,7 @@ export async function recomputeEnvelope(personaId: string): Promise<{
   belowMinimum?: boolean
   error?: string
 }> {
+  await assertAdmin()
   try {
     const admin = createAdminClient() as any
     const { data, error } = await admin
@@ -395,6 +404,7 @@ export async function recomputeEnvelope(personaId: string): Promise<{
 
 /** Guard for go-live: a persona needs a real moodboard behind it. */
 export async function confirmedImageCount(personaId: string): Promise<number> {
+  await assertAdmin()
   try {
     const admin = createAdminClient() as any
     const { count } = await admin

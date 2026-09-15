@@ -6,6 +6,7 @@ import { markUniqueSold, setRescueReplacement, rescueReviewQueue } from '@/lib/r
 import { onItemApproved } from '@/lib/second-hand-intake'
 import { runFeed, feedMerchants } from '@/lib/studio/second-hand-feed'
 import type { SizeCategory } from '@/lib/size-canonical'
+import { assertAdmin } from '@/lib/admin-audit'
 
 const PATH = '/admin/second-hand'
 
@@ -20,6 +21,7 @@ export async function updateMerchantSourcing(
     webhook_secret?: string | null
   },
 ): Promise<{ error?: string }> {
+  await assertAdmin()
   try {
     const admin = createAdminClient()
     const { error } = await (admin.from('merchant') as any).update(patch).eq('merchant_id', merchantId)
@@ -43,6 +45,7 @@ export async function setBrandSizeOffset(
   category: SizeCategory | 'default',
   steps: number,
 ): Promise<{ error?: string }> {
+  await assertAdmin()
   try {
     const admin = createAdminClient()
     const { data: brand } = await admin
@@ -67,6 +70,7 @@ export async function setBrandSizeOffset(
 
 /** Mark a one-of-one sold by hand — retires its looks and starts the rescues. */
 export async function markSoldByHand(itemId: string): Promise<{ error?: string; retired?: number; rescued?: number }> {
+  await assertAdmin()
   try {
     const res = await markUniqueSold(itemId, 'manual')
     revalidatePath(PATH)
@@ -78,6 +82,7 @@ export async function markSoldByHand(itemId: string): Promise<{ error?: string; 
 
 /** Classify + fast-compose a piece now, rather than waiting for the next run. */
 export async function styleNow(itemId: string): Promise<{ error?: string; composed?: number }> {
+  await assertAdmin()
   const res = await onItemApproved(itemId)
   revalidatePath(PATH)
   return res.error ? { error: res.error } : { composed: res.composed ?? 0 }
@@ -88,17 +93,20 @@ export async function chooseRescueReplacement(
   rescueId: string,
   itemId: string,
 ): Promise<{ error?: string }> {
+  await assertAdmin()
   const res = await setRescueReplacement(rescueId, itemId)
   revalidatePath(PATH)
   return res
 }
 
 export async function listRescueReviewQueue() {
+  await assertAdmin()
   return rescueReviewQueue()
 }
 
 /** Pull every configured feed on demand. */
 export async function pullFeedsNow(): Promise<{ merchants: number; sold: number; error?: string }> {
+  await assertAdmin()
   try {
     const merchants = await feedMerchants()
     let sold = 0
@@ -122,6 +130,7 @@ export async function setSizeOverride(
   on: boolean,
   note: string | null,
 ): Promise<{ error?: string }> {
+  await assertAdmin()
   try {
     const admin = createAdminClient()
     const { error } = await (admin.from('outfit_item') as any)

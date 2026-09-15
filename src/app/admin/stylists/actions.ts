@@ -26,6 +26,7 @@ import { ingestInspirationImages, confirmedImageCount } from './inspiration-acti
 import { MIN_CONFIRMED_IMAGES } from '@/lib/inspiration'
 import { CONSTITUTION_ARTICLES } from '@/lib/house-style'
 import { autonomyProgress, type AutonomyProgress } from '@/lib/autonomy'
+import { assertAdmin } from '@/lib/admin-audit'
 
 export interface StylistListEntry extends Stylist {
   autonomy: AutonomyProgress
@@ -34,6 +35,7 @@ export interface StylistListEntry extends Stylist {
 }
 
 export async function loadStylistList(): Promise<StylistListEntry[]> {
+  await assertAdmin()
   const stylists = await listStylists()
   const admin = createAdminClient()
   const out: StylistListEntry[] = []
@@ -61,6 +63,7 @@ export async function createPersonaDraft(
   name: string,
   moodboardUrls: string[],
 ): Promise<{ stylistId?: string; error?: string }> {
+  await assertAdmin()
   try {
     if (!name.trim()) return { error: 'Name required' }
     const urls = moodboardUrls.map((u) => u.trim()).filter((u) => /^https?:\/\//.test(u))
@@ -102,6 +105,7 @@ export async function scoreMoodboard(stylistId: string): Promise<{
   failed?: number
   error?: string
 }> {
+  await assertAdmin()
   try {
     const stylist = await getStylist(stylistId)
     if (!stylist) return { error: 'Stylist not found' }
@@ -158,6 +162,7 @@ export async function updateStylist(
   stylistId: string,
   patch: { name?: string; voice_notes?: string; constitution?: string },
 ): Promise<{ ok?: true; error?: string }> {
+  await assertAdmin()
   try {
     const admin = createAdminClient()
     const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
@@ -180,6 +185,7 @@ export async function updateStylist(
 
 // Step 3 — compute the item eligibility mask (auto; manual overrides survive).
 export async function computeStylistMask(stylistId: string): Promise<{ eligible?: number; excluded?: number; error?: string }> {
+  await assertAdmin()
   try {
     const res = await scoreItemMaskForStylist(stylistId)
     revalidatePath('/admin/stylists')
@@ -193,6 +199,7 @@ export async function computeStylistMask(stylistId: string): Promise<{ eligible?
 // enter MY review queue tagged with the persona; my approvals and swaps
 // calibrate the persona's own learning state.
 export async function composeSeedSets(stylistId: string, nSets = 3): Promise<{ sets?: number; staged?: number; error?: string }> {
+  await assertAdmin()
   try {
     const admin = createAdminClient()
     const { data: mask } = await admin
@@ -234,6 +241,7 @@ export async function composeSeedSets(stylistId: string, nSets = 3): Promise<{ s
 
 // Step 5 — go live, gated on the seed sets being fully reviewed.
 export async function setStylistLive(stylistId: string): Promise<{ ok?: true; error?: string }> {
+  await assertAdmin()
   try {
     const admin = createAdminClient()
     const [{ count: pending }, { count: approved }] = await Promise.all([
@@ -261,6 +269,7 @@ export async function setStylistLive(stylistId: string): Promise<{ ok?: true; er
 
 // Chloe as stylist 001 — idempotent backfill.
 export async function runStylistBackfill(): Promise<Awaited<ReturnType<typeof runChloeBackfill>>> {
+  await assertAdmin()
   const res = await runChloeBackfill()
   revalidatePath('/admin/stylists')
   revalidatePath('/admin')
@@ -269,10 +278,12 @@ export async function runStylistBackfill(): Promise<Awaited<ReturnType<typeof ru
 
 // Brand demo mode (never auto-publishes; draft project output).
 export async function runBrandDemo(brandId: string, nSets: number): Promise<Awaited<ReturnType<typeof composeBrandDemo>>> {
+  await assertAdmin()
   return composeBrandDemo(brandId, nSets)
 }
 
 export async function listBrandsForDemo(): Promise<{ brand_id: string; name: string }[]> {
+  await assertAdmin()
   try {
     const admin = createAdminClient()
     const { data } = await admin.from('brand' as any).select('brand_id, name').order('name')

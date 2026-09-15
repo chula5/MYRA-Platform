@@ -18,6 +18,7 @@ import { getReadyAndLiveItems } from '@/lib/admin-queries'
 import { generateHiggsfieldShootForOutfit } from '@/app/admin/projects/higgsfield-actions'
 import { SET_MIN_LIVE } from '@/lib/styling-sets'
 import { revalidatePath } from 'next/cache'
+import { assertAdmin } from '@/lib/admin-audit'
 
 export interface PausedSet {
   styling_set_id: string
@@ -38,6 +39,7 @@ export async function runStockSentinel(): Promise<{
   setsUnderStyled: number
   error?: string
 }> {
+  await assertAdmin()
   const admin = createAdminClient()
   try {
     const { data: dead } = await admin
@@ -134,6 +136,7 @@ export async function runStockSentinel(): Promise<{
 // ── Paused sets + one-decision hero replacement ──────────────────────────────
 
 export async function loadPausedSets(): Promise<PausedSet[]> {
+  await assertAdmin()
   try {
     const admin = createAdminClient()
     const { data: sets } = await admin
@@ -176,6 +179,7 @@ export interface HeroReplacementOption {
 // Ranked replacements for a dead hero: same slot, in stock, most compatible
 // with the outgoing hero (so the set's character survives the swap).
 export async function getHeroReplacementOptions(stylingSetId: string): Promise<{ options: HeroReplacementOption[]; error?: string }> {
+  await assertAdmin()
   try {
     const admin = createAdminClient()
     const { data: setRow } = await admin.from('styling_set' as any).select('hero_item_id').eq('styling_set_id', stylingSetId).maybeSingle()
@@ -212,6 +216,7 @@ export async function applyHeroReplacement(
   stylingSetId: string,
   replacementItemId: string,
 ): Promise<{ swapped: number; error?: string }> {
+  await assertAdmin()
   try {
     const admin = createAdminClient()
     const [{ data: setRow }, replacement] = await Promise.all([

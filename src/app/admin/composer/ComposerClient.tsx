@@ -2,17 +2,8 @@
 
 import { useState, useTransition, useEffect, useRef } from 'react'
 import { thumbUrl } from '@/lib/image-utils'
-import {
-  composeForAnchor,
-  searchAnchorItems,
-  approveCandidate,
-  getSwapOptions,
-  rescoreCandidate,
-  recordSwap,
-  type ComposedCandidatePayload,
-  type SlotPlanPayload,
-  type SwapOption,
-} from './actions'
+import { composeForAnchor, searchAnchorItems, approveCandidate, getSwapOptions, rescoreCandidate, recordSwap } from './actions.gated'
+import type { ComposedCandidatePayload, SlotPlanPayload, SwapOption } from './actions'
 
 type Slot = 'outerwear' | 'top' | 'bottom' | 'dress' | 'shoe' | 'bag' | 'jewellery' | 'accessory'
 

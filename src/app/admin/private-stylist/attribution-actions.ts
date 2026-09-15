@@ -21,6 +21,7 @@ import {
   type Scope, type Signal, type ClientRun, type Attribution, type StylistFit,
   type TransferPoint,
 } from '@/lib/learning-scope'
+import { assertAdmin } from '@/lib/admin-audit'
 
 const PATH = '/admin/private-stylist'
 
@@ -100,6 +101,7 @@ export async function tagSignalScope(
   feedbackId: string,
   scope: Scope,
 ): Promise<{ error?: string }> {
+  await assertAdmin()
   const admin = createAdminClient() as any
   const { error } = await admin.from('pilot_look_feedback')
     .update({ scope, scope_source: 'manual' }).eq('feedback_id', feedbackId)
@@ -110,6 +112,7 @@ export async function tagSignalScope(
 
 /** Every decision on one look, tagged at once — one tap after a swap. */
 export async function tagLookScope(lookId: string, scope: Scope): Promise<{ tagged: number; error?: string }> {
+  await assertAdmin()
   const admin = createAdminClient() as any
   const { data, error } = await admin.from('pilot_look_feedback')
     .update({ scope, scope_source: 'manual' }).eq('look_id', lookId).select('feedback_id')
@@ -141,6 +144,7 @@ export interface PromotionRun {
  * write that drift into it.
  */
 export async function runPromotionPass(): Promise<PromotionRun> {
+  await assertAdmin()
   const admin = createAdminClient() as any
   try {
     const signals = await loadSignals(admin)
@@ -224,6 +228,7 @@ export interface ClientAttribution {
 }
 
 export async function loadClientAttribution(memberId: string): Promise<ClientAttribution | { error: string }> {
+  await assertAdmin()
   const admin = createAdminClient() as any
   try {
     const signals = await loadSignals(admin, { memberId })
@@ -262,6 +267,7 @@ export async function loadClientAttribution(memberId: string): Promise<ClientAtt
 // ── Transfer metric ─────────────────────────────────────────────────────────
 
 export async function loadTransferSeries(): Promise<{ points: TransferPoint[]; error?: string }> {
+  await assertAdmin()
   const admin = createAdminClient() as any
   try {
     const { data: members } = await admin
@@ -320,6 +326,7 @@ export interface InheritanceReport {
  * discovered afterwards.
  */
 export async function loadInheritanceReport(memberId: string): Promise<InheritanceReport | { error: string }> {
+  await assertAdmin()
   const admin = createAdminClient() as any
   try {
     const { data: m } = await admin.from('pilot_member').select('*').eq('member_id', memberId).single()
@@ -429,6 +436,7 @@ export interface AlignResult {
  * Idempotent: safe to run whenever the layers look wrong.
  */
 export async function alignStylistLayers(): Promise<AlignResult> {
+  await assertAdmin()
   const admin = createAdminClient() as any
   const notes: string[] = []
   try {

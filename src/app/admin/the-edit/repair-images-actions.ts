@@ -3,6 +3,7 @@
 import { createAdminClient } from '@/lib/supabase-server'
 import { revalidatePath } from 'next/cache'
 import { isCloudinaryUrl, persistImageToCloudinary } from '@/lib/cloudinary-persist'
+import { assertAdmin } from '@/lib/admin-audit'
 
 /**
  * Migrate live outfits whose display image is NOT hosted on Cloudinary
@@ -14,6 +15,7 @@ import { isCloudinaryUrl, persistImageToCloudinary } from '@/lib/cloudinary-pers
 export async function repairLiveOutfitImages(
   batch = 8,
 ): Promise<{ repaired: number; failed: number; remaining: number; error?: string }> {
+  await assertAdmin()
   const supabase = createAdminClient()
   try {
     const { data, error } = await supabase

@@ -20,6 +20,7 @@ import {
   lookConfidence, calibrateThreshold, indexHistory, historySignals,
   HIGH_CONFIDENCE, type LookRecord, type Calibration,
 } from '@/lib/look-confidence'
+import { assertAdmin } from '@/lib/admin-audit'
 
 const PATH = '/admin/private-stylist'
 
@@ -61,6 +62,7 @@ export interface MemberConfidence {
  * to know whether it can be trusted on a look nobody has seen yet.
  */
 export async function loadMemberConfidence(memberId: string): Promise<MemberConfidence> {
+  await assertAdmin()
   const empty: MemberConfidence = {
     byLook: {},
     calibration: { threshold: HIGH_CONFIDENCE, separation: 0, cleanMean: 0, editedMean: 0, sample: 0, precision: 0, lift: 0, reaching: 0, usable: false },
@@ -181,6 +183,7 @@ export async function createClientLogin(
  * unwatched, so publishing stays a decision until it is.
  */
 export async function sendLookToClient(lookId: string): Promise<{ error?: string }> {
+  await assertAdmin()
   const admin = createAdminClient() as any
   try {
     const { data: look } = await admin
@@ -207,6 +210,7 @@ export async function sendLookToClient(lookId: string): Promise<{ error?: string
 
 /** Take a look back — she stops seeing it, and nothing she said is undone. */
 export async function unsendLook(lookId: string): Promise<{ error?: string }> {
+  await assertAdmin()
   const admin = createAdminClient() as any
   const { error } = await admin.from('pilot_look')
     .update({ visible_to_client: false }).eq('look_id', lookId)
@@ -217,6 +221,7 @@ export async function unsendLook(lookId: string): Promise<{ error?: string }> {
 
 /** Every shot look she has not been sent yet, sent at once. */
 export async function sendAllShotLooks(memberId: string): Promise<{ sent: number; error?: string }> {
+  await assertAdmin()
   const admin = createAdminClient() as any
   try {
     const { data: dels } = await admin.from('pilot_delivery').select('delivery_id').eq('member_id', memberId)

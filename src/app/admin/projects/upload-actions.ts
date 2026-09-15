@@ -3,6 +3,7 @@
 import crypto from 'crypto'
 import { createServerClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
+import { assertAdmin } from '@/lib/admin-audit'
 
 const CLOUD_NAME = 'dugby2pow'
 const API_KEY = '333725823491761'
@@ -20,6 +21,7 @@ function makePublicId(imageUrl: string): string {
 }
 
 export async function uploadOutfitToCloudinaryAndCreateProject(formData: FormData) {
+  await assertAdmin()
   const imageUrl = (formData.get('image_url') as string)?.trim()
   const projectTitle = (formData.get('project_title') as string)?.trim() || 'New Outfit Project'
   const celebrityName = (formData.get('celebrity_name') as string)?.trim() || null

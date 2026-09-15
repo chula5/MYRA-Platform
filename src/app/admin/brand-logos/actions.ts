@@ -6,6 +6,7 @@
 
 import { createAdminClient } from '@/lib/supabase-server'
 import { revalidatePath } from 'next/cache'
+import { assertAdmin } from '@/lib/admin-audit'
 
 const BUCKET = 'brand-logos'
 const EXT: Record<string, string> = {
@@ -29,6 +30,7 @@ export type BrandLogoRow = {
 }
 
 export async function listBrandLogos(): Promise<BrandLogoRow[]> {
+  await assertAdmin()
   const supa = createAdminClient()
   const { data: brands } = await supa.from('brand').select('brand_id, name, logo_url').order('name')
   if (!brands) return []
@@ -79,6 +81,7 @@ async function store(brandId: string, name: string, bytes: Buffer, contentType: 
 
 /** Upload a file chosen in the browser. */
 export async function uploadBrandLogo(formData: FormData) {
+  await assertAdmin()
   const brandId = String(formData.get('brand_id') ?? '')
   const name = String(formData.get('name') ?? '')
   const file = formData.get('file')
@@ -93,6 +96,7 @@ export async function uploadBrandLogo(formData: FormData) {
 
 /** Pull a logo from a URL that has been pasted in. */
 export async function fetchBrandLogoFromUrl(brandId: string, name: string, url: string) {
+  await assertAdmin()
   if (!brandId || !name) return { error: 'Missing brand' }
   let target: URL
   try {
@@ -123,6 +127,7 @@ export async function fetchBrandLogoFromUrl(brandId: string, name: string, url: 
 
 /** Clear a logo that looks wrong, so the tile falls back to the brand name. */
 export async function clearBrandLogo(brandId: string) {
+  await assertAdmin()
   const supa = createAdminClient()
   const { error } = await supa.from('brand').update({ logo_url: null }).eq('brand_id', brandId)
   if (error) return { error: error.message }

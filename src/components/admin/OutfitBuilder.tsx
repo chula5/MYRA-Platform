@@ -8,13 +8,14 @@ import ScoreInput from '@/components/admin/ScoreInput'
 import StatusBadge from '@/components/admin/StatusBadge'
 import StockBadge from '@/components/admin/StockBadge'
 import SizeOverrideControl from '@/components/admin/SizeOverrideControl'
-import { analyseOutfit, type OutfitAnalysis, type DetectedItem } from '@/app/admin/ai/analyse-outfit'
+import { analyseOutfit } from '@/app/admin/ai/analyse-outfit.gated'
+import type { OutfitAnalysis, DetectedItem } from '@/app/admin/ai/analyse-outfit'
 import { scrapeProductInfo } from '@/app/admin/ai/scrape-product'
-import { scrapeAndUploadToCloudinary } from '@/app/admin/items/cloudinary-upload'
+import { scrapeAndUploadToCloudinary } from '@/app/admin/items/cloudinary-upload.gated'
 import { quickAddItemToOutfit, updateQuickItem, reorderOutfitItems, addItemToOutfit, searchItemInventory, getInventoryFilterOptions, updateOutfitTags } from '@/app/admin/projects/actions'
 import { generateCanvaDeck } from '@/app/admin/projects/canva-actions'
-import { generateHiggsfieldShoot } from '@/app/admin/projects/higgsfield-actions'
-import { generateOccasionTags } from '@/app/admin/ai/occasion-tags'
+import { generateHiggsfieldShoot } from '@/app/admin/projects/higgsfield-actions.gated'
+import { generateOccasionTags } from '@/app/admin/ai/occasion-tags.gated'
 import {
   HIGGSFIELD_POSE_OPTIONS,
   buildGenerationPrompt,

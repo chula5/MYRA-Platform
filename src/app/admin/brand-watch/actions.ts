@@ -17,6 +17,7 @@ import {
 import { buildLearning, type DecidedRow } from '@/lib/brand-watch-learning'
 import { discoverProductUrls } from '@/lib/brand-watch-browser'
 import { revalidatePath } from 'next/cache'
+import { assertAdmin } from '@/lib/admin-audit'
 
 export interface QueueItemRow {
   item_id: string
@@ -132,6 +133,7 @@ async function fetchBrandWatchRows(admin: any, statuses: string[]): Promise<any[
 // The learning re-trains on every load from all decisions made so far, so the
 // ranking sharpens each time you come back to a brand.
 export async function loadQueuePage(offset: number, brandName?: string | null, filters: QueueFilters = {}): Promise<QueuePage> {
+  await assertAdmin()
   return queuePage(offset, brandName, filters)
 }
 
@@ -226,6 +228,7 @@ async function queuePage(offset: number, brandName?: string | null, filters: Que
 }
 
 export async function loadBrandWatch(): Promise<BrandWatchData> {
+  await assertAdmin()
   const admin = createAdminClient()
   const { data: watched, error: werr } = await (admin as any)
     .from('watched_brand')
@@ -254,6 +257,7 @@ export async function loadBrandWatch(): Promise<BrandWatchData> {
  * Switching on requires the brand's twin trust, checked here.
  */
 export async function setWatchedBrandAutoKeepTwins(watchedBrandId: string, on: boolean): Promise<{ error?: string }> {
+  await assertAdmin()
   const admin = createAdminClient() as any
   const { data: w } = await admin.from('watched_brand').select('*').eq('watched_brand_id', watchedBrandId).single()
   if (!w) return { error: 'Watchlist row not found' }
@@ -271,6 +275,7 @@ export async function setWatchedBrandAutoKeepTwins(watchedBrandId: string, on: b
 
 /** KEEP TWINS NOW — every twin of her keeps already in this brand's queue, on her press. */
 export async function keepTwinsNowForBrand(watchedBrandId: string): Promise<{ kept?: number; error?: string }> {
+  await assertAdmin()
   const admin = createAdminClient() as any
   const { data: w } = await admin.from('watched_brand').select('*').eq('watched_brand_id', watchedBrandId).single()
   if (!w) return { error: 'Watchlist row not found' }
@@ -289,6 +294,7 @@ export async function keepTwinsNowForBrand(watchedBrandId: string): Promise<{ ke
  * discovered after this moment can be kept automatically.
  */
 export async function setWatchedBrandAutoKeep(watchedBrandId: string, on: boolean): Promise<{ error?: string }> {
+  await assertAdmin()
   const admin = createAdminClient() as any
   const { data: w } = await admin.from('watched_brand').select('*').eq('watched_brand_id', watchedBrandId).single()
   if (!w) return { error: 'Watchlist row not found' }
@@ -311,6 +317,7 @@ export async function setWatchedBrandAutoKeep(watchedBrandId: string, on: boolea
 // min_score or above, any publish date). Both mark everything seen and set up
 // the Monday watching.
 export async function addWatchedBrand(url: string, mode: 'watch' | 'full' = 'watch'): Promise<{ result?: BrandCheckResult; error?: string }> {
+  await assertAdmin()
   const base = normaliseBaseUrl(url)
   if (!base) return { error: 'That doesn’t look like a URL' }
   const admin = createAdminClient()
@@ -365,6 +372,7 @@ export async function addWatchedBrand(url: string, mode: 'watch' | 'full' = 'wat
 // on-taste piece at the brand's current min_score — lower the min score and
 // run again to pull in the next band down.
 export async function fullScanBrand(watchedBrandId: string): Promise<{ result?: BrandCheckResult; error?: string }> {
+  await assertAdmin()
   const admin = createAdminClient()
   const { data } = await (admin as any)
     .from('watched_brand').select('*').eq('watched_brand_id', watchedBrandId).single()
@@ -379,12 +387,14 @@ export async function fullScanBrand(watchedBrandId: string): Promise<{ result?: 
 }
 
 export async function setWatchedBrandActive(watchedBrandId: string, active: boolean): Promise<void> {
+  await assertAdmin()
   const admin = createAdminClient()
   await (admin as any).from('watched_brand').update({ active } as any).eq('watched_brand_id', watchedBrandId)
   revalidatePath('/admin/brand-watch')
 }
 
 export async function setWatchedBrandMinScore(watchedBrandId: string, minScore: number): Promise<void> {
+  await assertAdmin()
   const admin = createAdminClient()
   const clamped = Math.max(-9, Math.min(9, Math.round(minScore)))
   await (admin as any).from('watched_brand').update({ min_score: clamped } as any).eq('watched_brand_id', watchedBrandId)
@@ -392,12 +402,14 @@ export async function setWatchedBrandMinScore(watchedBrandId: string, minScore: 
 }
 
 export async function removeWatchedBrand(watchedBrandId: string): Promise<void> {
+  await assertAdmin()
   const admin = createAdminClient()
   await (admin as any).from('watched_brand').delete().eq('watched_brand_id', watchedBrandId)
   revalidatePath('/admin/brand-watch')
 }
 
 export async function checkBrandNow(watchedBrandId: string): Promise<{ result?: BrandCheckResult; error?: string }> {
+  await assertAdmin()
   const admin = createAdminClient()
   const { data } = await (admin as any)
     .from('watched_brand').select('*').eq('watched_brand_id', watchedBrandId).single()
@@ -414,6 +426,7 @@ export async function checkBrandNow(watchedBrandId: string): Promise<{ result?: 
 }
 
 export async function checkAllBrandsNow(): Promise<{ results: BrandCheckResult[] }> {
+  await assertAdmin()
   const results = await runBrandWatch()
   revalidatePath('/admin/brand-watch')
   return { results }
@@ -421,6 +434,7 @@ export async function checkAllBrandsNow(): Promise<{ results: BrandCheckResult[]
 
 
 export async function keepItems(itemIds: string[]): Promise<{ updated: number }> {
+  await assertAdmin()
   if (!itemIds.length) return { updated: 0 }
   const admin = createAdminClient() as any
   const updated = await keepQueueRows(admin, itemIds)
@@ -435,6 +449,7 @@ export async function keepItems(itemIds: string[]): Promise<{ updated: number }>
 // not just the page loaded in the browser. Matches items via the brand table
 // (same name shown on the queue's brand chips).
 export async function keepAllForBrand(brandName: string): Promise<{ updated: number; error?: string }> {
+  await assertAdmin()
   const admin = createAdminClient() as any
   const { data: brands, error: berr } = await admin.from('brand').select('brand_id').ilike('name', brandName)
   if (berr) return { updated: 0, error: berr.message }
@@ -466,6 +481,7 @@ export async function keepAllForBrand(brandName: string): Promise<{ updated: num
 // been written into the library as a ready item, so unkeeping is a library
 // decision, not a queue one.
 export async function undoSkip(itemIds: string[]): Promise<{ restored: number }> {
+  await assertAdmin()
   if (!itemIds.length) return { restored: 0 }
   const admin = createAdminClient()
   const { data } = await (admin as any)
@@ -482,6 +498,7 @@ const SKIP_REASONS = new Set(['not_style', 'colour', 'type', 'too_young', 'price
 
 /** Why these pieces were skipped — the learning weighs that feature double. */
 export async function setSkipReason(itemIds: string[], reason: string): Promise<{ updated: number; error?: string }> {
+  await assertAdmin()
   if (!itemIds.length || !SKIP_REASONS.has(reason)) return { updated: 0, error: 'Unknown reason' }
   const admin = createAdminClient() as any
   const { data, error } = await admin.from('brand_watch_queue')
@@ -495,6 +512,7 @@ export async function setSkipReason(itemIds: string[], reason: string): Promise<
 /** One Brand Watch decision into Chloe's Style Brain. Never throws. */
 
 export async function skipItems(itemIds: string[]): Promise<{ updated: number }> {
+  await assertAdmin()
   if (!itemIds.length) return { updated: 0 }
   const admin = createAdminClient()
   const { data } = await (admin as any)

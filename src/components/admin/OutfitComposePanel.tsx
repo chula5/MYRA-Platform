@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import { thumbUrl } from '@/lib/image-utils'
-import { approveCandidate, rescoreCandidate, recordSkipDecision, recordSwap } from '@/app/admin/composer/actions'
-import { generateHiggsfieldShootForOutfit } from '@/app/admin/projects/higgsfield-actions'
+import { approveCandidate, rescoreCandidate, recordSkipDecision, recordSwap } from '@/app/admin/composer/actions.gated'
+import { generateHiggsfieldShootForOutfit } from '@/app/admin/projects/higgsfield-actions.gated'
 import type { ReviewItem } from '@/app/admin/outfit-review/actions'
 import type { Slot } from '@/lib/composer'
 

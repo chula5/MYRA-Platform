@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase-server'
 import { revalidatePath } from 'next/cache'
+import { assertAdmin } from '@/lib/admin-audit'
 
 export interface EarlyAccessUser {
   id: string
@@ -16,6 +17,7 @@ export interface EarlyAccessUser {
 const ROLE = 'early_access'
 
 export async function listEarlyAccessUsers(): Promise<{ users: EarlyAccessUser[]; error?: string }> {
+  await assertAdmin()
   const admin = createAdminClient()
   try {
     const { data, error } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 })
@@ -46,6 +48,7 @@ export async function createEarlyAccessUser(
   email: string,
   password: string,
 ): Promise<{ ok?: boolean; error?: string }> {
+  await assertAdmin()
   const cleanEmail = (email || '').trim().toLowerCase()
   if (!cleanEmail || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(cleanEmail)) {
     return { error: 'Enter a valid email address' }
@@ -78,6 +81,7 @@ export async function createEarlyAccessUser(
 }
 
 export async function deleteEarlyAccessUser(userId: string): Promise<{ ok?: boolean; error?: string }> {
+  await assertAdmin()
   if (!userId) return { error: 'No user id' }
   const admin = createAdminClient()
   try {

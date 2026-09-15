@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase-server'
 import { revalidatePath } from 'next/cache'
+import { assertAdmin } from '@/lib/admin-audit'
 
 function parseNullableInt(val: FormDataEntryValue | null): number | null {
   if (!val || val === '') return null
@@ -77,6 +78,7 @@ function extractOutfitFields(formData: FormData) {
 export async function createProject(
   formData: FormData
 ): Promise<{ projectId?: string; error?: string }> {
+  await assertAdmin()
   const supabase = createAdminClient()
   try {
     const { data, error } = await supabase
@@ -105,6 +107,7 @@ export async function updateProject(
   projectId: string,
   formData: FormData
 ): Promise<{ error?: string }> {
+  await assertAdmin()
   const supabase = createAdminClient()
   try {
     const { error } = await supabase
@@ -129,6 +132,7 @@ export async function updateProjectStatus(
   projectId: string,
   status: 'draft' | 'in_review' | 'live' | 'archived'
 ): Promise<{ error?: string }> {
+  await assertAdmin()
   const supabase = createAdminClient()
   try {
     const { error } = await supabase
@@ -146,6 +150,7 @@ export async function updateProjectStatus(
 }
 
 export async function publishProject(projectId: string): Promise<{ error?: string }> {
+  await assertAdmin()
   const supabase = createAdminClient()
   try {
     const now = new Date().toISOString()
@@ -192,6 +197,7 @@ export async function setOutfitsStatus(
   outfitIds: string[],
   status: 'live' | 'draft' | 'archived',
 ): Promise<{ error?: string; count?: number }> {
+  await assertAdmin()
   if (!outfitIds || outfitIds.length === 0) return { error: 'No outfits selected' }
   const supabase = createAdminClient()
   try {
@@ -218,6 +224,7 @@ export async function createOutfit(
   projectId: string,
   formData: FormData
 ): Promise<{ outfitId?: string; error?: string }> {
+  await assertAdmin()
   const supabase = createAdminClient()
   try {
     const fields = extractOutfitFields(formData)
@@ -268,6 +275,7 @@ export async function updateOutfit(
   outfitId: string,
   formData: FormData
 ): Promise<{ error?: string }> {
+  await assertAdmin()
   const supabase = createAdminClient()
   try {
     const fields = extractOutfitFields(formData)
@@ -304,6 +312,7 @@ export async function updateOutfitTags(
   outfitId: string,
   tags: string[],
 ): Promise<{ error?: string }> {
+  await assertAdmin()
   const supabase = createAdminClient()
   try {
     const clean = Array.from(
@@ -340,6 +349,7 @@ export async function updateOutfitAgeRanges(
   outfitId: string,
   ageRanges: string[],
 ): Promise<{ error?: string }> {
+  await assertAdmin()
   const supabase = createAdminClient()
   try {
     const clean = Array.from(new Set((ageRanges ?? []).map((t) => t.trim()).filter(Boolean)))
@@ -382,6 +392,7 @@ export async function searchItemInventory(params: string | {
   }>
   error?: string
 }> {
+  await assertAdmin()
   // Back-compat: a bare string is treated as the text query.
   const p = typeof params === 'string' ? { query: params } : params
   const query = (p.query ?? '').trim()
@@ -436,6 +447,7 @@ export async function getInventoryFilterOptions(): Promise<{
   colours: string[]
   error?: string
 }> {
+  await assertAdmin()
   const supabase = createAdminClient()
   try {
     const brands = new Set<string>()
@@ -471,6 +483,7 @@ export async function addItemToOutfit(
   itemId: string,
   slot: string
 ): Promise<{ error?: string }> {
+  await assertAdmin()
   const supabase = createAdminClient()
   try {
     const { error } = await supabase.from('outfit_item').insert([
@@ -508,6 +521,7 @@ export async function quickAddItemToOutfit(
   imageUrl: string,
   retailerUrl: string
 ): Promise<{ error?: string }> {
+  await assertAdmin()
   const supabase = createAdminClient()
   const SLOT_DEFAULT: Record<string, string> = {
     outerwear: 'coat', top: 'shirt', bottom: 'trousers',
@@ -593,6 +607,7 @@ export async function updateQuickItem(
   imageUrl: string,
   retailerUrl: string
 ): Promise<{ error?: string }> {
+  await assertAdmin()
   const supabase = createAdminClient()
   try {
     // Find or create brand
@@ -643,6 +658,7 @@ export async function reorderOutfitItems(
   outfitId: string,
   orderedIds: string[]
 ): Promise<{ error?: string }> {
+  await assertAdmin()
   const supabase = createAdminClient()
   try {
     const results = await Promise.all(
@@ -672,6 +688,7 @@ export async function removeItemFromOutfit(
   outfitItemId: string,
   outfitId: string
 ): Promise<{ error?: string }> {
+  await assertAdmin()
   const supabase = createAdminClient()
   try {
     const { error } = await supabase

@@ -3,15 +3,8 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { thumbUrl } from '@/lib/image-utils'
-import {
-  runPipelineBatch,
-  fastLaneApprove,
-  fastLaneOverride,
-  pipelineReject,
-  standardApprove,
-  runEjectionBackfill,
-  type PipelineCard,
-} from './actions'
+import { runPipelineBatch, fastLaneApprove, fastLaneOverride, pipelineReject, standardApprove, runEjectionBackfill } from './actions.gated'
+import type { PipelineCard } from './actions'
 
 const SLOT_LABEL: Record<string, string> = {
   outerwear: 'OUTERWEAR', top: 'TOP', bottom: 'BOTTOM', dress: 'DRESS',

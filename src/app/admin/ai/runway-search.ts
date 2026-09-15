@@ -1,6 +1,7 @@
 'use server'
 
 import Anthropic from '@anthropic-ai/sdk'
+import { assertAdmin } from '@/lib/admin-audit'
 
 export interface RunwayLook {
   letter: string
@@ -46,6 +47,7 @@ const SCRAPE_HEADERS = {
 
 /** Scrape up to 4 images for a brand/season from tag-walk */
 export async function fetchLookImages(brand: string, season: string): Promise<string[]> {
+  await assertAdmin()
   try {
     const seasonSlug = seasonToTagWalkSlug(season)
     const brandSlug = brand.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
@@ -86,6 +88,7 @@ function seasonToTagWalkSlug(season: string): string {
 }
 
 export async function searchRunwayLooksWithImages(query: string): Promise<{ data?: RunwaySearchResult; error?: string }> {
+  await assertAdmin()
   const res = await searchRunwayLooks(query)
   if (res.error || !res.data) return res
 
@@ -101,6 +104,7 @@ export async function searchRunwayLooksWithImages(query: string): Promise<{ data
 }
 
 export async function searchRunwayLooks(query: string): Promise<{ data?: RunwaySearchResult; error?: string }> {
+  await assertAdmin()
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return { error: 'ANTHROPIC_API_KEY not configured' }
 

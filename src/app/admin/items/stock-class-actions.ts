@@ -6,6 +6,7 @@ import { checkStockDetailed } from '@/app/admin/items/stock-check'
 import { upsertSizeAvailability, loadBrandOffsets, loadSizeRowsFor } from '@/lib/size-availability'
 import { markUniqueSold } from '@/lib/rescue'
 import type { SizeRow } from '@/lib/size-match'
+import { assertAdmin } from '@/lib/admin-audit'
 
 /**
  * Per-item override of the class inherited from the merchant.
@@ -18,6 +19,7 @@ export async function setItemStockClass(
   itemId: string,
   stockClass: 'replenishable' | 'unique',
 ): Promise<{ error?: string }> {
+  await assertAdmin()
   try {
     const admin = createAdminClient()
     const { data: item } = await admin
@@ -42,6 +44,7 @@ export async function setItemStockClass(
 export async function refreshItemSizes(
   itemId: string,
 ): Promise<{ sizes?: SizeRow[]; error?: string }> {
+  await assertAdmin()
   try {
     const admin = createAdminClient()
     const { data: item } = await admin
@@ -71,6 +74,7 @@ export async function refreshItemSizes(
 export async function markItemSold(
   itemId: string,
 ): Promise<{ retired?: number; rescued?: number; error?: string }> {
+  await assertAdmin()
   try {
     const res = await markUniqueSold(itemId, 'manual')
     revalidatePath(`/admin/items/${itemId}/edit`)
@@ -83,5 +87,6 @@ export async function markItemSold(
 
 /** Current size rows, for the item edit panel. */
 export async function getItemSizeRows(itemId: string): Promise<SizeRow[]> {
+  await assertAdmin()
   return (await loadSizeRowsFor([itemId])).get(itemId) ?? []
 }

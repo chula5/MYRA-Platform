@@ -7,9 +7,9 @@ import ScoreInput from '@/components/admin/ScoreInput'
 import StockBadge from '@/components/admin/StockBadge'
 import { createBrand, updateBrand } from '@/app/admin/items/actions'
 import { analyseProductUrl, type AnalysedProduct } from '@/app/admin/items/analyse-url'
-import { analyseProductImage } from '@/app/admin/items/analyse-image'
-import { scrapeAndUploadToCloudinary, uploadBase64ToCloudinary } from '@/app/admin/items/cloudinary-upload'
-import { checkItemStock } from '@/app/admin/items/stock-check'
+import { analyseProductImage } from '@/app/admin/items/analyse-image.gated'
+import { scrapeAndUploadToCloudinary, uploadBase64ToCloudinary } from '@/app/admin/items/cloudinary-upload.gated'
+import { checkItemStock } from '@/app/admin/items/stock-check.gated'
 import { discoverSimilarForItem } from '@/app/admin/items/discover-similar'
 
 const ITEM_TYPES: ItemType[] = [

@@ -11,6 +11,7 @@ import { revalidatePath } from 'next/cache'
 // "emerald" all resolve to the 'green' colour_family, so a piece whose product
 // name never says "green" still answers a green search.
 import { COLOUR, STOPWORDS } from '@/lib/search-taxonomy'
+import { assertAdmin } from '@/lib/admin-audit'
 
 export type PickCollection = 'picks' | 'bags' | 'mint'
 
@@ -32,6 +33,7 @@ export interface AdminPickRow {
 }
 
 export async function listPicks(): Promise<Record<PickCollection, AdminPickRow[]>> {
+  await assertAdmin()
   const empty: Record<PickCollection, AdminPickRow[]> = { picks: [], bags: [], mint: [] }
   try {
     const admin = createAdminClient()
@@ -110,6 +112,7 @@ export async function searchPickItems(
   collection: PickCollection,
   filters?: { brand?: string; itemType?: string; colour?: string },
 ): Promise<{ item_id: string; product_name: string; brand_name: string | null; image_url: string | null; item_type: string; status: string }[]> {
+  await assertAdmin()
   try {
     const admin = createAdminClient()
     // Drafts are pickable in ADMIN (badged, so you can curate ahead of going
@@ -227,6 +230,7 @@ export async function searchPickItems(
 // Brand list for the filter dropdown (every brand with non-archived items —
 // drafts included, since drafts are curatable ahead of going live).
 export async function listPickBrands(): Promise<{ name: string; count: number }[]> {
+  await assertAdmin()
   try {
     const admin = createAdminClient()
     const { data } = await admin
@@ -253,6 +257,7 @@ export async function listPickBrands(): Promise<{ name: string; count: number }[
 export async function searchPickOutfits(
   q: string,
 ): Promise<{ outfit_id: string; label: string; image_url: string | null; status: string }[]> {
+  await assertAdmin()
   try {
     const admin = createAdminClient()
     const needle = q.trim()
@@ -304,6 +309,7 @@ export async function addOutfitPick(
   collection: PickCollection,
   outfitId: string,
 ): Promise<{ ok?: true; error?: string }> {
+  await assertAdmin()
   try {
     const admin = createAdminClient()
     const { data: max } = await admin
@@ -334,6 +340,7 @@ export async function addOutfitPick(
 }
 
 export async function addPick(collection: PickCollection, itemId: string): Promise<{ ok?: true; error?: string }> {
+  await assertAdmin()
   try {
     const admin = createAdminClient()
     const { data: max } = await admin
@@ -363,6 +370,7 @@ export async function addPick(collection: PickCollection, itemId: string): Promi
 }
 
 export async function removePick(id: string): Promise<{ ok: true }> {
+  await assertAdmin()
   try {
     const admin = createAdminClient()
     await admin.from('our_pick' as any).delete().eq('id', id)
@@ -382,6 +390,7 @@ export async function removePick(id: string): Promise<{ ok: true }> {
  * something you have to arrive at with the arrows.
  */
 export async function makeTileImage(id: string): Promise<{ ok: true }> {
+  await assertAdmin()
   try {
     const admin = createAdminClient()
     const { data: row } = await admin.from('our_pick' as any).select('*').eq('id', id).maybeSingle()
@@ -407,6 +416,7 @@ export async function makeTileImage(id: string): Promise<{ ok: true }> {
 }
 
 export async function movePick(id: string, direction: 'up' | 'down'): Promise<{ ok: true }> {
+  await assertAdmin()
   try {
     const admin = createAdminClient()
     const { data: row } = await admin.from('our_pick' as any).select('*').eq('id', id).maybeSingle()

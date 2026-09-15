@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { thumbUrl } from '@/lib/image-utils'
 import { swapOutfitItemForStock, addItemToOutfitForStock, type StockOutfit, type StockOutfitItem } from './stock-impact'
-import { generateHiggsfieldShootForOutfit } from '@/app/admin/projects/higgsfield-actions'
+import { generateHiggsfieldShootForOutfit } from '@/app/admin/projects/higgsfield-actions.gated'
 import type { ReviewItem } from '@/app/admin/outfit-review/actions'
 
 const SLOT_LABEL: Record<string, string> = {

@@ -1,4 +1,7 @@
-'use server'
+// NOT a 'use server' module, on purpose: every export of a 'use server' file is
+// callable by anyone from the browser, and these run without an admin session
+// (cron, src/lib pipelines, /me client actions). Browser-facing callers must go
+// through an admin-gated 'use server' wrapper. Don't add 'use server' here.
 
 // MULTI-STYLING COMPOSITION — the composer's unit of work is a STYLING SET:
 // every hero item gets 3-4 distinct outfit variants in one run, linked by a

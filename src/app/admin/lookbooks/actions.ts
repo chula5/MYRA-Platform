@@ -2,11 +2,13 @@
 
 import { createAdminClient } from '@/lib/supabase-server'
 import { revalidatePath } from 'next/cache'
+import { assertAdmin } from '@/lib/admin-audit'
 
 export async function addOutfitToLookbook(
   outfitId: string,
   lookbookId: string,
 ): Promise<{ error?: string }> {
+  await assertAdmin()
   const supabase = createAdminClient()
   try {
     const { error } = await supabase
@@ -25,6 +27,7 @@ export async function removeOutfitFromLookbook(
   outfitId: string,
   lookbookId: string,
 ): Promise<{ error?: string }> {
+  await assertAdmin()
   const supabase = createAdminClient()
   try {
     const { error } = await supabase

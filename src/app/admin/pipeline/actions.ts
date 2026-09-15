@@ -1,4 +1,7 @@
-'use server'
+// NOT a 'use server' module, on purpose: every export of a 'use server' file is
+// callable by anyone from the browser, and these run without an admin session
+// (cron, src/lib pipelines, /me client actions). The admin UI calls the admin-gated
+// wrappers in ./actions.gated.ts. Don't add 'use server' here.
 
 // The self-critiquing pipeline queue: batch-compose outfits, gate them by
 // confidence, and split them into a FAST lane (one-tap batch approval, image

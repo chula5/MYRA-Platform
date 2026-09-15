@@ -14,6 +14,14 @@ export async function requireAdminUser(): Promise<{ ok: boolean; userId: string 
   }
 }
 
+// The gate for server actions that have no error shape to return: every export
+// of a 'use server' file is callable by anyone from the browser, so the first
+// line of an admin action is this.
+export async function assertAdmin(): Promise<void> {
+  const { ok } = await requireAdminUser()
+  if (!ok) throw new Error('Not authorised')
+}
+
 export async function writeAudit(opts: {
   actor: string
   action: string

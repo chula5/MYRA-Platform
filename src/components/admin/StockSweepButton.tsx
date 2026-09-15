@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { listItemsForStockSweep, checkItemStock } from '@/app/admin/items/stock-check'
+import { listItemsForStockSweep, checkItemStock } from '@/app/admin/items/stock-check.gated'
 
 const CONCURRENCY = 4
 

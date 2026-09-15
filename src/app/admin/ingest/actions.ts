@@ -6,6 +6,7 @@ import { analyseProductUrl, type AnalysedProduct } from '@/app/admin/items/analy
 import { scrapeAndUploadToCloudinary } from '@/app/admin/items/cloudinary-upload'
 import { checkStockForUrl } from '@/app/admin/items/stock-check'
 import { revalidatePath } from 'next/cache'
+import { assertAdmin } from '@/lib/admin-audit'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -225,6 +226,7 @@ export async function batchAnalyseUrls(
   input: string,
   mode: 'list' | 'collection',
 ): Promise<{ candidates?: ParsedCandidate[]; usedTasteFilter?: boolean; error?: string }> {
+  await assertAdmin()
   try {
     let urls: string[]
     let usedTasteFilter = false
@@ -279,6 +281,7 @@ export interface ApproveCandidatePayload {
 export async function bulkApproveCandidates(
   candidates: ApproveCandidatePayload[],
 ): Promise<{ created?: number; failed?: number; error?: string }> {
+  await assertAdmin()
   if (candidates.length === 0) return { created: 0, failed: 0 }
 
   const supabase = createAdminClient()
@@ -465,11 +468,13 @@ async function shopifyProductImage(url: string): Promise<string | null> {
 export async function getIngestPreview(
   url: string,
 ): Promise<{ image_url: string | null; stock: 'in_stock' | 'low_stock' | 'out_of_stock' | 'unknown'; sizes: string[] }> {
+  await assertAdmin()
   const [img, stock] = await Promise.all([scrapeProductImage(url), checkStockForUrl(url)])
   return { image_url: img.image_url ?? null, stock: (stock.status ?? 'unknown') as any, sizes: stock.sizes }
 }
 
 export async function scrapeProductImage(url: string): Promise<{ image_url?: string | null; error?: string }> {
+  await assertAdmin()
   try {
     const res = await fetch(url, {
       headers: {
