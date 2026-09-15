@@ -169,6 +169,11 @@ interface GenerateOpts {
   // colour cap, price integrity…) is discarded, never ranked. Written rules
   // override learned statistics, so this gate sits ahead of learnedBonus.
   houseGate?: (items: { item: ItemWithBrand; slot: Slot }[]) => boolean
+  // Per-piece nudge to the SHORTLIST each slot is built from (a client's history
+  // and rotation). Without it a slot's shortlist is the same top pieces by fit
+  // every time, and nothing scored later can bring a different bag into play —
+  // one Isadora clutch was in 7 of Alison's 99 looks. Omitted = unchanged.
+  shortlistAdjust?: (item: ItemWithBrand) => number
 }
 
 export function generateCandidates(opts: GenerateOpts): ComposerCandidate[] {
@@ -182,6 +187,7 @@ export function generateCandidates(opts: GenerateOpts): ComposerCandidate[] {
     learnedBonus,
     learnedBlend = 0,
     houseGate,
+    shortlistAdjust,
   } = opts
 
   const anchorSlot = slotForItemType(anchor.item_type)
@@ -191,17 +197,17 @@ export function generateCandidates(opts: GenerateOpts): ComposerCandidate[] {
   const eligible = library.filter(i => !excluded.has(i.item_id))
 
   // Bucket eligible items by slot, pre-ranked by pairwise compat with the anchor.
-  const buckets: Record<Slot, Array<{ item: ItemWithBrand; compat: number }>> = {
+  const buckets: Record<Slot, Array<{ item: ItemWithBrand; compat: number; rank: number }>> = {
     outerwear: [], top: [], bottom: [], dress: [],
     shoe: [], bag: [], jewellery: [], accessory: [],
   }
   for (const item of eligible) {
     const slot = slotForItemType(item.item_type)
     const compat = pairCompat(anchor, item).total
-    buckets[slot].push({ item, compat })
+    buckets[slot].push({ item, compat, rank: compat + (shortlistAdjust ? shortlistAdjust(item) : 0) })
   }
   for (const slot of Object.keys(buckets) as Slot[]) {
-    buckets[slot].sort((a, b) => b.compat - a.compat)
+    buckets[slot].sort((a, b) => b.rank - a.rank)
     buckets[slot] = buckets[slot].slice(0, perSlotPool)
   }
 
@@ -209,7 +215,7 @@ export function generateCandidates(opts: GenerateOpts): ComposerCandidate[] {
   // Optional slots are only included if at least one strong candidate exists.
   const slotsToFill: Slot[] = [...plan.required]
   for (const optSlot of plan.optional) {
-    if ((buckets[optSlot][0]?.compat ?? 0) >= 0.7) {
+    if (buckets[optSlot].reduce((best, b) => Math.max(best, b.compat), 0) >= 0.7) {
       slotsToFill.push(optSlot)
     }
   }

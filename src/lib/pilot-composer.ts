@@ -534,6 +534,26 @@ function varietyJitter(itemId: string, seed: number): number {
   return ((h % 1000) / 1000 - 0.5) * 0.16
 }
 
+/**
+ * Where a piece sits on a slot's shortlist, beyond its fit: pieces she has been
+ * shown step back, pieces she kept step forward, near-ties rotate. Applied to
+ * the piece itself — the same penalty averaged across a whole look moved a
+ * shown-three-times necklace by ~0.03 and changed nothing.
+ */
+function varietyAdjust(h: ComposeHistory | undefined, itemId: string, seed: number): number {
+  return -historyPenalty(h, itemId) + varietyJitter(itemId, seed)
+}
+
+/** The piece that completes a slot (the bag): the best few by fit, then her history and rotation decide. */
+function pickFill(
+  t: MemberTaste, library: ItemWithBrand[], slot: Slot, keep: ItemWithBrand[], exclude: Set<string>,
+  occ: OccasionContext | undefined, lens: PersonaLens | undefined, history: ComposeHistory | undefined, seed: number,
+): { item: ItemWithBrand; score: number } | undefined {
+  return rankAlternates(t, library, slot, keep, exclude, 6, occ, lens)
+    .map((o) => ({ ...o, score: o.score + varietyAdjust(history, o.item.item_id, seed) }))
+    .sort((a, b) => b.score - a.score)[0]
+}
+
 // Compose up to `count` looks. Anchors are the member's highest-affinity
 // dresses/tops (each look anchored on a different brand where possible);
 // the rest of each look comes from the Outfit Composer with the member's
@@ -653,6 +673,7 @@ export function composeMemberLooks(
       library: usable,
       perSlotPool: 5,
       maxCandidates: 5,
+      shortlistAdjust: (i) => varietyAdjust(history, i.item_id, seed),
       minScore: 0.5,
       excludeItemIds: Array.from(usedItems),
       learnedBonus: (items) =>
@@ -677,7 +698,7 @@ export function composeMemberLooks(
     for (const need of ENSURE_SLOTS) {
       if (all.some((x) => x.slot === need)) continue
       const exclude = new Set([...Array.from(usedItems), ...all.map((x) => x.item.item_id)])
-      const [pick] = rankAlternates(t, usable, need, all.map((x) => x.item), exclude, 1, occ, lens)
+      const pick = pickFill(t, usable, need, all.map((x) => x.item), exclude, occ, lens, history, seed)
       if (pick) all.push({ item: pick.item, slot: need })
     }
 
@@ -783,6 +804,7 @@ export function composeMemberVariants(
     library: usable,
     perSlotPool: 8,
     maxCandidates: 20,
+    shortlistAdjust: (i) => varietyAdjust(history, i.item_id, seed),
     minScore: 0.45,
     excludeItemIds: [],
     learnedBonus: (items) =>
@@ -801,26 +823,35 @@ export function composeMemberVariants(
     return shared / Math.max(a.size, b.size, 1)
   }
   const picked: ComposerCandidate[] = []
+  // Ways to wear the same hero should not all finish with the same necklace or
+  // bag — one pearl necklace ended up on two variants of Alison's looks.
+  const finishIds = (c: ComposerCandidate) =>
+    new Set(c.items.filter((x) => x.slot === 'jewellery' || x.slot === 'bag').map((x) => x.item.item_id))
+  const sharesFinish = (a: ComposerCandidate, b: ComposerCandidate) => {
+    const fb = finishIds(b)
+    return Array.from(finishIds(a)).some((id) => fb.has(id))
+  }
   // Greedy distinctness: a variant joins only if it shares ≤ half its supporting
-  // pieces with every variant already kept.
+  // pieces with every variant already kept, and not its necklace or bag.
   for (const c of cands) {
     if (picked.length >= count) break
     const ids = supportIds(c)
-    if (picked.every((p) => overlap(ids, supportIds(p)) <= 0.5)) picked.push(c)
+    if (picked.every((p) => overlap(ids, supportIds(p)) <= 0.5 && !sharesFinish(c, p))) picked.push(c)
   }
   // If the library was too thin to find `count` distinct ones, top up in rank order.
   for (const c of cands) { if (picked.length >= count) break; if (!picked.includes(c)) picked.push(c) }
 
   const heroSlot = slotForItemType(anchor.item_type)
+  const fillUsed = new Set<string>() // bags added to earlier variants
   const anchorOwned = isOwnedItem(anchor as any)
   const anchorLabel = anchorOwned ? `her own ${anchor.product_name}` : anchor.brand?.name ?? '—'
   return picked.map((best) => {
     const all = [{ item: anchor, slot: heroSlot }, ...best.items]
     for (const need of ENSURE_SLOTS) {
       if (all.some((x) => x.slot === need)) continue
-      const exclude = new Set(all.map((x) => x.item.item_id))
-      const [pick] = rankAlternates(t, usable, need, all.map((x) => x.item), exclude, 1, occ, lens)
-      if (pick) all.push({ item: pick.item, slot: need })
+      const exclude = new Set([...Array.from(fillUsed), ...all.map((x) => x.item.item_id)])
+      const pick = pickFill(t, usable, need, all.map((x) => x.item), exclude, occ, lens, history, seed)
+      if (pick) { all.push({ item: pick.item, slot: need }); fillUsed.add(pick.item.item_id) }
     }
     const ownedCount = all.filter(({ item }) => isOwnedItem(item as any)).length
     const notes = [
