@@ -7,7 +7,7 @@ import type { WatchedBrandRow } from '@/lib/brand-watch'
 import {
   addWatchedBrand, checkAllBrandsNow, checkBrandNow, fullScanBrand, keepAllForBrand,
   keepItems, loadQueuePage, removeWatchedBrand, setWatchedBrandActive,
-  setWatchedBrandMinScore, skipItems, undoSkip, type QueueItemRow, type QueuePage,
+  setWatchedBrandMinScore, skipItems, undoSkip, setSkipReason, type QueueItemRow, type QueuePage,
 } from './actions'
 
 const CHIP = 'px-3 py-1.5 rounded-full text-[9px] tracking-[0.12em] border transition-colors'
@@ -56,6 +56,8 @@ export default function BrandWatchClient(props: Props) {
   const [similarPrompt, setSimilarPrompt] = useState<{ name: string; ids: string[] } | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set()) // multi-select for batch keep/skip
   const [lastSkip, setLastSkip] = useState<string[]>([]) // most recent skip batch, for UNDO
+  // Why the last skip happened — optional, one tap; the learning weighs it.
+  const [reasonFor, setReasonFor] = useState<string[]>([])
 
   // queue state — starts from the server render, replaced when a brand is
   // selected (the learning re-trains server-side on every load)
@@ -111,7 +113,7 @@ export default function BrandWatchClient(props: Props) {
     }
     setGone((g) => new Set(Array.from(g).concat(ids)))
     setSelected((s) => new Set(Array.from(s).filter((id) => !ids.includes(id))))
-    if (!keep) setLastSkip(ids)
+    if (!keep) { setLastSkip(ids); setReasonFor(ids) } else setReasonFor([])
     // Fire-and-forget, OUTSIDE the shared transition: the card is already hidden
     // optimistically, so a decision must never block the next one. Each skip/keep
     // fires its own independent request, so rapid tapping never freezes the grid.
@@ -123,6 +125,7 @@ export default function BrandWatchClient(props: Props) {
   const undoLastSkip = () => {
     const ids = lastSkip
     setLastSkip([])
+    setReasonFor([])
     setSimilarPrompt(null)
     act(() => undoSkip(ids), (r) => {
       // bring the cards straight back into view
@@ -326,6 +329,26 @@ export default function BrandWatchClient(props: Props) {
               >
                 NO, THEY&rsquo;RE FINE
               </button>
+            )}
+            {reasonFor.length > 0 && (
+              <span className="inline-flex items-center gap-1.5 flex-wrap">
+                <span className="text-[11px] tracking-[0.12em] text-[#6B6B6B]">WHY?</span>
+                {([['not_style', 'NOT THE STYLE'], ['colour', 'COLOUR'], ['type', 'TYPE OF PIECE'], ['too_young', 'TOO YOUNG'], ['price', 'PRICE']] as const).map(([id, text]) => (
+                  <button
+                    key={id}
+                    onClick={() => {
+                      const ids = reasonFor
+                      setReasonFor([])
+                      setSkipReason(ids, id)
+                        .then((r) => setNotice(r.error ? r.error.toUpperCase() : `NOTED — ${text} · THE LEARNING WEIGHS IT ON NEXT LOAD`))
+                        .catch((e) => setNotice(e instanceof Error ? e.message : String(e)))
+                    }}
+                    className="border border-[#0A0A0A] text-[#0A0A0A] rounded-full px-3 py-1.5 text-[11px] tracking-[0.1em] hover:bg-[#0A0A0A] hover:text-white transition-colors"
+                  >
+                    {text}
+                  </button>
+                ))}
+              </span>
             )}
             {lastSkip.length > 0 && (
               <button

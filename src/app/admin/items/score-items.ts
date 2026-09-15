@@ -1,5 +1,7 @@
 'use server'
 
+import { correctPaleColourByIds } from '@/lib/pale-colour-store'
+
 // BACKFILL — read the style dimensions off the photograph for items that
 // arrived without them.
 //
@@ -162,6 +164,10 @@ export async function scoreUnscoredItems(
       else res.skipped++
     }
   }
+
+  // White or cream from the photo, for every piece this sweep touched —
+  // scoring keeps an existing colour, and pale colour codes are guesses.
+  await correctPaleColourByIds(admin, items.map((it) => it.item_id), items.length)
 
   res.remaining = (await countUnscored()).unscored
   return res

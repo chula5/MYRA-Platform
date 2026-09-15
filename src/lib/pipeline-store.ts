@@ -2,6 +2,7 @@
 // Pure logic lives in pipeline.ts; this file owns the DB.
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase-server'
+import { correctPaleColour } from '@/lib/pale-colour-store'
 import { buildOutfitVector } from '@/lib/taste-vector'
 import { slotForItemType } from '@/lib/composer'
 import type { ItemWithBrand } from '@/lib/admin-queries'
@@ -219,6 +220,8 @@ export async function ensureItemsScored(items: ItemWithBrand[]): Promise<{ score
   const scored: string[] = []
   const failed: string[] = []
   const admin = createAdminClient()
+  // White vs cream from the photo before the Composer pairs pale pieces.
+  await correctPaleColour(admin, items as any, 20)
   for (const item of items) {
     const it = item as any
     if (!itemNeedsScoring(it)) continue

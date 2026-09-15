@@ -84,6 +84,7 @@ import { rulesForMember, type MemberRules } from '@/lib/style-rules'
 import { loadStyleModel, recordStyleDecision } from '@/lib/style-brain-store'
 import { computeEnvelope } from '@/lib/inspiration'
 import { linkMemberToStyleProfile } from '@/lib/style-profile-store'
+import { correctPaleColour } from '@/lib/pale-colour-store'
 import { loadEjectionConstraints } from '@/lib/pipeline-store'
 import { loadLearnedMaterialPairs } from '@/lib/house-style-store'
 
@@ -1851,6 +1852,8 @@ async function planDeliveryLooks(
 
   const taste = await loadMemberTaste(admin, member)
   const library = await loadComposableLibrary(member)
+  // A pale piece added today is read before the nightly sweep can reach it.
+  await correctPaleColour(admin, library as any, 20)
   const mix = normalise(delivery.effective_weights ?? {})
   const occ: OccasionContext = { id: delivery.occasion ?? null, vector: lookTasteVector(mix), climate: delivery.climate ?? null }
   const lens = await loadPersonaLens(admin, delivery.member_id)

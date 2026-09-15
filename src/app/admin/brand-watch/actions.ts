@@ -1,5 +1,8 @@
 'use server'
 
+import { houseBanOf } from '@/lib/brand-watch-bans'
+import { recordStyleDecision } from '@/lib/style-brain-store'
+
 import { createAdminClient } from '@/lib/supabase-server'
 import {
   baselineBrand, checkWatchedBrand, onboardBrand, provisionalNameFromUrl, runBrandWatch, normaliseBaseUrl,
@@ -70,6 +73,20 @@ function mapQueueRow(r: any): Omit<QueueItemRow, 'learned_delta' | 'learned_reas
   }
 }
 
+/** Skip reasons by queue id (migration 0055). Empty until the column exists. */
+async function fetchSkipReasons(admin: any): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await admin.from('brand_watch_queue')
+      .select('queue_id, skip_reason').eq('status', 'skipped').not('skip_reason', 'is', null)
+      .order('queue_id').range(from, from + 999)
+    if (error) return out
+    for (const r of data ?? []) out.set(r.queue_id, r.skip_reason)
+    if (!data || data.length < 1000) break
+  }
+  return out
+}
+
 // All queue rows for the given statuses (paged past PostgREST's 1,000-row cap).
 async function fetchBrandWatchRows(admin: any, statuses: string[]): Promise<any[]> {
   const out: any[] = []
@@ -101,6 +118,7 @@ export async function loadQueuePage(offset: number, brandName?: string | null): 
     return { queue: [], queueTotal: 0, predictedSkipTotal: 0, decidedCount: 0, brandCounts: {}, error: e instanceof Error ? e.message : String(e) }
   }
 
+  const reasons = await fetchSkipReasons(admin)
   const decided: DecidedRow[] = decidedRows.map((r) => ({
     kept: r.status === 'kept',
     brandName: r.brand?.name ?? null,
@@ -109,6 +127,8 @@ export async function loadQueuePage(offset: number, brandName?: string | null): 
     colourFamily: r.colour_family,
     materialCategory: r.material_category,
     price: r.price,
+    priceGbp: r.price_gbp != null ? Number(r.price_gbp) : null,
+    skipReason: reasons.get(r.queue_id) ?? null,
   }))
   const learn = buildLearning(decided)
 
@@ -119,11 +139,13 @@ export async function loadQueuePage(offset: number, brandName?: string | null): 
   const { data: wbs } = await admin.from('watched_brand').select('name, min_score')
   const minByBrand = new Map<string, number>(((wbs ?? []) as any[]).map((w) => [foldBrandName(w.name), Number(w.min_score ?? 5)]))
 
-  const annotated: QueueItemRow[] = drafts.map((r) => {
+  // A banned piece already in the queue from before the bans is not shown.
+  const annotated: QueueItemRow[] = drafts.filter((r) => !houseBanOf({ title: r.product_name, materialPrimary: r.material_primary, itemType: r.item_type })).map((r) => {
     const base = mapQueueRow(r)
     const v = learn({
       brandName: base.brand_name, productName: base.product_name, itemType: base.item_type,
       colourFamily: base.colour_family, materialCategory: base.material_category, price: base.price,
+      priceGbp: base.price_gbp,
     })
     const minScore = minByBrand.get(foldBrandName(base.brand_name)) ?? 5
     const strong = (base.discovery_score ?? 0) >= minScore + 2
@@ -296,6 +318,16 @@ async function keepQueueRows(admin: any, queueIds: string[]): Promise<number> {
       .eq('status', 'queued')
     if (error) throw new Error(error.message)
     for (const q of rows ?? []) {
+      // A house ban (fuchsia, activewear, leopard, polka dot) is never kept —
+      // it is skipped, which also teaches the learning.
+      const ban = houseBanOf({ title: q.product_name, materialPrimary: q.material_primary, itemType: q.item_type })
+      if (ban) {
+        await admin.from('brand_watch_queue')
+          .update({ status: 'skipped', decided_at: new Date().toISOString() })
+          .eq('queue_id', q.queue_id)
+        console.warn(`[keepQueueRows] ${q.product_name}: not kept — ${ban}`)
+        continue
+      }
       if (!q.item_type) {
         // Left in the queue rather than kept as the wrong thing — the type can
         // be set by hand and it can be kept again.
@@ -343,6 +375,9 @@ async function keepQueueRows(admin: any, queueIds: string[]): Promise<number> {
         .update({ status: 'kept', decided_at: new Date().toISOString(), item_id: item.item_id })
         .eq('queue_id', q.queue_id)
       created++
+      // What goes on the site teaches Chloe's Style Brain too — a single piece,
+      // so at half the weight of a whole outfit decision.
+      await teachStyleBrain(q, 'approve', item.item_id)
     }
   }
   if (skippedUntyped.length) {
@@ -409,6 +444,42 @@ export async function undoSkip(itemIds: string[]): Promise<{ restored: number }>
   return { restored: (data ?? []).length }
 }
 
+const SKIP_REASONS = new Set(['not_style', 'colour', 'type', 'too_young', 'price'])
+
+/** Why these pieces were skipped — the learning weighs that feature double. */
+export async function setSkipReason(itemIds: string[], reason: string): Promise<{ updated: number; error?: string }> {
+  if (!itemIds.length || !SKIP_REASONS.has(reason)) return { updated: 0, error: 'Unknown reason' }
+  const admin = createAdminClient() as any
+  const { data, error } = await admin.from('brand_watch_queue')
+    .update({ skip_reason: reason }).in('queue_id', itemIds).eq('status', 'skipped').select('queue_id')
+  if (error) {
+    return { updated: 0, error: /skip_reason/.test(error.message) ? 'Run migration 0055 in Supabase to save skip reasons' : error.message }
+  }
+  return { updated: (data ?? []).length }
+}
+
+/** One Brand Watch decision into Chloe's Style Brain. Never throws. */
+async function teachStyleBrain(q: any, decision: 'approve' | 'skip', itemId?: string): Promise<void> {
+  try {
+    await recordStyleDecision({
+      items: [{
+        item_type: q.item_type ?? null,
+        colour_family: q.colour_family ?? null,
+        pattern: null,
+        material_formality: null,
+        brand_name: q.brand?.name ?? null,
+        price_tier: null,
+      }],
+      decision,
+      source: 'brand_watch',
+      itemIds: itemId ? [itemId] : [],
+      weight: 0.5,
+    })
+  } catch (err) {
+    console.error('[teachStyleBrain]', err)
+  }
+}
+
 export async function skipItems(itemIds: string[]): Promise<{ updated: number }> {
   if (!itemIds.length) return { updated: 0 }
   const admin = createAdminClient()
@@ -417,7 +488,8 @@ export async function skipItems(itemIds: string[]): Promise<{ updated: number }>
     .update({ status: 'skipped', decided_at: new Date().toISOString() } as any)
     .in('queue_id', itemIds)
     .eq('status', 'queued')
-    .select('queue_id')
+    .select('queue_id, item_type, colour_family, brand:brand_id(name)')
+  for (const q of (data ?? []) as any[]) await teachStyleBrain(q, 'skip')
   // No revalidatePath — see keepItems. The optimistic hide + next-load re-query
   // keep the queue correct without re-rendering the whole page on every skip.
   return { updated: (data ?? []).length }

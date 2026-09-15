@@ -9,10 +9,11 @@ import { createAdminClient } from '@/lib/supabase-server'
 import { toGbpAmount } from '@/lib/currency'
 import { classifyProductGender, type GenderRead } from '@/app/admin/ai/classify-gender'
 import { classifyProductColour } from '@/app/admin/ai/classify-colour'
+import { houseBanOf } from '@/lib/brand-watch-bans'
 import {
   discoverProductUrls, fetchNewProductPages, urlHash, type ParsedProduct,
 } from '@/lib/brand-watch-browser'
-import { buildLearning, type DecidedRow } from '@/lib/brand-watch-learning'
+import { buildLearning, type DecidedRow, type LearnedVerdict } from '@/lib/brand-watch-learning'
 
 // ---------------------------------------------------------------- types
 
@@ -105,7 +106,7 @@ function scanDiagnostic(
 const HOUSE_STYLE = {
   weights: { colour: 3, material: 2, silhouette: 2 },
   houseColours: ['black', 'white', 'ivory', 'cream', 'ecru', 'bone', 'off white', 'off-white', 'beige', 'taupe', 'sand', 'camel', 'tan', 'caramel', 'chocolate', 'brown', 'cognac', 'grey', 'gray', 'charcoal', 'navy', 'khaki', 'olive', 'burgundy', 'bordeaux', 'oxblood'],
-  offColours: ['neon', 'fluo', 'lime', 'fuchsia', 'hot pink', 'bright pink', 'turquoise', 'rainbow', 'multicolour', 'multicolor', 'leopard', 'zebra', 'animal print', 'cow print', 'snake print', 'glitter', 'holographic', 'iridescent', 'metallic silver', 'metallic gold'],
+  offColours: ['neon', 'fluo', 'lime', 'fuchsia', 'magenta', 'hot pink', 'shocking pink', 'bright pink', 'turquoise', 'rainbow', 'multicolour', 'multicolor', 'leopard', 'zebra', 'animal print', 'cow print', 'snake print', 'glitter', 'holographic', 'iridescent', 'metallic silver', 'metallic gold'],
   houseMaterials: ['leather', 'suede', 'calf', 'nappa', 'lambskin', 'nubuck', 'shearling', 'wool', 'cashmere', 'merino', 'mohair', 'silk', 'cotton', 'linen', 'poplin', 'denim'],
   offMaterials: ['sequin', 'diamante', 'rhinestone', 'pvc', 'vinyl', 'faux fur', 'marabou', 'feather', 'lurex', 'glitter'],
   houseSilhouettes: ['pointed', 'pointy', 'slingback', 'kitten heel', 'stiletto', 'ballet', 'ballerina', 'loafer', 'riding boot', 'knee boot', 'ankle boot', 'column', 'straight leg', 'wide leg', 'tailored', 'blazer', 'trench', 'slip dress', 'shirt dress', 'square toe', 'minimal', 'clean', 'structured', 'longline'],
@@ -844,21 +845,28 @@ async function markSeen(
 // seen — every later scan re-evaluates them against the CURRENT model, so a
 // shift in your taste lets them through. Cross-brand by design: decisions on
 // one site inform scans of every other site.
-async function loadLearnedSkipper(admin: any): Promise<(p: ScannedProduct, brandName: string) => boolean> {
+async function loadLearnedSkipper(admin: any): Promise<(p: ScannedProduct, brandName: string) => LearnedVerdict> {
+  const none: LearnedVerdict = { delta: 0, reasons: '', predictedSkip: false }
   const rows: any[] = []
-  try {
+  // skip_reason arrives with migration 0055; read without it until then.
+  const read = async (cols: string) => {
+    rows.length = 0
     for (let from = 0; ; from += 1000) {
       const { data, error } = await admin
-        .from('brand_watch_queue')
-        .select('product_name, item_type, colour_family, material_category, price, status, brand:brand_id(name)')
-        .in('status', ['kept', 'skipped'])
-        .order('queue_id')
-        .range(from, from + 999)
-      if (error) return () => false
+        .from('brand_watch_queue').select(cols)
+        .in('status', ['kept', 'skipped']).order('queue_id').range(from, from + 999)
+      if (error) return error
       rows.push(...(data ?? []))
       if (!data || data.length < 1000) break
     }
-  } catch { return () => false }
+    return null
+  }
+  try {
+    const base = 'product_name, item_type, colour_family, material_category, price, price_gbp, status, brand:brand_id(name)'
+    if (await read(`${base}, skip_reason`)) {
+      if (await read(base)) return () => none
+    }
+  } catch { return () => none }
   const decided: DecidedRow[] = rows.map((r) => ({
     kept: r.status === 'kept',
     brandName: r.brand?.name ?? null,
@@ -867,6 +875,8 @@ async function loadLearnedSkipper(admin: any): Promise<(p: ScannedProduct, brand
     colourFamily: r.colour_family,
     materialCategory: r.material_category,
     price: r.price,
+    priceGbp: r.price_gbp != null ? Number(r.price_gbp) : null,
+    skipReason: r.skip_reason ?? null,
   }))
   const learn = buildLearning(decided)
   return (p, brandName) => learn({
@@ -876,7 +886,31 @@ async function loadLearnedSkipper(admin: any): Promise<(p: ScannedProduct, brand
     colourFamily: p.colourFamily,
     materialCategory: p.materialCategory,
     price: p.price != null ? String(p.price) : null,
-  }).predictedSkip
+    priceGbp: toGbpAmount(p.price, p.currency ?? null),
+  })
+}
+
+/** Most a learned keep history can lift a piece's score at scan time. */
+const LEARNED_LIFT_CAP = 2
+
+/**
+ * What her keeps say lifts a piece's score, so a piece like the ones she keeps
+ * can clear the brand's min score. Only lifts — a negative verdict keeps its
+ * existing, capped veto below. Recorded in the piece's reasons.
+ */
+function applyLearnedLift(products: ScannedProduct[], learned: (p: ScannedProduct, brandName: string) => LearnedVerdict, brandName: string): void {
+  for (const p of products) {
+    const v = learned(p, brandName)
+    if (v.delta <= 0) continue
+    const lift = Math.min(LEARNED_LIFT_CAP, Math.round(v.delta * 10) / 10)
+    p.score += lift
+    p.reasons.push(`+${lift} learned from your keeps (${v.reasons})`)
+  }
+}
+
+/** Why a scanned product can never go on the site, or null. */
+export function houseBanFor(p: ScannedProduct): string | null {
+  return houseBanOf({ title: p.title, productType: p.productType, optionColours: p.optionColours, materialPrimary: p.materialPrimary, itemType: p.itemType })
 }
 
 // ---------------------------------------------------------------- stock refresh
@@ -1007,12 +1041,15 @@ async function scanAndQueue(
   const adopted = await adoptRealBrandName(admin as any, watchedIn, vendorMode(products))
   const watched = { ...watchedIn, ...adopted }
   const visionColours = await applyVisionColour(products, watched.min_score)
-  const fashion = products.filter((p) => !p.nonFashion && !p.menswear)
+  const learned = await loadLearnedSkipper(admin as any)
+  applyLearnedLift(products, learned, watched.name)
+  // House bans (fuchsia, activewear, leopard, polka dot) never reach the queue.
+  const fashion = products.filter((p) => !p.nonFashion && !p.menswear && !houseBanFor(p))
   const onTaste = fashion.filter(wanted)
   // Low or out of stock isn't worth adding — it gets another chance on a
   // later check if it restocks (queueing only marks items, not seen state).
   const inStock = onTaste.filter((p) => queueableStock(p))
-  const shouldSuppress = await loadLearnedSkipper(admin as any)
+  const shouldSuppress = (p: ScannedProduct, brandName: string) => learned(p, brandName).predictedSkip
   // The learned skipper may thin the queue, but it may not VETO the house
   // style: scan-time suppression removes a piece invisibly (unlike the queue's
   // predicted-skip toggle, which only hides), and it was swallowing 7-score
@@ -1078,6 +1115,7 @@ async function applyVisionColour(products: ScannedProduct[], minScore: number): 
   const candidates = products.filter((p) =>
     !p.colourFamily &&
     !p.nonFashion && !p.menswear &&
+    !houseBanFor(p) &&
     !!p.images[0] &&
     queueableStock(p) &&
     p.score + w >= minScore &&
@@ -1250,10 +1288,12 @@ async function browserScanAndQueue(watchedRow: WatchedBrandRow, mode: 'watch' | 
     // Sites with no textual gender signal get one vision call per product.
     await applyVisionGender(products)
     const visionColours = await applyVisionColour(products, watched.min_score)
-    const fashion = products.filter((p) => !p.nonFashion && !p.menswear)
+    const learned = await loadLearnedSkipper(admin)
+    applyLearnedLift(products, learned, watched.name)
+    const fashion = products.filter((p) => !p.nonFashion && !p.menswear && !houseBanFor(p))
     const onTaste = fashion.filter((p) => p.score >= watched.min_score)
     const inStock = onTaste.filter((p) => queueableStock(p))
-    const shouldSuppress = await loadLearnedSkipper(admin)
+    const shouldSuppress = (p: ScannedProduct, brandName: string) => learned(p, brandName).predictedSkip
     // The learned skipper may thin the queue, but it may not VETO the house
   // style: scan-time suppression removes a piece invisibly (unlike the queue's
   // predicted-skip toggle, which only hides), and it was swallowing 7-score
@@ -1317,13 +1357,15 @@ export async function checkWatchedBrand(watchedIn: WatchedBrandRow): Promise<Bra
   const fresh = products.filter((p) => !seen.has(p.shopifyProductId))
   // Only the new pieces are worth a vision call on a weekly check.
   const visionColours = await applyVisionColour(fresh, watched.min_score)
-  const onTaste = fresh.filter((p) => !p.nonFashion && !p.menswear && p.score >= watched.min_score)
+  const learned = await loadLearnedSkipper(admin as any)
+  applyLearnedLift(fresh, learned, watched.name)
+  const onTaste = fresh.filter((p) => !p.nonFashion && !p.menswear && !houseBanFor(p) && p.score >= watched.min_score)
   // Low or out of stock isn't worth adding — and it is NOT marked seen, so a
   // later check queues it the moment it restocks. Stock-held is computed over
   // the WHOLE catalogue (not just unseen products) so pieces marked seen by
   // earlier scans are released from the seen list too.
   const inStock = onTaste.filter((p) => queueableStock(p))
-  const shouldSuppress = await loadLearnedSkipper(admin as any)
+  const shouldSuppress = (p: ScannedProduct, brandName: string) => learned(p, brandName).predictedSkip
   // The learned skipper may thin the queue, but it may not VETO the house
   // style: scan-time suppression removes a piece invisibly (unlike the queue's
   // predicted-skip toggle, which only hides), and it was swallowing 7-score

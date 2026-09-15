@@ -13,6 +13,10 @@ export interface DecidedRow {
   colourFamily: string | null
   materialCategory: string | null
   price: string | null
+  /** Price converted to pounds — preferred over raw price for the price band. */
+  priceGbp?: number | null
+  /** Why it was skipped: 'colour' | 'type' | 'price' | 'too_young' | 'not_style'. */
+  skipReason?: string | null
 }
 
 export interface LearnedVerdict {
@@ -25,13 +29,14 @@ const STOP = new Set(['the', 'and', 'with', 'for', 'from', 'one'])
 
 function featuresOf(r: {
   productName: string | null; itemType: string | null; colourFamily: string | null
-  materialCategory: string | null; price: string | null
+  materialCategory: string | null; price: string | null; priceGbp?: number | null
 }): string[] {
   const f: string[] = []
   if (r.itemType) f.push('type:' + r.itemType)
   if (r.colourFamily) f.push('col:' + r.colourFamily)
   if (r.materialCategory) f.push('mat:' + r.materialCategory)
-  const p = parseFloat(String(r.price ?? ''))
+  // Pounds, not the store's own currency: a DKK 2,200 piece is ~£250, not £500+.
+  const p = r.priceGbp != null ? Number(r.priceGbp) : parseFloat(String(r.price ?? ''))
   if (!isNaN(p)) f.push('price:' + (p < 150 ? 'under150' : p < 300 ? '150-300' : p < 500 ? '300-500' : '500plus'))
   const seen = new Set<string>()
   for (const tok of String(r.productName ?? '').toLowerCase().split(/[^a-z0-9]+/)) {
@@ -44,9 +49,13 @@ function featuresOf(r: {
 
 interface Tally { k: number; s: number }
 
+/** A skip reason names the feature it was about; that feature counts twice. */
+const REASON_PREFIX: Record<string, string> = { colour: 'col:', type: 'type:', price: 'price:' }
+
 export function buildLearning(decided: DecidedRow[]): (row: {
   brandName: string | null; productName: string | null; itemType: string | null
   colourFamily: string | null; materialCategory: string | null; price: string | null
+  priceGbp?: number | null
 }) => LearnedVerdict {
   const global = new Map<string, Tally>()
   const perBrand = new Map<string, Map<string, Tally>>()
@@ -58,9 +67,11 @@ export function buildLearning(decided: DecidedRow[]): (row: {
   for (const d of decided) {
     const brandMap = perBrand.get(d.brandName ?? '') ?? new Map<string, Tally>()
     perBrand.set(d.brandName ?? '', brandMap)
+    const stressed = !d.kept && d.skipReason ? REASON_PREFIX[d.skipReason] : undefined
     for (const f of featuresOf(d)) {
       bump(global, f, d.kept)
       bump(brandMap, f, d.kept)
+      if (stressed && f.startsWith(stressed)) bump(global, f, d.kept)
     }
   }
   const total = decided.length
