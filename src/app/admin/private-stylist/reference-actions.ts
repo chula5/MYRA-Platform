@@ -13,6 +13,7 @@ import { createAdminClient, createServerClient } from '@/lib/supabase-server'
 import { revalidatePath } from 'next/cache'
 import { scoreInspirationImages } from '@/app/admin/stylists/inspiration-actions'
 import { picturesFromForm, intakePictures } from '@/lib/picture-intake'
+import { updateLovesFromReferences } from '@/lib/reference-loves'
 
 const PATH = '/admin/private-stylist'
 
@@ -80,6 +81,8 @@ export async function addMemberReferencePictures(formData: FormData): Promise<{
   screenshots?: number
   failed?: number
   notes?: string[]
+  /** Pieces the new pictures added to her loves list. */
+  lovesAdded?: string[]
   error?: string
 }> {
   if (!(await isAdmin())) return { error: 'Not authorised' }
@@ -98,20 +101,22 @@ export async function addMemberReferencePictures(formData: FormData): Promise<{
   const failed = unread + unsaved
   if (!rows.length) return { added: 0, failed, error: 'Could not save those pictures' }
 
-  const { error } = await admin.from('inspiration_image').insert(rows.map((r) => ({
+  const { data: inserted, error } = await admin.from('inspiration_image').insert(rows.map((r) => ({
     persona_id: personaId,
     user_id: memberId,
     image_url: r.image_url,
     source_url: r.source_url,
     source: 'user_upload',
     status: 'pending_scoring',
-  })))
+  }))).select('image_id')
   if (error) return { error: error.message }
 
   // Score each outfit now: an unscored picture has no vector, so it cannot shape her looks.
   await scoreInspirationImages(personaId, Math.max(40, rows.length))
+  // What the pictures keep showing goes on her loves list (never an avoided piece).
+  const loves = await updateLovesFromReferences(admin, memberId, ((inserted ?? []) as any[]).map((r) => r.image_id))
   revalidatePath(PATH)
-  return { added: rows.length, screenshots, failed, notes }
+  return { added: rows.length, screenshots, failed, notes, lovesAdded: loves.added }
 }
 
 export async function removeMemberReferencePicture(imageId: string): Promise<{ error?: string }> {

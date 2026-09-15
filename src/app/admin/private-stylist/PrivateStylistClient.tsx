@@ -1523,6 +1523,7 @@ function ReferencePictures({ memberId, memberName, hasStyle }: { memberId: strin
       const parts = [`${r.added} OUTFIT${r.added === 1 ? '' : 'S'} ADDED AND SCORED`]
       if (r.screenshots) parts.push(`FROM ${r.screenshots} SCREENSHOT${r.screenshots === 1 ? '' : 'S'}`)
       if (r.failed) parts.push(`${r.failed} COULD NOT BE SAVED`)
+      if (r.lovesAdded?.length) parts.push(`ADDED TO WHAT SHE LIVES IN: ${r.lovesAdded.map((t) => t.replace(/_/g, ' ')).join(', ').toUpperCase()}`)
       setMsg(`${parts.join(' · ')} — NOW SHAPING ${first.toUpperCase()}'S LOOKS`)
       setUrls('')
     }

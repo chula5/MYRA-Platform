@@ -17,6 +17,7 @@
 import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
 import { checkSizesForMember, type PieceSize } from '@/lib/look-size-check'
+import { typeCounts } from '@/lib/reference-loves'
 
 export type LookVerdict = 'works' | 'borderline' | 'clashes'
 
@@ -177,7 +178,23 @@ export async function loadClientDescription(admin: any, memberId: string): Promi
     const { data: persona } = await admin.from('stylist').select('name').eq('stylist_id', assignment.persona_id).maybeSingle()
     houseStyle = persona?.name ?? null
   }
-  return describeClientForCheck(member ?? {}, houseStyle)
+  // What her own reference pictures keep showing — her taste in her pictures,
+  // not only in the words on her profile.
+  const owners = [memberId, member?.auth_user_id].filter(Boolean)
+  const { data: pics } = await admin.from('inspiration_image')
+    .select('scores').in('user_id', owners).in('status', ['scored', 'confirmed'])
+  const scored = ((pics ?? []) as any[]).map((p) => p.scores).filter(Boolean)
+  let pictures = ''
+  if (scored.length >= 3) {
+    const counts = typeCounts(scored.map((s) => s.item_types ?? []))
+    const NOISE = new Set(['ring', 'earrings', 'bracelet', 'necklace', 'sunglasses', 'brooch'])
+    const common = Array.from(counts.entries())
+      .filter(([t, n]) => !NOISE.has(t) && n / scored.length >= 0.3)
+      .sort((a, b) => b[1] - a[1]).map(([t]) => t.replace(/_/g, ' '))
+    const avg = (k: string) => (scored.reduce((s, x) => s + (Number(x[k]) || 0), 0) / scored.length).toFixed(1)
+    pictures = ` Her own reference pictures (${scored.length} outfits) mostly show: ${common.join(', ')}; formality ${avg('formality')}/5, pattern ${avg('pattern')}/5, volume ${avg('volume')}/5.`
+  }
+  return describeClientForCheck(member ?? {}, houseStyle) + pictures
 }
 
 export interface JudgedLook {
