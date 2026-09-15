@@ -5,9 +5,11 @@ import { PICKER_COLOURS, PICKER_TYPES } from '@/components/admin/ItemPickerModal
 import { findSimilarToSkipped } from '@/lib/brand-watch-similar'
 import type { WatchedBrandRow } from '@/lib/brand-watch'
 import type { BrandTrust } from '@/lib/brand-watch-trust'
+import type { TwinTrust } from '@/lib/brand-watch-twins'
 import {
   addWatchedBrand, checkAllBrandsNow, checkBrandNow, fullScanBrand, keepAllForBrand,
   keepItems, loadQueuePage, removeWatchedBrand, setWatchedBrandActive, setWatchedBrandAutoKeep,
+  setWatchedBrandAutoKeepTwins, keepTwinsNowForBrand,
   setWatchedBrandMinScore, skipItems, undoSkip, setSkipReason, type QueueFilters, type QueueItemRow, type QueuePage,
 } from './actions'
 
@@ -51,6 +53,7 @@ function chipsFor<T extends { value: string; label: string }>(
 interface Props extends QueuePage {
   watched: WatchedBrandRow[]
   trust: Record<string, BrandTrust>
+  twinTrust: Record<string, TwinTrust>
 }
 
 // A scan writes { running: true } and clears it when it finishes or fails. If
@@ -66,7 +69,7 @@ function staleScan(state: { running?: boolean; started_at?: string } | null | un
 }
 
 export default function BrandWatchClient(props: Props) {
-  const { watched, trust } = props
+  const { watched, trust, twinTrust } = props
   const [pending, startTransition] = useTransition()
   const [url, setUrl] = useState('')
   const [notice, setNotice] = useState<string | null>(null)
@@ -254,7 +257,7 @@ export default function BrandWatchClient(props: Props) {
                     </button>
                   </span>
                 </div>
-                <div className="mt-1.5 flex items-center gap-3 text-[8px] tracking-[0.1em] text-[#A8A8A4]">
+                <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[8px] tracking-[0.1em] text-[#A8A8A4]">
                   <label className="flex items-center gap-1">
                     MIN SCORE
                     <input
@@ -265,6 +268,19 @@ export default function BrandWatchClient(props: Props) {
                   </label>
                   <button disabled={pending} onClick={() => act(() => setWatchedBrandActive(w.watched_brand_id, !w.active))} className="hover:text-[#4A4E57] transition-colors">
                     {w.active ? 'PAUSE' : 'RESUME'}
+                  </button>
+                  {/* AUTO-KEEP TWINS — the first, narrower level: only new pieces
+                      from a design line you kept yourself. Unlocks on twin trust. */}
+                  <button
+                    disabled={pending || (!w.auto_keep_twins && !twinTrust[w.watched_brand_id]?.trusted)}
+                    onClick={() => act(() => setWatchedBrandAutoKeepTwins(w.watched_brand_id, !w.auto_keep_twins), (r) =>
+                      setNotice(r.error ?? (w.auto_keep_twins
+                        ? `${w.name.toUpperCase()}: AUTO-KEEP TWINS OFF`
+                        : `${w.name.toUpperCase()}: AUTO-KEEP TWINS ON — FROM THE NEXT SCAN, NEW PIECES FROM DESIGNS YOU KEPT GO STRAIGHT TO THE LIBRARY`)))}
+                    className={`transition-colors disabled:cursor-not-allowed ${w.auto_keep_twins ? 'text-[#3D6B45] font-bold' : twinTrust[w.watched_brand_id]?.trusted ? 'text-[#0A0A0A] underline underline-offset-2' : 'text-[#C9C7C2]'}`}
+                    title={w.auto_keep_twins ? 'Switch off — twins wait for you again' : twinTrust[w.watched_brand_id]?.trusted ? 'New pieces from a design line you kept go straight to the library' : 'Unlocks when twins of your keeps have proven to be pieces you keep'}
+                  >
+                    {w.auto_keep_twins ? 'AUTO-KEEP TWINS ✓' : 'AUTO-KEEP TWINS'}
                   </button>
                   {/* AUTOMATE unlocks only once this brand's learning has proven
                       it keeps what you keep; it can always be switched off. */}
@@ -279,9 +295,6 @@ export default function BrandWatchClient(props: Props) {
                   >
                     {w.auto_keep ? 'AUTOMATED ✓' : 'AUTOMATE'}
                   </button>
-                </div>
-                <div className={`mt-1 text-[8px] tracking-[0.1em] ${w.auto_keep && !trust[w.watched_brand_id]?.trusted ? 'text-[#B4593A]' : trust[w.watched_brand_id]?.trusted ? 'text-[#3D6B45]' : 'text-[#A8A8A4]'}`}>
-                  {w.auto_keep && !trust[w.watched_brand_id]?.trusted ? 'AUTOMATE PAUSED — ' : ''}{trust[w.watched_brand_id]?.summary ?? 'NO ONE-BY-ONE DECISIONS YET'}
                   <button
                     disabled={pending}
                     onClick={() => { if (confirm(`Stop watching ${w.name}? Seen history is deleted too.`)) act(() => removeWatchedBrand(w.watched_brand_id)) }}
@@ -289,6 +302,12 @@ export default function BrandWatchClient(props: Props) {
                   >
                     REMOVE
                   </button>
+                </div>
+                <div className={`mt-1 text-[8px] tracking-[0.1em] ${w.auto_keep_twins && !twinTrust[w.watched_brand_id]?.trusted ? 'text-[#B4593A]' : twinTrust[w.watched_brand_id]?.trusted ? 'text-[#3D6B45]' : 'text-[#A8A8A4]'}`}>
+                  {w.auto_keep_twins && !twinTrust[w.watched_brand_id]?.trusted ? 'AUTO-KEEP TWINS PAUSED — ' : ''}{twinTrust[w.watched_brand_id]?.summary ?? 'TWINS: NO TWINS OF YOUR KEEPS YET'}
+                </div>
+                <div className={`mt-0.5 text-[8px] tracking-[0.1em] ${w.auto_keep && !trust[w.watched_brand_id]?.trusted ? 'text-[#B4593A]' : trust[w.watched_brand_id]?.trusted ? 'text-[#3D6B45]' : 'text-[#A8A8A4]'}`}>
+                  {w.auto_keep && !trust[w.watched_brand_id]?.trusted ? 'AUTOMATE PAUSED — ' : 'AUTOMATE: '}{trust[w.watched_brand_id]?.summary ?? 'NO ONE-BY-ONE DECISIONS YET'}
                 </div>
               </div>
             )
@@ -439,6 +458,26 @@ export default function BrandWatchClient(props: Props) {
             >
               KEEP ALL SHOWN
             </button>
+            {(() => {
+              // KEEP TWINS NOW: this brand's queued pieces from designs you kept —
+              // offered only once twins of your keeps have proven reliable here.
+              const sel = fBrand ? watched.find((w) => w.name.toLowerCase() === fBrand.toLowerCase()) : undefined
+              const n = fBrand ? page.twinCounts?.[fBrand] ?? 0 : 0
+              if (!sel || !n || !twinTrust[sel.watched_brand_id]?.trusted) return null
+              return (
+                <button
+                  disabled={pending}
+                  onClick={() => {
+                    if (confirm(`Keep the ${n} ${fBrand} pieces that are twins of designs you kept? They go straight to the library as ready.`))
+                      act(() => keepTwinsNowForBrand(sel.watched_brand_id), (r) => { setNotice(r.error?.toUpperCase() ?? `${r.kept} TWINS OF YOUR ${fBrand.toUpperCase()} KEEPS KEPT → READY`); reloadQueue() })
+                  }}
+                  className="bg-[#3D6B45] text-white rounded-full px-4 py-2 text-[9px] tracking-[0.12em] hover:opacity-85 transition-opacity disabled:opacity-40"
+                  title="Every queued piece from a design line you kept yourself, and not a twin of anything you skipped"
+                >
+                  KEEP {n} TWINS OF YOUR KEEPS
+                </button>
+              )
+            })()}
             {fBrand && (page.brandCounts[fBrand] ?? 0) > 0 && (
               <button
                 disabled={pending}
@@ -521,6 +560,11 @@ export default function BrandWatchClient(props: Props) {
                 <div className="p-3 flex flex-col gap-1 flex-1">
                   <p className="text-[8px] tracking-[0.14em] text-[#A8A8A4]">{(q.brand_name ?? '').toUpperCase()}</p>
                   <p className="text-[10px] tracking-[0.04em] text-[#4A4E57] leading-snug">{q.product_name.toUpperCase()}</p>
+                  {q.twin_of && (
+                    <p className="text-[8px] tracking-[0.1em] text-[#3D6B45]" title="Same design as a piece you kept — AUTO-KEEP TWINS would keep it">
+                      TWIN OF YOUR KEEP: {q.twin_of.toUpperCase()}
+                    </p>
+                  )}
                   <p className="text-[8px] tracking-[0.1em] text-[#A8A8A4]">
                     {[q.item_type, q.colour_family, q.material_category].filter(Boolean).join(' · ').toUpperCase()}
                   </p>

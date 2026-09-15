@@ -57,6 +57,9 @@ export interface WatchedBrandRow {
   /** AUTOMATE: new pieces the learning would keep go straight to the library (migration 0056). */
   auto_keep?: boolean
   auto_keep_since?: string | null
+  /** AUTO-KEEP TWINS: new pieces from a design line she kept go to the library (migration 0057). */
+  auto_keep_twins?: boolean
+  auto_keep_twins_since?: string | null
 }
 
 export interface BrandCheckResult {
@@ -1417,7 +1420,7 @@ export async function runBrandWatch(): Promise<BrandCheckResult[]> {
   // is server-only and would break every test that imports this file.
   const { autoKeepForBrand, loadBrandTrust } = await import('./brand-watch-auto')
   // Trust is measured once per run, from decisions made before this scan.
-  const trust =brands.some((w) => w.auto_keep) ? await loadBrandTrust(admin as any) : undefined
+  const trust = brands.some((w) => w.auto_keep || w.auto_keep_twins) ? await loadBrandTrust(admin as any) : undefined
   for (const w of brands) {
     try {
       const result = await checkWatchedBrand(w)

@@ -2,8 +2,11 @@
 
 import { houseBanOf } from '@/lib/brand-watch-bans'
 import { keepQueueRows, teachStyleBrain } from '@/lib/brand-watch-keep'
-import { autoKeepForBrand, loadBrandTrust, trustFor } from '@/lib/brand-watch-auto'
+import {
+  autoKeepForBrand, keepTwinsNow, loadBrandTrust, trustFor, twinOfQueueRow, twinTrustFor, type BrandTrustData,
+} from '@/lib/brand-watch-auto'
 import type { BrandTrust } from '@/lib/brand-watch-trust'
+import type { TwinTrust } from '@/lib/brand-watch-twins'
 
 import { createAdminClient } from '@/lib/supabase-server'
 import {
@@ -35,6 +38,8 @@ export interface QueueItemRow {
   learned_reasons: string
   predicted_skip: boolean
   adjusted: number
+  /** The piece Chloe kept that this is the same design as — AUTO-KEEP TWINS would keep it. */
+  twin_of: string | null
 }
 
 export interface QueuePage {
@@ -46,6 +51,8 @@ export interface QueuePage {
   /** Pieces per type / colour across the WHOLE queue in scope — not just the loaded page. */
   typeCounts?: Record<string, number>
   colourCounts?: Record<string, number>
+  /** Queued twins of her keeps, per brand name. */
+  twinCounts?: Record<string, number>
   error?: string
 }
 
@@ -61,6 +68,8 @@ export interface BrandWatchData extends QueuePage {
   watched: WatchedBrandRow[]
   /** Whether each brand's learning can be trusted to keep on its own, by watched_brand_id. */
   trust?: Record<string, BrandTrust>
+  /** Whether twins of her keeps can be kept on their own, by watched_brand_id. */
+  twinTrust?: Record<string, TwinTrust>
   migrationNeeded?: boolean
 }
 
@@ -68,7 +77,7 @@ const QUEUE_PAGE = 200
 const QUEUE_FIELDS = 'queue_id, product_name, item_type, colour_family, material_category, material_primary, price, currency, price_gbp, image_url, retailer_url, shopify_product_id, shopify_handle, stock_status, stock_sizes, discovery_score, discovered_at, admin_notes, status, brand_id, brand:brand_id(name)'
 
 // The client keys cards by item_id — for queue rows that's the queue_id.
-function mapQueueRow(r: any): Omit<QueueItemRow, 'learned_delta' | 'learned_reasons' | 'predicted_skip' | 'adjusted'> {
+function mapQueueRow(r: any): Omit<QueueItemRow, 'learned_delta' | 'learned_reasons' | 'predicted_skip' | 'adjusted' | 'twin_of'> {
   return {
     item_id: r.queue_id,
     product_name: r.product_name,
@@ -123,6 +132,11 @@ async function fetchBrandWatchRows(admin: any, statuses: string[]): Promise<any[
 // The learning re-trains on every load from all decisions made so far, so the
 // ranking sharpens each time you come back to a brand.
 export async function loadQueuePage(offset: number, brandName?: string | null, filters: QueueFilters = {}): Promise<QueuePage> {
+  return queuePage(offset, brandName, filters)
+}
+
+// trustIn lets the page load share one read of every decision with the brand cards.
+async function queuePage(offset: number, brandName?: string | null, filters: QueueFilters = {}, trustIn?: BrandTrustData): Promise<QueuePage> {
   const admin = createAdminClient() as any
   let drafts: any[]
   let decidedRows: any[]
@@ -146,6 +160,7 @@ export async function loadQueuePage(offset: number, brandName?: string | null, f
     skipReason: reasons.get(r.queue_id) ?? null,
   }))
   const learn = buildLearning(decided)
+  const trustData = trustIn ?? (await loadBrandTrust(admin))
 
   // The learning may fold a piece away, but never one the house style rates
   // well: anything two points clear of its brand's min score stays visible.
@@ -164,13 +179,15 @@ export async function loadQueuePage(offset: number, brandName?: string | null, f
     })
     const minScore = minByBrand.get(foldBrandName(base.brand_name)) ?? 5
     const strong = (base.discovery_score ?? 0) >= minScore + 2
-    return { ...base, learned_delta: v.delta, learned_reasons: v.reasons, predicted_skip: v.predictedSkip && !strong, adjusted: (base.discovery_score ?? 0) + v.delta }
+    return { ...base, learned_delta: v.delta, learned_reasons: v.reasons, predicted_skip: v.predictedSkip && !strong, adjusted: (base.discovery_score ?? 0) + v.delta, twin_of: twinOfQueueRow(trustData, r)?.product_name ?? null }
   })
 
   const brandCounts: Record<string, number> = {}
+  const twinCounts: Record<string, number> = {}
   for (const q of annotated) {
     const b = q.brand_name ?? '?'
     brandCounts[b] = (brandCounts[b] ?? 0) + 1
+    if (q.twin_of) twinCounts[b] = (twinCounts[b] ?? 0) + 1
   }
 
   // Filters run over the whole queue, not the loaded page: filtering the page
@@ -204,6 +221,7 @@ export async function loadQueuePage(offset: number, brandName?: string | null, f
     brandCounts,
     typeCounts,
     colourCounts,
+    twinCounts,
   }
 }
 
@@ -219,14 +237,50 @@ export async function loadBrandWatch(): Promise<BrandWatchData> {
     return { watched: [], queue: [], queueTotal: 0, predictedSkipTotal: 0, decidedCount: 0, brandCounts: {}, migrationNeeded, error: werr.message }
   }
 
-  const [page, trustData] = await Promise.all([loadQueuePage(0), loadBrandTrust(admin as any)])
+  const trustData = await loadBrandTrust(admin as any)
+  const page = await queuePage(0, null, {}, trustData)
   if (page.error && (/brand_watch_queue/.test(page.error) || /42P01/.test(page.error))) {
     // Queue table missing → migration 0033 hasn't been run yet.
     return { watched: (watched ?? []) as unknown as WatchedBrandRow[], ...page, migrationNeeded: true }
   }
   const rows = (watched ?? []) as unknown as WatchedBrandRow[]
   const trust = Object.fromEntries(rows.map((w) => [w.watched_brand_id, trustFor(trustData, w)]))
-  return { watched: rows, ...page, trust }
+  const twinTrust = Object.fromEntries(rows.map((w) => [w.watched_brand_id, twinTrustFor(trustData, w)]))
+  return { watched: rows, ...page, trust, twinTrust }
+}
+
+/**
+ * AUTO-KEEP TWINS for one brand — the narrower first level of automation.
+ * Switching on requires the brand's twin trust, checked here.
+ */
+export async function setWatchedBrandAutoKeepTwins(watchedBrandId: string, on: boolean): Promise<{ error?: string }> {
+  const admin = createAdminClient() as any
+  const { data: w } = await admin.from('watched_brand').select('*').eq('watched_brand_id', watchedBrandId).single()
+  if (!w) return { error: 'Watchlist row not found' }
+  if (on) {
+    const trust = twinTrustFor(await loadBrandTrust(admin), w)
+    if (!trust.trusted) return { error: `NOT YET TRUSTED — ${trust.summary}` }
+  }
+  const { error } = await admin.from('watched_brand')
+    .update({ auto_keep_twins: on, auto_keep_twins_since: on ? new Date().toISOString() : null })
+    .eq('watched_brand_id', watchedBrandId)
+  if (error) return { error: /auto_keep_twins/.test(error.message) ? 'RUN MIGRATION 0057_brand_watch_auto_twins.sql IN SUPABASE FIRST' : error.message }
+  revalidatePath('/admin/brand-watch')
+  return {}
+}
+
+/** KEEP TWINS NOW — every twin of her keeps already in this brand's queue, on her press. */
+export async function keepTwinsNowForBrand(watchedBrandId: string): Promise<{ kept?: number; error?: string }> {
+  const admin = createAdminClient() as any
+  const { data: w } = await admin.from('watched_brand').select('*').eq('watched_brand_id', watchedBrandId).single()
+  if (!w) return { error: 'Watchlist row not found' }
+  try {
+    const r = await keepTwinsNow(admin, w as WatchedBrandRow)
+    revalidatePath('/admin/brand-watch')
+    return r.error ? { error: r.error } : { kept: r.kept }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) }
+  }
 }
 
 /**

@@ -33,12 +33,41 @@ const STOP = new Set([
   'new', 'classic',
 ])
 
+// Cached: AUTO-KEEP TWINS compares every queued piece with every decision from
+// its brand, thousands of times per page load.
+const tokenCache = new Map<string, Set<string>>()
 function tokens(name: string | null): Set<string> {
+  const key = String(name ?? '')
+  const hit = tokenCache.get(key)
+  if (hit) return hit
   const out = new Set<string>()
-  for (const tok of String(name ?? '').toLowerCase().split(/[^a-z0-9]+/)) {
+  for (const tok of key.toLowerCase().split(/[^a-z0-9]+/)) {
     if (tok.length >= 3 && !STOP.has(tok)) out.add(tok)
   }
+  if (tokenCache.size > 50_000) tokenCache.clear()
+  tokenCache.set(key, out)
   return out
+}
+
+const lead = (n: string | null) => String(n ?? '').toLowerCase().split(/[^a-z0-9]+/).find((t) => t.length >= 4 && !STOP.has(t))
+
+/**
+ * The same design line — same brand and kind of piece, and ≥2 shared name
+ * tokens or the same leading model name ("Dagny skirt - Black" / "Dagny skirt
+ * - Indigo"). The model-twin route of verySimilarToSkipped only: the looser
+ * "same colour and material" route is fine for suggesting skips but not for
+ * keeping pieces unseen (measured: 90% vs 94% with careful evidence).
+ */
+export function isModelTwin(base: SimilarCandidate, cand: SimilarCandidate): boolean {
+  if (base.item_id === cand.item_id) return false
+  if ((base.brand_name ?? '').toLowerCase() !== (cand.brand_name ?? '').toLowerCase()) return false
+  if (family(base.item_type) !== family(cand.item_type)) return false
+  const candTokens = tokens(cand.product_name)
+  let shared = 0
+  tokens(base.product_name).forEach((t) => { if (candTokens.has(t)) shared++ })
+  if (shared >= 2) return true
+  const bl = lead(base.product_name)
+  return !!bl && bl === lead(cand.product_name)
 }
 
 /**
