@@ -11,6 +11,10 @@
 
 export type PaleTone = 'white' | 'cream'
 
+/** Shades a photo read can return for a pale piece (classifyPaleShade). */
+export const PALE_SHADES = ['optic_white', 'off_white', 'ivory', 'cream', 'butter', 'ecru', 'not_pale'] as const
+export type PaleShade = (typeof PALE_SHADES)[number]
+
 /** b* at or above this reads as cream; below it, white. */
 export const CREAM_MIN_B = 5
 /** Pale enough to count at all. Below this it is a beige/sand/stone, not white or cream. */
@@ -57,3 +61,18 @@ export function mixesWhiteAndCream(items: { colour_family?: string | null; colou
   }
   return false
 }
+
+
+/** Which side of Chloe's white / cream line a read shade falls on. */
+export function toneOfShade(shade: string | null | undefined): PaleTone | null {
+  if (shade === 'optic_white' || shade === 'off_white' || shade === 'ivory') return 'white'
+  if (shade === 'cream' || shade === 'butter' || shade === 'ecru') return 'cream'
+  return null
+}
+
+/**
+ * A colour code that reads unambiguously on the given side (b* ≈ 1 for white,
+ * ≈ 12 for cream), written when a shade is read from the photo so every rule
+ * that reads the colour — this one, the house constitution — agrees with it.
+ */
+export const TONE_HEX: Record<PaleTone, string> = { white: '#FAFAF7', cream: '#F4E7CF' }

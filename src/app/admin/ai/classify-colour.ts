@@ -13,6 +13,9 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { fetchImageForVision } from '@/lib/vision-image'
+// The shade list lives in a plain module: a 'use server' file may export only
+// async functions, and exporting a constant here took Brand Watch down.
+import { PALE_SHADES, type PaleShade } from '@/lib/pale-tone'
 
 // The families the scanner scores on, exactly as they are stored on the item.
 const FAMILIES = [
@@ -69,5 +72,55 @@ export async function classifyProductColour(
     return hit ? { colour: hit } : { colour: null, error: word ? `unusable read "${word}"` : 'empty read' }
   } catch (err) {
     return { colour: null, error: err instanceof Error ? err.message : 'vision failed' }
+  }
+}
+
+
+// ── White or cream ──────────────────────────────────────────────────────────
+// Chloe's rule, for every client: white and cream do not go together. The
+// stored colour codes cannot answer it — they are picked from a small palette
+// (87 pale pieces share one code) or are stock web colour names like #F5F5DC —
+// and the family read above deliberately files ivory under cream. So a pale
+// piece gets its own read of which side it sits on.
+
+
+const SHADE_PROMPT = `Look only at the GARMENT being sold in this product photo — ignore the background, skin, hair and anything styled with it.
+
+Which of these is its main colour? Answer with exactly one word:
+optic_white — a bright, cool, pure white
+off_white — a soft white with barely any warmth
+ivory — a white with a slight warm cast, still reads as white next to cream
+cream — clearly yellowed or warm, reads as cream rather than white
+butter — a pale buttery or light yellow cream
+ecru — raw, greyish-beige natural undyed cream
+not_pale — anything else (beige, sand, grey, a colour, a print, black)
+
+Never explain.`
+
+export async function classifyPaleShade(imageUrl: string): Promise<{ shade: PaleShade | null; error?: string }> {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) return { shade: null, error: 'ANTHROPIC_API_KEY not configured' }
+  const { image, error } = await fetchImageForVision(imageUrl)
+  if (!image) return { shade: null, error }
+  try {
+    const client = new Anthropic({ apiKey })
+    const r = await client.messages.create({
+      // Same read class as the family read above, once per pale product.
+      model: 'claude-haiku-4-5',
+      max_tokens: 10,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.data } },
+          { type: 'text', text: SHADE_PROMPT },
+        ],
+      }],
+    })
+    const block = r.content.find((b) => b.type === 'text')
+    const word = (block && block.type === 'text' ? block.text : '').trim().toLowerCase().replace(/[^a-z_]/g, '')
+    const hit = PALE_SHADES.find((x) => x === word)
+    return hit ? { shade: hit } : { shade: null, error: word ? `unusable read "${word}"` : 'empty read' }
+  } catch (err) {
+    return { shade: null, error: err instanceof Error ? err.message : 'vision failed' }
   }
 }

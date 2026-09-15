@@ -888,7 +888,10 @@ export function rankAlternates(
       avoidReasons(t.prefs, i as any).length === 0 &&
       itemPriceVerdict(t, i) !== 'over' &&
       !(t.traits && traitBlocked(t.traits, i as any)) &&
-      !climateReason(occ?.climate, i as any),
+      !climateReason(occ?.climate, i as any) &&
+      // A swap must not put white next to cream — the rule applies to every
+      // client, so it holds in the picker as well as in composing.
+      !mixesWhiteAndCream([...keepItems, i] as any),
   )
   return (allowed.length ? allowed : inSlot)
     .map((i) => {

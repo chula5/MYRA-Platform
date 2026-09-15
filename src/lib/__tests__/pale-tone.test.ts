@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { paleTone, mixesWhiteAndCream } from '../pale-tone'
+import { paleTone, mixesWhiteAndCream, toneOfShade, TONE_HEX } from '../pale-tone'
 
 describe('paleTone — from the colour, not the label', () => {
   it('reads the "cream" pieces from Alison\'s looks as the white they are', () => {
@@ -40,5 +40,28 @@ describe('mixesWhiteAndCream', () => {
 
   it('ignores pieces that are not pale', () => {
     expect(mixesWhiteAndCream([{ colour_hex: '#FFFFFF' }, { colour_family: 'black', colour_hex: '#111111' }])).toBe(false)
+  })
+})
+
+
+describe('shades read from the photo', () => {
+  it('puts ivory on the white side and butter on the cream side', () => {
+    expect(toneOfShade('ivory')).toBe('white')
+    expect(toneOfShade('off_white')).toBe('white')
+    expect(toneOfShade('butter')).toBe('cream')
+    expect(toneOfShade('ecru')).toBe('cream')
+    expect(toneOfShade('not_pale')).toBeNull()
+  })
+
+  it('writes codes that the colour rule reads on the same side', () => {
+    expect(paleTone({ colour_hex: TONE_HEX.white })).toBe('white')
+    expect(paleTone({ colour_hex: TONE_HEX.cream })).toBe('cream')
+  })
+
+  it("catches Alison's look: ivory satin blouse with a soft cream skirt", () => {
+    expect(mixesWhiteAndCream([
+      { colour_family: 'white', colour_hex: TONE_HEX[toneOfShade('ivory')!] },
+      { colour_family: 'cream', colour_hex: TONE_HEX[toneOfShade('butter')!] },
+    ])).toBe(true)
   })
 })
