@@ -31,6 +31,11 @@ export async function loadStyleModel(stylistId?: string | null): Promise<StyleMo
       const { data } = await admin.from('stylist_model' as any).select('model').eq('stylist_id', sid).maybeSingle()
       const m = parse((data as any)?.model)
       if (m) return m
+      // A house style (e.g. SCandi-Mum) learns from its own decisions. Falling
+      // through to the legacy row would start it as a copy of Chloe's model.
+      const { getStylistBySlug } = await import('@/lib/stylist-store')
+      const chloe = await getStylistBySlug('chloe')
+      if (chloe && chloe.stylist_id !== sid) return emptyModel()
     }
     // Legacy singleton (pre-0022) — Chloe's original model.
     const { data, error } = await admin.from('style_model' as any).select('model').eq('id', 1).maybeSingle()

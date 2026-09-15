@@ -1,3 +1,4 @@
+import { parsePatternKey, pieceBreaksLearnedRule } from '@/lib/learning-scope'
 import { describe, it, expect } from 'vitest'
 import {
   patternKey, patternLabel, gatherPatterns, promotions, attribution,
@@ -169,5 +170,32 @@ describe('predicted start', () => {
 
   it('says so plainly when there is no baseline yet', () => {
     expect(predictedCleanRate(null, { stylist: 3, style: 1 }).predicted).toBeNull()
+  })
+})
+
+
+describe('applying a promoted rule', () => {
+  it('reads a pattern key back into what it describes', () => {
+    expect(parsePatternKey('swap:type:skirt+colour:cream@casual_day')).toEqual({
+      action: 'swap', itemType: 'skirt', facet: 'colour', value: 'cream', occasion: 'casual_day',
+    })
+    expect(parsePatternKey('remove:type:structured_bag+material:leather@any')?.occasion).toBeNull()
+    expect(parsePatternKey('nonsense')).toBeNull()
+  })
+
+  it('applies at the occasion it was learned, and everywhere when learned @any', () => {
+    const atDinner = parsePatternKey('swap:type:skirt+colour:cream@dinner_drinks')!
+    const cream = { item_type: 'skirt', colour_family: 'cream' }
+    expect(pieceBreaksLearnedRule(atDinner, cream, 'dinner_drinks')).toBe(true)
+    expect(pieceBreaksLearnedRule(atDinner, cream, 'travel')).toBe(false)
+    const anywhere = parsePatternKey('swap:type:skirt+colour:cream@any')!
+    expect(pieceBreaksLearnedRule(anywhere, cream, 'travel')).toBe(true)
+  })
+
+  it('only catches the described kind of piece', () => {
+    const rule = parsePatternKey('remove:type:structured_bag+material:leather@any')!
+    expect(pieceBreaksLearnedRule(rule, { item_type: 'structured_bag', material_category: 'leather' }, null)).toBe(true)
+    expect(pieceBreaksLearnedRule(rule, { item_type: 'tote', material_category: 'leather' }, null)).toBe(false)
+    expect(pieceBreaksLearnedRule(rule, { item_type: 'structured_bag', material_category: 'raffia' }, null)).toBe(false)
   })
 })

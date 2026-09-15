@@ -338,3 +338,41 @@ export function predictedCleanRate(
     basis: `${inheritedRules.stylist} stylist rules + ${inheritedRules.style} style rules already learned`,
   }
 }
+
+
+// ── Applying a promoted rule ────────────────────────────────────────────────
+
+export interface LearnedRuleMatch {
+  action: string
+  itemType: string
+  facet: 'material' | 'colour'
+  value: string
+  /** null = any occasion */
+  occasion: string | null
+}
+
+/**
+ * Read a pattern key back into what it describes — the inverse of patternKey:
+ * `swap:type:skirt+colour:cream@casual_day`.
+ */
+export function parsePatternKey(key: string): LearnedRuleMatch | null {
+  const m = /^([a-z]+):type:([^+]+)\+(material|colour):([^@]+)@(.+)$/.exec(key)
+  if (!m) return null
+  return { action: m[1], itemType: m[2], facet: m[3] as 'material' | 'colour', value: m[4], occasion: m[5] === 'any' ? null : m[5] }
+}
+
+/**
+ * Does this piece fall under a promoted rule, for this occasion? A rule learned
+ * at an occasion applies at that occasion only — the same piece can be right for
+ * a beach and wrong for dinner. A rule learned '@any' applies everywhere.
+ */
+export function pieceBreaksLearnedRule(
+  rule: LearnedRuleMatch,
+  item: { item_type?: string | null; material_category?: string | null; colour_family?: string | null },
+  occasionId: string | null | undefined,
+): boolean {
+  if (rule.occasion && occasionId && rule.occasion !== occasionId) return false
+  if ((item.item_type ?? '') !== rule.itemType) return false
+  const have = rule.facet === 'material' ? item.material_category : item.colour_family
+  return (have ?? '') === rule.value
+}

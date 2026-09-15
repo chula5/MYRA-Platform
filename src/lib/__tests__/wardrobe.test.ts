@@ -5,7 +5,7 @@ import { imageCallCost, textCallCost } from '../wardrobe/cost'
 import { lowConfidenceDims, buildOwnedItemRow } from '../wardrobe/approve'
 import { lookSpend, formatLookSpend, styledInCounts, costPerWear, retailOnly, ownerRefsForMember } from '../wardrobe/owned-items'
 import { rankUnlockPurchases } from '../wardrobe/unlock'
-import { composeMemberLooks, toLookItem, type MemberTaste } from '../pilot-composer'
+import { composeMemberLooks, toLookItem, learnedRulePenalty, type MemberTaste } from '../pilot-composer'
 import { EMPTY_STYLE_PREFS } from '../pilot-stylist'
 import type { ItemWithBrand } from '../admin-queries'
 
@@ -282,6 +282,12 @@ describe('pilot composer with owned items', () => {
     const looks = composeMemberLooks(taste, library(), 3)
     expect(looks.length).toBeGreaterThan(0)
   })
+  it('a promoted style lesson lowers a piece but never removes it from her looks', () => {
+    const taste = emptyTaste()
+    taste.learnedRules = [{ action: 'remove', itemType: 'skirt', facet: 'colour', value: 'navy', occasion: null }]
+    const looks = composeMemberLooks(taste, library(), 3)
+    expect(looks.length).toBeGreaterThan(0)
+  })
 })
 
 // ── unlock ranking ──────────────────────────────────────────────────────────
@@ -347,3 +353,20 @@ describe('what to buy', () => {
   })
 })
 
+
+
+describe('learnedRulePenalty', () => {
+  const t = { learnedRules: [
+    { action: 'remove', itemType: 'jeans', facet: 'material', value: 'natural_woven', occasion: 'casual_day' },
+  ] } as any
+  const jeans = { item_type: 'jeans', material_category: 'natural_woven' } as any
+  it('applies at the occasion it was learned', () => {
+    expect(learnedRulePenalty(t, jeans, 'casual_day')).toBeCloseTo(0.15)
+    expect(learnedRulePenalty(t, jeans, 'dinner_drinks')).toBe(0)
+  })
+  it('is capped, and zero with nothing learned', () => {
+    const many = { learnedRules: [t.learnedRules[0], { ...t.learnedRules[0] }, { ...t.learnedRules[0] }] } as any
+    expect(learnedRulePenalty(many, jeans, 'casual_day')).toBeCloseTo(0.3)
+    expect(learnedRulePenalty({} as any, jeans, 'casual_day')).toBe(0)
+  })
+})

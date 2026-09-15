@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { thumbUrl } from '@/lib/image-utils'
 import {
@@ -15,6 +15,7 @@ import {
   type StylistListEntry,
 } from './actions'
 import InspirationReview from './InspirationReview'
+import { loadStyleLearning, type StyleLearning } from './style-learning-actions'
 import ClientsPanel from './ClientsPanel'
 
 const STATUS_TONE: Record<string, string> = {
@@ -147,6 +148,8 @@ export default function StylistsClient({
               </div>
             )}
 
+            {s.type === 'persona' && <StyleLearningPanel personaId={s.stylist_id} />}
+
             {/* Scoring review — the surface where the vision pass gets corrected */}
             {inspecting === s.stylist_id && (
               <InspirationReview
@@ -256,6 +259,93 @@ export default function StylistsClient({
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// WHAT THE STYLE HAS LEARNED — read from where each lesson is stored.
+function StyleLearningPanel({ personaId }: { personaId: string }) {
+  const [open, setOpen] = useState(false)
+  const [data, setData] = useState<StyleLearning | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    let alive = true
+    loadStyleLearning(personaId).then((r) => {
+      if (!alive) return
+      if ('images' in r) { setData(r); setError(null) } else setError(r.error)
+    })
+    return () => { alive = false }
+  }, [open, personaId])
+
+  const row = 'flex flex-wrap items-baseline justify-between gap-3 border-b border-[#F2F2F0] py-2.5'
+  const k = 'text-[16px] tracking-[0.12em] text-[#6B6B6B]'
+  const v = 'text-[18px] tracking-[0.04em] text-[#0A0A0A] text-right'
+
+  return (
+    <div className="mt-4 border-t border-[#E2E0DB] pt-4">
+      <button onClick={() => setOpen((x) => !x)} className="text-[16px] tracking-[0.14em] text-[#0A0A0A] underline underline-offset-4">
+        {open ? 'HIDE WHAT THIS STYLE HAS LEARNED' : 'WHAT THIS STYLE HAS LEARNED'}
+      </button>
+      {open && error && <p className="text-[16px] text-[#B83A3A] mt-3">{error}</p>}
+      {open && !data && !error && <p className="text-[16px] text-[#A8A8A4] mt-3">READING…</p>}
+      {open && data && (
+        <div className="mt-3 max-w-3xl">
+          <div className={row}>
+            <span className={k}>ITS IMAGES</span>
+            <span className={v}>
+              {data.images.confirmed} confirmed · {data.images.awaitingReview} awaiting review · {data.images.pending} pending · {data.images.rejected} rejected
+            </span>
+          </div>
+          <div className={row}>
+            <span className={k}>STYLE PROFILE (FROM CONFIRMED IMAGES)</span>
+            <span className={v}>
+              {data.envelope
+                ? `built from ${data.envelope.images} image${data.envelope.images === 1 ? '' : 's'}${data.envelope.computedAt ? ` · ${new Date(data.envelope.computedAt).toLocaleDateString('en-GB')}` : ''}`
+                : 'not built yet — confirm images to build it'}
+            </span>
+          </div>
+          <div className={row}>
+            <span className={k}>DECISIONS IT HAS LEARNED FROM</span>
+            <span className={v}>
+              {data.brain.decisions
+                ? `${data.brain.decisions} (${data.brain.approves} kept · ${data.brain.skips} turned down)`
+                : 'none yet — it learns from approvals, swaps, removals and her verdicts'}
+            </span>
+          </div>
+          <div className={row}>
+            <span className={k}>ITS RULES IN FORCE</span>
+            <span className={v}>{data.enforced.rules} rules · {data.enforced.families.join(', ') || '—'}</span>
+          </div>
+          <div className="py-2.5 border-b border-[#F2F2F0]">
+            <p className={k}>LESSONS PROMOTED TO THE STYLE</p>
+            {data.rules.length ? (
+              <ul className="mt-2 space-y-1">
+                {data.rules.map((r) => (
+                  <li key={r.label} className="text-[18px] text-[#0A0A0A]">{r.label} <span className="text-[#A8A8A4]">· {r.occurrences}×</span></li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-[18px] text-[#6B6B6B] mt-1">None yet — a lesson is promoted once it repeats 3 times for a client on this style.</p>
+            )}
+          </div>
+          <div className="py-2.5">
+            <p className={k}>CLIENTS ON THIS STYLE</p>
+            {data.clients.length ? (
+              <ul className="mt-2 space-y-1">
+                {data.clients.map((c) => (
+                  <li key={c.name} className="text-[18px] text-[#0A0A0A]">
+                    {c.name} <span className="text-[#6B6B6B]">· style weight {c.weight?.toFixed(2) ?? '—'} · {c.referencePictures} reference picture{c.referencePictures === 1 ? '' : 's'}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-[18px] text-[#6B6B6B] mt-1">No clients yet.</p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

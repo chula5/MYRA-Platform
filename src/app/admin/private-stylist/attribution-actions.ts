@@ -44,10 +44,16 @@ async function itemsById(admin: any, ids: string[]): Promise<Map<string, any>> {
 
 /** Every scoped signal for a stylist's clients, ready for the pure layer. */
 async function loadSignals(admin: any, opts: { memberId?: string } = {}): Promise<Signal[]> {
-  let q = admin.from('pilot_look_feedback').select('*').limit(10000)
-  if (opts.memberId) q = q.eq('member_id', opts.memberId)
-  const { data: rows } = await q
-  if (!rows?.length) return []
+  // Paged: PostgREST returns at most 1,000 rows however high .limit() is set.
+  const rows: any[] = []
+  for (let from = 0; ; from += 1000) {
+    let q = admin.from('pilot_look_feedback').select('*').order('created_at', { ascending: true }).range(from, from + 999)
+    if (opts.memberId) q = q.eq('member_id', opts.memberId)
+    const { data } = await q
+    rows.push(...(data ?? []))
+    if (!data || data.length < 1000) break
+  }
+  if (!rows.length) return []
 
   const { data: members } = await admin
     .from('pilot_member').select('member_id, stylist_id, style_profile_id')
@@ -151,7 +157,8 @@ export async function runPromotionPass(): Promise<PromotionRun> {
         .select('moodboard_persona_id').eq('profile_id', pid).maybeSingle()
       if (!prof?.moodboard_persona_id) continue
       const { data: imgs } = await admin.from('inspiration_image')
-        .select('image_url').eq('persona_id', prof.moodboard_persona_id).eq('status', 'scored').limit(4)
+        .select('image_url').eq('persona_id', prof.moodboard_persona_id)
+        .in('status', ['scored', 'confirmed']).is('user_id', null).limit(4)
       moodboards.set(pid, (imgs ?? []).map((i: any) => i.image_url).filter(Boolean))
     }
 

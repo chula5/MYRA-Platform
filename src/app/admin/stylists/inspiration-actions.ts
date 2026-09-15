@@ -64,6 +64,8 @@ export async function loadInspirationImages(personaId: string): Promise<{
       .from('inspiration_image')
       .select('*')
       .eq('persona_id', personaId)
+      // A client's reference pictures live on her profile, not in the style's review.
+      .is('user_id', null)
       .order('score_confidence', { ascending: true, nullsFirst: true })
       .order('created_at', { ascending: true })
     if (error) return { images: [], confirmed: 0, minRequired: MIN_CONFIRMED_IMAGES, error: error.message }
@@ -119,6 +121,9 @@ export async function ingestInspirationImages(
     if (rows.length) {
       const { error } = await admin.from('inspiration_image').insert(rows)
       if (error) return { error: error.message }
+      // Score straight away: an added image that waits for a separate button
+      // teaches the style nothing, and adding is the whole point.
+      await scoreInspirationImages(personaId, rows.length)
     }
     revalidatePath(PATH)
     return { added: rows.length, failed }
@@ -235,8 +240,9 @@ export async function setInspirationStatus(
       .eq('image_id', imageId)
     if (error) return { error: error.message }
 
-    // A live persona whose confirmed set changed must not drift silently.
-    if (row?.persona_id) await flagIfLive(admin, row.persona_id)
+    // A live persona whose confirmed set changed must not drift silently;
+    // a persona still being built learns from it immediately.
+    if (row?.persona_id) await rebuildOrFlag(admin, row.persona_id)
     revalidatePath(PATH)
     return {}
   } catch (err) {
@@ -252,14 +258,26 @@ export async function confirmAllScored(personaId: string): Promise<{ confirmed?:
       .update({ status: 'confirmed', updated_at: new Date().toISOString() })
       .eq('persona_id', personaId)
       .eq('status', 'scored')
+      .is('user_id', null)
       .select('image_id')
     if (error) return { error: error.message }
-    await flagIfLive(admin, personaId)
+    await rebuildOrFlag(admin, personaId)
     revalidatePath(PATH)
     return { confirmed: (data ?? []).length }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Bulk confirm failed' }
   }
+}
+
+/**
+ * After the confirmed set changes: a live persona is flagged for review (its
+ * envelope never moves underneath clients silently); any other persona has its
+ * envelope rebuilt at once, so confirming an image is what teaches the style.
+ */
+async function rebuildOrFlag(admin: any, personaId: string): Promise<void> {
+  const { data } = await admin.from('stylist').select('status').eq('stylist_id', personaId).single()
+  if (data?.status === 'live') return flagIfLive(admin, personaId)
+  await recomputeEnvelope(personaId)
 }
 
 async function flagIfLive(admin: any, personaId: string): Promise<void> {
@@ -292,6 +310,9 @@ export async function recomputeEnvelope(personaId: string): Promise<{
       .select('vector, scores, occasion_read')
       .eq('persona_id', personaId)
       .eq('status', 'confirmed')
+      // A client's own reference pictures shape HER looks, not the style that
+      // every other client on this persona inherits.
+      .is('user_id', null)
     if (error) return { error: error.message }
 
     const rows = data ?? []

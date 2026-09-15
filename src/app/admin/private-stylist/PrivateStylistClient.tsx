@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import HerViewTab from './HerViewTab'
+import { listMemberReferencePictures, addMemberReferencePictures, removeMemberReferencePicture, type ReferencePicture } from './reference-actions'
 import { loadMemberConfidence, sendLookToClient, unsendLook, sendAllShotLooks, createClientLogin, type MemberConfidence } from './confidence-actions'
 import { loadClientAttribution, loadTransferSeries, tagLookScope, loadInheritanceReport, runPromotionPass, alignStylistLayers, type ClientAttribution, type InheritanceReport } from './attribution-actions'
 import { SCOPE_LABEL, type Scope } from '@/lib/learning-scope'
@@ -1486,6 +1487,108 @@ function TrustPanel({ memberId }: { memberId: string }) {
   )
 }
 
+// ── HER REFERENCE PICTURES ─────────────────────────────────────────────────
+// Pictures of looks she likes. Scored like a moodboard, they shape HER looks
+// through a second lens; they never change the house style other clients share.
+function ReferencePictures({ memberId, memberName, hasStyle }: { memberId: string; memberName: string; hasStyle: boolean }) {
+  const [pictures, setPictures] = useState<ReferencePicture[]>([])
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+  const [urls, setUrls] = useState('')
+  const [files, setFiles] = useState<File[]>([])
+  const first = memberName.split(' ')[0] || 'her'
+
+  async function refresh() {
+    const r = await listMemberReferencePictures(memberId)
+    setPictures(r.pictures)
+    setLoading(false)
+    if (r.error) setMsg(r.error.toUpperCase())
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { void refresh() }, [memberId])
+
+  async function add() {
+    setBusy(true)
+    setMsg(null)
+    const fd = new FormData()
+    fd.set('memberId', memberId)
+    fd.set('urls', urls)
+    for (const f of files) fd.append('files', f)
+    const r = await addMemberReferencePictures(fd)
+    setBusy(false)
+    setMsg(r.error ? r.error.toUpperCase() : `${r.added} ADDED AND SCORED${r.failed ? ` · ${r.failed} COULD NOT BE SAVED` : ''} — NOW SHAPING ${first.toUpperCase()}'S LOOKS`)
+    if (!r.error) { setUrls(''); setFiles([]) }
+    await refresh()
+  }
+
+  return (
+    <div>
+      <p className={`${label} mb-1`}>{first.toUpperCase()}&apos;S REFERENCE PICTURES — LOOKS SHE LIKES</p>
+      <p className="text-[20px] tracking-[0.04em] text-[#6B6B6B] mb-3 max-w-3xl">
+        Scored like a moodboard. They pull her looks toward what she likes, never fade, and never change the house style other clients share.
+      </p>
+      {!hasStyle ? (
+        <p className="text-[20px] tracking-[0.08em] text-[#8B5E00]">ASSIGN HER A HOUSE STYLE FIRST — HER PICTURES ARE STORED ALONGSIDE IT.</p>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-start gap-3 mb-4">
+            <label className={`${btnTiny} cursor-pointer`}>
+              {files.length ? `${files.length} PICTURE${files.length === 1 ? '' : 'S'} CHOSEN` : 'CHOOSE PICTURES'}
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+              />
+            </label>
+            <textarea
+              value={urls}
+              onChange={(e) => setUrls(e.target.value)}
+              rows={1}
+              placeholder="OR PASTE IMAGE LINKS"
+              className={`${input} flex-1 min-w-[280px]`}
+            />
+            <button className={btnTiny} disabled={busy || (!files.length && !urls.trim())} onClick={add}>
+              {busy ? 'SAVING + SCORING…' : 'ADD PICTURES'}
+            </button>
+          </div>
+          {msg && <p className="text-[20px] tracking-[0.1em] text-[#C4A882] mb-3">{msg}</p>}
+          {loading ? (
+            <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4]">LOADING…</p>
+          ) : pictures.length === 0 ? (
+            <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4]">NO PICTURES YET</p>
+          ) : (
+            <div className="grid grid-cols-3 md:grid-cols-6 gap-[6px]">
+              {pictures.map((pic) => (
+                <div key={pic.image_id} className="border border-[#E2E0DB] bg-white">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={pic.image_url} alt="" className="w-full aspect-[3/4] object-cover bg-[#F2F2F0]" />
+                  <div className="px-2 py-2">
+                    <p className={`text-[16px] tracking-[0.06em] ${pic.status === 'pending_scoring' ? 'text-[#8B5E00]' : 'text-[#3D7A50]'}`}>
+                      {pic.status === 'pending_scoring' ? (pic.scoringError ? 'COULD NOT READ' : 'SCORING…') : 'SCORED'}
+                    </p>
+                    {pic.itemTypes.length > 0 && (
+                      <p className="text-[15px] text-[#6B6B6B] line-clamp-2">{pic.itemTypes.slice(0, 4).join(' · ').replace(/_/g, ' ')}</p>
+                    )}
+                    <button
+                      className="text-[16px] tracking-[0.1em] text-[#B83A3A] underline underline-offset-4 mt-1"
+                      onClick={async () => { await removeMemberReferencePicture(pic.image_id); await refresh() }}
+                    >
+                      ✕ REMOVE
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 function MemberCard({
   member: m,
   run,
@@ -1607,6 +1710,7 @@ function MemberCard({
       {open && (
         <div className="mt-6 space-y-6">
           <Lookbook deliveries={deliveries} memberName={m.name} activity={activity} run={run} busy={busy} />
+          <ReferencePictures memberId={m.member_id} memberName={m.name} hasStyle={!!m.persona_id} />
           {/* Brands */}
           <div>
             <MemberBrands member={m} run={run} busy={busy} />

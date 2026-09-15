@@ -77,11 +77,13 @@ import { buildTraitModel, type TraitModel, type TraitItem, type TraitDecision } 
 import { readTrust, trustHeadline, TRAILING, type LookOutcome, type TrustRead } from '@/lib/member-trust'
 import { explainTraits } from '@/lib/member-traits'
 import { type ClimateId } from '@/lib/climate'
-import { DEFAULT_SCOPE } from '@/lib/learning-scope'
-import { tooSimilarVariant } from '@/lib/pilot-composer'
+import { DEFAULT_SCOPE, parsePatternKey, type LearnedRuleMatch } from '@/lib/learning-scope'
+import { tooSimilarVariant, REFERENCE_LENS_WEIGHT } from '@/lib/pilot-composer'
 import { pieceVerdicts } from '@/lib/piece-verdicts'
 import { rulesForMember, type MemberRules } from '@/lib/style-rules'
-import { loadStyleModel } from '@/lib/style-brain-store'
+import { loadStyleModel, recordStyleDecision } from '@/lib/style-brain-store'
+import { computeEnvelope } from '@/lib/inspiration'
+import { linkMemberToStyleProfile } from '@/lib/style-profile-store'
 import { loadEjectionConstraints } from '@/lib/pipeline-store'
 import { loadLearnedMaterialPairs } from '@/lib/house-style-store'
 
@@ -1234,7 +1236,7 @@ export async function recordResponse(
     .from('pilot_look' as any)
     .update({ response, response_reason: reason, responded_at: new Date().toISOString() })
     .eq('look_id', lookId)
-    .select('delivery_id')
+    .select('delivery_id, items')
     .single()
   if (lookErr) return { error: lookErr.message }
   const deliveryId = (look as any).delivery_id
@@ -1254,6 +1256,8 @@ export async function recordResponse(
     if (r.error) return r
     // Her response is the thing that fades the persona.
     await recomputeMemberPersonaWeight((delivery as any).member_id)
+    // …and, from the client herself, the strongest thing the style can learn.
+    await teachHouseStyle(admin, (delivery as any).member_id, ((look as any).items ?? []) as LookItem[], response === 'yes' ? 'approve' : 'skip', 'review')
   }
   revalidatePath(PATH)
   return {}
@@ -1488,6 +1492,65 @@ async function buildMemberTraitModel(admin: any, rows: any[]): Promise<TraitMode
 }
 
 /**
+ * Lessons promoted from repeated rejections: to her house style (her style
+ * profile) or to her stylist (seen across clients on different styles). One
+ * client's quirks never get here — promotion needs the evidence first.
+ */
+async function loadLearnedRulesFor(admin: any, member: { stylist_id?: string | null; style_profile_id?: string | null }): Promise<LearnedRuleMatch[]> {
+  const reads: Promise<any>[] = []
+  if (member.style_profile_id) {
+    reads.push(admin.from('learned_rule').select('pattern_key').eq('active', true).eq('scope', 'style').eq('profile_id', member.style_profile_id))
+  }
+  if (member.stylist_id) {
+    reads.push(admin.from('learned_rule').select('pattern_key').eq('active', true).eq('scope', 'stylist').eq('stylist_id', member.stylist_id))
+  }
+  const out: LearnedRuleMatch[] = []
+  for (const r of await Promise.all(reads)) {
+    for (const row of r.data ?? []) {
+      const rule = parsePatternKey(row.pattern_key)
+      if (rule && rule.action !== 'liked') out.push(rule)
+    }
+  }
+  return out
+}
+
+/**
+ * Teach the client's house style from a decision made on her look, so the style
+ * builds its own Style Brain (SCandi-Mum learns from SCandi-Mum clients). Never
+ * throws into the decision it rides on; synthetic members never train it.
+ */
+async function teachHouseStyle(
+  admin: any,
+  memberId: string,
+  items: LookItem[],
+  decision: 'approve' | 'skip',
+  source: 'review' | 'swap',
+): Promise<void> {
+  try {
+    const { data: a } = await admin.from('user_persona').select('persona_id').eq('user_id', memberId).maybeSingle()
+    if (!a?.persona_id) return
+    const { data: m } = await admin.from('pilot_member').select('is_synthetic').eq('member_id', memberId).maybeSingle()
+    if (m?.is_synthetic) return
+    const ids = items.map((i) => i?.item_id).filter(Boolean) as string[]
+    if (!ids.length) return
+    const { data: rows } = await admin.from('item')
+      .select('item_id, item_type, colour_family, pattern, material_formality, brand(name, price_tier)').in('item_id', ids)
+    const features = ((rows ?? []) as any[]).map((r) => ({
+      item_type: r.item_type,
+      colour_family: r.colour_family ?? null,
+      pattern: r.pattern ?? null,
+      material_formality: r.material_formality ?? null,
+      brand_name: r.brand?.name ?? null,
+      price_tier: r.brand?.price_tier ?? null,
+    }))
+    if (!features.length) return
+    await recordStyleDecision({ items: features as any, decision, source, itemIds: ids, stylistId: a.persona_id })
+  } catch (err) {
+    console.error('[teachHouseStyle]', err)
+  }
+}
+
+/**
  * Which rules her looks are held to (lib/style-rules). Her assigned house style
  * (a persona in user_persona) wins; with none, a Chloe client gets Chloe style.
  */
@@ -1526,14 +1589,20 @@ async function loadMemberTaste(admin: any, member: { member_id: string; brands: 
 
   // Her rules by layer, and what Chloe's rejections have taught everyone.
   try {
-    const [rules, styleModel, ejections, learnedPairs] = await Promise.all([
+    const { data: styleAssignment } = await admin
+      .from('user_persona').select('persona_id').eq('user_id', member.member_id).maybeSingle()
+    const [rules, styleModel, houseStyleModel, learnedRules, ejections, learnedPairs] = await Promise.all([
       loadMemberRules(admin, member as any),
       loadStyleModel((member as any).stylist_id ?? null),
+      styleAssignment?.persona_id ? loadStyleModel(styleAssignment.persona_id) : Promise.resolve(undefined),
+      loadLearnedRulesFor(admin, member as any),
       loadEjectionConstraints(),
       loadLearnedMaterialPairs(),
     ])
     t.rules = rules
     t.styleModel = styleModel
+    t.houseStyleModel = houseStyleModel
+    t.learnedRules = learnedRules
     t.ejections = ejections
     t.learnedPairs = learnedPairs
   } catch (err) {
@@ -1635,6 +1704,7 @@ export async function assignMemberPersona(memberId: string, personaId: string): 
     const admin = createAdminClient() as any
     if (!personaId) {
       await admin.from('user_persona').delete().eq('user_id', memberId)
+      await linkMemberToStyleProfile(admin, memberId, null)
       revalidatePath(PATH)
       return {}
     }
@@ -1659,6 +1729,8 @@ export async function assignMemberPersona(memberId: string, personaId: string): 
       weight: PERSONA_START_WEIGHT, event_count: 0,
     })
     if (logErr) return { error: logErr.message }
+    // Her lessons can only reach the style through its profile.
+    await linkMemberToStyleProfile(admin, memberId, personaId)
     revalidatePath(PATH)
     return {}
   } catch (err) {
@@ -1673,17 +1745,36 @@ export async function assignMemberPersona(memberId: string, personaId: string): 
  * has to have been reviewed before it can style anyone.
  */
 async function loadPersonaLens(admin: any, memberId: string): Promise<PersonaLens | undefined> {
-  const { data: assignment } = await admin
-    .from('user_persona').select('persona_id, weight').eq('user_id', memberId).maybeSingle()
-  if (!assignment?.persona_id) return undefined
-  const { data: persona } = await admin
-    .from('stylist').select('name, envelope').eq('stylist_id', assignment.persona_id).maybeSingle()
-  const env = persona?.envelope
-  if (!env?.mean?.length) return undefined
+  const [{ data: assignment }, { data: member }] = await Promise.all([
+    admin.from('user_persona').select('persona_id, weight').eq('user_id', memberId).maybeSingle(),
+    admin.from('pilot_member').select('auth_user_id').eq('member_id', memberId).maybeSingle(),
+  ])
+  let name: string | null = null
+  let envelope: { mean: number[]; spread: number[] } | null = null
+  if (assignment?.persona_id) {
+    const { data: persona } = await admin
+      .from('stylist').select('name, envelope').eq('stylist_id', assignment.persona_id).maybeSingle()
+    name = persona?.name ?? null
+    const env = persona?.envelope
+    if (env?.mean?.length) envelope = { mean: env.mean, spread: env.spread ?? [] }
+  }
+
+  // Her own reference pictures — added on her profile by Chloe (user_id = her
+  // member id) or uploaded by her at /me (user_id = her login). What SHE likes:
+  // it does not fade as she responds, and it never shapes the house style.
+  const owners = [memberId, member?.auth_user_id].filter(Boolean)
+  const { data: refs } = await admin.from('inspiration_image')
+    .select('vector').in('user_id', owners).in('status', ['scored', 'confirmed'])
+  const vectors = ((refs ?? []) as any[]).map((r) => r.vector).filter((v) => Array.isArray(v))
+  const refEnv = vectors.length ? computeEnvelope(vectors, 1) : null
+  const reference = refEnv ? { envelope: { mean: refEnv.mean, spread: refEnv.spread }, weight: REFERENCE_LENS_WEIGHT } : null
+
+  if (!envelope && !reference) return undefined
   return {
-    name: persona?.name ?? null,
-    envelope: { mean: env.mean, spread: env.spread ?? [] },
-    weight: typeof assignment.weight === 'number' ? assignment.weight : PERSONA_START_WEIGHT,
+    name,
+    envelope,
+    weight: typeof assignment?.weight === 'number' ? assignment.weight : PERSONA_START_WEIGHT,
+    reference,
   }
 }
 
@@ -2052,7 +2143,13 @@ export async function keepAskPreview(
       if (brandsOut.length) await applyBrandSignals(admin, memberId, brandsOut, 'no')
       if (brandsIn.length) await applyBrandSignals(admin, memberId, brandsIn, 'yes')
     } catch { /* affinity nudge is best-effort, as on a delivery */ }
+    for (const e of edits) {
+      for (const sw of e?.swaps ?? []) await teachHouseStyle(admin, memberId, [sw.out], 'skip', 'swap')
+      for (const rm of e?.removes ?? []) await teachHouseStyle(admin, memberId, [rm.out], 'skip', 'swap')
+    }
   }
+  // Keeping a look is approving it, for the style as for a delivery.
+  for (const l of looks) await teachHouseStyle(admin, memberId, l.items, 'approve', 'review')
   revalidatePath(PATH)
   return { deliveryId: created.delivery_id, learned: fb.length }
 }
@@ -2317,6 +2414,7 @@ export async function swapComposedLookItem(lookId: string, itemIndex: number, ne
     if (outgoing.brand) await applyBrandSignals(admin, delivery.member_id, [outgoing.brand], 'no')
     if (incoming.brand) await applyBrandSignals(admin, delivery.member_id, [incoming.brand], 'yes')
   } catch { /* affinity nudge is best-effort */ }
+  await teachHouseStyle(admin, delivery.member_id, [outgoing], 'skip', 'swap')
 
   revalidatePath(PATH)
   return {}
@@ -2358,6 +2456,7 @@ export async function removeComposedLookItem(lookId: string, itemIndex: number):
   try {
     if (outgoing.brand) await applyBrandSignals(admin, delivery.member_id, [outgoing.brand], 'no')
   } catch { /* best-effort */ }
+  await teachHouseStyle(admin, delivery.member_id, [outgoing], 'skip', 'swap')
 
   revalidatePath(PATH)
   return {}
@@ -2391,6 +2490,7 @@ export async function approveComposedLook(lookId: string): Promise<{ error?: str
     const brandNames = Array.from(new Set(items.map((it) => it.brand).filter(Boolean)))
     if (brandNames.length) await applyBrandSignals(admin, delivery.member_id, brandNames, 'yes')
   } catch { /* best-effort */ }
+  await teachHouseStyle(admin, delivery.member_id, items, 'approve', 'review')
 
   revalidatePath(PATH)
   return {}
@@ -2432,6 +2532,7 @@ export async function skipComposedLook(lookId: string): Promise<{ error?: string
     const brandNames = Array.from(new Set(items.map((it) => it.brand).filter(Boolean)))
     if (brandNames.length) await applyBrandSignals(admin, delivery.member_id, brandNames, 'no')
   } catch { /* best-effort */ }
+  await teachHouseStyle(admin, delivery.member_id, items, 'skip', 'review')
 
   const { error: derr } = await admin.from('pilot_look').delete().eq('look_id', lookId)
   if (derr) return { error: derr.message }

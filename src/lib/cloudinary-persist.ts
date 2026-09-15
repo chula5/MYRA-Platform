@@ -75,6 +75,29 @@ export async function persistImageToCloudinary(
 ): Promise<string | null> {
   if (!imageUrl || !/^https?:\/\//i.test(imageUrl)) return null
 
+  let bytes = await fetchImageBytes(imageUrl)
+  if (bytes && bytes.data.length > MAX_UPLOAD_BYTES) {
+    bytes = (await shrinkToFit(bytes.data)) ?? bytes
+  }
+  const file = bytes ? `data:${bytes.contentType};base64,${bytes.data.toString('base64')}` : imageUrl
+  return signedUpload(file, opts)
+}
+
+/**
+ * Upload image bytes the caller already holds — a picture chosen from a camera
+ * roll has no URL to fetch. Oversized files are shrunk first. Never throws.
+ */
+export async function uploadImageBytesToCloudinary(
+  data: Buffer,
+  contentType: string,
+  opts: { folder?: string; publicId?: string } = {},
+): Promise<string | null> {
+  let bytes = { data, contentType }
+  if (data.length > MAX_UPLOAD_BYTES) bytes = (await shrinkToFit(data)) ?? bytes
+  return signedUpload(`data:${bytes.contentType};base64,${bytes.data.toString('base64')}`, opts)
+}
+
+async function signedUpload(file: string, opts: { folder?: string; publicId?: string }): Promise<string | null> {
   const folder = opts.folder ?? 'outfit-saves'
   const publicId = (opts.publicId ?? `img-${Date.now()}`).toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 100)
   const timestamp = String(Math.floor(Date.now() / 1000))
@@ -87,16 +110,7 @@ export async function persistImageToCloudinary(
   form.append('signature', signature)
   form.append('folder', folder)
   form.append('public_id', publicId)
-
-  let bytes = await fetchImageBytes(imageUrl)
-  if (bytes && bytes.data.length > MAX_UPLOAD_BYTES) {
-    bytes = (await shrinkToFit(bytes.data)) ?? bytes
-  }
-  if (bytes) {
-    form.append('file', `data:${bytes.contentType};base64,${bytes.data.toString('base64')}`)
-  } else {
-    form.append('file', imageUrl)
-  }
+  form.append('file', file)
 
   try {
     const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {

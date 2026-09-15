@@ -27,6 +27,7 @@ import { judgeLook, type MemberRules } from '@/lib/style-rules'
 import { toHouseItem } from '@/lib/house-item'
 import { learnedBonus, blendStrength, type StyleModel, type FeatureItem } from '@/lib/style-brain'
 import { isExcluded, formalityBand, hardSkipPairs, type EjectionConstraints } from '@/lib/pipeline'
+import { pieceBreaksLearnedRule, type LearnedRuleMatch } from '@/lib/learning-scope'
 import { priceOfItem } from '@/lib/brand-affinity'
 import { itemPseudoVector } from '@/lib/brand-affinity'
 import { cosine } from '@/lib/taste-vector'
@@ -48,7 +49,16 @@ export interface PersonaLens {
   name?: string | null
   envelope: { mean: number[]; spread: number[] } | null
   weight: number
+  /**
+   * Her own reference pictures — what SHE likes, added on her profile. A second
+   * envelope, scored exactly like the house style's, but hers: it does not fade
+   * as she responds and it never teaches the style.
+   */
+  reference?: { envelope: { mean: number[]; spread: number[] }; weight: number } | null
 }
+
+/** How much her reference pictures pull, relative to the house style's lens. */
+export const REFERENCE_LENS_WEIGHT = 0.5
 
 /**
  * The dimensions a SINGLE GARMENT can be compared to an outfit-level envelope
@@ -80,20 +90,29 @@ export const ITEM_LENS_DIMS: { dim: number; field: 'structure' | 'pattern' | 'ma
  * so a piece nobody has scored gets no opinion (0), not a penalty.
  */
 export function personaFitScore(lens: PersonaLens | undefined, item: ItemWithBrand): number {
-  if (!lens?.envelope?.mean?.length || lens.weight <= 0) return 0
+  if (!lens) return 0
+  let score = 0
+  if (lens.envelope?.mean?.length && lens.weight > 0) score += envelopeFit(lens.envelope, item) * lens.weight
+  if (lens.reference?.envelope?.mean?.length && lens.reference.weight > 0) {
+    score += envelopeFit(lens.reference.envelope, item) * lens.reference.weight
+  }
+  return score
+}
+
+/** One envelope's opinion of a piece, before weighting: +1 dead centre, 0 at two sigma. */
+function envelopeFit(envelope: { mean: number[]; spread: number[] }, item: ItemWithBrand): number {
   const v = pseudoVec(item)
   let total = 0
   let n = 0
   for (const { dim, field } of ITEM_LENS_DIMS) {
     if ((item as any)[field] == null) continue // not scored — no evidence either way
-    const spread = lens.envelope.spread?.[dim] ?? 0
+    const spread = envelope.spread?.[dim] ?? 0
     const denom = Math.max(spread, 0.125)
-    total += Math.abs(v[dim] - (lens.envelope.mean[dim] ?? 0)) / denom
+    total += Math.abs(v[dim] - (envelope.mean[dim] ?? 0)) / denom
     n++
   }
   if (n === 0) return 0
-  const raw = Math.max(-0.5, 1 - total / n / 2)
-  return raw * lens.weight
+  return Math.max(-0.5, 1 - total / n / 2)
 }
 
 // ── Occasion fit ─────────────────────────────────────────────────────────────
@@ -169,8 +188,28 @@ export interface MemberTaste {
   // ejections and learned material pairings. Shared by every client so the
   // system keeps getting smarter from what she turns down.
   styleModel?: StyleModel
+  // Her house style's own Style Brain (e.g. SCandi-Mum), learned from decisions
+  // made for its clients. Starts empty and ramps in as it learns.
+  houseStyleModel?: StyleModel
+  // Lessons promoted to her house style (or her stylist) from repeated
+  // rejections — "a cream skirt swapped out of dinner looks".
+  learnedRules?: LearnedRuleMatch[]
   ejections?: EjectionConstraints
   learnedPairs?: { approved: Set<string>; rejected: Set<string> }
+}
+
+/**
+ * A lesson promoted to her house style or stylist lowers a piece — it does not
+ * block it. Measured on Alison's history, one client alone would promote 42
+ * lessons as coarse as "woven trousers pulled from casual day looks" (a skipped
+ * look counts every piece in it), and as blocks they would strip trousers and
+ * blouses — two of her loved types — from every client on the style.
+ */
+export const LEARNED_RULE_PENALTY = 0.15
+export function learnedRulePenalty(t: MemberTaste, item: ItemWithBrand, occasionId?: string | null): number {
+  if (!t.learnedRules?.length) return 0
+  const hits = t.learnedRules.filter((r) => pieceBreaksLearnedRule(r, item as any, occasionId)).length
+  return Math.min(2 * LEARNED_RULE_PENALTY, hits * LEARNED_RULE_PENALTY)
 }
 
 /** A library piece as the Style Brain reads it — same fields as the Composer. */
@@ -203,7 +242,11 @@ function judgeMemberLook(t: MemberTaste, all: ItemWithBrand[], slots?: (string |
 export function styleLearningBonus(t: MemberTaste, anchor: ItemWithBrand, items: { item: ItemWithBrand; slot: Slot }[]): number {
   const all = [anchor, ...items.map((x) => x.item)]
   let b = 0
-  if (t.styleModel) b += blendStrength(t.styleModel) * learnedBonus(t.styleModel, all.map(toFeature))
+  const features = all.map(toFeature)
+  // Chloe's rejections are always carried; her house style's own learning is
+  // added on top and ramps in with its own decisions (blendStrength starts at 0).
+  if (t.styleModel) b += blendStrength(t.styleModel) * learnedBonus(t.styleModel, features)
+  if (t.houseStyleModel) b += blendStrength(t.houseStyleModel) * learnedBonus(t.houseStyleModel, features)
   const j = judgeMemberLook(t, all, [undefined, ...items.map((x) => x.slot)])
   if (j) b -= j.penalty
   return b
@@ -562,7 +605,7 @@ export function composeMemberLooks(
 
   const itemScore = (i: ItemWithBrand) =>
     memberItemScore(t, i) + occasionItemScore(occ, i) + climateScore(occ?.climate, i as any) + personaFitScore(lens, i)
-      - historyPenalty(history, i.item_id) + varietyJitter(i.item_id, seed)
+      - historyPenalty(history, i.item_id) - learnedRulePenalty(t, i, occ?.id) + varietyJitter(i.item_id, seed)
 
   // Regular anchors: dresses and tops (owned or retail, in blend mode).
   const anchorPool = usable.filter((i) => {
@@ -615,7 +658,7 @@ export function composeMemberLooks(
       learnedBonus: (items) =>
         memberComboBonus(t, a.item, items) + styleLearningBonus(t, a.item, items) +
         items.reduce((sum, i) => sum + occasionItemScore(occ, i.item) + personaFitScore(lens, i.item)
-          - historyPenalty(history, i.item.item_id) + varietyJitter(i.item.item_id, seed), 0) /
+          - historyPenalty(history, i.item.item_id) - learnedRulePenalty(t, i.item, occ?.id) + varietyJitter(i.item.item_id, seed), 0) /
           Math.max(1, items.length),
       learnedBlend: 0.4,
       houseGate: (items) => memberGate(t, a.item, items, strictRules),
@@ -657,6 +700,7 @@ export function composeMemberLooks(
       lens?.envelope && lens.weight > 0
         ? `through ${lens.name ?? 'persona'} at weight ${lens.weight.toFixed(2)} (lens fit ${lensFit >= 0 ? '+' : ''}${lensFit.toFixed(2)})`
         : null,
+      lens?.reference?.envelope ? 'shaped by her reference pictures' : null,
       `coherence ${best.score.toFixed(2)}`,
       ownedCount ? `◈ ${ownedCount} from her wardrobe` : null,
       !strictRules && t.rules?.source !== 'global_only' ? `${t.rules?.styleName ?? 'house style'} rules relaxed — too few looks passed them` : null,
@@ -744,7 +788,7 @@ export function composeMemberVariants(
     learnedBonus: (items) =>
       memberComboBonus(t, anchor, items) + styleLearningBonus(t, anchor, items) +
       items.reduce((sum, i) => sum + occasionItemScore(occ, i.item) + personaFitScore(lens, i.item)
-        - historyPenalty(history, i.item.item_id) + varietyJitter(i.item.item_id, seed), 0) /
+        - historyPenalty(history, i.item.item_id) - learnedRulePenalty(t, i.item, occ?.id) + varietyJitter(i.item.item_id, seed), 0) /
         Math.max(1, items.length),
     learnedBlend: 0.4,
     houseGate: (items) => memberGate(t, anchor, items),
@@ -852,7 +896,7 @@ export function rankAlternates(
         keepItems.length > 0
           ? keepItems.reduce((s, k) => s + pairCompat(k, i).total, 0) / keepItems.length
           : 0.7
-      return { item: i, score: 0.5 * memberItemScore(t, i) + 0.5 * compat + occasionItemScore(occ, i) + personaFitScore(lens, i) }
+      return { item: i, score: 0.5 * memberItemScore(t, i) + 0.5 * compat + occasionItemScore(occ, i) + personaFitScore(lens, i) - learnedRulePenalty(t, i, occ?.id) }
     })
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
