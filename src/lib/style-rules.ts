@@ -17,7 +17,13 @@
 
 import { CONSTITUTION_RULES, evaluateHouseStyle, type HouseItem, type EvaluateOpts, type RuleHit } from './house-style'
 
-export const GLOBAL_RULE_CODES = new Set(['colour.fuchsia', 'colour.discordant', 'category.activewear'])
+// layer.same_shape and set.coord_mismatch are about whether pieces make one
+// outfit at all, not taste — Chloe: "learn this for future outfits, not just
+// Alison". A sleeveless waistcoat over a sleeveless maxi dress; a co-ord shirt
+// under a different pair of trousers.
+export const GLOBAL_RULE_CODES = new Set([
+  'colour.fuchsia', 'colour.discordant', 'category.activewear', 'layer.same_shape', 'set.coord_mismatch',
+])
 
 /** Global rules that BLOCK even though the house constitution only penalises them. */
 const GLOBAL_BLOCKING = new Set(['colour.discordant'])

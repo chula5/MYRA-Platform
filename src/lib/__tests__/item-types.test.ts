@@ -114,8 +114,14 @@ describe('vest is a top unless something says otherwise', () => {
     expect(t('Sheepskin Gilet')).toBe('gilet')
     expect(t('Merino Wool Gilet')).toBe('gilet')
     expect(t('Carina Duffle Gilet - Cocoa')).toBe('gilet')
-    expect(t('Merlin waistcoat')).toBe('gilet')
     expect(t('Quilted Vest')).toBe('gilet')
+  })
+
+  it('reads a waistcoat as a top, not a layer', () => {
+    // Chloe, 2026-09-15: "this gilet is more of a top than a jacket" — a
+    // Clementine waistcoat was layered over a sleeveless maxi dress.
+    expect(t('Merlin waistcoat')).toBe('blouse')
+    expect(t('Clementine waistcoat - Natural')).toBe('blouse')
   })
 })
 

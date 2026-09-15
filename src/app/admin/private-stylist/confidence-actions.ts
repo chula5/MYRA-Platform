@@ -138,6 +138,10 @@ export async function createClientLogin(
   memberId: string,
   email: string,
 ): Promise<{ email?: string; password?: string; url?: string; error?: string }> {
+  // Creating a login is admin-only — this is a server action anyone could call.
+  const supabase = await createServerClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user || user.id !== process.env.ADMIN_USER_ID) return { error: 'Not authorised' }
   const clean = (email ?? '').trim().toLowerCase()
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(clean)) return { error: 'Enter a valid email address' }
   const admin = createAdminClient() as any

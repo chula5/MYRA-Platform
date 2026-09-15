@@ -2296,9 +2296,14 @@ export async function composeLookVariants(
     tooSimilarVariant(Array.from(a), Array.from(b), hero.item_id)
 
   const need = Math.max(1, target - existingSets.length)
-  const variants = composeMemberVariants(
+  const composed = composeMemberVariants(
     taste, library, hero.item_id, need + existingSets.length + 2, occ, lens, { seenCounts, rejected }, { ownedMode: 'blend' },
   )
+  // The same check as every other way a look is made: a variant that clashes,
+  // or holds a piece not in her size, is never saved. STYLE 3 WAYS was the one
+  // path that skipped it.
+  const judged = await judgeLooksForMember(admin, delivery.member_id, composed, 'unknown')
+  const variants = composed.filter((_, i) => judged[i].check?.verdict !== 'clashes' && !hasPieceOutOfSize(judged[i]))
   const fresh: typeof variants = []
   for (const v of variants) {
     if (fresh.length >= need) break

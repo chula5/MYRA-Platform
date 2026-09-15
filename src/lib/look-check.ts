@@ -57,6 +57,10 @@ ${pieces.map((p, i) => `${i + 1}. ${p.product_name ?? 'piece'}${p.item_type ? ` 
 
 Product photos are often worn by a model with other clothes and accessories. Judge ONLY the ${pieces.length} pieces listed — in each photo, the piece named for that position — and ignore everything else the model is wearing or holding.
 
+One exception: a CO-ORD or matching set. If a listed piece is one half of a set (its name says co-ord or set, or the photo plainly shows a matching top-and-bottom sold together) and the outfit pairs it with a DIFFERENT bottom or top instead of its own other half, that is a clash — it reads as two bottoms or two tops.
+
+A layer must add something. A waistcoat or tailored vest is worn as a TOP, not a jacket. A sleeveless layer (gilet, waistcoat, vest) over a sleeveless dress or top repeats the same shape and adds nothing — that is a clash.
+
 The client: ${client}
 
 House rules for every client: white and cream (or ivory next to butter or ecru cream) never go together; no fuchsia or hot pink; no clashing colours; the pieces must read as one outfit; at most one statement print, pattern or strong texture — a look with too much going on (e.g. a mustard textured top, a patterned navy trouser and a grey tweed jacket together) clashes.

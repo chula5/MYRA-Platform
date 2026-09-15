@@ -38,5 +38,7 @@ export function toHouseItem(it: ItemWithBrand, slot?: string): HouseItem {
     print_flag: a.print_flag ?? null,
     neckline: a.neckline ?? null,
     is_activewear: a.is_activewear ?? null,
+    // The one-outfit rule reads it: a sleeveless layer on a sleeveless piece.
+    sleeve: a.sleeve ?? null,
   }
 }

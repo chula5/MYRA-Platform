@@ -50,6 +50,7 @@ export interface HouseItem {
   price_tier?: number | null
   // Admin flags (migration 0021)
   print_flag?: string | null      // 'tasteful' allows leopard / polka dot
+  sleeve?: number | null          // 1 = sleeveless → 5 = long; about half the library carries it
   neckline?: string | null        // 'high' | 'covered' | 'crew' | 'turtleneck' | …
   is_activewear?: boolean | null
 }
@@ -278,6 +279,32 @@ export const isVolumous = (i: HouseItem) =>
 export const isCounterweight = (i: HouseItem) =>
   (num(i.fit) ?? 3) <= 2 || (num(i.waist_definition) ?? 3) <= 2 || (num(i.structure) ?? 3) <= 2
 
+// ── ONE OUTFIT ────────────────────────────────────────────────────────────────
+
+const SLEEVELESS_RE = /sleeveless|\btank\b|\bcami\b|camisole|strappy|halter|\bvest\b|waistcoat|slip dress|bustier|strapless/i
+
+/** No sleeves — from the scored sleeve where there is one, else the piece's name. */
+export const isSleeveless = (i: HouseItem): boolean =>
+  (num(i.sleeve) != null ? (num(i.sleeve) as number) <= 2 : false) || SLEEVELESS_RE.test(lower(i.product_name))
+
+const COORD_RE = /co-?ord|two[- ]piece|matching set/i
+const SET_NOISE = new Set([
+  'co', 'ord', 'coord', 'set', 'two', 'piece', 'matching', 'the', 'and', 'with',
+  'shirt', 'skirt', 'trousers', 'trouser', 'pant', 'pants', 'top', 'shorts', 'blouse', 'jacket', 'knit', 'tee', 'vest',
+])
+const setWords = (i: HouseItem) =>
+  new Set(lower(i.product_name).split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !SET_NOISE.has(w)))
+
+export const isCoordHalf = (i: HouseItem): boolean => COORD_RE.test(lower(i.product_name))
+
+/** Two halves of the same set: both named as a set, same brand, sharing the set's name. */
+export function sameSet(a: HouseItem, b: HouseItem): boolean {
+  if (!isCoordHalf(a) || !isCoordHalf(b)) return false
+  if (lower(a.brand_name) !== lower(b.brand_name)) return false
+  const wb = setWords(b)
+  return Array.from(setWords(a)).some((w) => wb.has(w))
+}
+
 // ── OCCASION NOTES ────────────────────────────────────────────────────────────
 
 export interface OccasionGuidance {
@@ -334,6 +361,8 @@ export const CONSTITUTION_RULES: ConstitutionRule[] = [
   { code: 'texture.budget', family: 'Statement budget', kind: 'violation' },
   { code: 'echo.none', family: 'Echo rule', kind: 'violation' },
   { code: 'silhouette.loose_on_loose', family: 'Silhouette balance', kind: 'violation' },
+  { code: 'layer.same_shape', family: 'One outfit', kind: 'violation' },
+  { code: 'set.coord_mismatch', family: 'One outfit', kind: 'violation' },
   { code: 'material.rejected', family: 'Material pairing', kind: 'violation' },
   { code: 'material.formality_gap', family: 'Material pairing', kind: 'violation' },
   { code: 'jewellery.loud_on_busy', family: 'Jewellery logic', kind: 'violation' },
@@ -465,6 +494,25 @@ export function evaluateHouseStyle(items: HouseItem[], opts: EvaluateOpts = {}):
   if (volumous.length > 0 && !items.some(isCounterweight)) {
     V('silhouette.loose_on_loose', 'Silhouette balance',
       `${volumous.map(name).join(', ')} volumous with nothing fitted or cinched — falls off the body`)
+  }
+
+  // ── ONE OUTFIT ──────────────────────────────────────────────────────────────
+  // Rules about whether the pieces make one outfit at all (global — every
+  // client, every style). Chloe, 2026-09-15: a sleeveless waistcoat over a
+  // sleeveless maxi dress "are the same shape"; a co-ord shirt worn with other
+  // trousers "doubled up on bottoms".
+  const layers = items.filter((i) => lower(i.item_type) === 'gilet' || (i.slot === 'outerwear' && isSleeveless(i)))
+  const underneath = items.filter((i) => (i.slot === 'dress' || i.slot === 'top') && isSleeveless(i))
+  if (layers.length && underneath.length) {
+    V('layer.same_shape', 'One outfit',
+      `${layers.map(name).join(', ')} over ${underneath.map(name).join(', ')} — a sleeveless layer on a sleeveless piece repeats the shape and adds nothing`)
+  }
+  for (const half of items.filter((i) => (i.slot === 'top' || i.slot === 'bottom') && isCoordHalf(i))) {
+    const partner = items.find((i) => i.slot === (half.slot === 'top' ? 'bottom' : 'top'))
+    if (partner && !sameSet(half, partner)) {
+      V('set.coord_mismatch', 'One outfit',
+        `${name(half)} is half of a set — worn with ${name(partner)} instead of its own other half`)
+    }
   }
 
   // ── MATERIAL PAIRING ────────────────────────────────────────────────────────

@@ -189,7 +189,13 @@ const TYPE_RULES: Array<[RegExp, string]> = [
   // gilets in the library as coats: Tura Top, High Neck Knit Tank, Amara
   // v-neck vest, every Mos Mosh knit vest. Sleeveless tops are handled lower
   // down, where the piece's own words decide.
-  [/\bgilet|waistcoat|(?:quilted|padded|puffer|shearling|utility|down|fleece|duffle|hunting|field)[\s-]*vest/, 'gilet'],
+  // French names: "pull" is a jumper and "gilet … en jersey / cachemire" is a
+  // cardigan — agnès b. pieces were being filed as outerwear gilets.
+  [/\bpull\b(?![\s-]on)|\bgilet\b[^.]{0,30}\ben\s+(?:jersey|cachemire|laine|maille|mérinos|merinos|coton)/, 'knitwear'],
+  // A waistcoat is worn as a TOP, not a layer (Chloe, 2026-09-15) — only warm,
+  // padded or fur gilets and vests are outerwear.
+  // "button down vest" is a top — only down FILL makes a vest outerwear.
+  [/\bgilet|(?:quilted|padded|puffer|shearling|utility|(?<!button[\s-])down|fleece|duffle|hunting|field|fur|sheepskin|teddy)[\s-]*vest/, 'gilet'],
   [/\bcape|poncho/, 'cape'],
   [/\bouterwear/, 'jacket'], // umbrella category (Munthe et al) — jacket as the safe default
   // "Runner" is what activewear brands call a sneaker — Varley sells six and
@@ -212,10 +218,10 @@ const TYPE_RULES: Array<[RegExp, string]> = [
   // A knit vest is a sleeveless jumper, not a coat.
   // The fibre word is rarely adjacent: "relaxed cashmere HIGH NECK vest".
   // Bounded so it cannot reach across a whole description.
-  [/(?:knit|ribbed|cashmere|merino|wool|sweater|jumper)[\s\w-]{0,20}vest/, 'knitwear'],
+  [/(?:knit|ribbed|cashmere|merino|wool|sweater|jumper)[\s\w-]{0,20}(?:vest|waistcoat)/, 'knitwear'],
   [/knit|sweater|jumper|cardigan|pullover|turtleneck|roll.?neck|polo.?neck/, 'knitwear'],
   // Everything else called a vest: a sleeveless top.
-  [/\bblouse|camisole|\bcami\b|\btop\b|\btops\b|\btank\b|\bvest\b/, 'blouse'], [/\bovershirt|\bshirt/, 'shirt'],
+  [/\bblouse|camisole|\bcami\b|\btop\b|\btops\b|\btank\b|\bvest\b|\bwaistcoat/, 'blouse'], [/\bovershirt|\bshirt/, 'shirt'],
   [/\bjeans|\bdenim\b/, 'jeans'], [/trouser|\bpants|chino|legging/, 'trousers'],
   [/\bshorts|bermuda/, 'shorts'], [/\bskirt/, 'skirt'],
   [/\bjacket|bomber|anorak|windbreaker/, 'jacket'],
