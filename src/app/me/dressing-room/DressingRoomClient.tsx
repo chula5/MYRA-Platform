@@ -7,6 +7,7 @@ import Link from 'next/link'
 import FallbackImage from '@/components/FallbackImage'
 import { ArchiveCard } from '@/components/ArchiveCard'
 import type { DressingRoomView } from '@/app/admin/private-stylist/actions'
+import EmailFinds from './EmailFinds'
 
 export default function DressingRoomClient({
   view, testMemberId, onOpenPiece,
@@ -35,6 +36,8 @@ export default function DressingRoomClient({
           }
         >
           {view.error && <p className="text-[20px] text-[#B83A3A] text-center mb-6">{view.error}</p>}
+          {/* Fill the dressing room from her order emails. */}
+          <EmailFinds testMemberId={testMemberId} />
           {view.pieces.length === 0 ? (
             <div className="text-center py-10 space-y-4">
               <p className="text-[22px] text-[#4A4E57]">Nothing in your dressing room yet.</p>

@@ -252,7 +252,7 @@ export async function listBrandNames(): Promise<string[]> {
  * exist is still written, and a genuine error (constraint, type, permission)
  * still fails the way it should.
  */
-async function insertItemTolerantly(
+export async function insertItemTolerantly(
   a: Admin,
   row: Record<string, unknown>,
   maxDrops = 8,

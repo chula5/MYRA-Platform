@@ -118,3 +118,83 @@ export function buildOwnedItemRow(i: BuildOwnedItemInput): Record<string, unknow
     owned_metadata: metadata,
   }
 }
+
+export interface BuildProductItemInput {
+  owner: OwnerRef
+  brandId: string | null
+  /** The brand as written, kept when there is no brand row. */
+  brandLabel: string | null
+  productName: string
+  imageUrl: string
+  retailerUrl: string | null
+  price: number | null
+  currency: string | null
+  scores: AnalysedProduct | null
+  lowConfidence: string[]
+  /** Where it came from, for the record. */
+  retailer: string | null
+  orderDate: string | null
+  colour: string | null
+  size: string | null
+  findId: string
+}
+
+/**
+ * The `item` insert for a piece she bought, found in her email. Same owned-item
+ * shape as a photographed piece; the product itself (name, retailer link, price
+ * paid, product photo) stands in for the photo and the cut-out.
+ */
+export function buildOwnedItemFromProduct(i: BuildProductItemInput): Record<string, unknown> {
+  const s = i.scores
+  const pick = (k: keyof AnalysedProduct) => INT_1_5(s?.[k] ?? null)
+  const metadata: OwnedMetadata = {
+    owned_since: i.orderDate,
+    fit_notes: i.size ? `Bought in ${i.size}` : null,
+    favourite: null,
+    brand_label: i.brandId ? null : i.brandLabel,
+    notes: i.retailer ? `Bought from ${i.retailer}` : null,
+    low_confidence_dims: i.lowConfidence,
+  }
+  return {
+    brand_id: i.brandId,
+    item_type: s?.item_type ?? null,
+    product_name: i.productName,
+    retailer_url: i.retailerUrl,
+    image_url: i.imageUrl,
+    price: i.price != null ? String(i.price) : null,
+    currency: i.currency,
+    in_inventory: false,
+    source: 'manual',
+    status: 'ready',
+    admin_notes: `Email import · find ${i.findId}`,
+    notes: null,
+    colour_hex: s?.colour_hex ?? null,
+    colour_family: s?.colour_family ?? null,
+    material_primary: s?.material_primary ?? null,
+    material_category: s?.material_category ?? null,
+    fit: pick('fit'),
+    length: pick('length'),
+    rise: pick('rise'),
+    structure: pick('structure'),
+    shoulder: pick('shoulder'),
+    neckline: pick('neckline'),
+    sleeve: pick('sleeve'),
+    waist_definition: pick('waist_definition'),
+    leg_opening: pick('leg_opening'),
+    surface: pick('surface'),
+    colour_depth: pick('colour_depth'),
+    pattern: pick('pattern'),
+    sheen: pick('sheen'),
+    material_weight: pick('material_weight'),
+    material_formality: pick('material_formality'),
+    jewellery_scale: pick('jewellery_scale'),
+    jewellery_formality: pick('jewellery_formality'),
+    stock_status: 'in_stock',
+    stock_checked_at: new Date().toISOString(),
+    ownership: 'owned',
+    owner_user_id: i.owner.id,
+    owner_kind: i.owner.kind,
+    estimated_value: i.price != null && i.price > 0 ? i.price : null,
+    owned_metadata: metadata,
+  }
+}
