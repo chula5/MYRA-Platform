@@ -71,10 +71,10 @@ async function gmailGet(accessToken: string, path: string): Promise<any> {
   return data
 }
 
-/** Order-looking messages since a date, newest first. Gmail does the first filter. */
+/** Order- and return-looking messages since a date, newest first. Gmail does the first filter. */
 export async function listGmailPurchaseIds(accessToken: string, since: Date, max = 1500): Promise<string[]> {
   const after = Math.floor(since.getTime() / 1000)
-  const q = `after:${after} -subject:(return OR refund OR cancelled OR canceled) {category:purchases subject:order subject:receipt subject:confirmation subject:dispatched subject:shipped subject:"on its way"}`
+  const q = `after:${after} {category:purchases subject:order subject:receipt subject:confirmation subject:dispatched subject:shipped subject:"on its way" subject:return subject:returned subject:refund subject:refunded subject:cancelled}`
   const ids: string[] = []
   let pageToken: string | undefined
   do {

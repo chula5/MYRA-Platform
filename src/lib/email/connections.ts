@@ -6,22 +6,30 @@
 // module in plain text.
 //
 // A scan is a queued job that runs in chunks under the cron's time limit and
-// resumes where it stopped: phase 'list' asks the inbox for order-looking
-// messages since the scan date; phase 'read' pre-filters each subject, sends
-// the rest to extraction, and records each wearable piece once.
+// resumes where it stopped: phase 'list' asks the inbox for order- and
+// return-looking messages since the scan date; phase 'read' pre-filters each
+// subject, sends the rest to extraction, and records each wearable piece ONCE —
+// the order confirmation, payment receipt, dispatch and delivery emails for one
+// piece merge into one find. A return or refund marks the piece returned; one
+// read before its order (inboxes are read newest first) waits as a marker.
 
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase-server'
 import { analyseProductImage } from '@/app/admin/items/analyse-image'
 import { persistImageToCloudinary } from '@/lib/cloudinary-persist'
 import { productPageImage } from '@/lib/product-image'
-import { insertItemTolerantly, resolveBrandId } from '@/lib/wardrobe/store'
+import { deleteOwnedItem, insertItemTolerantly, resolveBrandId } from '@/lib/wardrobe/store'
+import { uploadBufferToCloudinary } from '@/lib/wardrobe/cloudinary'
+import { rebuildLooksWithoutItems } from '@/app/admin/private-stylist/actions'
 import { buildOwnedItemFromProduct, lowConfidenceDims } from '@/lib/wardrobe/approve'
 import { encryptSecret, decryptSecret } from './secrets'
 import { googleAccessToken, listGmailPurchaseIds, getGmailMessage, revokeGoogle } from './gmail'
 import { listImapPurchaseUids, fetchImapMessages, testImapLogin, type ImapConfig } from './imap'
-import { findKey, looksLikeOrderEmail, type MailMessage } from './purchase-core'
-import { extractPurchase } from './purchases'
+import {
+  RETURNED, RETURN_SEEN, emailKind, findKey, isGenericName, mergeFind, sameFind,
+  type MailMessage, type PurchaseExtraction, type PurchaseItem,
+} from './purchase-core'
+import { extractPurchase, namePieceFromPhoto } from './purchases'
 
 const db = () => createAdminClient() as any
 
@@ -191,40 +199,23 @@ export async function processEmailScans(budgetMs = 240_000): Promise<{ read: num
         await a.from('email_scan_job').update({ phase: 'read', message_ids: ids, cursor }).eq('job_id', job.job_id)
       }
 
+      const finds = await loadFindsForMatching(a, job.member_id)
       let jobFound = job.found ?? 0
       let jobCalls = job.ai_calls ?? 0
       while (cursor < ids.length && Date.now() - started < budgetMs) {
         const chunk = ids.slice(cursor, cursor + READ_CHUNK)
         const messages = await fetchMessages(c, chunk)
         for (const m of messages) {
-          if (!looksLikeOrderEmail(m)) continue
+          if (!emailKind(m)) continue
           const { extraction } = await extractPurchase(m)
           jobCalls++
           aiCalls++
-          if (!extraction.is_purchase) continue
-          const rows = extraction.items.map((item) => ({
-            member_id: job.member_id,
-            connection_id: c.connection_id,
-            message_id: m.id,
-            find_key: findKey(extraction, item),
-            retailer: extraction.retailer,
-            order_id: extraction.order_id,
-            order_date: extraction.order_date,
-            product_name: item.product_name,
-            brand_name: item.brand_name,
-            colour: item.colour,
-            size: item.size,
-            price: item.price,
-            currency: item.currency,
-            image_url: item.image_url,
-            product_url: item.product_url,
-          }))
-          if (rows.length) {
-            const { data: inserted } = await a.from('email_purchase_find')
-              .upsert(rows, { onConflict: 'member_id,find_key', ignoreDuplicates: true }).select('find_id')
-            jobFound += (inserted ?? []).length
-            found += (inserted ?? []).length
-          }
+          if (extraction.kind === 'other') continue
+          const r = await recordEmail(a, finds, job.member_id, c.connection_id, m.id, extraction)
+          jobFound += r.added
+          found += r.added
+          aiCalls += r.aiCalls
+          jobCalls += r.aiCalls
         }
         cursor += chunk.length
         read += chunk.length
@@ -253,6 +244,168 @@ export async function processEmailScans(budgetMs = 240_000): Promise<{ read: num
 
   const { count } = await a.from('email_scan_job').select('job_id', { count: 'exact', head: true }).in('status', ['queued', 'running'])
   return { read, found, aiCalls, remaining: count ?? 0 }
+}
+
+// ── Recording what an email says ────────────────────────────────────────────
+
+type FindRow = {
+  find_id: string
+  retailer: string | null
+  order_id: string | null
+  order_date: string | null
+  product_name: string
+  brand_name: string | null
+  colour: string | null
+  size: string | null
+  price: number | null
+  currency: string | null
+  image_url: string | null
+  product_url: string | null
+  status: string
+  error: string | null
+  item_id: string | null
+}
+
+const FIND_COLS = 'find_id, retailer, order_id, order_date, product_name, brand_name, colour, size, price, currency, image_url, product_url, status, error, item_id'
+
+/** Every find she has, so a new email can be matched to the piece it is about. */
+async function loadFindsForMatching(a: any, memberId: string): Promise<FindRow[]> {
+  const out: FindRow[] = []
+  for (let from = 0; ; from += 1000) {
+    const { data } = await a.from('email_purchase_find').select(FIND_COLS).eq('member_id', memberId).order('created_at').range(from, from + 999)
+    out.push(...((data ?? []) as FindRow[]))
+    if (!data || data.length < 1000) break
+  }
+  return out
+}
+
+const isReturnMarker = (f: FindRow) => f.status === 'discarded' && f.error === RETURN_SEEN
+
+/**
+ * Apply one extracted email to her finds (kept in `finds`, updated in place):
+ * a purchase adds a piece or fills in one already found; a return marks the
+ * matching pieces returned, or leaves a marker for an order not read yet.
+ */
+async function recordEmail(
+  a: any, finds: FindRow[], memberId: string, connectionId: string, messageId: string, e: PurchaseExtraction,
+): Promise<{ added: number; aiCalls: number }> {
+  let added = 0
+  let aiCalls = 0
+  const save = async (f: FindRow, patch: Partial<FindRow>) => {
+    if (!Object.keys(patch).length) return
+    Object.assign(f, patch)
+    await a.from('email_purchase_find').update(patch).eq('find_id', f.find_id)
+  }
+
+  if (e.kind === 'return') {
+    const targets: FindRow[] = []
+    if (e.whole_order && e.order_id) {
+      targets.push(...finds.filter((f) => !isReturnMarker(f) && f.order_id && f.order_id.replace(/\W/g, '') === e.order_id!.replace(/\W/g, '')))
+    }
+    for (const item of e.items) {
+      const incoming = { ...item, retailer: e.retailer, order_id: e.order_id, order_date: e.order_date }
+      // A return comes after the purchase — allow a longer gap than for duplicates.
+      const hits = finds.filter((f) => sameFind(f, incoming, 120))
+      if (hits.length) { targets.push(...hits); continue }
+      const row = await insertFind(a, finds, memberId, connectionId, messageId, e, item, { status: 'discarded', error: RETURN_SEEN, keyPrefix: 'return|' })
+      if (row) targets.push(row)
+    }
+    for (const f of targets) {
+      if (isReturnMarker(f)) continue
+      if (f.status === 'pending') await save(f, { status: 'discarded', error: RETURNED })
+      else if (f.status === 'approved') await save(f, { error: RETURNED })
+    }
+    return { added, aiCalls }
+  }
+
+  for (let item of e.items) {
+    // Emails that never name the piece ("Item") — name it from its photo.
+    if (isGenericName(item.product_name) && item.image_url) {
+      const named = await namePieceFromPhoto(item.image_url)
+      aiCalls++
+      if (named) item = { ...item, product_name: named }
+    }
+    const incoming = { ...item, retailer: e.retailer, order_id: e.order_id, order_date: e.order_date }
+    const match = finds.find((f) => sameFind(f, incoming))
+    if (match) {
+      const patch = mergeFind(match, incoming) as Partial<FindRow>
+      // Its return was read first: the piece arrives already returned.
+      if (isReturnMarker(match)) patch.error = RETURNED
+      await save(match, patch)
+      continue
+    }
+    const row = await insertFind(a, finds, memberId, connectionId, messageId, e, item, { status: 'pending', error: null, keyPrefix: '' })
+    if (row) added++
+  }
+  return { added, aiCalls }
+}
+
+async function insertFind(
+  a: any, finds: FindRow[], memberId: string, connectionId: string, messageId: string, e: PurchaseExtraction, item: PurchaseItem,
+  opts: { status: 'pending' | 'discarded'; error: string | null; keyPrefix: string },
+): Promise<FindRow | null> {
+  const { data } = await a.from('email_purchase_find').upsert({
+    member_id: memberId,
+    connection_id: connectionId,
+    message_id: messageId,
+    find_key: opts.keyPrefix + findKey(e, item),
+    retailer: e.retailer,
+    order_id: e.order_id,
+    order_date: e.order_date,
+    product_name: item.product_name,
+    brand_name: item.brand_name,
+    colour: item.colour,
+    size: item.size,
+    price: item.price,
+    currency: item.currency,
+    image_url: item.image_url,
+    product_url: item.product_url,
+    status: opts.status,
+    error: opts.error,
+  }, { onConflict: 'member_id,find_key', ignoreDuplicates: true }).select(FIND_COLS)
+  const row = ((data ?? []) as FindRow[])[0]
+  if (!row) return null
+  finds.push(row)
+  return row
+}
+
+/** A photo she adds to a find whose email had none (Vinted sends none). */
+export async function setFindPhoto(memberId: string, findId: string, bytes: Buffer, contentType: string): Promise<{ error?: string }> {
+  const a = db()
+  const { data: f } = await a.from('email_purchase_find').select('find_id').eq('find_id', findId).eq('member_id', memberId).maybeSingle()
+  if (!f) return { error: 'Not found' }
+  const up = await uploadBufferToCloudinary(bytes, { folder: `wardrobe/email/${memberId.slice(0, 8)}`, publicId: `find-${findId}-${Date.now()}`, contentType })
+  if (!up.url) return { error: up.error ?? 'Upload failed' }
+  const { error } = await a.from('email_purchase_find').update({ image_url: up.url, error: null }).eq('find_id', findId)
+  return error ? { error: error.message } : {}
+}
+
+/** Pieces already in her dressing room that an email says went back. */
+export async function listReturnedInWardrobe(memberId: string): Promise<EmailFindView[]> {
+  const { data } = await db().from('email_purchase_find')
+    .select('find_id, retailer, order_date, product_name, brand_name, colour, size, price, currency, image_url, product_url, status, error, item_id')
+    .eq('member_id', memberId).eq('status', 'approved').eq('error', RETURNED).limit(100)
+  return ((data ?? []) as any[]).map((r) => ({ ...r, price: r.price != null ? Number(r.price) : null }))
+}
+
+/** She sent it back: take it out of the dressing room and rebuild looks that used it. */
+export async function removeReturnedPiece(memberId: string, findId: string): Promise<{ error?: string }> {
+  const a = db()
+  const { data: f } = await a.from('email_purchase_find').select('find_id, item_id')
+    .eq('find_id', findId).eq('member_id', memberId).maybeSingle()
+  if (!f?.item_id) return { error: 'Not found' }
+  const r = await deleteOwnedItem(f.item_id, [{ kind: 'pilot_member', id: memberId }])
+  if (r.error) return r
+  await rebuildLooksWithoutItems([f.item_id])
+  await a.from('email_purchase_find').update({ status: 'discarded', error: RETURNED }).eq('find_id', findId)
+  return {}
+}
+
+/** She still has it (kept after all, or the return was for another size). */
+export async function keepReturnedPiece(memberId: string, findId: string): Promise<{ error?: string }> {
+  const { error } = await db().from('email_purchase_find').update({ error: null })
+    .eq('find_id', findId).eq('member_id', memberId).eq('status', 'approved')
+  return error ? { error: error.message } : {}
 }
 
 // ── Review ──────────────────────────────────────────────────────────────────

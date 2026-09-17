@@ -1,12 +1,13 @@
 'use client'
 
 // FIND WHAT YOU'VE BOUGHT — connect an inbox, let MYRA read the past year of
-// order emails, and add the pieces to the wardrobe one by one.
+// order and return emails, and add the pieces she kept to the wardrobe one by one.
 
 import { useEffect, useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import {
-  addFoundPiece, connectVirginMedia, disconnectInbox, loadEmailPanel, notMine, scanAgain, scanNow,
+  addFindPhoto, addFoundPiece, connectVirginMedia, disconnectInbox, keepReturned, loadEmailPanel, notMine, removeReturned,
+  scanAgain, scanNow,
   type EmailPanelView,
 } from './email-actions'
 
@@ -46,6 +47,8 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
         if (!live) break
         setView(v)
         if (!v.connections.some((c) => c.scan && (c.scan.status === 'queued' || c.scan.status === 'running')) || (r.remaining ?? 0) === 0) break
+        // Another tab or the cron has the scan — look again shortly rather than spinning.
+        if (!r.read) await new Promise((res) => setTimeout(res, 5000))
       }
       scanning.current = false
     }
@@ -165,6 +168,20 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
         </div>
       )}
 
+      {/* Pieces in the dressing room that an email says went back */}
+      {view.returned.length > 0 && (
+        <div className="space-y-3 border-t border-[#C3BFB8] pt-5">
+          <p className="myra-section-note">SENT BACK · STILL IN YOUR DRESSING ROOM</p>
+          {view.returned.map((f) => (
+            <div key={f.find_id} className="flex flex-wrap items-center gap-x-5 gap-y-2">
+              <p className="text-[20px] text-[#2B2B2B]">{f.product_name}{f.brand_name ? ` · ${f.brand_name}` : f.retailer ? ` · ${f.retailer}` : ''}</p>
+              <button disabled={!!busy} onClick={() => act(`rm-${f.find_id}`, () => removeReturned(f.find_id, testMemberId), `${f.product_name} is out of your dressing room.`)} className="text-[18px] px-4 py-2 bg-[#2B2B2B] text-white disabled:opacity-40">Remove it</button>
+              <button disabled={!!busy} onClick={() => act(`keep-${f.find_id}`, () => keepReturned(f.find_id, testMemberId))} className="text-[18px] underline underline-offset-4 text-[#55534E] disabled:opacity-40">I still have it</button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Found pieces */}
       {view.finds.length > 0 && (
         <div className="space-y-4">
@@ -173,7 +190,29 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
             {view.finds.map((f) => (
               <div key={f.find_id} className="bg-white flex flex-col">
                 <div className="relative aspect-[3/4] bg-[#EDEDED] overflow-hidden">
-                  {f.image_url && <FallbackImage src={f.image_url} thumbWidth={500} alt={f.product_name} className="absolute inset-0 w-full h-full object-contain" />}
+                  {f.image_url ? (
+                    <FallbackImage src={f.image_url} thumbWidth={500} alt={f.product_name} className="absolute inset-0 w-full h-full object-contain" />
+                  ) : (
+                    // Some shops (Vinted) send no photo — she adds her own.
+                    <label className={`absolute inset-0 flex flex-col items-center justify-center gap-3 px-4 text-center cursor-pointer hover:bg-[#E4E2DE] ${busy ? 'pointer-events-none opacity-50' : ''}`}>
+                      <span className="text-[18px] text-[#6E6B65]">No photo in the email</span>
+                      <span className="text-[18px] px-4 py-2 border border-[#2B2B2B] text-[#2B2B2B]">{busy === `photo-${f.find_id}` ? 'Uploading…' : 'Add a photo'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (!file) return
+                          const fd = new FormData()
+                          fd.set('find_id', f.find_id)
+                          fd.set('file', file)
+                          if (testMemberId) fd.set('as_member_id', testMemberId)
+                          void act(`photo-${f.find_id}`, () => addFindPhoto(fd))
+                        }}
+                      />
+                    </label>
+                  )}
                 </div>
                 <div className="px-3 py-3 flex flex-col gap-1 flex-1">
                   <p className="text-[20px] text-[#2B2B2B] leading-tight line-clamp-2">{f.product_name}</p>

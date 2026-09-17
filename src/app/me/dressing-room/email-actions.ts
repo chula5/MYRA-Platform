@@ -7,7 +7,8 @@
 
 import { resolveClientMember } from '@/lib/client-member'
 import {
-  approveFind, connectImap, disconnect, discardFind, listConnections, listFinds, processEmailScans, queueScan,
+  approveFind, connectImap, disconnect, discardFind, keepReturnedPiece, listConnections, listFinds, listReturnedInWardrobe,
+  processEmailScans, queueScan, removeReturnedPiece, setFindPhoto,
   type EmailConnectionView, type EmailFindView,
 } from '@/lib/email/connections'
 import { IMAP_PRESETS, presetForEmail } from '@/lib/email/imap'
@@ -21,20 +22,22 @@ export interface EmailPanelView {
   secretsReady: boolean
   connections: EmailConnectionView[]
   finds: EmailFindView[]
+  /** Already in her dressing room, but an email says it went back. */
+  returned: EmailFindView[]
   error?: string
 }
 
 export async function loadEmailPanel(asMemberId?: string): Promise<EmailPanelView> {
   const me = await resolveClientMember(asMemberId)
   const base = { gmailReady: gmailConfigured(), secretsReady: emailSecretsConfigured() }
-  if (!me) return { memberId: null, test: false, connections: [], finds: [], ...base }
+  if (!me) return { memberId: null, test: false, connections: [], finds: [], returned: [], ...base }
   try {
-    const [connections, finds] = await Promise.all([listConnections(me.memberId), listFinds(me.memberId)])
-    return { memberId: me.memberId, test: me.test, connections, finds, ...base }
+    const [connections, finds, returned] = await Promise.all([listConnections(me.memberId), listFinds(me.memberId), listReturnedInWardrobe(me.memberId)])
+    return { memberId: me.memberId, test: me.test, connections, finds, returned, ...base }
   } catch (err) {
     // Before migration 0058 the tables do not exist.
     const msg = err instanceof Error ? err.message : String(err)
-    return { memberId: me.memberId, test: me.test, connections: [], finds: [], ...base, error: /member_email_connection|email_purchase_find/.test(msg) ? 'Run migration 0058_member_email_connection.sql in Supabase first' : msg }
+    return { memberId: me.memberId, test: me.test, connections: [], finds: [], returned: [], ...base, error: /member_email_connection|email_purchase_find/.test(msg) ? 'Run migration 0058_member_email_connection.sql in Supabase first' : msg }
   }
 }
 
@@ -51,11 +54,11 @@ export async function connectVirginMedia(email: string, appPassword: string, asM
 }
 
 /** Work through queued scans for a little while — the page calls this while a scan is running. */
-export async function scanNow(asMemberId?: string): Promise<{ error?: string; remaining?: number }> {
+export async function scanNow(asMemberId?: string): Promise<{ error?: string; remaining?: number; read?: number }> {
   const me = await resolveClientMember(asMemberId)
   if (!me) return { error: 'Not signed in' }
   const r = await processEmailScans(45_000)
-  return { remaining: r.remaining }
+  return { remaining: r.remaining, read: r.read }
 }
 
 export async function scanAgain(connectionId: string, asMemberId?: string): Promise<{ error?: string }> {
@@ -82,4 +85,28 @@ export async function notMine(findId: string, asMemberId?: string): Promise<{ er
   const me = await resolveClientMember(asMemberId)
   if (!me) return { error: 'Not signed in' }
   return discardFind(me.memberId, findId)
+}
+
+/** A photo for a find whose email had none. */
+export async function addFindPhoto(formData: FormData): Promise<{ error?: string }> {
+  const me = await resolveClientMember(String(formData.get('as_member_id') ?? '') || undefined)
+  if (!me) return { error: 'Not signed in' }
+  const findId = String(formData.get('find_id') ?? '')
+  const file = formData.get('file')
+  if (!findId || !(file instanceof File) || file.size === 0) return { error: 'Choose a photo' }
+  if (!file.type.startsWith('image/')) return { error: 'That is not an image' }
+  if (file.size > 15 * 1024 * 1024) return { error: 'That photo is too large' }
+  return setFindPhoto(me.memberId, findId, Buffer.from(await file.arrayBuffer()), file.type)
+}
+
+export async function removeReturned(findId: string, asMemberId?: string): Promise<{ error?: string }> {
+  const me = await resolveClientMember(asMemberId)
+  if (!me) return { error: 'Not signed in' }
+  return removeReturnedPiece(me.memberId, findId)
+}
+
+export async function keepReturned(findId: string, asMemberId?: string): Promise<{ error?: string }> {
+  const me = await resolveClientMember(asMemberId)
+  if (!me) return { error: 'Not signed in' }
+  return keepReturnedPiece(me.memberId, findId)
 }

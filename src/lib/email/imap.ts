@@ -59,11 +59,11 @@ export async function testImapLogin(cfg: ImapConfig): Promise<{ ok: boolean; err
   }
 }
 
-/** Order-looking messages in the inbox since a date, as uids (newest first). */
+/** Order- and return-looking messages in the inbox since a date, as uids (newest first). */
 export async function listImapPurchaseUids(cfg: ImapConfig, since: Date, max = 1500): Promise<string[]> {
   return withImap(cfg, async (c) => {
     await c.mailboxOpen('INBOX', { readOnly: true })
-    const words = ['order', 'receipt', 'confirmation', 'dispatched', 'shipped', 'on its way']
+    const words = ['order', 'receipt', 'confirmation', 'dispatched', 'shipped', 'on its way', 'return', 'refund', 'cancel']
     const found = new Set<number>()
     for (const w of words) {
       const uids = await c.search({ since, subject: w }, { uid: true })
