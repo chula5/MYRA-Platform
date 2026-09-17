@@ -279,6 +279,19 @@ export function mergeFind(existing: Mergeable, incoming: Mergeable): Partial<Mer
   return patch
 }
 
+/**
+ * Does the email actually say this name? A reader can invent one ("Striped
+ * T-shirt") for an email that only says "1 item" — those get named from the
+ * photo instead. At least half the piece's words must be in the email.
+ */
+export function nameAppearsIn(name: string, emailText: string, images: EmailImage[] = []): boolean {
+  const words = pieceWords(name)
+  if (!words.length) return false
+  const hay = ' ' + fold(emailText + ' ' + images.map((i) => i.alt ?? '').join(' ')) + ' '
+  const hits = words.filter((w) => hay.includes(' ' + w + ' ')).length
+  return hits >= Math.ceil(words.length / 2)
+}
+
 /** Give each piece without a photo the email image whose alt text names it. */
 export function matchImagesByAlt(items: PurchaseItem[], images: EmailImage[]): PurchaseItem[] {
   return items.map((item) => {

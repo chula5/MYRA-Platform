@@ -5,7 +5,7 @@
 
 import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
-import { emailForExtraction, matchImagesByAlt, parseExtraction, type EmailImage, type MailMessage, type PurchaseExtraction } from './purchase-core'
+import { emailForExtraction, matchImagesByAlt, nameAppearsIn, parseExtraction, type EmailImage, type MailMessage, type PurchaseExtraction } from './purchase-core'
 
 const MODEL = 'claude-haiku-4-5'
 
@@ -86,6 +86,8 @@ export async function extractPurchase(m: MailMessage): Promise<{ extraction: Pur
     if (!block) return { extraction: none, error: 'No answer from the model' }
     const extraction = parseExtraction(JSON.parse(block.text))
     extraction.items = matchImagesByAlt(extraction.items, imageAlts)
+      // A name the email never says was made up — mark it unnamed so the photo names it.
+      .map((item) => (nameAppearsIn(item.product_name, text, imageAlts) ? item : { ...item, product_name: 'Item' }))
     // The email's own date stands in when the order date is not written.
     if (extraction.kind !== 'other' && !extraction.order_date && m.date) {
       const d = new Date(m.date)

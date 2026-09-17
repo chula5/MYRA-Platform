@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  looksLikeOrderEmail, emailKind, worthReading, subjectTopic, parseExtraction, findKey, emailForExtraction, sameFind, mergeFind, matchImagesByAlt, isGenericName,
+  looksLikeOrderEmail, emailKind, worthReading, subjectTopic, nameAppearsIn, parseExtraction, findKey, emailForExtraction, sameFind, mergeFind, matchImagesByAlt, isGenericName,
 } from '@/lib/email/purchase-core'
 
 describe('looksLikeOrderEmail', () => {
@@ -182,5 +182,14 @@ describe('saving reads', () => {
     // A return about the same listing is a different topic — it is always read.
     expect(subjectTopic({ subject: 'Return your order by 23 Sep: Emporio Armani black jacket (Size 8)', from })).not.toBe(receipt)
     expect(needed === null || needed !== receipt).toBe(true)
+  })
+})
+
+describe('nameAppearsIn', () => {
+  it('catches a name the email never says', () => {
+    const zara = 'Your order has been shipped ORDER NO. 54426546801 1 item S 29.99 GBP'
+    expect(nameAppearsIn('Striped T-shirt', zara)).toBe(false)
+    expect(nameAppearsIn('Emporio Armani black jacket', 'Your receipt for "Emporio Armani black jacket (Size 8)"')).toBe(true)
+    expect(nameAppearsIn('Charlotte Jacket', 'Order #374353476', [{ url: 'https://x/y.jpg', alt: 'Charlotte Jacket' }])).toBe(true)
   })
 })
