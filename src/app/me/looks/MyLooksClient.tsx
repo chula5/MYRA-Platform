@@ -58,8 +58,8 @@ const RECENT_KEY = 'myra:me:recent'
 
 const ACTION = 'pointer-events-auto text-white text-[15px] md:text-[18px] tracking-[0.1em] uppercase font-light hover:opacity-70 transition-opacity'
 
-export default function MyLooksClient({ view, readOnly = false }: { view: ClientView; readOnly?: boolean }) {
-  const [query, setQuery] = useState('')
+export default function MyLooksClient({ view, readOnly = false, initialQuery = '' }: { view: ClientView; readOnly?: boolean; initialQuery?: string }) {
+  const [query, setQuery] = useState(initialQuery)
   const [occasion, setOccasion] = useState<string | null>(null)
   // One "related" view drives Similar Looks, Explore Styles and Style Item —
   // the three actions differ only in how the row is chosen.

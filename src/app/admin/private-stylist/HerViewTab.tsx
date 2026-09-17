@@ -15,6 +15,7 @@ import DressingRoomClient from '@/app/me/dressing-room/DressingRoomClient'
 import PieceClient from '@/app/me/dressing-room/PieceClient'
 import InspirationBoard from '@/app/me/inspiration/InspirationBoard'
 import MagazineClient from '@/app/me/magazine/MagazineClient'
+import RoomNav, { ROOMS, type RoomId } from '@/components/me/RoomNav'
 import { MirrorLoading } from '@/components/ArchiveCard'
 import { loadLooksForMember, type ClientView } from '@/app/me/looks/actions'
 import { loadForYou, type ForYouView } from '@/app/me/for-you-actions'
@@ -22,15 +23,7 @@ import { loadMyDressingRoom, loadMyPiece } from '@/app/me/dressing-room/actions'
 import { loadMyInspiration, type InspirationBoardView } from '@/app/me/inspiration/board-actions'
 import type { DressingRoomView, OwnedPieceView } from '@/app/admin/private-stylist/actions'
 
-type Room = 'for_you' | 'all_looks' | 'dressing_room' | 'magazine' | 'inspiration'
-
-const ROOMS: { id: Room; label: string }[] = [
-  { id: 'for_you', label: 'FOR YOU' },
-  { id: 'all_looks', label: 'ALL LOOKS' },
-  { id: 'dressing_room', label: 'DRESSING ROOM' },
-  { id: 'magazine', label: 'MAGAZINE' },
-  { id: 'inspiration', label: 'INSPIRATION' },
-]
+type Room = RoomId
 
 export default function HerViewTab({
   members, memberId, setMemberId,
@@ -40,6 +33,7 @@ export default function HerViewTab({
   setMemberId: (id: string) => void
 }) {
   const [room, setRoom] = useState<Room>('for_you')
+  const [search, setSearch] = useState('')
   const [looksView, setLooksView] = useState<ClientView | null>(null)
   const [forYou, setForYou] = useState<ForYouView | null>(null)
   const [dressing, setDressing] = useState<DressingRoomView | null>(null)
@@ -94,17 +88,14 @@ export default function HerViewTab({
       </div>
 
       {/* Her rooms, as she would move between them. */}
-      <div className="flex gap-1.5 flex-wrap border-y border-[#E2E0DB] py-3">
-        {ROOMS.map((r) => (
-          <button
-            key={r.id}
-            onClick={() => { setRoom(r.id); setPiece(null) }}
-            className={`text-[20px] tracking-[0.1em] px-4 py-2 border transition-colors ${room === r.id ? 'bg-[#0A0A0A] border-[#0A0A0A] text-white' : 'border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A]'}`}
-          >
-            {r.label}
-          </button>
-        ))}
-        <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4] self-center ml-3">
+      {/* Her own bar, full width of the screen — exactly what she taps. */}
+      <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen">
+        <RoomNav
+          active={room}
+          onSelect={(id) => { setRoom(id === 'profile' ? 'for_you' : id); setPiece(null) }}
+          onSearch={(q) => { setRoom('all_looks'); setSearch(q) }}
+        />
+        <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4] text-center px-6 py-3">
           HER SCREEN, LOADED AS {name.toUpperCase()} — YOUR TAPS ARE TESTS: NOTHING IS SENT TO HER OR SAVED
         </p>
       </div>
@@ -123,7 +114,7 @@ export default function HerViewTab({
       {!loading && room === 'all_looks' && looksView && (
         looksView.looks.length ? (
           <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen">
-            <MyLooksClient view={looksView} readOnly />
+            <MyLooksClient view={looksView} readOnly initialQuery={search} key={search} />
           </div>
         ) : (
           <div className="border border-[#E8D9B8] bg-[#FBF8F2] p-5">
