@@ -50,7 +50,7 @@ export default function PieceClient({
         ) : (
           <>
             <section className="grid grid-cols-1 md:grid-cols-[minmax(0,420px)_1fr] gap-8 items-start">
-              <div className="relative aspect-[3/4] bg-white overflow-hidden">
+              <div className="relative aspect-[3/4] bg-white overflow-hidden rounded-[14px]">
                 {piece.image_url && <FallbackImage src={piece.image_url} thumbWidth={900} alt={piece.product_name} className="absolute inset-0 w-full h-full object-contain" />}
               </div>
               <div className="space-y-4">
@@ -137,7 +137,7 @@ function OutfitCard({ look, heroId }: { look: StyledLook; heroId: string }) {
   return (
     <article className="bg-[#F7F6F3] border border-[#2B2B2B]">
       {look.image_url ? (
-        <div className="relative aspect-[3/4] bg-[#E4E2DD] overflow-hidden">
+        <div className="relative aspect-[3/4] bg-[#E4E2DD] overflow-hidden rounded-[14px]">
           <FallbackImage src={look.image_url} thumbWidth={700} alt="" className="absolute inset-0 w-full h-full object-cover" />
         </div>
       ) : (

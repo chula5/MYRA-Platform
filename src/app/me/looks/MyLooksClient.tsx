@@ -245,7 +245,7 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
                   <button
                     key={label}
                     onClick={() => setOccasion(label)}
-                    className="group relative w-full aspect-[3/4] overflow-hidden bg-[#E4E2DD]"
+                    className="group relative w-full aspect-[3/4] overflow-hidden bg-[#E4E2DD] rounded-[14px]"
                   >
                     {looks[0]?.image_url && (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -346,7 +346,7 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
                     <button
                       key={l.look_id}
                       onClick={() => showRelated({ anchor: l, mode: 'similar' })}
-                      className="relative w-full aspect-[3/4] overflow-hidden bg-[#E4E2DD]"
+                      className="relative w-full aspect-[3/4] overflow-hidden bg-[#E4E2DD] rounded-[14px]"
                     >
                       {l.image_url && (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -468,7 +468,7 @@ function LookCard({
   return (
     <article className="relative flex flex-col bg-[#EDEBE7] border border-[#C3BFB8]">
       <div
-        className="group relative aspect-[3/4] w-full overflow-hidden"
+        className="group relative aspect-[3/4] w-full overflow-hidden rounded-[14px]"
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
@@ -957,7 +957,7 @@ function AskPanel({
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-[6px] p-[6px]">
                 {l.items.map((it: any, j: number) => (
                   <div key={j} className="bg-white">
-                    <div className="relative aspect-[3/4] bg-[#EDEDED] overflow-hidden">
+                    <div className="relative aspect-[3/4] bg-[#EDEDED] overflow-hidden rounded-[14px]">
                       {it.image_url && (
                         <FallbackImage src={it.image_url} thumbWidth={500} alt={it.product_name} className="absolute inset-0 w-full h-full object-cover" />
                       )}
@@ -1055,7 +1055,7 @@ function AskPanel({
                     <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-[6px]">
                       {swap.options.map((o) => (
                         <button key={o.item_id} onClick={() => useOption(i, swap.piece, o)} className="bg-white text-left hover:outline hover:outline-2 hover:outline-[#2B2B2B]">
-                          <div className="relative aspect-[3/4] bg-[#EDEDED] overflow-hidden">
+                          <div className="relative aspect-[3/4] bg-[#EDEDED] overflow-hidden rounded-[14px]">
                             {o.image_url && <FallbackImage src={o.image_url} thumbWidth={400} alt={o.product_name} className="absolute inset-0 w-full h-full object-cover" />}
                           </div>
                           <div className="px-2.5 py-2">

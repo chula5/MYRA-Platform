@@ -63,9 +63,9 @@ export default function DressingRoomClient({
                     </>
                   )
                   return onOpenPiece ? (
-                    <button key={p.item_id} onClick={() => onOpenPiece(p.item_id)} className="bg-white hover:outline hover:outline-2 hover:outline-[#2B2B2B]">{body}</button>
+                    <button key={p.item_id} onClick={() => onOpenPiece(p.item_id)} className="bg-white rounded-[18px] overflow-hidden hover:outline hover:outline-2 hover:outline-[#2B2B2B]">{body}</button>
                   ) : (
-                    <Link key={p.item_id} href={`/me/dressing-room/${p.item_id}`} className="bg-white hover:outline hover:outline-2 hover:outline-[#2B2B2B]">{body}</Link>
+                    <Link key={p.item_id} href={`/me/dressing-room/${p.item_id}`} className="bg-white rounded-[18px] overflow-hidden hover:outline hover:outline-2 hover:outline-[#2B2B2B]">{body}</Link>
                   )
                 })}
               </div>

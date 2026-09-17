@@ -134,11 +134,11 @@ export default function MagazineClient({ testMemberId }: { testMemberId?: string
                         </>
                       )
                       return p.url ? (
-                        <a key={i} href={p.url} target="_blank" rel="noopener noreferrer" className="bg-white hover:outline hover:outline-2 hover:outline-[#2B2B2B]">
+                        <a key={i} href={p.url} target="_blank" rel="noopener noreferrer" className="bg-white rounded-[18px] overflow-hidden hover:outline hover:outline-2 hover:outline-[#2B2B2B]">
                           {body}
                         </a>
                       ) : (
-                        <div key={i} className="bg-white">{body}</div>
+                        <div key={i} className="bg-white rounded-[18px] overflow-hidden">{body}</div>
                       )
                     })}
                   </div>

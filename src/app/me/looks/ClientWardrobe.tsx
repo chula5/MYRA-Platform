@@ -129,7 +129,7 @@ export default function ClientWardrobe({
                         <button
                           key={l.look_id}
                           onClick={() => { setOpen(false); onOpenLook?.(l) }}
-                          className="group relative aspect-[3/4] overflow-hidden bg-[#EDEDED] text-left"
+                          className="group relative aspect-[3/4] overflow-hidden bg-[#EDEDED] text-left rounded-[14px]"
                         >
                           {l.image_url && (
                             // eslint-disable-next-line @next/next/no-img-element
@@ -154,7 +154,7 @@ export default function ClientWardrobe({
                         <div key={it.item_id} className="flex items-center gap-3">
                           {it.image_url && (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={it.image_url} alt="" className="w-20 aspect-[3/4] object-cover shrink-0 bg-[#EDEDED]" />
+                            <img src={it.image_url} alt="" className="w-20 aspect-[3/4] object-cover shrink-0 bg-[#EDEDED] rounded-[14px] overflow-hidden" />
                           )}
                           <div className="min-w-0 flex-1">
                             {it.brand_name && (

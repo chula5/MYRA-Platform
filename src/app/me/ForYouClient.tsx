@@ -92,7 +92,7 @@ function LookCard({ look, testMemberId }: { look: ForYouLook; testMemberId?: str
   }
 
   return (
-    <article className="bg-[#F7F6F3] border border-[#2B2B2B] flex flex-col">
+    <article className="bg-[#F7F6F3] border border-[#2B2B2B] flex flex-col rounded-[18px] overflow-hidden">
       <div className="relative aspect-[3/4] bg-[#E4E2DD] overflow-hidden">
         {look.image_url && (
           <FallbackImage src={look.image_url} thumbWidth={900} alt="" className="absolute inset-0 w-full h-full object-cover" />

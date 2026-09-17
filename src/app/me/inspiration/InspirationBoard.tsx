@@ -122,7 +122,7 @@ export default function InspirationBoard({ view: initial, testMemberId }: { view
               </p>
               <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8 gap-[6px] w-full">
                 {view.pictures.map((p) => (
-                  <div key={p.image_id} className="relative aspect-[3/4] bg-[#E4E2DD] overflow-hidden">
+                  <div key={p.image_id} className="relative aspect-[3/4] bg-[#E4E2DD] overflow-hidden rounded-[14px]">
                     <FallbackImage src={p.image_url} thumbWidth={500} alt="" className="absolute inset-0 w-full h-full object-cover" />
                   </div>
                 ))}
