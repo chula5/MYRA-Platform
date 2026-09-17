@@ -62,12 +62,23 @@ export async function revokeGoogle(refreshToken: string): Promise<void> {
   await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(refreshToken)}`, { method: 'POST' }).catch(() => undefined)
 }
 
-async function gmailGet(accessToken: string, path: string): Promise<any> {
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+/** Gmail counts requests per minute; a big inbox runs into it, so back off and try again. */
+async function gmailGet(accessToken: string, path: string, attempt = 0): Promise<any> {
   const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/${path}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   })
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(`Gmail ${path.split('?')[0]} failed: ${data?.error?.message ?? res.status}`)
+  if (!res.ok) {
+    const message: string = data?.error?.message ?? String(res.status)
+    const throttled = res.status === 429 || res.status === 403 ? /quota|rate limit|user rate/i.test(message) : res.status >= 500
+    if (throttled && attempt < 5) {
+      await wait(2000 * 2 ** attempt)
+      return gmailGet(accessToken, path, attempt + 1)
+    }
+    throw new Error(`Gmail ${path.split('?')[0]} failed: ${message}`)
+  }
   return data
 }
 
@@ -109,8 +120,8 @@ export async function getGmailMessage(accessToken: string, id: string): Promise<
 /** Sender and subject only — no body is opened. For sorting a year of candidates cheaply. */
 export async function getGmailHeaders(accessToken: string, ids: string[]): Promise<{ id: string; from: string; subject: string }[]> {
   const out: { id: string; from: string; subject: string }[] = []
-  for (let i = 0; i < ids.length; i += 20) {
-    const part = await Promise.all(ids.slice(i, i + 20).map(async (id) => {
+  for (let i = 0; i < ids.length; i += 10) {
+    const part = await Promise.all(ids.slice(i, i + 10).map(async (id) => {
       try {
         const m = await gmailGet(accessToken, `messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`)
         const headers: { name: string; value: string }[] = m.payload?.headers ?? []
@@ -123,4 +134,11 @@ export async function getGmailHeaders(accessToken: string, ids: string[]): Promi
     out.push(...part)
   }
   return out
+}
+
+/** Any messages matching a Gmail search — used to hunt down a photo for a piece. */
+export async function searchGmailIds(accessToken: string, query: string, max = 8): Promise<string[]> {
+  const params = new URLSearchParams({ q: query, maxResults: String(max) })
+  const page = await gmailGet(accessToken, `messages?${params.toString()}`)
+  return (page.messages ?? []).map((m: any) => m.id).slice(0, max)
 }

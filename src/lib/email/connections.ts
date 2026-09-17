@@ -23,10 +23,11 @@ import { uploadBufferToCloudinary } from '@/lib/wardrobe/cloudinary'
 import { rebuildLooksWithoutItems } from '@/app/admin/private-stylist/actions'
 import { buildOwnedItemFromProduct, lowConfidenceDims } from '@/lib/wardrobe/approve'
 import { encryptSecret, decryptSecret } from './secrets'
-import { googleAccessToken, listGmailPurchaseIds, getGmailHeaders, getGmailMessage, revokeGoogle } from './gmail'
-import { listImapPurchaseUids, fetchImapHeaders, fetchImapMessages, testImapLogin, type ImapConfig } from './imap'
+import { googleAccessToken, listGmailPurchaseIds, getGmailHeaders, getGmailMessage, searchGmailIds, revokeGoogle } from './gmail'
+import { listImapPurchaseUids, fetchImapHeaders, fetchImapMessages, searchImapUids, testImapLogin, type ImapConfig } from './imap'
 import {
-  RETURNED, RETURN_SEEN, RETURN_STARTED, RETURN_STARTED_SEEN, findKey, isGenericName, mergeFind, sameFind, subjectTopic, worthReading,
+  RETURNED, RETURN_SEEN, RETURN_STARTED, RETURN_STARTED_SEEN, emailForExtraction, findKey, isGenericName, mergeFind, pieceWords,
+  sameFind, subjectTopic, worthReading,
   type MailMessage, type PurchaseExtraction, type PurchaseItem,
 } from './purchase-core'
 import { extractPurchase, namePieceFromPhoto, triageBySubject } from './purchases'
@@ -250,6 +251,8 @@ export async function processEmailScans(budgetMs = 240_000): Promise<{ read: num
       }
 
       if (cursor >= ids.length) {
+        // Pieces whose order email had no picture: look for one in her other emails.
+        await huntMissingPhotos(job.member_id).catch(() => 0)
         await a.from('email_scan_job').update({ status: 'done', finished_at: new Date().toISOString(), error: null }).eq('job_id', job.job_id)
         await a.from('member_email_connection').update({ last_scanned_at: new Date().toISOString(), status: 'connected', error: null }).eq('connection_id', c.connection_id)
       } else {
@@ -410,6 +413,78 @@ async function insertFind(
   if (!row) return null
   finds.push(row)
   return row
+}
+
+async function searchInbox(c: any, text: string, max = 8): Promise<string[]> {
+  const secret = decryptSecret(c.secret_enc)
+  if (c.provider === 'gmail') return searchGmailIds(await googleAccessToken(secret), text, max)
+  return searchImapUids({ host: c.imap_host, email: c.email, password: secret }, text.replace(/["]/g, ''), max)
+}
+
+/**
+ * A photo for a piece whose order email had none. Vinted's order emails carry
+ * no picture, but its "New message about <listing>" emails do — so look through
+ * every email that names this piece and take the first product photo. Free: a
+ * search and a few message reads, no AI.
+ */
+export async function huntPhotoForFind(memberId: string, findId: string): Promise<{ imageUrl?: string; error?: string }> {
+  const a = db()
+  const { data: f } = await a.from('email_purchase_find').select('find_id, connection_id, product_name, brand_name, image_url')
+    .eq('find_id', findId).eq('member_id', memberId).maybeSingle()
+  if (!f) return { error: 'Not found' }
+  if (f.image_url) return { imageUrl: f.image_url }
+  const { data: c } = await a.from('member_email_connection').select('*').eq('connection_id', f.connection_id).maybeSingle()
+  if (!c) return { error: 'That inbox is no longer connected' }
+
+  const words = pieceWords(f.product_name, null)
+  if (words.length < 2) return { error: 'Not enough of a name to search for' }
+  try {
+    const ids = await searchInbox(c, `"${f.product_name.replace(/["]/g, '')}"`)
+    for (const id of ids) {
+      const m = await fetchMessages(c, [id])
+      const { images } = emailForExtraction(m[0] ?? { id, subject: '', from: '', date: null, html: null, text: null })
+      const photo = images[0]
+      if (!photo) continue
+      const hosted = await keepPhoto(photo, memberId, findId)
+      await a.from('email_purchase_find').update({ image_url: hosted, error: null }).eq('find_id', findId)
+      return { imageUrl: hosted }
+    }
+    return { error: 'No email with a photo of this piece' }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Could not look for a photo' }
+  }
+}
+
+/**
+ * Keep a photo for good. Cloudinary fetches most URLs itself, but some shops
+ * (Vinted) sign theirs and refuse it, so the bytes are downloaded here instead.
+ */
+async function keepPhoto(url: string, memberId: string, findId: string): Promise<string> {
+  const hosted = await persistImageToCloudinary(url, { folder: `wardrobe/email/${memberId.slice(0, 8)}` })
+  if (hosted) return hosted
+  try {
+    const res = await fetch(url)
+    const type = res.headers.get('content-type') ?? 'image/jpeg'
+    if (!res.ok || !type.startsWith('image/')) return url
+    const up = await uploadBufferToCloudinary(Buffer.from(await res.arrayBuffer()), {
+      folder: `wardrobe/email/${memberId.slice(0, 8)}`, publicId: `find-${findId}`, contentType: type,
+    })
+    return up.url ?? url
+  } catch {
+    return url
+  }
+}
+
+/** Look for photos for every piece that has none — run when a scan finishes. */
+export async function huntMissingPhotos(memberId: string, limit = 40): Promise<number> {
+  const { data } = await db().from('email_purchase_find').select('find_id')
+    .eq('member_id', memberId).eq('status', 'pending').is('image_url', null).limit(limit)
+  let found = 0
+  for (const f of (data ?? []) as any[]) {
+    const r = await huntPhotoForFind(memberId, f.find_id)
+    if (r.imageUrl) found++
+  }
+  return found
 }
 
 /** A photo she adds to a find whose email had none (Vinted sends none). */

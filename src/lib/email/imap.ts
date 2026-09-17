@@ -107,3 +107,12 @@ export async function fetchImapHeaders(cfg: ImapConfig, uids: string[]): Promise
     return out
   })
 }
+
+/** Messages whose subject or body mentions this text, newest first. */
+export async function searchImapUids(cfg: ImapConfig, text: string, max = 8): Promise<string[]> {
+  return withImap(cfg, async (c) => {
+    await c.mailboxOpen('INBOX', { readOnly: true })
+    const uids = await c.search({ or: [{ subject: text }, { body: text }] }, { uid: true })
+    return (uids || []).sort((a, b) => b - a).slice(0, max).map(String)
+  })
+}

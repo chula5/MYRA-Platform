@@ -7,7 +7,7 @@
 
 import { resolveClientMember } from '@/lib/client-member'
 import {
-  approveFind, connectImap, disconnect, discardFind, keepReturnedPiece, listConnections, listFinds, listReturnedInWardrobe,
+  approveFind, connectImap, disconnect, discardFind, huntPhotoForFind, keepReturnedPiece, listConnections, listFinds, listReturnedInWardrobe,
   processEmailScans, queueScan, removeReturnedPiece, setFindPhoto,
   type EmailConnectionView, type EmailFindView,
 } from '@/lib/email/connections'
@@ -109,4 +109,11 @@ export async function keepReturned(findId: string, asMemberId?: string): Promise
   const me = await resolveClientMember(asMemberId)
   if (!me) return { error: 'Not signed in' }
   return keepReturnedPiece(me.memberId, findId)
+}
+
+/** Look through her other emails for a photo of this piece. */
+export async function findPhotoInEmails(findId: string, asMemberId?: string): Promise<{ imageUrl?: string; error?: string }> {
+  const me = await resolveClientMember(asMemberId)
+  if (!me) return { error: 'Not signed in' }
+  return huntPhotoForFind(me.memberId, findId)
 }

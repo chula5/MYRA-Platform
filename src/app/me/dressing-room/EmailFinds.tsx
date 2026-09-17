@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import {
-  addFindPhoto, addFoundPiece, connectVirginMedia, disconnectInbox, keepReturned, loadEmailPanel, notMine, removeReturned,
+  addFindPhoto, addFoundPiece, connectVirginMedia, disconnectInbox, findPhotoInEmails, keepReturned, loadEmailPanel, notMine, removeReturned,
   scanAgain, scanNow,
   type EmailPanelView,
 } from './email-actions'
@@ -193,25 +193,35 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
                   {f.image_url ? (
                     <FallbackImage src={f.image_url} thumbWidth={500} alt={f.product_name} className="absolute inset-0 w-full h-full object-contain" />
                   ) : (
-                    // Some shops (Vinted) send no photo — she adds her own.
-                    <label className={`absolute inset-0 flex flex-col items-center justify-center gap-3 px-4 text-center cursor-pointer hover:bg-[#E4E2DE] ${busy ? 'pointer-events-none opacity-50' : ''}`}>
-                      <span className="text-[18px] text-[#6E6B65]">No photo in the email</span>
-                      <span className="text-[18px] px-4 py-2 border border-[#2B2B2B] text-[#2B2B2B]">{busy === `photo-${f.find_id}` ? 'Uploading…' : 'Add a photo'}</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0]
-                          if (!file) return
-                          const fd = new FormData()
-                          fd.set('find_id', f.find_id)
-                          fd.set('file', file)
-                          if (testMemberId) fd.set('as_member_id', testMemberId)
-                          void act(`photo-${f.find_id}`, () => addFindPhoto(fd))
-                        }}
-                      />
-                    </label>
+                    // Some shops (Vinted) leave the photo out of the order email —
+                    // look for it in her other emails about the same piece, or she adds her own.
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-4 text-center">
+                      <span className="text-[18px] text-[#6E6B65]">No photo in the order email</span>
+                      <button
+                        disabled={!!busy}
+                        onClick={() => act(`hunt-${f.find_id}`, () => findPhotoInEmails(f.find_id, testMemberId))}
+                        className="text-[18px] px-4 py-2 border border-[#2B2B2B] text-[#2B2B2B] disabled:opacity-40"
+                      >
+                        {busy === `hunt-${f.find_id}` ? 'Looking…' : 'Look in my emails'}
+                      </button>
+                      <label className={`text-[18px] underline underline-offset-4 text-[#55534E] cursor-pointer ${busy ? 'pointer-events-none opacity-50' : ''}`}>
+                        {busy === `photo-${f.find_id}` ? 'Uploading…' : 'Add a photo'}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (!file) return
+                            const fd = new FormData()
+                            fd.set('find_id', f.find_id)
+                            fd.set('file', file)
+                            if (testMemberId) fd.set('as_member_id', testMemberId)
+                            void act(`photo-${f.find_id}`, () => addFindPhoto(fd))
+                          }}
+                        />
+                      </label>
+                    </div>
                   )}
                 </div>
                 <div className="px-3 py-3 flex flex-col gap-1 flex-1">
