@@ -1,0 +1,140 @@
+// MYRA Mirror — service worker. Holds the member token, talks to /api/mirror,
+// caches a page's ranking for ten minutes so a revisit reorders instantly,
+// and keeps the per-tab "lifted N pieces" count for the badge and popup.
+
+const DEFAULTS = { apiBase: 'http://localhost:3000', token: null, member: null, disabledHosts: [] }
+const RANK_TTL_MS = 10 * 60_000
+const rankCache = new Map() // `${host}|${hash}` → { at, data }
+const tabStats = new Map() // tabId → { host, lifted, total, member, ms }
+
+async function cfg() {
+  const stored = await chrome.storage.local.get(null)
+  return { ...DEFAULTS, ...stored }
+}
+
+function hashKeys(products) {
+  const s = products.map((p) => p.key).sort().join(',')
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0
+  return String(h)
+}
+
+async function api(path, init = {}) {
+  const c = await cfg()
+  if (!c.token) return { status: 401, json: { error: 'not connected' } }
+  const res = await fetch(`${c.apiBase.replace(/\/+$/, '')}${path}`, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${c.token}`, ...(init.headers || {}) },
+  })
+  if (res.status === 401) await chrome.storage.local.set({ token: null, member: null })
+  let json = null
+  try { json = await res.json() } catch {}
+  return { status: res.status, json }
+}
+
+const handlers = {
+  async state({ host }) {
+    const c = await cfg()
+    return { enabled: !c.disabledHosts.includes(host), connected: !!c.token, member: c.member, apiBase: c.apiBase }
+  },
+
+  async rank({ host, products }) {
+    const key = `${host}|${hashKeys(products)}`
+    const hit = rankCache.get(key)
+    if (hit && Date.now() - hit.at < RANK_TTL_MS) return { ...hit.data, cached: true }
+    const { status, json } = await api('/api/mirror/rank', { method: 'POST', body: JSON.stringify({ host, products }) })
+    if (status !== 200 || !json) return { error: json?.error || `rank failed (${status})` }
+    rankCache.set(key, { at: Date.now(), data: json })
+    return json
+  },
+
+  async setToken({ token, member, apiBase }) {
+    if (apiBase) await chrome.storage.local.set({ apiBase })
+    await chrome.storage.local.set({ token, member: member || null })
+    const { status, json } = await api('/api/mirror/me')
+    if (status !== 200) return { ok: false, error: 'token rejected' }
+    await chrome.storage.local.set({ member: json.name })
+    rankCache.clear()
+    return { ok: true, member: json.name }
+  },
+
+  // Only our own content scripts can ask; the token then travels by postMessage
+  // straight into the MYRA pop-out frame, never through the brand page's DOM.
+  async token() {
+    const c = await cfg()
+    return { token: c.token, apiBase: c.apiBase }
+  },
+
+  async me() {
+    const { status, json } = await api('/api/mirror/me')
+    return status === 200 ? json : { connected: false }
+  },
+
+  async disconnect() {
+    await chrome.storage.local.set({ token: null, member: null })
+    rankCache.clear()
+    return { ok: true }
+  },
+
+  async setApiBase({ apiBase }) {
+    await chrome.storage.local.set({ apiBase })
+    rankCache.clear()
+    return { ok: true }
+  },
+
+  async toggleHost({ host, enabled }) {
+    const c = await cfg()
+    const set = new Set(c.disabledHosts)
+    enabled ? set.delete(host) : set.add(host)
+    await chrome.storage.local.set({ disabledHosts: [...set] })
+    return { enabled }
+  },
+
+  /**
+   * Her Vinted purchases, read in her own signed-in tab and sent to MYRA.
+   * She asks for it from the popup; MYRA never holds her Vinted password and
+   * nothing is written back to Vinted.
+   */
+  async vintedImport({ tabId }) {
+    const c = await cfg()
+    if (!c.token) return { error: 'Connect MYRA first' }
+    let res
+    try {
+      res = await chrome.tabs.sendMessage(tabId, { type: 'readVintedOrders' })
+    } catch {
+      return { error: 'Open your Vinted orders page in this tab, then try again' }
+    }
+    if (!res?.ok) return { error: res?.error || 'Could not read this page' }
+    if (!res.orders.length) return { error: 'No orders on this page — open My orders / Purchases on Vinted' }
+    const { status, json } = await api('/api/mirror/vinted-purchases', {
+      method: 'POST',
+      body: JSON.stringify({ url: res.url, orders: res.orders }),
+    })
+    if (status !== 200 || !json) return { error: json?.error || `MYRA refused the list (${status})` }
+    return json
+  },
+
+  async pageStats(msg, sender) {
+    const tabId = sender?.tab?.id
+    if (tabId == null) return { ok: false }
+    tabStats.set(tabId, { host: msg.host, lifted: msg.lifted, total: msg.total, member: msg.member, ms: msg.ms })
+    try {
+      await chrome.action.setBadgeBackgroundColor({ tabId, color: '#141414' })
+      await chrome.action.setBadgeText({ tabId, text: msg.lifted > 0 ? String(msg.lifted) : '' })
+    } catch {}
+    return { ok: true }
+  },
+
+  async getStats({ tabId }) {
+    return tabStats.get(tabId) || null
+  },
+}
+
+chrome.runtime.onMessage.addListener((msg, sender, respond) => {
+  const fn = handlers[msg?.type]
+  if (!fn) { respond({ error: `unknown message ${msg?.type}` }); return false }
+  fn(msg, sender).then(respond, (e) => respond({ error: String(e?.message || e) }))
+  return true
+})
+
+chrome.tabs.onRemoved.addListener((tabId) => tabStats.delete(tabId))

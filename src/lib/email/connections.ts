@@ -466,6 +466,11 @@ export async function huntPhotoForFind(memberId: string, findId: string): Promis
  * Keep a photo for good. Cloudinary fetches most URLs itself, but some shops
  * (Vinted) sign theirs and refuse it, so the bytes are downloaded here instead.
  */
+export async function keepFindPhoto(url: string, memberId: string, findId: string, retailer?: string | null): Promise<string> {
+  const hosted = await keepPhoto(url, memberId, findId)
+  return SNAPSHOT_RETAILER.test(retailer ?? '') ? (await cutoutToProductPhoto(hosted, memberId, findId)) ?? hosted : hosted
+}
+
 async function keepPhoto(url: string, memberId: string, findId: string): Promise<string> {
   const hosted = await persistImageToCloudinary(url, { folder: `wardrobe/email/${memberId.slice(0, 8)}` })
   if (hosted) return hosted
@@ -516,7 +521,7 @@ export async function huntMissingPhotos(memberId: string, limit = 40): Promise<n
  */
 const SNAPSHOT_RETAILER = /vinted|ebay|depop|vestiaire|etsy|facebook|gumtree/i
 
-async function cutoutToProductPhoto(imageUrl: string, memberId: string, findId: string): Promise<string | null> {
+async function cutoutToProductPhoto(imageUrl: string, memberId: string, findId: string, attempt = 0): Promise<string | null> {
   if (!openAiConfigured()) return null
   try {
     const res = await fetch(imageUrl)
@@ -536,7 +541,10 @@ async function cutoutToProductPhoto(imageUrl: string, memberId: string, findId: 
       folder: `wardrobe/email/${memberId.slice(0, 8)}`, publicId: `cutout-${findId}-${Date.now()}`, contentType: 'image/jpeg',
     })
     return up.url ?? null
-  } catch {
+  } catch (err) {
+    // OpenAI times out now and then; one more go before she is left with the snapshot.
+    console.error('[cutoutToProductPhoto]', findId, err instanceof Error ? err.message : err)
+    if (attempt < 1) return cutoutToProductPhoto(imageUrl, memberId, findId, attempt + 1)
     return null
   }
 }

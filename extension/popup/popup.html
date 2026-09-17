@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root { color-scheme: light; }
+  body { margin: 0; width: 320px; font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; background: #f6f4ef; color: #141414; }
+  .wrap { padding: 20px 18px 18px; }
+  .eyebrow { font-size: 12px; letter-spacing: .22em; text-transform: uppercase; opacity: .7; margin: 0 0 14px; }
+  h1 { font-size: 20px; font-weight: 500; line-height: 1.25; margin: 0 0 6px; }
+  p { font-size: 15px; line-height: 1.45; margin: 0 0 14px; }
+  .muted { opacity: .7; }
+  button { width: 100%; font: inherit; font-size: 14px; letter-spacing: .16em; text-transform: uppercase; padding: 12px 14px; background: #141414; color: #f6f4ef; border: 1px solid #141414; cursor: pointer; }
+  button.ghost { background: transparent; color: #141414; margin-top: 8px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px solid rgba(20,20,20,.15); font-size: 15px; }
+  .switch { position: relative; width: 42px; height: 24px; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .knob { position: absolute; inset: 0; background: rgba(20,20,20,.25); border-radius: 24px; transition: .15s; }
+  .knob:before { content: ""; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .15s; }
+  input:checked + .knob { background: #141414; }
+  input:checked + .knob:before { transform: translateX(18px); }
+  details { margin-top: 10px; font-size: 13px; }
+  details input { width: 100%; box-sizing: border-box; font: inherit; font-size: 14px; padding: 8px; margin-top: 6px; border: 1px solid rgba(20,20,20,.3); background: #fff; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">MYRA · Mirror</p>
+  <div id="disconnected" hidden>
+    <h1>Not connected</h1>
+    <p class="muted">Connect once and every brand site opens in your order.</p>
+    <button id="connect">Connect to MYRA</button>
+  </div>
+  <div id="connected" hidden>
+    <h1 id="who">Connected</h1>
+    <p id="stats" class="muted">Open a brand site to see it in your order.</p>
+    <p id="basis" class="muted" style="font-size:13px"></p>
+    <p id="sizes" class="muted" style="font-size:13px"></p>
+    <ol id="picks" style="list-style:none;margin:0 0 6px;padding:0;font-size:14px;line-height:1.35"></ol>
+    <div id="vintedBox" hidden style="border-top:1px solid rgba(20,20,20,.12);padding-top:10px;margin-top:6px">
+      <button id="vinted">Send my purchases to MYRA</button>
+      <p id="vintedNote" class="muted" style="font-size:13px;margin:6px 0 0">Open your Vinted orders page first. MYRA reads the list you can see — never your password.</p>
+    </div>
+    <div class="row">
+      <span id="hostLabel">On this site</span>
+      <label class="switch"><input type="checkbox" id="toggle"><span class="knob"></span></label>
+    </div>
+    <button id="disconnect" class="ghost">Disconnect</button>
+  </div>
+  <details>
+    <summary>Advanced</summary>
+    <label>MYRA address<input id="apiBase" placeholder="http://localhost:3000"></label>
+  </details>
+</div>
+<script src="popup.js"></script>
+</body>
+</html>

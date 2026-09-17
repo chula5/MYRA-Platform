@@ -1,0 +1,59 @@
+{
+  "manifest_version": 3,
+  "name": "MYRA Mirror",
+  "version": "0.1.0",
+  "description": "Every brand site, already in your order. MYRA lifts the pieces you'd actually want to the top \u2014 the site stays exactly the brand's own.",
+  "permissions": [
+    "scripting",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "MYRA Mirror"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost:3000/mirror/connect*",
+        "https://www.myraassistant.co.uk/mirror/connect*",
+        "https://myraassistant.co.uk/mirror/connect*"
+      ],
+      "js": [
+        "connect.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "exclude_matches": [
+        "http://localhost:3000/*",
+        "https://www.myraassistant.co.uk/*",
+        "https://myraassistant.co.uk/*"
+      ],
+      "js": [
+        "adapters.js",
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.vinted.co.uk/*",
+        "https://www.vinted.com/*"
+      ],
+      "js": [
+        "vinted.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
