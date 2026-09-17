@@ -363,6 +363,8 @@ async function recordEmail(
       aiCalls++
       if (named) item = { ...item, product_name: named }
     }
+    // Still no name and nothing to show — nothing she could recognise.
+    if (isGenericName(item.product_name)) continue
     const incoming = { ...item, retailer: e.retailer, order_id: e.order_id, order_date: e.order_date }
     const match = finds.find((f) => sameFind(f, incoming))
     if (match) {
