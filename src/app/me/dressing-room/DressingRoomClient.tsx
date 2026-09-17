@@ -18,7 +18,7 @@ export default function DressingRoomClient({
   onOpenPiece?: (itemId: string) => void
 }) {
   return (
-    <div className={`myra-texture relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen min-h-screen ${testMemberId ? '' : '-my-10'}`}>
+    <div className={`myra-pearl relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen min-h-screen ${testMemberId ? '' : '-my-10'}`}>
       <div className="w-full px-6 sm:px-10 pb-16">
         <ArchiveCard
           className="w-full"
@@ -47,7 +47,7 @@ export default function DressingRoomClient({
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-[6px] max-w-[1600px] mx-auto">
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6 gap-[6px] w-full">
                 {view.pieces.map((p) => {
                   const body = (
                     <>

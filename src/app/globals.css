@@ -304,6 +304,24 @@ html {
 /* Page texture — the grey photoshoot backdrop behind The Edit and Our Story.
    Fixed on desktop so it sits still while content scrolls; scroll-attached on
    touch devices, where fixed backgrounds are janky. */
+/* Her rooms sit on pearl: a soft silver surface with light falling across it,
+   so the whole client area reads as one lit room rather than panels of grey. */
+.myra-pearl {
+  background-color: #E6E6E9;
+  background-image:
+    linear-gradient(118deg, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0) 18%),
+    linear-gradient(118deg, rgba(255, 255, 255, 0.55) 26%, rgba(255, 255, 255, 0) 38%),
+    linear-gradient(298deg, rgba(255, 255, 255, 0.45) 4%, rgba(255, 255, 255, 0) 26%),
+    radial-gradient(130% 90% at 50% 0%, #F7F7F9 0%, #E9E9EC 48%, #DEDEE2 100%);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+@media (hover: none), (max-width: 640px) {
+  .myra-pearl { background-attachment: scroll; }
+}
+
 .myra-texture {
   background-color: #C5C0B8;
   background-image: url('/grey-bg.webp');

@@ -20,7 +20,7 @@ const REASONS: { id: string; label: string }[] = [
 
 export default function ForYouClient({ view, testMemberId }: { view: ForYouView; testMemberId?: string }) {
   return (
-    <div className={`myra-texture relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen min-h-screen ${testMemberId ? '' : '-my-10'}`}>
+    <div className={`myra-pearl relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen min-h-screen ${testMemberId ? '' : '-my-10'}`}>
       <div className="w-full px-6 sm:px-10 pb-16">
         <ArchiveCard
           className="w-full"
@@ -45,7 +45,7 @@ export default function ForYouClient({ view, testMemberId }: { view: ForYouView;
               Your first looks are on their way.
             </p>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 max-w-[1400px] mx-auto">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6 md:gap-8 w-full">
               {view.looks.map((l) => <LookCard key={l.look_id} look={l} testMemberId={testMemberId} />)}
             </div>
           )}

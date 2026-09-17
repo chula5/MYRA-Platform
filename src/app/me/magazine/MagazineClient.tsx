@@ -43,7 +43,7 @@ export default function MagazineClient({ testMemberId }: { testMemberId?: string
   if (!view.memberId) return null
 
   return (
-    <div className={`myra-texture relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen min-h-screen ${testMemberId ? '' : '-my-10'}`}>
+    <div className={`myra-pearl relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen min-h-screen ${testMemberId ? '' : '-my-10'}`}>
       <div className="w-full px-6 sm:px-10 pb-16">
         <ArchiveCard
           className="w-full"
@@ -64,7 +64,7 @@ export default function MagazineClient({ testMemberId }: { testMemberId?: string
         >
           {view.error && <p className="text-[20px] text-[#B83A3A] text-center mb-6">{view.error}</p>}
 
-          <div className="max-w-[1500px] mx-auto">
+          <div className="w-full">
             {/* Masthead line: read again, and what has been read */}
             <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 border-y border-[#2B2B2B] py-4 mb-12">
               <button
@@ -112,7 +112,7 @@ export default function MagazineClient({ testMemberId }: { testMemberId?: string
                     <p className="text-[clamp(22px,2.2vw,32px)] text-[#4A4E57] leading-snug mb-7 max-w-4xl">{issue.subject}</p>
                   )}
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-[6px]">
+                  <div className="grid grid-cols-2 md:grid-cols-4 2xl:grid-cols-6 gap-[6px] w-full">
                     {issue.picks.map((p, i) => {
                       const body = (
                         <>

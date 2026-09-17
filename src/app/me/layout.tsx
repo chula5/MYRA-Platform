@@ -18,7 +18,7 @@ export default async function MeLayout({ children }: { children: React.ReactNode
   if (role !== 'client' && !isAdmin) redirect('/edit')
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen myra-pearl">
       <MeChrome
         signOut={
           <form action={earlyAccessSignOut}>

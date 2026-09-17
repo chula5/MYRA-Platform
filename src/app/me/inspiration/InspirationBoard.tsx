@@ -59,7 +59,7 @@ export default function InspirationBoard({ view: initial, testMemberId }: { view
   }, [busy, testMemberId])
 
   return (
-    <div className={`myra-texture relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen min-h-screen ${testMemberId ? '' : '-my-10'}`}>
+    <div className={`myra-pearl relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen min-h-screen ${testMemberId ? '' : '-my-10'}`}>
       <div className="w-full px-6 sm:px-10 pb-16">
         <ArchiveCard
           className="w-full"
@@ -120,7 +120,7 @@ export default function InspirationBoard({ view: initial, testMemberId }: { view
               <p className="myra-section-note text-center mb-4">
                 {view.pictures.length} OUTFIT{view.pictures.length === 1 ? '' : 'S'} YOU LOVE
               </p>
-              <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-[6px] max-w-[1600px] mx-auto">
+              <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8 gap-[6px] w-full">
                 {view.pictures.map((p) => (
                   <div key={p.image_id} className="relative aspect-[3/4] bg-[#E4E2DD] overflow-hidden">
                     <FallbackImage src={p.image_url} thumbWidth={500} alt="" className="absolute inset-0 w-full h-full object-cover" />

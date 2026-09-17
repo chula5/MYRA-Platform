@@ -118,7 +118,7 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
   const gmailHref = `/api/email/google/start?return=${encodeURIComponent(returnPath)}${testMemberId ? `&member=${testMemberId}` : ''}`
 
   return (
-    <section className="max-w-[1400px] mx-auto border border-[#2B2B2B] bg-[rgba(255,255,255,0.18)] px-5 md:px-8 py-7 mb-10 space-y-6">
+    <section className="w-full border border-[#2B2B2B] bg-[rgba(255,255,255,0.18)] px-5 md:px-8 py-7 mb-10 space-y-6">
       <div>
         <h2 className="myra-section-label">FIND WHAT YOU&rsquo;VE BOUGHT</h2>
         <p className="text-[20px] text-[#2B2B2B] mt-3 max-w-3xl">
@@ -240,7 +240,7 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
               </>
             )}
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-[6px]">
+          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8 gap-[6px] w-full">
             {view.finds.map((f) => (
               <div key={f.find_id} className={`bg-white flex flex-col ${picked.includes(f.find_id) ? 'outline outline-2 outline-[#2B2B2B]' : ''}`}>
                 <div className="relative aspect-[3/4] bg-[#EDEDED] overflow-hidden">

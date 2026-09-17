@@ -14,7 +14,7 @@ export default function MeChrome({ signOut }: { signOut: React.ReactNode }) {
     .find((r) => path === r.href || path.startsWith(`${r.href}/`))?.id) ?? 'for_you'
 
   return (
-    <header className="sticky top-0 z-30 bg-[#F4F2EE]">
+    <header className="sticky top-0 z-30 myra-pearl">
       <div className="flex items-center justify-between px-6 sm:px-10 h-14">
         <Link href="/me" className="text-[22px] tracking-[0.24em] text-[#4A4E57]">MYRA</Link>
         {signOut}

@@ -42,7 +42,7 @@ export default function PieceClient({
     : <Link href="/me/dressing-room" className="text-[22px] text-[#2B2B2B] underline underline-offset-4">← Your dressing room</Link>
 
   return (
-    <div className={`myra-texture relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen min-h-screen ${testMemberId ? '' : '-my-10'}`}>
+    <div className={`myra-pearl relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen min-h-screen ${testMemberId ? '' : '-my-10'}`}>
       <div className="w-full px-6 sm:px-10 py-10 max-w-[1600px] mx-auto space-y-14">
         {back}
         {!piece ? (

@@ -179,7 +179,7 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
   return (
     // Full width of the screen (design principle): breaks out of whatever
     // column holds it, on the set-wall grey texture the feed stands on.
-    <div className={`myra-texture relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen min-h-screen ${readOnly ? '' : '-my-10'}`}>
+    <div className={`myra-pearl relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen min-h-screen ${readOnly ? '' : '-my-10'}`}>
       <ClientWardrobe readOnly={readOnly} loved={loved} onOpenLook={(l) => { setRelated(null); setQuery(''); setOccasion(l.occasion_label) }} />
 
       <div className="w-full px-6 sm:px-10 pb-16 flex flex-col">

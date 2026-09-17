@@ -95,7 +95,7 @@ export default function HerViewTab({
           onSelect={(id) => { setRoom(id === 'profile' ? 'for_you' : id); setPiece(null) }}
           onSearch={(q) => { setRoom('all_looks'); setSearch(q) }}
         />
-        <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4] text-center px-6 py-3">
+        <p className="myra-pearl text-[20px] tracking-[0.1em] text-[#55534E] text-center px-6 py-3">
           HER SCREEN, LOADED AS {name.toUpperCase()} — YOUR TAPS ARE TESTS: NOTHING IS SENT TO HER OR SAVED
         </p>
       </div>

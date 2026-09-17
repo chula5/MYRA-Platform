@@ -30,48 +30,67 @@ export const ROOMS: Room[] = [
 
 const S = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.3, strokeLinecap: 'round', strokeLinejoin: 'round' } as const
 
+/** A four-point sparkle with concave sides, the way the reference draws them. */
+function sparkle(cx: number, cy: number, r: number): string {
+  const w = r * 0.2
+  return `M${cx} ${cy - r}Q${cx + w} ${cy - w} ${cx + r} ${cy}Q${cx + w} ${cy + w} ${cx} ${cy + r}Q${cx - w} ${cy + w} ${cx - r} ${cy}Q${cx - w} ${cy - w} ${cx} ${cy - r}Z`
+}
+
+/** A garment on a hanger, hanging from the rail at y. */
+function hanging(x: number, y: number): string {
+  return `M${x} ${y}v3M${x - 4} ${y + 3}h8M${x - 7} ${y + 6}l3-3M${x + 7} ${y + 6}l-3-3`
+    + `M${x - 7} ${y + 6}l-1.5 4 2 1.5 1-2v13h11v-13l1 2 2-1.5-1.5-4`
+}
+
 function Icon({ id }: { id: RoomId }) {
   const common = { viewBox: '0 0 64 64', className: 'w-full h-full', 'aria-hidden': true } as const
   switch (id) {
-    case 'for_you': // a mirror — the first thing she looks into
+    case 'for_you': // her mirror, standing
       return (
         <svg {...common}>
-          <ellipse cx="32" cy="27" rx="16" ry="21" {...S} />
-          <ellipse cx="32" cy="27" rx="11.5" ry="16.5" {...S} opacity="0.5" />
-          <path d="M32 48v9M25 57h14" {...S} />
+          <rect x="21" y="8" width="22" height="38" rx="2" {...S} />
+          <path d="M26 14l-2 9M31 14l-2 9" {...S} opacity="0.55" />
+          <path d="M43 46l6 8M21 46l-6 8" {...S} />
+          <path d="M26 46v10M38 46v10" {...S} />
         </svg>
       )
-    case 'all_looks': // a rail of looks
+    case 'all_looks': // a rail of clothes, on its feet
       return (
         <svg {...common}>
-          <path d="M8 16h48" {...S} />
-          <path d="M18 16v6l-5 22h10l-5-22v-6M32 16v6l-5 22h10l-5-22v-6M46 16v6l-5 22h10l-5-22v-6" {...S} />
-          <path d="M32 8v8" {...S} />
+          <path d="M10 14h44" {...S} />
+          <path d="M13 14v40M51 14v40M8 54h10M46 54h10" {...S} />
+          <path d={hanging(24, 14)} {...S} />
+          <path d={hanging(38, 14)} {...S} />
+          <path d={hanging(31, 14)} {...S} opacity="0.85" />
         </svg>
       )
-    case 'dressing_room': // wardrobe doors, open
+    case 'dressing_room': // the wardrobe, doors open, stool inside
       return (
         <svg {...common}>
-          <rect x="10" y="10" width="20" height="40" {...S} />
-          <rect x="34" y="10" width="20" height="40" {...S} />
-          <path d="M26 28v5M38 28v5" {...S} />
-          <path d="M14 50v5M50 50v5" {...S} />
+          <rect x="21" y="10" width="22" height="34" {...S} />
+          <path d="M21 10L9 6v42l12-4z" {...S} />
+          <path d="M43 10l12-4v42l-12-4z" {...S} />
+          <path d="M18 27v4M46 27v4" {...S} />
+          <rect x="26" y="34" width="12" height="7" rx="2" {...S} />
+          <path d="M28 41v3M36 41v3" {...S} />
         </svg>
       )
-    case 'inspiration': // the pictures she keeps
+    case 'inspiration': // sparkles
       return (
         <svg {...common}>
-          <path d="M32 10l3.4 9.2L45 22l-9.6 2.8L32 34l-3.4-9.2L19 22l9.6-2.8z" {...S} />
-          <path d="M46 34l1.8 5 5 1.8-5 1.8-1.8 5-1.8-5-5-1.8 5-1.8z" {...S} />
-          <path d="M18 38l1.5 4.2 4.2 1.5-4.2 1.5L18 49.4l-1.5-4.2-4.2-1.5 4.2-1.5z" {...S} />
+          <path d={sparkle(25, 30, 15)} {...S} />
+          <path d={sparkle(44, 18, 8)} {...S} />
+          <path d={sparkle(43, 42, 9)} {...S} />
         </svg>
       )
-    case 'magazine': // a dress and the post it arrived in
+    case 'magazine': // an open magazine: a dress on one page, pieces on the other
       return (
         <svg {...common}>
-          <path d="M20 12l5 4 5-4 3 9-3 3 4 20H16l4-20-3-3z" {...S} />
-          <rect x="36" y="26" width="20" height="14" {...S} />
-          <path d="M36 27l10 7 10-7" {...S} />
+          <path d="M32 16v34" {...S} />
+          <path d="M32 16c-5-4-12-5-20-4v34c8-1 15 0 20 4M32 16c5-4 12-5 20-4v34c-8-1-15 0-20 4" {...S} />
+          <path d="M22 24l3 2 3-2 2 6-2 2 2 10h-10l2-10-2-2z" {...S} />
+          <path d="M39 24l2 1.5 2-1.5 1.5 4-1.5 1.5 1.5 6h-7l1.5-6-1.5-1.5z" {...S} />
+          <rect x="38" y="38" width="8" height="6" rx="1" {...S} />
         </svg>
       )
     case 'profile':
@@ -107,12 +126,12 @@ export default function RoomNav({
   }
 
   return (
-    <div className="w-full bg-[#F4F2EE] border-b border-[#E2E0DB]">
+    <div className="w-full myra-pearl border-b border-[rgba(43,43,43,0.18)]">
       <div className="w-full px-6 sm:px-10 pt-7 pb-6">
         {/* Search, wide and quiet */}
-        <form onSubmit={submit} className="w-full max-w-[1100px] mx-auto">
-          <div className="flex items-center gap-4 bg-white rounded-full border border-[#E2E0DB] px-7 py-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-            <svg viewBox="0 0 24 24" className="w-6 h-6 text-[#8C8A85] shrink-0" aria-hidden>
+        <form onSubmit={submit} className="w-full">
+          <div className="flex items-center gap-4 bg-[rgba(255,255,255,0.55)] rounded-full border border-[rgba(43,43,43,0.15)] px-7 py-4">
+            <svg viewBox="0 0 24 24" className="w-6 h-6 text-[#55534E] shrink-0" aria-hidden>
               <circle cx="11" cy="11" r="7" {...S} />
               <path d="M16.5 16.5L21 21" {...S} />
             </svg>
@@ -121,18 +140,18 @@ export default function RoomNav({
               onChange={(e) => setQuery(e.target.value)}
               placeholder={searchPlaceholder}
               aria-label="Search"
-              className="flex-1 text-[21px] text-[#2B2B2B] placeholder:text-[#9A9791] bg-transparent focus:outline-none"
+              className="flex-1 text-[21px] text-[#2B2B2B] placeholder:text-[#6E6B65] bg-transparent focus:outline-none"
             />
           </div>
         </form>
 
         {/* The rooms, spread across the screen */}
-        <nav data-lenis-prevent className="mt-8 mx-auto w-full max-w-[1500px] grid grid-cols-3 sm:grid-cols-6 gap-x-2 gap-y-8 items-start">
+        <nav data-lenis-prevent className="mt-8 w-full grid grid-cols-3 sm:grid-cols-6 gap-x-2 gap-y-8 items-start">
           {ROOMS.map((r) => {
             const on = r.id === active
             const inner = (
               <>
-                <span className={`block w-[54px] h-[54px] sm:w-[68px] sm:h-[68px] mx-auto transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#7A7873] group-hover:text-[#2B2B2B]'}`}>
+                <span className={`block w-[54px] h-[54px] sm:w-[68px] sm:h-[68px] mx-auto transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
                   <Icon id={r.id} />
                 </span>
                 <span className={`block mt-3 text-[20px] sm:text-[22px] tracking-[0.02em] transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
