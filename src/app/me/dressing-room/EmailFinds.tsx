@@ -158,17 +158,17 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
       {/* Connect */}
       <div className="flex flex-wrap gap-3">
         {view.gmailReady ? (
-          <a href={gmailHref} className="text-[22px] px-7 py-3.5 bg-[#2B2B2B] text-white">Connect Gmail</a>
+          <a href={gmailHref} className="text-[22px] px-7 py-3.5 bg-[#2B2B2B] text-white rounded-full">Connect Gmail</a>
         ) : (
-          <span className="text-[20px] px-6 py-3 border border-[#C3BFB8] text-[#8C8A85]" title="Needs the Google keys set up">Connect Gmail (not set up yet)</span>
+          <span className="text-[20px] px-6 py-3 border border-[#C3BFB8] text-[#8C8A85] rounded-full" title="Needs the Google keys set up">Connect Gmail (not set up yet)</span>
         )}
-        <button onClick={() => setShowVirgin(!showVirgin)} className="text-[22px] px-7 py-3.5 border border-[#2B2B2B] text-[#2B2B2B]">
+        <button onClick={() => setShowVirgin(!showVirgin)} className="text-[22px] px-7 py-3.5 border border-[#2B2B2B] text-[#2B2B2B] rounded-full">
           Connect Virgin Media / Blueyonder mail
         </button>
       </div>
 
       {showVirgin && (
-        <div className="border border-[#C3BFB8] bg-[rgba(255,255,255,0.35)] px-5 py-5 space-y-4 max-w-2xl">
+        <div className="border border-[#C3BFB8] bg-[rgba(255,255,255,0.35)] px-5 py-5 space-y-4 max-w-2xl rounded-full">
           <p className="text-[20px] text-[#2B2B2B]">Virgin Media needs an <b>app password</b> for this — not your usual password. It only opens your mail, and you can cancel it any time.</p>
           <ol className="text-[20px] text-[#2B2B2B] list-decimal pl-6 space-y-1">
             <li>Sign in to My Virgin Media and go to <b>Account settings → Account details</b>.</li>
@@ -182,7 +182,7 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
               onChange={(e) => setEmail(e.target.value)}
               placeholder="Your email, e.g. name@blueyonder.co.uk"
               autoComplete="email"
-              className="text-[20px] bg-white border border-[#6E6B65] px-4 py-3 focus:outline-none focus:border-[#2B2B2B]"
+              className="text-[20px] bg-white border border-[#6E6B65] px-4 py-3 focus:outline-none focus:border-[#2B2B2B] rounded-full"
             />
             <input
               value={appPassword}
@@ -190,12 +190,12 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
               placeholder="Virgin Media Mail app password"
               type="password"
               autoComplete="off"
-              className="text-[20px] bg-white border border-[#6E6B65] px-4 py-3 focus:outline-none focus:border-[#2B2B2B]"
+              className="text-[20px] bg-white border border-[#6E6B65] px-4 py-3 focus:outline-none focus:border-[#2B2B2B] rounded-full"
             />
             <button
               disabled={working('virgin') || !email.trim() || !appPassword || !view.secretsReady}
               onClick={connectVirgin}
-              className="text-[22px] px-7 py-3.5 bg-[#2B2B2B] text-white disabled:opacity-40 self-start"
+              className="text-[22px] px-7 py-3.5 bg-[#2B2B2B] text-white disabled:opacity-40 self-start rounded-full"
             >
               {working('virgin') ? 'Checking…' : 'Connect'}
             </button>
@@ -210,7 +210,7 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
           {view.returned.map((f) => (
             <div key={f.find_id} className="flex flex-wrap items-center gap-x-5 gap-y-2">
               <p className="text-[20px] text-[#2B2B2B]">{f.product_name}{f.brand_name ? ` · ${f.brand_name}` : f.retailer ? ` · ${f.retailer}` : ''}</p>
-              <button disabled={working(`rm-${f.find_id}`)} onClick={() => act(`rm-${f.find_id}`, () => removeReturned(f.find_id, testMemberId), `${f.product_name} is out of your dressing room.`)} className="text-[18px] px-4 py-2 bg-[#2B2B2B] text-white disabled:opacity-40">Remove it</button>
+              <button disabled={working(`rm-${f.find_id}`)} onClick={() => act(`rm-${f.find_id}`, () => removeReturned(f.find_id, testMemberId), `${f.product_name} is out of your dressing room.`)} className="text-[18px] px-4 py-2 bg-[#2B2B2B] text-white disabled:opacity-40 rounded-full">Remove it</button>
               <button disabled={working(`keep-${f.find_id}`)} onClick={() => act(`keep-${f.find_id}`, () => keepReturned(f.find_id, testMemberId))} className="text-[18px] underline underline-offset-4 text-[#55534E] disabled:opacity-40">I still have it</button>
             </div>
           ))}
@@ -231,10 +231,10 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
             {picked.length > 0 && (
               <>
                 <span className="text-[18px] text-[#55534E]">{picked.length} selected</span>
-                <button onClick={() => decideMany(picked, true)} className="text-[18px] px-5 py-2 bg-[#2B2B2B] text-white">
+                <button onClick={() => decideMany(picked, true)} className="text-[18px] px-5 py-2 bg-[#2B2B2B] text-white rounded-full">
                   Add {picked.length} to my wardrobe
                 </button>
-                <button onClick={() => decideMany(picked, false)} className="text-[18px] px-5 py-2 border border-[#2B2B2B] text-[#2B2B2B]">
+                <button onClick={() => decideMany(picked, false)} className="text-[18px] px-5 py-2 border border-[#2B2B2B] text-[#2B2B2B] rounded-full">
                   Not mine ({picked.length})
                 </button>
               </>
@@ -259,7 +259,7 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
                       <button
                         disabled={working(`hunt-${f.find_id}`)}
                         onClick={() => act(`hunt-${f.find_id}`, () => findPhotoInEmails(f.find_id, testMemberId))}
-                        className="text-[18px] px-4 py-2 border border-[#2B2B2B] text-[#2B2B2B] disabled:opacity-40"
+                        className="text-[18px] px-4 py-2 border border-[#2B2B2B] text-[#2B2B2B] disabled:opacity-40 rounded-full"
                       >
                         {working(`hunt-${f.find_id}`) ? 'Looking…' : 'Look in my emails'}
                       </button>

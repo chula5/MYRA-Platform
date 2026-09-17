@@ -85,7 +85,7 @@ export default function InspirationBoard({ view: initial, testMemberId }: { view
             <p className="text-[22px] text-[#2B2B2B]">Add an outfit you love</p>
             <p className="text-[20px] text-[#55534E] mt-2">A screenshot, a photo, a whole Pinterest board — paste it, drop it, or choose it.</p>
             <div className="flex flex-wrap items-center justify-center gap-3 mt-5">
-              <label className={`text-[22px] px-7 py-3.5 bg-[#2B2B2B] text-white cursor-pointer ${busy ? 'opacity-50 pointer-events-none' : ''}`}>
+              <label className={`text-[22px] px-7 py-3.5 bg-[#2B2B2B] text-white cursor-pointer ${busy ? 'opacity-50 pointer-events-none' : ''} rounded-full`}>
                 Choose pictures
                 <input
                   type="file"
@@ -99,12 +99,12 @@ export default function InspirationBoard({ view: initial, testMemberId }: { view
                 value={links}
                 onChange={(e) => setLinks(e.target.value)}
                 placeholder="Or paste a picture link"
-                className="text-[20px] bg-white border border-[#6E6B65] px-4 py-3 min-w-0 w-full sm:w-[320px] placeholder:text-[#8C8A85] focus:outline-none focus:border-[#2B2B2B]"
+                className="text-[20px] bg-white border border-[#6E6B65] px-4 py-3 min-w-0 w-full sm:w-[320px] placeholder:text-[#8C8A85] focus:outline-none focus:border-[#2B2B2B] rounded-full"
               />
               <button
                 disabled={busy || !links.trim()}
                 onClick={() => add([], links)}
-                className="text-[22px] px-6 py-3.5 border border-[#2B2B2B] text-[#2B2B2B] disabled:opacity-40"
+                className="text-[22px] px-6 py-3.5 border border-[#2B2B2B] text-[#2B2B2B] disabled:opacity-40 rounded-full"
               >
                 Add
               </button>

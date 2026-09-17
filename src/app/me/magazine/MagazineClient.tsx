@@ -70,7 +70,7 @@ export default function MagazineClient({ testMemberId }: { testMemberId?: string
               <button
                 disabled={busy || view.needsInbox}
                 onClick={read}
-                className="text-[20px] tracking-[0.12em] px-7 py-3 bg-[#2B2B2B] text-white disabled:opacity-40"
+                className="text-[20px] tracking-[0.12em] px-7 py-3 bg-[#2B2B2B] text-white disabled:opacity-40 rounded-full"
               >
                 {busy ? 'READING…' : 'READ THIS WEEK'}
               </button>

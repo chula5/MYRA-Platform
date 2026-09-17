@@ -73,7 +73,7 @@ export default function PieceClient({
                     key={o.id}
                     disabled={busy}
                     onClick={() => run(o.label, { occasion: o.id })}
-                    className={`text-[22px] px-6 py-3.5 border transition-colors disabled:opacity-50 ${asked === o.label ? 'bg-[#2B2B2B] border-[#2B2B2B] text-white' : 'border-[#2B2B2B] text-[#2B2B2B] hover:bg-[#2B2B2B] hover:text-white'}`}
+                    className={`text-[22px] px-6 py-3.5 border transition-colors disabled:opacity-50 ${asked === o.label ? 'bg-[#2B2B2B] border-[#2B2B2B] text-white' : 'border-[#2B2B2B] text-[#2B2B2B] hover:bg-[#2B2B2B] hover:text-white'} rounded-full`}
                   >
                     {o.label}
                   </button>
@@ -90,7 +90,7 @@ export default function PieceClient({
                           key={f.itemType}
                           disabled={busy}
                           onClick={() => run(label, { withType: f.itemType })}
-                          className={`text-[22px] px-6 py-3.5 border transition-colors disabled:opacity-50 ${asked === label ? 'bg-[#2B2B2B] border-[#2B2B2B] text-white' : 'border-[#2B2B2B] text-[#2B2B2B] hover:bg-[#2B2B2B] hover:text-white'}`}
+                          className={`text-[22px] px-6 py-3.5 border transition-colors disabled:opacity-50 ${asked === label ? 'bg-[#2B2B2B] border-[#2B2B2B] text-white' : 'border-[#2B2B2B] text-[#2B2B2B] hover:bg-[#2B2B2B] hover:text-white'} rounded-full`}
                         >
                           {label}
                         </button>
@@ -149,12 +149,10 @@ function OutfitCard({ look, heroId }: { look: StyledLook; heroId: string }) {
           ))}
         </div>
       )}
-      <div className="px-5 py-5 space-y-3">
-        <p className="text-[22px] leading-snug text-[#2B2B2B]">{look.why}</p>
-        <p className="text-[18px] text-[#6E6B65]">
-          {look.items.map((it) => (it.owned ? `your ${it.product_name.toLowerCase()}` : it.product_name)).join(' · ')}
-        </p>
-      </div>
+      {/* The outfit speaks for itself; how many of her own pieces are in it does not. */}
+      <p className="px-5 py-4 text-[19px] text-[#6E6B65]">
+        {look.items.filter((it) => it.owned).length} of your own
+      </p>
     </article>
   )
 }

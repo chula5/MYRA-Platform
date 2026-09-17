@@ -230,7 +230,7 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
               ) : (
                 <button
                   onClick={() => setAsking(true)}
-                  className="w-full border border-[#2B2B2B] bg-[rgba(255,255,255,0.18)] px-6 py-5 myra-field tracking-[0.14em] text-[#2B2B2B] hover:bg-[#2B2B2B] hover:text-white transition-colors"
+                  className="w-full border border-[#2B2B2B] bg-[rgba(255,255,255,0.18)] px-6 py-5 myra-field tracking-[0.14em] text-[#2B2B2B] hover:bg-[#2B2B2B] hover:text-white transition-colors rounded-full"
                 >
                   {readOnly ? `ASK MYRA — TEST AS ${(view.name.split(' ')[0] || 'HER').toUpperCase()}` : 'ASK MYRA FOR SOMETHING NEW'}
                 </button>
@@ -559,7 +559,7 @@ function LookCard({
               <button
                 onClick={() => send('yes')}
                 disabled={saving}
-                className={`text-[20px] px-5 py-3 border transition-colors ${verdict === 'yes' ? 'bg-[#2B2B2B] text-white border-[#2B2B2B]' : 'border-[#2B2B2B] text-[#2B2B2B] hover:bg-[rgba(255,255,255,0.35)]'}`}
+                className={`text-[20px] px-5 py-3 border transition-colors ${verdict === 'yes' ? 'bg-[#2B2B2B] text-white border-[#2B2B2B]' : 'border-[#2B2B2B] text-[#2B2B2B] hover:bg-[rgba(255,255,255,0.35)]'} rounded-full`}
               >
                 I would wear this
               </button>
@@ -589,12 +589,12 @@ function LookCard({
                   onChange={(e) => setWords(e.target.value)}
                   rows={2}
                   placeholder="In your own words — the most useful part"
-                  className="w-full text-[20px] bg-transparent border border-[#C3BFB8] px-3 py-2.5 focus:outline-none focus:border-[#2B2B2B]"
+                  className="w-full text-[20px] bg-transparent border border-[#C3BFB8] px-3 py-2.5 focus:outline-none focus:border-[#2B2B2B] rounded-full"
                 />
                 <button
                   onClick={() => send('no')}
                   disabled={saving || !reason}
-                  className="text-[20px] px-5 py-3 bg-[#2B2B2B] text-white disabled:opacity-40"
+                  className="text-[20px] px-5 py-3 bg-[#2B2B2B] text-white disabled:opacity-40 rounded-full"
                 >
                   {saving ? 'Sending…' : 'Send'}
                 </button>
@@ -676,7 +676,7 @@ function StyleItemPrompt({ item, look }: { item: ClientLookItem; look: ClientLoo
           setBusy(false)
           setSent(true)
         }}
-        className="text-[20px] px-6 py-3.5 bg-[#2B2B2B] text-white disabled:opacity-40"
+        className="text-[20px] px-6 py-3.5 bg-[#2B2B2B] text-white disabled:opacity-40 rounded-full"
       >
         {busy ? 'Asking…' : 'Ask MYRA to style it another way'}
       </button>
@@ -886,17 +886,17 @@ function AskPanel({
         onChange={(e) => setWords(e.target.value)}
         rows={2}
         placeholder="Anything else MYRA should know"
-        className="w-full text-[20px] bg-transparent border border-[#6E6B65] px-4 py-3 placeholder:text-[#6E6B65] focus:outline-none focus:border-[#2B2B2B]"
+        className="w-full text-[20px] bg-transparent border border-[#6E6B65] px-4 py-3 placeholder:text-[#6E6B65] focus:outline-none focus:border-[#2B2B2B] rounded-full"
       />
       <div className="flex flex-wrap gap-3">
         <button
           disabled={!occasion || busy}
           onClick={submit}
-          className="text-[20px] px-7 py-3.5 bg-[#2B2B2B] text-white disabled:opacity-40"
+          className="text-[20px] px-7 py-3.5 bg-[#2B2B2B] text-white disabled:opacity-40 rounded-full"
         >
           {busy ? (testing ? 'Composing…' : 'Sending…') : preview ? 'Run the test again' : testing ? 'Run the test' : 'Ask MYRA'}
         </button>
-        <button onClick={onDone} className="text-[20px] px-7 py-3.5 border border-[#6E6B65] text-[#2B2B2B]">
+        <button onClick={onDone} className="text-[20px] px-7 py-3.5 border border-[#6E6B65] text-[#2B2B2B] rounded-full">
           {preview ? 'Close' : 'Not now'}
         </button>
       </div>
@@ -939,7 +939,7 @@ function AskPanel({
                   {(history[i]?.length ?? 0) > 0 && (
                     <button
                       onClick={() => undo(i)}
-                      className="text-[18px] tracking-[0.08em] px-4 py-2 border border-[#6E6B65] text-[#2B2B2B] hover:border-[#2B2B2B] transition-colors"
+                      className="text-[18px] tracking-[0.08em] px-4 py-2 border border-[#6E6B65] text-[#2B2B2B] hover:border-[#2B2B2B] transition-colors rounded-full"
                       title="Put the look back as it was before your last change"
                     >
                       ↶ UNDO {history[i][history[i].length - 1].kind === 'swap' ? 'SWAP' : 'REMOVE'}
@@ -1013,12 +1013,12 @@ function AskPanel({
                         value={swapQ}
                         onChange={(e) => setSwapQ(e.target.value)}
                         placeholder="Search pieces — brand, name, colour"
-                        className="flex-1 min-w-[240px] text-[20px] bg-white border border-[#6E6B65] px-4 py-2.5 placeholder:text-[#8C8A85] focus:outline-none focus:border-[#2B2B2B]"
+                        className="flex-1 min-w-[240px] text-[20px] bg-white border border-[#6E6B65] px-4 py-2.5 placeholder:text-[#8C8A85] focus:outline-none focus:border-[#2B2B2B] rounded-full"
                       />
                       <select
                         value={swapBrand}
                         onChange={(e) => setSwapBrand(e.target.value)}
-                        className="text-[20px] bg-white border border-[#6E6B65] px-3 py-2.5 focus:outline-none"
+                        className="text-[20px] bg-white border border-[#6E6B65] px-3 py-2.5 focus:outline-none rounded-full"
                       >
                         <option value="">All brands</option>
                         {swap.brands.map((b) => <option key={b.name} value={b.name}>{b.name} ({b.count})</option>)}
@@ -1026,9 +1026,9 @@ function AskPanel({
                     </div>
                     {swap.types.length > 1 && (
                       <div className="flex flex-wrap gap-2">
-                        <button onClick={() => setSwapType('')} className={`text-[16px] tracking-[0.08em] px-3 py-1.5 border ${!swapType ? 'bg-[#2B2B2B] border-[#2B2B2B] text-white' : 'border-[#9B978F] text-[#2B2B2B]'}`}>ALL TYPES</button>
+                        <button onClick={() => setSwapType('')} className={`text-[16px] tracking-[0.08em] px-3 py-1.5 border ${!swapType ? 'bg-[#2B2B2B] border-[#2B2B2B] text-white' : 'border-[#9B978F] text-[#2B2B2B]'} rounded-full`}>ALL TYPES</button>
                         {swap.types.map((ty) => (
-                          <button key={ty} onClick={() => setSwapType(swapType === ty ? '' : ty)} className={`text-[16px] tracking-[0.08em] px-3 py-1.5 border ${swapType === ty ? 'bg-[#2B2B2B] border-[#2B2B2B] text-white' : 'border-[#9B978F] text-[#2B2B2B]'}`}>
+                          <button key={ty} onClick={() => setSwapType(swapType === ty ? '' : ty)} className={`text-[16px] tracking-[0.08em] px-3 py-1.5 border ${swapType === ty ? 'bg-[#2B2B2B] border-[#2B2B2B] text-white' : 'border-[#9B978F] text-[#2B2B2B]'} rounded-full`}>
                             {PICKER_TYPES.find((p) => p.value === ty)?.label ?? ty.replace(/_/g, ' ').toUpperCase()}
                           </button>
                         ))}
@@ -1090,7 +1090,7 @@ function AskPanel({
                 if (r.error) setError(r.error)
                 else setKept(true)
               }}
-              className="text-[20px] px-7 py-3.5 border border-[#2B2B2B] text-[#2B2B2B] hover:bg-[#2B2B2B] hover:text-white transition-colors disabled:opacity-40"
+              className="text-[20px] px-7 py-3.5 border border-[#2B2B2B] text-[#2B2B2B] hover:bg-[#2B2B2B] hover:text-white transition-colors disabled:opacity-40 rounded-full"
             >
               {kept
                 ? `Kept ${accepted.size} — light shoot${accepted.size === 1 ? '' : 's'} started, in DELIVERIES as a draft`
