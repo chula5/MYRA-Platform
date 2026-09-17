@@ -186,6 +186,29 @@ async function fetchMessages(c: any, ids: string[]): Promise<MailMessage[]> {
   return fetchImapMessages({ host: c.imap_host, email: c.email, password: secret }, ids)
 }
 
+/** Her connected inboxes, with their secrets — for MYRA's own readers only. */
+export async function memberInboxes(memberId: string): Promise<any[]> {
+  const { data } = await db().from('member_email_connection').select('*').eq('member_id', memberId).eq('status', 'connected')
+  return (data ?? []) as any[]
+}
+
+/** Sender and subject of recent messages in an inbox — free, no body opened. */
+export async function inboxHeadersSince(c: any, since: Date, query: string, max = 400): Promise<{ id: string; from: string; subject: string }[]> {
+  const secret = decryptSecret(c.secret_enc)
+  if (c.provider === 'gmail') {
+    const token = await googleAccessToken(secret)
+    const ids = await searchGmailIds(token, `after:${Math.floor(since.getTime() / 1000)} ${query}`, max)
+    return getGmailHeaders(token, ids)
+  }
+  const cfg = { host: c.imap_host, email: c.email, password: secret }
+  const uids = await listImapPurchaseUids(cfg, since, max)
+  return fetchImapHeaders(cfg, uids)
+}
+
+export async function inboxMessages(c: any, ids: string[]): Promise<MailMessage[]> {
+  return fetchMessages(c, ids)
+}
+
 const permanentAuthError = (msg: string) => /invalid_grant|unauthorized|401|403|auth|password|credentials|AUTHENTICATIONFAILED/i.test(msg)
 
 /** Drain queued scans within a time budget. Safe to call from the cron and "scan now". */

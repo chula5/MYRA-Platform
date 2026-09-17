@@ -26,6 +26,7 @@ export default async function MeLayout({ children }: { children: React.ReactNode
           <Link href="/me" className="text-[16px] sm:text-[18px] tracking-[0.1em] text-[#0A0A0A] hover:opacity-70 transition-opacity">FOR YOU</Link>
           <Link href="/me/looks" className="text-[16px] sm:text-[18px] tracking-[0.1em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors">ALL LOOKS</Link>
           <Link href="/me/dressing-room" className="text-[16px] sm:text-[18px] tracking-[0.1em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors">DRESSING ROOM</Link>
+          <Link href="/me/magazine" className="text-[16px] sm:text-[18px] tracking-[0.1em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors">MAGAZINE</Link>
           <Link href="/me/inspiration" className="text-[16px] sm:text-[18px] tracking-[0.1em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors">INSPIRATION</Link>
           <Link href="/me/profile" className="text-[16px] sm:text-[18px] tracking-[0.1em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors">PROFILE</Link>
           <form action={earlyAccessSignOut}>

@@ -14,6 +14,7 @@ import ForYouClient from '@/app/me/ForYouClient'
 import DressingRoomClient from '@/app/me/dressing-room/DressingRoomClient'
 import PieceClient from '@/app/me/dressing-room/PieceClient'
 import InspirationBoard from '@/app/me/inspiration/InspirationBoard'
+import MagazineClient from '@/app/me/magazine/MagazineClient'
 import { MirrorLoading } from '@/components/ArchiveCard'
 import { loadLooksForMember, type ClientView } from '@/app/me/looks/actions'
 import { loadForYou, type ForYouView } from '@/app/me/for-you-actions'
@@ -21,12 +22,13 @@ import { loadMyDressingRoom, loadMyPiece } from '@/app/me/dressing-room/actions'
 import { loadMyInspiration, type InspirationBoardView } from '@/app/me/inspiration/board-actions'
 import type { DressingRoomView, OwnedPieceView } from '@/app/admin/private-stylist/actions'
 
-type Room = 'for_you' | 'all_looks' | 'dressing_room' | 'inspiration'
+type Room = 'for_you' | 'all_looks' | 'dressing_room' | 'magazine' | 'inspiration'
 
 const ROOMS: { id: Room; label: string }[] = [
   { id: 'for_you', label: 'FOR YOU' },
   { id: 'all_looks', label: 'ALL LOOKS' },
   { id: 'dressing_room', label: 'DRESSING ROOM' },
+  { id: 'magazine', label: 'MAGAZINE' },
   { id: 'inspiration', label: 'INSPIRATION' },
 ]
 
@@ -131,6 +133,13 @@ export default function HerViewTab({
             </p>
           </div>
         )
+      )}
+
+      {/* The magazine loads her newsletters itself, as it does on her screen. */}
+      {!loading && room === 'magazine' && (
+        <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen">
+          <MagazineClient key={memberId} testMemberId={memberId} />
+        </div>
       )}
 
       {!loading && room === 'dressing_room' && !piece && dressing && (
