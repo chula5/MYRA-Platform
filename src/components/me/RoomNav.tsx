@@ -180,7 +180,7 @@ export default function RoomNav({
   }
 
   return (
-    <div className="w-full myra-pearl border-b border-[rgba(43,43,43,0.18)]">
+    <div className="w-full">
       <div className="w-full px-6 sm:px-10 pt-7 pb-6">
         {/* Search, wide and quiet */}
         <form onSubmit={submit} className="w-full">
