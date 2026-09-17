@@ -50,6 +50,7 @@ const prompt = (email: string, images: EmailImage[], links: string[]) => `This i
 Then list each item the email is about (bought, or returned/refunded/cancelled).
 
 Rules:
+- MYRA dresses women: leave out menswear and pieces clearly bought for a man or child (MR PORTER, "men's", "boys'"), even when she paid.
 - category: clothing, shoes, bag, jewellery or accessory ONLY for something she would wear or carry as part of an outfit (accessory = belts, scarves, hats, gloves, sunglasses, hair accessories, watches). "other" for everything else — beauty and makeup tools (mirrors, brushes), homeware, food, tech, phone cases, gift cards, multi-packs of small goods.
 - product_name exactly as the email names it. Never invent a generic name like "Item" — if the email does not name the piece, use what the photo's alt text or the email says it is, else leave the item out.
 - brand_name when the email says it (the retailer is not always the brand — on Vinted, eBay or Depop the brand is in the listing title). colour and size as shown.
@@ -155,7 +156,7 @@ export async function triageBySubject(rows: { id: string; from: string; subject:
           content: `Below are the sender and subject of emails from a woman's inbox. Return the numbers of the emails that could be an order confirmation, receipt, dispatch/delivery notice, return or refund for CLOTHING, SHOES, BAGS, JEWELLERY or wearable ACCESSORIES she bought.
 
 Keep: fashion brands and shops, department stores, marketplaces and resale (Vinted, eBay, Depop, Vestiaire, Amazon, ASOS, John Lewis...) — when unsure whether a shop sells clothes, keep it. Keep every update about a specific order or item from such a shop, even delays and failed deliveries ("Order update for Black vest top", "Your Flannels parcel could not be delivered" — a carrier naming a fashion shop counts).
-Leave out: food and takeaway, groceries, travel, tickets, parcel carriers, payment processors, software and subscriptions, gyms, utilities, banks, beauty and skincare, homeware, cards and gifts, news, and marketing.
+Leave out: menswear shops (MR PORTER), food and takeaway, groceries, travel, tickets, parcel carriers, payment processors, software and subscriptions, gyms, utilities, banks, beauty and skincare, homeware, cards and gifts, news, and marketing.
 
 ${list}`,
         }],
