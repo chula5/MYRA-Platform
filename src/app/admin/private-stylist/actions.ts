@@ -1609,7 +1609,7 @@ async function loadMemberRules(admin: any, member: { member_id: string; stylist_
   return rulesForMember(null, chloeStyle)
 }
 
-async function loadMemberTaste(admin: any, member: { member_id: string; brands: RankedBrand[]; brands_input_only: string[] } & Partial<StylePrefs>): Promise<MemberTaste> {
+export async function loadMemberTaste(admin: any, member: { member_id: string; brands: RankedBrand[]; brands_input_only: string[] } & Partial<StylePrefs>): Promise<MemberTaste> {
   const t: MemberTaste = {
     affinity: new Map(),
     families: new Map(),
@@ -1714,7 +1714,7 @@ async function loadMemberTaste(admin: any, member: { member_id: string; brands: 
 // a look she can't buy. Pre-loved pieces appear only if she asked for them.
 //
 // Her own wardrobe is exempt: she already owns those, and they already fit.
-async function loadComposableLibrary(member?: { member_id: string; auth_user_id?: string | null } | null): Promise<ItemWithBrand[]> {
+export async function loadComposableLibrary(member?: { member_id: string; auth_user_id?: string | null } | null): Promise<ItemWithBrand[]> {
   const [ready, live, owned] = await Promise.all([
     getAllItems('ready'),
     getAllItems('live'),
@@ -1781,7 +1781,7 @@ export async function assignMemberPersona(memberId: string, personaId: string): 
  * confirmed images has no envelope and therefore no influence — the moodboard
  * has to have been reviewed before it can style anyone.
  */
-async function loadPersonaLens(admin: any, memberId: string): Promise<PersonaLens | undefined> {
+export async function loadPersonaLens(admin: any, memberId: string): Promise<PersonaLens | undefined> {
   const [{ data: assignment }, { data: member }] = await Promise.all([
     admin.from('user_persona').select('persona_id, weight').eq('user_id', memberId).maybeSingle(),
     admin.from('pilot_member').select('auth_user_id').eq('member_id', memberId).maybeSingle(),
@@ -1884,7 +1884,7 @@ type PlannedLooks = ReturnType<typeof composeMemberLooks>
  * that have already anchored an approved look. Shared by fresh deliveries and
  * the Dressing Room, so both explore rather than replaying the same looks.
  */
-async function loadComposeHistory(admin: any, memberId: string): Promise<ComposeHistory> {
+export async function loadComposeHistory(admin: any, memberId: string): Promise<ComposeHistory> {
   // Her look history: everything already composed for her (any delivery) plus
   // her explicit rejections — the composer ranks those down so each delivery
   // explores the library instead of regenerating the same argmax looks.
@@ -3140,6 +3140,37 @@ export async function loadDressingRoom(asMemberId?: string): Promise<DressingRoo
     return { ...base, pieces: pieces.map((p) => toPiece(p, styled)) }
   } catch (err) {
     return { ...base, pieces: [], error: err instanceof Error ? err.message : 'Could not load your wardrobe' }
+  }
+}
+
+/**
+ * The looks she already has that use one of her pieces — free and instant: her
+ * own looks, no library, no composing. The Dressing Room shows these the moment
+ * she taps a piece; building NEW outfits is a separate, deliberate press.
+ */
+export async function looksWithOwnedPiece(itemId: string, asMemberId?: string): Promise<{ looks: StyledLook[]; error?: string }> {
+  const me = await resolveClientMember(asMemberId)
+  if (!me) return { looks: [], error: 'Not signed in' }
+  try {
+    const admin = createAdminClient() as any
+    const { data: member } = await admin.from('pilot_member').select('*').eq('member_id', me.memberId).single()
+    const looks = await memberLooksFor(admin, me.memberId, me.test)
+    const using = looks.filter((l) => ((l.items ?? []) as any[]).some((i) => i.item_id === itemId))
+    if (!using.length) return { looks: [] }
+    const ids = Array.from(new Set(using.flatMap((l) => (l.items ?? []).map((i: any) => i.item_id)).filter(Boolean)))
+    const { data: rows } = ids.length ? await admin.from('item').select(WHY_DIMS).in('item_id', ids) : { data: [] }
+    const dims = new Map<string, any>(((rows ?? []) as any[]).map((r) => [r.item_id, r]))
+    const prefs = readStylePrefs(member)
+    return {
+      looks: using.map((l) => ({
+        look_id: l.look_id,
+        image_url: l.image_url ?? null,
+        items: l.items ?? [],
+        why: whyThisSuitsHer((l.items ?? []).map((it: any) => ({ ...(dims.get(it.item_id) ?? {}), product_name: it.product_name, owned: !!it.owned })), prefs),
+      })),
+    }
+  } catch (err) {
+    return { looks: [], error: err instanceof Error ? err.message : 'Could not load its looks' }
   }
 }
 

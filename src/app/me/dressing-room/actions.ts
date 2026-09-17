@@ -23,3 +23,8 @@ export async function styleMyPiece(
 ): Promise<{ looks: impl.StyledLook[]; hidden?: number; error?: string }> {
   return impl.styleOwnedPiece(itemId, opts, asMemberId)
 }
+
+/** Her looks that already use this piece — no composing, nothing paid for. */
+export async function myLooksWithPiece(itemId: string, asMemberId?: string): Promise<{ looks: impl.StyledLook[]; error?: string }> {
+  return impl.looksWithOwnedPiece(itemId, asMemberId)
+}

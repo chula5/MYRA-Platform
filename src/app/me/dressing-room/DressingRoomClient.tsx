@@ -3,16 +3,16 @@
 // DRESSING ROOM — the room across the top, her rail under it, and MYRA
 // working down the right.
 //
-// Tapping a piece stands it up on the right and MYRA styles it there: real
-// outfits built from her own wardrobe and the library, checked before they
-// show. The full page for a piece (how it has been styled, STYLE THIS by
-// occasion, the finders) is one tap further in.
+// Tapping a piece stands it up on the right with the looks she ALREADY has
+// with it — free, instant, her own looks. Building new outfits is a deliberate
+// press, because that composes and checks for real. The piece's own page (how
+// it has been styled, STYLE THIS by occasion, the finders) is one tap further in.
 
 import Link from 'next/link'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import type { DressingRoomPiece, DressingRoomView, StyledLook } from '@/app/admin/private-stylist/actions'
-import { styleMyPiece } from './actions'
+import { myLooksWithPiece, styleMyPiece } from './actions'
 import EmailFinds from './EmailFinds'
 
 const TABS: { id: string; label: string; slots: string[] }[] = [
@@ -38,7 +38,10 @@ export default function DressingRoomClient({
 }) {
   const [tab, setTab] = useState('all')
   const [picked, setPicked] = useState<DressingRoomPiece | null>(null)
+  // What she already has with this piece, and what MYRA makes when she asks.
+  const [worn, setWorn] = useState<StyledLook[]>([])
   const [looks, setLooks] = useState<StyledLook[]>([])
+  const [loadingWorn, setLoadingWorn] = useState(false)
   const [styling, setStyling] = useState(false)
   const [note, setNote] = useState<string | null>(null)
   // Only the latest tap's outfits are shown, however fast she moves.
@@ -56,20 +59,31 @@ export default function DressingRoomClient({
     return !t || !t.slots.length ? view.pieces : view.pieces.filter((p) => t.slots.includes(p.slot ?? ''))
   }, [tab, view.pieces])
 
-  // Tapping a piece is the whole interaction: MYRA styles it on the right.
+  /** Tapping a piece shows the looks she already has with it — free and instant. */
   async function pick(p: DressingRoomPiece) {
     setPicked(p)
+    setWorn([])
     setLooks([])
     setNote(null)
+    setLoadingWorn(true)
+    wanted.current = p.item_id
+    const r = await myLooksWithPiece(p.item_id, testMemberId)
+    if (wanted.current !== p.item_id) return
+    setLoadingWorn(false)
+    setWorn(r.looks ?? [])
+    if (r.error) setNote(r.error)
+  }
+
+  /** New outfits are built only when she asks: real composing, checked before it shows. */
+  async function styleNow(p: DressingRoomPiece) {
     setStyling(true)
+    setNote(null)
     wanted.current = p.item_id
     const r = await styleMyPiece(p.item_id, {}, testMemberId)
     if (wanted.current !== p.item_id) return
     setStyling(false)
     setLooks(r.looks ?? [])
-    setNote(r.error ?? (r.looks?.length
-      ? null
-      : 'Nothing in the library goes with this one yet.'))
+    setNote(r.error ?? (r.looks?.length ? null : 'Nothing in the library goes with this one yet.'))
   }
 
   const openPiece = (itemId: string) => { if (onOpenPiece) onOpenPiece(itemId) }
@@ -80,7 +94,7 @@ export default function DressingRoomClient({
       <div className="w-full px-6 sm:px-10 py-8 pb-16 space-y-6">
         {/* The room */}
         <section className={`${CARD} overflow-hidden`}>
-          <div className="grid lg:grid-cols-[1fr_380px]">
+          <div className="grid lg:grid-cols-[minmax(0,1fr)_360px]">
             <div className="px-8 py-10 flex flex-col justify-between gap-8">
               <div>
                 <p className="text-[20px] tracking-[0.18em] text-[#6E6B65]">DRESSING ROOM</p>
@@ -142,8 +156,8 @@ export default function DressingRoomClient({
         {/* Her rail, and MYRA working down the right */}
         {view.pieces.length > 0 && (
           <section className={`${CARD} px-6 sm:px-8 py-8`}>
-            <div className="grid xl:grid-cols-[1fr_420px] gap-8">
-              <div>
+            <div className="grid xl:grid-cols-[minmax(0,1fr)_400px] gap-8">
+              <div className="min-w-0">
                 <div className="flex flex-wrap items-baseline justify-between gap-4 mb-6">
                   <h2 className="text-[26px] tracking-[0.06em] text-[#2B2B2B]">YOUR WARDROBE</h2>
                   <p className="text-[20px] text-[#6E6B65]">{shown.length} shown</p>
@@ -195,14 +209,25 @@ export default function DressingRoomClient({
                           {[picked.item_type?.replace(/_/g, ' '), picked.colour_family].filter(Boolean).join(' · ')}
                         </p>
                         <button
-                          onClick={() => pick(picked)}
+                          onClick={() => styleNow(picked)}
                           disabled={styling}
                           className="mt-3 text-[19px] px-5 py-2.5 rounded-full bg-[#2B2B2B] text-white disabled:opacity-40"
                         >
-                          {styling ? 'Styling…' : 'Style it again'}
+                          {styling ? 'Building…' : looks.length ? 'Build more outfits' : 'Build new outfits'}
                         </button>
                       </div>
                     </div>
+
+                    {loadingWorn && <p className="text-[20px] text-[#6E6B65]">Looking for what you wear it with…</p>}
+
+                    {worn.length > 0 && (
+                      <p className="text-[19px] tracking-[0.12em] text-[#6E6B65]">
+                        ALREADY STYLED — {worn.length} LOOK{worn.length === 1 ? '' : 'S'}
+                      </p>
+                    )}
+                    {!loadingWorn && !worn.length && !looks.length && !styling && (
+                      <p className="text-[20px] text-[#4A4E57]">MYRA hasn&rsquo;t styled this one yet. Build an outfit around it.</p>
+                    )}
 
                     {styling && (
                       <div className="rounded-[16px] bg-white/70 px-6 py-10 text-center">
@@ -213,7 +238,11 @@ export default function DressingRoomClient({
 
                     {note && !styling && <p className="text-[20px] text-[#4A4E57]">{note}</p>}
 
-                    {looks.map((l, i) => (
+                    {looks.length > 0 && (
+                      <p className="text-[19px] tracking-[0.12em] text-[#6E6B65]">NEW — BUILT JUST NOW</p>
+                    )}
+
+                    {[...looks, ...worn].map((l, i) => (
                       <div key={l.look_id ?? i} className="bg-white rounded-[16px] overflow-hidden shadow-[0_1px_8px_rgba(43,43,43,0.06)]">
                         <div className="relative aspect-[3/4] bg-[#F3F2F0] overflow-hidden">
                           {l.image_url ? (
