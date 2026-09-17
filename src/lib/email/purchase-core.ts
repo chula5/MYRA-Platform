@@ -30,6 +30,8 @@ export interface PurchaseExtraction {
   is_purchase: boolean
   /** A return/refund/cancellation of the WHOLE order (items may then be empty). */
   whole_order: boolean
+  /** The return is done — refunded, received back, or cancelled. False while it is only requested or being arranged. */
+  return_confirmed: boolean
   retailer: string | null
   order_date: string | null
   order_id: string | null
@@ -136,6 +138,7 @@ export function parseExtraction(raw: unknown): PurchaseExtraction {
     kind: usable ? kind : 'other',
     is_purchase: kind === 'purchase' && items.length > 0,
     whole_order: wholeOrder,
+    return_confirmed: kind === 'return' && r.return_confirmed !== false,
     retailer: str(r.retailer),
     order_date: isoDate(r.order_date),
     order_id: str(r.order_id),
@@ -253,7 +256,11 @@ export function matchImagesByAlt(items: PurchaseItem[], images: EmailImage[]): P
   })
 }
 
-/** Marks on a find's error field: the piece went back. */
+/** Marks on a find's error field: the piece went back (refunded, received, or cancelled). */
 export const RETURNED = 'Returned'
-/** A return seen before its order email (inboxes are read newest first). */
+/** A return was requested or is being arranged — she may still keep it. */
+export const RETURN_STARTED = 'Return started'
+/** A completed return seen before its order email (inboxes are read newest first). */
 export const RETURN_SEEN = 'Return seen'
+/** A started return seen before its order email. */
+export const RETURN_STARTED_SEEN = 'Return started seen'

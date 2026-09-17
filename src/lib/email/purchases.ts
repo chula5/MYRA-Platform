@@ -12,10 +12,11 @@ const MODEL = 'claude-haiku-4-5'
 const SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['kind', 'whole_order', 'retailer', 'order_date', 'order_id', 'items'],
+  required: ['kind', 'whole_order', 'return_confirmed', 'retailer', 'order_date', 'order_id', 'items'],
   properties: {
     kind: { type: 'string', enum: ['purchase', 'return', 'other'] },
     whole_order: { type: 'boolean' },
+    return_confirmed: { type: 'boolean' },
     retailer: { type: ['string', 'null'] },
     order_date: { type: ['string', 'null'] },
     order_id: { type: ['string', 'null'] },
@@ -49,7 +50,7 @@ const prompt = (email: string, images: EmailImage[], links: string[]) => `This i
 Then list each item the email is about (bought, or returned/refunded/cancelled).
 
 Rules:
-- category: clothing, shoes, bag, jewellery or accessory for anything she would wear or carry; "other" for everything else (beauty, homeware, food, tech, gift cards).
+- category: clothing, shoes, bag, jewellery or accessory ONLY for something she would wear or carry as part of an outfit (accessory = belts, scarves, hats, gloves, sunglasses, hair accessories, watches). "other" for everything else — beauty and makeup tools (mirrors, brushes), homeware, food, tech, phone cases, gift cards, multi-packs of small goods.
 - product_name exactly as the email names it. Never invent a generic name like "Item" — if the email does not name the piece, use what the photo's alt text or the email says it is, else leave the item out.
 - brand_name when the email says it (the retailer is not always the brand — on Vinted, eBay or Depop the brand is in the listing title). colour and size as shown.
 - price: the item's price as a number, currency as a 3-letter code (GBP for £).
@@ -57,6 +58,7 @@ Rules:
 - retailer: the shop. On a payment receipt (PayPal, Klarna, Clearpay) it is the shop that was paid.
 - order_id when shown. order_date as YYYY-MM-DD when shown, else the email date.
 - whole_order: true only for a return/refund/cancellation of the entire order.
+- return_confirmed (returns only): true when the return is DONE — a refund issued, the shop/seller received it back, or the order was cancelled. false when a return is only requested, a label or instructions are sent, or she must still send it (e.g. "return your order by 23 Sep, or else you'll keep it"). false for purchases.
 
 Image URLs in the email (with alt text):
 ${images.map((i) => (i.alt ? `${i.url}  [alt: ${i.alt}]` : i.url)).join('\n') || '(none)'}

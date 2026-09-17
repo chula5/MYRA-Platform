@@ -220,7 +220,11 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
                     {[f.brand_name ?? f.retailer, f.size, f.order_date ? new Date(f.order_date).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : null].filter(Boolean).join(' · ')}
                   </p>
                   {f.price != null && <p className="text-[18px] text-[#55534E]">{f.currency === 'GBP' || !f.currency ? '£' : `${f.currency} `}{Math.round(f.price)}</p>}
-                  {f.error && <p className="text-[16px] text-[#B83A3A]">{f.error}</p>}
+                  {f.error === 'Return started' ? (
+                    <p className="text-[18px] text-[#8B5E00]">You started a return — add it only if you kept it</p>
+                  ) : f.error ? (
+                    <p className="text-[18px] text-[#B83A3A]">{f.error}</p>
+                  ) : null}
                   <div className="mt-auto pt-2 flex flex-col gap-2">
                     <button
                       disabled={!!busy}

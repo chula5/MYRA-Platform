@@ -104,6 +104,12 @@ describe('parseExtraction kinds', () => {
     expect(e.whole_order).toBe(true)
     expect(e.is_purchase).toBe(false)
   })
+  it('a return only requested is not confirmed; a refund is', () => {
+    const item = { product_name: 'Emporio Armani black jacket', category: 'clothing' }
+    expect(parseExtraction({ kind: 'return', return_confirmed: false, items: [item] }).return_confirmed).toBe(false)
+    expect(parseExtraction({ kind: 'return', return_confirmed: true, items: [item] }).return_confirmed).toBe(true)
+    expect(parseExtraction({ kind: 'purchase', return_confirmed: true, items: [item] }).return_confirmed).toBe(false)
+  })
   it('a return with nothing to match is nothing', () => {
     expect(parseExtraction({ kind: 'return', whole_order: false, items: [] }).kind).toBe('other')
   })

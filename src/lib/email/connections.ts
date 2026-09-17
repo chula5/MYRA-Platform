@@ -26,7 +26,7 @@ import { encryptSecret, decryptSecret } from './secrets'
 import { googleAccessToken, listGmailPurchaseIds, getGmailMessage, revokeGoogle } from './gmail'
 import { listImapPurchaseUids, fetchImapMessages, testImapLogin, type ImapConfig } from './imap'
 import {
-  RETURNED, RETURN_SEEN, emailKind, findKey, isGenericName, mergeFind, sameFind,
+  RETURNED, RETURN_SEEN, RETURN_STARTED, RETURN_STARTED_SEEN, emailKind, findKey, isGenericName, mergeFind, sameFind,
   type MailMessage, type PurchaseExtraction, type PurchaseItem,
 } from './purchase-core'
 import { extractPurchase, namePieceFromPhoto } from './purchases'
@@ -279,7 +279,7 @@ async function loadFindsForMatching(a: any, memberId: string): Promise<FindRow[]
   return out
 }
 
-const isReturnMarker = (f: FindRow) => f.status === 'discarded' && f.error === RETURN_SEEN
+const isReturnMarker = (f: FindRow) => f.status === 'discarded' && (f.error === RETURN_SEEN || f.error === RETURN_STARTED_SEEN)
 
 /**
  * Apply one extracted email to her finds (kept in `finds`, updated in place):
@@ -307,13 +307,24 @@ async function recordEmail(
       // A return comes after the purchase — allow a longer gap than for duplicates.
       const hits = finds.filter((f) => sameFind(f, incoming, 120))
       if (hits.length) { targets.push(...hits); continue }
-      const row = await insertFind(a, finds, memberId, connectionId, messageId, e, item, { status: 'discarded', error: RETURN_SEEN, keyPrefix: 'return|' })
+      const row = await insertFind(a, finds, memberId, connectionId, messageId, e, item, {
+        status: 'discarded', error: e.return_confirmed ? RETURN_SEEN : RETURN_STARTED_SEEN, keyPrefix: 'return|',
+      })
       if (row) targets.push(row)
     }
     for (const f of targets) {
-      if (isReturnMarker(f)) continue
-      if (f.status === 'pending') await save(f, { status: 'discarded', error: RETURNED })
-      else if (f.status === 'approved') await save(f, { error: RETURNED })
+      if (isReturnMarker(f)) {
+        // A later email finished the return that an earlier one started.
+        if (e.return_confirmed && f.error === RETURN_STARTED_SEEN) await save(f, { error: RETURN_SEEN })
+        continue
+      }
+      if (e.return_confirmed) {
+        if (f.status === 'pending') await save(f, { status: 'discarded', error: RETURNED })
+        else if (f.status === 'approved') await save(f, { error: RETURNED })
+      } else if (f.status === 'pending' && f.error !== RETURNED) {
+        // Only started: she may keep it, so it stays to review, with a note.
+        await save(f, { error: RETURN_STARTED })
+      }
     }
     return { added, aiCalls }
   }
@@ -329,8 +340,11 @@ async function recordEmail(
     const match = finds.find((f) => sameFind(f, incoming))
     if (match) {
       const patch = mergeFind(match, incoming) as Partial<FindRow>
-      // Its return was read first: the piece arrives already returned.
-      if (isReturnMarker(match)) patch.error = RETURNED
+      // Its return was read first: the piece arrives returned, or with its return started.
+      if (isReturnMarker(match)) {
+        if (match.error === RETURN_SEEN) patch.error = RETURNED
+        else { patch.error = RETURN_STARTED; patch.status = 'pending' }
+      }
       await save(match, patch)
       continue
     }
