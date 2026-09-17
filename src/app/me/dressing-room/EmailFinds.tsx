@@ -18,7 +18,10 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
   const [showVirgin, setShowVirgin] = useState(false)
   const [email, setEmail] = useState('')
   const [appPassword, setAppPassword] = useState('')
-  const [busy, setBusy] = useState<string | null>(null)
+  const [picked, setPicked] = useState<string[]>([])
+  // One key per button in flight: adding a piece never blocks the next card.
+  const [busy, setBusy] = useState<string[]>([])
+  const working = (key: string) => busy.includes(key)
   const [msg, setMsg] = useState<string | null>(null)
   const scanning = useRef(false)
 
@@ -58,10 +61,10 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
   }, [running, testMemberId])
 
   async function connectVirgin() {
-    setBusy('virgin')
+    setBusy((b) => [...b, 'virgin'])
     setMsg('Checking the app password with Virgin Media…')
     const r = await connectVirginMedia(email, appPassword, testMemberId)
-    setBusy(null)
+    setBusy((b) => b.filter((k) => k !== 'virgin'))
     setAppPassword('')
     if (r.error) { setMsg(r.error); return }
     setShowVirgin(false)
@@ -70,11 +73,43 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
   }
 
   async function act(key: string, fn: () => Promise<{ error?: string }>, done?: string) {
-    setBusy(key)
+    setBusy((b) => [...b, key])
     const r = await fn()
-    setBusy(null)
+    setBusy((b) => b.filter((k) => k !== key))
     setMsg(r.error ?? done ?? null)
     await refresh()
+  }
+
+  const togglePick = (findId: string) =>
+    setPicked((p) => (p.includes(findId) ? p.filter((x) => x !== findId) : [...p, findId]))
+
+  /** Everything ticked, added or put aside in one go; the cards go at once. */
+  async function decideMany(findIds: string[], mine: boolean) {
+    const chosen = (view?.finds ?? []).filter((f) => findIds.includes(f.find_id))
+    if (!chosen.length) return
+    setView((v) => (v ? { ...v, finds: v.finds.filter((f) => !findIds.includes(f.find_id)) } : v))
+    setPicked([])
+    setMsg(mine ? `Adding ${chosen.length} piece${chosen.length === 1 ? '' : 's'} to your dressing room…` : `${chosen.length} put aside.`)
+    let failed = 0
+    for (const f of chosen) {
+      const r = mine ? await addFoundPiece(f.find_id, testMemberId) : await notMine(f.find_id, testMemberId)
+      if (r.error) failed++
+    }
+    setMsg(failed ? `${failed} could not be added — they are back below.` : mine ? `${chosen.length} added to your dressing room.` : `${chosen.length} put aside.`)
+    await refresh()
+    if (mine) onAdded?.()
+  }
+
+  /**
+   * Take the card away at once and do the work behind it, so she can keep
+   * going down the grid. A piece that fails comes back on the next refresh.
+   */
+  async function decide(f: EmailPanelView['finds'][number], fn: () => Promise<{ error?: string }>, done: string) {
+    setView((v) => (v ? { ...v, finds: v.finds.filter((x) => x.find_id !== f.find_id) } : v))
+    setMsg(done)
+    const r = await fn()
+    if (r.error) { setMsg(r.error); await refresh(); return }
+    onAdded?.()
   }
 
   if (!view) return null
@@ -113,8 +148,8 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
                     : c.scan?.status === 'failed' ? <span className="text-[#B83A3A]">Scan stopped: {c.scan.error}</span>
                       : c.last_scanned_at ? `Last read ${new Date(c.last_scanned_at).toLocaleDateString('en-GB')}` : 'Not read yet'}
               </p>
-              <button disabled={!!busy} onClick={() => act(`scan-${c.connection_id}`, () => scanAgain(c.connection_id, testMemberId), 'Reading new order emails…')} className="text-[18px] underline underline-offset-4 text-[#2B2B2B] disabled:opacity-40">Read again</button>
-              <button disabled={!!busy} onClick={() => { if (confirm(`Disconnect ${c.email}? MYRA forgets the connection; pieces already found stay here.`)) void act(`disc-${c.connection_id}`, () => disconnectInbox(c.connection_id, testMemberId), 'Disconnected.') }} className="text-[18px] underline underline-offset-4 text-[#B83A3A] disabled:opacity-40">Disconnect</button>
+              <button disabled={working(`scan-${c.connection_id}`)} onClick={() => act(`scan-${c.connection_id}`, () => scanAgain(c.connection_id, testMemberId), 'Reading new order emails…')} className="text-[18px] underline underline-offset-4 text-[#2B2B2B] disabled:opacity-40">Read again</button>
+              <button disabled={working(`disc-${c.connection_id}`)} onClick={() => { if (confirm(`Disconnect ${c.email}? MYRA forgets the connection; pieces already found stay here.`)) void act(`disc-${c.connection_id}`, () => disconnectInbox(c.connection_id, testMemberId), 'Disconnected.') }} className="text-[18px] underline underline-offset-4 text-[#B83A3A] disabled:opacity-40">Disconnect</button>
             </div>
           ))}
         </div>
@@ -158,11 +193,11 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
               className="text-[20px] bg-white border border-[#6E6B65] px-4 py-3 focus:outline-none focus:border-[#2B2B2B]"
             />
             <button
-              disabled={busy === 'virgin' || !email.trim() || !appPassword || !view.secretsReady}
+              disabled={working('virgin') || !email.trim() || !appPassword || !view.secretsReady}
               onClick={connectVirgin}
               className="text-[22px] px-7 py-3.5 bg-[#2B2B2B] text-white disabled:opacity-40 self-start"
             >
-              {busy === 'virgin' ? 'Checking…' : 'Connect'}
+              {working('virgin') ? 'Checking…' : 'Connect'}
             </button>
           </div>
         </div>
@@ -175,8 +210,8 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
           {view.returned.map((f) => (
             <div key={f.find_id} className="flex flex-wrap items-center gap-x-5 gap-y-2">
               <p className="text-[20px] text-[#2B2B2B]">{f.product_name}{f.brand_name ? ` · ${f.brand_name}` : f.retailer ? ` · ${f.retailer}` : ''}</p>
-              <button disabled={!!busy} onClick={() => act(`rm-${f.find_id}`, () => removeReturned(f.find_id, testMemberId), `${f.product_name} is out of your dressing room.`)} className="text-[18px] px-4 py-2 bg-[#2B2B2B] text-white disabled:opacity-40">Remove it</button>
-              <button disabled={!!busy} onClick={() => act(`keep-${f.find_id}`, () => keepReturned(f.find_id, testMemberId))} className="text-[18px] underline underline-offset-4 text-[#55534E] disabled:opacity-40">I still have it</button>
+              <button disabled={working(`rm-${f.find_id}`)} onClick={() => act(`rm-${f.find_id}`, () => removeReturned(f.find_id, testMemberId), `${f.product_name} is out of your dressing room.`)} className="text-[18px] px-4 py-2 bg-[#2B2B2B] text-white disabled:opacity-40">Remove it</button>
+              <button disabled={working(`keep-${f.find_id}`)} onClick={() => act(`keep-${f.find_id}`, () => keepReturned(f.find_id, testMemberId))} className="text-[18px] underline underline-offset-4 text-[#55534E] disabled:opacity-40">I still have it</button>
             </div>
           ))}
         </div>
@@ -185,11 +220,35 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
       {/* Found pieces */}
       {view.finds.length > 0 && (
         <div className="space-y-4">
-          <p className="myra-section-note">FOUND IN YOUR EMAIL · {view.finds.length} TO LOOK THROUGH</p>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+            <p className="myra-section-note">FOUND IN YOUR EMAIL · {view.finds.length} TO LOOK THROUGH</p>
+            <button
+              onClick={() => setPicked(picked.length === view.finds.length ? [] : view.finds.map((f) => f.find_id))}
+              className="text-[18px] underline underline-offset-4 text-[#2B2B2B]"
+            >
+              {picked.length === view.finds.length ? 'Clear selection' : 'Select all'}
+            </button>
+            {picked.length > 0 && (
+              <>
+                <span className="text-[18px] text-[#55534E]">{picked.length} selected</span>
+                <button onClick={() => decideMany(picked, true)} className="text-[18px] px-5 py-2 bg-[#2B2B2B] text-white">
+                  Add {picked.length} to my wardrobe
+                </button>
+                <button onClick={() => decideMany(picked, false)} className="text-[18px] px-5 py-2 border border-[#2B2B2B] text-[#2B2B2B]">
+                  Not mine ({picked.length})
+                </button>
+              </>
+            )}
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-[6px]">
             {view.finds.map((f) => (
-              <div key={f.find_id} className="bg-white flex flex-col">
+              <div key={f.find_id} className={`bg-white flex flex-col ${picked.includes(f.find_id) ? 'outline outline-2 outline-[#2B2B2B]' : ''}`}>
                 <div className="relative aspect-[3/4] bg-[#EDEDED] overflow-hidden">
+                  {/* Tick several, then add or put aside the lot. */}
+                  <label className="absolute top-2 left-2 z-10 flex items-center gap-2 bg-white/90 px-2.5 py-1.5 cursor-pointer">
+                    <input type="checkbox" checked={picked.includes(f.find_id)} onChange={() => togglePick(f.find_id)} className="w-5 h-5 accent-[#2B2B2B]" />
+                    <span className="text-[16px] text-[#2B2B2B]">Pick</span>
+                  </label>
                   {f.image_url ? (
                     <FallbackImage src={f.image_url} thumbWidth={500} alt={f.product_name} className="absolute inset-0 w-full h-full object-contain" />
                   ) : (
@@ -198,14 +257,14 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-4 text-center">
                       <span className="text-[18px] text-[#6E6B65]">No photo in the order email</span>
                       <button
-                        disabled={!!busy}
+                        disabled={working(`hunt-${f.find_id}`)}
                         onClick={() => act(`hunt-${f.find_id}`, () => findPhotoInEmails(f.find_id, testMemberId))}
                         className="text-[18px] px-4 py-2 border border-[#2B2B2B] text-[#2B2B2B] disabled:opacity-40"
                       >
-                        {busy === `hunt-${f.find_id}` ? 'Looking…' : 'Look in my emails'}
+                        {working(`hunt-${f.find_id}`) ? 'Looking…' : 'Look in my emails'}
                       </button>
-                      <label className={`text-[18px] underline underline-offset-4 text-[#55534E] cursor-pointer ${busy ? 'pointer-events-none opacity-50' : ''}`}>
-                        {busy === `photo-${f.find_id}` ? 'Uploading…' : 'Add a photo'}
+                      <label className={`text-[18px] underline underline-offset-4 text-[#55534E] cursor-pointer ${working(`photo-${f.find_id}`) ? 'pointer-events-none opacity-50' : ''}`}>
+                        {working(`photo-${f.find_id}`) ? 'Uploading…' : 'Add a photo'}
                         <input
                           type="file"
                           accept="image/*"
@@ -237,21 +296,12 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
                   ) : null}
                   <div className="mt-auto pt-2 flex flex-col gap-2">
                     <button
-                      disabled={!!busy}
-                      onClick={async () => {
-                        setBusy(f.find_id)
-                        setMsg(`Adding ${f.product_name}…`)
-                        const r = await addFoundPiece(f.find_id, testMemberId)
-                        setBusy(null)
-                        setMsg(r.error ?? `${f.product_name} is in your dressing room.`)
-                        await refresh()
-                        if (!r.error) onAdded?.()
-                      }}
-                      className="text-[18px] py-2.5 bg-[#2B2B2B] text-white disabled:opacity-40"
+                      onClick={() => decide(f, () => addFoundPiece(f.find_id, testMemberId), `Adding ${f.product_name} — keep going.`)}
+                      className="text-[18px] py-2.5 bg-[#2B2B2B] text-white"
                     >
-                      {busy === f.find_id ? 'Adding…' : 'Add to my wardrobe'}
+                      Add to my wardrobe
                     </button>
-                    <button disabled={!!busy} onClick={() => act(`no-${f.find_id}`, () => notMine(f.find_id, testMemberId))} className="text-[18px] py-2 text-[#55534E] underline underline-offset-4 disabled:opacity-40">
+                    <button onClick={() => decide(f, () => notMine(f.find_id, testMemberId), `${f.product_name} put aside.`)} className="text-[18px] py-2 text-[#55534E] underline underline-offset-4">
                       Not mine
                     </button>
                   </div>

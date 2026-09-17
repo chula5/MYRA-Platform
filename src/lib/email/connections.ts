@@ -20,6 +20,9 @@ import { persistImageToCloudinary } from '@/lib/cloudinary-persist'
 import { productPageImage } from '@/lib/product-image'
 import { deleteOwnedItem, insertItemTolerantly, resolveBrandId } from '@/lib/wardrobe/store'
 import { uploadBufferToCloudinary } from '@/lib/wardrobe/cloudinary'
+import { detectGarments, editToCutout } from '@/lib/wardrobe/openai'
+import { buildCutoutPrompt, cropGarment, cutoutLooksValid, detectorJpeg, frameOnWhite, normalisePhoto } from '@/lib/wardrobe/cutout'
+import { openAiConfigured } from '@/lib/wardrobe/config'
 import { rebuildLooksWithoutItems } from '@/app/admin/private-stylist/actions'
 import { buildOwnedItemFromProduct, lowConfidenceDims } from '@/lib/wardrobe/approve'
 import { encryptSecret, decryptSecret } from './secrets'
@@ -487,6 +490,38 @@ export async function huntMissingPhotos(memberId: string, limit = 40): Promise<n
   return found
 }
 
+/**
+ * A seller's or her own snapshot — on a hanger, in a room — is not a product
+ * photo. Marketplace pieces and photos she uploads go through the SAME cutout
+ * the wardrobe import uses, so they land on white like a shop's own image.
+ */
+const SNAPSHOT_RETAILER = /vinted|ebay|depop|vestiaire|etsy|facebook|gumtree/i
+
+async function cutoutToProductPhoto(imageUrl: string, memberId: string, findId: string): Promise<string | null> {
+  if (!openAiConfigured()) return null
+  try {
+    const res = await fetch(imageUrl)
+    if (!res.ok) return null
+    const { png } = await normalisePhoto(Buffer.from(await res.arrayBuffer()))
+    const det = await detectGarments(await detectorJpeg(png))
+    // The piece the photo is of: the biggest thing detected.
+    const g = [...det.garments].sort((x, y) => y.bounding_box.width * y.bounding_box.height - x.bounding_box.width * x.bounding_box.height)[0]
+    if (!g) return null
+    const crop = await cropGarment(png, g.bounding_box, 0.12)
+    let out = await editToCutout(crop, buildCutoutPrompt(g))
+    const check = await cutoutLooksValid(out.png)
+    if (!check.ok) {
+      out = await editToCutout(crop, `${buildCutoutPrompt(g)}\n\nThe previous attempt failed because: ${check.reason}. The background must be uniform pure white edge to edge and the complete garment must be clearly visible in the centre.`)
+    }
+    const up = await uploadBufferToCloudinary(await frameOnWhite(out.png), {
+      folder: `wardrobe/email/${memberId.slice(0, 8)}`, publicId: `cutout-${findId}-${Date.now()}`, contentType: 'image/jpeg',
+    })
+    return up.url ?? null
+  } catch {
+    return null
+  }
+}
+
 /** A photo she adds to a find whose email had none (Vinted sends none). */
 export async function setFindPhoto(memberId: string, findId: string, bytes: Buffer, contentType: string): Promise<{ error?: string }> {
   const a = db()
@@ -543,7 +578,11 @@ export async function approveFind(memberId: string, findId: string): Promise<{ i
     await a.from('email_purchase_find').update({ error: 'No product photo in the email or on the product page' }).eq('find_id', findId)
     return { error: 'No product photo was found for this piece — add it with a photo instead' }
   }
-  const hosted = (await persistImageToCloudinary(source, { folder: `wardrobe/email/${memberId.slice(0, 8)}` })) ?? source
+  let hosted = (await persistImageToCloudinary(source, { folder: `wardrobe/email/${memberId.slice(0, 8)}` })) ?? source
+  // A snapshot from a marketplace becomes a product photo on white first.
+  if (!fromPage && SNAPSHOT_RETAILER.test(f.retailer ?? '')) {
+    hosted = (await cutoutToProductPhoto(hosted, memberId, findId)) ?? hosted
+  }
 
   const { data: scores, error: serr } = await analyseProductImage(hosted)
   if (!scores?.item_type) {
