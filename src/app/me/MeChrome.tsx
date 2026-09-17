@@ -20,11 +20,11 @@ export default function MeChrome({ signOut }: { signOut: React.ReactNode }) {
           room they step aside into the top right, so the room has the screen. */}
       {home ? (
         <>
-          <div className="flex items-center justify-between px-6 sm:px-10 h-14">
-            <Link href="/me" className="text-[24px] tracking-[0.24em] text-[#4A4E57]">MYRA</Link>
-            {signOut}
-          </div>
-          <RoomNav active={active} />
+          <div className="flex items-start justify-end px-6 sm:px-10 pt-4">{signOut}</div>
+          <Link href="/me" className="block px-6 sm:px-10 -mt-6">
+            <img src="/myra-logo-black.png" alt="MYRA" className="mx-auto h-[70px] sm:h-[96px] w-auto" />
+          </Link>
+          <RoomNav active={active} searchPlaceholder="What are you wearing today?" />
         </>
       ) : (
         <div className="flex items-center gap-8 px-6 sm:px-10 py-3">

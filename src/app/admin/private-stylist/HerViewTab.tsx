@@ -16,6 +16,7 @@ import PieceClient from '@/app/me/dressing-room/PieceClient'
 import InspirationBoard from '@/app/me/inspiration/InspirationBoard'
 import MagazineClient from '@/app/me/magazine/MagazineClient'
 import RoomNav, { ROOMS, type RoomId } from '@/components/me/RoomNav'
+import ThreadsClient from '@/app/me/threads/ThreadsClient'
 import { MirrorLoading } from '@/components/ArchiveCard'
 import { loadLooksForMember, type ClientView } from '@/app/me/looks/actions'
 import { loadForYou, type ForYouView } from '@/app/me/for-you-actions'
@@ -94,11 +95,10 @@ export default function HerViewTab({
         <div className="myra-pearl border-b border-[rgba(43,43,43,0.18)]">
           {room === 'for_you' ? (
             <>
-              <div className="flex items-center px-6 sm:px-10 h-14">
-                <span className="text-[24px] tracking-[0.24em] text-[#4A4E57]">MYRA</span>
-              </div>
+              <img src="/myra-logo-black.png" alt="MYRA" className="mx-auto h-[70px] sm:h-[96px] w-auto mt-6" />
               <RoomNav
                 active={room}
+                searchPlaceholder="What are you wearing today?"
                 onSelect={(id) => { setRoom(id === 'profile' ? 'for_you' : id); setPiece(null) }}
                 onSearch={(q) => { setRoom('all_looks'); setSearch(q) }}
               />
@@ -146,6 +146,13 @@ export default function HerViewTab({
             </p>
           </div>
         )
+      )}
+
+      {/* Threads reads her own records, as it does on her screen. */}
+      {!loading && room === 'threads' && (
+        <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen">
+          <ThreadsClient key={memberId} testMemberId={memberId} />
+        </div>
       )}
 
       {/* The magazine loads her newsletters itself, as it does on her screen. */}

@@ -11,7 +11,7 @@
 import Link from 'next/link'
 import { useState } from 'react'
 
-export type RoomId = 'for_you' | 'all_looks' | 'dressing_room' | 'magazine' | 'inspiration' | 'profile'
+export type RoomId = 'for_you' | 'all_looks' | 'dressing_room' | 'magazine' | 'inspiration' | 'threads' | 'profile'
 
 export interface Room {
   id: RoomId
@@ -27,6 +27,7 @@ export const ROOMS: Room[] = [
   { id: 'dressing_room', label: 'Dressing Room', short: 'Dressing', href: '/me/dressing-room' },
   { id: 'inspiration', label: 'Inspiration', short: 'Inspiration', href: '/me/inspiration' },
   { id: 'magazine', label: 'MYRA Magazine', short: 'Magazine', href: '/me/magazine' },
+  { id: 'threads', label: 'Threads', short: 'Threads', href: '/me/threads' },
   { id: 'profile', label: 'You', short: 'You', href: '/me/profile' },
 ]
 
@@ -95,6 +96,20 @@ function Icon({ id }: { id: RoomId }) {
           <rect x="38" y="38" width="8" height="6" rx="1" {...S} />
         </svg>
       )
+    case 'threads': // a spool wound with thread, and the needle through it
+      return (
+        <svg {...common}>
+          <ellipse cx="30" cy="16" rx="15" ry="5" {...S} />
+          <path d="M15 16v32M45 16v32" {...S} />
+          <ellipse cx="30" cy="48" rx="15" ry="5" {...S} />
+          <path d="M16 23h28M16 29h28M16 35h28M16 41h28" {...S} opacity="0.55" />
+          <ellipse cx="30" cy="16" rx="4" ry="1.6" {...S} />
+          <path d="M48 10L22 52" {...S} />
+          <path d="M45 13c3 1 4 4 2 6" {...S} />
+          {/* the loose end, trailing away */}
+          <path d="M45 44c8 2 12 8 6 11s-14-2-9-6" {...S} />
+        </svg>
+      )
     case 'profile':
       return (
         <svg {...common}>
@@ -142,7 +157,7 @@ export default function RoomNav({
         <span className={`block mx-auto ${compact ? 'mt-1' : 'mt-2'} h-px w-10 ${on ? 'bg-[#2B2B2B]' : 'bg-transparent'}`} />
       </>
     )
-    const cls = compact ? 'group text-center px-2 shrink-0 w-[124px] whitespace-nowrap' : 'group text-center px-1'
+    const cls = compact ? 'group text-center px-2 shrink-0 w-[112px] whitespace-nowrap' : 'group text-center px-1'
     return onSelect ? (
       <button key={r.id} type="button" onClick={() => onSelect(r.id)} className={cls}>{inner}</button>
     ) : (
@@ -200,7 +215,7 @@ export default function RoomNav({
         </form>
 
         {/* The rooms, spread across the screen */}
-        <nav data-lenis-prevent className="mt-8 w-full grid grid-cols-3 sm:grid-cols-6 gap-x-2 gap-y-8 items-start">
+        <nav data-lenis-prevent className="mt-8 w-full grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-x-2 gap-y-8 items-start">
           {ROOMS.map((r) => {
             const on = r.id === active
             const inner = (
