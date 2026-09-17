@@ -105,8 +105,19 @@ export interface EmailImage { url: string; alt: string | null }
 
 const decodeAttr = (s: string) => s.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim()
 
+// Shops end an order email with things they want her to buy next. Those are
+// not what she bought, so everything from the first such heading is dropped —
+// text and photos alike — before the email is read.
+const RECOMMENDATIONS = /(you might also like|you may also like|recommended for you|you'?ll also love|complete the look|shop the look|pairs? well with|trending now|new arrivals|others also bought|customers also|more from|discover more|explore more)/i
+
+function beforeRecommendations(html: string): string {
+  const cut = html.search(RECOMMENDATIONS)
+  // Only trust the cut when the order itself is above it.
+  return cut > 400 ? html.slice(0, cut) : html
+}
+
 export function emailForExtraction(m: MailMessage, maxChars = 12_000): { text: string; images: string[]; imageAlts: EmailImage[]; links: string[] } {
-  const html = m.html ?? ''
+  const html = beforeRecommendations(m.html ?? '')
   const imageAlts: EmailImage[] = []
   const links: string[] = []
   for (const match of Array.from(html.matchAll(/<img\b[^>]*>/gi))) {
@@ -127,7 +138,8 @@ export function emailForExtraction(m: MailMessage, maxChars = 12_000): { text: s
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&pound;/g, '£').replace(/&#163;/g, '£')
     .replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n')
-  const body = (m.text && m.text.trim().length > 200 ? m.text : fromHtml).trim()
+  const plain = m.text ? beforeRecommendations(m.text) : null
+  const body = (plain && plain.trim().length > 200 ? plain : fromHtml).trim()
   const header = `Subject: ${m.subject}\nFrom: ${m.from}\nDate: ${m.date ?? ''}\n\n`
   return {
     text: (header + body).slice(0, maxChars),

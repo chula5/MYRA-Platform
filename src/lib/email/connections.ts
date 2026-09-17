@@ -493,7 +493,7 @@ export async function cutoutPendingSnapshots(memberId: string, limit = 40): Prom
     .eq('member_id', memberId).eq('status', 'pending').not('image_url', 'is', null).limit(limit)
   let done = 0
   for (const f of (data ?? []) as any[]) {
-    if (!SNAPSHOT_RETAILER.test(f.retailer ?? '') || /\/cutout-/.test(f.image_url)) continue
+    if (!SNAPSHOT_RETAILER.test(f.retailer ?? '') || isCutout(f.image_url)) continue
     const cut = await cutoutToProductPhoto(f.image_url, memberId, f.find_id)
     if (!cut) continue
     await db().from('email_purchase_find').update({ image_url: cut }).eq('find_id', f.find_id)
@@ -520,6 +520,9 @@ export async function huntMissingPhotos(memberId: string, limit = 40): Promise<n
  * the wardrobe import uses, so they land on white like a shop's own image.
  */
 const SNAPSHOT_RETAILER = /vinted|ebay|depop|vestiaire|etsy|facebook|gumtree/i
+
+/** Already laid out on white by us — Cloudinary folds the folder into the public id. */
+const isCutout = (url: string | null | undefined) => /cutout-/.test(url ?? '')
 
 async function cutoutToProductPhoto(imageUrl: string, memberId: string, findId: string, attempt = 0): Promise<string | null> {
   if (!openAiConfigured()) return null
@@ -609,7 +612,7 @@ export async function approveFind(memberId: string, findId: string): Promise<{ i
   }
   let hosted = (await persistImageToCloudinary(source, { folder: `wardrobe/email/${memberId.slice(0, 8)}` })) ?? source
   // A snapshot from a marketplace becomes a product photo on white first.
-  if (!fromPage && !/\/cutout-/.test(hosted) && SNAPSHOT_RETAILER.test(f.retailer ?? '')) {
+  if (!fromPage && !isCutout(hosted) && SNAPSHOT_RETAILER.test(f.retailer ?? '')) {
     hosted = (await cutoutToProductPhoto(hosted, memberId, findId)) ?? hosted
   }
 

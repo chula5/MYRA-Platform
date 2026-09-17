@@ -193,3 +193,15 @@ describe('nameAppearsIn', () => {
     expect(nameAppearsIn('Charlotte Jacket', 'Order #374353476', [{ url: 'https://x/y.jpg', alt: 'Charlotte Jacket' }])).toBe(true)
   })
 })
+
+describe('emailForExtraction — what she was sold, not what she was shown', () => {
+  it('drops the "You might also like" block and its photos', () => {
+    const out = emailForExtraction({
+      id: '1', subject: 'Your order has arrived!', from: 'On Team <no-reply@order.on.com>', date: null, text: null,
+      html: `<p>Your order has arrived. ORDER NUMBER ON817548981004. Here's what you ordered</p>${'<p>Delivery address padding</p>'.repeat(20)}<p>Cloudsurfer Trail £160</p><img src="https://cdn.on.com/p/cloudsurfer.jpg" alt="Cloudsurfer Trail"><h3>You might also like</h3><p>Cloud X 4 £140</p><img src="https://cdn.on.com/p/cloudx4.jpg" alt="Cloud X 4">`,
+    })
+    expect(out.text).toContain('Cloudsurfer Trail')
+    expect(out.text).not.toContain('Cloud X 4')
+    expect(out.images).toEqual(['https://cdn.on.com/p/cloudsurfer.jpg'])
+  })
+})
