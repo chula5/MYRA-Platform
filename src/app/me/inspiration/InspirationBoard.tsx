@@ -120,7 +120,7 @@ export default function InspirationBoard({ view: initial, testMemberId }: { view
               <p className="myra-section-note text-center mb-4">
                 {view.pictures.length} OUTFIT{view.pictures.length === 1 ? '' : 'S'} YOU LOVE
               </p>
-              <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8 gap-[6px] w-full">
+              <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8 gap-4 w-full">
                 {view.pictures.map((p) => (
                   <div key={p.image_id} className="relative aspect-[3/4] bg-[#E4E2DD] overflow-hidden rounded-[14px]">
                     <FallbackImage src={p.image_url} thumbWidth={500} alt="" className="absolute inset-0 w-full h-full object-cover" />

@@ -135,7 +135,7 @@ export default function PieceClient({
 
 function OutfitCard({ look, heroId }: { look: StyledLook; heroId: string }) {
   return (
-    <article className="bg-[#F7F6F3] border border-[#2B2B2B]">
+    <article className="bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] rounded-[18px] overflow-hidden">
       {look.image_url ? (
         <div className="relative aspect-[3/4] bg-[#E4E2DD] overflow-hidden rounded-[14px]">
           <FallbackImage src={look.image_url} thumbWidth={700} alt="" className="absolute inset-0 w-full h-full object-cover" />
@@ -143,7 +143,7 @@ function OutfitCard({ look, heroId }: { look: StyledLook; heroId: string }) {
       ) : (
         <div className="grid grid-cols-3 gap-[4px] p-[4px] bg-[#E4E2DD]">
           {look.items.map((it, j) => (
-            <div key={j} className={`relative aspect-[3/4] bg-white overflow-hidden ${it.item_id === heroId ? 'outline outline-2 outline-[#2B2B2B]' : ''}`}>
+            <div key={j} className={`relative aspect-[3/4] bg-white overflow-hidden ${it.item_id === heroId ? 'ring-2 ring-[#2B2B2B]' : ''}`}>
               {it.image_url && <FallbackImage src={it.image_url} thumbWidth={300} alt={it.product_name} className="absolute inset-0 w-full h-full object-contain" />}
             </div>
           ))}

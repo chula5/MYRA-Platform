@@ -118,7 +118,7 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
   const gmailHref = `/api/email/google/start?return=${encodeURIComponent(returnPath)}${testMemberId ? `&member=${testMemberId}` : ''}`
 
   return (
-    <section className="w-full border border-[#2B2B2B] rounded-[18px] bg-[rgba(255,255,255,0.18)] px-5 md:px-8 py-7 mb-10 space-y-6">
+    <section className="w-full rounded-[18px] bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] px-5 md:px-8 py-7 mb-10 space-y-6">
       <div>
         <h2 className="myra-section-label">FIND WHAT YOU&rsquo;VE BOUGHT</h2>
         <p className="text-[20px] text-[#2B2B2B] mt-3 max-w-3xl">
@@ -240,9 +240,9 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
               </>
             )}
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8 gap-[6px] w-full">
+          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8 gap-4 w-full">
             {view.finds.map((f) => (
-              <div key={f.find_id} className={`bg-white flex flex-col rounded-[18px] overflow-hidden ${picked.includes(f.find_id) ? 'outline outline-2 outline-[#2B2B2B]' : ''}`}>
+              <div key={f.find_id} className={`bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] flex flex-col rounded-[18px] overflow-hidden ${picked.includes(f.find_id) ? 'ring-2 ring-[#2B2B2B]' : ''}`}>
                 <div className="relative aspect-[3/4] bg-[#EDEDED] overflow-hidden">
                   {/* Tick several, then add or put aside the lot. */}
                   <label className="absolute top-2 left-2 z-10 flex items-center gap-2 bg-white/90 px-2.5 py-1.5 cursor-pointer">

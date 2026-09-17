@@ -66,7 +66,7 @@ export default function MagazineClient({ testMemberId }: { testMemberId?: string
 
           <div className="w-full">
             {/* Masthead line: read again, and what has been read */}
-            <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 border-y border-[#2B2B2B] py-4 mb-12">
+            <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 border-y border-[rgba(43,43,43,0.18)] py-4 mb-12">
               <button
                 disabled={busy || view.needsInbox}
                 onClick={read}
@@ -112,7 +112,7 @@ export default function MagazineClient({ testMemberId }: { testMemberId?: string
                     <p className="text-[clamp(22px,2.2vw,32px)] text-[#4A4E57] leading-snug mb-7 max-w-4xl">{issue.subject}</p>
                   )}
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 2xl:grid-cols-6 gap-[6px] w-full">
+                  <div className="grid grid-cols-2 md:grid-cols-4 2xl:grid-cols-6 gap-4 w-full">
                     {issue.picks.map((p, i) => {
                       const body = (
                         <>
@@ -134,11 +134,11 @@ export default function MagazineClient({ testMemberId }: { testMemberId?: string
                         </>
                       )
                       return p.url ? (
-                        <a key={i} href={p.url} target="_blank" rel="noopener noreferrer" className="bg-white rounded-[18px] overflow-hidden hover:outline hover:outline-2 hover:outline-[#2B2B2B]">
+                        <a key={i} href={p.url} target="_blank" rel="noopener noreferrer" className="bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] rounded-[18px] overflow-hidden hover:ring-2 hover:ring-[#2B2B2B]">
                           {body}
                         </a>
                       ) : (
-                        <div key={i} className="bg-white rounded-[18px] overflow-hidden">{body}</div>
+                        <div key={i} className="bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] rounded-[18px] overflow-hidden">{body}</div>
                       )
                     })}
                   </div>
@@ -148,7 +148,7 @@ export default function MagazineClient({ testMemberId }: { testMemberId?: string
 
             {/* What she is subscribed to, and what MYRA has stopped reading */}
             {view.publications.length > 0 && (
-              <div className="mt-16 border-t border-[#2B2B2B] pt-6">
+              <div className="mt-16 border-t border-[rgba(43,43,43,0.18)] pt-6">
                 <p className="myra-section-note">YOUR SUBSCRIPTIONS</p>
                 <div className="flex flex-wrap gap-x-6 gap-y-3 mt-4">
                   {view.publications.map((p) => (

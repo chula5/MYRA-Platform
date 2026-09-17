@@ -92,32 +92,31 @@ function LookCard({ look, testMemberId }: { look: ForYouLook; testMemberId?: str
   }
 
   return (
-    <article className="bg-[#F7F6F3] border border-[#2B2B2B] flex flex-col rounded-[18px] overflow-hidden">
+    <article className="bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] flex flex-col rounded-[18px] overflow-hidden">
       <div className="relative aspect-[3/4] bg-[#E4E2DD] overflow-hidden">
         {look.image_url && (
           <FallbackImage src={look.image_url} thumbWidth={900} alt="" className="absolute inset-0 w-full h-full object-cover" />
         )}
-        <span className="absolute top-4 left-4 bg-[rgba(247,246,243,0.92)] px-3 py-1.5 text-[18px] tracking-[0.1em] text-[#2B2B2B]">
+        <span className="absolute top-4 left-4 bg-[rgba(255,255,255,0.92)] rounded-full px-4 py-1.5 text-[18px] tracking-[0.1em] text-[#2B2B2B]">
           {look.occasion_label.toUpperCase()}
         </span>
       </div>
 
-      <div className="px-5 md:px-7 py-6 flex flex-col gap-5">
-        <p className="text-[22px] md:text-[24px] leading-snug text-[#2B2B2B]">{look.why}</p>
+      <div className="px-5 md:px-7 py-5 flex flex-col gap-5">
 
         {answer === null && (
           <div className="grid grid-cols-2 gap-3">
             <button
               disabled={busy}
               onClick={() => tap('yes')}
-              className="text-[22px] py-4 bg-[#2B2B2B] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+              className="text-[21px] py-3.5 rounded-full bg-[#2B2B2B] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
             >
               I&rsquo;d wear this
             </button>
             <button
               disabled={busy}
               onClick={() => tap('no')}
-              className="text-[22px] py-4 border border-[#2B2B2B] text-[#2B2B2B] hover:bg-[#2B2B2B] hover:text-white transition-colors disabled:opacity-50"
+              className="text-[21px] py-3.5 rounded-full border border-[#2B2B2B] text-[#2B2B2B] hover:bg-[#2B2B2B] hover:text-white transition-colors disabled:opacity-50"
             >
               Not for me
             </button>
@@ -145,7 +144,7 @@ function LookCard({ look, testMemberId }: { look: ForYouLook; testMemberId?: str
                     <button
                       key={r.id}
                       onClick={() => setReason(reason === r.id ? null : r.id)}
-                      className={`text-[20px] px-4 py-2.5 border transition-colors ${reason === r.id ? 'bg-[#2B2B2B] border-[#2B2B2B] text-white' : 'border-[#6E6B65] text-[#2B2B2B]'}`}
+                      className={`text-[20px] px-4 py-2.5 rounded-full border transition-colors ${reason === r.id ? 'bg-[#2B2B2B] border-[#2B2B2B] text-white' : 'border-[#6E6B65] text-[#2B2B2B]'}`}
                     >
                       {r.label}
                     </button>
@@ -156,13 +155,13 @@ function LookCard({ look, testMemberId }: { look: ForYouLook; testMemberId?: str
                   onChange={(e) => setWords(e.target.value)}
                   rows={2}
                   placeholder="Or in your own words"
-                  className="text-[20px] bg-white border border-[#6E6B65] px-4 py-3 placeholder:text-[#8C8A85] focus:outline-none focus:border-[#2B2B2B]"
+                  className="text-[20px] bg-white rounded-[14px] border border-[#6E6B65] px-4 py-3 placeholder:text-[#8C8A85] focus:outline-none focus:border-[#2B2B2B]"
                 />
                 <div className="flex gap-3">
                   <button
                     disabled={busy || (!reason && !words.trim())}
                     onClick={sendWhy}
-                    className="text-[20px] px-6 py-3 bg-[#2B2B2B] text-white disabled:opacity-40"
+                    className="text-[20px] px-6 py-3 rounded-full bg-[#2B2B2B] text-white disabled:opacity-40"
                   >
                     Send
                   </button>

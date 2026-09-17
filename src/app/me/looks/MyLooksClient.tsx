@@ -202,7 +202,7 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
           >
             <div className="mx-auto w-full max-w-[900px] flex items-center justify-center gap-3 mb-5 md:mb-7">
               <span className="myra-field shrink-0 text-[#55524C]">SEARCH A LOOK</span>
-              <div className="flex-1 min-w-0 border border-[#2B2B2B] flex items-center">
+              <div className="flex-1 min-w-0 rounded-full bg-white/70 border border-[rgba(43,43,43,0.15)] flex items-center">
                 <input
                   value={query}
                   onChange={(e) => { setQuery(e.target.value); setOccasion(null); setRelated(null) }}
@@ -847,7 +847,7 @@ function AskPanel({
 
   if (sent) {
     return (
-      <div className="border border-[#2B2B2B] bg-[rgba(255,255,255,0.18)] px-6 py-6 text-center">
+      <div className="rounded-[18px] bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] px-6 py-6 text-center">
         <p className="text-[20px] text-[#2B2B2B]">
           MYRA is putting some looks together. Your stylist checks them before they land here.
         </p>
@@ -856,7 +856,7 @@ function AskPanel({
   }
 
   return (
-    <div className="border border-[#2B2B2B] bg-[rgba(255,255,255,0.18)] px-5 md:px-8 py-6 md:py-8 space-y-6">
+    <div className="rounded-[18px] bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] px-5 md:px-8 py-6 md:py-8 space-y-6">
       {testing && (
         <p className="text-[18px] tracking-[0.1em] text-[#8B5E00]">
           TEST AS {firstName.toUpperCase()} — THE REAL COMPOSER ON HER REAL HISTORY. NOTHING IS SENT TO HER, SAVED OR LEARNED UNTIL YOU KEEP A LOOK.
@@ -919,7 +919,7 @@ function AskPanel({
             )}
           </div>
           {preview.looks.map((l, i) => (
-            <div key={i} className="border border-[#2B2B2B] bg-[#EDEBE7]">
+            <div key={i} className="rounded-[14px] overflow-hidden bg-[#EDEBE7]">
               <div className="flex items-center justify-between gap-4 flex-wrap px-5 py-4 border-b border-[#C3BFB8]">
                 <div className="flex items-center gap-4">
                   <p className="text-[20px] text-[#2B2B2B]">LOOK {i + 1}</p>
@@ -1054,7 +1054,7 @@ function AskPanel({
                   {swap.options && swap.options.length > 0 && (
                     <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-[6px]">
                       {swap.options.map((o) => (
-                        <button key={o.item_id} onClick={() => useOption(i, swap.piece, o)} className="bg-white text-left hover:outline hover:outline-2 hover:outline-[#2B2B2B]">
+                        <button key={o.item_id} onClick={() => useOption(i, swap.piece, o)} className="bg-white text-left hover:ring-2 hover:ring-[#2B2B2B]">
                           <div className="relative aspect-[3/4] bg-[#EDEDED] overflow-hidden rounded-[14px]">
                             {o.image_url && <FallbackImage src={o.image_url} thumbWidth={400} alt={o.product_name} className="absolute inset-0 w-full h-full object-cover" />}
                           </div>
