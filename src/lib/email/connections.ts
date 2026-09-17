@@ -26,7 +26,7 @@ import { encryptSecret, decryptSecret } from './secrets'
 import { googleAccessToken, listGmailPurchaseIds, getGmailMessage, revokeGoogle } from './gmail'
 import { listImapPurchaseUids, fetchImapMessages, testImapLogin, type ImapConfig } from './imap'
 import {
-  RETURNED, RETURN_SEEN, RETURN_STARTED, RETURN_STARTED_SEEN, emailKind, findKey, isGenericName, mergeFind, sameFind,
+  RETURNED, RETURN_SEEN, RETURN_STARTED, RETURN_STARTED_SEEN, findKey, isGenericName, mergeFind, sameFind, subjectTopic, worthReading,
   type MailMessage, type PurchaseExtraction, type PurchaseItem,
 } from './purchase-core'
 import { extractPurchase, namePieceFromPhoto } from './purchases'
@@ -200,13 +200,18 @@ export async function processEmailScans(budgetMs = 240_000): Promise<{ read: num
       }
 
       const finds = await loadFindsForMatching(a, job.member_id)
+      const topicsRead = new Set<string>()
       let jobFound = job.found ?? 0
       let jobCalls = job.ai_calls ?? 0
       while (cursor < ids.length && Date.now() - started < budgetMs) {
         const chunk = ids.slice(cursor, cursor + READ_CHUNK)
         const messages = await fetchMessages(c, chunk)
         for (const m of messages) {
-          if (!emailKind(m)) continue
+          if (!worthReading(m, c.email)) continue
+          // One read per piece or order: its receipt, delivery and feedback emails say the same.
+          const topic = subjectTopic(m)
+          if (topic && topicsRead.has(topic)) continue
+          if (topic) topicsRead.add(topic)
           const { extraction } = await extractPurchase(m)
           jobCalls++
           aiCalls++

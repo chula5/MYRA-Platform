@@ -73,7 +73,7 @@ export async function extractPurchase(m: MailMessage): Promise<{ extraction: Pur
   const none = parseExtraction(null)
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return { extraction: none, error: 'ANTHROPIC_API_KEY not configured' }
-  const { text, imageAlts, links } = emailForExtraction(m)
+  const { text, imageAlts, links } = emailForExtraction(m, 7_000)
   try {
     const client = new Anthropic({ apiKey })
     const res = await client.messages.create({

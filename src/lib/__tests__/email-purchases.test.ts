@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  looksLikeOrderEmail, emailKind, parseExtraction, findKey, emailForExtraction, sameFind, mergeFind, matchImagesByAlt, isGenericName,
+  looksLikeOrderEmail, emailKind, worthReading, subjectTopic, parseExtraction, findKey, emailForExtraction, sameFind, mergeFind, matchImagesByAlt, isGenericName,
 } from '@/lib/email/purchase-core'
 
 describe('looksLikeOrderEmail', () => {
@@ -161,5 +161,26 @@ describe('matchImagesByAlt', () => {
       'https://media.sezane.com/image/upload/c_fill,h_200/gh2v7ia77gkijzynwh0o.jpg',
       'https://media.sezane.com/image/upload/c_fill,h_200/ulimvmmzpbmuzyij8xlb.jpg',
     ])
+  })
+})
+
+describe('saving reads', () => {
+  it('skips carriers, payment processors, food and her own emails', () => {
+    expect(worthReading({ subject: 'Your parcel has been delivered', from: 'Royal Mail <no-reply@royalmail.com>' })).toBe(false)
+    expect(worthReading({ subject: 'Your order is confirmed', from: 'Deliveroo <noreply@deliveroo.co.uk>' })).toBe(false)
+    expect(worthReading({ subject: 'Receipt for your payment to Benda Bili Ltd', from: 'PayPal <service@paypal.co.uk>' })).toBe(false)
+    expect(worthReading({ subject: 'Order notes', from: 'CC <ccotter31@gmail.com>' }, 'ccotter31@gmail.com')).toBe(false)
+    expect(worthReading({ subject: '[Sézane] Confirmation of your Order #374353476', from: '"Sézane" <hello@sezane.com>' })).toBe(true)
+    expect(worthReading({ subject: 'Your order was delivered', from: 'Zara <noreply@zara.com>' })).toBe(true)
+  })
+  it('gives Vinted emails about one listing the same topic', () => {
+    const from = 'Team Vinted <no-reply@vinted.co.uk>'
+    const receipt = subjectTopic({ subject: 'Your receipt for "Emporio Armani black jacket (Size 8)“', from })
+    const needed = subjectTopic({ subject: 'Emporio Armani black jacket (Size 8) - Confirmation needed', from })
+    expect(receipt).toBeTruthy()
+    expect(subjectTopic({ subject: 'Your receipt for "Emporio Armani black jacket (Size 8)"', from })).toBe(receipt)
+    // A return about the same listing is a different topic — it is always read.
+    expect(subjectTopic({ subject: 'Return your order by 23 Sep: Emporio Armani black jacket (Size 8)', from })).not.toBe(receipt)
+    expect(needed === null || needed !== receipt).toBe(true)
   })
 })

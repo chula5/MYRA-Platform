@@ -58,6 +58,43 @@ export function emailKind(m: Pick<MailMessage, 'subject'>): 'order' | 'return' |
   return null
 }
 
+// Senders whose order-looking emails never describe clothes: parcel carriers
+// (no item names), payment processors (the shop's own email says more), food,
+// travel, tickets, software, gyms, cards, news. Skipped without an AI read.
+const NOT_A_WARDROBE_SENDER = new RegExp([
+  'royal ?mail', 'evri', 'hermes', 'dpd', 'dhl', 'ups', 'fedex', 'yodel', 'inpost', 'hived', 'parcelforce', 'amazon logistics',
+  'paypal', 'klarna', 'clearpay', 'afterpay', 'stripe', 'dojo', 'sumup', 'square',
+  'deliveroo', 'uber', 'just ?eat', 'bolt', 'tesco', 'sainsbury', 'ocado', 'waitrose', 'asda', 'gousto', 'hellofresh',
+  'trainline', 'easyjet', 'ryanair', 'british airways', 'booking\\.com', 'airbnb', 'ferryhopper', 'tfl',
+  'ticketmaster', 'see tickets', 'dice', 'everyman', 'eventbrite',
+  'canva', 'godaddy', 'framer', 'vercel', 'anthropic', 'openai', 'apple', 'google', 'microsoft', 'adobe', 'fiverr', 'linkedin', 'meta for business', 'shopify',
+  'virgin ?active', 'whoop', 'moonpig', 'funky pigeon', 'nextdoor', 'vogue', 'wsj', 'gulf news', 'ark invest',
+  "information commissioner", 'octopus energy', 'thames water', 'hmrc', 'council',
+].map((w) => `\\b${w}\\b`).join('|'), 'i')
+
+/** Would an AI read of this email be wasted? Wrong kind, wrong sender, or her own email. */
+export function worthReading(m: Pick<MailMessage, 'subject' | 'from'>, ownAddress?: string | null): boolean {
+  if (!emailKind(m)) return false
+  const from = m.from ?? ''
+  if (ownAddress && from.toLowerCase().includes(ownAddress.toLowerCase())) return false
+  return !NOT_A_WARDROBE_SENDER.test(from)
+}
+
+/**
+ * The piece or order an email is about, from its subject alone — a quoted
+ * listing title (Vinted: \"Your receipt for "Emporio Armani black jacket"\") or
+ * an order number. Emails sharing it (receipt, delivered, feedback) need one
+ * read, not five. Null when the subject names neither.
+ */
+export function subjectTopic(m: Pick<MailMessage, 'subject' | 'from'>): string | null {
+  const s = m.subject ?? ''
+  const sender = fold((m.from ?? '').replace(/<.*>/, '')) || fold(m.from)
+  const quoted = s.match(/["“”']([^"“”']{6,})["“”']/)?.[1] ?? s.match(/:\s*(.{6,})$/)?.[1]
+  const order = s.match(/#\s?([A-Z0-9-]{5,})/i)?.[1] ?? s.match(/\b(\d{6,})\b/)?.[1]
+  const topic = order ? `order ${order}` : quoted ? pieceWords(quoted).join(' ') : null
+  return topic ? `${sender}|${emailKind(m)}|${topic}` : null
+}
+
 /** Worth reading for a purchase? Subject says order/receipt/dispatch, and not a return, refund or marketing. */
 export function looksLikeOrderEmail(m: Pick<MailMessage, 'subject'>): boolean {
   return emailKind(m) === 'order'
