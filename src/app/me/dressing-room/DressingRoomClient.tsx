@@ -13,6 +13,7 @@ import { useMemo, useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import type { DressingRoomPiece, DressingRoomView, StyledLook } from '@/app/admin/private-stylist/actions'
 import { myLooksWithPiece, styleMyPiece } from './actions'
+import DressingRoomScene from '@/components/me/DressingRoomScene'
 import EmailFinds from './EmailFinds'
 
 const TABS: { id: string; label: string; slots: string[] }[] = [
@@ -92,63 +93,59 @@ export default function DressingRoomClient({
   return (
     <div className={`myra-pearl relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen min-h-screen ${testMemberId ? '' : '-my-10'}`}>
       <div className="w-full px-6 sm:px-10 py-8 pb-16 space-y-6">
-        {/* The room */}
-        <section className={`${CARD} overflow-hidden`}>
-          <div className="grid lg:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="px-8 py-10 flex flex-col justify-between gap-8">
-              <div>
-                <p className="text-[20px] tracking-[0.18em] text-[#6E6B65]">DRESSING ROOM</p>
-                <h1 className="text-[clamp(30px,4vw,56px)] tracking-[0.03em] text-[#2B2B2B] leading-[1.05] mt-3">
-                  {view.firstName ? `${view.firstName.toUpperCase()}’S OWN PIECES` : 'YOUR OWN PIECES'}
-                </h1>
-                <p className="text-[22px] text-[#4A4E57] mt-4 max-w-2xl">
-                  {view.pieces.length
-                    ? `${view.pieces.length} piece${view.pieces.length === 1 ? '' : 's'} in here${styledCount ? `, ${styledCount} already styled into looks` : ''}. Tap one and MYRA dresses it.`
-                    : 'Nothing in here yet. Add your pieces, or find what you have bought below.'}
+        {/* The room, drawn — with what she is dressing for over it */}
+        <section className="relative rounded-[18px] overflow-hidden shadow-[0_2px_14px_rgba(43,43,43,0.08)]">
+          <DressingRoomScene className="w-full h-[300px] md:h-[360px] object-cover" />
+          <div className="absolute inset-0 flex flex-col justify-between px-8 py-7">
+            <div>
+              <p className="text-[20px] tracking-[0.18em] text-[#6E6B65]">DRESSING ROOM</p>
+              <h1 className="text-[clamp(28px,3.4vw,48px)] tracking-[0.03em] text-[#2B2B2B] leading-[1.05] mt-2">
+                {view.firstName ? `${view.firstName.toUpperCase()}\u2019S OWN PIECES` : 'YOUR OWN PIECES'}
+              </h1>
+              <p className="text-[21px] text-[#4A4E57] mt-2 max-w-md">
+                {view.pieces.length
+                  ? `${view.pieces.length} piece${view.pieces.length === 1 ? '' : 's'} in here${styledCount ? `, ${styledCount} already styled` : ''}.`
+                  : 'Nothing in here yet — add your pieces, or find what you have bought below.'}
+              </p>
+              {view.test && (
+                <p className="text-[18px] tracking-[0.1em] text-[#8B5E00] mt-2">
+                  TEST AS {view.firstName.toUpperCase()} — COMPOSED FOR REAL, NOTHING SAVED
                 </p>
-                {view.test && (
-                  <p className="text-[18px] tracking-[0.1em] text-[#8B5E00] mt-4">
-                    TEST AS {view.firstName.toUpperCase()} — OUTFITS ARE COMPOSED FOR REAL, NOTHING IS SAVED
-                  </p>
-                )}
-              </div>
-              {view.pieces.length > 0 && (
-                <div className="flex flex-wrap gap-3">
-                  {tabs.map((t) => (
-                    <button
-                      key={t.id}
-                      onClick={() => setTab(t.id)}
-                      className={`text-[20px] px-6 py-3 rounded-full transition-colors ${tab === t.id ? 'bg-[#2B2B2B] text-white' : 'bg-white/70 text-[#4A4E57] hover:bg-white'}`}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
               )}
             </div>
 
-            {/* Your look — what the room is for */}
-            <aside className="bg-[rgba(255,255,255,0.55)] px-8 py-10 flex flex-col items-center justify-center text-center gap-5 border-t lg:border-t-0 lg:border-l border-[rgba(43,43,43,0.1)]">
-              <p className="text-[22px] tracking-[0.14em] text-[#2B2B2B]">YOUR LOOK</p>
-              <svg viewBox="0 0 64 64" className="w-20 h-20 text-[#55534E]" aria-hidden>
-                <path d="M24 10l8 5 8-5 4 11-4 4 5 26H19l5-26-4-4z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-              </svg>
-              <p className="text-[21px] text-[#4A4E57] leading-snug">
-                {picked ? `Styling ${picked.product_name}.` : 'Tap a piece and MYRA builds the outfit around it.'}
-              </p>
-              {picked && (
-                onOpenPiece ? (
-                  <button onClick={() => openPiece(picked.item_id)} className="text-[20px] px-6 py-3 rounded-full border border-[#2B2B2B] text-[#2B2B2B]">
-                    Open its page
+            {view.pieces.length > 0 && (
+              <div className="flex flex-wrap gap-2.5">
+                {tabs.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => setTab(t.id)}
+                    className={`text-[20px] px-5 py-2.5 rounded-full transition-colors ${tab === t.id ? 'bg-[#2B2B2B] text-white' : 'bg-[rgba(255,255,255,0.75)] text-[#4A4E57] hover:bg-white'}`}
+                  >
+                    {t.label}
                   </button>
-                ) : (
-                  <Link href={`/me/dressing-room/${picked.item_id}`} className="text-[20px] px-6 py-3 rounded-full border border-[#2B2B2B] text-[#2B2B2B]">
-                    Open its page
-                  </Link>
-                )
-              )}
-            </aside>
+                ))}
+              </div>
+            )}
           </div>
+
+          {/* Your look — the card standing in the room */}
+          <aside className="hidden lg:flex absolute top-7 right-7 w-[280px] flex-col items-center text-center gap-4 rounded-[16px] bg-[rgba(255,255,255,0.92)] px-6 py-6 shadow-[0_2px_14px_rgba(43,43,43,0.1)]">
+            <p className="text-[21px] tracking-[0.14em] text-[#2B2B2B]">YOUR LOOK</p>
+            <svg viewBox="0 0 64 64" className="w-16 h-16 text-[#55534E]" aria-hidden>
+              <path d="M24 10l8 5 8-5 4 11-4 4 5 26H19l5-26-4-4z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+            </svg>
+            <p className="text-[20px] text-[#4A4E57] leading-snug">
+              {picked ? picked.product_name : 'Tap a piece and MYRA builds the outfit around it.'}
+            </p>
+            {picked && (
+              onOpenPiece ? (
+                <button onClick={() => openPiece(picked.item_id)} className="text-[19px] px-5 py-2.5 rounded-full border border-[#2B2B2B] text-[#2B2B2B]">Open its page</button>
+              ) : (
+                <Link href={`/me/dressing-room/${picked.item_id}`} className="text-[19px] px-5 py-2.5 rounded-full border border-[#2B2B2B] text-[#2B2B2B]">Open its page</Link>
+              )
+            )}
+          </aside>
         </section>
 
         {view.error && <p className="text-[20px] text-[#B83A3A] text-center">{view.error}</p>}

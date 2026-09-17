@@ -16,16 +16,18 @@ export type RoomId = 'for_you' | 'all_looks' | 'dressing_room' | 'magazine' | 'i
 export interface Room {
   id: RoomId
   label: string
+  /** What the room is called when the bar sits in the header. */
+  short: string
   href: string
 }
 
 export const ROOMS: Room[] = [
-  { id: 'for_you', label: 'For You', href: '/me' },
-  { id: 'all_looks', label: 'Your Looks', href: '/me/looks' },
-  { id: 'dressing_room', label: 'Dressing Room', href: '/me/dressing-room' },
-  { id: 'inspiration', label: 'Inspiration', href: '/me/inspiration' },
-  { id: 'magazine', label: 'MYRA Magazine', href: '/me/magazine' },
-  { id: 'profile', label: 'You', href: '/me/profile' },
+  { id: 'for_you', label: 'For You', short: 'For You', href: '/me' },
+  { id: 'all_looks', label: 'Your Looks', short: 'Looks', href: '/me/looks' },
+  { id: 'dressing_room', label: 'Dressing Room', short: 'Dressing', href: '/me/dressing-room' },
+  { id: 'inspiration', label: 'Inspiration', short: 'Inspiration', href: '/me/inspiration' },
+  { id: 'magazine', label: 'MYRA Magazine', short: 'Magazine', href: '/me/magazine' },
+  { id: 'profile', label: 'You', short: 'You', href: '/me/profile' },
 ]
 
 const S = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.3, strokeLinecap: 'round', strokeLinejoin: 'round' } as const
@@ -108,11 +110,13 @@ function Icon({ id }: { id: RoomId }) {
  * room is a link (her own pages).
  */
 export default function RoomNav({
-  active, onSelect, onSearch, searchPlaceholder = 'Search your looks, your pieces, your inspiration',
+  active, onSelect, onSearch, compact = false, searchPlaceholder = 'Search your looks, your pieces, your inspiration',
 }: {
   active: RoomId
   onSelect?: (id: RoomId) => void
   onSearch?: (query: string) => void
+  /** Sits in the header beside MYRA, rooms and search on one line to the right. */
+  compact?: boolean
   searchPlaceholder?: string
 }) {
   const [query, setQuery] = useState('')
@@ -123,6 +127,56 @@ export default function RoomNav({
     if (!q) return
     if (onSearch) onSearch(q)
     else window.location.href = `/me/looks?q=${encodeURIComponent(q)}`
+  }
+
+  const room = (r: Room) => {
+    const on = r.id === active
+    const inner = (
+      <>
+        <span className={`block ${compact ? 'w-[34px] h-[34px]' : 'w-[54px] h-[54px] sm:w-[68px] sm:h-[68px]'} mx-auto transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
+          <Icon id={r.id} />
+        </span>
+        <span className={`block ${compact ? 'mt-1 text-[17px]' : 'mt-3 text-[20px] sm:text-[22px]'} tracking-[0.02em] transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
+          {compact ? r.short : r.label}
+        </span>
+        <span className={`block mx-auto ${compact ? 'mt-1' : 'mt-2'} h-px w-10 ${on ? 'bg-[#2B2B2B]' : 'bg-transparent'}`} />
+      </>
+    )
+    const cls = compact ? 'group text-center px-2 shrink-0 w-[124px] whitespace-nowrap' : 'group text-center px-1'
+    return onSelect ? (
+      <button key={r.id} type="button" onClick={() => onSelect(r.id)} className={cls}>{inner}</button>
+    ) : (
+      <Link key={r.id} href={r.href} className={cls}>{inner}</Link>
+    )
+  }
+
+  const search = (
+    <form onSubmit={submit} className={compact ? 'w-full max-w-[380px]' : 'w-full'}>
+      <div className={`flex items-center gap-3 bg-[rgba(255,255,255,0.55)] rounded-full border border-[rgba(43,43,43,0.15)] ${compact ? 'px-5 py-2.5' : 'px-7 py-4'}`}>
+        <svg viewBox="0 0 24 24" className={`${compact ? 'w-5 h-5' : 'w-6 h-6'} text-[#55534E] shrink-0`} aria-hidden>
+          <circle cx="11" cy="11" r="7" {...S} />
+          <path d="M16.5 16.5L21 21" {...S} />
+        </svg>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={compact ? 'Search' : searchPlaceholder}
+          aria-label="Search"
+          className={`flex-1 min-w-0 ${compact ? 'text-[19px]' : 'text-[21px]'} text-[#2B2B2B] placeholder:text-[#6E6B65] bg-transparent focus:outline-none`}
+        />
+      </div>
+    </form>
+  )
+
+  if (compact) {
+    return (
+      <div className="flex items-center justify-end gap-6 w-full">
+        {search}
+        <nav data-lenis-prevent className="flex items-start gap-1 overflow-x-auto">
+          {ROOMS.map(room)}
+        </nav>
+      </div>
+    )
   }
 
   return (

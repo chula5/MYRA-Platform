@@ -1,15 +1,22 @@
 'use client'
 
-// MYRA MAGAZINE — everything she subscribes to, read for her and laid out as
-// one page: a masthead, then each publication's issue with the few pieces that
-// are hers. Made to be read in a minute, not browsed.
+// MYRA MAGAZINE — her own subscriptions, read for her and set like a spread:
+// the masthead and one piece of the day down the left, the newest issue from
+// her inbox across the middle, and everything else that was hers down the
+// right. Made to be read in a minute, not browsed.
+//
+// It reads the inbox she has already connected for her orders — no second
+// sign-in, and the email itself is never stored.
 
 import { useEffect, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
-import { ArchiveCard } from '@/components/ArchiveCard'
 import { loadMyMagazine, refreshMyMagazine, setPublicationMuted, type MagazinePageView } from './actions'
+import type { MagazinePick } from '@/lib/magazine/core'
 
-const MONTH = { month: 'long', day: 'numeric' } as const
+const DATE = { day: 'numeric', month: 'long' } as const
+
+const price = (p: MagazinePick) =>
+  p.price == null ? null : `${p.currency === 'GBP' || !p.currency ? '£' : `${p.currency} `}${Math.round(p.price)}`
 
 export default function MagazineClient({ testMemberId }: { testMemberId?: string }) {
   const [view, setView] = useState<MagazinePageView | null>(null)
@@ -42,122 +49,166 @@ export default function MagazineClient({ testMemberId }: { testMemberId?: string
   if (!view) return null
   if (!view.memberId) return null
 
+  const issues = view.issues
+  const lead = issues[0] ?? null
+  // The piece of the day: the first thing MYRA kept, with a picture.
+  const ofTheDay = issues.flatMap((i) => i.picks).find((p) => p.image_url) ?? null
+  // Everything else she was kept — the piece of the day does not appear twice.
+  const rest = issues.flatMap((i) => i.picks.map((p) => ({ ...p, publication: i.publication })))
+    .filter((p) => !(ofTheDay && p.name === ofTheDay.name && p.brand === ofTheDay.brand))
+    .slice(0, 12)
+
   return (
     <div className={`myra-pearl relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen min-h-screen ${testMemberId ? '' : '-my-10'}`}>
-      <div className="w-full px-6 sm:px-10 pb-16">
-        <ArchiveCard
-          className="w-full"
-          intro="settle"
-          heading={
-            <div className="text-center">
-              <h1 className="text-[clamp(34px,6vw,86px)] tracking-[0.14em] text-[#4A4E57] leading-[1]">MYRA MAGAZINE</h1>
-              <p className="myra-section-note mt-4">
-                EVERYTHING YOU SUBSCRIBE TO, READ FOR YOU — ONLY WHAT&rsquo;S YOU
+      <div className="w-full px-6 sm:px-10 py-8 pb-16">
+        <div className="grid xl:grid-cols-[320px_minmax(0,1fr)_420px] gap-6 items-start">
+
+          {/* The masthead, and one piece chosen for her */}
+          <aside className="rounded-[18px] overflow-hidden bg-[#8C8A85] text-white px-7 py-8 flex flex-col gap-7 min-h-[560px]">
+            <div>
+              <p className="text-[19px] tracking-[0.2em] text-white/80">MYRA MAGAZINE</p>
+              <h1 className="text-[clamp(36px,4vw,62px)] leading-[0.95] tracking-[0.06em] mt-3">MYRA</h1>
+              <p className="text-[19px] tracking-[0.14em] text-white/80 mt-3">
+                {view.firstName ? `FOR ${view.firstName.toUpperCase()}` : 'FOR YOU'}
               </p>
-              {view.test && (
-                <p className="text-[18px] tracking-[0.1em] text-[#8B5E00] mt-4">
-                  TEST AS {view.firstName.toUpperCase()} — HER REAL NEWSLETTERS
-                </p>
+            </div>
+
+            <div className="border-t border-white/30 pt-6">
+              <p className="text-[19px] tracking-[0.16em] text-white/80">ITEM OF THE DAY</p>
+              {ofTheDay ? (
+                <>
+                  <p className="text-[26px] leading-tight mt-3">{ofTheDay.name}</p>
+                  {ofTheDay.why && <p className="text-[20px] text-white/85 mt-2 leading-snug">{ofTheDay.why}</p>}
+                  <div className="relative aspect-[3/4] rounded-[14px] overflow-hidden bg-white/10 mt-5">
+                    {ofTheDay.image_url && (
+                      <FallbackImage src={ofTheDay.image_url} thumbWidth={700} alt={ofTheDay.name} className="absolute inset-0 w-full h-full object-cover" />
+                    )}
+                  </div>
+                  <p className="text-[20px] tracking-[0.1em] mt-4">{(ofTheDay.brand ?? '').toUpperCase()}</p>
+                  <p className="text-[19px] text-white/80">{price(ofTheDay) ?? 'In your size, in your colours'}</p>
+                  {ofTheDay.url && (
+                    <a href={ofTheDay.url} target="_blank" rel="noopener noreferrer" className="inline-block mt-4 text-[19px] rounded-full border border-white/70 px-5 py-2.5">
+                      See it
+                    </a>
+                  )}
+                </>
+              ) : (
+                <p className="text-[20px] text-white/85 mt-3">Nothing chosen yet. Read this week and MYRA picks one.</p>
               )}
             </div>
-          }
-        >
-          {view.error && <p className="text-[20px] text-[#B83A3A] text-center mb-6">{view.error}</p>}
 
-          <div className="w-full">
-            {/* Masthead line: read again, and what has been read */}
-            <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 border-y border-[rgba(43,43,43,0.18)] py-4 mb-12">
+            <div className="mt-auto border-t border-white/30 pt-5">
               <button
-                disabled={busy || view.needsInbox}
                 onClick={read}
-                className="text-[20px] tracking-[0.12em] px-7 py-3 bg-[#2B2B2B] text-white disabled:opacity-40 rounded-full"
+                disabled={busy || view.needsInbox}
+                className="w-full text-[20px] tracking-[0.1em] rounded-full bg-white text-[#2B2B2B] px-6 py-3.5 disabled:opacity-50"
               >
                 {busy ? 'READING…' : 'READ THIS WEEK'}
               </button>
-              {msg && <p className="text-[20px] text-[#2B2B2B]">{msg}</p>}
-              {view.needsInbox && (
-                <p className="text-[20px] text-[#2B2B2B]">
-                  Connect your email in your dressing room and MYRA reads the newsletters you already get.
-                </p>
+              <p className="text-[18px] text-white/75 mt-3 leading-snug">
+                {view.needsInbox
+                  ? 'Connect your email in your dressing room first.'
+                  : 'Read straight from the inbox you already connected.'}
+              </p>
+            </div>
+          </aside>
+
+          {/* What came in: the newest issue */}
+          <section className="rounded-[18px] overflow-hidden bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] min-h-[560px] flex flex-col">
+            <div className="px-8 pt-8">
+              <p className="text-[19px] tracking-[0.16em] text-[#6E6B65]">HERO FROM YOUR INBOX</p>
+              <h2 className="text-[clamp(30px,3.4vw,52px)] leading-[1.05] text-[#2B2B2B] mt-3">
+                {lead?.subject ?? (view.needsInbox ? 'Connect your email' : 'Nothing read yet')}
+              </h2>
+              <p className="text-[21px] text-[#4A4E57] mt-4 max-w-xl leading-snug">
+                {lead
+                  ? `From ${lead.publication}${lead.received_at ? `, ${new Date(lead.received_at).toLocaleDateString('en-GB', DATE)}` : ''} — only the pieces that are yours.`
+                  : 'MYRA reads the fashion newsletters you already subscribe to and keeps what is yours.'}
+              </p>
+              {msg && <p className="text-[20px] text-[#2B2B2B] mt-4">{msg}</p>}
+              {view.error && <p className="text-[20px] text-[#B83A3A] mt-4">{view.error}</p>}
+            </div>
+
+            <div className="relative flex-1 mt-6 mx-8 mb-6 rounded-[14px] overflow-hidden bg-[#EDEDED] min-h-[320px]">
+              {(lead?.hero_image ?? lead?.picks[0]?.image_url) && (
+                <FallbackImage
+                  src={(lead?.hero_image ?? lead?.picks[0]?.image_url) as string}
+                  thumbWidth={1400}
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
               )}
             </div>
 
-            {view.issues.length === 0 && !view.needsInbox && !busy && (
-              <p className="text-[22px] text-[#4A4E57] text-center py-10">
-                Nothing yet. Press READ THIS WEEK and MYRA will go through your newsletters.
-              </p>
+            {lead && (
+              <div className="px-8 pb-8 border-t border-[rgba(43,43,43,0.15)] pt-5 flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <p className="text-[19px] tracking-[0.14em] text-[#6E6B65]">CURATED FROM YOUR SUBSCRIPTION EMAIL</p>
+                  <p className="text-[22px] text-[#2B2B2B] mt-1">
+                    {lead.picks.length} piece{lead.picks.length === 1 ? '' : 's'} kept from {lead.publication}
+                  </p>
+                </div>
+                <button
+                  disabled={busy}
+                  onClick={() => mute(lead.publication, true)}
+                  className="text-[19px] rounded-full border border-[#2B2B2B] px-5 py-2.5 text-[#2B2B2B] disabled:opacity-40"
+                >
+                  Stop reading {lead.publication}
+                </button>
+              </div>
             )}
+          </section>
 
-            {/* The issues */}
-            <div className="space-y-16">
-              {view.issues.map((issue) => (
-                <article key={issue.issue_id}>
-                  <header className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 border-b border-[#C3BFB8] pb-3 mb-6">
-                    <h2 className="text-[clamp(24px,3vw,40px)] tracking-[0.06em] text-[#2B2B2B]">{issue.publication.toUpperCase()}</h2>
-                    <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1">
-                      {issue.received_at && (
-                        <p className="text-[18px] text-[#6E6B65]">{new Date(issue.received_at).toLocaleDateString('en-GB', MONTH)}</p>
-                      )}
-                      <button
-                        disabled={busy}
-                        onClick={() => mute(issue.publication, true)}
-                        className="text-[18px] underline underline-offset-4 text-[#6E6B65] disabled:opacity-40"
-                      >
-                        Stop reading this
-                      </button>
-                    </div>
-                  </header>
-
-                  {issue.subject && (
-                    <p className="text-[clamp(22px,2.2vw,32px)] text-[#4A4E57] leading-snug mb-7 max-w-4xl">{issue.subject}</p>
-                  )}
-
-                  <div className="grid grid-cols-2 md:grid-cols-4 2xl:grid-cols-6 gap-4 w-full">
-                    {issue.picks.map((p, i) => {
-                      const body = (
-                        <>
-                          <div className="relative aspect-[3/4] bg-[#EDEDED] overflow-hidden">
-                            {p.image_url && (
-                              <FallbackImage src={p.image_url} thumbWidth={700} alt={p.name} className="absolute inset-0 w-full h-full object-cover" />
-                            )}
-                          </div>
-                          <div className="px-4 py-4 text-left">
-                            {p.brand && <p className="text-[18px] tracking-[0.1em] text-[#6E6B65]">{p.brand.toUpperCase()}</p>}
-                            <p className="text-[21px] text-[#2B2B2B] leading-tight mt-1 line-clamp-2">{p.name}</p>
-                            {p.price != null && (
-                              <p className="text-[19px] text-[#55534E] mt-1">
-                                {p.currency === 'GBP' || !p.currency ? '£' : `${p.currency} `}{Math.round(p.price)}
-                              </p>
-                            )}
-                            {p.why && <p className="text-[19px] text-[#4A4E57] mt-2 italic">{p.why}</p>}
-                          </div>
-                        </>
-                      )
-                      return p.url ? (
-                        <a key={i} href={p.url} target="_blank" rel="noopener noreferrer" className="bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] rounded-[18px] overflow-hidden hover:ring-2 hover:ring-[#2B2B2B]">
-                          {body}
-                        </a>
-                      ) : (
-                        <div key={i} className="bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] rounded-[18px] overflow-hidden">{body}</div>
-                      )
-                    })}
-                  </div>
-                </article>
-              ))}
+          {/* Everything else that was hers */}
+          <aside className="rounded-[18px] bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] px-6 py-7 min-h-[560px]">
+            <div className="flex items-baseline justify-between gap-4 border-b border-[rgba(43,43,43,0.15)] pb-3">
+              <p className="text-[19px] tracking-[0.16em] text-[#2B2B2B]">RECOMMENDED FOR YOU</p>
+              <p className="text-[18px] text-[#6E6B65]">From your subscriptions</p>
             </div>
 
-            {/* What she is subscribed to, and what MYRA has stopped reading */}
+            {rest.length === 0 ? (
+              <p className="text-[20px] text-[#4A4E57] mt-5">
+                {view.needsInbox ? 'Nothing to read until an inbox is connected.' : 'Press READ THIS WEEK and MYRA goes through your newsletters.'}
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-4 mt-5">
+                {rest.map((p, i) => {
+                  const body = (
+                    <>
+                      <div className="relative aspect-[3/4] rounded-[14px] overflow-hidden bg-[#EDEDED]">
+                        {p.image_url && (
+                          <FallbackImage src={p.image_url} thumbWidth={500} alt={p.name} className="absolute inset-0 w-full h-full object-cover" />
+                        )}
+                      </div>
+                      <p className="text-[19px] tracking-[0.06em] text-[#2B2B2B] mt-2 leading-tight line-clamp-2">{p.name.toUpperCase()}</p>
+                      <p className="text-[18px] text-[#6E6B65]">{[p.brand, price(p)].filter(Boolean).join(' · ')}</p>
+                      {p.why && <p className="text-[18px] text-[#4A4E57] italic leading-snug">{p.why}</p>}
+                    </>
+                  )
+                  return p.url ? (
+                    <a key={i} href={p.url} target="_blank" rel="noopener noreferrer" className="block">{body}</a>
+                  ) : (
+                    <div key={i}>{body}</div>
+                  )
+                })}
+              </div>
+            )}
+
+            <p className="text-[19px] tracking-[0.1em] text-[#6E6B65] text-center mt-7 pt-5 border-t border-[rgba(43,43,43,0.15)]">
+              INSPIRED BY YOU. READ BY MYRA.
+            </p>
+
             {view.publications.length > 0 && (
-              <div className="mt-16 border-t border-[rgba(43,43,43,0.18)] pt-6">
-                <p className="myra-section-note">YOUR SUBSCRIPTIONS</p>
-                <div className="flex flex-wrap gap-x-6 gap-y-3 mt-4">
+              <div className="mt-5">
+                <p className="text-[18px] tracking-[0.14em] text-[#6E6B65]">YOUR SUBSCRIPTIONS</p>
+                <div className="flex flex-wrap gap-2 mt-3">
                   {view.publications.map((p) => (
                     <button
                       key={p.publication}
                       disabled={busy}
                       onClick={() => mute(p.publication, !p.muted)}
-                      className={`text-[19px] px-4 py-2 border disabled:opacity-40 ${p.muted ? 'border-[#C3BFB8] text-[#8C8A85] line-through' : 'border-[#2B2B2B] text-[#2B2B2B]'}`}
                       title={p.muted ? 'Start reading this again' : 'Stop reading this'}
+                      className={`text-[18px] rounded-full px-4 py-2 border disabled:opacity-40 ${p.muted ? 'border-[#C3BFB8] text-[#8C8A85] line-through' : 'border-[rgba(43,43,43,0.3)] text-[#2B2B2B]'}`}
                     >
                       {p.publication}
                     </button>
@@ -165,8 +216,8 @@ export default function MagazineClient({ testMemberId }: { testMemberId?: string
                 </div>
               </div>
             )}
-          </div>
-        </ArchiveCard>
+          </aside>
+        </div>
       </div>
     </div>
   )

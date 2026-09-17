@@ -90,11 +90,17 @@ export default function HerViewTab({
       {/* Her rooms, as she would move between them. */}
       {/* Her own bar, full width of the screen — exactly what she taps. */}
       <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen">
-        <RoomNav
-          active={room}
-          onSelect={(id) => { setRoom(id === 'profile' ? 'for_you' : id); setPiece(null) }}
-          onSearch={(q) => { setRoom('all_looks'); setSearch(q) }}
-        />
+        <div className="myra-pearl border-b border-[rgba(43,43,43,0.18)] flex items-center gap-8 px-6 sm:px-10 py-3">
+          <span className="text-[24px] tracking-[0.24em] text-[#4A4E57] shrink-0">MYRA</span>
+          <div className="flex-1 min-w-0">
+            <RoomNav
+              active={room}
+              compact
+              onSelect={(id) => { setRoom(id === 'profile' ? 'for_you' : id); setPiece(null) }}
+              onSearch={(q) => { setRoom('all_looks'); setSearch(q) }}
+            />
+          </div>
+        </div>
         <p className="myra-pearl text-[20px] tracking-[0.1em] text-[#55534E] text-center px-6 py-3">
           HER SCREEN, LOADED AS {name.toUpperCase()} — YOUR TAPS ARE TESTS: NOTHING IS SENT TO HER OR SAVED
         </p>

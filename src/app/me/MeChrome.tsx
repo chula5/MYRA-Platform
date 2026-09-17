@@ -14,12 +14,14 @@ export default function MeChrome({ signOut }: { signOut: React.ReactNode }) {
     .find((r) => path === r.href || path.startsWith(`${r.href}/`))?.id) ?? 'for_you'
 
   return (
-    <header className="sticky top-0 z-30 myra-pearl">
-      <div className="flex items-center justify-between px-6 sm:px-10 h-14">
-        <Link href="/me" className="text-[22px] tracking-[0.24em] text-[#4A4E57]">MYRA</Link>
-        {signOut}
+    <header className="sticky top-0 z-30 myra-pearl border-b border-[rgba(43,43,43,0.18)]">
+      <div className="flex items-center gap-8 px-6 sm:px-10 py-3">
+        <Link href="/me" className="text-[24px] tracking-[0.24em] text-[#4A4E57] shrink-0">MYRA</Link>
+        <div className="flex-1 min-w-0">
+          <RoomNav active={active} compact />
+        </div>
+        <div className="shrink-0">{signOut}</div>
       </div>
-      <RoomNav active={active} />
     </header>
   )
 }
