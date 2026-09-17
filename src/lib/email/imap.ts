@@ -93,3 +93,17 @@ export async function fetchImapMessages(cfg: ImapConfig, uids: string[]): Promis
     return out
   })
 }
+
+/** Sender and subject only, from the envelope — no body is downloaded. */
+export async function fetchImapHeaders(cfg: ImapConfig, uids: string[]): Promise<{ id: string; from: string; subject: string }[]> {
+  if (!uids.length) return []
+  return withImap(cfg, async (c) => {
+    await c.mailboxOpen('INBOX', { readOnly: true })
+    const out: { id: string; from: string; subject: string }[] = []
+    for await (const msg of c.fetch(uids.join(','), { envelope: true, uid: true }, { uid: true })) {
+      const f = msg.envelope?.from?.[0]
+      out.push({ id: String(msg.uid), from: f ? `${f.name ?? ''} <${f.address ?? ''}>` : '', subject: msg.envelope?.subject ?? '' })
+    }
+    return out
+  })
+}

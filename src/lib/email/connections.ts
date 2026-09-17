@@ -23,13 +23,13 @@ import { uploadBufferToCloudinary } from '@/lib/wardrobe/cloudinary'
 import { rebuildLooksWithoutItems } from '@/app/admin/private-stylist/actions'
 import { buildOwnedItemFromProduct, lowConfidenceDims } from '@/lib/wardrobe/approve'
 import { encryptSecret, decryptSecret } from './secrets'
-import { googleAccessToken, listGmailPurchaseIds, getGmailMessage, revokeGoogle } from './gmail'
-import { listImapPurchaseUids, fetchImapMessages, testImapLogin, type ImapConfig } from './imap'
+import { googleAccessToken, listGmailPurchaseIds, getGmailHeaders, getGmailMessage, revokeGoogle } from './gmail'
+import { listImapPurchaseUids, fetchImapHeaders, fetchImapMessages, testImapLogin, type ImapConfig } from './imap'
 import {
   RETURNED, RETURN_SEEN, RETURN_STARTED, RETURN_STARTED_SEEN, findKey, isGenericName, mergeFind, sameFind, subjectTopic, worthReading,
   type MailMessage, type PurchaseExtraction, type PurchaseItem,
 } from './purchase-core'
-import { extractPurchase, namePieceFromPhoto } from './purchases'
+import { extractPurchase, namePieceFromPhoto, triageBySubject } from './purchases'
 
 const db = () => createAdminClient() as any
 
@@ -143,10 +143,32 @@ export async function listFinds(memberId: string, status: 'pending' | 'approved'
 
 // ── Scanning ────────────────────────────────────────────────────────────────
 
+/**
+ * The emails worth opening, newest first. Every inbox is big, so the body of
+ * an email is only opened after three free-or-cheap sieves: the inbox's own
+ * search (order and return words), the sender/subject rules, and one bulk
+ * AI sort of the remaining subjects (~150 per call).
+ */
 async function listCandidateIds(c: any, since: Date): Promise<string[]> {
   const secret = decryptSecret(c.secret_enc)
-  if (c.provider === 'gmail') return listGmailPurchaseIds(await googleAccessToken(secret), since)
-  return listImapPurchaseUids({ host: c.imap_host, email: c.email, password: secret }, since)
+  let ids: string[]
+  let headers: { id: string; from: string; subject: string }[]
+  if (c.provider === 'gmail') {
+    const token = await googleAccessToken(secret)
+    ids = await listGmailPurchaseIds(token, since)
+    headers = await getGmailHeaders(token, ids)
+  } else {
+    const cfg = { host: c.imap_host, email: c.email, password: secret }
+    ids = await listImapPurchaseUids(cfg, since)
+    headers = await fetchImapHeaders(cfg, ids)
+  }
+  const worth = headers.filter((h) => worthReading(h, c.email))
+  return triageIds(ids, worth)
+}
+
+async function triageIds(ids: string[], worth: { id: string; from: string; subject: string }[]): Promise<string[]> {
+  const keep = await triageBySubject(worth)
+  return ids.filter((id) => keep.has(id))
 }
 
 async function fetchMessages(c: any, ids: string[]): Promise<MailMessage[]> {

@@ -105,3 +105,22 @@ export async function getGmailMessage(accessToken: string, id: string): Promise<
   const internal = m.internalDate ? new Date(Number(m.internalDate)).toISOString() : null
   return { id, subject: header('subject'), from: header('from'), date: header('date') || internal, html, text }
 }
+
+/** Sender and subject only — no body is opened. For sorting a year of candidates cheaply. */
+export async function getGmailHeaders(accessToken: string, ids: string[]): Promise<{ id: string; from: string; subject: string }[]> {
+  const out: { id: string; from: string; subject: string }[] = []
+  for (let i = 0; i < ids.length; i += 20) {
+    const part = await Promise.all(ids.slice(i, i + 20).map(async (id) => {
+      try {
+        const m = await gmailGet(accessToken, `messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`)
+        const headers: { name: string; value: string }[] = m.payload?.headers ?? []
+        const h = (n: string) => headers.find((x) => x.name.toLowerCase() === n)?.value ?? ''
+        return { id, from: h('from'), subject: h('subject') }
+      } catch {
+        return { id, from: '', subject: '' }
+      }
+    }))
+    out.push(...part)
+  }
+  return out
+}

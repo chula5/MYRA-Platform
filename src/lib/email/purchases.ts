@@ -123,3 +123,49 @@ export async function namePieceFromPhoto(imageUrl: string): Promise<string | nul
     return null
   }
 }
+
+const TRIAGE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['keep'],
+  properties: { keep: { type: 'array', items: { type: 'integer' } } },
+} as const
+
+/**
+ * Sort a year of order-looking emails by sender and subject alone, ~150 per
+ * call: which could be about clothes, shoes, bags, jewellery or wearable
+ * accessories she bought or sent back. Only those are opened and read. When a
+ * call fails, its emails are kept — better a read too many than a purchase missed.
+ */
+export async function triageBySubject(rows: { id: string; from: string; subject: string }[]): Promise<Set<string>> {
+  const keep = new Set<string>()
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) { rows.forEach((r) => keep.add(r.id)); return keep }
+  const client = new Anthropic({ apiKey })
+  for (let i = 0; i < rows.length; i += 150) {
+    const batch = rows.slice(i, i + 150)
+    const list = batch.map((r, n) => `${n}. ${r.from.replace(/<[^>]*>/, '').trim() || r.from} — ${r.subject}`).join('\n')
+    try {
+      const res = await client.messages.create({
+        model: MODEL,
+        max_tokens: 1500,
+        output_config: { format: { type: 'json_schema', schema: TRIAGE_SCHEMA } },
+        messages: [{
+          role: 'user',
+          content: `Below are the sender and subject of emails from a woman's inbox. Return the numbers of the emails that could be an order confirmation, receipt, dispatch/delivery notice, return or refund for CLOTHING, SHOES, BAGS, JEWELLERY or wearable ACCESSORIES she bought.
+
+Keep: fashion brands and shops, department stores, marketplaces and resale (Vinted, eBay, Depop, Vestiaire, Amazon, ASOS, John Lewis...) — when unsure whether a shop sells clothes, keep it. Keep every update about a specific order or item from such a shop, even delays and failed deliveries ("Order update for Black vest top", "Your Flannels parcel could not be delivered" — a carrier naming a fashion shop counts).
+Leave out: food and takeaway, groceries, travel, tickets, parcel carriers, payment processors, software and subscriptions, gyms, utilities, banks, beauty and skincare, homeware, cards and gifts, news, and marketing.
+
+${list}`,
+        }],
+      } as any) as Anthropic.Message
+      const block = res.content.find((b): b is Anthropic.TextBlock => b.type === 'text')
+      const nums: number[] = block ? (JSON.parse(block.text).keep ?? []) : []
+      for (const n of nums) if (batch[n]) keep.add(batch[n].id)
+    } catch {
+      batch.forEach((r) => keep.add(r.id))
+    }
+  }
+  return keep
+}
