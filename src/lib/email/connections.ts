@@ -449,8 +449,12 @@ export async function huntPhotoForFind(memberId: string, findId: string): Promis
       const photo = images[0]
       if (!photo) continue
       const hosted = await keepPhoto(photo, memberId, findId)
-      await a.from('email_purchase_find').update({ image_url: hosted, error: null }).eq('find_id', findId)
-      return { imageUrl: hosted }
+      // A seller's snapshot becomes a product photo now, so the card shows it clean.
+      const shown = SNAPSHOT_RETAILER.test(f.retailer ?? '')
+        ? (await cutoutToProductPhoto(hosted, memberId, findId)) ?? hosted
+        : hosted
+      await a.from('email_purchase_find').update({ image_url: shown, error: null }).eq('find_id', findId)
+      return { imageUrl: shown }
     }
     return { error: 'No email with a photo of this piece' }
   } catch (err) {
@@ -476,6 +480,21 @@ async function keepPhoto(url: string, memberId: string, findId: string): Promise
   } catch {
     return url
   }
+}
+
+/** Lay every snapshot in her list out on white — for pieces found before cutouts existed. */
+export async function cutoutPendingSnapshots(memberId: string, limit = 40): Promise<number> {
+  const { data } = await db().from('email_purchase_find').select('find_id, retailer, image_url')
+    .eq('member_id', memberId).eq('status', 'pending').not('image_url', 'is', null).limit(limit)
+  let done = 0
+  for (const f of (data ?? []) as any[]) {
+    if (!SNAPSHOT_RETAILER.test(f.retailer ?? '') || /\/cutout-/.test(f.image_url)) continue
+    const cut = await cutoutToProductPhoto(f.image_url, memberId, f.find_id)
+    if (!cut) continue
+    await db().from('email_purchase_find').update({ image_url: cut }).eq('find_id', f.find_id)
+    done++
+  }
+  return done
 }
 
 /** Look for photos for every piece that has none — run when a scan finishes. */
@@ -529,7 +548,9 @@ export async function setFindPhoto(memberId: string, findId: string, bytes: Buff
   if (!f) return { error: 'Not found' }
   const up = await uploadBufferToCloudinary(bytes, { folder: `wardrobe/email/${memberId.slice(0, 8)}`, publicId: `find-${findId}-${Date.now()}`, contentType })
   if (!up.url) return { error: up.error ?? 'Upload failed' }
-  const { error } = await a.from('email_purchase_find').update({ image_url: up.url, error: null }).eq('find_id', findId)
+  // Her own photo of the piece, laid out on white like a shop's.
+  const shown = (await cutoutToProductPhoto(up.url, memberId, findId)) ?? up.url
+  const { error } = await a.from('email_purchase_find').update({ image_url: shown, error: null }).eq('find_id', findId)
   return error ? { error: error.message } : {}
 }
 
@@ -580,7 +601,7 @@ export async function approveFind(memberId: string, findId: string): Promise<{ i
   }
   let hosted = (await persistImageToCloudinary(source, { folder: `wardrobe/email/${memberId.slice(0, 8)}` })) ?? source
   // A snapshot from a marketplace becomes a product photo on white first.
-  if (!fromPage && SNAPSHOT_RETAILER.test(f.retailer ?? '')) {
+  if (!fromPage && !/\/cutout-/.test(hosted) && SNAPSHOT_RETAILER.test(f.retailer ?? '')) {
     hosted = (await cutoutToProductPhoto(hosted, memberId, findId)) ?? hosted
   }
 
