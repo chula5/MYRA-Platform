@@ -107,11 +107,6 @@ export default function DressingRoomClient({
                   ? `${view.pieces.length} piece${view.pieces.length === 1 ? '' : 's'} in here${styledCount ? `, ${styledCount} already styled` : ''}.`
                   : 'Nothing in here yet — add your pieces, or find what you have bought below.'}
               </p>
-              {view.test && (
-                <p className="text-[18px] tracking-[0.1em] text-[#8B5E00] mt-2">
-                  TEST AS {view.firstName.toUpperCase()} — COMPOSED FOR REAL, NOTHING SAVED
-                </p>
-              )}
             </div>
 
             {view.pieces.length > 0 && (

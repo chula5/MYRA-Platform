@@ -31,6 +31,9 @@ export const ROOMS: Room[] = [
   { id: 'profile', label: 'You', short: 'You', href: '/me/profile' },
 ]
 
+/** The rooms that sit in the row. YOU stands on its own, in the corner. */
+export const ROW_ROOMS = ROOMS.filter((r) => r.id !== 'profile')
+
 const S = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.3, strokeLinecap: 'round', strokeLinejoin: 'round' } as const
 
 /** A four-point sparkle with concave sides, the way the reference draws them. */
@@ -148,16 +151,16 @@ export default function RoomNav({
     const on = r.id === active
     const inner = (
       <>
-        <span className={`block ${compact ? 'w-[34px] h-[34px]' : 'w-[54px] h-[54px] sm:w-[68px] sm:h-[68px]'} mx-auto transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
+        <span className={`block ${compact ? 'w-[42px] h-[42px]' : 'w-[68px] h-[68px] sm:w-[86px] sm:h-[86px]'} mx-auto transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
           <Icon id={r.id} />
         </span>
-        <span className={`block ${compact ? 'mt-1 text-[17px]' : 'mt-3 text-[20px] sm:text-[22px]'} tracking-[0.02em] transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
+        <span className={`block ${compact ? 'mt-1.5 text-[18px]' : 'mt-3 text-[22px] sm:text-[24px]'} tracking-[0.02em] transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
           {compact ? r.short : r.label}
         </span>
         <span className={`block mx-auto ${compact ? 'mt-1' : 'mt-2'} h-px w-10 ${on ? 'bg-[#2B2B2B]' : 'bg-transparent'}`} />
       </>
     )
-    const cls = compact ? 'group text-center px-2 shrink-0 w-[112px] whitespace-nowrap' : 'group text-center px-1'
+    const cls = compact ? 'group text-center px-2 shrink-0 w-[116px] whitespace-nowrap' : 'group text-center px-1'
     return onSelect ? (
       <button key={r.id} type="button" onClick={() => onSelect(r.id)} className={cls}>{inner}</button>
     ) : (
@@ -166,7 +169,7 @@ export default function RoomNav({
   }
 
   const search = (
-    <form onSubmit={submit} className={compact ? 'w-full max-w-[380px]' : 'w-full'}>
+    <form onSubmit={submit} className={compact ? 'w-full max-w-[220px]' : 'w-full'}>
       <div className={`flex items-center gap-3 bg-[rgba(255,255,255,0.55)] rounded-full border border-[rgba(43,43,43,0.15)] ${compact ? 'px-5 py-2.5' : 'px-7 py-4'}`}>
         <svg viewBox="0 0 24 24" className={`${compact ? 'w-5 h-5' : 'w-6 h-6'} text-[#55534E] shrink-0`} aria-hidden>
           <circle cx="11" cy="11" r="7" {...S} />
@@ -185,10 +188,10 @@ export default function RoomNav({
 
   if (compact) {
     return (
-      <div className="flex items-center justify-end gap-6 w-full">
+      <div className="flex items-center justify-end gap-4 w-full">
         {search}
         <nav data-lenis-prevent className="flex items-start gap-1 overflow-x-auto">
-          {ROOMS.map(room)}
+          {ROW_ROOMS.map(room)}
         </nav>
       </div>
     )
@@ -215,8 +218,8 @@ export default function RoomNav({
         </form>
 
         {/* The rooms, spread across the screen */}
-        <nav data-lenis-prevent className="mt-8 w-full grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-x-2 gap-y-8 items-start">
-          {ROOMS.map((r) => {
+        <nav data-lenis-prevent className="mt-8 w-full grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-6 gap-x-2 gap-y-8 items-start">
+          {ROW_ROOMS.map((r) => {
             const on = r.id === active
             const inner = (
               <>

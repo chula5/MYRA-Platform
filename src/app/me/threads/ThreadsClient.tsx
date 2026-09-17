@@ -51,11 +51,6 @@ export default function ThreadsClient({ testMemberId }: { testMemberId?: string 
                 HOW YOU DRESS
               </h1>
               <p className="text-[22px] text-[#4A4E57] mt-4 max-w-2xl leading-snug">{view.opening}</p>
-              {view.test && (
-                <p className="text-[18px] tracking-[0.1em] text-[#8B5E00] mt-4">
-                  TEST AS {view.firstName.toUpperCase()} — READ FROM HER REAL RECORDS
-                </p>
-              )}
               <div className="flex flex-wrap gap-x-7 gap-y-2 mt-6">
                 {[
                   [c.pieces, 'pieces you own'],

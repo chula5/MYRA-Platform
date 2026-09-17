@@ -16,6 +16,7 @@ import PieceClient from '@/app/me/dressing-room/PieceClient'
 import InspirationBoard from '@/app/me/inspiration/InspirationBoard'
 import MagazineClient from '@/app/me/magazine/MagazineClient'
 import RoomNav, { ROOMS, type RoomId } from '@/components/me/RoomNav'
+import YouButton from '@/components/me/YouButton'
 import ThreadsClient from '@/app/me/threads/ThreadsClient'
 import { MirrorLoading } from '@/components/ArchiveCard'
 import { loadLooksForMember, type ClientView } from '@/app/me/looks/actions'
@@ -89,13 +90,21 @@ export default function HerViewTab({
       </div>
 
       {/* Her rooms, as she would move between them. */}
+      {/* The test label belongs to Chloe, not to her screen: it sits above it. */}
+      <p className="text-[20px] tracking-[0.1em] text-[#8B5E00] px-1 pb-3">
+        TESTING AS {name.toUpperCase()} — TAPS HERE ARE TESTS: NOTHING IS SENT TO HER OR SAVED
+      </p>
+
       {/* Her own bar, full width of the screen — exactly what she taps. */}
       <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen">
         {/* Her front door shows the rooms full width; inside a room they move to the top right. */}
         <div className="myra-pearl border-b border-[rgba(43,43,43,0.18)]">
           {room === 'for_you' ? (
             <>
-              <img src="/myra-logo-black.png" alt="MYRA" className="mx-auto h-[70px] sm:h-[96px] w-auto mt-6" />
+              <div className="flex items-start justify-end px-6 sm:px-10 pt-4">
+                <YouButton onClick={() => setRoom('for_you')} />
+              </div>
+              <img src="/myra-logo-black.png" alt="MYRA" className="mx-auto h-[110px] sm:h-[150px] w-auto -mt-12" />
               <RoomNav
                 active={room}
                 searchPlaceholder="What are you wearing today?"
@@ -104,8 +113,8 @@ export default function HerViewTab({
               />
             </>
           ) : (
-            <div className="flex items-center gap-8 px-6 sm:px-10 py-3">
-              <span className="text-[24px] tracking-[0.24em] text-[#4A4E57] shrink-0">MYRA</span>
+            <div className="flex items-center gap-4 px-6 sm:px-10 py-3">
+              <img src="/myra-logo-black.png" alt="MYRA" className="h-[46px] w-auto shrink-0" />
               <div className="flex-1 min-w-0">
                 <RoomNav
                   active={room}
@@ -114,12 +123,11 @@ export default function HerViewTab({
                   onSearch={(q) => { setRoom('all_looks'); setSearch(q) }}
                 />
               </div>
+              <YouButton onClick={() => setRoom('for_you')} />
             </div>
           )}
         </div>
-        <p className="myra-pearl text-[20px] tracking-[0.1em] text-[#55534E] text-center px-6 py-3">
-          HER SCREEN, LOADED AS {name.toUpperCase()} — YOUR TAPS ARE TESTS: NOTHING IS SENT TO HER OR SAVED
-        </p>
+
       </div>
 
       {loading && <MirrorLoading label={`LOADING ${name.toUpperCase()}'S ${ROOMS.find((r) => r.id === room)?.label ?? ''}`} />}

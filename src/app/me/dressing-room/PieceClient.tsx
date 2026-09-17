@@ -59,7 +59,6 @@ export default function PieceClient({
                 <p className="text-[22px] text-[#55534E]">
                   {piece.styled_in ? `Styled in ${piece.styled_in} look${piece.styled_in === 1 ? '' : 's'} so far.` : 'Not styled yet — try it below.'}
                 </p>
-                {view.test && <p className="text-[18px] tracking-[0.1em] text-[#8B5E00]">TEST AS {view.firstName.toUpperCase()} — NOTHING IS SAVED</p>}
               </div>
             </section>
 

@@ -6,6 +6,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import RoomNav, { ROOMS, type RoomId } from '@/components/me/RoomNav'
+import YouButton from '@/components/me/YouButton'
 
 export default function MeChrome({ signOut }: { signOut: React.ReactNode }) {
   const path = usePathname() ?? '/me'
@@ -20,18 +21,24 @@ export default function MeChrome({ signOut }: { signOut: React.ReactNode }) {
           room they step aside into the top right, so the room has the screen. */}
       {home ? (
         <>
-          <div className="flex items-start justify-end px-6 sm:px-10 pt-4">{signOut}</div>
-          <Link href="/me" className="block px-6 sm:px-10 -mt-6">
-            <img src="/myra-logo-black.png" alt="MYRA" className="mx-auto h-[70px] sm:h-[96px] w-auto" />
+          <div className="flex items-start justify-end gap-7 px-6 sm:px-10 pt-4">
+            <YouButton />
+            {signOut}
+          </div>
+          <Link href="/me" className="block px-6 sm:px-10 -mt-12">
+            <img src="/myra-logo-black.png" alt="MYRA" className="mx-auto h-[110px] sm:h-[150px] w-auto" />
           </Link>
           <RoomNav active={active} searchPlaceholder="What are you wearing today?" />
         </>
       ) : (
-        <div className="flex items-center gap-8 px-6 sm:px-10 py-3">
-          <Link href="/me" className="text-[24px] tracking-[0.24em] text-[#4A4E57] shrink-0">MYRA</Link>
+        <div className="flex items-center gap-4 px-6 sm:px-10 py-3">
+          <Link href="/me" className="shrink-0">
+            <img src="/myra-logo-black.png" alt="MYRA" className="h-[46px] w-auto" />
+          </Link>
           <div className="flex-1 min-w-0">
             <RoomNav active={active} compact />
           </div>
+          <YouButton active={active === 'profile'} />
           <div className="shrink-0">{signOut}</div>
         </div>
       )}

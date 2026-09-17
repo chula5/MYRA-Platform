@@ -3,10 +3,9 @@
 // FOR YOU — the first thing she sees. Her newest looks, big; one plain reason
 // under each; one tap to answer. Saying why is offered, never required.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import FallbackImage from '@/components/FallbackImage'
-import { ArchiveCard } from '@/components/ArchiveCard'
 import { answerLook, explainAnswer, type ForYouLook, type ForYouView } from './for-you-actions'
 
 const REASONS: { id: string; label: string }[] = [
@@ -19,26 +18,26 @@ const REASONS: { id: string; label: string }[] = [
 ]
 
 export default function ForYouClient({ view, testMemberId }: { view: ForYouView; testMemberId?: string }) {
+  // The mirror meets her in the middle, then goes up to the logo. Once.
+  const [arriving, setArriving] = useState(true)
+  useEffect(() => {
+    const t = setTimeout(() => setArriving(false), 1800)
+    return () => clearTimeout(t)
+  }, [])
+
   return (
     <div className={`myra-pearl relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen min-h-screen ${testMemberId ? '' : '-my-10'}`}>
-      <div className="w-full px-6 sm:px-10 pb-16">
-        <ArchiveCard
-          className="w-full"
-          intro="settle"
-          heading={
-            <div className="text-center">
-              <h1 className="text-[clamp(30px,5vw,72px)] tracking-[0.045em] text-[#4A4E57] leading-[1.05]">
-                {view.firstName ? `HELLO ${view.firstName.toUpperCase()}` : 'HELLO'}
-              </h1>
-              <p className="myra-section-note mt-4">YOUR NEWEST LOOKS</p>
-              {view.test && (
-                <p className="text-[18px] tracking-[0.1em] text-[#8B5E00] mt-4">
-                  TEST AS {view.firstName.toUpperCase()} — YOUR TAPS HERE ARE NOT SAVED
-                </p>
-              )}
-            </div>
-          }
-        >
+      {arriving && (
+        <img src="/myra-mirror-transparent.png" alt="" className="myra-mirror-join h-48 md:h-64 w-auto" />
+      )}
+      <div className="w-full px-6 sm:px-10 pb-16 pt-10">
+        <div className="w-full">
+          <div className="text-center mb-10">
+            <h1 className="text-[clamp(32px,5vw,76px)] tracking-[0.045em] text-[#4A4E57] leading-[1.05]">
+              {view.firstName ? `HELLO ${view.firstName.toUpperCase()}` : 'HELLO'}
+            </h1>
+            <p className="myra-section-note mt-4">YOUR NEWEST LOOKS</p>
+          </div>
           {view.error && <p className="text-[20px] text-[#B83A3A] text-center mb-6">{view.error}</p>}
           {view.looks.length === 0 ? (
             <p className="text-[22px] text-[#4A4E57] text-center py-10">
@@ -56,7 +55,7 @@ export default function ForYouClient({ view, testMemberId }: { view: ForYouView;
               <Link href="/me/looks" className="text-[22px] text-[#2B2B2B] underline underline-offset-4">See all your looks →</Link>
             )}
           </div>
-        </ArchiveCard>
+        </div>
       </div>
     </div>
   )

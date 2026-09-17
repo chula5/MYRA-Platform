@@ -68,11 +68,6 @@ export default function InspirationBoard({ view: initial, testMemberId }: { view
             <div className="text-center">
               <h1 className="text-[clamp(30px,5vw,72px)] tracking-[0.045em] text-[#4A4E57] leading-[1.05]">INSPIRATION</h1>
               <p className="myra-section-note mt-4">OUTFITS YOU LOVE — THEY SHAPE EVERY LOOK WE MAKE YOU</p>
-              {view.test && (
-                <p className="text-[18px] tracking-[0.1em] text-[#8B5E00] mt-4">
-                  TEST AS {view.firstName.toUpperCase()} — PICTURES ADDED HERE ARE ADDED TO HER REAL PICTURES
-                </p>
-              )}
             </div>
           }
         >
