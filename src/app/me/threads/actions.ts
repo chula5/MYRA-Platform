@@ -12,7 +12,7 @@ export interface ThreadsPageView extends ThreadsView {
   error?: string
 }
 
-const EMPTY = { firstName: '', opening: '', threads: [], thin: [], counts: { pieces: 0, pictures: 0, looks: 0, yes: 0, no: 0, brands: 0 } }
+const EMPTY = { firstName: '', portrait: null, inferences: [], opening: '', threads: [], thin: [], counts: { pieces: 0, pictures: 0, looks: 0, yes: 0, no: 0, brands: 0 } }
 
 export async function loadMyThreads(asMemberId?: string): Promise<ThreadsPageView> {
   const me = await resolveClientMember(asMemberId)

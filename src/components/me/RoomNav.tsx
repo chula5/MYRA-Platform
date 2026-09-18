@@ -160,7 +160,7 @@ export default function RoomNav({
         <span className={`block mx-auto ${compact ? 'mt-1' : 'mt-2'} h-px w-10 ${on ? 'bg-[#2B2B2B]' : 'bg-transparent'}`} />
       </>
     )
-    const cls = compact ? 'group text-center px-2 shrink-0 w-[116px] whitespace-nowrap' : 'group text-center px-1'
+    const cls = compact ? 'group text-center px-2 shrink-0 w-[124px] whitespace-nowrap' : 'group text-center px-1'
     return onSelect ? (
       <button key={r.id} type="button" onClick={() => onSelect(r.id)} className={cls}>{inner}</button>
     ) : (
@@ -169,7 +169,7 @@ export default function RoomNav({
   }
 
   const search = (
-    <form onSubmit={submit} className={compact ? 'w-full max-w-[220px]' : 'w-full'}>
+    <form onSubmit={submit} className={compact ? 'w-full max-w-[200px]' : 'w-full'}>
       <div className={`flex items-center gap-3 bg-[rgba(255,255,255,0.55)] rounded-full border border-[rgba(43,43,43,0.15)] ${compact ? 'px-5 py-2.5' : 'px-7 py-4'}`}>
         <svg viewBox="0 0 24 24" className={`${compact ? 'w-5 h-5' : 'w-6 h-6'} text-[#55534E] shrink-0`} aria-hidden>
           <circle cx="11" cy="11" r="7" {...S} />

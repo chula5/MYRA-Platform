@@ -11,12 +11,14 @@
 // can never drift from what is true.
 
 import 'server-only'
+import Anthropic from '@anthropic-ai/sdk'
 import { createAdminClient } from '@/lib/supabase-server'
 import { listOwnedItems } from '@/lib/wardrobe/store'
 import { ownerRefsForMember } from '@/lib/wardrobe/owned-items'
 import { readStylePrefs } from '@/lib/pilot-stylist'
 import { loadMemberSizeProfile } from '@/lib/size-availability'
 import { CATEGORY_LABEL, SIZE_CATEGORIES, shortSizeLabel } from '@/lib/size-canonical'
+import { slotForItemType } from '@/lib/composer'
 
 export interface ThreadEvidence {
   /** Where it came from: her wardrobe, her pictures, her brands, her answers. */
@@ -36,6 +38,10 @@ export interface Thread {
 
 export interface ThreadsView {
   firstName: string
+  /** Her style in two sentences — every thread pulled together. */
+  portrait: string | null
+  /** What MYRA can reasonably infer beyond what she has shown it. */
+  inferences: string[]
   /** The whole picture in two or three sentences. */
   opening: string
   threads: Thread[]
@@ -45,6 +51,13 @@ export interface ThreadsView {
 }
 
 const tidy = (s: string) => s.replace(/_/g, ' ').toLowerCase()
+
+/** Pieces said the way she would say them: sandals, not sandal. */
+const PLURAL: Record<string, string> = {
+  sandal: 'sandals', boot: 'boots', flat: 'flats', heel: 'heels', sneaker: 'trainers', mule: 'mules',
+  trousers: 'trousers', jeans: 'jeans', shorts: 'shorts',
+}
+const plural = (t: string) => PLURAL[t] ?? t
 
 /** The n things that come up most, with their counts. */
 function top<T>(values: T[], n: number): { value: T; count: number }[] {
@@ -84,21 +97,31 @@ export async function buildThreads(memberId: string): Promise<ThreadsView> {
 
   const ownerIds = [memberId, member?.auth_user_id].filter(Boolean)
   const [{ data: pics }, { data: looks }] = await Promise.all([
-    admin.from('inspiration_image').select('scores').in('user_id', ownerIds).in('status', ['scored', 'confirmed']),
+    admin.from('inspiration_image').select('scores, occasion_read').in('user_id', ownerIds).in('status', ['scored', 'confirmed']),
     admin.from('pilot_look')
       .select('items, response, delivery:delivery_id!inner(member_id)')
       .eq('delivery.member_id', memberId),
   ])
 
   const pictures = ((pics ?? []) as any[]).map((p) => p.scores).filter(Boolean)
+  const pictureOccasions = ((pics ?? []) as any[]).flatMap((p) => (p.occasion_read ?? []) as string[])
   const allLooks = (looks ?? []) as any[]
   const yes = allLooks.filter((l) => l.response === 'yes')
   const no = allLooks.filter((l) => l.response === 'no')
 
+  const lookItemIds = Array.from(new Set([...yes, ...no].flatMap((l) => ((l.items ?? []) as any[]).map((i) => i.item_id)).filter(Boolean)))
+  const pieceOf = new Map<string, any>()
+  for (let i = 0; i < lookItemIds.length; i += 400) {
+    const { data } = await admin.from('item').select('item_id, item_type, colour_family, length, fit, pattern')
+      .in('item_id', lookItemIds.slice(i, i + 400))
+    for (const r of (data ?? []) as any[]) pieceOf.set(r.item_id, r)
+  }
+  const piecesIn = (l: any) => ((l.items ?? []) as any[]).map((i) => pieceOf.get(i.item_id)).filter(Boolean)
+
   // ── What she reaches for ─────────────────────────────────────────────────
   const ownedColours = top(owned.map((i: any) => i.colour_family as string), 4)
-  const yesColours = top(yes.flatMap((l) => ((l.items ?? []) as any[]).map((i) => i.colour_family as string)), 4)
-  const pictureColours = top(pictures.flatMap((p: any) => (p.colour_story ? [String(p.colour_story)] : [])), 3)
+  const yesColours = top(yes.flatMap((l) => piecesIn(l).map((i) => i.colour_family as string)), 4)
+  const pictureColours: { value: string; count: number }[] = []
 
   const ownedTypes = top(owned.map((i: any) => i.item_type as string), 5)
   const pictureTypes = top(pictures.flatMap((p: any) => (p.item_types ?? []) as string[]), 5)
@@ -216,6 +239,79 @@ export async function buildThreads(memberId: string): Promise<ThreadsView> {
     })
   }
 
+  // The outfits she says yes to — the formula, not just the pieces
+  {
+    const formula = (l: any): string | null => {
+      const bySlot = new Map<string, string>()
+      for (const it of piecesIn(l)) {
+        if (!it.item_type) continue
+        const slot = slotForItemType(it.item_type)
+        if (['dress', 'top', 'bottom', 'outerwear', 'shoe'].includes(slot) && !bySlot.has(slot)) bySlot.set(slot, plural(tidy(it.item_type)))
+      }
+      const order = ['dress', 'bottom', 'top', 'outerwear', 'shoe'].map((k) => bySlot.get(k)).filter(Boolean) as string[]
+      return order.length >= 2 ? order.join(' + ') : null
+    }
+    const yesFormulas = top(yes.map(formula).filter(Boolean) as string[], 3)
+    const shoesIn = (ls: any[]) => top(ls.flatMap((l) => piecesIn(l).filter((i) => i.item_type && slotForItemType(i.item_type) === 'shoe').map((i) => plural(tidy(i.item_type)))), 3)
+    const yesShoes = shoesIn(yes)
+    const noTypes = new Set(no.flatMap((l) => piecesIn(l).map((i) => i.item_type)).filter(Boolean))
+    const yesTypes = new Set(yes.flatMap((l) => piecesIn(l).map((i) => i.item_type)).filter(Boolean))
+    const onlyInNo = Array.from(noTypes).filter((t) => !yesTypes.has(t)).map((t) => plural(tidy(String(t)))).slice(0, 4)
+    const lengthsYes = yes.flatMap((l) => piecesIn(l).map((i) => i.length)).filter((n: any) => typeof n === 'number')
+
+    const evidence: ThreadEvidence[] = []
+    if (yesFormulas.length) evidence.push({ from: 'Looks you said yes to', detail: list(yesFormulas.map((f) => `${f.value}${f.count > 1 ? ` (${f.count})` : ''}`)) })
+    if (yesShoes.length) evidence.push({ from: 'On your feet', detail: list(yesShoes.map((x) => x.value)) })
+    const yesLength = lengthWord(avg(lengthsYes))
+    if (yesLength) evidence.push({ from: 'The length you keep', detail: yesLength })
+    if (onlyInNo.length) evidence.push({ from: 'Only in looks you turned down', detail: list(onlyInNo) })
+    const lead = yesFormulas[0]?.value
+    add({
+      id: 'outfits',
+      title: 'The outfits you say yes to',
+      line: lead
+        ? `Your yes is ${lead}${yesShoes[0] && !lead.includes(yesShoes[0].value) ? `, finished with ${yesShoes[0].value}` : ''}${onlyInNo.length ? ` — and ${onlyInNo[0]} ${onlyInNo[0].endsWith('s') ? 'are' : 'is'} what tips a look to no` : ''}.`
+        : yes.length ? 'MYRA is still reading what your yeses have in common.' : '',
+      evidence,
+      strength: Math.min(3, evidence.length),
+    })
+  }
+
+  // What her pictures say about the feel of an outfit
+  {
+    const lean = (key: string, low: string, high: string): string | null => {
+      const v = avg(pictures.map((p: any) => p[key]).filter((n: any) => typeof n === 'number'))
+      if (Number.isNaN(v)) return null
+      if (v <= 2.3) return low
+      if (v >= 3.7) return high
+      return null
+    }
+    const feel = [
+      lean('construction', 'tailored', 'soft and unstructured'),
+      lean('volume', 'close to the body', 'loose and roomy'),
+      lean('colour_story', 'one colour head to toe', 'strong contrasts'),
+      lean('colour_depth', 'pale, light colours', 'deep, saturated colours'),
+      lean('pattern', 'plain, no print', 'bold print'),
+      lean('surface_story', 'clean, flat fabrics', 'texture — knits, weaves, lace'),
+      lean('sheen', 'matte', 'a bit of shine'),
+      lean('formality', 'everyday, never done-up', 'dressed up'),
+    ].filter(Boolean) as string[]
+    const moods = top(pictureOccasions.map((o) => tidy(o)), 3)
+    const evidence: ThreadEvidence[] = []
+    if (feel.length) evidence.push({ from: 'Across your pictures', detail: list(feel) })
+    if (moods.length) evidence.push({ from: 'Where they are going', detail: list(moods.map((m) => m.value)) })
+    if (pictureTypes.length >= 2) evidence.push({ from: 'The pieces in them', detail: list(pictureTypes.slice(0, 4).map((t) => tidy(String(t.value)))) })
+    add({
+      id: 'pictures',
+      title: 'What your pictures are telling MYRA',
+      line: feel.length
+        ? `The outfits you keep are ${list(feel.slice(0, 3))}${moods[0] ? `, mostly for ${moods[0].value}` : ''}.`
+        : pictures.length ? 'Your pictures point in a few directions — MYRA is still reading them.' : '',
+      evidence,
+      strength: Math.min(3, evidence.length),
+    })
+  }
+
   const ordered = threads.filter((t) => t.line).sort((a, b) => b.strength - a.strength)
 
   const thin: string[] = []
@@ -233,8 +329,12 @@ export async function buildThreads(memberId: string): Promise<ThreadsView> {
     ].filter(Boolean).join(', ')}.`
     : 'MYRA has not learned enough about you yet. Add a few pieces, keep some pictures, and answer a look or two.'
 
+  const read = await readHerStyle(memberId, firstName, ordered)
+
   return {
     firstName,
+    portrait: read?.portrait ?? null,
+    inferences: read?.inferences ?? [],
     opening,
     threads: ordered,
     thin,
@@ -246,5 +346,64 @@ export async function buildThreads(memberId: string): Promise<ThreadsView> {
       no: no.length,
       brands: brandsNamed.length,
     },
+  }
+}
+
+// ── The read: every thread pulled into one picture of her ──────────────────
+
+const READ_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['portrait', 'inferences'],
+  properties: {
+    portrait: { type: 'string' },
+    inferences: { type: 'array', items: { type: 'string' } },
+  },
+} as const
+
+const readCache = new Map<string, { at: number; key: string; value: { portrait: string; inferences: string[] } }>()
+const READ_TTL_MS = 60 * 60 * 1000
+
+/**
+ * One cheap call that reads the threads together: who she dresses like, and
+ * what follows from it that she has not said outright. Cached for an hour per
+ * member and redone as soon as a thread changes.
+ */
+async function readHerStyle(memberId: string, firstName: string, threads: Thread[]): Promise<{ portrait: string; inferences: string[] } | null> {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey || threads.length < 2) return null
+  const facts = threads.map((t) => `${t.title}: ${t.line}\n${t.evidence.map((e) => `  - ${e.from}: ${e.detail}`).join('\n')}`).join('\n\n')
+  const key = facts
+  const hit = readCache.get(memberId)
+  if (hit && hit.key === key && Date.now() - hit.at < READ_TTL_MS) return hit.value
+  try {
+    const client = new Anthropic({ apiKey })
+    const res = await client.messages.create({
+      model: 'claude-haiku-4-5',
+      max_tokens: 700,
+      output_config: { format: { type: 'json_schema', schema: READ_SCHEMA } },
+      messages: [{
+        role: 'user',
+        content: `You are MYRA, a private stylist, writing to ${firstName || 'your client'} about how she dresses. Below is everything learned from her wardrobe, her inspiration pictures, the brands she named and the looks she said yes and no to.
+
+portrait: two short sentences in the second person that describe her style as a whole — the kind of outfits, the feel, the palette. Specific and plain, like a good stylist talking. Never use "effortless" or "effortlessly", "timeless", "chic", "elevated", "curated" or "considered". No exclamation marks.
+
+inferences: 3 to 5 things you can reasonably INFER that she has not said outright — each one short sentence, second person, grounded in the evidence (e.g. what she would likely love next, what she probably finds uncomfortable, how she dresses for an occasion she has not shown). Never repeat a fact already stated; infer beyond it. No guesses about her body, age or money.
+
+${facts}`,
+      }],
+    } as any) as Anthropic.Message
+    const block = res.content.find((b): b is Anthropic.TextBlock => b.type === 'text')
+    if (!block) return null
+    const raw = JSON.parse(block.text)
+    const value = {
+      portrait: String(raw.portrait ?? '').trim(),
+      inferences: (Array.isArray(raw.inferences) ? raw.inferences : []).map((x: unknown) => String(x).trim()).filter(Boolean).slice(0, 5),
+    }
+    if (!value.portrait) return null
+    readCache.set(memberId, { at: Date.now(), key, value })
+    return value
+  } catch {
+    return null
   }
 }

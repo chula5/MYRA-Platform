@@ -50,7 +50,10 @@ export default function ThreadsClient({ testMemberId }: { testMemberId?: string 
               <h1 className="text-[clamp(30px,4vw,56px)] tracking-[0.03em] text-[#2B2B2B] leading-[1.05] mt-3">
                 HOW YOU DRESS
               </h1>
-              <p className="text-[22px] text-[#4A4E57] mt-4 max-w-2xl leading-snug">{view.opening}</p>
+              {view.portrait && (
+                <p className="text-[clamp(24px,2.2vw,32px)] text-[#2B2B2B] mt-5 max-w-3xl leading-snug">{view.portrait}</p>
+              )}
+              <p className="text-[20px] text-[#6E6B65] mt-4 max-w-2xl leading-snug">{view.opening}</p>
               <div className="flex flex-wrap gap-x-7 gap-y-2 mt-6">
                 {[
                   [c.pieces, 'pieces you own'],
@@ -72,6 +75,21 @@ export default function ThreadsClient({ testMemberId }: { testMemberId?: string 
         </section>
 
         {view.error && <p className="text-[20px] text-[#B83A3A] text-center">{view.error}</p>}
+
+        {/* What follows from it — the things she has not said outright */}
+        {view.inferences.length > 0 && (
+          <section className="rounded-[18px] bg-[#8C8A85] text-white px-8 py-7">
+            <p className="text-[20px] tracking-[0.16em] text-white/80">WHAT MYRA INFERS</p>
+            <ul className="mt-4 grid md:grid-cols-2 gap-x-10 gap-y-3">
+              {view.inferences.map((t, i) => (
+                <li key={i} className="text-[22px] leading-snug flex gap-3">
+                  <span className="mt-[11px] block w-2 h-2 rounded-full bg-white/80 shrink-0" />
+                  <span>{t}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {/* The threads themselves */}
         <div className="grid md:grid-cols-2 2xl:grid-cols-3 gap-4">
