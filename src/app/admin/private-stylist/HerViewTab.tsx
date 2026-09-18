@@ -17,6 +17,7 @@ import InspirationBoard from '@/app/me/inspiration/InspirationBoard'
 import MagazineClient from '@/app/me/magazine/MagazineClient'
 import RoomNav, { ROOMS, type RoomId } from '@/components/me/RoomNav'
 import YouButton from '@/components/me/YouButton'
+import MirrorCurtain from '@/components/me/MirrorCurtain'
 import ThreadsClient from '@/app/me/threads/ThreadsClient'
 import { MirrorLoading } from '@/components/ArchiveCard'
 import { loadLooksForMember, type ClientView } from '@/app/me/looks/actions'
@@ -130,7 +131,9 @@ export default function HerViewTab({
 
       </div>
 
-      {loading && <MirrorLoading label={`LOADING ${name.toUpperCase()}'S ${ROOMS.find((r) => r.id === room)?.label ?? ''}`} />}
+      {/* Her front door is only the mirror until it is ready, as on her own screen. */}
+      {loading && room === 'for_you' && <MirrorCurtain />}
+      {loading && room !== 'for_you' && <MirrorLoading label={`LOADING ${name.toUpperCase()}'S ${ROOMS.find((r) => r.id === room)?.label ?? ''}`} />}
 
       {/* Her pages, full width of the screen — previews of front-end views, so
           they break out of the admin's column exactly as her browser shows them.

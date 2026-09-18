@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import FallbackImage from '@/components/FallbackImage'
+import MirrorCurtain from '@/components/me/MirrorCurtain'
 import { answerLook, explainAnswer, type ForYouLook, type ForYouView } from './for-you-actions'
 
 const REASONS: { id: string; label: string }[] = [
@@ -18,18 +19,32 @@ const REASONS: { id: string; label: string }[] = [
 ]
 
 export default function ForYouClient({ view, testMemberId }: { view: ForYouView; testMemberId?: string }) {
-  // The mirror meets her in the middle, then goes up to the logo. Once.
-  const [arriving, setArriving] = useState(true)
+  // Until her looks are ready the screen is only the mirror. It waits for the
+  // first pictures to load (a little wiggle at least, never more than a few
+  // seconds), then rises to the logo and the page appears whole.
+  const [curtain, setCurtain] = useState<'waiting' | 'leaving' | 'gone'>('waiting')
   useEffect(() => {
-    const t = setTimeout(() => setArriving(false), 1800)
-    return () => clearTimeout(t)
-  }, [])
+    let live = true
+    const urls = view.looks.slice(0, 4).map((l) => l.image_url).filter((u): u is string => !!u)
+    const loaded = Promise.all(urls.map((u) => new Promise<void>((done) => {
+      const img = new window.Image()
+      img.onload = () => done()
+      img.onerror = () => done()
+      img.src = u
+    })))
+    const atLeast = new Promise((r) => setTimeout(r, 1100))
+    const atMost = new Promise((r) => setTimeout(r, 6000))
+    void Promise.race([Promise.all([loaded, atLeast]), atMost]).then(() => {
+      if (!live) return
+      setCurtain('leaving')
+      setTimeout(() => { if (live) setCurtain('gone') }, 760)
+    })
+    return () => { live = false }
+  }, [view.looks])
 
   return (
     <div className={`myra-pearl relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen min-h-screen ${testMemberId ? '' : '-my-10'}`}>
-      {arriving && (
-        <img src="/myra-mirror-transparent.png" alt="" className="myra-mirror-join h-48 md:h-64 w-auto" />
-      )}
+      {curtain !== 'gone' && <MirrorCurtain leaving={curtain === 'leaving'} />}
       <div className="w-full px-6 sm:px-10 pb-16 pt-10">
         <div className="w-full">
           <div className="text-center mb-10">
