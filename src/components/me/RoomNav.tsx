@@ -218,7 +218,7 @@ export default function RoomNav({
         </form>
 
         {/* The rooms, spread across the screen */}
-        <nav data-lenis-prevent data-tour="rooms" className="mt-8 w-full grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-6 gap-x-2 gap-y-8 items-start">
+        <nav data-lenis-prevent data-tour="rooms" className="mt-9 w-full grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-6 gap-x-2 gap-y-8 items-start">
           {ROW_ROOMS.map((r) => {
             const on = r.id === active
             const inner = (
