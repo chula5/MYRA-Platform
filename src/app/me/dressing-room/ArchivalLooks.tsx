@@ -91,7 +91,17 @@ export default function ArchivalLooks({ testMemberId }: { testMemberId?: string 
     })
   }
 
-  if (!view || !view.memberId) return null
+  // While it loads, the section still stands — an empty space here reads as a
+  // missing feature, and this is how she gets her own photos in.
+  if (!view) {
+    return (
+      <section id="archival-looks" className="w-full rounded-[18px] bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] px-5 md:px-8 py-7 scroll-mt-6">
+        <h2 className="text-[26px] xl:text-[29px] 2xl:text-[33px] tracking-[0.06em] text-[#2B2B2B]">ARCHIVAL LOOKS</h2>
+        <p className={`${T} text-[#6E6B65] mt-2`}>Looking for your photos…</p>
+      </section>
+    )
+  }
+  if (!view.memberId) return null
   const returnPath = typeof window !== 'undefined' ? window.location.pathname : '/me/dressing-room'
   const igHref = `/api/instagram/start?return=${encodeURIComponent(returnPath)}${testMemberId ? `&member=${testMemberId}` : ''}`
   const connected = view.connections.filter((c) => c.status !== 'disconnected')
