@@ -151,27 +151,27 @@ export default function RoomNav({
     const on = r.id === active
     const inner = (
       <>
-        <span className={`block ${compact ? 'w-[42px] h-[42px]' : 'w-[68px] h-[68px] sm:w-[86px] sm:h-[86px]'} mx-auto transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
+        <span className={`block ${compact ? 'w-[42px] h-[42px] xl:w-[46px] xl:h-[46px] min-[1500px]:w-[52px] min-[1500px]:h-[52px] min-[1800px]:w-[60px] min-[1800px]:h-[60px]' : 'w-[68px] h-[68px] sm:w-[86px] sm:h-[86px]'} mx-auto transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
           <Icon id={r.id} />
         </span>
-        <span className={`block ${compact ? 'mt-1.5 text-[18px]' : 'mt-3 text-[22px] sm:text-[24px]'} tracking-[0.02em] transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
+        <span className={`block ${compact ? 'mt-1.5 text-[18px] xl:text-[19px] min-[1500px]:text-[21px] min-[1800px]:text-[25px]' : 'mt-3 text-[22px] sm:text-[24px]'} tracking-[0.02em] transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
           {compact ? r.short : r.label}
         </span>
         <span className={`block mx-auto ${compact ? 'mt-1' : 'mt-2'} h-px w-10 ${on ? 'bg-[#2B2B2B]' : 'bg-transparent'}`} />
       </>
     )
-    const cls = compact ? 'group text-center px-2 shrink-0 w-[124px] whitespace-nowrap' : 'group text-center px-1'
+    const cls = compact ? 'group text-center px-2 shrink-0 w-[124px] min-[1500px]:w-[140px] min-[1800px]:w-[164px] whitespace-nowrap' : 'group text-center px-1'
     return onSelect ? (
-      <button key={r.id} type="button" onClick={() => onSelect(r.id)} className={cls}>{inner}</button>
+      <button key={r.id} type="button" data-tour={`room-${r.id}`} onClick={() => onSelect(r.id)} className={cls}>{inner}</button>
     ) : (
-      <Link key={r.id} href={r.href} className={cls}>{inner}</Link>
+      <Link key={r.id} href={r.href} data-tour={`room-${r.id}`} className={cls}>{inner}</Link>
     )
   }
 
   const search = (
-    <form onSubmit={submit} className={compact ? 'w-full max-w-[200px]' : 'w-full'}>
-      <div className={`flex items-center gap-3 bg-[rgba(255,255,255,0.55)] rounded-full border border-[rgba(43,43,43,0.15)] ${compact ? 'px-5 py-2.5' : 'px-7 py-4'}`}>
-        <svg viewBox="0 0 24 24" className={`${compact ? 'w-5 h-5' : 'w-6 h-6'} text-[#55534E] shrink-0`} aria-hidden>
+    <form onSubmit={submit} data-tour="search" className={compact ? 'w-full max-w-[200px] min-[1500px]:max-w-[260px] min-[1800px]:max-w-[320px]' : 'w-full'}>
+      <div className={`flex items-center gap-3 bg-[rgba(255,255,255,0.55)] rounded-full border border-[rgba(43,43,43,0.15)] ${compact ? 'px-5 py-2.5 min-[1800px]:px-6 min-[1800px]:py-3.5' : 'px-7 py-4'}`}>
+        <svg viewBox="0 0 24 24" className={`${compact ? 'w-5 h-5 min-[1800px]:w-6 min-[1800px]:h-6' : 'w-6 h-6'} text-[#55534E] shrink-0`} aria-hidden>
           <circle cx="11" cy="11" r="7" {...S} />
           <path d="M16.5 16.5L21 21" {...S} />
         </svg>
@@ -180,7 +180,7 @@ export default function RoomNav({
           onChange={(e) => setQuery(e.target.value)}
           placeholder={compact ? 'Search' : searchPlaceholder}
           aria-label="Search"
-          className={`flex-1 min-w-0 ${compact ? 'text-[19px]' : 'text-[21px]'} text-[#2B2B2B] placeholder:text-[#6E6B65] bg-transparent focus:outline-none`}
+          className={`flex-1 min-w-0 ${compact ? 'text-[19px] min-[1500px]:text-[21px] min-[1800px]:text-[25px]' : 'text-[21px]'} text-[#2B2B2B] placeholder:text-[#6E6B65] bg-transparent focus:outline-none`}
         />
       </div>
     </form>
@@ -190,7 +190,7 @@ export default function RoomNav({
     return (
       <div className="flex items-center justify-end gap-4 w-full">
         {search}
-        <nav data-lenis-prevent className="flex items-start gap-1 overflow-x-auto">
+        <nav data-lenis-prevent data-tour="rooms" className="flex items-start gap-1 overflow-x-auto">
           {ROW_ROOMS.map(room)}
         </nav>
       </div>
@@ -201,7 +201,7 @@ export default function RoomNav({
     <div className="w-full">
       <div className="w-full px-6 sm:px-10 pt-7 pb-6">
         {/* Search, wide and quiet */}
-        <form onSubmit={submit} className="w-full">
+        <form onSubmit={submit} data-tour="search" className="w-full">
           <div className="flex items-center gap-4 bg-[rgba(255,255,255,0.55)] rounded-full border border-[rgba(43,43,43,0.15)] px-7 py-4">
             <svg viewBox="0 0 24 24" className="w-6 h-6 text-[#55534E] shrink-0" aria-hidden>
               <circle cx="11" cy="11" r="7" {...S} />
@@ -218,7 +218,7 @@ export default function RoomNav({
         </form>
 
         {/* The rooms, spread across the screen */}
-        <nav data-lenis-prevent className="mt-8 w-full grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-6 gap-x-2 gap-y-8 items-start">
+        <nav data-lenis-prevent data-tour="rooms" className="mt-8 w-full grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-6 gap-x-2 gap-y-8 items-start">
           {ROW_ROOMS.map((r) => {
             const on = r.id === active
             const inner = (
@@ -234,9 +234,9 @@ export default function RoomNav({
             )
             const cls = 'group text-center px-1'
             return onSelect ? (
-              <button key={r.id} type="button" onClick={() => onSelect(r.id)} className={cls}>{inner}</button>
+              <button key={r.id} type="button" data-tour={`room-${r.id}`} onClick={() => onSelect(r.id)} className={cls}>{inner}</button>
             ) : (
-              <Link key={r.id} href={r.href} className={cls}>{inner}</Link>
+              <Link key={r.id} href={r.href} data-tour={`room-${r.id}`} className={cls}>{inner}</Link>
             )
           })}
         </nav>

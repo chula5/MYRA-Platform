@@ -5,19 +5,17 @@
 
 import { useEffect, useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
+import VirginConnect from './VirginConnect'
 import {
-  addFindPhoto, addFoundPiece, connectVirginMedia, disconnectInbox, findPhotoInEmails, keepReturned, loadEmailPanel, notMine, removeReturned,
+  addFindPhoto, addFoundPiece, disconnectInbox, findPhotoInEmails, keepReturned, loadEmailPanel, notMine, removeReturned,
   scanAgain, scanNow,
   type EmailPanelView,
 } from './email-actions'
 
-const VIRGIN_HELP = 'https://www.virginmedia.com/help/broadband/manage-email-settings'
 
 export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: string; onAdded?: () => void }) {
   const [view, setView] = useState<EmailPanelView | null>(null)
-  const [showVirgin, setShowVirgin] = useState(false)
-  const [email, setEmail] = useState('')
-  const [appPassword, setAppPassword] = useState('')
+  const [virginStep, setVirginStep] = useState<0 | 1>(0)
   const [picked, setPicked] = useState<string[]>([])
   // One key per button in flight: adding a piece never blocks the next card.
   const [busy, setBusy] = useState<string[]>([])
@@ -26,6 +24,20 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
   const scanning = useRef(false)
 
   const refresh = async () => setView(await loadEmailPanel(testMemberId))
+
+  // The button at the top of the Dressing Room: read every connected inbox again.
+  useEffect(() => {
+    const onSync = async () => {
+      const connected = (view?.connections ?? []).filter((c) => c.status !== 'disconnected')
+      if (!connected.length) return
+      setMsg('Reading new order emails…')
+      for (const c of connected) await scanAgain(c.connection_id, testMemberId)
+      await refresh()
+    }
+    window.addEventListener('myra:email-sync', onSync)
+    return () => window.removeEventListener('myra:email-sync', onSync)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, testMemberId])
 
   useEffect(() => {
     void refresh()
@@ -59,18 +71,6 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
     return () => { live = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running, testMemberId])
-
-  async function connectVirgin() {
-    setBusy((b) => [...b, 'virgin'])
-    setMsg('Checking the app password with Virgin Media…')
-    const r = await connectVirginMedia(email, appPassword, testMemberId)
-    setBusy((b) => b.filter((k) => k !== 'virgin'))
-    setAppPassword('')
-    if (r.error) { setMsg(r.error); return }
-    setShowVirgin(false)
-    setMsg('Connected — reading the past year of order emails.')
-    await refresh()
-  }
 
   async function act(key: string, fn: () => Promise<{ error?: string }>, done?: string) {
     setBusy((b) => [...b, key])
@@ -118,38 +118,38 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
   const gmailHref = `/api/email/google/start?return=${encodeURIComponent(returnPath)}${testMemberId ? `&member=${testMemberId}` : ''}`
 
   return (
-    <section className="w-full rounded-[18px] bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] px-5 md:px-8 py-7 mb-10 space-y-6">
+    <section id="email-finds" className="w-full rounded-[18px] bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] px-5 md:px-8 py-7 mb-10 space-y-6 scroll-mt-6">
       <div>
         <h2 className="myra-section-label">FIND WHAT YOU&rsquo;VE BOUGHT</h2>
-        <p className="text-[20px] text-[#2B2B2B] mt-3 max-w-3xl">
+        <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#2B2B2B] mt-3 max-w-3xl">
           Connect your email and MYRA reads your order confirmations from the past year, finds the clothes, shoes and bags you bought, and lets you add them to your dressing room.
           Only order emails are read, and nothing else is kept.
         </p>
         {view.test && (
-          <p className="text-[18px] tracking-[0.08em] text-[#8B5E00] mt-3">
+          <p className="text-[18px] xl:text-[21px] 2xl:text-[25px] tracking-[0.08em] text-[#8B5E00] mt-3">
             NOTE: CONNECTING HERE CONNECTS HER REAL INBOX — ADDING A PIECE ADDS IT TO HER REAL WARDROBE.
           </p>
         )}
       </div>
 
-      {view.error && <p className="text-[20px] text-[#B83A3A]">{view.error}</p>}
-      {msg && <p className="text-[20px] text-[#2B2B2B]">{msg}</p>}
+      {view.error && <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#B83A3A]">{view.error}</p>}
+      {msg && <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#2B2B2B]">{msg}</p>}
 
       {/* Connected inboxes */}
       {view.connections.length > 0 && (
         <div className="space-y-3">
           {view.connections.map((c) => (
             <div key={c.connection_id} className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-[#C3BFB8] pt-3">
-              <p className="text-[20px] text-[#2B2B2B]">{c.provider === 'gmail' ? 'Gmail' : 'Virgin Media'} · {c.email}</p>
-              <p className="text-[18px] text-[#55534E]">
+              <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#2B2B2B]">{c.provider === 'gmail' ? 'Gmail' : 'Virgin Media'} · {c.email}</p>
+              <p className="text-[18px] xl:text-[21px] 2xl:text-[25px] text-[#55534E]">
                 {c.status === 'error' ? <span className="text-[#B83A3A]">{c.error}</span>
                   : c.scan && (c.scan.status === 'queued' || c.scan.status === 'running')
                     ? (c.scan.phase === 'list' ? 'Looking for order emails…' : `Reading ${c.scan.read} of ${c.scan.total} order emails · ${c.scan.found} pieces found`)
                     : c.scan?.status === 'failed' ? <span className="text-[#B83A3A]">Scan stopped: {c.scan.error}</span>
                       : c.last_scanned_at ? `Last read ${new Date(c.last_scanned_at).toLocaleDateString('en-GB')}` : 'Not read yet'}
               </p>
-              <button disabled={working(`scan-${c.connection_id}`)} onClick={() => act(`scan-${c.connection_id}`, () => scanAgain(c.connection_id, testMemberId), 'Reading new order emails…')} className="text-[18px] underline underline-offset-4 text-[#2B2B2B] disabled:opacity-40">Read again</button>
-              <button disabled={working(`disc-${c.connection_id}`)} onClick={() => { if (confirm(`Disconnect ${c.email}? MYRA forgets the connection; pieces already found stay here.`)) void act(`disc-${c.connection_id}`, () => disconnectInbox(c.connection_id, testMemberId), 'Disconnected.') }} className="text-[18px] underline underline-offset-4 text-[#B83A3A] disabled:opacity-40">Disconnect</button>
+              <button disabled={working(`scan-${c.connection_id}`)} onClick={() => act(`scan-${c.connection_id}`, () => scanAgain(c.connection_id, testMemberId), 'Reading new order emails…')} className="text-[18px] xl:text-[21px] 2xl:text-[25px] underline underline-offset-4 text-[#2B2B2B] disabled:opacity-40">Read again</button>
+              <button disabled={working(`disc-${c.connection_id}`)} onClick={() => { if (confirm(`Disconnect ${c.email}? MYRA forgets the connection; pieces already found stay here.`)) void act(`disc-${c.connection_id}`, () => disconnectInbox(c.connection_id, testMemberId), 'Disconnected.') }} className="text-[18px] xl:text-[21px] 2xl:text-[25px] underline underline-offset-4 text-[#B83A3A] disabled:opacity-40">Disconnect</button>
             </div>
           ))}
         </div>
@@ -158,60 +158,32 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
       {/* Connect */}
       <div className="flex flex-wrap gap-3">
         {view.gmailReady ? (
-          <a href={gmailHref} className="text-[22px] px-7 py-3.5 bg-[#2B2B2B] text-white rounded-full">Connect Gmail</a>
+          <a href={gmailHref} className="text-[22px] xl:text-[25px] 2xl:text-[29px] px-7 py-3.5 bg-[#2B2B2B] text-white rounded-full">Connect Gmail</a>
         ) : (
-          <span className="text-[20px] px-6 py-3 border border-[#C3BFB8] text-[#8C8A85] rounded-full" title="Needs the Google keys set up">Connect Gmail (not set up yet)</span>
+          <span className="text-[20px] xl:text-[23px] 2xl:text-[27px] px-6 py-3 border border-[#C3BFB8] text-[#8C8A85] rounded-full" title="Needs the Google keys set up">Connect Gmail (not set up yet)</span>
         )}
-        <button onClick={() => setShowVirgin(!showVirgin)} className="text-[22px] px-7 py-3.5 border border-[#2B2B2B] text-[#2B2B2B] rounded-full">
+        <button onClick={() => setVirginStep(virginStep ? 0 : 1)} className="text-[22px] xl:text-[25px] 2xl:text-[29px] px-7 py-3.5 border border-[#2B2B2B] text-[#2B2B2B] rounded-full">
           Connect Virgin Media / Blueyonder mail
         </button>
       </div>
 
-      {showVirgin && (
-        <div className="border border-[#C3BFB8] bg-[rgba(255,255,255,0.35)] px-5 py-5 space-y-4 max-w-2xl rounded-full">
-          <p className="text-[20px] text-[#2B2B2B]">Virgin Media needs an <b>app password</b> for this — not your usual password. It only opens your mail, and you can cancel it any time.</p>
-          <ol className="text-[20px] text-[#2B2B2B] list-decimal pl-6 space-y-1">
-            <li>Sign in to My Virgin Media and go to <b>Account settings → Account details</b>.</li>
-            <li>Under <b>Virgin Media Mail</b>, choose <b>Manage</b> next to app password, then <b>Generate new app password</b>.</li>
-            <li>Copy it and paste it below.</li>
-          </ol>
-          <a href={VIRGIN_HELP} target="_blank" rel="noopener noreferrer" className="text-[18px] underline underline-offset-4 text-[#2B2B2B]">Virgin Media&rsquo;s help page →</a>
-          <div className="flex flex-col gap-3">
-            <input
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Your email, e.g. name@blueyonder.co.uk"
-              autoComplete="email"
-              className="text-[20px] bg-white border border-[#6E6B65] px-4 py-3 focus:outline-none focus:border-[#2B2B2B] rounded-full"
-            />
-            <input
-              value={appPassword}
-              onChange={(e) => setAppPassword(e.target.value)}
-              placeholder="Virgin Media Mail app password"
-              type="password"
-              autoComplete="off"
-              className="text-[20px] bg-white border border-[#6E6B65] px-4 py-3 focus:outline-none focus:border-[#2B2B2B] rounded-full"
-            />
-            <button
-              disabled={working('virgin') || !email.trim() || !appPassword || !view.secretsReady}
-              onClick={connectVirgin}
-              className="text-[22px] px-7 py-3.5 bg-[#2B2B2B] text-white disabled:opacity-40 self-start rounded-full"
-            >
-              {working('virgin') ? 'Checking…' : 'Connect'}
-            </button>
-          </div>
-        </div>
+      {virginStep > 0 && (
+        <VirginConnect
+          testMemberId={testMemberId}
+          secretsReady={view.secretsReady}
+          onConnected={async () => { setVirginStep(0); setMsg('Connected — reading the past year of order emails.'); await refresh() }}
+        />
       )}
 
       {/* Pieces in the dressing room that an email says went back */}
       {view.returned.length > 0 && (
         <div className="space-y-3 border-t border-[#C3BFB8] pt-5">
-          <p className="myra-section-note">SENT BACK · STILL IN YOUR DRESSING ROOM</p>
+          <p className="myra-section-note 2xl:!text-[28px]">SENT BACK · STILL IN YOUR DRESSING ROOM</p>
           {view.returned.map((f) => (
             <div key={f.find_id} className="flex flex-wrap items-center gap-x-5 gap-y-2">
-              <p className="text-[20px] text-[#2B2B2B]">{f.product_name}{f.brand_name ? ` · ${f.brand_name}` : f.retailer ? ` · ${f.retailer}` : ''}</p>
-              <button disabled={working(`rm-${f.find_id}`)} onClick={() => act(`rm-${f.find_id}`, () => removeReturned(f.find_id, testMemberId), `${f.product_name} is out of your dressing room.`)} className="text-[18px] px-4 py-2 bg-[#2B2B2B] text-white disabled:opacity-40 rounded-full">Remove it</button>
-              <button disabled={working(`keep-${f.find_id}`)} onClick={() => act(`keep-${f.find_id}`, () => keepReturned(f.find_id, testMemberId))} className="text-[18px] underline underline-offset-4 text-[#55534E] disabled:opacity-40">I still have it</button>
+              <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#2B2B2B]">{f.product_name}{f.brand_name ? ` · ${f.brand_name}` : f.retailer ? ` · ${f.retailer}` : ''}</p>
+              <button disabled={working(`rm-${f.find_id}`)} onClick={() => act(`rm-${f.find_id}`, () => removeReturned(f.find_id, testMemberId), `${f.product_name} is out of your dressing room.`)} className="text-[18px] xl:text-[21px] 2xl:text-[25px] px-4 py-2 bg-[#2B2B2B] text-white disabled:opacity-40 rounded-full">Remove it</button>
+              <button disabled={working(`keep-${f.find_id}`)} onClick={() => act(`keep-${f.find_id}`, () => keepReturned(f.find_id, testMemberId))} className="text-[18px] xl:text-[21px] 2xl:text-[25px] underline underline-offset-4 text-[#55534E] disabled:opacity-40">I still have it</button>
             </div>
           ))}
         </div>
@@ -221,20 +193,20 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
       {view.finds.length > 0 && (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
-            <p className="myra-section-note">FOUND IN YOUR EMAIL · {view.finds.length} TO LOOK THROUGH</p>
+            <p className="myra-section-note 2xl:!text-[28px]">FOUND IN YOUR EMAIL · {view.finds.length} TO LOOK THROUGH</p>
             <button
               onClick={() => setPicked(picked.length === view.finds.length ? [] : view.finds.map((f) => f.find_id))}
-              className="text-[18px] underline underline-offset-4 text-[#2B2B2B]"
+              className="text-[18px] xl:text-[21px] 2xl:text-[25px] underline underline-offset-4 text-[#2B2B2B]"
             >
               {picked.length === view.finds.length ? 'Clear selection' : 'Select all'}
             </button>
             {picked.length > 0 && (
               <>
-                <span className="text-[18px] text-[#55534E]">{picked.length} selected</span>
-                <button onClick={() => decideMany(picked, true)} className="text-[18px] px-5 py-2 bg-[#2B2B2B] text-white rounded-full">
+                <span className="text-[18px] xl:text-[21px] 2xl:text-[25px] text-[#55534E]">{picked.length} selected</span>
+                <button onClick={() => decideMany(picked, true)} className="text-[18px] xl:text-[21px] 2xl:text-[25px] px-5 py-2 bg-[#2B2B2B] text-white rounded-full">
                   Add {picked.length} to my wardrobe
                 </button>
-                <button onClick={() => decideMany(picked, false)} className="text-[18px] px-5 py-2 border border-[#2B2B2B] text-[#2B2B2B] rounded-full">
+                <button onClick={() => decideMany(picked, false)} className="text-[18px] xl:text-[21px] 2xl:text-[25px] px-5 py-2 border border-[#2B2B2B] text-[#2B2B2B] rounded-full">
                   Not mine ({picked.length})
                 </button>
               </>
@@ -247,7 +219,7 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
                   {/* Tick several, then add or put aside the lot. */}
                   <label className="absolute top-2 left-2 z-10 flex items-center gap-2 bg-white/90 px-2.5 py-1.5 cursor-pointer">
                     <input type="checkbox" checked={picked.includes(f.find_id)} onChange={() => togglePick(f.find_id)} className="w-5 h-5 accent-[#2B2B2B]" />
-                    <span className="text-[16px] text-[#2B2B2B]">Pick</span>
+                    <span className="text-[16px] xl:text-[19px] 2xl:text-[23px] text-[#2B2B2B]">Pick</span>
                   </label>
                   {f.image_url ? (
                     <FallbackImage src={f.image_url} thumbWidth={500} alt={f.product_name} className="absolute inset-0 w-full h-full object-contain" />
@@ -255,15 +227,15 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
                     // Some shops (Vinted) leave the photo out of the order email —
                     // look for it in her other emails about the same piece, or she adds her own.
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-4 text-center">
-                      <span className="text-[18px] text-[#6E6B65]">No photo in the order email</span>
+                      <span className="text-[18px] xl:text-[21px] 2xl:text-[25px] text-[#6E6B65]">No photo in the order email</span>
                       <button
                         disabled={working(`hunt-${f.find_id}`)}
                         onClick={() => act(`hunt-${f.find_id}`, () => findPhotoInEmails(f.find_id, testMemberId))}
-                        className="text-[18px] px-4 py-2 border border-[#2B2B2B] text-[#2B2B2B] disabled:opacity-40 rounded-full"
+                        className="text-[18px] xl:text-[21px] 2xl:text-[25px] px-4 py-2 border border-[#2B2B2B] text-[#2B2B2B] disabled:opacity-40 rounded-full"
                       >
                         {working(`hunt-${f.find_id}`) ? 'Looking…' : 'Look in my emails'}
                       </button>
-                      <label className={`text-[18px] underline underline-offset-4 text-[#55534E] cursor-pointer ${working(`photo-${f.find_id}`) ? 'pointer-events-none opacity-50' : ''}`}>
+                      <label className={`text-[18px] xl:text-[21px] 2xl:text-[25px] underline underline-offset-4 text-[#55534E] cursor-pointer ${working(`photo-${f.find_id}`) ? 'pointer-events-none opacity-50' : ''}`}>
                         {working(`photo-${f.find_id}`) ? 'Uploading…' : 'Add a photo'}
                         <input
                           type="file"
@@ -284,24 +256,24 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
                   )}
                 </div>
                 <div className="px-3 py-3 flex flex-col gap-1 flex-1">
-                  <p className="text-[20px] text-[#2B2B2B] leading-tight line-clamp-2">{f.product_name}</p>
-                  <p className="text-[18px] text-[#6E6B65]">
+                  <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#2B2B2B] leading-tight line-clamp-2">{f.product_name}</p>
+                  <p className="text-[18px] xl:text-[21px] 2xl:text-[25px] text-[#6E6B65]">
                     {[f.brand_name ?? f.retailer, f.size, f.order_date ? new Date(f.order_date).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : null].filter(Boolean).join(' · ')}
                   </p>
-                  {f.price != null && <p className="text-[18px] text-[#55534E]">{f.currency === 'GBP' || !f.currency ? '£' : `${f.currency} `}{Math.round(f.price)}</p>}
+                  {f.price != null && <p className="text-[18px] xl:text-[21px] 2xl:text-[25px] text-[#55534E]">{f.currency === 'GBP' || !f.currency ? '£' : `${f.currency} `}{Math.round(f.price)}</p>}
                   {f.error === 'Return started' ? (
-                    <p className="text-[18px] text-[#8B5E00]">You started a return — add it only if you kept it</p>
+                    <p className="text-[18px] xl:text-[21px] 2xl:text-[25px] text-[#8B5E00]">You started a return — add it only if you kept it</p>
                   ) : f.error ? (
-                    <p className="text-[18px] text-[#B83A3A]">{f.error}</p>
+                    <p className="text-[18px] xl:text-[21px] 2xl:text-[25px] text-[#B83A3A]">{f.error}</p>
                   ) : null}
                   <div className="mt-auto pt-2 flex flex-col gap-2">
                     <button
                       onClick={() => decide(f, () => addFoundPiece(f.find_id, testMemberId), `Adding ${f.product_name} — keep going.`)}
-                      className="text-[18px] py-2.5 bg-[#2B2B2B] text-white"
+                      className="text-[18px] xl:text-[21px] 2xl:text-[25px] py-2.5 bg-[#2B2B2B] text-white"
                     >
                       Add to my wardrobe
                     </button>
-                    <button onClick={() => decide(f, () => notMine(f.find_id, testMemberId), `${f.product_name} put aside.`)} className="text-[18px] py-2 text-[#55534E] underline underline-offset-4">
+                    <button onClick={() => decide(f, () => notMine(f.find_id, testMemberId), `${f.product_name} put aside.`)} className="text-[18px] xl:text-[21px] 2xl:text-[25px] py-2 text-[#55534E] underline underline-offset-4">
                       Not mine
                     </button>
                   </div>

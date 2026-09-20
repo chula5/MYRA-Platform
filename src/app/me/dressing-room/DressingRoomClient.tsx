@@ -9,12 +9,15 @@
 // it has been styled, STYLE THIS by occasion, the finders) is one tap further in.
 
 import Link from 'next/link'
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import type { DressingRoomPiece, DressingRoomView, StyledLook } from '@/app/admin/private-stylist/actions'
 import { myLooksWithPiece, styleMyPiece } from './actions'
 import DressingRoomScene from '@/components/me/DressingRoomScene'
 import EmailFinds from './EmailFinds'
+import ArchivalLooks from './ArchivalLooks'
+import { loadEmailPanel } from './email-actions'
+import { useScrollTo } from '@/lib/smooth-scroll'
 
 const TABS: { id: string; label: string; slots: string[] }[] = [
   { id: 'all', label: 'Everything', slots: [] },
@@ -38,6 +41,19 @@ export default function DressingRoomClient({
   onOpenPiece?: (itemId: string) => void
 }) {
   const [tab, setTab] = useState('all')
+  // Is an inbox connected? Decides what the button in the room says.
+  const [inboxes, setInboxes] = useState<number | null>(null)
+  const scrollTo = useScrollTo()
+  useEffect(() => {
+    let live = true
+    loadEmailPanel(testMemberId).then((v) => { if (live) setInboxes(v.connections.filter((c) => c.status !== 'disconnected').length) }).catch(() => { if (live) setInboxes(0) })
+    return () => { live = false }
+  }, [testMemberId])
+  const emailSync = () => {
+    const el = document.getElementById('email-finds')
+    if (el) scrollTo(el, { offset: -24 })
+    if (inboxes) window.dispatchEvent(new CustomEvent('myra:email-sync'))
+  }
   const [picked, setPicked] = useState<DressingRoomPiece | null>(null)
   // What she already has with this piece, and what MYRA makes when she asks.
   const [worn, setWorn] = useState<StyledLook[]>([])
@@ -95,18 +111,37 @@ export default function DressingRoomClient({
       <div className="w-full px-6 sm:px-10 py-8 pb-16 space-y-6">
         {/* The room, drawn — with what she is dressing for over it */}
         <section className="relative rounded-[18px] overflow-hidden shadow-[0_2px_14px_rgba(43,43,43,0.08)]">
-          <DressingRoomScene className="w-full h-[300px] md:h-[360px] object-cover" />
+          <DressingRoomScene className="w-full h-[300px] md:h-[360px] min-[1440px]:h-auto min-[1440px]:aspect-[4/1] object-cover" />
           <div className="absolute inset-0 flex flex-col justify-between px-8 py-7">
             <div>
-              <p className="text-[20px] tracking-[0.18em] text-[#6E6B65]">DRESSING ROOM</p>
-              <h1 className="text-[clamp(28px,3.4vw,48px)] tracking-[0.03em] text-[#2B2B2B] leading-[1.05] mt-2">
+              <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] tracking-[0.18em] text-[#6E6B65]">DRESSING ROOM</p>
+              <h1 className="text-[clamp(28px,3.4vw,48px)] 2xl:text-[clamp(44px,3.4vw,72px)] tracking-[0.03em] text-[#2B2B2B] leading-[1.05] mt-2">
                 {view.firstName ? `${view.firstName.toUpperCase()}\u2019S OWN PIECES` : 'YOUR OWN PIECES'}
               </h1>
-              <p className="text-[21px] text-[#4A4E57] mt-2 max-w-md">
+              <p className="text-[21px] xl:text-[24px] 2xl:text-[28px] text-[#4A4E57] mt-2 max-w-md">
                 {view.pieces.length
                   ? `${view.pieces.length} piece${view.pieces.length === 1 ? '' : 's'} in here${styledCount ? `, ${styledCount} already styled` : ''}.`
                   : 'Nothing in here yet — add your pieces, or find what you have bought below.'}
               </p>
+              {inboxes !== null && (
+                <button
+                  onClick={emailSync}
+                  data-tour="email-sync"
+                  className="mt-4 inline-flex items-center gap-2.5 text-[19px] xl:text-[22px] 2xl:text-[26px] px-5 py-2.5 rounded-full bg-[#2B2B2B] text-white hover:opacity-85 transition-opacity"
+                >
+                  {inboxes ? 'Update email sync' : 'Connect your email'} <span aria-hidden>→</span>
+                </button>
+              )}
+            </div>
+
+            {/* The two ways to fill the room, from the top of it. */}
+            <div className="flex flex-wrap gap-4 mb-4">
+              <a href="#archival-looks" className="text-[20px] xl:text-[23px] underline underline-offset-4 text-[#2B2B2B]">
+                Add from Instagram or your photos
+              </a>
+              <a href="#email-finds" className="text-[20px] xl:text-[23px] underline underline-offset-4 text-[#2B2B2B]">
+                Find what you&rsquo;ve bought
+              </a>
             </div>
 
             {view.pieces.length > 0 && (
@@ -115,7 +150,7 @@ export default function DressingRoomClient({
                   <button
                     key={t.id}
                     onClick={() => setTab(t.id)}
-                    className={`text-[20px] px-5 py-2.5 rounded-full transition-colors ${tab === t.id ? 'bg-[#2B2B2B] text-white' : 'bg-[rgba(255,255,255,0.75)] text-[#4A4E57] hover:bg-white'}`}
+                    className={`text-[20px] xl:text-[23px] 2xl:text-[27px] px-5 py-2.5 rounded-full transition-colors ${tab === t.id ? 'bg-[#2B2B2B] text-white' : 'bg-[rgba(255,255,255,0.75)] text-[#4A4E57] hover:bg-white'}`}
                   >
                     {t.label}
                   </button>
@@ -125,36 +160,36 @@ export default function DressingRoomClient({
           </div>
 
           {/* Your look — the card standing in the room */}
-          <aside className="hidden lg:flex absolute top-7 right-7 w-[280px] flex-col items-center text-center gap-4 rounded-[16px] bg-[rgba(255,255,255,0.92)] px-6 py-6 shadow-[0_2px_14px_rgba(43,43,43,0.1)]">
-            <p className="text-[21px] tracking-[0.14em] text-[#2B2B2B]">YOUR LOOK</p>
+          <aside className="hidden lg:flex absolute top-7 right-7 w-[280px] 2xl:w-[380px] flex-col items-center text-center gap-4 rounded-[16px] bg-[rgba(255,255,255,0.92)] px-6 py-6 shadow-[0_2px_14px_rgba(43,43,43,0.1)]">
+            <p className="text-[21px] xl:text-[24px] 2xl:text-[28px] tracking-[0.14em] text-[#2B2B2B]">YOUR LOOK</p>
             <svg viewBox="0 0 64 64" className="w-16 h-16 text-[#55534E]" aria-hidden>
               <path d="M24 10l8 5 8-5 4 11-4 4 5 26H19l5-26-4-4z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
             </svg>
-            <p className="text-[20px] text-[#4A4E57] leading-snug">
+            <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#4A4E57] leading-snug">
               {picked ? picked.product_name : 'Tap a piece and MYRA builds the outfit around it.'}
             </p>
             {picked && (
               onOpenPiece ? (
-                <button onClick={() => openPiece(picked.item_id)} className="text-[19px] px-5 py-2.5 rounded-full border border-[#2B2B2B] text-[#2B2B2B]">Open its page</button>
+                <button onClick={() => openPiece(picked.item_id)} className="text-[19px] xl:text-[22px] 2xl:text-[26px] px-5 py-2.5 rounded-full border border-[#2B2B2B] text-[#2B2B2B]">Open its page</button>
               ) : (
-                <Link href={`/me/dressing-room/${picked.item_id}`} className="text-[19px] px-5 py-2.5 rounded-full border border-[#2B2B2B] text-[#2B2B2B]">Open its page</Link>
+                <Link href={`/me/dressing-room/${picked.item_id}`} className="text-[19px] xl:text-[22px] 2xl:text-[26px] px-5 py-2.5 rounded-full border border-[#2B2B2B] text-[#2B2B2B]">Open its page</Link>
               )
             )}
           </aside>
         </section>
 
-        {view.error && <p className="text-[20px] text-[#B83A3A] text-center">{view.error}</p>}
+        {view.error && <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#B83A3A] text-center">{view.error}</p>}
 
         {/* Her rail, and MYRA working down the right */}
         {view.pieces.length > 0 && (
           <section className={`${CARD} px-6 sm:px-8 py-8`}>
-            <div className="grid xl:grid-cols-[minmax(0,1fr)_400px] gap-8">
+            <div className="grid xl:grid-cols-[minmax(0,1fr)_minmax(460px,36%)] 2xl:grid-cols-[minmax(0,1fr)_42%] gap-8">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-baseline justify-between gap-4 mb-6">
-                  <h2 className="text-[26px] tracking-[0.06em] text-[#2B2B2B]">YOUR WARDROBE</h2>
-                  <p className="text-[20px] text-[#6E6B65]">{shown.length} shown</p>
+                  <h2 className="text-[26px] xl:text-[29px] 2xl:text-[33px] tracking-[0.06em] text-[#2B2B2B]">YOUR WARDROBE</h2>
+                  <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#6E6B65]">{shown.length} shown</p>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6 gap-4">
+                <div data-tour="wardrobe" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-3 2xl:grid-cols-4 min-[2200px]:grid-cols-5 min-[2800px]:grid-cols-6 gap-4">
                   {shown.map((p) => {
                     const on = picked?.item_id === p.item_id
                     return (
@@ -169,8 +204,8 @@ export default function DressingRoomClient({
                           )}
                         </div>
                         <div className="px-4 py-3">
-                          <p className="text-[19px] text-[#2B2B2B] leading-tight line-clamp-2">{p.product_name}</p>
-                          <p className="text-[18px] text-[#6E6B65] mt-1">
+                          <p className="text-[19px] xl:text-[22px] 2xl:text-[26px] text-[#2B2B2B] leading-tight line-clamp-2">{p.product_name}</p>
+                          <p className="text-[18px] xl:text-[21px] 2xl:text-[25px] text-[#6E6B65] mt-1">
                             {p.styled_in ? `In ${p.styled_in} look${p.styled_in === 1 ? '' : 's'}` : 'Not styled yet'}
                           </p>
                         </div>
@@ -181,59 +216,60 @@ export default function DressingRoomClient({
               </div>
 
               {/* The right pane: the piece, then the outfits MYRA makes with it */}
-              <aside className="xl:sticky xl:top-6 self-start space-y-4">
+              <aside data-tour="styling-pane" className="xl:sticky xl:top-6 self-start space-y-4">
                 {!picked && (
                   <div className="rounded-[16px] bg-white/70 px-6 py-12 text-center">
-                    <p className="text-[21px] text-[#4A4E57]">Tap a piece and MYRA styles it here, from your own wardrobe.</p>
+                    <p className="text-[21px] xl:text-[24px] 2xl:text-[28px] text-[#4A4E57]">Tap a piece and MYRA styles it here, from your own wardrobe.</p>
                   </div>
                 )}
                 {picked && (
                   <>
                     <div className="flex gap-4 items-start">
-                      <div className="relative w-[120px] aspect-[3/4] bg-white rounded-[14px] overflow-hidden shrink-0 shadow-[0_1px_8px_rgba(43,43,43,0.06)]">
+                      <div className="relative w-[120px] xl:w-[150px] 2xl:w-[200px] aspect-[3/4] bg-white rounded-[14px] overflow-hidden shrink-0 shadow-[0_1px_8px_rgba(43,43,43,0.06)]">
                         {picked.image_url && (
                           <FallbackImage src={picked.image_url} thumbWidth={400} alt={picked.product_name} className="absolute inset-0 w-full h-full object-contain" />
                         )}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-[21px] text-[#2B2B2B] leading-tight">{picked.product_name}</p>
-                        <p className="text-[19px] text-[#6E6B65] mt-1">
+                        <p className="text-[21px] xl:text-[24px] 2xl:text-[28px] text-[#2B2B2B] leading-tight">{picked.product_name}</p>
+                        <p className="text-[19px] xl:text-[22px] 2xl:text-[26px] text-[#6E6B65] mt-1">
                           {[picked.item_type?.replace(/_/g, ' '), picked.colour_family].filter(Boolean).join(' · ')}
                         </p>
                         <button
                           onClick={() => styleNow(picked)}
                           disabled={styling}
-                          className="mt-3 text-[19px] px-5 py-2.5 rounded-full bg-[#2B2B2B] text-white disabled:opacity-40"
+                          className="mt-3 text-[19px] xl:text-[22px] 2xl:text-[26px] px-5 py-2.5 rounded-full bg-[#2B2B2B] text-white disabled:opacity-40"
                         >
                           {styling ? 'Building…' : looks.length ? 'Build more outfits' : 'Build new outfits'}
                         </button>
                       </div>
                     </div>
 
-                    {loadingWorn && <p className="text-[20px] text-[#6E6B65]">Looking for what you wear it with…</p>}
+                    {loadingWorn && <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#6E6B65]">Looking for what you wear it with…</p>}
 
                     {worn.length > 0 && (
-                      <p className="text-[19px] tracking-[0.12em] text-[#6E6B65]">
+                      <p className="text-[19px] xl:text-[22px] 2xl:text-[26px] tracking-[0.12em] text-[#6E6B65]">
                         ALREADY STYLED — {worn.length} LOOK{worn.length === 1 ? '' : 'S'}
                       </p>
                     )}
                     {!loadingWorn && !worn.length && !looks.length && !styling && (
-                      <p className="text-[20px] text-[#4A4E57]">MYRA hasn&rsquo;t styled this one yet. Build an outfit around it.</p>
+                      <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#4A4E57]">MYRA hasn&rsquo;t styled this one yet. Build an outfit around it.</p>
                     )}
 
                     {styling && (
                       <div className="rounded-[16px] bg-white/70 px-6 py-10 text-center">
                         <img src="/myra-mirror-transparent.png" alt="" className="myra-mirror-wiggle h-24 w-auto mx-auto" />
-                        <p className="text-[20px] text-[#4A4E57] mt-4">Building outfits around it…</p>
+                        <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#4A4E57] mt-4">Building outfits around it…</p>
                       </div>
                     )}
 
-                    {note && !styling && <p className="text-[20px] text-[#4A4E57]">{note}</p>}
+                    {note && !styling && <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#4A4E57]">{note}</p>}
 
                     {looks.length > 0 && (
-                      <p className="text-[19px] tracking-[0.12em] text-[#6E6B65]">NEW — BUILT JUST NOW</p>
+                      <p className="text-[19px] xl:text-[22px] 2xl:text-[26px] tracking-[0.12em] text-[#6E6B65]">NEW — BUILT JUST NOW</p>
                     )}
 
+                    <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
                     {[...looks, ...worn].map((l, i) => (
                       <div key={l.look_id ?? i} className="bg-white rounded-[16px] overflow-hidden shadow-[0_1px_8px_rgba(43,43,43,0.06)]">
                         <div className="relative aspect-[3/4] bg-[#F3F2F0] overflow-hidden">
@@ -252,9 +288,10 @@ export default function DressingRoomClient({
                             </div>
                           )}
                         </div>
-                        {l.why && <p className="text-[19px] text-[#4A4E57] px-4 py-3 leading-snug">{l.why}</p>}
+                        {l.why && <p className="text-[19px] xl:text-[22px] 2xl:text-[26px] text-[#4A4E57] px-4 py-3 leading-snug">{l.why}</p>}
                       </div>
                     ))}
+                    </div>
                   </>
                 )}
               </aside>
@@ -262,12 +299,15 @@ export default function DressingRoomClient({
           </section>
         )}
 
+        {/* What she already wears, and how — from Instagram or her own photos. */}
+        <ArchivalLooks testMemberId={testMemberId} />
+
         {/* Fill the dressing room from her order emails. */}
         <EmailFinds testMemberId={testMemberId} />
 
         {!testMemberId && (
           <p className="text-center">
-            <Link href="/me/wardrobe" className={view.pieces.length ? 'text-[22px] text-[#2B2B2B] underline underline-offset-4' : 'inline-block text-[22px] px-7 py-4 bg-[#2B2B2B] text-white rounded-full'}>
+            <Link href="/me/wardrobe" className={view.pieces.length ? 'text-[22px] xl:text-[25px] 2xl:text-[29px] text-[#2B2B2B] underline underline-offset-4' : 'inline-block text-[22px] xl:text-[25px] 2xl:text-[29px] px-7 py-4 bg-[#2B2B2B] text-white rounded-full'}>
               {view.pieces.length ? 'Add more pieces →' : 'Add your pieces'}
             </Link>
           </p>
