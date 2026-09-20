@@ -11,9 +11,9 @@
 import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
 import { emailForExtraction, type EmailImage, type MailMessage } from '@/lib/email/purchase-core'
-import { looksLikeNewsletter, parseMagazineRead, type MagazinePick, type MagazineRead } from './core'
+import { cleanName, looksLikeNewsletter, parseMagazineRead, type MagazinePick, type MagazineRead } from './core'
 
-export { looksLikeNewsletter, parseMagazineRead }
+export { cleanName, looksLikeNewsletter, parseMagazineRead }
 export type { MagazinePick, MagazineRead }
 
 const MODEL = 'claude-haiku-4-5'
@@ -99,7 +99,7 @@ Pick AT MOST 4 pieces from this email that are genuinely hers — her shapes, he
 
 Rules:
 - Only clothes, shoes, bags and jewellery she could buy. No beauty, homeware, competitions, events, discount codes or gift cards.
-- name: the piece as the email names it. brand: the label. price as a number with a 3-letter currency when shown.
+- name: the piece as the email names it, in full. If the email cuts the name off (it ends in ...), give only the words you can see, never the cut-off fragment. brand: the label. price as a number with a 3-letter currency when shown.
 - image_url: that piece's photo, from the image URLs below. url: its link, from the links below. Leave either null rather than guessing.
 - why: at most 8 words, plain and specific about HER ("your neckline, in your navy"). Never "trendy" or "versatile". No exclamation marks.
 - publication: whose newsletter this is. headline: what the issue is about, at most 8 words.

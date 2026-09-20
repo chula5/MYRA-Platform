@@ -11,7 +11,7 @@
 import { useEffect, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import { loadMyMagazine, refreshMyMagazine, setPublicationMuted, type MagazinePageView } from './actions'
-import type { MagazinePick } from '@/lib/magazine/core'
+import { cleanName, type MagazinePick } from '@/lib/magazine/core'
 
 const DATE = { day: 'numeric', month: 'long' } as const
 
@@ -51,17 +51,25 @@ export default function MagazineClient({ testMemberId }: { testMemberId?: string
 
   const issues = view.issues
   const lead = issues[0] ?? null
-  // The piece of the day: the first thing MYRA kept, with a picture.
-  const ofTheDay = issues.flatMap((i) => i.picks).find((p) => p.image_url) ?? null
+  // The piece of the day comes from anywhere BUT the issue leading the middle,
+  // so the same piece never heads two parts of the page.
+  const leadPicks = (lead?.picks ?? []).slice(0, 3)
+  const ofTheDay = issues.slice(1).flatMap((i) => i.picks).find((p) => p.image_url)
+    ?? (lead?.picks ?? []).slice(3).find((p) => p.image_url)
+    ?? null
   // Everything else she was kept — the piece of the day does not appear twice.
+  const inLead = new Set(leadPicks.map((p) => `${p.name}|${p.brand ?? ''}`))
   const rest = issues.flatMap((i) => i.picks.map((p) => ({ ...p, publication: i.publication })))
     .filter((p) => !(ofTheDay && p.name === ofTheDay.name && p.brand === ofTheDay.brand))
-    .slice(0, 12)
+    .filter((p) => !inLead.has(`${p.name}|${p.brand ?? ''}`))
+    // The same piece from two newsletters is one piece.
+    .filter((p, i, all) => all.findIndex((q) => q.name === p.name && q.brand === p.brand) === i)
+    .slice(0, 8)
 
   return (
     <div className={`myra-pearl relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen min-h-screen ${testMemberId ? '' : '-my-10'}`}>
       <div className="w-full px-6 sm:px-10 py-8 pb-16">
-        <div className="grid xl:grid-cols-[320px_minmax(0,1fr)_420px] gap-6 items-start">
+        <div className="grid xl:grid-cols-[300px_minmax(0,1fr)_460px] gap-6 items-start">
 
           {/* The masthead, and one piece chosen for her */}
           <aside className="rounded-[18px] overflow-hidden bg-[#8C8A85] text-white px-7 py-8 flex flex-col gap-7 min-h-[560px]">
@@ -77,7 +85,7 @@ export default function MagazineClient({ testMemberId }: { testMemberId?: string
               <p className="text-[19px] tracking-[0.16em] text-white/80">ITEM OF THE DAY</p>
               {ofTheDay ? (
                 <>
-                  <p className="text-[26px] leading-tight mt-3">{ofTheDay.name}</p>
+                  <p className="text-[26px] leading-tight mt-3">{cleanName(ofTheDay.name)}</p>
                   {ofTheDay.why && <p className="text-[20px] text-white/85 mt-2 leading-snug">{ofTheDay.why}</p>}
                   <div className="relative aspect-[3/4] rounded-[14px] overflow-hidden bg-white/10 mt-5">
                     {ofTheDay.image_url && (
@@ -129,25 +137,41 @@ export default function MagazineClient({ testMemberId }: { testMemberId?: string
               {view.error && <p className="text-[20px] text-[#B83A3A] mt-4">{view.error}</p>}
             </div>
 
-            <div className="relative flex-1 mt-6 mx-8 mb-6 rounded-[14px] overflow-hidden bg-[#EDEDED] min-h-[320px]">
-              {(lead?.hero_image ?? lead?.picks[0]?.image_url) && (
-                <FallbackImage
-                  src={(lead?.hero_image ?? lead?.picks[0]?.image_url) as string}
-                  thumbWidth={1400}
-                  alt=""
-                  className="absolute inset-0 w-full h-full object-cover"
-                />
-              )}
-            </div>
+            {/* The pieces she was kept from this issue, big. A newsletter's own
+                hero is usually a banner of type, so a piece leads instead. */}
+            {lead && lead.picks.length > 0 && (
+              <div className="px-8 mt-6 grid grid-cols-2 lg:grid-cols-3 gap-5">
+                {lead.picks.slice(0, 3).map((p, i) => {
+                  const body = (
+                    <>
+                      <div className="relative aspect-[3/4] rounded-[14px] overflow-hidden bg-[#EDEDED]">
+                        {p.image_url && (
+                          <FallbackImage src={p.image_url} thumbWidth={800} alt={p.name} className="absolute inset-0 w-full h-full object-cover" />
+                        )}
+                      </div>
+                      <p className="text-[20px] text-[#2B2B2B] mt-3 leading-tight">{cleanName(p.name)}</p>
+                      <p className="text-[19px] text-[#6E6B65] mt-1">{[p.brand, price(p)].filter(Boolean).join(' · ')}</p>
+                      {p.why && <p className="text-[19px] text-[#4A4E57] italic leading-snug mt-1">{p.why}</p>}
+                    </>
+                  )
+                  return p.url
+                    ? <a key={i} href={p.url} target="_blank" rel="noopener noreferrer" className="block group">{body}</a>
+                    : <div key={i}>{body}</div>
+                })}
+              </div>
+            )}
+
+            {lead?.hero_image && lead.picks.length === 0 && (
+              <div className="relative flex-1 mt-6 mx-8 rounded-[14px] overflow-hidden bg-[#EDEDED] min-h-[260px]">
+                <FallbackImage src={lead.hero_image} thumbWidth={1400} alt="" className="absolute inset-0 w-full h-full object-cover" />
+              </div>
+            )}
 
             {lead && (
-              <div className="px-8 pb-8 border-t border-[rgba(43,43,43,0.15)] pt-5 flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <p className="text-[19px] tracking-[0.14em] text-[#6E6B65]">CURATED FROM YOUR SUBSCRIPTION EMAIL</p>
-                  <p className="text-[22px] text-[#2B2B2B] mt-1">
-                    {lead.picks.length} piece{lead.picks.length === 1 ? '' : 's'} kept from {lead.publication}
-                  </p>
-                </div>
+              <div className="px-8 pb-8 pt-6 mt-auto flex flex-wrap items-center justify-between gap-4">
+                <p className="text-[19px] tracking-[0.14em] text-[#6E6B65]">
+                  {lead.picks.length} KEPT FROM {lead.publication.toUpperCase()}
+                </p>
                 <button
                   disabled={busy}
                   onClick={() => mute(lead.publication, true)}
@@ -171,22 +195,25 @@ export default function MagazineClient({ testMemberId }: { testMemberId?: string
                 {view.needsInbox ? 'Nothing to read until an inbox is connected.' : 'Press READ THIS WEEK and MYRA goes through your newsletters.'}
               </p>
             ) : (
-              <div className="grid grid-cols-2 gap-4 mt-5">
+              <div className="divide-y divide-[rgba(43,43,43,0.12)]">
                 {rest.map((p, i) => {
                   const body = (
-                    <>
-                      <div className="relative aspect-[3/4] rounded-[14px] overflow-hidden bg-[#EDEDED]">
+                    <div className="flex gap-4 py-4">
+                      <div className="relative w-[92px] shrink-0 aspect-[3/4] rounded-[12px] overflow-hidden bg-[#EDEDED]">
                         {p.image_url && (
-                          <FallbackImage src={p.image_url} thumbWidth={500} alt={p.name} className="absolute inset-0 w-full h-full object-cover" />
+                          <FallbackImage src={p.image_url} thumbWidth={400} alt={p.name} className="absolute inset-0 w-full h-full object-cover" />
                         )}
                       </div>
-                      <p className="text-[19px] tracking-[0.06em] text-[#2B2B2B] mt-2 leading-tight line-clamp-2">{p.name.toUpperCase()}</p>
-                      <p className="text-[18px] text-[#6E6B65]">{[p.brand, price(p)].filter(Boolean).join(' · ')}</p>
-                      {p.why && <p className="text-[18px] text-[#4A4E57] italic leading-snug">{p.why}</p>}
-                    </>
+                      <div className="min-w-0">
+                        <p className="text-[19px] tracking-[0.08em] text-[#6E6B65]">{(p.brand ?? p.publication).toUpperCase()}</p>
+                        <p className="text-[20px] text-[#2B2B2B] leading-tight mt-0.5">{cleanName(p.name)}</p>
+                        {price(p) && <p className="text-[19px] text-[#55534E] mt-0.5">{price(p)}</p>}
+                        {p.why && <p className="text-[19px] text-[#4A4E57] italic leading-snug mt-1">{p.why}</p>}
+                      </div>
+                    </div>
                   )
                   return p.url ? (
-                    <a key={i} href={p.url} target="_blank" rel="noopener noreferrer" className="block">{body}</a>
+                    <a key={i} href={p.url} target="_blank" rel="noopener noreferrer" className="block hover:bg-white/60">{body}</a>
                   ) : (
                     <div key={i}>{body}</div>
                   )

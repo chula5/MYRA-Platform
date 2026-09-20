@@ -34,6 +34,16 @@ export function looksLikeNewsletter(m: Pick<MailMessage, 'subject' | 'from'>, ow
   return !NOT_A_NEWSLETTER.test(subject)
 }
 
+/** A product name the email cut off ends mid-word: keep the whole words. */
+export function cleanName(name: string): string {
+  const cut = name.replace(/\s*(\.{2,}|…)\s*$/, '')
+  if (cut === name) return name.trim()
+  const words = cut.trim().split(/\s+/)
+  // The last word is usually a fragment ("pa"), so it goes unless it looks whole.
+  if (words.length > 1 && words[words.length - 1].length <= 3) words.pop()
+  return words.join(' ')
+}
+
 const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null)
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null)
 const url = (v: unknown): string | null => (typeof v === 'string' && /^https?:\/\//i.test(v.trim()) ? v.trim() : null)
@@ -43,7 +53,7 @@ export function parseMagazineRead(raw: unknown): MagazineRead {
   const picks = (Array.isArray(r.picks) ? r.picks : [])
     .map((x) => (x && typeof x === 'object' ? x : {}) as Record<string, unknown>)
     .map((x): MagazinePick => ({
-      name: str(x.name) ?? '',
+      name: cleanName(str(x.name) ?? ''),
       brand: str(x.brand),
       price: num(x.price),
       currency: str(x.currency)?.toUpperCase().slice(0, 3) ?? null,
