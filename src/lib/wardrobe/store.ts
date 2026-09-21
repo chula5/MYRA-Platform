@@ -58,6 +58,8 @@ export async function addPhotoToBatch(
   batchId: string | null,
   owner: OwnerRef,
   file: { bytes: Buffer; name: string | null; mime: string | null },
+  /** false: keep the photo but do not look for garments until asked (her archival photos wait to be chosen). */
+  opts: { detect?: boolean } = {},
 ): Promise<{ photo?: WardrobePhoto; error?: string }> {
   if (file.bytes.length > WARDROBE_CONFIG.maxPhotoBytes) return { error: `Photo is over ${Math.round(WARDROBE_CONFIG.maxPhotoBytes / 1024 / 1024)}MB` }
   let normalised: { png: Buffer; width: number; height: number }
@@ -93,8 +95,8 @@ export async function addPhotoToBatch(
     await a.storage.from(BUCKET).remove([path])
     return { error: error?.message ?? 'Could not record photo' }
   }
-  await a.from('wardrobe_job').insert({ kind: 'detect', batch_id: batchId, photo_id: photoId, owner_user_id: owner.id, priority: 1 })
-  if (batchId) {
+  if (opts.detect !== false) await a.from('wardrobe_job').insert({ kind: 'detect', batch_id: batchId, photo_id: photoId, owner_user_id: owner.id, priority: 1 })
+  if (batchId && opts.detect !== false) {
     const { data: b } = await a.from('wardrobe_batch').select('photo_count').eq('batch_id', batchId).single()
     await a.from('wardrobe_batch').update({ photo_count: (b?.photo_count ?? 0) + 1, status: 'processing' }).eq('batch_id', batchId)
   }

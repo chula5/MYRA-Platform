@@ -1,16 +1,17 @@
 'use client'
 
 // ARCHIVAL LOOKS — photos of what she already wears, from her Instagram or
-// uploaded. The photo stays as a look (how she puts things together); the
-// pieces MYRA spots in it are offered underneath, and only the ones she taps
-// go onto her rail.
+// uploaded. Only photos with an outfit in them are kept, and they wait for
+// her: she selects the ones worth keeping and adds them to her archival looks.
+// Only then does MYRA look for the pieces, offered underneath; only the ones
+// she taps go onto her rail.
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import FallbackImage from '@/components/FallbackImage'
 import InstagramImport from './InstagramImport'
 import {
-  addArchivalPiece, dismissArchivalPiece, disconnectArchivalInstagram, loadArchivalPanel, nudgeArchival, removeArchivalLook,
+  addArchivalPiece, chooseMyArchivalLooks, dismissArchivalPiece, disconnectArchivalInstagram, loadArchivalPanel, nudgeArchival, removeArchivalLook,
   syncArchivalInstagram, uploadArchivalPhoto,
   type ArchivalPanelView,
 } from './archival-actions'
@@ -28,6 +29,29 @@ export default function ArchivalLooks({ testMemberId }: { testMemberId?: string 
   // The guided import reopens where she left it: step two can take a day.
   const [importing, setImporting] = useState(false)
   const polling = useRef(false)
+  // Photos she has ticked to keep as archival looks.
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const togglePick = (id: string) => setPicked((cur) => { const n = new Set(cur); if (n.has(id)) n.delete(id); else n.add(id); return n })
+
+  // The cross takes the photo away at once; the server catches up behind it.
+  function removeLook(lookId: string) {
+    setView((v) => (v ? { ...v, looks: v.looks.filter((l) => l.look_id !== lookId) } : v))
+    setPicked((cur) => { const n = new Set(cur); n.delete(lookId); return n })
+    void removeArchivalLook(lookId, testMemberId).then((r) => { if (r?.error) { setMsg(r.error); void refresh() } }).catch(() => void refresh())
+  }
+
+  async function keepPicked() {
+    const ids = Array.from(picked)
+    if (!ids.length) return
+    await run('choose', async () => {
+      // Move them across straight away: they are now being looked at.
+      setView((v) => (v ? { ...v, looks: v.looks.map((l) => (picked.has(l.look_id) ? { ...l, photo_status: 'detecting' } : l)) } : v))
+      setPicked(new Set())
+      const r = await chooseMyArchivalLooks(ids, testMemberId)
+      setMsg(r.error ?? `${r.chosen ?? ids.length} added to your archival looks. MYRA is finding the pieces in them.`)
+      await refresh()
+    })
+  }
 
   const refresh = async () => setView(await loadArchivalPanel(testMemberId))
   const working = (k: string) => busy.includes(k)
@@ -50,7 +74,7 @@ export default function ArchivalLooks({ testMemberId }: { testMemberId?: string 
   }, [testMemberId])
 
   // While MYRA is still looking at photos, keep the work moving and the section fresh.
-  const processing = !!view?.looks.some((l) => l.photo_status === 'uploaded' || l.photo_status === 'detecting' || l.pieces.some((p) => WORKING.has(p.status)))
+  const processing = !!view?.looks.some((l) => l.photo_status === 'detecting' || l.pieces.some((p) => WORKING.has(p.status)))
   useEffect(() => {
     if (!processing || polling.current) return
     let live = true
@@ -61,7 +85,7 @@ export default function ArchivalLooks({ testMemberId }: { testMemberId?: string 
         if (!live) break
         const v = await loadArchivalPanel(testMemberId)
         setView(v)
-        const still = v.looks.some((l) => l.photo_status === 'uploaded' || l.photo_status === 'detecting' || l.pieces.some((p) => WORKING.has(p.status)))
+        const still = v.looks.some((l) => l.photo_status === 'detecting' || l.pieces.some((p) => WORKING.has(p.status)))
         if (!still) break
         await new Promise((r) => setTimeout(r, 3000))
       }
@@ -85,7 +109,7 @@ export default function ArchivalLooks({ testMemberId }: { testMemberId?: string 
     const list = Array.from(files ?? []).filter((f) => f.type.startsWith('image/')).slice(0, 24)
     if (!list.length) return
     await run('upload', async () => {
-      let added = 0, failed = 0
+      let added = 0, failed = 0, noOutfit = 0
       for (let i = 0; i < list.length; i++) {
         setMsg(`Adding photo ${i + 1} of ${list.length}…`)
         const fd = new FormData()
@@ -93,9 +117,10 @@ export default function ArchivalLooks({ testMemberId }: { testMemberId?: string 
         if (testMemberId) fd.set('member', testMemberId)
         const r = await uploadArchivalPhoto(fd)
         if (r.error) failed++
+        else if (r.noOutfit) noOutfit++
         else if (!r.skipped) added++
       }
-      setMsg(`${added} photo${added === 1 ? '' : 's'} added${failed ? ` · ${failed} could not be read` : ''} — MYRA is looking at them.`)
+      setMsg(`${added} photo${added === 1 ? '' : 's'} added${noOutfit ? ` · ${noOutfit} left out (no outfit in them)` : ''}${failed ? ` · ${failed} could not be read` : ''}.${added ? ' Select the ones to keep below.' : ''}`)
       if (fileRef.current) fileRef.current.value = ''
       await refresh()
     })
@@ -115,6 +140,9 @@ export default function ArchivalLooks({ testMemberId }: { testMemberId?: string 
   const returnPath = typeof window !== 'undefined' ? window.location.pathname : '/me/dressing-room'
   const igHref = `/api/instagram/start?return=${encodeURIComponent(returnPath)}${testMemberId ? `&member=${testMemberId}` : ''}`
   const connected = view.connections.filter((c) => c.status !== 'disconnected')
+  // Kept but not yet chosen: waiting for her to pick. Everything else is an archival look.
+  const waiting = view.looks.filter((l) => l.photo_status === 'uploaded')
+  const chosen = view.looks.filter((l) => l.photo_status !== 'uploaded')
 
   return (
     <section id="archival-looks" className="w-full rounded-[18px] bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] px-5 md:px-8 py-7 space-y-6 scroll-mt-6">
@@ -166,16 +194,59 @@ export default function ArchivalLooks({ testMemberId }: { testMemberId?: string 
         />
       )}
 
-      {view.looks.length > 0 && (
+      {waiting.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h3 className={`${T} text-[#2B2B2B]`}>Your photos: pick the outfits to keep</h3>
+              <p className={`${T_SMALL} text-[#6E6B65]`}>MYRA only looks for the pieces in the ones you add.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button type="button" onClick={() => setPicked(picked.size === waiting.length ? new Set() : new Set(waiting.map((l) => l.look_id)))}
+                className={`${T_SMALL} px-5 py-2.5 rounded-full bg-white text-[#2B2B2B] shadow-[0_8px_18px_-12px_rgba(43,43,43,0.5)]`}>
+                {picked.size === waiting.length ? 'Clear' : 'Select all'}
+              </button>
+              <button type="button" disabled={!picked.size || working('choose')} onClick={keepPicked}
+                className={`myra-silver-button !w-auto px-7 !py-3 ${T_SMALL} disabled:opacity-40 disabled:pointer-events-none`}>
+                {working('choose') ? 'Adding…' : picked.size ? `Add ${picked.size} to archival looks` : 'Add to archival looks'}
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 min-[2200px]:grid-cols-5 gap-5">
+            {waiting.map((l) => {
+              const on = picked.has(l.look_id)
+              return (
+                <article key={l.look_id} className="flex flex-col gap-3">
+                  <button type="button" onClick={() => togglePick(l.look_id)} aria-pressed={on}
+                    className={`relative aspect-[3/4] bg-[#F3F2F0] overflow-hidden rounded-[16px] transition-shadow ${on ? 'ring-4 ring-[#2B2B2B] ring-offset-2' : ''}`}>
+                    {l.image_url && <FallbackImage src={l.image_url} thumbWidth={800} alt="" className="absolute inset-0 w-full h-full object-cover" />}
+                    {on && <span className="absolute top-3 left-3 w-10 h-10 rounded-full bg-[#2B2B2B] text-white grid place-content-center text-[22px]">✓</span>}
+                  </button>
+                  <div className="flex items-center justify-between gap-2">
+                    <button type="button" onClick={() => togglePick(l.look_id)}
+                      className={`${T_SMALL} px-5 py-2 rounded-full transition-colors ${on ? 'bg-[#2B2B2B] text-white' : 'bg-white text-[#2B2B2B] shadow-[0_8px_18px_-12px_rgba(43,43,43,0.5)]'}`}>
+                      {on ? 'Selected' : 'Select'}
+                    </button>
+                    <button type="button" onClick={() => removeLook(l.look_id)} aria-label="Remove this photo"
+                      className={`${T_SMALL} px-4 py-2 rounded-full text-[#6E6B65] hover:text-[#2B2B2B]`}>Remove</button>
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {chosen.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 min-[2200px]:grid-cols-5 gap-5">
-          {view.looks.map((l) => {
-            const looking = l.photo_status === 'uploaded' || l.photo_status === 'detecting' || l.pieces.some((p) => WORKING.has(p.status))
+          {chosen.map((l) => {
+            const looking = l.photo_status === 'detecting' || l.pieces.some((p) => WORKING.has(p.status))
             const offered = l.pieces.filter((p) => p.status === 'review' || p.status === 'approved' || WORKING.has(p.status))
             return (
               <article key={l.look_id} className="bg-white rounded-[16px] overflow-hidden shadow-[0_1px_8px_rgba(43,43,43,0.06)] flex flex-col">
                 <div className="relative aspect-[3/4] bg-[#F3F2F0] overflow-hidden">
                   {l.image_url && <FallbackImage src={l.image_url} thumbWidth={800} alt="" className="absolute inset-0 w-full h-full object-cover" />}
-                  <button onClick={() => run(`hide-${l.look_id}`, async () => { await removeArchivalLook(l.look_id, testMemberId); await refresh() })} aria-label="Remove this photo" className="absolute top-3 right-3 w-10 h-10 rounded-full bg-[rgba(255,255,255,0.9)] text-[22px] leading-none text-[#2B2B2B]">×</button>
+                  <button onClick={() => removeLook(l.look_id)} aria-label="Remove this photo" className="absolute top-3 right-3 w-10 h-10 rounded-full bg-[rgba(255,255,255,0.9)] text-[22px] leading-none text-[#2B2B2B]">×</button>
                 </div>
                 <div className="px-4 py-4 space-y-3">
                   {l.summary && <p className={`${T_SMALL} text-[#4A4E57] leading-snug`}>{l.summary}</p>}

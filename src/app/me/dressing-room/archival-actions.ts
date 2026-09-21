@@ -13,7 +13,7 @@ import { inboxHeadersSince, inboxMessages, memberInboxes } from '@/lib/email/con
 import { emailForExtraction } from '@/lib/email/purchase-core'
 import { instagramConfigured } from '@/lib/archival/instagram'
 import {
-  MIGRATION_HINT, disconnectInstagram, hideArchivalLook, importArchivalPhoto, listArchivalLooks, listInstagramConnections,
+  MIGRATION_HINT, chooseArchivalLooks, disconnectInstagram, hideArchivalLook, importArchivalPhoto, listArchivalLooks, listInstagramConnections,
   readArchivalLooks, syncInstagram, uploadSourceId,
   type ArchivalLookView, type InstagramConnectionView,
 } from '@/lib/archival/store'
@@ -59,7 +59,7 @@ export async function syncArchivalInstagram(asMemberId?: string): Promise<{ adde
 }
 
 /** One photo per call — server actions carry a small body, and each photo is its own piece of work. */
-export async function uploadArchivalPhoto(formData: FormData): Promise<{ lookId?: string; skipped?: boolean; error?: string }> {
+export async function uploadArchivalPhoto(formData: FormData): Promise<{ lookId?: string; skipped?: boolean; noOutfit?: boolean; error?: string }> {
   const me = await resolveClientMember(String(formData.get('member') ?? '') || undefined)
   if (!me) return { error: 'Not signed in' }
   const file = formData.get('file')
@@ -74,6 +74,15 @@ export async function uploadArchivalPhoto(formData: FormData): Promise<{ lookId?
     : file.lastModified ? new Date(file.lastModified).toISOString() : null
   const r = await importArchivalPhoto(me.memberId, { bytes, name: file.name, mime: file.type, source: 'upload', sourceId: uploadSourceId(bytes), takenAt, caption })
   if (r.lookId && !r.skipped) workInBackground(me.memberId)
+  return r
+}
+
+/** She picks which of her photos are outfits worth keeping; only then does MYRA look for the pieces in them. */
+export async function chooseMyArchivalLooks(lookIds: string[], asMemberId?: string): Promise<{ chosen?: number; error?: string }> {
+  const me = await resolveClientMember(asMemberId)
+  if (!me) return { error: 'Not signed in' }
+  const r = await chooseArchivalLooks(me.memberId, Array.isArray(lookIds) ? lookIds.map(String) : [])
+  if (r.chosen) workInBackground(me.memberId)
   return r
 }
 

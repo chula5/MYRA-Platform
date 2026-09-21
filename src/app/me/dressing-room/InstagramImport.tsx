@@ -36,7 +36,7 @@ export default function InstagramImport({ testMemberId, onClose, onImported }: {
   const [step, setStepState] = useState<Step>(1)
   const [mail, setMail] = useState<{ inbox: boolean; ready: boolean; link?: string } | null>(null)
   const [checking, setChecking] = useState(false)
-  const [work, setWork] = useState<{ found: number; done: number; total: number; added: number; already: number; failed: number; why?: string } | null>(null)
+  const [work, setWork] = useState<{ found: number; done: number; total: number; added: number; already: number; failed: number; noOutfit?: number; why?: string } | null>(null)
   const [finished, setFinished] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
@@ -134,7 +134,7 @@ export default function InstagramImport({ testMemberId, onClose, onImported }: {
     const { BlobReader, BlobWriter, ZipReader } = await import('@zip.js/zip.js')
     const batch = rest.photos.slice(rest.from, rest.from + BATCH)
     const want = new Map(batch.map((p) => [p.path, p]))
-    let done = 0, added = 0, already = 0, failed = 0
+    let done = 0, added = 0, already = 0, failed = 0, noOutfit = 0
     let why: string | undefined
     setFinished(false)
     setWork({ found: rest.photos.length, done: 0, total: batch.length, added: 0, already: 0, failed: 0 })
@@ -153,11 +153,12 @@ export default function InstagramImport({ testMemberId, onClose, onImported }: {
           if (testMemberId) fd.set('member', testMemberId)
           const r = await uploadArchivalPhoto(fd)
           if (r.error) { failed++; why = why ?? r.error }
+          else if (r.noOutfit) noOutfit++
           else if (r.skipped) already++
           else added++
         } catch (err) { failed++; why = why ?? (err instanceof Error ? err.message : undefined) }
         done++
-        setWork({ found: rest.photos.length, done, total: batch.length, added, already, failed, why })
+        setWork({ found: rest.photos.length, done, total: batch.length, added, already, failed, noOutfit, why })
       }
       await reader.close()
     }
@@ -315,7 +316,7 @@ export default function InstagramImport({ testMemberId, onClose, onImported }: {
                 {!finished
                   ? `Found ${work.found} photo${work.found === 1 ? '' : 's'}. Bringing in photo ${Math.min(work.done + 1, work.total)} of ${work.total}…`
                   : work.added
-                    ? `Done — ${work.added} photo${work.added === 1 ? '' : 's'} brought in${work.already ? `, ${work.already} were already here` : ''}${work.failed ? `, ${work.failed} could not be read` : ''}. MYRA is looking at them now.`
+                    ? `Done — ${work.added} photo${work.added === 1 ? '' : 's'} brought in${work.noOutfit ? `, ${work.noOutfit} left out (no outfit in them)` : ''}${work.already ? `, ${work.already} were already here` : ''}${work.failed ? `, ${work.failed} could not be read` : ''}. Pick the ones to keep in your Archival Looks.`
                     : work.already && !work.failed
                       ? 'Those photos were already here — nothing new to bring in.'
                       : `The photos could not be brought in${work.why ? ` — ${work.why}` : ''}. Nothing was lost; try again in a moment.`}

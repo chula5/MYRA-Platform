@@ -17,6 +17,7 @@ import type { OwnerRef, WardrobeExtraction } from '@/lib/wardrobe/types'
 import { analyseOutfit } from '@/app/admin/ai/analyse-outfit'
 import { buildOutfitVector } from '@/lib/taste-vector'
 import { listInstagramImages, refreshInstagramToken, type InstagramGrant } from './instagram'
+import { photoHasOutfit, photoUrlHasOutfit } from './outfit-gate'
 
 export const MIGRATION_HINT = 'Run migration 0061_archival_looks.sql in Supabase first'
 const missing = (msg: string) => /archival_look|member_instagram_connection|schema cache|does not exist/i.test(msg)
@@ -63,12 +64,15 @@ async function archivalBatchId(memberId: string): Promise<string | null> {
 export interface IncomingPhoto { bytes: Buffer; name: string | null; mime: string | null; source: 'instagram' | 'upload'; sourceId: string; permalink?: string | null; caption?: string | null; takenAt?: string | null }
 
 /** One photo in: a wardrobe photo (for the garments) and an archival look (for the outfit). Idempotent on (member, source, sourceId). */
-export async function importArchivalPhoto(memberId: string, p: IncomingPhoto): Promise<{ lookId?: string; skipped?: true; error?: string }> {
+export async function importArchivalPhoto(memberId: string, p: IncomingPhoto): Promise<{ lookId?: string; skipped?: true; noOutfit?: true; error?: string }> {
   const admin = createAdminClient() as any
   const { data: known, error: kErr } = await admin.from('archival_look').select('look_id').eq('member_id', memberId).eq('source', p.source).eq('source_id', p.sourceId).maybeSingle()
   if (kErr) return { error: missing(kErr.message) ? MIGRATION_HINT : kErr.message }
   if (known) return { skipped: true, lookId: known.look_id }
-  const added = await addPhotoToBatch(await archivalBatchId(memberId), ownerFor(memberId), { bytes: p.bytes, name: p.name, mime: p.mime })
+  // Only photos with an outfit in them are kept: no landscapes, food or face-only selfies.
+  if (!(await photoHasOutfit(p.bytes))) return { skipped: true, noOutfit: true }
+  // Kept, not searched: MYRA only looks for the pieces once she chooses the photo.
+  const added = await addPhotoToBatch(await archivalBatchId(memberId), ownerFor(memberId), { bytes: p.bytes, name: p.name, mime: p.mime }, { detect: false })
   if (!added.photo) return { error: added.error ?? 'Could not keep that photo' }
   const { data, error } = await admin.from('archival_look').insert({
     member_id: memberId, source: p.source, source_id: p.sourceId, permalink: p.permalink ?? null,
@@ -118,8 +122,9 @@ export async function syncInstagram(memberId: string, max = SYNC_PHOTOS): Promis
 /** Read the outfits MYRA has not read yet — how she wears things. Bounded: each is one vision call. */
 export async function readArchivalLooks(memberId: string, max = 4): Promise<number> {
   const admin = createAdminClient() as any
-  const { data } = await admin.from('archival_look').select('look_id, photo:photo_id(storage_path)').eq('member_id', memberId).is('read_at', null).eq('hidden', false).order('created_at').limit(max)
-  const rows = (data ?? []).filter((r: any) => r.photo?.storage_path)
+  const { data } = await admin.from('archival_look').select('look_id, photo:photo_id(storage_path, status)').eq('member_id', memberId).is('read_at', null).eq('hidden', false).order('created_at').limit(max)
+  // Only looks she has chosen are read; photos still waiting to be picked cost nothing.
+  const rows = (data ?? []).filter((r: any) => r.photo?.storage_path && r.photo.status !== 'uploaded')
   if (!rows.length) return 0
   const urls = await signedPhotoUrls(rows.map((r: any) => r.photo.storage_path))
   let read = 0
@@ -179,6 +184,56 @@ export async function listArchivalLooks(memberId: string): Promise<ArchivalLookV
       colour_family: x.detected?.colour_family ?? null, image_url: x.cutout_url ?? x.crop_url ?? null, status: x.status, item_id: x.item_id ?? null,
     })),
   }))
+}
+
+/** Hide the looks already kept that have no outfit in them. One small vision call each; bounded per run. */
+export async function hideLooksWithoutOutfit(memberId: string, max = 200): Promise<{ checked: number; hidden: number }> {
+  const admin = createAdminClient() as any
+  const { data } = await admin.from('archival_look').select('look_id, photo:photo_id(storage_path)').eq('member_id', memberId).eq('hidden', false).limit(max)
+  const rows = (data ?? []).filter((r: any) => r.photo?.storage_path)
+  const urls = rows.length ? await signedPhotoUrls(rows.map((r: any) => r.photo.storage_path)) : new Map<string, string>()
+  let hidden = 0
+  for (let i = 0; i < rows.length; i += 6) {
+    await Promise.all(rows.slice(i, i + 6).map(async (r: any) => {
+      const url = urls.get(r.photo.storage_path)
+      if (url && !(await photoUrlHasOutfit(url))) {
+        await admin.from('archival_look').update({ hidden: true }).eq('look_id', r.look_id)
+        hidden++
+      }
+    }))
+  }
+  return { checked: rows.length, hidden }
+}
+
+/** Her chosen photos become archival looks: MYRA starts finding the pieces in them. */
+export async function chooseArchivalLooks(memberId: string, lookIds: string[]): Promise<{ chosen: number; error?: string }> {
+  if (!lookIds.length) return { chosen: 0 }
+  const admin = createAdminClient() as any
+  const { data, error } = await admin.from('archival_look').select('look_id, photo_id, photo:photo_id(status, batch_id)').eq('member_id', memberId).in('look_id', lookIds.slice(0, 100))
+  if (error) return { chosen: 0, error: error.message }
+  const waiting = (data ?? []).filter((r: any) => r.photo_id && r.photo?.status === 'uploaded')
+  if (!waiting.length) return { chosen: 0 }
+  const { data: queued } = await admin.from('wardrobe_job').select('photo_id').in('photo_id', waiting.map((r: any) => r.photo_id)).in('status', ['queued', 'running'])
+  const already = new Set((queued ?? []).map((q: any) => q.photo_id))
+  const jobs = waiting.filter((r: any) => !already.has(r.photo_id))
+    .map((r: any) => ({ kind: 'detect', batch_id: r.photo?.batch_id ?? null, photo_id: r.photo_id, owner_user_id: memberId, priority: 1 }))
+  if (jobs.length) {
+    const { error: jErr } = await admin.from('wardrobe_job').insert(jobs)
+    if (jErr) return { chosen: 0, error: jErr.message }
+  }
+  // Marked as looking, so the photo moves into her archival looks straight away.
+  await admin.from('wardrobe_photo').update({ status: 'detecting' }).in('photo_id', waiting.map((r: any) => r.photo_id)).eq('status', 'uploaded')
+  return { chosen: waiting.length }
+}
+
+/** Photos kept before choosing existed had garment searches queued on arrival: take back the ones not yet run. */
+export async function holdUnchosenArchivalPhotos(memberId: string): Promise<number> {
+  const admin = createAdminClient() as any
+  const { data } = await admin.from('archival_look').select('photo_id, photo:photo_id(status)').eq('member_id', memberId).eq('hidden', false)
+  const ids = (data ?? []).filter((r: any) => r.photo?.status === 'uploaded').map((r: any) => r.photo_id)
+  if (!ids.length) return 0
+  const { data: gone } = await admin.from('wardrobe_job').delete().in('photo_id', ids).eq('status', 'queued').select('job_id')
+  return gone?.length ?? 0
 }
 
 export async function hideArchivalLook(memberId: string, lookId: string): Promise<{ error?: string }> {
