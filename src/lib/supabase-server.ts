@@ -39,6 +39,9 @@ export function createAdminClient() {
         autoRefreshToken: false,
         persistSession: false,
       },
+      // Never let Next.js's fetch cache answer a database read: it served her
+      // wardrobe as it stood weeks ago (4 pieces when she had 14).
+      global: { fetch: (input, init) => fetch(input, { ...init, cache: 'no-store' }) },
     }
   )
 }
