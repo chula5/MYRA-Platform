@@ -24,6 +24,8 @@ interface OutfitCardProps {
   onExploreStyles?: (outfit: OutfitWithItems) => void
   onStyleItem?: (itemId: string, itemType: ItemType, outfit: OutfitWithItems) => void
   detailHref?: string
+  /** Tap the card: when set, this runs INSTEAD of going to the detail page (her hosted looks open in place). */
+  onOpen?: (outfit: OutfitWithItems) => void
   // Save (heart) — only shown for signed-in early-access users.
   canSave?: boolean
   initialSaved?: boolean
@@ -42,6 +44,7 @@ export default function OutfitCard({
   onExploreStyles,
   onStyleItem,
   detailHref,
+  onOpen,
   canSave = false,
   initialSaved = false,
   lockedSave = false,
@@ -95,19 +98,20 @@ export default function OutfitCard({
 
   function handleTap() {
     if (didSwipe.current) return
+    if (onOpen) { onOpen(outfit); return }
     trackEngagement('outfit_view', outfit.outfit_id)
     router.push(detailHref ?? `/outfit/${outfit.outfit_id}`)
   }
 
   const hasUnique = Object.values(sizeInfo?.items ?? {}).some((i) => i.unique)
 
-  const actionClass = 'pointer-events-auto text-white text-[10px] sm:text-[11px] tracking-[0.1em] uppercase font-light hover:opacity-70 transition-opacity'
+  const actionClass = 'pointer-events-auto text-[10px] sm:text-[11px] tracking-[0.1em] uppercase font-light myra-action'
 
   return (
     <article className="relative flex flex-col">
       {/* Full-bleed image carousel — 3:4 portrait, actions overlaid */}
       <div
-        className="relative aspect-[3/4] w-full overflow-hidden cursor-pointer"
+        className="relative aspect-[3/4] w-full overflow-hidden rounded-[14px] cursor-pointer"
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
         onClick={handleTap}
@@ -199,11 +203,11 @@ export default function OutfitCard({
         <div className="absolute inset-x-0 bottom-0 z-40 pt-10 pb-3.5 px-3 bg-gradient-to-t from-black/55 via-black/20 to-transparent pointer-events-none">
             {/* Source Items + Similar Looks on one line, Explore Styles below —
                 the cards are too narrow to fit all three on a single row. */}
-            <div className="flex items-center justify-center gap-x-4">
+            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2">
               <button onClick={(e) => { e.stopPropagation(); setSourcePanelOpen((v) => !v) }} className={actionClass}>Source Items</button>
               <button onClick={(e) => { e.stopPropagation(); trackEngagement('similar_looks', outfit.outfit_id); onSimilarLooks?.(outfit) }} className={actionClass}>Similar Looks</button>
             </div>
-            <div className="flex justify-center mt-1.5">
+            <div className="flex justify-center mt-2.5">
               <button onClick={(e) => { e.stopPropagation(); trackEngagement('explore_styles', outfit.outfit_id); onExploreStyles?.(outfit) }} className={actionClass}>Explore Styles</button>
             </div>
             {/* Honest, not apologetic: the styling still stands, and the piece

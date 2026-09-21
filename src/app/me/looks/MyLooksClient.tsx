@@ -17,7 +17,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import ClientWardrobe from './ClientWardrobe'
 import { reactToLook, requestLooks, type ClientView, type ClientLook, type ClientLookItem } from './actions'
-import { CLIENT_OCCASIONS, ASK_KINDS, ASK_WHEN, ASK_FEEL, ASK_WEATHER, ASK_LIMITS, ASK_BUDGET } from '@/lib/client-occasions'
+import { CLIENT_OCCASIONS, askKindForEvent, ASK_KINDS, ASK_WHEN, ASK_FEEL, ASK_WEATHER, ASK_LIMITS, ASK_BUDGET } from '@/lib/client-occasions'
 import { lookSimilarity, relatedLooks, looksWearing } from '@/lib/look-similarity'
 import FallbackImage from '@/components/FallbackImage'
 import Hotspot from '@/components/hotspot/Hotspot'
@@ -31,6 +31,7 @@ import { previewAskForMember, rescoreAskLook, type AskPreviewResult } from '@/ap
 import { keepAskPreview, askPreviewAlternates } from '@/app/admin/private-stylist/actions.gated'
 import type { AskSwapOption, AskLookEdits } from '@/app/admin/private-stylist/actions'
 import { PICKER_COLOURS, PICKER_TYPES } from '@/components/admin/ItemPickerModal'
+import { loadCalendarPanel, syncMyCalendar, planMyEvent, type CalendarPanelView } from '@/app/me/dressing-room/calendar-actions'
 
 // The feed's section heading pair, so her page reads at the feed's scale.
 function SectionHead({ label, note, heart = false }: { label: string; note?: string; heart?: boolean }) {
@@ -59,7 +60,7 @@ const REASONS = [
 
 const RECENT_KEY = 'myra:me:recent'
 
-const ACTION = 'pointer-events-auto text-white text-[clamp(15px,1.05vw,32px)] tracking-[0.1em] uppercase font-light hover:opacity-70 transition-opacity'
+const ACTION = 'pointer-events-auto text-[clamp(15px,1.05vw,32px)] tracking-[0.1em] uppercase font-light myra-action'
 
 export default function MyLooksClient({ view, readOnly = false, initialQuery = '' }: { view: ClientView; readOnly?: boolean; initialQuery?: string }) {
   const [query, setQuery] = useState(initialQuery)
@@ -587,13 +588,13 @@ function LookCard({
         {/* Actions — Source Items + Similar Looks on one line, Explore Styles
             underneath. Same rows, same class, same z-40 as the feed card. */}
         <div className="absolute inset-x-0 bottom-0 z-40 pt-10 pb-3.5 px-3 bg-gradient-to-t from-black/55 via-black/20 to-transparent pointer-events-none">
-          <div className="flex items-center justify-center gap-x-4">
+          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2">
             <button data-tour="look-source" onClick={(e) => { e.stopPropagation(); if (!sourcePanelOpen) onOpen?.(); setSourcePanelOpen((v) => !v) }} className={ACTION}>
               Source Items
             </button>
             <button data-tour="look-similar" onClick={(e) => { e.stopPropagation(); onSimilar?.() }} className={ACTION}>Similar Looks</button>
           </div>
-          <div className="flex justify-center mt-1.5">
+          <div className="flex justify-center mt-2.5">
             <button data-tour="look-explore" onClick={(e) => { e.stopPropagation(); onExplore?.() }} className={ACTION}>Explore Styles</button>
           </div>
         </div>
@@ -913,6 +914,36 @@ function AskPanel({
   const [budget, setBudget] = useState<string | null>(null)
   const [refine, setRefine] = useState(false)
   const [formOpen, setFormOpen] = useState(true)
+  const [moreKinds, setMoreKinds] = useState(false)
+  // PLAN FOR SOMETHING IN HER CALENDAR: picking an event fills the brief.
+  const [cal, setCal] = useState<CalendarPanelView | null>(null)
+  const [calOpen, setCalOpen] = useState(false)
+  const [calBusy, setCalBusy] = useState(false)
+  const [eventId, setEventId] = useState<string | null>(null)
+  async function openCalendar() {
+    if (calOpen) { setCalOpen(false); return }
+    setCalOpen(true)
+    if (!cal) setCal(await loadCalendarPanel(testMemberId))
+  }
+  async function syncCalendar() {
+    setCalBusy(true)
+    await syncMyCalendar(testMemberId).catch(() => undefined)
+    setCal(await loadCalendarPanel(testMemberId))
+    setCalBusy(false)
+  }
+  function planFor(ev: CalendarPanelView['events'][number]) {
+    const k = askKindForEvent(ev.title, ev.occasion)
+    pickKind(k)
+    setMoreKinds(!!ASK_KINDS.find((x) => x.id === k)?.more)
+    const start = new Date(ev.starts_at)
+    const h = start.getHours()
+    setWhen(ev.all_day ? 'Day' : h < 15 ? 'Day' : h < 18 ? 'Day into night' : h < 21 ? 'Evening' : 'Late')
+    const day = start.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+    setWords(`${ev.title}, ${day}${ev.location ? ` at ${ev.location}` : ''}`)
+    setEventId(ev.event_id)
+    setCalOpen(false)
+  }
+  const calHref = `/api/calendar/google/start?return=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/me/looks')}${testMemberId ? `&member=${testMemberId}` : ''}`
   const offered = new Set(occasionIds?.length ? occasionIds : CLIENT_OCCASIONS.map((o) => o.id as string))
   const kinds = ASK_KINDS.filter((k) => offered.has(k.occasion))
   const picked = ASK_KINDS.find((k) => k.id === kind) ?? null
@@ -957,7 +988,7 @@ function AskPanel({
     } else {
       const r = await requestLooks(occasion, climate, brief)
       if (r.error) setError(r.error)
-      else setSent(true)
+      else { setSent(true); if (eventId) void planMyEvent(eventId, testMemberId).catch(() => undefined) }
     }
     setBusy(false)
   }
@@ -981,8 +1012,9 @@ function AskPanel({
   return (
     <div className="space-y-6">
       {formOpen && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[80] flex items-start sm:items-center justify-center bg-[rgba(43,43,43,0.35)] backdrop-blur-[3px] px-4 py-8 overflow-y-auto" data-lenis-prevent
-          onMouseDown={(e) => { if (e.target === e.currentTarget) closeForm() }}>
+        <div className="fixed inset-0 z-[80] bg-[rgba(43,43,43,0.35)] backdrop-blur-[3px] overflow-y-auto" data-lenis-prevent>
+          {/* min-h-full centres a short card; a tall one starts at the top and scrolls, never cut off. */}
+          <div className="min-h-full flex items-center justify-center px-4 py-8" onMouseDown={(e) => { if (e.target === e.currentTarget) closeForm() }}>
           <div role="dialog" aria-modal="true" aria-label="Ask MYRA"
             className="w-full max-w-[clamp(640px,58vw,1400px)] bg-white rounded-[28px] shadow-[0_30px_60px_-30px_rgba(43,43,43,0.55)] px-[clamp(22px,2.4vw,56px)] py-[clamp(22px,2.2vw,52px)] space-y-[clamp(22px,1.8vw,40px)]">
             <div className="flex items-start justify-between gap-4">
@@ -998,10 +1030,61 @@ function AskPanel({
                 className="shrink-0 w-[52px] h-[52px] rounded-full bg-[#F4F4F2] text-[26px] text-[#2B2B2B] hover:bg-[#E9E9E6]">×</button>
             </div>
 
+            <div>
+              <button type="button" onClick={openCalendar}
+                className="myra-silver-button !w-auto !inline-flex items-center gap-3 px-[1.3em] !py-[0.6em] text-[clamp(19px,1.1vw,28px)] tracking-[0.04em]">
+                <svg viewBox="0 0 24 24" className="w-[1.1em] h-[1.1em]" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" aria-hidden>
+                  <rect x="3" y="5" width="18" height="16" rx="3" /><path d="M3 10h18M8 3v4M16 3v4" />
+                </svg>
+                Plan for something in my calendar
+              </button>
+              {calOpen && (
+                <div className="mt-4 rounded-[20px] bg-[#F7F7F5] px-5 py-5">
+                  {!cal ? (
+                    <p className="text-[clamp(18px,1vw,24px)] text-[#6E6B65]">Opening your calendar…</p>
+                  ) : cal.error ? (
+                    <p className="text-[clamp(18px,1vw,24px)] text-[#8B5E00]">{cal.error}</p>
+                  ) : !cal.connections.length ? (
+                    <div className="flex flex-wrap items-center gap-4">
+                      <p className="text-[clamp(18px,1vw,24px)] text-[#55534E]">Connect your Google Calendar and MYRA lists what is coming up.</p>
+                      {cal.ready
+                        ? <a href={calHref} className={pill(false).replace('bg-[#F4F4F2]', 'bg-white')}>Connect Google Calendar</a>
+                        : <span className="text-[clamp(18px,1vw,24px)] text-[#8A8F95]">Calendar connect is not switched on yet.</span>}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-[clamp(18px,1vw,24px)] text-[#6E6B65]">Coming up: pick one and MYRA fills in the brief.</p>
+                        <button type="button" disabled={calBusy} onClick={syncCalendar} className={pill(false).replace('bg-[#F4F4F2]', 'bg-white')}>{calBusy ? 'Syncing…' : 'Sync calendar'}</button>
+                      </div>
+                      {cal.events.filter((e) => e.status !== 'ignored').length ? (
+                        <div className="flex flex-wrap gap-2.5">
+                          {cal.events.filter((e) => e.status !== 'ignored').slice(0, 12).map((e) => (
+                            <button key={e.event_id} type="button" onClick={() => planFor(e)} className={pill(eventId === e.event_id).replace('bg-[#F4F4F2]', 'bg-white')}>
+                              <span className="myra-guide-text">{e.title}</span>
+                              <span className="ml-2 opacity-60">{new Date(e.starts_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[clamp(18px,1vw,24px)] text-[#55534E]">Nothing worth dressing for in the next few weeks. Sync to check again.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             <section>
               <p className={step}>01 The occasion</p>
               <div className="mt-3 flex flex-wrap gap-2.5">
-                {kinds.map((k) => <button key={k.id} type="button" onClick={() => pickKind(k.id)} className={pill(kind === k.id)}>{k.label}</button>)}
+                {kinds.filter((k) => !k.more || moreKinds || kind === k.id).map((k) => <button key={k.id} type="button" onClick={() => pickKind(k.id)} className={pill(kind === k.id)}>{k.label}</button>)}
+                {kinds.some((k) => k.more) && (
+                  <button type="button" onClick={() => setMoreKinds(!moreKinds)}
+                    className="text-[clamp(19px,1.1vw,28px)] px-[1.1em] py-[0.55em] rounded-full border-2 border-dashed border-[#C9C9C6] text-[#55534E] hover:text-[#2B2B2B]">
+                    {moreKinds ? '− Fewer occasions' : '+ More occasions'}
+                  </button>
+                )}
               </div>
               {picked?.where && (
                 <div className="mt-4 rounded-[20px] bg-[#F7F7F5] px-5 py-4">
@@ -1090,6 +1173,7 @@ function AskPanel({
               )}
               {error && <p className="text-[20px] text-[#B83A3A]">{error}</p>}
             </div>
+          </div>
           </div>
         </div>,
         document.body,

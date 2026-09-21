@@ -21,17 +21,46 @@ export const CLIENT_CLIMATES = [
 
 // The fuller brief in her Ask MYRA pop-out. Each kind rides on one of the
 // composer's occasions above; the rest travels as the brief.
-export const ASK_KINDS: { id: string; label: string; occasion: string; where?: string[] }[] = [
+export const ASK_KINDS: { id: string; label: string; occasion: string; where?: string[]; more?: boolean }[] = [
   { id: 'everyday', label: 'Everyday', occasion: 'casual_day', where: ['School run', 'Errands', 'Lunch with friends', 'At home'] },
   { id: 'work', label: 'Work', occasion: 'work_standard', where: ['Office', 'Client meeting', 'Presenting', 'Working from home'] },
-  { id: 'work_big', label: 'A big day at work', occasion: 'work_elevated' },
   { id: 'dinner', label: 'Dinner or drinks', occasion: 'dinner_drinks', where: ['Local spot', 'Smart restaurant', "Members' club", "Someone's home"] },
   { id: 'date', label: 'A date', occasion: 'dinner_drinks', where: ['Local spot', 'Smart restaurant', 'Bar', 'Something outdoors'] },
+  { id: 'kids', label: 'A kids\u2019 event', occasion: 'casual_day', where: ['School gate', 'Sports day', 'Kids\u2019 party', 'Nativity or concert', 'Parents\u2019 evening'] },
   { id: 'event', label: 'An event', occasion: 'event', where: ['Party', 'Gallery or show', 'Garden', 'Daytime do'] },
   { id: 'wedding', label: 'Wedding or celebration', occasion: 'event', where: ['Church or registry', 'Garden', 'Country house', 'Evening reception'] },
-  { id: 'black_tie', label: 'Black tie', occasion: 'event' },
   { id: 'trip', label: 'A trip', occasion: 'travel', where: ['City break', 'Beach', 'Countryside', 'Skiing'] },
+  { id: 'black_tie', label: 'Black tie', occasion: 'event' },
+  // Behind "+ More occasions".
+  { id: 'work_big', label: 'A big day at work', occasion: 'work_elevated', where: ['Interview', 'Presenting', 'Conference', 'Client dinner'], more: true },
+  { id: 'birthday', label: 'A birthday', occasion: 'event', where: ['Lunch', 'Dinner', 'Party', 'At home'], more: true },
+  { id: 'christening', label: 'Christening', occasion: 'event', more: true },
+  { id: 'funeral', label: 'Funeral or memorial', occasion: 'event', more: true },
+  { id: 'races', label: 'The races', occasion: 'event', more: true },
+  { id: 'garden_party', label: 'Garden party', occasion: 'event', more: true },
+  { id: 'graduation', label: 'Graduation', occasion: 'event', more: true },
+  { id: 'theatre', label: 'Theatre or a show', occasion: 'dinner_drinks', more: true },
+  { id: 'family_lunch', label: 'Family lunch', occasion: 'casual_day', where: ['Pub', 'Restaurant', 'At home', 'Outdoors'], more: true },
+  { id: 'weekend_away', label: 'A weekend away', occasion: 'travel', where: ['City', 'Country house', 'By the sea'], more: true },
+  { id: 'holiday', label: 'A holiday', occasion: 'travel', where: ['Beach', 'City', 'Villa', 'Skiing'], more: true },
 ]
+
+/** The brief's kind for something in her calendar: the title first, then the calendar's own read. */
+export function askKindForEvent(title: string, occasion: string | null): string {
+  const t = title.toLowerCase()
+  const rules: [RegExp, string][] = [
+    [/wedding|engagement|anniversary|hen (do|party)/, 'wedding'], [/black tie|gala|\bball\b/, 'black_tie'],
+    [/christening|baptism/, 'christening'], [/funeral|memorial/, 'funeral'], [/races|ascot/, 'races'],
+    [/graduation/, 'graduation'], [/garden party/, 'garden_party'], [/birthday/, 'birthday'],
+    [/school|sports day|nativity|parents.? evening|kids|children|playdate/, 'kids'],
+    [/theatre|theater|opera|ballet|concert|gig|show/, 'theatre'], [/date night|\bdate\b/, 'date'],
+    [/interview|presentation|pitch|conference|keynote/, 'work_big'], [/holiday|villa|beach/, 'holiday'],
+  ]
+  for (const [re, id] of rules) if (re.test(t)) return id
+  const byOccasion: Record<string, string> = { event: 'event', travel: 'trip', dinner_drinks: 'dinner', work_elevated: 'work_big', work_standard: 'work', casual_day: 'everyday' }
+  return (occasion && byOccasion[occasion]) || 'event'
+}
+
 export const ASK_WHEN = ['Day', 'Day into night', 'Evening', 'Late'] as const
 export const ASK_FEEL = ['Easy', 'Polished', 'Noticed'] as const
 export const ASK_WEATHER = ['Hot', 'Mild', 'Cold', 'Rain', 'Mostly indoors'] as const

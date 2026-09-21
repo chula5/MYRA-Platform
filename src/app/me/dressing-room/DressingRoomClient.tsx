@@ -16,6 +16,7 @@ import { myLooksWithPiece, styleMyPiece } from './actions'
 import DressingRoomScene from '@/components/me/DressingRoomScene'
 import EmailFinds from './EmailFinds'
 import ArchivalLooks from './ArchivalLooks'
+import CalendarPanel from './CalendarPanel'
 import { loadEmailPanel } from './email-actions'
 import { useScrollTo } from '@/lib/smooth-scroll'
 
@@ -300,6 +301,9 @@ export default function DressingRoomClient({
         )}
 
         {/* What she already wears, and how — from Instagram or her own photos. */}
+        {/* What is coming up, from her calendar — so MYRA can plan for it. */}
+        <CalendarPanel testMemberId={testMemberId} />
+
         <ArchivalLooks testMemberId={testMemberId} />
 
         {/* Fill the dressing room from her order emails. */}

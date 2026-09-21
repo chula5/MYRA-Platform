@@ -8,6 +8,7 @@
 // Each of her rooms is a tab; in all of them Chloe's taps are tests — outfits
 // are composed and checked for real, but nothing she would record is saved.
 
+import InviteLink from './InviteLink'
 import { useEffect, useState } from 'react'
 import MyLooksClient from '@/app/me/looks/MyLooksClient'
 import ForYouClient from '@/app/me/ForYouClient'
@@ -18,6 +19,7 @@ import MagazineClient from '@/app/me/magazine/MagazineClient'
 import RoomNav, { ROOMS, type RoomId } from '@/components/me/RoomNav'
 import YouButton from '@/components/me/YouButton'
 import MirrorCurtain from '@/components/me/MirrorCurtain'
+import YouSettings from '@/app/me/YouSettings'
 import ThreadsClient from '@/app/me/threads/ThreadsClient'
 import { MirrorLoading } from '@/components/ArchiveCard'
 import { loadLooksForMember, type ClientView } from '@/app/me/looks/actions'
@@ -95,6 +97,7 @@ export default function HerViewTab({
       <p className="text-[20px] tracking-[0.1em] text-[#8B5E00] px-1 pb-3">
         TESTING AS {name.toUpperCase()} — TAPS HERE ARE TESTS: NOTHING IS SENT TO HER OR SAVED
       </p>
+      <InviteLink memberId={memberId} name={name} />
 
       {/* Her own bar, full width of the screen — exactly what she taps. */}
       <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen">
@@ -103,13 +106,13 @@ export default function HerViewTab({
           {room === 'for_you' ? (
             <>
               <div className="flex items-start justify-end px-6 sm:px-10 pt-4">
-                <YouButton onClick={() => setRoom('for_you')} />
+                <YouButton onClick={() => { setRoom('profile'); setPiece(null) }} />
               </div>
               <img src="/myra-logo-black.png" alt="MYRA" className="mx-auto h-[110px] sm:h-[150px] w-auto -mt-12" />
               <RoomNav
                 active={room}
                 searchPlaceholder="What are you wearing today?"
-                onSelect={(id) => { setRoom(id === 'profile' ? 'for_you' : id); setPiece(null) }}
+                onSelect={(id) => { setRoom(id); setPiece(null) }}
                 onSearch={(q) => { setRoom('all_looks'); setSearch(q) }}
               />
             </>
@@ -120,11 +123,11 @@ export default function HerViewTab({
                 <RoomNav
                   active={room}
                   compact
-                  onSelect={(id) => { setRoom(id === 'profile' ? 'for_you' : id); setPiece(null) }}
+                  onSelect={(id) => { setRoom(id); setPiece(null) }}
                   onSearch={(q) => { setRoom('all_looks'); setSearch(q) }}
                 />
               </div>
-              <YouButton onClick={() => setRoom('for_you')} />
+              <YouButton active={room === 'profile'} onClick={() => { setRoom('profile'); setPiece(null) }} />
             </div>
           )}
         </div>
@@ -157,6 +160,13 @@ export default function HerViewTab({
             </p>
           </div>
         )
+      )}
+
+      {/* YOU: her settings, loaded as her. */}
+      {!loading && room === 'profile' && (
+        <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen">
+          <YouSettings key={memberId} testMemberId={memberId} />
+        </div>
       )}
 
       {/* Threads reads her own records, as it does on her screen. */}

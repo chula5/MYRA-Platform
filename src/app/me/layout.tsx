@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createServerClient } from '@/lib/supabase-server'
 import { earlyAccessSignOut } from '@/app/earlyaccess/actions'
 import MeChrome from './MeChrome'
+import MeTour from '@/components/me/MeTour'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,6 +28,7 @@ export default async function MeLayout({ children }: { children: React.ReactNode
         }
       />
       <main className="w-full px-6 sm:px-10 py-10">{children}</main>
+      <MeTour />
     </div>
   )
 }

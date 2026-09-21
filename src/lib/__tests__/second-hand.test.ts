@@ -10,9 +10,17 @@ import type { SizeRow } from '@/lib/size-match'
 import type { SizeProfile } from '@/lib/size-canonical'
 
 const risk = (patch: Partial<RiskInputs> = {}): RiskInputs => ({
-  saversInSize: 0, saversOtherSize: 0, clickOuts48h: 0, clickOuts24h: 0,
+  freshSaversInSize: 0, activeSaversInSize: 0, saversInSize: 0, saversOtherSize: 0,
+  clickOuts48h: 0, clickOuts24h: 0,
   daysLive: 30, inLiveOutfit: false, stockClass: 'replenishable', ...patch,
 })
+
+/** A save made just now: fresh, active, and counted in the total. */
+const freshSave = (n = 1) => ({ freshSaversInSize: n, activeSaversInSize: n, saversInSize: n })
+/** Saved a while back, but she's still opening the app. */
+const activeSave = (n = 1) => ({ freshSaversInSize: 0, activeSaversInSize: n, saversInSize: n })
+/** Saved once, long ago, and she hasn't been back. */
+const dormantSave = (n = 1) => ({ freshSaversInSize: 0, activeSaversInSize: 0, saversInSize: n })
 
 describe('source and class', () => {
   it('lets the merchant decide, with a brand override', () => {
@@ -40,8 +48,8 @@ describe('source and class', () => {
 })
 
 describe('polling tiers', () => {
-  it('puts a piece someone is waiting on in her size in the fastest lane', () => {
-    expect(pollTier(risk({ saversInSize: 1 }))).toBe('A')
+  it('puts a piece saved in her size TODAY in the fastest lane', () => {
+    expect(pollTier(risk(freshSave()))).toBe('A')
     expect(POLL_INTERVAL_MS.A).toBe(30 * 60_000)
   })
 
@@ -49,19 +57,35 @@ describe('polling tiers', () => {
     expect(pollTier(risk({ clickOuts24h: 1 }))).toBe('A')
   })
 
-  it('drops an unengaged live piece to three-hourly, and a shelved one to daily', () => {
-    expect(pollTier(risk({ inLiveOutfit: true }))).toBe('B')
-    expect(pollTier(risk())).toBe('C')
+  it('cannot let arithmetic outvote a fresh save in her size', () => {
+    // Zero on every other signal, and still Tier A.
+    expect(pollTier(risk({ ...freshSave(), daysLive: 900 }))).toBe('A')
   })
 
-  it('cannot let arithmetic outvote a saver in her size', () => {
-    // Zero on every other signal, and still Tier A.
-    expect(pollTier(risk({ saversInSize: 1, daysLive: 900 }))).toBe('A')
+  it('cools an older save to three-hourly while she is still coming back', () => {
+    expect(pollTier(risk(activeSave()))).toBe('B')
+    expect(POLL_INTERVAL_MS.B).toBe(3 * 60 * 60_000)
+  })
+
+  it('drops to the daily floor once every saver has gone quiet', () => {
+    // THE POINT: a save no longer pins an item to the 30-minute lane forever.
+    expect(pollTier(risk(dormantSave()))).toBe('C')
+  })
+
+  it('never checks anything less often than daily', () => {
+    // A dead link is a customer hitting a sold-out page, so daily is the floor
+    // for everything — watched, forgotten, live or shelved alike.
+    expect(pollTier(risk({ inLiveOutfit: true }))).toBe('C')
+    expect(pollTier(risk({ ...dormantSave(), inLiveOutfit: true }))).toBe('C')
+    expect(pollTier(risk())).toBe('C')
+    const slowest = Math.max(...Object.values(POLL_INTERVAL_MS))
+    expect(slowest).toBe(24 * 60 * 60_000)
   })
 
   it('schedules the next check by tier', () => {
     const from = 1_700_000_000_000
     expect(nextCheckAt('B', from).getTime() - from).toBe(3 * 60 * 60_000)
+    expect(nextCheckAt('C', from).getTime() - from).toBe(24 * 60 * 60_000)
   })
 })
 
@@ -72,11 +96,20 @@ describe('risk score', () => {
   })
 
   it('weights a saver in her size above one who isn’t', () => {
-    expect(riskScore(risk({ saversInSize: 2 }))).toBeGreaterThan(riskScore(risk({ saversOtherSize: 2 })))
+    expect(riskScore(risk(freshSave(2)))).toBeGreaterThan(riskScore(risk({ saversOtherSize: 2 })))
+  })
+
+  it('ranks fresh attention above active, and active above dormant', () => {
+    expect(riskScore(risk(freshSave()))).toBeGreaterThan(riskScore(risk(activeSave())))
+    expect(riskScore(risk(activeSave()))).toBeGreaterThan(riskScore(risk(dormantSave())))
+  })
+
+  it('still counts a dormant saver — she is owed the alert, just not the slot', () => {
+    expect(riskScore(risk(dormantSave()))).toBeGreaterThan(riskScore(risk()))
   })
 
   it('stays within 0-1', () => {
-    const hot = risk({ saversInSize: 40, clickOuts48h: 90, inLiveOutfit: true, daysLive: 0 })
+    const hot = risk({ ...freshSave(40), clickOuts48h: 90, inLiveOutfit: true, daysLive: 0 })
     expect(riskScore(hot)).toBeLessThanOrEqual(1)
   })
 })

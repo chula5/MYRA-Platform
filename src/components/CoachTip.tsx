@@ -19,6 +19,7 @@ export default function CoachTip({
   widthClass = 'w-[190px]',
   active,
   onResolved,
+  size = 'small',
 }: {
   id: string
   text: string
@@ -28,6 +29,8 @@ export default function CoachTip({
   widthClass?: string
   active?: boolean
   onResolved?: () => void
+  /** 'large' for her own pages, where a tip has to be read at a glance (about 20pt once the page scales). */
+  size?: 'small' | 'large'
 }) {
   const [show, setShow] = useState(false)
   const controlled = active !== undefined
@@ -56,6 +59,7 @@ export default function CoachTip({
   }
 
   if (!show) return null
+  const large = size === 'large'
 
   const arrowPos: Record<string, string> = {
     up: 'top-0 left-1/2 -translate-x-1/2 -translate-y-1/2',
@@ -65,13 +69,13 @@ export default function CoachTip({
   }
 
   return (
-    <div className={`absolute z-40 ${widthClass} animate-[fadeIn_0.35s_ease] pointer-events-auto ${className}`}>
-      <div className="relative bg-white text-[#4A4E57] rounded-[10px] px-3 py-2.5 shadow-[0_6px_24px_rgba(0,0,0,0.2)] border border-[#EDEDED]">
-        <span className={`absolute w-2.5 h-2.5 bg-white rotate-45 ${arrowPos[arrow]}`} />
-        <p className="relative text-[9px] tracking-[0.05em] leading-relaxed">{text}</p>
+    <div className={`absolute z-40 ${large ? 'w-[270px]' : widthClass} animate-[fadeIn_0.35s_ease] pointer-events-auto ${className}`}>
+      <div className={`relative bg-white shadow-[0_6px_24px_rgba(0,0,0,0.2)] border border-[#EDEDED] ${large ? 'text-[#2B2B2B] px-5 py-4 rounded-[16px]' : 'text-[#4A4E57] px-3 py-2.5 rounded-[10px]'}`}>
+        <span className={`absolute bg-white rotate-45 ${large ? 'w-3.5 h-3.5' : 'w-2.5 h-2.5'} ${arrowPos[arrow]}`} />
+        <p className={`relative ${large ? 'text-[15px] tracking-[0.02em] leading-snug' : 'text-[9px] tracking-[0.05em] leading-relaxed'}`}>{text}</p>
         <button
           onClick={dismiss}
-          className="relative mt-2 text-[8px] tracking-[0.14em] text-[#A8A8A4] hover:text-[#4A4E57]"
+          className={`relative ${large ? 'mt-3 text-[13px] tracking-[0.12em] text-[#2B2B2B] underline underline-offset-4' : 'mt-2 text-[8px] tracking-[0.14em] text-[#A8A8A4]'} hover:text-[#4A4E57]`}
         >
           GOT IT ×
         </button>

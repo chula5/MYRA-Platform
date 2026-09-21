@@ -33,13 +33,13 @@ export function decryptSecret(stored: string): string {
 }
 
 /** Signed OAuth state: which member, where to return, and a nonce also held in a cookie. */
-export function signState(payload: { memberId: string; returnTo: string; nonce: string }): string {
+export function signState(payload: { memberId: string; returnTo: string; nonce: string; kind?: 'gmail' | 'calendar' }): string {
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url')
   const sig = crypto.createHmac('sha256', key()).update(body).digest('base64url')
   return `${body}.${sig}`
 }
 
-export function readState(state: string | null): { memberId: string; returnTo: string; nonce: string } | null {
+export function readState(state: string | null): { memberId: string; returnTo: string; nonce: string; kind?: 'gmail' | 'calendar' } | null {
   if (!state) return null
   const [body, sig] = state.split('.')
   if (!body || !sig) return null

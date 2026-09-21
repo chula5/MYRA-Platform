@@ -3,6 +3,9 @@ import { redirect } from 'next/navigation'
 import { createServerClient, createAdminClient } from '@/lib/supabase-server'
 import { getClientStyleProfile } from '@/lib/taste-profile'
 import { OCCASION_OPTIONS, PRICE_BANDS, HEEL_OPTIONS, LENGTH_NO_GO_OPTIONS } from '@/lib/style-profile'
+import { resolveClientMember } from '@/lib/client-member'
+import YouSettings from '../YouSettings'
+import { buildYouSettings } from '@/lib/you-settings'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,6 +19,10 @@ export default async function ProfilePage() {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/signin')
+
+  // A private-stylist client gets her settings room; everyone else the profile below.
+  const me = await resolveClientMember()
+  if (me) return <div className="-mx-6 sm:-mx-10 -my-10"><YouSettings initial={await buildYouSettings(me.memberId, false, me.name)} /></div>
 
   const admin = createAdminClient() as any
   const [{ data: clientRow }, { data: assignment }, profile] = await Promise.all([

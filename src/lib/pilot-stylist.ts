@@ -442,6 +442,20 @@ export const COLOUR_SHADES: ColourShade[] = [
 const SHADE_BY_ID = new Map(COLOUR_SHADES.map((s) => [s.id, s]))
 // Family ids are usable as colour preferences too, so "no green at all" stays
 // sayable alongside "no mint green".
+// The kinds of piece a member lives in or never touches. One list, used by the
+// studio (PIECES) and by her own settings (YOU).
+export const PIECE_PREFERENCES: { value: string; label: string }[] = [
+  { value: 'coat', label: 'COAT' }, { value: 'trench', label: 'TRENCH' }, { value: 'jacket', label: 'JACKET' },
+  { value: 'blazer', label: 'BLAZER' }, { value: 'gilet', label: 'GILET' }, { value: 'shirt', label: 'SHIRT' },
+  { value: 'blouse', label: 'BLOUSE' }, { value: 't-shirt', label: 'T-SHIRT' }, { value: 'knitwear', label: 'KNITWEAR' },
+  { value: 'bodysuit', label: 'BODYSUIT' }, { value: 'trousers', label: 'TROUSERS' }, { value: 'jeans', label: 'JEANS' },
+  { value: 'shorts', label: 'SHORTS' }, { value: 'skirt', label: 'SKIRT' }, { value: 'mini_dress', label: 'MINI DRESS' },
+  { value: 'midi_dress', label: 'MIDI DRESS' }, { value: 'maxi_dress', label: 'MAXI DRESS' }, { value: 'shirt_dress', label: 'SHIRT DRESS' },
+  { value: 'slip_dress', label: 'SLIP DRESS' }, { value: 'boot', label: 'BOOTS' }, { value: 'heel', label: 'HEELS' },
+  { value: 'flat', label: 'FLATS' }, { value: 'sneaker', label: 'TRAINERS' }, { value: 'mule', label: 'MULES' },
+  { value: 'sandal', label: 'SANDALS' },
+]
+
 export const COLOUR_FAMILY_IDS = [
   'white', 'cream', 'black', 'grey', 'navy', 'blue', 'green', 'brown',
   'camel', 'burgundy', 'red', 'pink', 'yellow', 'orange', 'purple', 'multicolour',

@@ -68,11 +68,21 @@ export type PollTier = 'A' | 'B' | 'C'
 export const POLL_INTERVAL_MS: Record<PollTier, number> = {
   A: 30 * 60_000,      // every 30 min
   B: 3 * 60 * 60_000,  // every 3 hours
-  C: 24 * 60 * 60_000, // daily
+  C: 24 * 60 * 60_000, // daily — the floor: nothing is ever checked less often
 }
 
+/** A save is HOT for this long — she is actively looking at it. */
+export const SAVE_HOT_HOURS = 24
+
+/** A saver who hasn't opened the app in this long has gone quiet. */
+export const SAVER_DORMANT_DAYS = 7
+
 export interface RiskInputs {
-  /** Users who saved it AND wear its size — the expensive case. */
+  /** Saved in her size within the last SAVE_HOT_HOURS. She's looking now. */
+  freshSaversInSize: number
+  /** Saved in her size by someone who has been back within SAVER_DORMANT_DAYS. */
+  activeSaversInSize: number
+  /** Everyone who saved it and wears its size, however long ago. */
   saversInSize: number
   /** Users who saved it whose size doesn't match (or isn't known). */
   saversOtherSize: number
@@ -84,13 +94,30 @@ export interface RiskInputs {
 }
 
 /**
- * Tier assignment, straight from the rules — deliberately not derived from the
- * continuous score, so "saved by someone in her size" can never be outvoted by
- * arithmetic.
+ * Tier assignment, deliberately NOT derived from the continuous score — so a
+ * fresh save in her size can never be outvoted by arithmetic.
+ *
+ * The thing that decays here is ATTENTION, not the save. A save is a standing
+ * request to be told, and it stays one forever; what changes is how fast we
+ * need to answer it. Somebody who saved a piece an hour ago is looking at it
+ * now, so half an hour is the right latency. Somebody who saved it in March and
+ * hasn't opened the app since is not refreshing a page waiting for us — three
+ * days is plenty, and she still gets the alert when it fires.
+ *
+ * Without this decay every save pinned an item to the 30-minute lane forever,
+ * which quietly consumed the whole check budget on behalf of people who had
+ * long since stopped looking.
  */
 export function pollTier(r: RiskInputs): PollTier {
-  if (r.saversInSize >= 1 || r.clickOuts24h > 0) return 'A'
-  if (r.inLiveOutfit) return 'B'
+  // Live interest — she's in the app right now, or was today.
+  if (r.freshSaversInSize >= 1 || r.clickOuts24h > 0) return 'A'
+  // Still coming back, just not today.
+  if (r.activeSaversInSize >= 1) return 'B'
+  // Everything else: dormant savers, and pieces nobody is watching at all.
+  // Daily is the FLOOR — no item is ever checked less often than this. The
+  // cheapest way to be wrong here is to let a sold-out product sit behind a
+  // live link for days, and a daily sweep of the cold catalogue is affordable
+  // in a way that makes that impossible.
   return 'C'
 }
 
@@ -100,7 +127,15 @@ export function pollTier(r: RiskInputs): PollTier {
  * carries a floor, because for it every check is the last chance.
  */
 export function riskScore(r: RiskInputs): number {
-  const saves = r.saversInSize * 1 + r.saversOtherSize * 0.25
+  // Recent attention counts for more than an old save. A dormant saver still
+  // registers — she'll get the alert — but she doesn't hold a slot ahead of
+  // someone who is looking today.
+  const dormantInSize = Math.max(0, r.saversInSize - r.activeSaversInSize)
+  const saves =
+    r.freshSaversInSize * 1 +
+    Math.max(0, r.activeSaversInSize - r.freshSaversInSize) * 0.6 +
+    dormantInSize * 0.2 +
+    r.saversOtherSize * 0.1
   const parts = [
     Math.min(1, saves / 3) * 0.4,
     Math.min(1, r.clickOuts48h / 6) * 0.3,

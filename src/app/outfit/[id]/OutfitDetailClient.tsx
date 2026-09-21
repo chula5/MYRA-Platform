@@ -27,7 +27,7 @@ import type { OutfitWithItems, Item, Brand, ItemType } from '@/types/database'
 const SHOW_BROWSE_BUTTONS = true
 
 // White overlaid action text (matches the editorial feed cards).
-const ACTION_CLS = 'pointer-events-auto text-white text-[12px] sm:text-[13px] tracking-[0.12em] uppercase font-light hover:opacity-70 transition-opacity'
+const ACTION_CLS = 'pointer-events-auto text-[12px] sm:text-[13px] tracking-[0.12em] uppercase font-light myra-action'
 
 type SourceItemData = Item & { brand: Brand }
 
@@ -51,6 +51,23 @@ interface OutfitDetailClientProps {
   // panel and every other piece stays linked and shoppable.
   soldItemId?: string | null
   rescueId?: string | null
+  // HOSTED: another page (her own looks) opens this same view over itself and
+  // owns where Back, Similar Looks, Explore Styles, Style Item and the look
+  // arrows go. Nothing is fetched from the public outfit table when hosted.
+  host?: {
+    onBack: () => void
+    /** Similar Looks / Explore Styles: the looks to show underneath. */
+    related: (mode: 'similar' | 'explore') => OutfitWithItems[]
+    /** Style Item: her other looks wearing this piece. */
+    wearing: (itemId: string) => OutfitWithItems[]
+    /** A result was tapped: open that look in place (optionally straight into a mode). */
+    onOpenLook: (lookId: string, mode?: 'similar' | 'explore') => void
+    onSibling?: (dir: -1 | 1) => void
+    hasPrev?: boolean
+    hasNext?: boolean
+    prevImage?: string | null
+    nextImage?: string | null
+  }
 }
 
 export default function OutfitDetailClient({
@@ -67,6 +84,7 @@ export default function OutfitDetailClient({
   sizeInfo,
   soldItemId = null,
   rescueId = null,
+  host,
 }: OutfitDetailClientProps) {
   const router = useRouter()
   const scrollTo = useScrollTo()
@@ -79,7 +97,7 @@ export default function OutfitDetailClient({
   // initialOutfit), so this must be optional-chained: reading .outfit_id in the
   // dependency array throws DURING RENDER, which React cannot recover from.
   useEffect(() => {
-    if (outfit) recordOutfitView(outfit.outfit_id)
+    if (outfit && !host) recordOutfitView(outfit.outfit_id)
   }, [outfit?.outfit_id, outfit])
   const [relatedOutfits, setRelatedOutfits] = useState<OutfitWithItems[]>([])
   // Which related view is showing — drives the results heading (the URL `mode`
@@ -176,6 +194,7 @@ export default function OutfitDetailClient({
 
   // ── Load sibling outfits (for swiping between looks) ──────
   useEffect(() => {
+    if (host) return // the host page knows its own neighbours
     async function loadSiblings() {
       const supabase = createClient()
       const { data } = await supabase
@@ -217,10 +236,11 @@ export default function OutfitDetailClient({
   }, [siblings, router, linkBase])
 
   const goToSibling = useCallback((dir: -1 | 1) => {
+    if (host) { host.onSibling?.(dir); return }
     const idx = siblings.findIndex((s) => s.id === outfitId)
     if (idx === -1) return
     goToIndex(idx + dir)
-  }, [siblings, outfitId, goToIndex])
+  }, [siblings, outfitId, goToIndex, host])
 
   // Arrow keys move between looks (desktop).
   useEffect(() => {
@@ -236,6 +256,7 @@ export default function OutfitDetailClient({
   // Server action (admin client) so each result card carries its full items —
   // the anon client drops them under RLS, which broke the cards' SOURCE ITEMS.
   const fetchStyleItemOutfits = useCallback(async (itemId: string) => {
+    if (host) { setStyleItemOutfits(host.wearing(itemId)); return }
     const res = await getStyleItemOutfits(outfitId, itemId)
     setStyleItemOutfits(res.outfits ?? [])
   }, [outfitId])
@@ -249,6 +270,7 @@ export default function OutfitDetailClient({
     fetchMode: 'similar' | 'explore'
   ) => {
     setActiveMode(fetchMode)
+    if (host) { setRelatedOutfits(host.related(fetchMode)); return }
     const res = await getRelatedOutfits(currentOutfit.outfit_id, fetchMode)
     setRelatedOutfits(res.outfits ?? [])
   }, [])
@@ -308,7 +330,7 @@ export default function OutfitDetailClient({
       <div className="text-center py-24 px-10">
         <p className="text-[11px] tracking-[0.113em] text-[#A8A8A4]">OUTFIT NOT FOUND</p>
         <button
-          onClick={() => router.back()}
+          onClick={() => (host ? host.onBack() : router.back())}
           className="mt-6 text-[11px] tracking-[0.09em] underline text-[#6B6B6B]"
         >
           GO BACK
@@ -349,10 +371,10 @@ export default function OutfitDetailClient({
 
   // Position of this look in the list, for prev/next between outfits.
   const siblingIdx = siblings.findIndex((s) => s.id === outfitId)
-  const hasPrevLook = siblingIdx > 0
-  const hasNextLook = siblingIdx >= 0 && siblingIdx < siblings.length - 1
-  const prevImage = hasPrevLook ? siblings[siblingIdx - 1].image : null
-  const nextImage = hasNextLook ? siblings[siblingIdx + 1].image : null
+  const hasPrevLook = host ? !!host.hasPrev : siblingIdx > 0
+  const hasNextLook = host ? !!host.hasNext : siblingIdx >= 0 && siblingIdx < siblings.length - 1
+  const prevImage = host ? host.prevImage ?? null : hasPrevLook ? siblings[siblingIdx - 1]?.image ?? null : null
+  const nextImage = host ? host.nextImage ?? null : hasNextLook ? siblings[siblingIdx + 1]?.image ?? null : null
 
   // Windowed dots (the list can be long — show up to 7 around the current look).
   const DOTS = 7
@@ -384,10 +406,10 @@ export default function OutfitDetailClient({
     <div className="max-w-[1440px] mx-auto px-4 sm:px-10 py-4 sm:py-8">
 
       {/* ── Back + Nav (desktop; on mobile these overlay the image) ─────── */}
-      <div className="hidden sm:flex items-center justify-between mb-8">
+      <div className={`hidden sm:flex items-center justify-between ${host ? 'mb-3 max-w-[820px] mx-auto' : 'mb-8'}`}>
         <button
-          onClick={() => router.back()}
-          className="text-[11px] tracking-[0.09em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300 flex items-center gap-2"
+          onClick={() => (host ? host.onBack() : router.back())}
+          className={`${host ? 'text-[15px] text-[#2B2B2B]' : 'text-[11px] text-[#6B6B6B]'} tracking-[0.09em] hover:text-[#4A4E57] transition-colors duration-300 flex items-center gap-2`}
         >
           ← BACK
         </button>
@@ -396,7 +418,7 @@ export default function OutfitDetailClient({
             onClick={() => goToSibling(-1)}
             disabled={!hasPrevLook}
             aria-label="Previous look"
-            className="text-[20px] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300 leading-none disabled:opacity-25 disabled:cursor-default"
+            className={`${host ? 'text-[38px] px-2 text-[#2B2B2B]' : 'text-[20px] text-[#6B6B6B]'} hover:text-[#4A4E57] transition-colors duration-300 leading-none disabled:opacity-25 disabled:cursor-default`}
           >
             ‹
           </button>
@@ -404,7 +426,7 @@ export default function OutfitDetailClient({
             onClick={() => goToSibling(1)}
             disabled={!hasNextLook}
             aria-label="Next look"
-            className="text-[20px] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300 leading-none disabled:opacity-25 disabled:cursor-default"
+            className={`${host ? 'text-[38px] px-2 text-[#2B2B2B]' : 'text-[20px] text-[#6B6B6B]'} hover:text-[#4A4E57] transition-colors duration-300 leading-none disabled:opacity-25 disabled:cursor-default`}
           >
             ›
           </button>
@@ -426,6 +448,9 @@ export default function OutfitDetailClient({
             outfitId={outfitId}
             outfitImage={outfit.image_url}
             linkBase={linkBase}
+            soft={!!host}
+            wearing={host?.wearing}
+            onOpenLook={host?.onOpenLook}
           />
         ) : (
         // Single look — full-bleed on mobile, large & centred on desktop. Looks
@@ -433,7 +458,7 @@ export default function OutfitDetailClient({
         <div className="relative">
             <div
               ref={heroRef}
-              className="relative z-10 bg-white overflow-hidden group scroll-mt-20 aspect-[3/4] -mx-4 sm:mx-auto sm:w-full sm:max-w-[820px]"
+              className={`relative z-10 bg-white overflow-hidden group scroll-mt-20 aspect-[3/4] -mx-4 sm:mx-auto sm:w-full sm:max-w-[820px] ${host ? 'sm:rounded-[18px]' : ''}`}
               onTouchStart={onLookTouchStart}
               onTouchEnd={onLookTouchEnd}
             >
@@ -450,7 +475,7 @@ export default function OutfitDetailClient({
                   image, so the photo can run full width edge-to-edge. */}
               <div className="sm:hidden absolute inset-x-0 top-0 z-30 flex items-center justify-between px-4 pt-3 pointer-events-none">
                 <button
-                  onClick={() => router.back()}
+                  onClick={() => (host ? host.onBack() : router.back())}
                   className="pointer-events-auto text-white text-[11px] tracking-[0.09em] drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)]"
                 >
                   ← BACK
@@ -479,8 +504,9 @@ export default function OutfitDetailClient({
                   action-button tips along the bottom. */}
               {!sourcePanelOpen && !activeStyleItemId && (
                 <CoachTip
+                  size={host ? 'large' : 'small'}
                   id="outfit-tap-to-style"
-                  text="Tap any piece to restyle it."
+                  text={host ? "Tap a circle on a piece, like the skirt, to see it styled other ways." : "Tap any piece to restyle it."}
                   arrow="up"
                   widthClass="w-[168px]"
                   className="left-1/2 -translate-x-1/2 top-[22%]"
@@ -563,18 +589,18 @@ export default function OutfitDetailClient({
                   <div className="flex flex-wrap items-center justify-center gap-x-5 sm:gap-x-8 gap-y-1.5">
                     <span className="relative">
                       <button onClick={openSourcePanel} className={ACTION_CLS}>Source Items</button>
-                      <CoachTip id="outfit-source-items" text="Shop direct from the retailer." arrow="down" widthClass="w-[164px]" className="bottom-full mb-2.5 left-0" delayMs={300} active={coachStep === 1} onResolved={() => advanceCoach(1)} />
+                      <CoachTip size={host ? 'large' : 'small'} id="outfit-source-items" text={host ? "Every piece in this look, and where to buy it." : "Shop direct from the retailer."} arrow="down" widthClass="w-[164px]" className="bottom-full mb-2.5 left-0" delayMs={300} active={coachStep === 1} onResolved={() => advanceCoach(1)} />
                     </span>
                     {showBrowse && (
                       <span className="relative">
                         <button onClick={handleSimilarLooks} className={ACTION_CLS}>Similar Looks</button>
-                        <CoachTip id="outfit-similar-looks" text="More outfits with the same shape." arrow="down" widthClass="w-[164px]" className="bottom-full mb-2.5 left-1/2 -translate-x-1/2" delayMs={300} active={coachStep === 2} onResolved={() => advanceCoach(2)} />
+                        <CoachTip size={host ? 'large' : 'small'} id="outfit-similar-looks" text={host ? "More of your looks like this one. They appear below." : "More outfits with the same shape."} arrow="down" widthClass="w-[164px]" className="bottom-full mb-2.5 left-1/2 -translate-x-1/2" delayMs={300} active={coachStep === 2} onResolved={() => advanceCoach(2)} />
                       </span>
                     )}
                     {showBrowse && (
                       <span className="relative">
                         <button onClick={handleExploreStyles} className={ACTION_CLS}>Explore Styles</button>
-                        <CoachTip id="outfit-explore-styles" text="Other looks for this occasion." arrow="down" widthClass="w-[164px]" className="bottom-full mb-2.5 right-0" delayMs={300} active={coachStep === 3} onResolved={() => advanceCoach(3)} />
+                        <CoachTip size={host ? 'large' : 'small'} id="outfit-explore-styles" text={host ? "Other ways to dress for the same occasion. They appear below." : "Other looks for this occasion."} arrow="down" widthClass="w-[164px]" className="bottom-full mb-2.5 right-0" delayMs={300} active={coachStep === 3} onResolved={() => advanceCoach(3)} />
                       </span>
                     )}
                   </div>
@@ -600,16 +626,16 @@ export default function OutfitDetailClient({
           </div>
         )}
 
-        <div className="max-w-[560px] mx-auto mt-6">
+        <div className={host ? 'max-w-[860px] mx-auto mt-3' : 'max-w-[560px] mx-auto mt-6'}>
         {/* Thumbnail strip */}
         {allImages.length > 1 && (
-          <div className="flex gap-2 justify-center mb-4 mt-3">
+          <div className={`flex justify-center mb-4 ${host ? 'gap-3 mt-2' : 'gap-2 mt-3'}`}>
             {allImages.map((url, idx) => (
               <button
                 key={idx}
                 type="button"
                 onClick={() => setCurrentImageIndex(idx)}
-                className={`relative w-14 h-16 border overflow-hidden transition-all duration-200 ${
+                className={`relative ${host ? 'w-[84px] h-[112px] rounded-[14px]' : 'w-14 h-16'} border overflow-hidden transition-all duration-200 ${
                   idx === safeIndex
                     ? 'border-[#0A0A0A] opacity-100'
                     : 'border-[#E2E0DB] opacity-60 hover:opacity-100'
@@ -646,8 +672,9 @@ export default function OutfitDetailClient({
                 key={o.outfit_id}
                 outfit={o}
                 detailHref={`${linkBase}/${o.outfit_id}`}
-                onSimilarLooks={() => router.push(`${linkBase}/${o.outfit_id}?mode=similar`)}
-                onExploreStyles={() => router.push(`${linkBase}/${o.outfit_id}?mode=explore`)}
+                onOpen={host ? (x) => host.onOpenLook(x.outfit_id) : undefined}
+                onSimilarLooks={() => (host ? host.onOpenLook(o.outfit_id, 'similar') : router.push(`${linkBase}/${o.outfit_id}?mode=similar`))}
+                onExploreStyles={() => (host ? host.onOpenLook(o.outfit_id, 'explore') : router.push(`${linkBase}/${o.outfit_id}?mode=explore`))}
                 onStyleItem={(itemId, iType) => handleStyleItem(itemId, iType)}
               />
             ))}
@@ -655,11 +682,18 @@ export default function OutfitDetailClient({
         </div>
       )}
 
+      {host && activeStyleItemId && styleItemOutfits.length === 0 && (
+        <div className="mt-8">
+          <div className="border-t border-[#E2E0DB] mb-6" />
+          <p className="text-[15px] tracking-[0.06em] text-[#4A4E57] text-center">This is the only look you have with that piece so far.</p>
+        </div>
+      )}
+
       {/* ── Similar / Explore results ──────────────────────── */}
       {relatedOutfits.length > 0 && !activeStyleItemId && (
         <div className="mt-8">
           <div className="border-t border-[#E2E0DB] mb-6" />
-          <p className="text-[11px] tracking-[0.113em] text-[#6B6B6B] mb-8 text-center">
+          <p className={`tracking-[0.113em] mb-8 text-center ${host ? 'text-[16px] text-[#2B2B2B]' : 'text-[11px] text-[#6B6B6B]'}`}>
             {activeMode === 'explore' ? 'EXPLORE STYLES' : 'SIMILAR LOOKS'}
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -668,8 +702,9 @@ export default function OutfitDetailClient({
                 key={o.outfit_id}
                 outfit={o}
                 detailHref={`${linkBase}/${o.outfit_id}`}
-                onSimilarLooks={() => router.push(`${linkBase}/${o.outfit_id}?mode=similar`)}
-                onExploreStyles={() => router.push(`${linkBase}/${o.outfit_id}?mode=explore`)}
+                onOpen={host ? (x) => host.onOpenLook(x.outfit_id) : undefined}
+                onSimilarLooks={() => (host ? host.onOpenLook(o.outfit_id, 'similar') : router.push(`${linkBase}/${o.outfit_id}?mode=similar`))}
+                onExploreStyles={() => (host ? host.onOpenLook(o.outfit_id, 'explore') : router.push(`${linkBase}/${o.outfit_id}?mode=explore`))}
                 onStyleItem={(itemId, iType) => handleStyleItem(itemId, iType)}
               />
             ))}
@@ -743,6 +778,9 @@ function ItemDetailView({
   outfitId,
   outfitImage,
   linkBase,
+  soft = false,
+  wearing,
+  onOpenLook,
 }: {
   item: SourceItemData
   total: number
@@ -752,6 +790,10 @@ function ItemDetailView({
   outfitId: string
   outfitImage: string | null
   linkBase: string
+  /** Hosted on her own page: rounder, larger, and no tall reserved height (the host scales the view). */
+  soft?: boolean
+  wearing?: (itemId: string) => OutfitWithItems[]
+  onOpenLook?: (lookId: string) => void
 }) {
   const router = useRouter()
   const nextImg = item.image_url ?? ''
@@ -778,6 +820,7 @@ function ItemDetailView({
   useEffect(() => {
     let live = true
     setTagged([])
+    if (wearing) { setTagged(wearing(item.item_id)); return }
     getStyleItemOutfits(outfitId, item.item_id).then((res) => {
       if (live) setTagged(res.outfits ?? [])
     })
@@ -804,7 +847,7 @@ function ItemDetailView({
   // detail column softly fades in alongside it — no slide, matching the ref.
   return (
     <div className="overflow-x-hidden">
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-12 items-center sm:min-h-[68vh]">
+    <div className={`grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-12 items-center ${soft ? '' : 'sm:min-h-[68vh]'}`}>
       {/* Detail — left on desktop, under the image on mobile */}
       <div
         className="order-2 sm:order-1 sm:pr-8 will-change-transform"
@@ -816,20 +859,20 @@ function ItemDetailView({
       >
         <button
           onClick={onBackToOutfit}
-          className="text-[10px] tracking-[0.12em] text-[#A8A8A4] hover:text-[#4A4E57] transition-colors duration-300"
+          className={`${soft ? 'text-[14px] text-[#55534E]' : 'text-[10px] text-[#A8A8A4]'} tracking-[0.12em] hover:text-[#4A4E57] transition-colors duration-300`}
         >
           ← BACK TO LOOK
         </button>
-        <p className="mt-6 text-[10px] tracking-[0.16em] uppercase text-[#A8A8A4]">{item.brand?.name ?? 'MYRA'}</p>
+        <p className={`mt-6 tracking-[0.16em] uppercase ${soft ? 'text-[14px] text-[#55534E]' : 'text-[10px] text-[#A8A8A4]'}`}>{item.brand?.name ?? 'MYRA'}</p>
         <h2 className="mt-3 text-[22px] sm:text-[32px] leading-[1.08] tracking-[0.01em] text-[#0A0A0A] font-light uppercase">
           {item.product_name}
         </h2>
-        {price && <p className="mt-4 text-[15px] sm:text-[16px] tracking-[0.04em] text-[#0A0A0A]">{price}</p>}
+        {price && <p className={`mt-4 tracking-[0.04em] text-[#0A0A0A] ${soft ? 'text-[19px]' : 'text-[15px] sm:text-[16px]'}`}>{price}</p>}
 
         {descriptors.length > 0 && (
           <div className="mt-6 space-y-1.5 hidden sm:block">
             {descriptors.map((d, i) => (
-              <p key={i} className="text-[12px] tracking-[0.02em] text-[#4A4E57]">
+              <p key={i} className={`tracking-[0.02em] text-[#4A4E57] ${soft ? 'text-[15px]' : 'text-[12px]'}`}>
                 — {d.charAt(0).toUpperCase() + d.slice(1)}
               </p>
             ))}
@@ -840,7 +883,7 @@ function ItemDetailView({
           <ShopLink
             item={item}
             outfitId={outfitId}
-            className="mt-8 inline-flex items-center justify-center w-full sm:w-auto sm:min-w-[300px] border border-[#0A0A0A] text-[#0A0A0A] px-8 py-4 text-[11px] tracking-[0.16em] uppercase hover:bg-[#0A0A0A] hover:text-white transition-colors duration-300"
+            className={`mt-8 inline-flex items-center justify-center w-full sm:w-auto sm:min-w-[300px] border border-[#0A0A0A] text-[#0A0A0A] px-8 py-4 ${soft ? 'rounded-full text-[14px]' : 'text-[11px]'} tracking-[0.16em] uppercase hover:bg-[#0A0A0A] hover:text-white transition-colors duration-300`}
           >
             Go to retailer website →
           </ShopLink>
@@ -851,7 +894,7 @@ function ItemDetailView({
           from the previous product to the new one, with a slow scale settle. */}
       <div className="order-1 sm:order-2">
         <div className="relative" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-          <div className="relative aspect-[3/4] w-full bg-[#F7F7F5] overflow-hidden">
+          <div className={`relative aspect-[3/4] w-full bg-[#F7F7F5] overflow-hidden ${soft ? 'rounded-[18px]' : ''}`}>
             {/* Outgoing product — sits underneath, faded out by the new one. */}
             {back && (
               <FallbackImage
@@ -925,14 +968,14 @@ function ItemDetailView({
               opacity: entered ? 1 : 0,
             }}
           >
-            <p className="text-[9px] tracking-[0.16em] uppercase text-[#A8A8A4] mb-2.5">Styled with this piece</p>
+            <p className={`tracking-[0.16em] uppercase mb-2.5 ${soft ? 'text-[13px] text-[#55534E]' : 'text-[9px] text-[#A8A8A4]'}`}>Styled with this piece</p>
             <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-1 px-1">
               {tagged.map((o) => (
                 <button
                   key={o.outfit_id}
                   type="button"
-                  onClick={() => router.push(`${linkBase}/${o.outfit_id}`)}
-                  className="group flex-shrink-0 w-[66px] sm:w-[80px]"
+                  onClick={() => (onOpenLook ? onOpenLook(o.outfit_id) : router.push(`${linkBase}/${o.outfit_id}`))}
+                  className={`group flex-shrink-0 ${soft ? 'w-[96px]' : 'w-[66px] sm:w-[80px]'}`}
                   aria-label="Open this look"
                 >
                   <div className="relative aspect-[3/4] overflow-hidden rounded-md bg-[#F2F2F0]">

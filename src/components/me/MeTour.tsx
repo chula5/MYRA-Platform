@@ -27,20 +27,26 @@ interface Step { path?: string; target?: string; fallback?: string; title: strin
 
 const DRESSING = '/me/dressing-room'
 const STEPS: Step[] = [
-  { path: '/me', target: '[data-tour="rooms"]', title: 'YOUR ROOMS', body: 'Everything in MYRA lives in these rooms. Here is what each one is for — it takes about a minute.' },
-  { path: '/me', target: '[data-tour="room-for_you"]', title: 'FOR YOU', body: 'Where you land. Outfits MYRA has put together for you, built around what you own. Say yes or no to each one — it learns from both.' },
-  { path: '/me', target: '[data-tour="room-all_looks"]', title: 'YOUR LOOKS', body: 'Every outfit you have said yes to, sorted by occasion — so it is there on the morning you need it.' },
-  { path: DRESSING, target: '[data-tour="wardrobe"]', title: 'YOUR WARDROBE', body: 'Your own pieces. Tap any one and MYRA stands it up on the right with the outfits it already belongs to.' },
-  { path: DRESSING, target: '[data-tour="styling-pane"]', title: 'STYLED FOR YOU', body: 'The outfits around the piece you tapped. BUILD NEW OUTFITS makes fresh ones — it takes a moment, because each is checked before you see it.' },
-  { path: DRESSING, target: '[data-tour="email-sync"]', fallback: '#email-finds', title: 'UPDATE EMAIL SYNC', body: 'Reads your order emails again and finds what you have bought since, ready to add to your wardrobe.' },
-  { path: DRESSING, target: '#archival-looks', title: 'ARCHIVAL LOOKS', body: 'Photos of what you already wear. MYRA learns how you put things together, and picks out the pieces — tap Add to wardrobe for the ones you still own.' },
-  { path: DRESSING, target: '#email-finds', title: 'FIND WHAT YOU’VE BOUGHT', body: 'Pieces MYRA found in your order emails. Add the ones you kept; leave the ones that went back.' },
-  { target: '[data-tour="room-inspiration"]', title: 'INSPIRATION', body: 'Outfits you love. Paste a screenshot or drop pictures in — MYRA reads them to understand where your taste is heading.' },
-  { target: '[data-tour="room-magazine"]', title: 'MYRA MAGAZINE', body: 'The brand emails you already subscribe to, read for you and set like a magazine. A minute to read, not an inbox to clear.' },
-  { target: '[data-tour="room-threads"]', title: 'THREADS', body: 'Everything MYRA believes about how you dress, and where each idea came from. Nothing it knows about you is hidden from you.' },
-  { target: '[data-tour="search"]', title: 'SEARCH', body: 'Ask in your own words — “something for a wedding in June” — and MYRA looks through your looks, your pieces and your inspiration.' },
-  { target: '[data-tour="you"]', title: 'YOU', body: 'Your sizes, your preferences and your account. Keeping your sizes right is what keeps every suggestion wearable.' },
-  { title: 'THAT’S EVERYTHING', body: 'Your wardrobe is still filling in from your email and photos — give it a few minutes. When you are ready, start in your Dressing Room.' },
+  { path: '/me', target: '[data-tour="rooms"]', title: 'YOUR ROOMS', body: 'Everything lives in these rooms. A one minute look around.' },
+  { path: '/me', target: '[data-tour="room-for_you"]', title: 'FOR YOU', body: 'Outfits made for you. Say yes or no and MYRA learns.' },
+  { path: '/me', target: '[data-tour="room-all_looks"]', title: 'YOUR LOOKS', body: 'Every outfit you said yes to, sorted by occasion.' },
+  { path: '/me/looks', target: '[data-tour="look-open"]', title: 'OPEN A LOOK', body: 'Tap a look to open it. Flick through each piece, then back to the outfit.' },
+  { path: '/me/looks', target: '[data-tour="look-source"]', fallback: '[data-tour="look-open"]', title: 'SOURCE ITEMS', body: 'Every piece in the look, and where to buy it.' },
+  { path: '/me/looks', target: '[data-tour="look-similar"]', fallback: '[data-tour="look-open"]', title: 'SIMILAR LOOKS', body: 'More looks like this one.' },
+  { path: '/me/looks', target: '[data-tour="look-explore"]', fallback: '[data-tour="look-open"]', title: 'EXPLORE STYLES', body: 'The same kind of piece, styled a different way.' },
+  { path: '/me/looks', target: '[data-tour="look-open"] button[aria-label^="Style "]', fallback: '[data-tour="look-open"]', title: 'STYLE ITEM', body: 'The see-through circles on a look. Tap one to see that piece in other outfits.' },
+  { path: DRESSING, target: '[data-tour="wardrobe"]', title: 'YOUR WARDROBE', body: 'Your own pieces. Tap one to see it styled.' },
+  { path: DRESSING, target: '[data-tour="styling-pane"]', title: 'STYLED FOR YOU', body: 'Outfits around the piece you tapped. Build new ones here.' },
+  { path: DRESSING, target: '[data-tour="email-sync"]', fallback: '#email-finds', title: 'UPDATE EMAIL SYNC', body: 'Finds what you have bought from your order emails.' },
+  { path: DRESSING, target: '#coming-up', title: 'COMING UP', body: 'Your calendar. Tap Plan an outfit for anything you want dressed.' },
+  { path: DRESSING, target: '#archival-looks', title: 'ARCHIVAL LOOKS', body: 'Photos of what you already wear. Add the pieces you still own.' },
+  { path: DRESSING, target: '#email-finds', title: 'FIND WHAT YOU\u2019VE BOUGHT', body: 'Pieces from your order emails. Add the ones you kept.' },
+  { target: '[data-tour="room-inspiration"]', title: 'INSPIRATION', body: 'Save outfits you love. MYRA learns your taste from them.' },
+  { target: '[data-tour="room-magazine"]', title: 'MYRA MAGAZINE', body: 'Your brand emails, read for you in a minute.' },
+  { target: '[data-tour="room-threads"]', title: 'THREADS', body: 'Everything MYRA knows about your style, and why.' },
+  { target: '[data-tour="search"]', title: 'SEARCH', body: 'Ask in your own words. Try \u201ca wedding in June\u201d.' },
+  { target: '[data-tour="you"]', title: 'YOU', body: 'Your sizes, preferences and account.' },
+  { title: 'THAT\u2019S EVERYTHING', body: 'Your wardrobe is still filling in. Start on your For You page.' },
 ]
 
 interface Box { top: number; left: number; width: number; height: number }
@@ -155,12 +161,13 @@ export default function MeTour() {
   // Where the sentence sits: under the lit thing when there is room, else over it, else low and central.
   const vh = typeof window !== 'undefined' ? window.innerHeight : 900
   const vw = typeof window !== 'undefined' ? window.innerWidth : 1400
-  const cardW = Math.min(560, vw - 32)
+  const cardW = Math.min(Math.max(560, vw * 0.36), 1040, vw - 32)
+  const cardH = cardW * 0.42 // roughly: a title, two lines, a row of buttons
   let cardStyle: React.CSSProperties = { left: (vw - cardW) / 2, bottom: 40, width: cardW }
   if (lit) {
     const left = Math.max(16, Math.min(vw - cardW - 16, box.left + box.width / 2 - cardW / 2))
-    if (box.top + box.height + 300 < vh) cardStyle = { left, top: box.top + box.height + 18, width: cardW }
-    else if (box.top > 320) cardStyle = { left, bottom: vh - box.top + 18, width: cardW }
+    if (box.top + box.height + cardH + 40 < vh) cardStyle = { left, top: box.top + box.height + 18, width: cardW }
+    else if (box.top > cardH + 40) cardStyle = { left, bottom: vh - box.top + 18, width: cardW }
   } else if (!s.target) cardStyle = { left: (vw - cardW) / 2, top: '50%', transform: 'translateY(-50%)', width: cardW }
 
   return (
@@ -173,21 +180,21 @@ export default function MeTour() {
           style={{ top: box.top, left: box.left, width: box.width, height: box.height, boxShadow: '0 0 0 9999px rgba(20,20,20,0.6), 0 0 0 2px rgba(255,255,255,0.95)' }}
         />
       )}
-      <div className="absolute bg-[#F7F6F3] rounded-[22px] shadow-[0_18px_60px_rgba(0,0,0,0.35)] px-7 py-6" style={cardStyle}>
+      <div className="absolute bg-[#F7F6F3] rounded-[22px] shadow-[0_18px_60px_rgba(0,0,0,0.35)] px-[clamp(28px,1.8vw,56px)] py-[clamp(24px,1.5vw,48px)]" style={cardStyle}>
         <div className="flex items-baseline justify-between gap-4">
-          <p className="text-[20px] xl:text-[22px] tracking-[0.16em] text-[#2B2B2B]">{s.title}</p>
-          <p className="text-[18px] text-[#6E6B65] shrink-0">{step + 1} of {STEPS.length}</p>
+          <p className="text-[clamp(22px,1.25vw,38px)] tracking-[0.16em] text-[#2B2B2B]">{s.title}</p>
+          <p className="text-[clamp(18px,1vw,30px)] text-[#6E6B65] shrink-0">{step + 1} of {STEPS.length}</p>
         </div>
-        <p className="mt-3 text-[22px] xl:text-[24px] leading-snug text-[#2B2B2B]">{s.body}</p>
-        <div className="mt-5 flex items-center justify-between gap-4">
-          <button onClick={finish} className="text-[18px] underline underline-offset-4 text-[#6E6B65]">{last ? 'Close' : 'Skip the tour'}</button>
+        <p className="mt-[0.5em] text-[clamp(27px,1.6vw,48px)] leading-snug text-[#2B2B2B]">{s.body}</p>
+        <div className="mt-[1em] flex items-center justify-between gap-4 text-[clamp(22px,1.2vw,36px)]">
+          <button onClick={finish} className="text-[clamp(20px,1.1vw,32px)] underline underline-offset-4 text-[#6E6B65]">{last ? 'Close' : 'Skip the tour'}</button>
           <div className="flex items-center gap-3">
-            {step > 0 && <button onClick={() => go(step - 1)} className="text-[20px] px-6 py-3 border border-[#2B2B2B] text-[#2B2B2B] rounded-full">Back</button>}
+            {step > 0 && <button onClick={() => go(step - 1)} className="text-[clamp(22px,1.2vw,36px)] px-[1.2em] py-[0.55em] border border-[#2B2B2B] text-[#2B2B2B] rounded-full">Back</button>}
             <button
-              onClick={() => { if (last) { finish(); router.push(DRESSING) } else go(step + 1) }}
-              className="text-[20px] tracking-[0.06em] px-7 py-3 bg-[#2B2B2B] text-white rounded-full"
+              onClick={() => { if (last) { finish(); router.push('/me') } else go(step + 1) }}
+              className="text-[clamp(22px,1.2vw,36px)] tracking-[0.06em] px-[1.3em] py-[0.55em] bg-[#2B2B2B] text-white rounded-full"
             >
-              {last ? 'Take me to my Dressing Room →' : 'Next →'}
+              {last ? 'Take me to For You →' : 'Next →'}
             </button>
           </div>
         </div>

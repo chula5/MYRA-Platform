@@ -8,6 +8,8 @@ import { resolveClientMember } from '@/lib/client-member'
 import { exchangeGoogleCode } from '@/lib/email/gmail'
 import { readState, safeReturnPath } from '@/lib/email/secrets'
 import { saveConnection } from '@/lib/email/connections'
+import { exchangeCalendarCode } from '@/lib/calendar/google'
+import { saveCalendarConnection } from '@/lib/calendar/store'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,6 +32,17 @@ export async function GET(req: NextRequest) {
   const self = await resolveClientMember()
   const allowed = self?.memberId === state.memberId || !!(await resolveClientMember(state.memberId))
   if (!allowed) return back('email_error=Not+allowed')
+
+  // Same Google app, same redirect: the signed state says which connection this was for.
+  if (state.kind === 'calendar') {
+    try {
+      const { refreshToken, email } = await exchangeCalendarCode(code)
+      const r = await saveCalendarConnection(state.memberId, email, refreshToken)
+      return back(r.error ? `calendar_error=${encodeURIComponent(r.error)}` : 'calendar_connected=1')
+    } catch (err) {
+      return back(`calendar_error=${encodeURIComponent(err instanceof Error ? err.message : 'Could not connect your calendar')}`)
+    }
+  }
 
   try {
     const { refreshToken, email } = await exchangeGoogleCode(code)
