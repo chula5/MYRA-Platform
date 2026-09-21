@@ -31,3 +31,33 @@ export function readInvite(token: string | null | undefined): { memberId: string
   } catch { return null }
   return { memberId, exp }
 }
+
+// ── The short form she is sent: /join/alison-g3k9f2a1c07b ────────────────────
+// Her first name, the day it runs out (base 36) and a 10-character signature.
+// Still stateless: the name narrows the members to check, the signature
+// proves which one. Same expiry and same single use as the long form.
+
+const DAY = 86_400
+export const nameSlug = (name: string) => ((name ?? '').trim().split(/\s+/)[0] ?? '').toLowerCase().normalize('NFKD').replace(/[^a-z]/g, '') || 'hello'
+const shortSig = (memberId: string, day: number) => crypto.createHmac('sha256', secret()).update(`j1~${memberId}~${day}`).digest('hex').slice(0, 10)
+
+export function mintShortInvite(memberId: string, name: string, days = INVITE_DAYS): string {
+  const day = Math.floor(Date.now() / 1000 / DAY) + days
+  return `${nameSlug(name)}-${day.toString(36)}${shortSig(memberId, day)}`
+}
+
+/** Which of these members the short code belongs to, if it is genuine and in date. */
+export function readShortInvite(code: string, members: { member_id: string; name: string }[]): string | null {
+  const m = /^([a-z]+)-([0-9a-z]+)([0-9a-f]{10})$/.exec((code ?? '').toLowerCase())
+  if (!m) return null
+  const [, slug, dayStr, sig] = m
+  const day = parseInt(dayStr, 36)
+  if (!Number.isFinite(day) || day * DAY < Math.floor(Date.now() / 1000)) return null
+  for (const mem of members) {
+    if (nameSlug(mem.name) !== slug) continue
+    try {
+      if (crypto.timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(shortSig(mem.member_id, day), 'hex'))) return mem.member_id
+    } catch { /* wrong length */ }
+  }
+  return null
+}
