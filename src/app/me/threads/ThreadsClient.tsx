@@ -6,7 +6,8 @@
 // believes about her is hidden from her.
 
 import { useEffect, useState } from 'react'
-import { loadMyThreads, type ThreadsPageView } from './actions'
+import { loadMyThreads, loadMyThreadsRead, type ThreadsPageView } from './actions'
+import { MirrorLoading } from '@/components/ArchiveCard'
 
 function Tangle({ className = '' }: { className?: string }) {
   const s = { fill: 'none', stroke: 'currentColor', strokeLinecap: 'round', strokeLinejoin: 'round' } as const
@@ -27,13 +28,27 @@ function Tangle({ className = '' }: { className?: string }) {
 export default function ThreadsClient({ testMemberId }: { testMemberId?: string }) {
   const [view, setView] = useState<ThreadsPageView | null>(null)
 
+  // The threads come first (her own records, quick); the written read — the
+  // portrait and what MYRA infers — arrives after, so nothing waits on it.
+  const [reading, setReading] = useState(false)
   useEffect(() => {
     let live = true
-    void loadMyThreads(testMemberId).then((v) => { if (live) setView(v) })
+    void loadMyThreads(testMemberId).then((v) => {
+      if (!live) return
+      setView(v)
+      if (v.memberId && !v.portrait && v.threads.length >= 2) {
+        setReading(true)
+        void loadMyThreadsRead(testMemberId).then((r) => {
+          if (!live) return
+          setReading(false)
+          setView((cur) => (cur ? { ...cur, portrait: r.portrait, inferences: r.inferences } : cur))
+        })
+      }
+    })
     return () => { live = false }
   }, [testMemberId])
 
-  if (!view) return null
+  if (!view) return <MirrorLoading label="READING YOUR THREADS" />
   if (!view.memberId) return null
 
   const c = view.counts
@@ -43,34 +58,35 @@ export default function ThreadsClient({ testMemberId }: { testMemberId?: string 
       <div className="w-full px-6 sm:px-10 py-8 pb-16 space-y-6">
 
         {/* What MYRA knows, in one line */}
-        <section className="rounded-[18px] bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] px-8 py-9">
-          <div className="grid lg:grid-cols-[minmax(0,1fr)_440px] gap-8 items-center">
+        <section className="rounded-[18px] bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] px-8 md:px-12 py-10 space-y-7">
+          <div className="flex flex-wrap items-end justify-between gap-6">
             <div>
-              <p className="text-[20px] tracking-[0.18em] text-[#6E6B65]">THREADS</p>
-              <h1 className="text-[clamp(30px,4vw,56px)] tracking-[0.03em] text-[#2B2B2B] leading-[1.05] mt-3">
-                HOW YOU DRESS
-              </h1>
-              {view.portrait && (
-                <p className="text-[clamp(24px,2.2vw,32px)] text-[#2B2B2B] mt-5 max-w-3xl leading-snug">{view.portrait}</p>
-              )}
-              <p className="text-[20px] text-[#6E6B65] mt-4 max-w-2xl leading-snug">{view.opening}</p>
-              <div className="flex flex-wrap gap-x-7 gap-y-2 mt-6">
-                {[
-                  [c.pieces, 'pieces you own'],
-                  [c.pictures, 'pictures you kept'],
-                  [c.yes, 'looks you said yes to'],
-                  [c.no, 'looks you turned down'],
-                  [c.brands, 'brands you named'],
-                ].filter(([n]) => (n as number) > 0).map(([n, label]) => (
-                  <p key={label as string} className="text-[20px] text-[#2B2B2B]">
-                    <span className="text-[26px]">{n as number}</span> <span className="text-[#6E6B65]">{label as string}</span>
-                  </p>
-                ))}
-              </div>
+              <p className="text-[clamp(19px,1.2vw,28px)] tracking-[0.18em] text-[#6E6B65]">THREADS</p>
+              <h1 className="text-[clamp(34px,3.6vw,76px)] tracking-[0.03em] text-[#2B2B2B] leading-[1.02] mt-2">HOW YOU DRESS</h1>
             </div>
-            <div className="text-[#2B2B2B]">
+            <div className="text-[#2B2B2B] w-[clamp(260px,26vw,620px)]">
               <Tangle className="w-full h-auto" />
             </div>
+          </div>
+
+          {view.portrait ? (
+            <p className="myra-guide-text text-[clamp(24px,1.9vw,42px)] text-[#2B2B2B] leading-[1.35] max-w-[74ch]">{view.portrait}</p>
+          ) : reading ? (
+            <p className="text-[clamp(21px,1.3vw,30px)] text-[#6E6B65]">MYRA is putting it into words…</p>
+          ) : null}
+
+          <div className="flex flex-wrap gap-x-10 gap-y-3 border-t border-[rgba(43,43,43,0.12)] pt-6">
+            {[
+              [c.pieces, 'pieces you own'],
+              [c.pictures, 'pictures you kept'],
+              [c.yes, 'looks you said yes to'],
+              [c.no, 'looks you turned down'],
+              [c.brands, 'brands you named'],
+            ].filter(([n]) => (n as number) > 0).map(([n, label]) => (
+              <p key={label as string} className="text-[clamp(19px,1.2vw,28px)] text-[#6E6B65]">
+                <span className="text-[clamp(28px,1.9vw,44px)] text-[#2B2B2B] mr-2">{n as number}</span>{label as string}
+              </p>
+            ))}
           </div>
         </section>
 
@@ -80,9 +96,9 @@ export default function ThreadsClient({ testMemberId }: { testMemberId?: string 
         {view.inferences.length > 0 && (
           <section className="rounded-[18px] bg-[#8C8A85] text-white px-8 py-7">
             <p className="text-[20px] tracking-[0.16em] text-white/80">WHAT MYRA INFERS</p>
-            <ul className="mt-4 grid md:grid-cols-2 gap-x-10 gap-y-3">
+            <ul className="mt-5 grid md:grid-cols-2 gap-x-12 gap-y-4">
               {view.inferences.map((t, i) => (
-                <li key={i} className="text-[22px] leading-snug flex gap-3">
+                <li key={i} className="myra-guide-text text-[clamp(21px,1.35vw,32px)] leading-snug flex gap-3">
                   <span className="mt-[11px] block w-2 h-2 rounded-full bg-white/80 shrink-0" />
                   <span>{t}</span>
                 </li>

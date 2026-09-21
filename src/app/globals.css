@@ -522,3 +522,47 @@ html {
   .myra-thumb svg { transition: none; }
   .myra-thumb:hover svg { transform: none; }
 }
+
+/* A written paragraph she reads (her portrait in Threads) — sentence case. */
+.myra-guide-text, .myra-guide-text * { text-transform: none; font-weight: 500; letter-spacing: 0; }
+
+/* Silver sign-in card (her invite login): soft white card, pillowy inputs, a silver button. */
+.myra-silver-card {
+  background: linear-gradient(0deg, #ffffff 0%, #f1f2f4 100%);
+  border-radius: 40px;
+  border: 5px solid #ffffff;
+  box-shadow: rgba(150, 156, 164, 0.75) 0px 30px 30px -20px;
+}
+.myra-silver-card .myra-silver-heading {
+  font-weight: 900;
+  background: linear-gradient(180deg, #8d939a 0%, #4f555c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.myra-silver-input {
+  width: 100%;
+  background: #ffffff;
+  border: none;
+  border-inline: 2px solid transparent;
+  border-radius: 20px;
+  padding: 18px 24px;
+  color: #2b2b2b;
+  box-shadow: #e2e5e9 0px 10px 10px -5px;
+}
+.myra-silver-input::placeholder { color: #a6a9ad; }
+.myra-silver-input:focus { outline: none; border-inline: 2px solid #9aa1a9; }
+.myra-silver-button {
+  display: block;
+  width: 100%;
+  text-align: center;
+  color: #ffffff;
+  background: linear-gradient(45deg, #6c7279 0%, #a9afb6 100%);
+  border: none;
+  border-radius: 20px;
+  padding-block: 18px;
+  box-shadow: rgba(150, 156, 164, 0.85) 0px 20px 10px -15px;
+  transition: all 0.2s ease-in-out;
+}
+.myra-silver-button:hover { transform: scale(1.03); box-shadow: rgba(150, 156, 164, 0.85) 0px 23px 10px -20px; }
+.myra-silver-button:active { transform: scale(0.95); box-shadow: rgba(150, 156, 164, 0.85) 0px 15px 10px -10px; }

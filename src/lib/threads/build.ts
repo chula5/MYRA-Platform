@@ -329,12 +329,14 @@ export async function buildThreads(memberId: string): Promise<ThreadsView> {
     ].filter(Boolean).join(', ')}.`
     : 'MYRA has not learned enough about you yet. Add a few pieces, keep some pictures, and answer a look or two.'
 
-  const read = await readHerStyle(memberId, firstName, ordered)
+  // The written read (portrait + inferences) is a model call, so it is fetched
+  // separately — the threads show at once and the read fills in after.
+  const cached = cachedRead(memberId, ordered)
 
   return {
     firstName,
-    portrait: read?.portrait ?? null,
-    inferences: read?.inferences ?? [],
+    portrait: cached?.portrait ?? null,
+    inferences: cached?.inferences ?? [],
     opening,
     threads: ordered,
     thin,
@@ -362,7 +364,24 @@ const READ_SCHEMA = {
 } as const
 
 const readCache = new Map<string, { at: number; key: string; value: { portrait: string; inferences: string[] } }>()
-const READ_TTL_MS = 60 * 60 * 1000
+const READ_TTL_MS = 6 * 60 * 60 * 1000
+
+const factsOf = (threads: Thread[]) =>
+  threads.map((t) => `${t.title}: ${t.line}\n${t.evidence.map((e) => `  - ${e.from}: ${e.detail}`).join('\n')}`).join('\n\n')
+
+/** A read already made for exactly these threads, if there is one. */
+function cachedRead(memberId: string, threads: Thread[]): { portrait: string; inferences: string[] } | null {
+  const hit = readCache.get(memberId)
+  return hit && hit.key === factsOf(threads) && Date.now() - hit.at < READ_TTL_MS ? hit.value : null
+}
+
+/** The written read for her current threads — the slow part, asked for on its own. */
+export async function buildThreadsRead(memberId: string): Promise<{ portrait: string | null; inferences: string[] }> {
+  const view = await buildThreads(memberId)
+  if (view.portrait) return { portrait: view.portrait, inferences: view.inferences }
+  const read = await readHerStyle(memberId, view.firstName, view.threads)
+  return { portrait: read?.portrait ?? null, inferences: read?.inferences ?? [] }
+}
 
 /**
  * One cheap call that reads the threads together: who she dresses like, and
@@ -372,7 +391,7 @@ const READ_TTL_MS = 60 * 60 * 1000
 async function readHerStyle(memberId: string, firstName: string, threads: Thread[]): Promise<{ portrait: string; inferences: string[] } | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey || threads.length < 2) return null
-  const facts = threads.map((t) => `${t.title}: ${t.line}\n${t.evidence.map((e) => `  - ${e.from}: ${e.detail}`).join('\n')}`).join('\n\n')
+  const facts = factsOf(threads)
   const key = facts
   const hit = readCache.get(memberId)
   if (hit && hit.key === key && Date.now() - hit.at < READ_TTL_MS) return hit.value
