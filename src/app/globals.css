@@ -566,3 +566,38 @@ html {
 }
 .myra-silver-button:hover { transform: scale(1.03); box-shadow: rgba(150, 156, 164, 0.85) 0px 23px 10px -20px; }
 .myra-silver-button:active { transform: scale(0.95); box-shadow: rgba(150, 156, 164, 0.85) 0px 15px 10px -10px; }
+
+/* Connect-your-accounts icons: round white buttons that fill with the app's colour
+   from below on hover, with a tooltip saying what MYRA does with it. */
+.myra-connect { display: flex; justify-content: center; flex-wrap: wrap; gap: clamp(32px, 4.5vw, 110px); }
+.myra-connect .item { position: relative; display: flex; flex-direction: column; align-items: center; }
+.myra-connect .tip {
+  position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+  width: max-content; max-width: 320px; text-align: center; color: #fff;
+  padding: 10px 16px; border-radius: 14px; font-size: clamp(18px, 1vw, 24px); line-height: 1.25;
+  text-transform: none; font-weight: 600; letter-spacing: 0;
+  opacity: 0; visibility: hidden; transition: all 0.3s ease; pointer-events: none; z-index: 5;
+}
+.myra-connect .item:hover .tip, .myra-connect .item:focus-within .tip { opacity: 1; visibility: visible; bottom: calc(100% + 20px); }
+.myra-connect .btn {
+  position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center;
+  width: clamp(140px, 10vw, 250px); height: clamp(140px, 10vw, 250px); border-radius: 50%;
+  color: #4d4d4d; background: #fff; transition: all 0.3s ease-in-out;
+  box-shadow: 0 10px 24px -14px rgba(43, 43, 43, 0.35);
+}
+.myra-connect .btn:hover { color: #fff; box-shadow: 3px 2px 45px 0 rgb(0 0 0 / 12%); }
+.myra-connect .btn svg { position: relative; z-index: 1; width: 46%; height: 46%; }
+.myra-connect .btn .filled { position: absolute; bottom: 0; left: 0; width: 100%; height: 0; transition: all 0.3s ease-in-out; }
+.myra-connect .btn:hover .filled { height: 100%; }
+.myra-connect .btn[data-on="true"] { color: #fff; }
+.myra-connect .btn[data-on="true"] .filled { height: 100%; }
+.myra-connect .done {
+  position: absolute; top: 4px; right: 4px; z-index: 2; width: 38px; height: 38px; border-radius: 50%;
+  background: #fff; color: #2B2B2B; display: grid; place-content: center; font-size: 22px;
+  box-shadow: 0 4px 10px -4px rgba(0,0,0,0.35);
+}
+.myra-connect .label { margin-top: 14px; font-size: clamp(21px, 1.2vw, 32px); color: #2B2B2B; }
+.myra-connect [data-app="instagram"] .filled, .myra-connect [data-app="instagram"] ~ .tip { background: linear-gradient(45deg, #405de6, #5b51db, #b33ab4, #c135b4, #e1306c, #fd1f1f); }
+.myra-connect [data-app="email"] .filled, .myra-connect [data-app="email"] ~ .tip { background: #d44638; }
+.myra-connect [data-app="calendar"] .filled, .myra-connect [data-app="calendar"] ~ .tip { background: #4285f4; }
+.myra-connect [data-app="photos"] .filled, .myra-connect [data-app="photos"] ~ .tip { background: linear-gradient(45deg, #6c7279, #a9afb6); }
