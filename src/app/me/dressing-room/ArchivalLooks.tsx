@@ -138,7 +138,7 @@ export default function ArchivalLooks({ testMemberId }: { testMemberId?: string 
 
       {/* Three ways in. The import works for every account; one-tap connect only
           exists for Creator and Business accounts, so it shows only when it can work. */}
-      {!importing && (
+      {(
         <>
           <div className="flex flex-wrap gap-3">
             <button onClick={() => setImporting(true)} className="text-[22px] xl:text-[25px] 2xl:text-[29px] px-7 py-3.5 bg-[#2B2B2B] text-white rounded-full">

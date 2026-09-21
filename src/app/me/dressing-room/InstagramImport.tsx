@@ -14,16 +14,18 @@
 // take a day.
 
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { isPostsList, pickPostPhotos, readPostsList, type ExportPhoto } from '@/lib/archival/instagram-export'
 import { findInstagramExportEmail, uploadArchivalPhoto } from './archival-actions'
 
 const INSTAGRAM_EXPORT_PAGE = 'https://accountscenter.instagram.com/info_and_permissions/dyi/'
 const BATCH = 40
 
-const T = 'text-[22px] xl:text-[24px] 2xl:text-[28px]'
-const T_SMALL = 'text-[20px] xl:text-[22px] 2xl:text-[25px]'
-const BTN = 'text-[22px] xl:text-[25px] 2xl:text-[29px] px-8 py-4 rounded-full bg-[#2B2B2B] text-white disabled:opacity-40'
-const BTN_QUIET = 'text-[22px] xl:text-[25px] 2xl:text-[29px] px-8 py-4 rounded-full border border-[#2B2B2B] text-[#2B2B2B] disabled:opacity-40'
+const T = 'text-[clamp(22px,1.45vw,34px)] leading-snug'
+const T_SMALL = 'text-[clamp(20px,1.25vw,30px)] leading-snug'
+const BTN = 'text-[clamp(22px,1.4vw,32px)] px-9 py-4 rounded-full bg-[#2B2B2B] text-white hover:opacity-85 transition-opacity disabled:opacity-40'
+// The quiet choice is a plain text button on the left, as on the card this is modelled on.
+const BTN_QUIET = 'text-[clamp(21px,1.3vw,30px)] py-3 text-[#55534E] underline-offset-4 hover:underline hover:text-[#2B2B2B] disabled:opacity-40'
 
 type Step = 1 | 2 | 3
 
@@ -39,6 +41,8 @@ export default function InstagramImport({ testMemberId, onClose, onImported }: {
   const [error, setError] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
   const awaitingReturn = useRef(false)
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
   const fileRef = useRef<HTMLInputElement>(null)
   // What is left in the file after the first batch, for "bring in more".
   const remaining = useRef<{ files: File[]; photos: ExportPhoto[]; from: number } | null>(null)
@@ -165,11 +169,55 @@ export default function InstagramImport({ testMemberId, onClose, onImported }: {
 
   const left = remaining.current ? Math.max(0, remaining.current.photos.length - remaining.current.from) : 0
 
-  return (
-    <div className="myra-guide rounded-[18px] bg-[rgba(255,255,255,0.7)] border border-[rgba(43,43,43,0.12)] px-6 md:px-9 py-8 space-y-7">
+  // Escape closes it; the page behind does not scroll while it is open.
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', key)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { window.removeEventListener('keydown', key); document.body.style.overflow = prev }
+  }, [onClose])
+
+  if (!mounted) return null
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-[rgba(43,43,43,0.45)] px-4 py-16"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Import from Instagram"
+    >
+    {/* The card does not scroll; its inside does — so the mark can stand on the top edge. */}
+    <div className="relative w-full max-w-[min(94vw,clamp(640px,52vw,1200px))]">
+      <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 z-10 block w-[clamp(84px,5.6vw,128px)] h-[clamp(84px,5.6vw,128px)]" aria-hidden>
+        <svg viewBox="0 0 96 96" className="w-full h-full drop-shadow-[0_2px_6px_rgba(60,64,67,0.3)]">
+          <defs>
+            <radialGradient id="ig-mark" cx="0.3" cy="1.05" r="1.2">
+              <stop offset="0" stopColor="#FFD776" />
+              <stop offset="0.25" stopColor="#F3A554" />
+              <stop offset="0.5" stopColor="#E1306C" />
+              <stop offset="0.8" stopColor="#9B36B7" />
+              <stop offset="1" stopColor="#515BD4" />
+            </radialGradient>
+          </defs>
+          <rect x="6" y="6" width="84" height="84" rx="24" fill="url(#ig-mark)" />
+          <rect x="25" y="25" width="46" height="46" rx="14" fill="none" stroke="#fff" strokeWidth="5" />
+          <circle cx="48" cy="48" r="11" fill="none" stroke="#fff" strokeWidth="5" />
+          <circle cx="61.5" cy="34.5" r="3.4" fill="#fff" />
+        </svg>
+      </span>
+    <div
+      data-lenis-prevent
+      className="myra-guide w-full max-h-[calc(100vh-9rem)] overflow-y-auto rounded-2xl bg-white [box-shadow:rgba(60,64,67,0.3)_0_1px_2px_0,rgba(60,64,67,0.15)_0_2px_6px_2px] px-7 md:px-12 pb-9 pt-[clamp(56px,3.6vw,84px)] space-y-7"
+    >
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h4 className="text-[20px] xl:text-[23px] tracking-[0.16em] text-[#6E6B65]">IMPORT FROM INSTAGRAM · STEP {step} OF 3</h4>
-        <button onClick={onClose} className={`${T_SMALL} underline underline-offset-4 text-[#6E6B65]`}>Close</button>
+        <h4 className="text-[clamp(19px,1.2vw,28px)] tracking-[0.16em] text-[#6E6B65]">IMPORT FROM INSTAGRAM · STEP {step} OF 3</h4>
+        <button onClick={onClose} aria-label="Close" className="p-2 -mr-2 text-[#55534E] hover:text-[#2B2B2B]">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-[clamp(26px,1.6vw,38px)] h-[clamp(26px,1.6vw,38px)]" aria-hidden>
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
       </div>
 
       {/* Where she is */}
@@ -179,7 +227,7 @@ export default function InstagramImport({ testMemberId, onClose, onImported }: {
 
       {step === 1 && (
         <div className="space-y-6">
-          <h3 className="text-[30px] xl:text-[36px] text-[#2B2B2B] leading-tight">Ask Instagram for your photos</h3>
+          <h3 className="text-[clamp(30px,2.1vw,50px)] text-[#2B2B2B] leading-tight">Ask Instagram for your photos</h3>
           <p className={`${T} text-[#4A4E57] max-w-4xl`}>
             Instagram will gather your photos into one file and email you when it&rsquo;s ready. Asking takes about two minutes.
             Press the button and Instagram opens in a new tab &mdash; then tap these, in order:
@@ -193,16 +241,16 @@ export default function InstagramImport({ testMemberId, onClose, onImported }: {
             <li>Tap <b>Start export</b>. Instagram may ask for your password &mdash; that&rsquo;s Instagram checking it&rsquo;s you.</li>
           </ol>
           <p className={`${T_SMALL} text-[#6E6B65] max-w-4xl`}>Then come back to this tab. MYRA will be on the next step, waiting for you.</p>
-          <div className="flex flex-wrap gap-4">
-            <button onClick={openInstagram} className={BTN}>Open Instagram →</button>
+          <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
             <button onClick={() => setStep(2)} className={BTN_QUIET}>I&rsquo;ve already asked</button>
+            <button onClick={openInstagram} className={BTN}>Open Instagram →</button>
           </div>
         </div>
       )}
 
       {step === 2 && (
         <div className="space-y-6">
-          <h3 className="text-[30px] xl:text-[36px] text-[#2B2B2B] leading-tight">
+          <h3 className="text-[clamp(30px,2.1vw,50px)] text-[#2B2B2B] leading-tight">
             {mail?.ready ? 'Your photos are ready' : 'Now Instagram gets your photos ready'}
           </h3>
           {mail?.ready ? (
@@ -210,9 +258,9 @@ export default function InstagramImport({ testMemberId, onClose, onImported }: {
               <p className={`${T} text-[#4A4E57] max-w-4xl`}>
                 Instagram&rsquo;s email has arrived. Press the button, then tap <b>Download</b> on Instagram&rsquo;s page. The file saves to your computer, usually in your <b>Downloads</b> folder. Then come back here.
               </p>
-              <div className="flex flex-wrap gap-4">
-                {mail.link && <a href={mail.link} target="_blank" rel="noopener noreferrer" onClick={() => { awaitingReturn.current = false }} className={BTN}>Open my download →</a>}
+              <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
                 <button onClick={() => setStep(3)} className={mail.link ? BTN_QUIET : BTN}>I have the file</button>
+                {mail.link && <a href={mail.link} target="_blank" rel="noopener noreferrer" onClick={() => { awaitingReturn.current = false }} className={BTN}>Open my download →</a>}
               </div>
             </>
           ) : (
@@ -227,9 +275,9 @@ export default function InstagramImport({ testMemberId, onClose, onImported }: {
                     ? 'MYRA is watching your inbox and will tell you here the moment it arrives.'
                     : 'When the email from Instagram arrives, open it and tap the download button. The file saves to your Downloads folder.'}
               </p>
-              <div className="flex flex-wrap gap-4">
-                <button onClick={() => setStep(3)} className={BTN}>I have the file</button>
+              <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
                 <button onClick={() => setStep(1)} className={BTN_QUIET}>Back</button>
+                <button onClick={() => setStep(3)} className={BTN}>I have the file</button>
               </div>
             </>
           )}
@@ -238,7 +286,7 @@ export default function InstagramImport({ testMemberId, onClose, onImported }: {
 
       {step === 3 && (
         <div className="space-y-6">
-          <h3 className="text-[30px] xl:text-[36px] text-[#2B2B2B] leading-tight">Give the file to MYRA</h3>
+          <h3 className="text-[clamp(30px,2.1vw,50px)] text-[#2B2B2B] leading-tight">Give the file to MYRA</h3>
           {!work && (
             <>
               <p className={`${T} text-[#4A4E57] max-w-4xl`}>
@@ -257,7 +305,7 @@ export default function InstagramImport({ testMemberId, onClose, onImported }: {
               <p className={`${T_SMALL} text-[#6E6B65] max-w-4xl`}>
                 The file is opened here on your computer. Only your post photos go to MYRA &mdash; your messages and everything else in it stay with you.
               </p>
-              <button onClick={() => setStep(2)} className={`${T_SMALL} underline underline-offset-4 text-[#6E6B65]`}>Back</button>
+              <button onClick={() => setStep(2)} className={BTN_QUIET}>Back</button>
             </>
           )}
 
@@ -276,8 +324,8 @@ export default function InstagramImport({ testMemberId, onClose, onImported }: {
                 <div className="h-full bg-[#2B2B2B] transition-[width] duration-300" style={{ width: `${work.total ? (work.done / work.total) * 100 : 0}%` }} />
               </div>
               {finished && (
-                <div className="flex flex-wrap gap-4">
-                  {left > 0 && <button onClick={() => void bringIn()} className={BTN_QUIET}>Bring in {Math.min(BATCH, left)} more</button>}
+                <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
+                  {left > 0 ? <button onClick={() => void bringIn()} className={BTN_QUIET}>Bring in {Math.min(BATCH, left)} more</button> : <span />}
                   <button onClick={onClose} className={BTN}>See my photos</button>
                 </div>
               )}
@@ -289,5 +337,8 @@ export default function InstagramImport({ testMemberId, onClose, onImported }: {
 
       {error && <p className={`${T} text-[#B83A3A]`}>{error}</p>}
     </div>
+    </div>
+    </div>,
+    document.body,
   )
 }

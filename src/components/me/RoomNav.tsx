@@ -219,7 +219,7 @@ export default function RoomNav({
     <div className="w-full">
       <div className="w-full px-6 sm:px-10 pt-7 pb-6">
         {/* Search — the same pill as the header's, at her front door's scale */}
-        <form onSubmit={submit} onReset={() => setQuery('')} data-tour="search" className="relative w-full">
+        <form onSubmit={submit} onReset={() => setQuery('')} data-tour="search" className="relative w-full md:w-1/2 mx-auto">
           <button type="submit" aria-label="Search" className="absolute top-1/2 -translate-y-1/2 left-[clamp(20px,1.3vw,44px)] p-1 text-[#55534E] hover:text-[#2B2B2B]">
             <svg viewBox="0 0 17 16" fill="none" className="w-[clamp(24px,1.4vw,48px)] h-[clamp(24px,1.4vw,48px)]" aria-hidden>
               <path d="M7.667 12.667A5.333 5.333 0 107.667 2a5.333 5.333 0 000 10.667zM14.334 14l-2.9-2.9" stroke="currentColor" strokeWidth="1.333" strokeLinecap="round" strokeLinejoin="round" />
