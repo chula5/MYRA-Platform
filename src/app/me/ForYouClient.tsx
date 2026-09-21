@@ -106,22 +106,19 @@ function LookCard({ look, testMemberId }: { look: ForYouLook; testMemberId?: str
   }
 
   return (
-    <article className="bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] flex flex-col rounded-[18px] overflow-hidden">
-      <div className="relative aspect-[3/4] bg-[#E4E2DD] overflow-hidden">
+    <article className="flex flex-col gap-3">
+      <div className="relative aspect-[3/4] bg-[#E4E2DD] overflow-hidden rounded-[18px] shadow-[0_2px_14px_rgba(43,43,43,0.08)]">
         {look.image_url && (
           <FallbackImage src={look.image_url} thumbWidth={900} alt="" className="absolute inset-0 w-full h-full object-cover" />
         )}
         <span className="absolute top-4 left-4 bg-[rgba(255,255,255,0.92)] rounded-full px-4 py-1.5 text-[18px] tracking-[0.1em] text-[#2B2B2B]">
           {look.occasion_label.toUpperCase()}
         </span>
-      </div>
 
-      <div className="px-5 md:px-7 py-5 flex flex-col gap-5">
-
-        {/* Thumbs, not words (after the uiverse thumbs toggles): grey until she
-            taps, then blue for yes and red for no. Tapping the lit one again
-            takes the answer back; tapping the other changes it. */}
-        <div className="flex items-center justify-center gap-10" role="group" aria-label="Would you wear this?">
+        {/* Thumbs on the photo itself, bottom left and right: small, silver
+            until she taps, black once chosen. Tapping the lit one again takes
+            the answer back; tapping the other changes it. */}
+        <div className="absolute inset-x-4 bottom-4 flex items-center justify-between pointer-events-none" role="group" aria-label="Would you wear this?">
           <button
             type="button"
             disabled={busy}
@@ -129,7 +126,7 @@ function LookCard({ look, testMemberId }: { look: ForYouLook; testMemberId?: str
             aria-label="I would wear this"
             title="I'd wear this"
             onClick={() => (answer === 'yes' ? setAnswer(null) : tap('yes'))}
-            className="myra-thumb disabled:opacity-50"
+            className="myra-thumb pointer-events-auto disabled:opacity-50"
             data-on={answer === 'yes' ? 'yes' : undefined}
           >
             <svg viewBox="0 0 24 24" aria-hidden>
@@ -143,7 +140,7 @@ function LookCard({ look, testMemberId }: { look: ForYouLook; testMemberId?: str
             aria-label="Not for me"
             title="Not for me"
             onClick={() => { if (answer === 'no') { setAnswer(null); setAskWhy(false) } else void tap('no') }}
-            className="myra-thumb disabled:opacity-50"
+            className="myra-thumb pointer-events-auto disabled:opacity-50"
             data-on={answer === 'no' ? 'no' : undefined}
           >
             <svg viewBox="0 0 24 24" aria-hidden>
@@ -151,9 +148,11 @@ function LookCard({ look, testMemberId }: { look: ForYouLook; testMemberId?: str
             </svg>
           </button>
         </div>
+      </div>
 
-        {answer === 'no' && (
-          <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-5 empty:hidden">
+        {answer === 'no' && (thanked || askWhy) && (
+          <div className="flex flex-col gap-4 bg-white/85 rounded-[18px] shadow-[0_2px_14px_rgba(43,43,43,0.08)] px-5 md:px-7 py-5">
             {thanked && <p className="text-[21px] text-[#55534E] text-center">Thank you — that really helps.</p>}
             {askWhy && (
               <div className="flex flex-col gap-3">
