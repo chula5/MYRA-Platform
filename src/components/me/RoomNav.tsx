@@ -151,16 +151,16 @@ export default function RoomNav({
     const on = r.id === active
     const inner = (
       <>
-        <span className={`block ${compact ? 'w-[42px] h-[42px] xl:w-[46px] xl:h-[46px] min-[1500px]:w-[52px] min-[1500px]:h-[52px] min-[1800px]:w-[60px] min-[1800px]:h-[60px]' : 'w-[68px] h-[68px] sm:w-[86px] sm:h-[86px]'} mx-auto transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
+        <span className={`block ${compact ? 'w-[clamp(42px,2.9vw,104px)] h-[clamp(42px,2.9vw,104px)]' : 'w-[clamp(68px,4vw,150px)] h-[clamp(68px,4vw,150px)]'} mx-auto transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
           <Icon id={r.id} />
         </span>
-        <span className={`block ${compact ? 'mt-1.5 text-[18px] xl:text-[19px] min-[1500px]:text-[21px] min-[1800px]:text-[25px]' : 'mt-3 text-[22px] sm:text-[24px]'} tracking-[0.02em] transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
+        <span className={`block ${compact ? 'mt-1.5 text-[clamp(18px,1.15vw,40px)]' : 'mt-3 text-[clamp(22px,1.35vw,46px)]'} tracking-[0.02em] transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
           {compact ? r.short : r.label}
         </span>
         <span className={`block mx-auto ${compact ? 'mt-1' : 'mt-2'} h-px w-10 ${on ? 'bg-[#2B2B2B]' : 'bg-transparent'}`} />
       </>
     )
-    const cls = compact ? 'group text-center px-2 shrink-0 w-[124px] min-[1500px]:w-[140px] min-[1800px]:w-[164px] whitespace-nowrap' : 'group text-center px-1'
+    const cls = compact ? 'group text-center px-2 shrink-0 w-[clamp(124px,7.6vw,280px)] whitespace-nowrap' : 'group text-center px-1'
     return onSelect ? (
       <button key={r.id} type="button" data-tour={`room-${r.id}`} onClick={() => onSelect(r.id)} className={cls}>{inner}</button>
     ) : (
@@ -168,21 +168,39 @@ export default function RoomNav({
     )
   }
 
+  // The search pill (after uiverse.io/ahmedyasserdev/funny-treefrog-48): white,
+  // softly lifted, the glass on the left to search and a cross on the right to
+  // clear. The focus ring is MYRA's ink rather than the original's blue.
+  const iconSize = compact ? 'w-[clamp(20px,1.2vw,40px)] h-[clamp(20px,1.2vw,40px)]' : 'w-6 h-6'
   const search = (
-    <form onSubmit={submit} data-tour="search" className={compact ? 'w-full max-w-[200px] min-[1500px]:max-w-[260px] min-[1800px]:max-w-[320px]' : 'w-full'}>
-      <div className={`flex items-center gap-3 bg-[rgba(255,255,255,0.55)] rounded-full border border-[rgba(43,43,43,0.15)] ${compact ? 'px-5 py-2.5 min-[1800px]:px-6 min-[1800px]:py-3.5' : 'px-7 py-4'}`}>
-        <svg viewBox="0 0 24 24" className={`${compact ? 'w-5 h-5 min-[1800px]:w-6 min-[1800px]:h-6' : 'w-6 h-6'} text-[#55534E] shrink-0`} aria-hidden>
-          <circle cx="11" cy="11" r="7" {...S} />
-          <path d="M16.5 16.5L21 21" {...S} />
+    <form
+      onSubmit={submit}
+      onReset={() => setQuery('')}
+      data-tour="search"
+      className={`relative ${compact ? 'w-full max-w-[clamp(200px,14vw,520px)]' : 'w-full'}`}
+    >
+      <button type="submit" aria-label="Search" className={`absolute top-1/2 -translate-y-1/2 p-1 text-[#55534E] hover:text-[#2B2B2B] ${compact ? 'left-3' : 'left-5'}`}>
+        <svg viewBox="0 0 17 16" fill="none" className={iconSize} aria-hidden>
+          <path d="M7.667 12.667A5.333 5.333 0 107.667 2a5.333 5.333 0 000 10.667zM14.334 14l-2.9-2.9" stroke="currentColor" strokeWidth="1.333" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={compact ? 'Search' : searchPlaceholder}
-          aria-label="Search"
-          className={`flex-1 min-w-0 ${compact ? 'text-[19px] min-[1500px]:text-[21px] min-[1800px]:text-[25px]' : 'text-[21px]'} text-[#2B2B2B] placeholder:text-[#6E6B65] bg-transparent focus:outline-none`}
-        />
-      </div>
+      </button>
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder={compact ? 'Search' : searchPlaceholder}
+        aria-label="Search"
+        type="text"
+        className={`w-full rounded-full bg-white border-2 border-transparent shadow-md transition-all duration-300 focus:outline-none focus:border-[#2B2B2B] text-[#2B2B2B] placeholder:text-[#8C8A85] ${compact
+          ? 'text-[clamp(19px,1.15vw,40px)] pl-[clamp(44px,2.8vw,88px)] pr-[clamp(40px,2.6vw,80px)] py-[clamp(8px,0.6vw,22px)]'
+          : 'text-[21px] pl-16 pr-14 py-4'}`}
+      />
+      {query && (
+        <button type="reset" aria-label="Clear search" className={`absolute top-1/2 -translate-y-1/2 p-1 text-[#55534E] hover:text-[#2B2B2B] ${compact ? 'right-3' : 'right-5'}`}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className={iconSize} aria-hidden>
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      )}
     </form>
   )
 
@@ -200,21 +218,28 @@ export default function RoomNav({
   return (
     <div className="w-full">
       <div className="w-full px-6 sm:px-10 pt-7 pb-6">
-        {/* Search, wide and quiet */}
-        <form onSubmit={submit} data-tour="search" className="w-full">
-          <div className="flex items-center gap-4 bg-[rgba(255,255,255,0.55)] rounded-full border border-[rgba(43,43,43,0.15)] px-7 py-4">
-            <svg viewBox="0 0 24 24" className="w-6 h-6 text-[#55534E] shrink-0" aria-hidden>
-              <circle cx="11" cy="11" r="7" {...S} />
-              <path d="M16.5 16.5L21 21" {...S} />
+        {/* Search — the same pill as the header's, at her front door's scale */}
+        <form onSubmit={submit} onReset={() => setQuery('')} data-tour="search" className="relative w-full">
+          <button type="submit" aria-label="Search" className="absolute top-1/2 -translate-y-1/2 left-[clamp(20px,1.3vw,44px)] p-1 text-[#55534E] hover:text-[#2B2B2B]">
+            <svg viewBox="0 0 17 16" fill="none" className="w-[clamp(24px,1.4vw,48px)] h-[clamp(24px,1.4vw,48px)]" aria-hidden>
+              <path d="M7.667 12.667A5.333 5.333 0 107.667 2a5.333 5.333 0 000 10.667zM14.334 14l-2.9-2.9" stroke="currentColor" strokeWidth="1.333" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={searchPlaceholder}
-              aria-label="Search"
-              className="flex-1 text-[21px] text-[#2B2B2B] placeholder:text-[#6E6B65] bg-transparent focus:outline-none"
-            />
-          </div>
+          </button>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={searchPlaceholder}
+            aria-label="Search"
+            type="text"
+            className="w-full rounded-full bg-white border-2 border-transparent shadow-md transition-all duration-300 focus:outline-none focus:border-[#2B2B2B] text-[clamp(21px,1.3vw,44px)] text-[#2B2B2B] placeholder:text-[#8C8A85] pl-[clamp(64px,4.2vw,140px)] pr-[clamp(60px,4vw,130px)] py-[clamp(16px,1vw,36px)]"
+          />
+          {query && (
+            <button type="reset" aria-label="Clear search" className="absolute top-1/2 -translate-y-1/2 right-[clamp(20px,1.3vw,44px)] p-1 text-[#55534E] hover:text-[#2B2B2B]">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-[clamp(24px,1.4vw,48px)] h-[clamp(24px,1.4vw,48px)]" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
         </form>
 
         {/* The rooms, spread across the screen */}
@@ -223,10 +248,10 @@ export default function RoomNav({
             const on = r.id === active
             const inner = (
               <>
-                <span className={`block w-[54px] h-[54px] sm:w-[68px] sm:h-[68px] mx-auto transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
+                <span className={`block w-[clamp(54px,4vw,150px)] h-[clamp(54px,4vw,150px)] mx-auto transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
                   <Icon id={r.id} />
                 </span>
-                <span className={`block mt-3 text-[20px] sm:text-[22px] tracking-[0.02em] transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
+                <span className={`block mt-[clamp(12px,0.8vw,28px)] text-[clamp(20px,1.35vw,46px)] tracking-[0.02em] transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
                   {r.label}
                 </span>
                 <span className={`block mx-auto mt-2 h-px w-10 ${on ? 'bg-[#2B2B2B]' : 'bg-transparent'}`} />
