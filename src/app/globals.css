@@ -499,3 +499,26 @@ html {
 .myra-guide li b {
   font-weight: 800;
 }
+
+
+/* THUMBS — her yes and no on a look (after uiverse's thumbs toggles): grey at
+   rest, a small lift and tilt on hover, blue once it is her yes, red for her no. */
+.myra-thumb {
+  cursor: pointer;
+  user-select: none;
+  padding: 6px;
+  line-height: 0;
+}
+.myra-thumb svg {
+  height: clamp(50px, 3.2vw, 84px);
+  width: clamp(50px, 3.2vw, 84px);
+  fill: #666;
+  transition: all 0.3s;
+}
+.myra-thumb:hover svg { transform: scale(1.1) rotate(-10deg); }
+.myra-thumb[data-on='yes'] svg { fill: #2196F3; }
+.myra-thumb[data-on='no'] svg { fill: rgb(185, 51, 51); }
+@media (prefers-reduced-motion: reduce) {
+  .myra-thumb svg { transition: none; }
+  .myra-thumb:hover svg { transform: none; }
+}

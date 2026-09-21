@@ -118,38 +118,43 @@ function LookCard({ look, testMemberId }: { look: ForYouLook; testMemberId?: str
 
       <div className="px-5 md:px-7 py-5 flex flex-col gap-5">
 
-        {answer === null && (
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              disabled={busy}
-              onClick={() => tap('yes')}
-              className="text-[21px] py-3.5 rounded-full bg-[#2B2B2B] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
-            >
-              I&rsquo;d wear this
-            </button>
-            <button
-              disabled={busy}
-              onClick={() => tap('no')}
-              className="text-[21px] py-3.5 rounded-full border border-[#2B2B2B] text-[#2B2B2B] hover:bg-[#2B2B2B] hover:text-white transition-colors disabled:opacity-50"
-            >
-              Not for me
-            </button>
-          </div>
-        )}
-
-        {answer === 'yes' && (
-          <p className="text-[22px] text-[#3D6B45]">
-            ✓ You&rsquo;d wear this.{' '}
-            <button onClick={() => setAnswer(null)} className="text-[20px] text-[#55534E] underline underline-offset-4">Change</button>
-          </p>
-        )}
+        {/* Thumbs, not words (after the uiverse thumbs toggles): grey until she
+            taps, then blue for yes and red for no. Tapping the lit one again
+            takes the answer back; tapping the other changes it. */}
+        <div className="flex items-center justify-center gap-10" role="group" aria-label="Would you wear this?">
+          <button
+            type="button"
+            disabled={busy}
+            aria-pressed={answer === 'yes'}
+            aria-label="I would wear this"
+            title="I'd wear this"
+            onClick={() => (answer === 'yes' ? setAnswer(null) : tap('yes'))}
+            className="myra-thumb disabled:opacity-50"
+            data-on={answer === 'yes' ? 'yes' : undefined}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden>
+              <path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            aria-pressed={answer === 'no'}
+            aria-label="Not for me"
+            title="Not for me"
+            onClick={() => { if (answer === 'no') { setAnswer(null); setAskWhy(false) } else void tap('no') }}
+            className="myra-thumb disabled:opacity-50"
+            data-on={answer === 'no' ? 'no' : undefined}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden>
+              <path d="M15 3H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l6.59-6.59c.36-.36.58-.86.58-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z" />
+            </svg>
+          </button>
+        </div>
 
         {answer === 'no' && (
           <div className="flex flex-col gap-4">
-            <p className="text-[22px] text-[#55534E]">
-              {thanked ? 'Thank you — that really helps.' : 'Noted — not for you.'}{' '}
-              <button onClick={() => { setAnswer(null); setAskWhy(false) }} className="text-[20px] underline underline-offset-4">Change</button>
-            </p>
+            {thanked && <p className="text-[21px] text-[#55534E] text-center">Thank you — that really helps.</p>}
             {askWhy && (
               <div className="flex flex-col gap-3">
                 <p className="text-[20px] text-[#2B2B2B]">Want to say why? It&rsquo;s optional.</p>
