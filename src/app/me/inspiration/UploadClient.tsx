@@ -188,7 +188,7 @@ function ResultCard({
       {/* The payoff — an upload has to visibly do something. */}
       {!!result.because?.length && (
         <div className="border-t border-[#E2E0DB] px-3 py-3 bg-[#FAFAF8]">
-          <p className="text-[10px] tracking-[0.14em] text-[#8B5E00] mb-2">BECAUSE OF WHAT YOU JUST ADDED</p>
+          <p className="text-[10px] tracking-[0.14em] text-[#7C838B] mb-2">BECAUSE OF WHAT YOU JUST ADDED</p>
           <div className="grid grid-cols-3 gap-2">
             {result.because.map((o) => (
               <a key={o.outfit_id} href={`/outfit/${o.outfit_id}`} className="block">

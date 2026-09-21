@@ -94,7 +94,7 @@ export default function HerViewTab({
 
       {/* Her rooms, as she would move between them. */}
       {/* The test label belongs to Chloe, not to her screen: it sits above it. */}
-      <p className="text-[20px] tracking-[0.1em] text-[#8B5E00] px-1 pb-3">
+      <p className="text-[20px] tracking-[0.1em] text-[#7C838B] px-1 pb-3">
         TESTING AS {name.toUpperCase()} — TAPS HERE ARE TESTS: NOTHING IS SENT TO HER OR SAVED
       </p>
       <InviteLink memberId={memberId} name={name} />
@@ -153,8 +153,8 @@ export default function HerViewTab({
             <MyLooksClient view={looksView} readOnly initialQuery={search} key={search} />
           </div>
         ) : (
-          <div className="border border-[#E8D9B8] bg-[#FBF8F2] p-5">
-            <p className="text-[20px] tracking-[0.08em] text-[#8B5E00]">{name.toUpperCase()} HAS NOT BEEN SENT ANYTHING YET</p>
+          <div className="border border-[#DCDEE1] bg-[#F4F5F6] p-5">
+            <p className="text-[20px] tracking-[0.08em] text-[#7C838B]">{name.toUpperCase()} HAS NOT BEEN SENT ANYTHING YET</p>
             <p className="text-[20px] tracking-[0.06em] text-[#6B6B6B] mt-2">
               THIS IS EXACTLY WHAT SHE WOULD SEE ON SIGNING IN. USE SEND TO HER ON A SHOT LOOK, OR SEND HER EVERY SHOT LOOK, IN DELIVERIES.
             </p>

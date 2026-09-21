@@ -38,7 +38,7 @@ export default async function PartnerSettings() {
                 ? <p className="text-[9px] tracking-[0.08em] text-[#3D7A50]">ACCEPTED {new Date(t.accepted_at).toLocaleDateString('en-GB')}</p>
                 : ctx.role === 'owner'
                   ? <AcceptTermsButton termsId={t.terms_id} />
-                  : <p className="text-[9px] tracking-[0.08em] text-[#8B5E00]">AWAITING ACCEPTANCE BY THE ACCOUNT OWNER</p>}
+                  : <p className="text-[9px] tracking-[0.08em] text-[#7C838B]">AWAITING ACCEPTANCE BY THE ACCOUNT OWNER</p>}
             </div>
           </>
         ) : (

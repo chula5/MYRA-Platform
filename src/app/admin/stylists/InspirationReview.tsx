@@ -26,7 +26,7 @@ import {
 
 const STATUS_TONE: Record<string, string> = {
   pending_scoring: 'text-[#A8A8A4] border-[#E2E0DB]',
-  scored: 'text-[#8B5E00] border-[#E8D9B8]',
+  scored: 'text-[#7C838B] border-[#DCDEE1]',
   confirmed: 'text-[#3D7A50] border-[#C9E0CF]',
   rejected: 'text-[#B83A3A] border-[#E8B4B4]',
 }
@@ -136,7 +136,7 @@ export default function InspirationReview({
           {pending} PENDING · {scored} AWAITING REVIEW · {rejected} REJECTED
         </span>
         {envelopeStatus === 'needs_review' && (
-          <span className="text-[9px] tracking-[0.12em] text-[#8B5E00] border border-[#E8D9B8] px-2 py-0.5">
+          <span className="text-[9px] tracking-[0.12em] text-[#7C838B] border border-[#DCDEE1] px-2 py-0.5">
             ENVELOPE UPDATED — REVIEW RULES
           </span>
         )}

@@ -187,7 +187,7 @@ export default function PipelineClient({ fast, standard }: { fast: PipelineCard[
                     onClick={() => act(c.id, 'override')}
                     disabled={!!busy[c.id]}
                     title="Needs edits — moves to standard lane and tightens the gate"
-                    className="px-2.5 py-1.5 text-[9px] tracking-[0.1em] border border-[#E2E0DB] text-[#8B5E00] rounded-full hover:border-[#8B5E00] disabled:opacity-50"
+                    className="px-2.5 py-1.5 text-[9px] tracking-[0.1em] border border-[#E2E0DB] text-[#7C838B] rounded-full hover:border-[#7C838B] disabled:opacity-50"
                   >
                     ✎
                   </button>
@@ -228,7 +228,7 @@ export default function PipelineClient({ fast, standard }: { fast: PipelineCard[
                 <p className="text-[9px] tracking-[0.16em] text-[#6B6B6B]">
                   {(c.anchor?.brand_name ?? '').toUpperCase()} · {c.anchor?.product_name?.toUpperCase()}
                   {g.setId && <span className="ml-2 text-[#C4A882]">VARIANT {vi + 1} OF {total}{c.variant_direction ? ` · ${(DIRECTION_LABEL[c.variant_direction] ?? c.variant_direction).toUpperCase()}` : ''}</span>}
-                  {c.overridden && <span className="ml-2 text-[#8B5E00]">OVERRIDE</span>}
+                  {c.overridden && <span className="ml-2 text-[#7C838B]">OVERRIDE</span>}
                 </p>
                 <p className="text-[9px] tracking-[0.12em] text-[#A8A8A4]">
                   COHERENCE {((c.base_score ?? 0) * 100).toFixed(0)} · CONFIDENCE {((c.confidence ?? 0) * 100).toFixed(0)}
@@ -237,7 +237,7 @@ export default function PipelineClient({ fast, standard }: { fast: PipelineCard[
               {c.reasons.length > 0 && (
                 <ul className="mb-3 space-y-0.5">
                   {c.reasons.map((r, i) => (
-                    <li key={i} className="text-[8px] tracking-[0.06em] text-[#8B5E00] leading-relaxed">▲ {r.toUpperCase()}</li>
+                    <li key={i} className="text-[8px] tracking-[0.06em] text-[#7C838B] leading-relaxed">▲ {r.toUpperCase()}</li>
                   ))}
                 </ul>
               )}

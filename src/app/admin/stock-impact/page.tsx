@@ -22,7 +22,7 @@ export default async function StockImpactPage() {
         </p>
         <div className="mt-3 flex items-center gap-4 text-[10px] tracking-[0.09em]">
           {outCount > 0 && <span className="text-[#B83A3A]">{outCount} WITH OUT-OF-STOCK</span>}
-          {lowCount > 0 && <span className="text-[#8B5E00]">{lowCount} WITH LOW STOCK</span>}
+          {lowCount > 0 && <span className="text-[#7C838B]">{lowCount} WITH LOW STOCK</span>}
           <Link href="/admin/items?stock=flagged" className="text-[#6B6B6B] hover:text-[#0A0A0A]">← FLAGGED ITEMS</Link>
         </div>
       </div>

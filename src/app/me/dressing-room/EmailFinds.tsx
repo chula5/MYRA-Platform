@@ -126,7 +126,7 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
           Only order emails are read, and nothing else is kept.
         </p>
         {view.test && (
-          <p className="text-[18px] xl:text-[21px] 2xl:text-[25px] tracking-[0.08em] text-[#8B5E00] mt-3">
+          <p className="text-[18px] xl:text-[21px] 2xl:text-[25px] tracking-[0.08em] text-[#7C838B] mt-3">
             NOTE: CONNECTING HERE CONNECTS HER REAL INBOX — ADDING A PIECE ADDS IT TO HER REAL WARDROBE.
           </p>
         )}
@@ -262,7 +262,7 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
                   </p>
                   {f.price != null && <p className="text-[18px] xl:text-[21px] 2xl:text-[25px] text-[#55534E]">{f.currency === 'GBP' || !f.currency ? '£' : `${f.currency} `}{Math.round(f.price)}</p>}
                   {f.error === 'Return started' ? (
-                    <p className="text-[18px] xl:text-[21px] 2xl:text-[25px] text-[#8B5E00]">You started a return — add it only if you kept it</p>
+                    <p className="text-[18px] xl:text-[21px] 2xl:text-[25px] text-[#7C838B]">You started a return — add it only if you kept it</p>
                   ) : f.error ? (
                     <p className="text-[18px] xl:text-[21px] 2xl:text-[25px] text-[#B83A3A]">{f.error}</p>
                   ) : null}

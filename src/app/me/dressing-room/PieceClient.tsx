@@ -105,7 +105,7 @@ export default function PieceClient({
                 <div className="space-y-3">
                   <p className="myra-section-note">{asked?.toUpperCase()}</p>
                   {view.test && hidden > 0 && (
-                    <p className="text-[18px] text-[#8B5E00]">{hidden} more outfit{hidden === 1 ? ' was' : 's were'} composed and not shown — they failed the look check or her size.</p>
+                    <p className="text-[18px] text-[#7C838B]">{hidden} more outfit{hidden === 1 ? ' was' : 's were'} composed and not shown — they failed the look check or her size.</p>
                   )}
                   <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
                     {results.map((l, i) => <OutfitCard key={i} look={l} heroId={piece.item_id} />)}

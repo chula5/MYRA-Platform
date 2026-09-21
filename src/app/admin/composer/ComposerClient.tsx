@@ -511,7 +511,7 @@ export default function ComposerClient({
                   {(candidate.reasons?.length ?? 0) > 0 && (
                     <ul className="mb-3 space-y-0.5">
                       {candidate.reasons.map((r, ri) => (
-                        <li key={ri} className="text-[8px] tracking-[0.06em] text-[#8B5E00] leading-relaxed">▲ {r.toUpperCase()}</li>
+                        <li key={ri} className="text-[8px] tracking-[0.06em] text-[#7C838B] leading-relaxed">▲ {r.toUpperCase()}</li>
                       ))}
                     </ul>
                   )}

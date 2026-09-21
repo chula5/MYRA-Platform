@@ -54,7 +54,7 @@ function StockTag({ item }: { item: { stock_status?: string | null; stock_sizes?
   else if (low) text = 'LOW STOCK'
   else if (item.stock_status === 'in_stock') text = 'IN STOCK'
   if (!text) return null
-  const tone = out ? 'text-[#B83A3A]' : low ? 'text-[#8B5E00]' : 'text-[#3D7A50]'
+  const tone = out ? 'text-[#B83A3A]' : low ? 'text-[#7C838B]' : 'text-[#3D7A50]'
   return <p className={`text-[7px] tracking-[0.06em] ${tone} truncate`}>{text}</p>
 }
 
@@ -411,7 +411,7 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
                 {(c.reasons?.length ?? 0) > 0 && (
                   <ul className="mb-2 space-y-0.5">
                     {c.reasons.map((r, ri) => (
-                      <li key={ri} className="text-[8px] tracking-[0.06em] text-[#8B5E00] leading-relaxed">▲ {r.toUpperCase()}</li>
+                      <li key={ri} className="text-[8px] tracking-[0.06em] text-[#7C838B] leading-relaxed">▲ {r.toUpperCase()}</li>
                     ))}
                   </ul>
                 )}

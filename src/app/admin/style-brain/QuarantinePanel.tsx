@@ -25,7 +25,7 @@ export function QuarantinePanel({ items }: { items: QuarantinedItem[] }) {
   if (!visible.length) return null
 
   return (
-    <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[12px] p-6 mb-6">
+    <div className="border border-[#DCDEE1] bg-[#FBF6EA] rounded-[12px] p-6 mb-6">
       <p className="text-[10px] tracking-[0.099em] text-[#8A7A4E] mb-1">QUARANTINED ITEMS — RETIRE OR KEEP?</p>
       <p className="text-[9px] tracking-[0.06em] text-[#8A7A4E]/80 mb-4 max-w-[720px] leading-relaxed">
         Ejected 3+ times across contexts, so the composer has stopped proposing them. RETIRE archives

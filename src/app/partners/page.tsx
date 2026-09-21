@@ -68,7 +68,7 @@ export default async function PartnerOverview() {
 
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: 'PENDING', value: fmt(pending), sub: 'IN RETURN WINDOW', tone: 'text-[#8B5E00]' },
+          { label: 'PENDING', value: fmt(pending), sub: 'IN RETURN WINDOW', tone: 'text-[#7C838B]' },
           { label: 'APPROVED', value: fmt(approved), sub: 'WINDOW CLOSED — DUE', tone: 'text-[#3D7A50]' },
           { label: 'SETTLED', value: fmt(paid), sub: 'ALL TIME', tone: 'text-[#4A4E57]' },
         ].map((s) => (

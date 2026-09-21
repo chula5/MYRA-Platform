@@ -377,12 +377,12 @@ export default async function AnalyticsPage() {
       </div>
 
       {!tableReady && (
-        <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[12px] p-5 mb-8 max-w-[600px]">
+        <div className="border border-[#DCDEE1] bg-[#FBF6EA] rounded-[12px] p-5 mb-8 max-w-[600px]">
           <p className="text-[11px] tracking-[0.081em] text-[#8A7A4E] mb-3">DATABASE TABLE NOT YET CREATED</p>
           <p className="text-[10px] tracking-[0.054em] text-[#8A7A4E] leading-relaxed mb-3">
             Run the following SQL once in your Supabase SQL Editor to start collecting data:
           </p>
-          <pre className="text-[9px] bg-white border border-[#E8D9B8] p-3 rounded overflow-x-auto text-[#6B6B6B] leading-relaxed">{`CREATE TABLE IF NOT EXISTS public.landing_event (
+          <pre className="text-[9px] bg-white border border-[#DCDEE1] p-3 rounded overflow-x-auto text-[#6B6B6B] leading-relaxed">{`CREATE TABLE IF NOT EXISTS public.landing_event (
   event_id    uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   event_type  text        NOT NULL,
   path        text        NOT NULL DEFAULT '/',
@@ -436,13 +436,13 @@ ALTER TABLE public.landing_event ENABLE ROW LEVEL SECURITY;`}</pre>
       <div className="mb-10">
         <p className="text-[10px] tracking-[0.135em] text-[#6B6B6B] mb-4">RETENTION · LAST 30 DAYS</p>
         {!retentionReady ? (
-          <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[12px] p-5 max-w-[600px]">
+          <div className="border border-[#DCDEE1] bg-[#FBF6EA] rounded-[12px] p-5 max-w-[600px]">
             <p className="text-[11px] tracking-[0.081em] text-[#8A7A4E] mb-3">SESSION TABLE NOT YET CREATED</p>
             <p className="text-[10px] tracking-[0.054em] text-[#8A7A4E] leading-relaxed mb-3">
               Run migration <span className="font-mono">0013_site_session.sql</span> in Supabase to start
               measuring time on site and repeat sessions.
             </p>
-            <pre className="text-[9px] bg-white border border-[#E8D9B8] p-3 rounded overflow-x-auto text-[#6B6B6B] leading-relaxed">{`create table if not exists site_session (
+            <pre className="text-[9px] bg-white border border-[#DCDEE1] p-3 rounded overflow-x-auto text-[#6B6B6B] leading-relaxed">{`create table if not exists site_session (
   session_id   text primary key,
   visitor_id   text not null,
   is_returning boolean not null default false,
@@ -678,12 +678,12 @@ alter table site_session enable row level security;`}</pre>
         </div>
 
         {!refColumnReady ? (
-          <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[12px] p-4 max-w-[620px]">
+          <div className="border border-[#DCDEE1] bg-[#FBF6EA] rounded-[12px] p-4 max-w-[620px]">
             <p className="text-[10px] tracking-[0.063em] text-[#8A7A4E] leading-relaxed mb-2">
               Run migration <span className="font-mono">0008_landing_event_ref.sql</span> in Supabase to start
               tracking referrals:
             </p>
-            <pre className="text-[9px] bg-white border border-[#E8D9B8] p-3 rounded overflow-x-auto text-[#6B6B6B] leading-relaxed">{`ALTER TABLE public.landing_event ADD COLUMN IF NOT EXISTS ref text;
+            <pre className="text-[9px] bg-white border border-[#DCDEE1] p-3 rounded overflow-x-auto text-[#6B6B6B] leading-relaxed">{`ALTER TABLE public.landing_event ADD COLUMN IF NOT EXISTS ref text;
 CREATE INDEX IF NOT EXISTS landing_event_ref_idx ON public.landing_event (ref);`}</pre>
           </div>
         ) : refRows.length === 0 ? (

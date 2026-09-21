@@ -346,13 +346,13 @@ export default async function SignupPreferencesPage({
       </div>
 
       {!tableReady && (
-        <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[12px] p-5 mb-8 max-w-[640px]">
+        <div className="border border-[#DCDEE1] bg-[#FBF6EA] rounded-[12px] p-5 mb-8 max-w-[640px]">
           <p className="text-[11px] tracking-[0.081em] text-[#8A7A4E] mb-3">DATABASE TABLE NOT YET CREATED</p>
           <p className="text-[10px] tracking-[0.054em] text-[#8A7A4E] leading-relaxed mb-3">
             Run migration <span className="font-mono">0006_signup_onboarding.sql</span> in your Supabase SQL Editor
             to start collecting onboarding data:
           </p>
-          <pre className="text-[9px] bg-white border border-[#E8D9B8] p-3 rounded overflow-x-auto text-[#6B6B6B] leading-relaxed">{`ALTER TABLE public.outfit
+          <pre className="text-[9px] bg-white border border-[#DCDEE1] p-3 rounded overflow-x-auto text-[#6B6B6B] leading-relaxed">{`ALTER TABLE public.outfit
   ADD COLUMN IF NOT EXISTS age_ranges text[] NOT NULL DEFAULT '{}';
 
 CREATE TABLE IF NOT EXISTS public.signup_preference (
@@ -594,12 +594,12 @@ ALTER TABLE public.signup_preference ENABLE ROW LEVEL SECURITY;`}</pre>
         </div>
 
         {!itemClicksReady ? (
-          <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[12px] p-4">
+          <div className="border border-[#DCDEE1] bg-[#FBF6EA] rounded-[12px] p-4">
             <p className="text-[10px] tracking-[0.063em] text-[#8A7A4E] leading-relaxed mb-2">
               Run migration <span className="font-mono">0007_item_click.sql</span> in Supabase to start
               tracking retailer click-throughs:
             </p>
-            <pre className="text-[9px] bg-white border border-[#E8D9B8] p-3 rounded overflow-x-auto text-[#6B6B6B] leading-relaxed">{`CREATE TABLE IF NOT EXISTS public.item_click (
+            <pre className="text-[9px] bg-white border border-[#DCDEE1] p-3 rounded overflow-x-auto text-[#6B6B6B] leading-relaxed">{`CREATE TABLE IF NOT EXISTS public.item_click (
   click_id   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   item_id    uuid NOT NULL,
   outfit_id  uuid,
@@ -662,11 +662,11 @@ ALTER TABLE public.item_click ENABLE ROW LEVEL SECURITY;`}</pre>
           )}
         </div>
         {!savesReady ? (
-          <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[12px] p-4">
+          <div className="border border-[#DCDEE1] bg-[#FBF6EA] rounded-[12px] p-4">
             <p className="text-[10px] tracking-[0.063em] text-[#8A7A4E] leading-relaxed mb-2">
               Run migration <span className="font-mono">0010_saved_outfit.sql</span> in Supabase to track saves:
             </p>
-            <pre className="text-[9px] bg-white border border-[#E8D9B8] p-3 rounded overflow-x-auto text-[#6B6B6B] leading-relaxed">{`CREATE TABLE IF NOT EXISTS public.saved_outfit (
+            <pre className="text-[9px] bg-white border border-[#DCDEE1] p-3 rounded overflow-x-auto text-[#6B6B6B] leading-relaxed">{`CREATE TABLE IF NOT EXISTS public.saved_outfit (
   user_id    uuid NOT NULL,
   outfit_id  uuid NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),

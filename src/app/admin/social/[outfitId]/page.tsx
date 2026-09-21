@@ -86,14 +86,14 @@ export default async function SocialPostPage({ params }: PageProps) {
             </div>
 
             {products.length === 0 && (
-              <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[12px] p-4 mb-4">
+              <div className="border border-[#DCDEE1] bg-[#FBF6EA] rounded-[12px] p-4 mb-4">
                 <p className="text-[10px] tracking-[0.081em] text-[#8A7A4E] leading-relaxed">
                   This outfit has no items yet, so there are no shop-the-look cards. Add items to it in Projects.
                 </p>
               </div>
             )}
             {!outfit.image_url && (
-              <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[12px] p-4">
+              <div className="border border-[#DCDEE1] bg-[#FBF6EA] rounded-[12px] p-4">
                 <p className="text-[10px] tracking-[0.081em] text-[#8A7A4E] leading-relaxed">
                   No display image set — the backdrop is empty. Set a display image (e.g. a Higgsfield shoot) on the
                   outfit for the full effect.

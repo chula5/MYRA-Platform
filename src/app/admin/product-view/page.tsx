@@ -63,13 +63,13 @@ export default async function ProductViewPage() {
         {clipsErr ? (
           <div>
             <p className="text-[10px] tracking-[0.099em] text-[#6B6B6B] mb-3">DEMO VIDEOS</p>
-            <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[12px] p-5 max-w-[640px]">
+            <div className="border border-[#DCDEE1] bg-[#FBF6EA] rounded-[12px] p-5 max-w-[640px]">
               <p className="text-[11px] tracking-[0.081em] text-[#8A7A4E] mb-3">VIDEO LIBRARY NOT SET UP YET</p>
               <p className="text-[10px] tracking-[0.054em] text-[#8A7A4E] leading-relaxed mb-3">
                 Run migration <span className="font-mono">0009_product_view.sql</span> in Supabase to add saved demo
                 videos here (optional — the live previews above work without it):
               </p>
-              <pre className="text-[9px] bg-white border border-[#E8D9B8] p-3 rounded overflow-x-auto text-[#6B6B6B] leading-relaxed">{`CREATE TABLE IF NOT EXISTS public.product_view_clip (
+              <pre className="text-[9px] bg-white border border-[#DCDEE1] p-3 rounded overflow-x-auto text-[#6B6B6B] leading-relaxed">{`CREATE TABLE IF NOT EXISTS public.product_view_clip (
   clip_id    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   title      text NOT NULL,
   caption    text,

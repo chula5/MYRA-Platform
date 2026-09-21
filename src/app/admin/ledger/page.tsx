@@ -78,7 +78,7 @@ export default async function LedgerPage({
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         {[
-          { label: 'PENDING (IN WINDOW)', value: totals.pending, tone: 'text-[#8B5E00]' },
+          { label: 'PENDING (IN WINDOW)', value: totals.pending, tone: 'text-[#7C838B]' },
           { label: 'APPROVED — OWED', value: totals.approved, tone: 'text-[#3D7A50]' },
           { label: 'PAID', value: totals.paid, tone: 'text-[#4A4E57]' },
           { label: 'RETURNED', value: totals.returned, tone: 'text-[#B83A3A]' },

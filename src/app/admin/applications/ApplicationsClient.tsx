@@ -56,7 +56,7 @@ export default function ApplicationsClient({ rows }: { rows: ApplicationRow[] })
                 <div className="flex items-center gap-2.5">
                   <p className="text-[13px] tracking-[0.05em] text-[#0A0A0A]">{a.brand_name.toUpperCase()}</p>
                   <span className={`text-[8px] tracking-[0.1em] px-2 py-0.5 rounded-full border ${
-                    a.status === 'pending' ? 'border-[#E8D9B8] bg-[#FBF6EA] text-[#8B5E00]'
+                    a.status === 'pending' ? 'border-[#DCDEE1] bg-[#FBF6EA] text-[#7C838B]'
                     : a.status === 'approved' ? 'border-[#BBD9C2] bg-[#EAF3EC] text-[#3D7A50]'
                     : 'border-[#E2E0DB] text-[#A8A8A4]'
                   }`}>{a.status.replace('_', ' ').toUpperCase()}</span>

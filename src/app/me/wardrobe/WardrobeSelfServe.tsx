@@ -93,10 +93,10 @@ export default function WardrobeSelfServe({ data }: { data: MyWardrobe }) {
       >
         {busy === 'upload' ? (progress ?? 'WORKING…') : '+ ADD PHOTOS'}
       </button>
-      {!data.ready && <p className="text-[15px] text-[#8B5E00] leading-relaxed">Photos are saved, but extraction isn&rsquo;t switched on yet &mdash; we&rsquo;ll work through them as soon as it is.</p>}
+      {!data.ready && <p className="text-[15px] text-[#7C838B] leading-relaxed">Photos are saved, but extraction isn&rsquo;t switched on yet &mdash; we&rsquo;ll work through them as soon as it is.</p>}
       {error && <p className="text-[15px] text-[#B83A3A] leading-relaxed">{error}</p>}
       {(working > 0 || data.processing) && (
-        <p className="text-[15px] text-[#8B5E00] tracking-[0.04em]">Working through your photos… {working > 0 ? `${working} piece${working === 1 ? '' : 's'} in progress` : `${data.queued} in the queue`}. Pieces appear below as they are ready.</p>
+        <p className="text-[15px] text-[#7C838B] tracking-[0.04em]">Working through your photos… {working > 0 ? `${working} piece${working === 1 ? '' : 's'} in progress` : `${data.queued} in the queue`}. Pieces appear below as they are ready.</p>
       )}
 
       {/* Review */}

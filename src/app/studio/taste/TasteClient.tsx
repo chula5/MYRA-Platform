@@ -844,7 +844,7 @@ function MemberScatter({
                 <circle
                   cx={d.x} cy={d.y} r={named ? 4.5 : 3}
                   fill={colour}
-                  stroke={named ? '#8A6D1F' : 'none'}
+                  stroke={named ? '#7C838B' : 'none'}
                   strokeWidth={named ? 1.2 : 0}
                 />
                 <text

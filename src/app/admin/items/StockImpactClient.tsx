@@ -42,7 +42,7 @@ async function fetchOptions(
 
 function StockBadge({ status }: { status: StockOutfitItem['stock_status'] }) {
   if (status === 'out_of_stock') return <span className="text-[7px] tracking-[0.08em] text-[#B83A3A]">OUT OF STOCK</span>
-  if (status === 'low_stock') return <span className="text-[7px] tracking-[0.08em] text-[#8B5E00]">LOW STOCK</span>
+  if (status === 'low_stock') return <span className="text-[7px] tracking-[0.08em] text-[#7C838B]">LOW STOCK</span>
   if (status === 'in_stock') return <span className="text-[7px] tracking-[0.08em] text-[#3D7A50]">IN STOCK</span>
   return <span className="text-[7px] tracking-[0.08em] text-[#A8A8A4]">UNCHECKED</span>
 }
@@ -217,7 +217,7 @@ export default function StockImpactClient({ outfits: initial }: { outfits: Stock
                   <div className="min-w-0">
                     <p className="text-[12px] tracking-[0.05em] text-[#4A4E57] truncate">{o.aesthetic_label?.toUpperCase() || 'OUTFIT'}</p>
                     <p className="text-[8px] tracking-[0.1em] mt-0.5">
-                      {o.hasOut ? <span className="text-[#B83A3A]">CONTAINS OUT-OF-STOCK</span> : <span className="text-[#8B5E00]">CONTAINS LOW STOCK</span>}
+                      {o.hasOut ? <span className="text-[#B83A3A]">CONTAINS OUT-OF-STOCK</span> : <span className="text-[#7C838B]">CONTAINS LOW STOCK</span>}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">

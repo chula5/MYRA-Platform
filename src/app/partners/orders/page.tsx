@@ -26,7 +26,7 @@ export default async function PartnerOrders() {
 
   const explain = (r: any): { label: string; tone: string } => {
     switch (r.status) {
-      case 'pending': return { label: `IN RETURN WINDOW UNTIL ${day(r.return_window_ends_at)}`, tone: 'text-[#8B5E00]' }
+      case 'pending': return { label: `IN RETURN WINDOW UNTIL ${day(r.return_window_ends_at)}`, tone: 'text-[#7C838B]' }
       case 'approved': return { label: 'APPROVED — DUE', tone: 'text-[#3D7A50]' }
       case 'payable': return { label: 'ON YOUR NEXT STATEMENT', tone: 'text-[#3D7A50]' }
       case 'paid': return { label: 'SETTLED', tone: 'text-[#4A4E57]' }

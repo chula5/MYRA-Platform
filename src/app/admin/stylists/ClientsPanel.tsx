@@ -101,8 +101,8 @@ export default function ClientsPanel({
 
       {/* Invite details — no email infrastructure for the pilot, share by hand */}
       {invite && (
-        <div className="border border-[#E8D9B8] bg-[#FBF8F2] px-4 py-3 mb-4">
-          <p className="text-[9px] tracking-[0.14em] text-[#8B5E00] mb-2">SEND HER THESE THREE THINGS</p>
+        <div className="border border-[#DCDEE1] bg-[#F4F5F6] px-4 py-3 mb-4">
+          <p className="text-[9px] tracking-[0.14em] text-[#7C838B] mb-2">SEND HER THESE THREE THINGS</p>
           <p className="text-[11px] tracking-[0.04em] text-[#4A4E57]">LINK: {invite.url}</p>
           <p className="text-[11px] tracking-[0.04em] text-[#4A4E57]">EMAIL: {invite.email}</p>
           <p className="text-[11px] tracking-[0.04em] text-[#4A4E57]">PASSWORD: {invite.password}</p>

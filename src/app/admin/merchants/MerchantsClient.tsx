@@ -94,7 +94,7 @@ export default function MerchantsClient({ merchants }: { merchants: MerchantRow[
                 <div className="flex items-center gap-6 text-center">
                   <div><p className="text-[16px] text-[#4A4E57] leading-none">{m.itemCount}</p><p className="text-[8px] tracking-[0.1em] text-[#A8A8A4] mt-1">ITEMS ({m.liveItemCount} LIVE)</p></div>
                   <div><p className="text-[16px] text-[#4A4E57] leading-none">{m.clicks30}</p><p className="text-[8px] tracking-[0.1em] text-[#A8A8A4] mt-1">CLICKS · 30D</p></div>
-                  <div><p className="text-[16px] text-[#8B5E00] leading-none">{fmt(m.commission.pendingGbp)}</p><p className="text-[8px] tracking-[0.1em] text-[#A8A8A4] mt-1">PENDING</p></div>
+                  <div><p className="text-[16px] text-[#7C838B] leading-none">{fmt(m.commission.pendingGbp)}</p><p className="text-[8px] tracking-[0.1em] text-[#A8A8A4] mt-1">PENDING</p></div>
                   <div><p className="text-[16px] text-[#3D7A50] leading-none">{fmt(m.commission.approvedGbp)}</p><p className="text-[8px] tracking-[0.1em] text-[#A8A8A4] mt-1">APPROVED</p></div>
                   <div><p className="text-[16px] text-[#4A4E57] leading-none">{fmt(m.commission.paidGbp)}</p><p className="text-[8px] tracking-[0.1em] text-[#A8A8A4] mt-1">PAID</p></div>
                 </div>

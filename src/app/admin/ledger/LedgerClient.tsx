@@ -20,7 +20,7 @@ export interface LedgerRow {
 }
 
 const STATUS_TONE: Record<string, string> = {
-  pending: 'text-[#8B5E00] border-[#E8D9B8] bg-[#FBF6EA]',
+  pending: 'text-[#7C838B] border-[#DCDEE1] bg-[#FBF6EA]',
   approved: 'text-[#3D7A50] border-[#BBD9C2] bg-[#EAF3EC]',
   payable: 'text-[#3D7A50] border-[#BBD9C2] bg-[#EAF3EC]',
   paid: 'text-[#4A4E57] border-[#E2E0DB] bg-[#FAFAF8]',
@@ -68,7 +68,7 @@ export default function LedgerClient({ rows }: { rows: LedgerRow[] }) {
             <div className="flex items-center gap-5">
               <p className="text-[10px] text-[#6B6B6B]">{r.currency} {r.order_value} → {fmt(r.order_value_gbp)} × {(r.rate_applied * 100).toFixed(0)}%</p>
               <p className="text-[14px] text-[#0A0A0A]">{fmt(r.commission_gbp)}</p>
-              {r.status === 'pending' && <p className="text-[8px] tracking-[0.06em] text-[#8B5E00]">WINDOW ENDS {d(r.return_window_ends_at)}</p>}
+              {r.status === 'pending' && <p className="text-[8px] tracking-[0.06em] text-[#7C838B]">WINDOW ENDS {d(r.return_window_ends_at)}</p>}
               <div className="flex items-center gap-2">
                 {r.status === 'pending' && (
                   <>

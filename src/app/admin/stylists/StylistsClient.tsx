@@ -19,7 +19,7 @@ import { loadStyleLearning, type StyleLearning } from './style-learning-actions'
 import ClientsPanel from './ClientsPanel'
 
 const STATUS_TONE: Record<string, string> = {
-  draft: 'text-[#8B5E00] border-[#E8D9B8]',
+  draft: 'text-[#7C838B] border-[#DCDEE1]',
   seeding: 'text-[#4A6FA5] border-[#C7D4E8]',
   live: 'text-[#3D7A50] border-[#C9E0CF]',
   paused: 'text-[#B83A3A] border-[#E8B4B4]',

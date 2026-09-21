@@ -54,7 +54,7 @@ export default async function ReconciliationPage() {
             <span className="text-[11px] tracking-[0.03em] text-[#4A4E57]">{r.name.toUpperCase()}</span>
             <span className="text-[11px] text-[#6B6B6B] text-right">{r.clicks}</span>
             <span className="text-[11px] text-[#6B6B6B] text-right">{r.orders}</span>
-            <span className={`text-[11px] text-right ${r.orders > 0 && r.attributed < r.orders ? 'text-[#8B5E00]' : 'text-[#3D7A50]'}`}>
+            <span className={`text-[11px] text-right ${r.orders > 0 && r.attributed < r.orders ? 'text-[#7C838B]' : 'text-[#3D7A50]'}`}>
               {r.attributed}/{r.orders}
             </span>
             <span className="text-[11px] text-[#0A0A0A] text-right">{fmt(r.commissionGbp)}</span>

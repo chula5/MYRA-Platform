@@ -191,7 +191,7 @@ export default function ApplyModal() {
                       <button
                         type="button"
                         onMouseDown={(e) => { e.preventDefault(); addBrand(q.trim()) }}
-                        className="w-full text-left px-4 py-2.5 text-[15px] text-[#8B5E00] hover:bg-[#F1F0EC] transition-colors"
+                        className="w-full text-left px-4 py-2.5 text-[15px] text-[#7C838B] hover:bg-[#F1F0EC] transition-colors"
                       >
                         + Add &ldquo;{q.trim()}&rdquo;
                       </button>

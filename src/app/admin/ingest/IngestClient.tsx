@@ -298,7 +298,7 @@ export default function IngestClient() {
                     <span
                       className={`absolute bottom-2 left-2 z-10 text-[8px] tracking-[0.1em] px-2 py-0.5 rounded-full ${
                         q.stock === 'out_of_stock' ? 'bg-[#B83A3A] text-white'
-                          : q.stock === 'low_stock' ? 'bg-[#F3E9CF] text-[#8B5E00]'
+                          : q.stock === 'low_stock' ? 'bg-[#F3E9CF] text-[#7C838B]'
                           : 'bg-[#EAF3EC] text-[#3D7A50]'
                       }`}
                     >

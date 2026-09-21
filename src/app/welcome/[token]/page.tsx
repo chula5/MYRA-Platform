@@ -30,7 +30,7 @@ export default async function WelcomePage({ params, searchParams }: { params: { 
   return (
     <main className="min-h-screen myra-pearl flex items-center justify-center px-6 py-14">
       {preview && (
-        <p className="fixed top-0 inset-x-0 z-10 text-center text-[15px] tracking-[0.12em] bg-[#8B5E00] text-white py-2.5">
+        <p className="fixed top-0 inset-x-0 z-10 text-center text-[15px] tracking-[0.12em] bg-[#7C838B] text-white py-2.5">
           PREVIEW — THIS IS WHAT {(name ?? 'SHE').toUpperCase()} SEES FROM HER INVITE LINK · STEP 1 OF 3 · NOTHING IS CREATED
         </p>
       )}

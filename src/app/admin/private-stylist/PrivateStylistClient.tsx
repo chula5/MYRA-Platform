@@ -41,8 +41,7 @@ import {
   COLOUR_SHADES,
   PRICE_BUCKETS,
   type StylePrefs,
-  type PriceBands,
-} from '@/lib/pilot-stylist'
+  type PriceBands, PIECE_PREFERENCES } from '@/lib/pilot-stylist'
 import { createMember, updateMember, deleteMember, seedSyntheticPersonas, addKnownEvent, removeKnownEvent, addWardrobeItem, removeWardrobeItem, createDelivery, createCalibrationSet, deleteDelivery, reopenDelivery, deleteDeliveryAndMemory, updateDelivery, saveLook, deleteLook, clearLook, clearDeliveryLooks, markStockChecked, sendDelivery, recordResponse, logActivity, recomputeWeights, assignMemberPersona, composeDeliveryLooks, lookAlternates, swapComposedLookItem, removeComposedLookItem, lookAddOptions, addComposedLookItem, approveComposedLook, skipComposedLook, composeLookVariants, restoreLookShoot, deleteLookShoot, loadMemberTrust, recordMemberLookFeedback, setMemberBrands, addMemberBrand, removeMemberBrand, restoreMemberBrand, loadMemberBrandMap } from './actions.gated'
 import type { MemberTrust, MemberBrandMap, MemberBrandDot, SwapOption, PilotData, PilotMember, PilotDelivery, PilotLook, PilotActivity } from './actions'
 
@@ -155,33 +154,7 @@ const SHADES_BY_FAMILY = COLOUR_GROUPS.reduce<Record<string, { value: string; la
   return acc
 }, {})
 
-const PREF_TYPES: { value: string; label: string }[] = [
-  { value: 'coat', label: 'COAT' },
-  { value: 'trench', label: 'TRENCH' },
-  { value: 'jacket', label: 'JACKET' },
-  { value: 'blazer', label: 'BLAZER' },
-  { value: 'gilet', label: 'GILET' },
-  { value: 'shirt', label: 'SHIRT' },
-  { value: 'blouse', label: 'BLOUSE' },
-  { value: 't-shirt', label: 'T-SHIRT' },
-  { value: 'knitwear', label: 'KNITWEAR' },
-  { value: 'bodysuit', label: 'BODYSUIT' },
-  { value: 'trousers', label: 'TROUSERS' },
-  { value: 'jeans', label: 'JEANS' },
-  { value: 'shorts', label: 'SHORTS' },
-  { value: 'skirt', label: 'SKIRT' },
-  { value: 'mini_dress', label: 'MINI DRESS' },
-  { value: 'midi_dress', label: 'MIDI DRESS' },
-  { value: 'maxi_dress', label: 'MAXI DRESS' },
-  { value: 'shirt_dress', label: 'SHIRT DRESS' },
-  { value: 'slip_dress', label: 'SLIP DRESS' },
-  { value: 'boot', label: 'BOOTS' },
-  { value: 'heel', label: 'HEELS' },
-  { value: 'flat', label: 'FLATS' },
-  { value: 'sneaker', label: 'TRAINERS' },
-  { value: 'mule', label: 'MULES' },
-  { value: 'sandal', label: 'SANDALS' },
-]
+const PREF_TYPES = PIECE_PREFERENCES
 
 const label = 'text-[20px] tracking-[0.18em] text-[#6B6B6B]'
 const input =
@@ -561,7 +534,7 @@ function Lookbook({ deliveries, memberName, activity, run, busy }: {
         onClick={() => setOpen((v) => !v)}
         className="w-full flex items-baseline gap-2 text-left border-b border-[#E2E0DB] pb-2 mb-3 group"
       >
-        <span className="text-[20px] tracking-[0.18em] text-[#0A0A0A] group-hover:text-[#8B5E00] transition-colors">
+        <span className="text-[20px] tracking-[0.18em] text-[#0A0A0A] group-hover:text-[#7C838B] transition-colors">
           {open ? '−' : '+'} {memberName.toUpperCase()}
         </span>
         <span className="text-[20px] tracking-[0.14em] text-[#A8A8A4]">
@@ -1008,12 +981,12 @@ function MemberBrands({ member: m, run, busy }: { member: PilotMember; run: Run;
 
       {inputOnly.length > 0 && (
         <div className="mt-2">
-          <p className="text-[20px] tracking-[0.1em] text-[#8B5E00] mb-1">INPUT ONLY (TASTE SIGNAL, NEVER RECOMMENDED)</p>
+          <p className="text-[20px] tracking-[0.1em] text-[#7C838B] mb-1">INPUT ONLY (TASTE SIGNAL, NEVER RECOMMENDED)</p>
           <div className="flex flex-wrap gap-1.5">
             {inputOnly.map((n, i) => (
-              <span key={`${n}-${i}`} className="flex items-center gap-1.5 text-[20px] tracking-[0.1em] text-[#8B5E00] border border-[#E8DCC0] bg-[#FFFBEF] px-2 py-1">
+              <span key={`${n}-${i}`} className="flex items-center gap-1.5 text-[20px] tracking-[0.1em] text-[#7C838B] border border-[#E8DCC0] bg-[#FFFBEF] px-2 py-1">
                 {n.toUpperCase()}
-                <button className="text-[#8B5E00] hover:opacity-60" onClick={() => setInputOnly(inputOnly.filter((_, k) => k !== i))}>×</button>
+                <button className="text-[#7C838B] hover:opacity-60" onClick={() => setInputOnly(inputOnly.filter((_, k) => k !== i))}>×</button>
               </span>
             ))}
           </div>
@@ -1124,8 +1097,8 @@ function PriceBandsEditor({ member: m, run, busy, ready = true }: { member: Pilo
 
       {!ready && (
         <div className="border border-[#E4C97E] bg-[#FFFBEF] px-3 py-2.5 my-2">
-          <p className="text-[20px] tracking-[0.14em] text-[#8A6D1F]">MIGRATION 0049 NOT RUN — NOTHING HERE CAN SAVE YET</p>
-          <p className="text-[20px] tracking-[0.04em] text-[#8A6D1F] mt-1">
+          <p className="text-[20px] tracking-[0.14em] text-[#7C838B]">MIGRATION 0049 NOT RUN — NOTHING HERE CAN SAVE YET</p>
+          <p className="text-[20px] tracking-[0.04em] text-[#7C838B] mt-1">
             Run <span className="font-mono">supabase/migrations/0049_pilot_price_bands.sql</span>, then reload.
           </p>
         </div>
@@ -1283,10 +1256,10 @@ function StylePreferences({ member: m, run, busy, ready = true }: { member: Pilo
 
       {!ready && (
         <div className="border border-[#E4C97E] bg-[#FFFBEF] px-3 py-2.5">
-          <p className="text-[20px] tracking-[0.14em] text-[#8A6D1F]">
+          <p className="text-[20px] tracking-[0.14em] text-[#7C838B]">
             MIGRATION 0045 NOT RUN — NOTHING PICKED HERE CAN SAVE YET
           </p>
-          <p className="text-[20px] tracking-[0.04em] text-[#8A6D1F] mt-1 leading-relaxed">
+          <p className="text-[20px] tracking-[0.04em] text-[#7C838B] mt-1 leading-relaxed">
             Run <span className="font-mono">supabase/migrations/0045_pilot_style_preferences.sql</span> in the Supabase
             SQL editor, then reload this page. Your picks below will be lost on reload until then.
           </p>
@@ -1411,7 +1384,7 @@ function TrustPanel({ memberId }: { memberId: string }) {
 
       {state.blockers.length > 0 && (
         <div>
-          <p className="text-[20px] tracking-[0.14em] text-[#8B5E00] mb-1">
+          <p className="text-[20px] tracking-[0.14em] text-[#7C838B] mb-1">
             BEFORE SHE CAN BE SENT LOOKS UNREVIEWED
           </p>
           {state.blockers.map((b, i) => (
@@ -1512,7 +1485,7 @@ function ReferencePictures({ memberId, memberName, hasStyle }: { memberId: strin
         Paste a screenshot (⌘V) — a single outfit or a whole Pinterest board. Each outfit is found, cut out and scored on its own, and pulls her looks toward what she likes. They never change the house style other clients share.
       </p>
       {!hasStyle ? (
-        <p className="text-[20px] tracking-[0.08em] text-[#8B5E00]">ASSIGN HER A HOUSE STYLE FIRST — HER PICTURES ARE STORED ALONGSIDE IT.</p>
+        <p className="text-[20px] tracking-[0.08em] text-[#7C838B]">ASSIGN HER A HOUSE STYLE FIRST — HER PICTURES ARE STORED ALONGSIDE IT.</p>
       ) : (
         <>
           <div
@@ -1565,7 +1538,7 @@ function ReferencePictures({ memberId, memberName, hasStyle }: { memberId: strin
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={pic.image_url} alt="" className="w-full aspect-[3/4] object-cover bg-[#F2F2F0]" />
                     <div className="px-2 py-2">
-                      <p className={`text-[16px] tracking-[0.06em] ${pic.status === 'pending_scoring' ? 'text-[#8B5E00]' : 'text-[#3D7A50]'}`}>
+                      <p className={`text-[16px] tracking-[0.06em] ${pic.status === 'pending_scoring' ? 'text-[#7C838B]' : 'text-[#3D7A50]'}`}>
                         {pic.status === 'pending_scoring' ? (pic.scoringError ? 'COULD NOT READ' : 'SCORING…') : 'SCORED'}
                         {pic.fromScreenshot ? ' · FROM A SCREENSHOT' : ''}
                       </p>
@@ -1625,7 +1598,7 @@ function MemberCard({
           <div className="flex items-center gap-3">
             <p className="text-[20px] tracking-[0.12em] text-[#0A0A0A]">{m.name}</p>
             {m.is_synthetic && (
-              <span className="text-[20px] tracking-[0.14em] text-[#8B5E00] border border-[#E8D9B8] px-2 py-0.5">
+              <span className="text-[20px] tracking-[0.14em] text-[#7C838B] border border-[#DCDEE1] px-2 py-0.5">
                 SYNTHETIC — NEVER TRAINS TASTE
               </span>
             )}
@@ -1757,7 +1730,7 @@ function MemberCard({
             </div>
             <WeightBar weights={eff} />
             {WORK_OCCASIONS.includes(previewOccasion) && m.work_dress_code && (
-              <p className="text-[20px] tracking-[0.1em] text-[#8B5E00] mt-1.5">FORMALITY FLOOR APPLIED — OVERRIDES TASTE</p>
+              <p className="text-[20px] tracking-[0.1em] text-[#7C838B] mt-1.5">FORMALITY FLOOR APPLIED — OVERRIDES TASTE</p>
             )}
           </div>
 
@@ -2075,7 +2048,7 @@ function TransferSeries() {
         ))}
       </div>
       {points.length === 1 && (
-        <p className="text-[20px] tracking-[0.06em] text-[#8B5E00] mt-3">
+        <p className="text-[20px] tracking-[0.06em] text-[#7C838B] mt-3">
           ONE CLIENT ONLY — SHE IS THE BASELINE. THE METRIC MEANS NOTHING UNTIL A SECOND CLIENT STARTS.
         </p>
       )}
@@ -2140,7 +2113,7 @@ function AttributionPanel({ memberId }: { memberId: string }) {
           <p className="text-[20px] tracking-[0.14em] text-[#6B6B6B] mb-1">RULES HER HISTORY HAS PRODUCED</p>
           {a.rules.map((r, i) => (
             <p key={i} className="text-[20px] tracking-[0.06em] text-[#6B6B6B]">
-              <span className={r.scope === 'stylist' ? 'text-[#3D7A50]' : 'text-[#8B5E00]'}>{r.scope.toUpperCase()}</span>
+              <span className={r.scope === 'stylist' ? 'text-[#3D7A50]' : 'text-[#7C838B]'}>{r.scope.toUpperCase()}</span>
               {' · '}{r.label.toUpperCase()} <span className="text-[#A8A8A4]">({r.reason})</span>
             </p>
           ))}
@@ -2169,8 +2142,8 @@ function ClientAccess({ memberId, memberName, run, busy }: { memberId: string; m
   const [sent, setSent] = useState<number | null>(null)
 
   return (
-    <div className="border border-[#E8D9B8] bg-[#FBF8F2] p-4 space-y-3">
-      <p className="text-[20px] tracking-[0.16em] text-[#8B5E00]">HER ACCESS</p>
+    <div className="border border-[#DCDEE1] bg-[#F4F5F6] p-4 space-y-3">
+      <p className="text-[20px] tracking-[0.16em] text-[#7C838B]">HER ACCESS</p>
 
       {made?.password ? (
         <div className="space-y-1">
@@ -2273,7 +2246,7 @@ function ConfidencePanel({ memberId }: { memberId: string }) {
         </div>
       </div>
 
-      <p className={`text-[20px] tracking-[0.06em] ${cal.usable ? 'text-[#3D7A50]' : 'text-[#8B5E00]'}`}>
+      <p className={`text-[20px] tracking-[0.06em] ${cal.usable ? 'text-[#3D7A50]' : 'text-[#7C838B]'}`}>
         {cal.usable
           ? 'GOOD ENOUGH TO SEND ON — LOOKS ABOVE THE THRESHOLD CAN GO TO HER UNREVIEWED'
           : 'NOT YET GOOD ENOUGH TO SEND ON — EVERY LOOK STILL WAITS FOR YOU'}
@@ -2315,7 +2288,7 @@ function FinishedWall({
 
       {Array.from(byOccasion.entries()).map(([occasion, entries]) => (
         <div key={occasion} className="mb-7 last:mb-0">
-          <p className="text-[20px] tracking-[0.16em] text-[#8B5E00] mb-3 pb-2 border-b border-[#EFEDE8]">
+          <p className="text-[20px] tracking-[0.16em] text-[#7C838B] mb-3 pb-2 border-b border-[#EFEDE8]">
             {occasion} · {entries.length}
           </p>
           <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
@@ -2344,7 +2317,7 @@ function FinishedWall({
                         )}
                         <div className="min-w-0">
                           <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4] truncate">
-                            {it.brand.toUpperCase()}{itemTypeLabel(it) && <span className="text-[#8B5E00]"> · {itemTypeLabel(it)}</span>}
+                            {it.brand.toUpperCase()}{itemTypeLabel(it) && <span className="text-[#7C838B]"> · {itemTypeLabel(it)}</span>}
                           </p>
                           <p className="text-[20px] tracking-[0.06em] text-[#0A0A0A] truncate">
                             {it.product_name.toUpperCase()}
@@ -2354,7 +2327,7 @@ function FinishedWall({
                       </div>
                     ))}
                     <button
-                      className="mt-2 w-full text-[20px] tracking-[0.14em] text-[#8B5E00] border border-[#E8D9B8] py-1.5 hover:bg-[#FBF8F2]"
+                      className="mt-2 w-full text-[20px] tracking-[0.14em] text-[#7C838B] border border-[#DCDEE1] py-1.5 hover:bg-[#F4F5F6]"
                       disabled={busy === `var-${l.look_id}`}
                       onClick={() => run(`var-${l.look_id}`, () => composeLookVariants(l.look_id), 'STYLED ANOTHER WAY')}
                     >
@@ -2430,7 +2403,7 @@ function ScoreStrip({ memberId }: { memberId: string }) {
         </p>
       )}
       {t.blockers.length > 0 && (
-        <p className="text-[20px] tracking-[0.06em] text-[#8B5E00] mt-2">
+        <p className="text-[20px] tracking-[0.06em] text-[#7C838B] mt-2">
           BEFORE SHE CAN BE SENT LOOKS UNREVIEWED — {t.blockers.join(' · ').toUpperCase()}
         </p>
       )}
@@ -2558,7 +2531,7 @@ function NewDeliveryForm({
 }
 
 const STATUS_TONE: Record<string, string> = {
-  draft: 'text-[#8B5E00] border-[#E8D9B8]',
+  draft: 'text-[#7C838B] border-[#DCDEE1]',
   sent: 'text-[#4A6FA5] border-[#C7D4E8]',
   responded: 'text-[#3D7A50] border-[#C9E0CF]',
 }
@@ -2618,7 +2591,7 @@ function DeliveryCard({
                 wool had nothing on screen to say the climate never took —
                 a badge that is simply absent is the tell. */}
             {(d as { climate?: string | null }).climate && (
-              <span className="text-[20px] tracking-[0.14em] text-[#8B5E00] border border-[#E8D9B8] px-2 py-0.5">
+              <span className="text-[20px] tracking-[0.14em] text-[#7C838B] border border-[#DCDEE1] px-2 py-0.5">
                 {CLIMATES.find((c) => c.id === (d as { climate?: string }).climate)?.label ?? ''}
               </span>
             )}
@@ -2633,10 +2606,10 @@ function DeliveryCard({
               </span>
             )}
             {d.trigger === 'anticipation' && (
-              <span className="text-[20px] tracking-[0.14em] text-[#C4A882] border border-[#E8D9B8] px-2 py-0.5">ANTICIPATION MOVE</span>
+              <span className="text-[20px] tracking-[0.14em] text-[#C4A882] border border-[#DCDEE1] px-2 py-0.5">ANTICIPATION MOVE</span>
             )}
             {d.is_synthetic && (
-              <span className="text-[20px] tracking-[0.14em] text-[#8B5E00] border border-[#E8D9B8] px-2 py-0.5">DRY RUN</span>
+              <span className="text-[20px] tracking-[0.14em] text-[#7C838B] border border-[#DCDEE1] px-2 py-0.5">DRY RUN</span>
             )}
           </div>
           {d.request_text && <p className="text-[20px] tracking-[0.06em] text-[#6B6B6B] mt-1.5">“{d.request_text.toUpperCase()}”</p>}
@@ -2807,7 +2780,7 @@ function DeliveryCard({
                   {busy === `compose-${d.delivery_id}` ? 'COMPOSING…' : '✦ COMPOSE 3 LOOKS'}
                 </button>
                 <button
-                  className="text-[20px] tracking-[0.12em] px-3 py-1.5 border border-[#C4A882] text-[#8B5E00] hover:bg-[#C4A882] hover:text-white disabled:opacity-40"
+                  className="text-[20px] tracking-[0.12em] px-3 py-1.5 border border-[#C4A882] text-[#7C838B] hover:bg-[#C4A882] hover:text-white disabled:opacity-40"
                   disabled={busy === `compose-owned-${d.delivery_id}`}
                   title={`Style what she owns: at least ${Math.round(ownedShare * 100)}% of the looks are built around a piece from her wardrobe (owned pieces are £0 of new spend). Needs approved wardrobe pieces — see /admin/wardrobe.`}
                   onClick={() =>
@@ -2869,7 +2842,7 @@ function DeliveryCard({
                   compose again with nothing carried over. */}
               {d.looks.length > 0 && (
                 <button
-                  className="text-[20px] tracking-[0.12em] text-[#8B5E00] hover:underline ml-auto"
+                  className="text-[20px] tracking-[0.12em] text-[#7C838B] hover:underline ml-auto"
                   title="Empty every look here — the slots stay, and nothing is learned"
                   onClick={() => {
                     if (window.confirm(`Empty all ${d.looks.length} looks?\n\nTheir items, shoots and everything they taught the composer are removed, so this delivery has no effect on anything. The looks stay, ready to compose into again.`)) {
@@ -2972,7 +2945,7 @@ function VariantGroup({
       {lead}
       <button
         onClick={() => setOpen((v) => !v)}
-        className="mt-1.5 mb-2 text-[20px] tracking-[0.16em] text-[#8B5E00] hover:underline"
+        className="mt-1.5 mb-2 text-[20px] tracking-[0.16em] text-[#7C838B] hover:underline"
       >
         ◆ {open ? 'HIDE THE OTHER WAYS' : `SEE ${heroName.toUpperCase()} STYLED ${count - 1} OTHER WAY${count - 1 === 1 ? '' : 'S'}`}
       </button>
@@ -3082,7 +3055,7 @@ function LookRow({
             LOOK {l.position} — {formatRoomMix(l.room_mix) || 'NO ROOM MIX'}
             {l.approved_at && <span className="ml-2 text-[#3D7A50]">· APPROVED ✓</span>}
             {composed && (
-              <span className="ml-2 text-[#8B5E00]" title="What she'd pay — owned pieces are £0 of new spend but still count toward reuse">
+              <span className="ml-2 text-[#7C838B]" title="What she'd pay — owned pieces are £0 of new spend but still count toward reuse">
                 · {formatLookSpend(lookSpend(l.items)).toUpperCase()}
               </span>
             )}
@@ -3093,7 +3066,7 @@ function LookRow({
                 <div className="w-96 border-2 border-[#C4A882] bg-white">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={l.image_url} alt="Higgsfield shoot" className="w-full aspect-[3/4] object-cover" />
-                  <p className="text-[20px] tracking-[0.12em] text-[#8B5E00] px-2.5 py-2">
+                  <p className="text-[20px] tracking-[0.12em] text-[#7C838B] px-2.5 py-2">
                     ✦ SHOT · {l.items.length} PIECE{l.items.length === 1 ? '' : 'S'} — TAP TO SEE THEM
                   </p>
                 </div>
@@ -3119,14 +3092,14 @@ function LookRow({
                     <p className="text-[20px] tracking-[0.12em] text-[#A8A8A4] flex items-baseline justify-between gap-2">
                       <span className="truncate">{it.brand.toUpperCase()}</span>
                       {itemTypeLabel(it) && (
-                        <span className="text-[#8B5E00] shrink-0">{itemTypeLabel(it)}</span>
+                        <span className="text-[#7C838B] shrink-0">{itemTypeLabel(it)}</span>
                       )}
                     </p>
                     <p className="text-[20px] tracking-[0.08em] text-[#0A0A0A] mt-0.5">
                       {it.owned ? '◈ OWNED — ' : ''}
                       {it.product_name.toUpperCase()}
                     </p>
-                    <p className={`text-[20px] tracking-[0.08em] mt-0.5 ${it.owned ? 'text-[#8B5E00]' : 'text-[#6B6B6B]'}`}>
+                    <p className={`text-[20px] tracking-[0.08em] mt-0.5 ${it.owned ? 'text-[#7C838B]' : 'text-[#6B6B6B]'}`}>
                       {it.owned
                         ? `IN HER WARDROBE${typeof it.estimated_value_gbp === 'number' ? ` · WORTH ~£${it.estimated_value_gbp}` : ''}`
                         : typeof it.price_gbp === 'number' ? gbp(it.price_gbp) : ''}
@@ -3170,7 +3143,7 @@ function LookRow({
                             ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]'
                             : presentSlots.has(sl.value)
                             ? 'border-[#E2E0DB] text-[#A8A8A4] hover:border-[#0A0A0A] hover:text-[#4A4E57]'
-                            : 'border-[#C4A882] text-[#8B5E00] hover:bg-[#C4A882] hover:text-white'
+                            : 'border-[#C4A882] text-[#7C838B] hover:bg-[#C4A882] hover:text-white'
                         }`}
                         title={presentSlots.has(sl.value) ? `Already has a ${sl.label.toLowerCase()} — adds another` : `Add a ${sl.label.toLowerCase()}`}
                         onClick={() => (addSlot === sl.value ? setAddSlot(null) : openAdd(sl.value))}
@@ -3192,7 +3165,7 @@ function LookRow({
                   </button>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={l.image_url} alt="Higgsfield shoot" className="w-full aspect-[3/4] object-cover" />
-                  <p className="text-[20px] tracking-[0.12em] text-[#8B5E00] px-2.5 pt-2">✦ HIGGSFIELD SHOOT</p>
+                  <p className="text-[20px] tracking-[0.12em] text-[#7C838B] px-2.5 pt-2">✦ HIGGSFIELD SHOOT</p>
                   {/* One generation returns several frames. They used to be
                       thrown away — now the alternatives sit under the one in
                       use, so picking a different shot is one tap. */}
@@ -3291,7 +3264,7 @@ function LookRow({
                       <button
                         disabled={shooting}
                         onClick={() => setPoseOpen(true)}
-                        className="text-[20px] tracking-[0.14em] text-[#8B5E00] border border-[#E8D9B8] px-2 py-1 hover:border-[#8B5E00] disabled:opacity-40"
+                        className="text-[20px] tracking-[0.14em] text-[#7C838B] border border-[#DCDEE1] px-2 py-1 hover:border-[#7C838B] disabled:opacity-40"
                       >
                         ✦ SHOOT AGAIN
                       </button>
@@ -3306,7 +3279,7 @@ function LookRow({
                 <p key={i} className="text-[20px] tracking-[0.06em] text-[#6B6B6B]">
                   {it.owned ? '◈ OWNED — ' : ''}
                   {it.brand.toUpperCase()} {it.product_name.toUpperCase()}
-                  {itemTypeLabel(it) && <span className="text-[#8B5E00]"> · {itemTypeLabel(it)}</span>}
+                  {itemTypeLabel(it) && <span className="text-[#7C838B]"> · {itemTypeLabel(it)}</span>}
                   {typeof it.price_gbp === 'number' && ` · ${gbp(it.price_gbp)}`}
                   {it.size && ` · ${it.size.toUpperCase()}`}
                   {!it.owned && (it.stock_checked_at ? ' · STOCK ✓' : ' · STOCK UNCHECKED')}
@@ -3315,8 +3288,8 @@ function LookRow({
             </div>
           )}
           {(swapIdx !== null || addSlot !== null) && (
-            <div className="mt-2 border border-[#E8D9B8] bg-[#FBF8F2] p-3">
-              <p className="text-[20px] tracking-[0.14em] text-[#8B5E00] mb-2">
+            <div className="mt-2 border border-[#DCDEE1] bg-[#F4F5F6] p-3">
+              <p className="text-[20px] tracking-[0.14em] text-[#7C838B] mb-2">
                 {swapIdx !== null
                   ? `SWAP ${l.items[swapIdx]?.product_name?.toUpperCase()}`
                   : `ADD ${(ADD_SLOTS.find((x) => x.value === addSlot)?.label ?? addSlot ?? '').toUpperCase()}`}
@@ -3365,7 +3338,7 @@ function LookRow({
                         <button
                           type="button"
                           onClick={() => { setSwapQuery(''); setSwapBrand(''); setSwapColour('') }}
-                          className="text-[20px] tracking-[0.12em] text-[#8B5E00] hover:underline px-1"
+                          className="text-[20px] tracking-[0.12em] text-[#7C838B] hover:underline px-1"
                         >
                           CLEAR
                         </button>
@@ -3408,8 +3381,8 @@ function LookRow({
             </div>
           )}
           {poseOpen && !sent && (
-            <div className="mt-2 border border-[#E8D9B8] bg-[#FBF8F2] p-3">
-              <p className="text-[20px] tracking-[0.14em] text-[#8B5E00] mb-2">
+            <div className="mt-2 border border-[#DCDEE1] bg-[#F4F5F6] p-3">
+              <p className="text-[20px] tracking-[0.14em] text-[#7C838B] mb-2">
                 {l.image_url ? 'SHOOT AGAIN — PICK A POSE AND LIGHTING. THE CURRENT SHOOT IS KEPT.' : 'PICK A POSE AND LIGHTING'}
               </p>
               <div className="flex flex-wrap gap-1.5">
@@ -3438,7 +3411,7 @@ function LookRow({
               </div>
               {shootHistory.length > 1 && (
                 <>
-                  <p className="text-[20px] tracking-[0.14em] text-[#8B5E00] mt-3 mb-1.5">
+                  <p className="text-[20px] tracking-[0.14em] text-[#7C838B] mt-3 mb-1.5">
                     OTHER FRAMES AND EARLIER SHOOTS — TAP TO USE ONE
                   </p>
                   <div className="flex gap-2 flex-wrap">
@@ -3508,7 +3481,7 @@ function LookRow({
               )}
               {composed && (
                 <button
-                  className="text-[20px] tracking-[0.12em] px-3 py-1.5 border border-[#C4A882] text-[#8B5E00] hover:bg-[#C4A882] hover:text-white transition-colors"
+                  className="text-[20px] tracking-[0.12em] px-3 py-1.5 border border-[#C4A882] text-[#7C838B] hover:bg-[#C4A882] hover:text-white transition-colors"
                   title={l.image_url
                     ? 'Shoot it again — pick a different pose and lighting. The current shoot is kept.'
                     : 'Generate an editorial shoot of this look via the local Higgsfield CLI'}
@@ -3519,7 +3492,7 @@ function LookRow({
               )}
               {composed && (
                 <button
-                  className="text-[20px] tracking-[0.12em] px-3 py-1.5 border border-[#C4A882] text-[#8B5E00] hover:bg-[#C4A882] hover:text-white transition-colors"
+                  className="text-[20px] tracking-[0.12em] px-3 py-1.5 border border-[#C4A882] text-[#7C838B] hover:bg-[#C4A882] hover:text-white transition-colors"
                   title="Style this same hero piece several ways — composes distinct sibling looks around it, so she sees what else it goes with. Each becomes its own approvable look."
                   onClick={() => run(`var-${l.look_id}`, () => composeLookVariants(l.look_id), 'STYLED SEVERAL WAYS — NEW LOOKS ADDED')}
                 >
@@ -3545,7 +3518,7 @@ function LookRow({
                   </button>
                 ) : (
                   <button
-                    className={`${btnTiny} !text-[#8B5E00] !border-[#E8D9B8]`}
+                    className={`${btnTiny} !text-[#7C838B] !border-[#DCDEE1]`}
                     title="Send this look to her and tell her it is there"
                     onClick={() => run(`send-${l.look_id}`, () => sendLookToClient(l.look_id), 'SENT TO HER')}
                   >
@@ -3782,8 +3755,8 @@ function DryRunTab({
 
   return (
     <div className="space-y-6">
-      <div className="border border-[#E8D9B8] bg-[#FDFBF6] px-5 py-4">
-        <p className="text-[20px] tracking-[0.14em] text-[#8B5E00] mb-1">CONTAMINATION RULE — THE ONE THAT BITES LATER</p>
+      <div className="border border-[#DCDEE1] bg-[#FDFBF6] px-5 py-4">
+        <p className="text-[20px] tracking-[0.14em] text-[#7C838B] mb-1">CONTAMINATION RULE — THE ONE THAT BITES LATER</p>
         <p className="text-[20px] tracking-[0.06em] text-[#6B6B6B] leading-relaxed max-w-3xl">
           SYNTHETIC RESPONSES ARE YOUR GUESSES ABOUT THEIR TASTE, NOT THEIR TASTE. EVERYTHING HERE CARRIES
           IS_SYNTHETIC AND IS EXCLUDED FROM ALL REAL TASTE UPDATES AND ANY FUTURE TRAINING DATA. WHEN THE REAL
@@ -3890,7 +3863,7 @@ function ArtefactTab({ data }: { data: PilotData }) {
             <div className="flex items-center gap-3 mb-4">
               <p className="text-[20px] tracking-[0.12em] text-[#0A0A0A]">{m.name}</p>
               {m.is_synthetic && (
-                <span className="text-[20px] tracking-[0.14em] text-[#8B5E00] border border-[#E8D9B8] px-2 py-0.5">SYNTHETIC</span>
+                <span className="text-[20px] tracking-[0.14em] text-[#7C838B] border border-[#DCDEE1] px-2 py-0.5">SYNTHETIC</span>
               )}
             </div>
             <div className="grid grid-cols-3 gap-8 mb-5 max-w-3xl">

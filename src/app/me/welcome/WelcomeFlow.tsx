@@ -15,6 +15,8 @@ import { loadCalendarPanel, syncMyCalendar, type CalendarPanelView } from '../dr
 import { startTour } from '@/components/me/MeTour'
 
 const S = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.4, strokeLinecap: 'round', strokeLinejoin: 'round' } as const
+// The Chrome Web Store listing for the MYRA Mirror extension, once published.
+const MIRROR_STORE_URL = process.env.NEXT_PUBLIC_MIRROR_STORE_URL ?? ''
 const BODY = 'text-[clamp(22px,1.35vw,40px)]'
 const PILL = 'text-[clamp(21px,1.2vw,32px)] inline-block px-[1.3em] py-[0.6em] bg-white text-[#2B2B2B] rounded-full shadow-[0_8px_18px_-12px_rgba(43,43,43,0.5)] hover:bg-[#2B2B2B] hover:text-white transition-colors'
 
@@ -23,6 +25,7 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
   const [email, setEmail] = useState<EmailPanelView | null>(null)
   const [archival, setArchival] = useState<ArchivalPanelView | null>(null)
   const [calendar, setCalendar] = useState<CalendarPanelView | null>(null)
+  const [mirrorOpen, setMirrorOpen] = useState(false)
   const [virgin, setVirgin] = useState(false)
   const [emailChoice, setEmailChoice] = useState(false)
   const [igImport, setIgImport] = useState(false)
@@ -75,7 +78,7 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
   return (
     <div className="w-full max-w-[1700px] mx-auto space-y-7 pb-10">
       {previewMemberId && (
-        <p className="text-center text-[15px] tracking-[0.12em] bg-[#8B5E00] text-white py-2.5 rounded-full">
+        <p className="text-center text-[15px] tracking-[0.12em] bg-[#7C838B] text-white py-2.5 rounded-full">
           PREVIEW · STEP 2 OF 3 · WHAT {firstName.toUpperCase() || 'SHE'} SEES AFTER MAKING HER LOGIN · CONNECTING HERE IS REAL
         </p>
       )}
@@ -152,7 +155,36 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
           <span className="tip">Add photos of you in outfits you love</span>
           <span className="label">{uploading ? 'Adding…' : 'Photos'}</span>
         </li>
+
+        <li className="item">
+          <button type="button" data-app="mirror" data-on={mirrorOpen} className="btn" aria-label="MYRA for Chrome" onClick={() => setMirrorOpen((v) => !v)}>
+            <span className="filled" />
+            <svg viewBox="0 0 64 64" aria-hidden>
+              <circle cx="32" cy="32" r="22" {...S} strokeWidth={4} />
+              <circle cx="32" cy="32" r="8.5" {...S} strokeWidth={4} />
+              <path d="M32 23.5h21M24.6 36.3L14 18M39.4 36.3L28.8 54.6" {...S} strokeWidth={4} />
+            </svg>
+          </button>
+          <span className="tip">MYRA for Chrome puts the pieces you would wear first on any brand site</span>
+          <span className="label">Chrome</span>
+        </li>
       </ul>
+
+      {mirrorOpen && (
+        <div className="mx-auto max-w-[900px] rounded-[18px] bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] px-7 py-7 space-y-4 text-center">
+          <p className={`${BODY} text-[#2B2B2B]`}>MYRA for Chrome</p>
+          <p className="text-[clamp(20px,1.15vw,32px)] text-[#4A4E57] leading-snug">
+            On a laptop, in Chrome: add MYRA, then connect it to you. After that, every brand site you visit shows the pieces you would actually wear first. The site itself stays the same.
+          </p>
+          <div className="flex flex-wrap justify-center gap-4">
+            {MIRROR_STORE_URL
+              ? <a href={MIRROR_STORE_URL} target="_blank" rel="noopener noreferrer" className={PILL}>1. Add to Chrome</a>
+              : <span className={`${PILL} opacity-60`}>1. Add to Chrome (link coming soon)</span>}
+            <a href={`/mirror/connect${previewMemberId ? `?as=${previewMemberId}` : ''}`} target="_blank" rel="noopener noreferrer" className={PILL}>2. Connect it to me</a>
+          </div>
+          <p className="text-[clamp(18px,1vw,26px)] text-[#6E6B65]">Not on a phone yet. It only reads the brand pages you open.</p>
+        </div>
+      )}
 
       {emailChoice && (
         <div className="flex flex-wrap justify-center gap-4">

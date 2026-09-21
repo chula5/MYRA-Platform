@@ -261,7 +261,7 @@ export default function PicksClient({
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     {o.image_url && <img src={thumbUrl(o.image_url, 400)} alt="" className="w-full h-full object-cover" />}
                     {o.status !== 'live' && (
-                      <span className="absolute top-1 left-1 bg-[#8B5E00] text-white text-[6px] tracking-[0.08em] px-1 py-0.5 rounded">{o.status.toUpperCase()}</span>
+                      <span className="absolute top-1 left-1 bg-[#7C838B] text-white text-[6px] tracking-[0.08em] px-1 py-0.5 rounded">{o.status.toUpperCase()}</span>
                     )}
                   </div>
                   <p className="text-[8px] tracking-[0.04em] text-[#4A4E57] truncate mt-1">{o.label}</p>
@@ -291,7 +291,7 @@ export default function PicksClient({
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     {it.image_url && <img src={thumbUrl(it.image_url, 400)} alt="" className="w-full h-full object-cover" />}
                     {it.status !== 'live' && (
-                      <span className="absolute top-1 left-1 bg-[#8B5E00] text-white text-[6px] tracking-[0.08em] px-1 py-0.5 rounded">{it.status.replace(/_/g, ' ').toUpperCase()}</span>
+                      <span className="absolute top-1 left-1 bg-[#7C838B] text-white text-[6px] tracking-[0.08em] px-1 py-0.5 rounded">{it.status.replace(/_/g, ' ').toUpperCase()}</span>
                     )}
                   </div>
                   <p className="text-[7px] tracking-[0.08em] text-[#6B6B6B] mt-1 truncate">{(it.brand_name ?? '').toUpperCase()}</p>

@@ -82,7 +82,7 @@ export default function WardrobeClient({ data }: { data: WardrobeData }) {
         </div>
       )}
       {data.ready && !data.openAiConfigured && (
-        <div className="border border-[#C4A882] bg-[#FBF8F2] px-4 py-3 text-[10px] tracking-[0.1em] text-[#8B5E00]">
+        <div className="border border-[#C4A882] bg-[#F4F5F6] px-4 py-3 text-[10px] tracking-[0.1em] text-[#7C838B]">
           OPENAI_API_KEY IS NOT SET — PHOTOS WILL UPLOAD AND QUEUE, BUT NOTHING IS DETECTED OR CUT OUT UNTIL IT IS. (VISION {data.models.vision.toUpperCase()} · IMAGES {data.models.image.toUpperCase()} · {data.models.quality.toUpperCase()})
         </div>
       )}
@@ -97,7 +97,7 @@ export default function WardrobeClient({ data }: { data: WardrobeData }) {
             className={`${btnTiny} ${sel?.member.member_id === m.member_id ? '!border-[#0A0A0A] !text-[#0A0A0A]' : ''}`}
           >
             {m.name.toUpperCase()} · {m.owned_count}
-            {m.pending_review > 0 && <span className="ml-1.5 text-[#8B5E00]">● {m.pending_review}</span>}
+            {m.pending_review > 0 && <span className="ml-1.5 text-[#7C838B]">● {m.pending_review}</span>}
           </button>
         ))}
         {!data.members.length && <span className="text-[9px] tracking-[0.1em] text-[#A8A8A4]">NO PILOT MEMBERS YET — ADD ONE IN PRIVATE STYLIST (ALISON COTTER TO START).</span>}
@@ -252,7 +252,7 @@ function UploadPanel({ sel, run, onDone }: { sel: MemberWardrobe; run: Run; onDo
         onDragLeave={() => setOver(false)}
         onDrop={async (e) => { e.preventDefault(); setOver(false); const got = await collectFiles(e.dataTransfer.items); setFiles((prev) => [...prev, ...got]) }}
         onClick={() => inputRef.current?.click()}
-        className={`border-2 border-dashed px-6 py-12 text-center cursor-pointer transition-colors ${over ? 'border-[#C4A882] bg-[#FBF8F2]' : 'border-[#D8D5CE] bg-[#FCFCFA]'}`}
+        className={`border-2 border-dashed px-6 py-12 text-center cursor-pointer transition-colors ${over ? 'border-[#C4A882] bg-[#F4F5F6]' : 'border-[#D8D5CE] bg-[#FCFCFA]'}`}
       >
         <p className="text-[11px] tracking-[0.16em] text-[#0A0A0A]">DROP A FOLDER OF {sel.member.name.split(' ')[0].toUpperCase()}&rsquo;S PHOTOS HERE</p>
         <p className="text-[9px] tracking-[0.1em] text-[#6B6B6B] mt-2">OR CLICK TO CHOOSE · FULL OUTFITS OR SINGLE PIECES · JPG / PNG / HEIC · UP TO 12MB EACH</p>
@@ -370,7 +370,7 @@ function ReviewCard({ x, run, busy }: { x: WardrobeExtraction; run: Run; busy: s
         <div className="min-w-0 flex-1 space-y-1.5">
           <div className="flex items-start justify-between gap-2">
             <p className="text-[10px] tracking-[0.1em] text-[#0A0A0A] truncate">{name.toUpperCase()}</p>
-            <span className={`text-[8px] tracking-[0.12em] whitespace-nowrap ${x.status === 'failed' ? 'text-[#B83A3A]' : ready ? 'text-[#8B5E00]' : 'text-[#A8A8A4]'}`}>{STATUS_LABEL[x.status] ?? x.status.toUpperCase()}</span>
+            <span className={`text-[8px] tracking-[0.12em] whitespace-nowrap ${x.status === 'failed' ? 'text-[#B83A3A]' : ready ? 'text-[#7C838B]' : 'text-[#A8A8A4]'}`}>{STATUS_LABEL[x.status] ?? x.status.toUpperCase()}</span>
           </div>
           <p className="text-[8px] tracking-[0.06em] text-[#6B6B6B] leading-relaxed">{d.description} <span className="text-[#A8A8A4]">· CONFIDENCE {(d.confidence * 100).toFixed(0)}%</span></p>
           {x.error && <p className="text-[8px] tracking-[0.06em] text-[#B83A3A]">{x.error.toUpperCase()}</p>}
@@ -409,7 +409,7 @@ function ReviewCard({ x, run, busy }: { x: WardrobeExtraction; run: Run; busy: s
             if (base == null && cur == null) return null
             return (
               <div key={String(k)} className="flex items-center justify-between gap-2">
-                <span className={`text-[7px] tracking-[0.1em] ${low.has(String(k)) ? 'text-[#8B5E00]' : 'text-[#6B6B6B]'}`} title={low.has(String(k)) ? 'Scored with lower confidence' : ''}>
+                <span className={`text-[7px] tracking-[0.1em] ${low.has(String(k)) ? 'text-[#7C838B]' : 'text-[#6B6B6B]'}`} title={low.has(String(k)) ? 'Scored with lower confidence' : ''}>
                   {String(k).replace(/_/g, ' ').toUpperCase()}{low.has(String(k)) ? ' ◌' : ''}
                 </span>
                 <div className="flex gap-0.5">
@@ -421,7 +421,7 @@ function ReviewCard({ x, run, busy }: { x: WardrobeExtraction; run: Run; busy: s
             )
           })}
           {low.size > 0 && (
-            <p className="col-span-full text-[7px] tracking-[0.08em] text-[#8B5E00] mt-1">
+            <p className="col-span-full text-[7px] tracking-[0.08em] text-[#7C838B] mt-1">
               ◌ LOWER CONFIDENCE: {Array.from(low).map((d) => d.replace(/_/g, ' ').toUpperCase()).join(' · ')} — {low.has('brand_price_tier') ? 'NO BRAND, SO THE BRAND-DERIVED SIGNALS ARE ABSENT' : 'MATERIAL OR SHAPE COULD NOT BE READ WITH CERTAINTY'}
             </p>
           )}
@@ -483,7 +483,7 @@ function OwnedCard({ it, run, busy }: { it: OwnedItemView; run: Run; busy: strin
         <img src={it.image_url} alt={it.product_name} className="w-full aspect-[3/4] object-contain bg-white" />
       ) : <div className="w-full aspect-[3/4] bg-[#F8F8F6]" />}
       <div className="px-2 py-2 space-y-1">
-        <p className="text-[8px] tracking-[0.12em] text-[#8B5E00]">◈ {(it.brand_name ?? 'HER WARDROBE').toUpperCase()}</p>
+        <p className="text-[8px] tracking-[0.12em] text-[#7C838B]">◈ {(it.brand_name ?? 'HER WARDROBE').toUpperCase()}</p>
         <p className="text-[9px] tracking-[0.06em] text-[#0A0A0A] leading-snug">{it.product_name.toUpperCase()}</p>
         <p className="text-[8px] tracking-[0.08em] text-[#6B6B6B]">
           STYLED IN {it.styled_in} LOOK{it.styled_in === 1 ? '' : 'S'}{cpw != null ? ` · £${cpw.toFixed(0)}/WEAR` : ''}
@@ -587,8 +587,8 @@ function UnlockPanel({ sel }: { sel: MemberWardrobe }) {
 
       {/* What her wardrobe cannot finish — the same gap in every look is worth saying once, loudly. */}
       {rows && rows.length > 0 && rows[0].missingSlots.length > 0 && (
-        <div className="border border-[#C4A882] bg-[#FBF8F2] px-4 py-2.5">
-          <p className="text-[9px] tracking-[0.1em] text-[#8B5E00]">
+        <div className="border border-[#C4A882] bg-[#F4F5F6] px-4 py-2.5">
+          <p className="text-[9px] tracking-[0.1em] text-[#7C838B]">
             SHE OWNS NO {rows[0].missingSlots.map((sl) => SLOT_LABEL[sl] ?? sl.toUpperCase()).join(' AND NO ')} — SO THESE LOOKS ARE SHOWN WITHOUT {rows[0].missingSlots.length === 1 ? 'ONE' : 'THEM'}. ADD {rows[0].missingSlots.length === 1 ? 'A PAIR' : 'SOME'} TO HER WARDROBE, OR TREAT THAT AS THE FIRST THING TO BUY.
           </p>
         </div>
@@ -609,7 +609,7 @@ function UnlockPanel({ sel }: { sel: MemberWardrobe }) {
             <div className="min-w-0 flex-1">
               <p className="text-[9px] tracking-[0.14em] text-[#A8A8A4]">{(r.brand_name ?? '—').toUpperCase()} · {SLOT_LABEL[r.slot] ?? r.slot.toUpperCase()}</p>
               <p className="text-[13px] tracking-[0.06em] text-[#0A0A0A] mt-0.5">{r.product_name.toUpperCase()}</p>
-              <p className="text-[11px] tracking-[0.06em] text-[#8B5E00] mt-2">
+              <p className="text-[11px] tracking-[0.06em] text-[#7C838B] mt-2">
                 {r.price_gbp != null ? `£${r.price_gbp}` : 'PRICE UNKNOWN'} · UNLOCKS {r.unlocked} NEW LOOK{r.unlocked === 1 ? '' : 'S'} FROM HER OWN WARDROBE
               </p>
               <p className="text-[9px] tracking-[0.08em] text-[#6B6B6B] mt-1">

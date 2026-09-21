@@ -87,7 +87,7 @@ export default async function TheEditPreviewPage() {
       </div>
 
       {liveCount === 0 && (
-        <div className="mb-8 p-4 border border-[#E8D9B8] bg-[#FBF6EA] rounded-[12px]">
+        <div className="mb-8 p-4 border border-[#DCDEE1] bg-[#FBF6EA] rounded-[12px]">
           <p className="text-[10px] tracking-[0.081em] text-[#8A7A4E] leading-relaxed">
             Nothing is LIVE yet, so the preview below is empty. Open an outfit and set its status to
             LIVE (or publish a project) — then it will appear here to preview and click through.

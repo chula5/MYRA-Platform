@@ -62,7 +62,7 @@ export default async function PartnerProducts() {
             <span className={`text-[9px] tracking-[0.07em] text-right ${it.status === 'live' ? 'text-[#3D7A50]' : 'text-[#A8A8A4]'}`}>
               {it.status === 'live' ? 'LIVE' : it.status === 'ready' ? 'READY' : 'IN REVIEW'}
             </span>
-            <span className={`text-[9px] tracking-[0.05em] text-right ${it.stock_status === 'out_of_stock' ? 'text-[#B83A3A]' : it.stock_status === 'low_stock' ? 'text-[#8B5E00]' : 'text-[#6B6B6B]'}`}>
+            <span className={`text-[9px] tracking-[0.05em] text-right ${it.stock_status === 'out_of_stock' ? 'text-[#B83A3A]' : it.stock_status === 'low_stock' ? 'text-[#7C838B]' : 'text-[#6B6B6B]'}`}>
               {(it.stock_sizes ?? []).length ? (it.stock_sizes as string[]).join('·') : (it.stock_status ?? '—').replace(/_/g, ' ').toUpperCase()}
             </span>
             <span className="text-[12px] text-[#0A0A0A] text-right">{it.clicks30}</span>

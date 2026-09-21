@@ -93,7 +93,7 @@ export default function StockSweepButton() {
         <div className="mt-4">
           <div className="flex flex-wrap gap-3 text-[10px] tracking-[0.068em]">
             <span className="text-[#3A6B3A]">{tally.in_stock} IN STOCK</span>
-            {tally.low_stock > 0 && <span className="text-[#8B5E00]">· {tally.low_stock} LOW</span>}
+            {tally.low_stock > 0 && <span className="text-[#7C838B]">· {tally.low_stock} LOW</span>}
             {tally.out_of_stock > 0 && <span className="text-[#B83A3A]">· {tally.out_of_stock} OUT</span>}
             {tally.unknown > 0 && <span className="text-[#6B6B6B]">· {tally.unknown} UNKNOWN</span>}
             {tally.failed > 0 && <span className="text-[#A8A8A4]">· {tally.failed} FAILED</span>}

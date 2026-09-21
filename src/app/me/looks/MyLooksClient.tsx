@@ -1021,7 +1021,7 @@ function AskPanel({
               <div>
                 <h2 className="text-[clamp(30px,2.4vw,60px)] leading-none text-[#1a1a1a]">What are you dressing for?</h2>
                 {testing && (
-                  <p className="mt-3 text-[16px] tracking-[0.1em] text-[#8B5E00]">
+                  <p className="mt-3 text-[16px] tracking-[0.1em] text-[#7C838B]">
                     TEST AS {firstName.toUpperCase()}: NOTHING IS SENT, SAVED OR LEARNED UNTIL YOU KEEP A LOOK
                   </p>
                 )}
@@ -1043,7 +1043,7 @@ function AskPanel({
                   {!cal ? (
                     <p className="text-[clamp(18px,1vw,24px)] text-[#6E6B65]">Opening your calendar…</p>
                   ) : cal.error ? (
-                    <p className="text-[clamp(18px,1vw,24px)] text-[#8B5E00]">{cal.error}</p>
+                    <p className="text-[clamp(18px,1vw,24px)] text-[#7C838B]">{cal.error}</p>
                   ) : !cal.connections.length ? (
                     <div className="flex flex-wrap items-center gap-4">
                       <p className="text-[clamp(18px,1vw,24px)] text-[#55534E]">Connect your Google Calendar and MYRA lists what is coming up.</p>
@@ -1169,7 +1169,7 @@ function AskPanel({
                 {!canSend && !busy && <span className="text-[clamp(18px,1vw,24px)] text-[#8A8F95]">{!occasion ? 'Pick the occasion to continue.' : 'Pick a time of day to continue.'}</span>}
               </div>
               {testing && (feel || where || limits.length || around || budget || words) && (
-                <p className="text-[16px] text-[#8B5E00]">In the test, the composer uses the occasion and weather. The rest is the brief her stylist sees.</p>
+                <p className="text-[16px] text-[#7C838B]">In the test, the composer uses the occasion and weather. The rest is the brief her stylist sees.</p>
               )}
               {error && <p className="text-[20px] text-[#B83A3A]">{error}</p>}
             </div>
@@ -1199,7 +1199,7 @@ function AskPanel({
                 : 'THE LOOK CHECK DID NOT RUN — % IS FROM HER HISTORY ONLY AND IS NOT YET RELIABLE'}
             </p>
             {(preview.hiddenByCheck ?? 0) > 0 && (
-              <p className="text-[18px] text-[#8B5E00] mt-3">
+              <p className="text-[18px] text-[#7C838B] mt-3">
                 {preview.hiddenByCheck} more look{preview.hiddenByCheck === 1 ? ' was' : 's were'} composed and not shown — the check caught: {preview.hiddenIssues?.join(' · ')}
               </p>
             )}
@@ -1232,7 +1232,7 @@ function AskPanel({
                     </button>
                   )}
                 </div>
-                <p className={`text-[20px] tracking-[0.06em] ${checking.has(i) ? 'text-[#6E6B65]' : l.check?.verdict === 'clashes' ? 'text-[#B83A3A]' : l.high ? 'text-[#3D6B45]' : 'text-[#8B5E00]'}`}>
+                <p className={`text-[20px] tracking-[0.06em] ${checking.has(i) ? 'text-[#6E6B65]' : l.check?.verdict === 'clashes' ? 'text-[#B83A3A]' : l.high ? 'text-[#3D6B45]' : 'text-[#7C838B]'}`}>
                   {checking.has(i)
                     ? 'CHECKING THE LOOK…'
                     : `${Math.round(l.score * 100)}% · ${l.check
@@ -1256,9 +1256,9 @@ function AskPanel({
                       {typeof it.price_gbp === 'number' && !it.owned && (
                         <p className="text-[20px] text-[#55534E]">£{Math.round(it.price_gbp)}</p>
                       )}
-                      {it.owned && <p className="text-[18px] text-[#8B5E00]">Already hers</p>}
+                      {it.owned && <p className="text-[18px] text-[#7C838B]">Already hers</p>}
                       {!it.owned && it.item_id && l.sizes?.[it.item_id] && (
-                        <p className={`text-[18px] ${l.sizes[it.item_id].verdict === 'in_size' ? 'text-[#3D6B45]' : l.sizes[it.item_id].verdict === 'not_in_size' ? 'text-[#B83A3A]' : 'text-[#8B5E00]'}`}>
+                        <p className={`text-[18px] ${l.sizes[it.item_id].verdict === 'in_size' ? 'text-[#3D6B45]' : l.sizes[it.item_id].verdict === 'not_in_size' ? 'text-[#B83A3A]' : 'text-[#7C838B]'}`}>
                           {l.sizes[it.item_id].verdict === 'in_size'
                             ? `In her size${l.sizes[it.item_id].label ? ` · ${l.sizes[it.item_id].label}` : ''}`
                             : l.sizes[it.item_id].verdict === 'not_in_size' ? 'Not in her size' : 'Size not confirmed'}
@@ -1268,7 +1268,7 @@ function AskPanel({
                         {it.slot && (
                           <button
                             onClick={() => openSwap(i, j)}
-                            className={`text-[18px] tracking-[0.1em] underline underline-offset-4 ${swap?.look === i && swap?.piece === j ? 'text-[#2B2B2B]' : 'text-[#8B5E00]'}`}
+                            className={`text-[18px] tracking-[0.1em] underline underline-offset-4 ${swap?.look === i && swap?.piece === j ? 'text-[#2B2B2B]' : 'text-[#7C838B]'}`}
                           >
                             {swap?.look === i && swap?.piece === j ? 'CLOSE' : '⇄ SWAP'}
                           </button>

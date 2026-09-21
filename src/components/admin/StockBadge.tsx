@@ -2,7 +2,7 @@ type StockStatus = 'in_stock' | 'low_stock' | 'out_of_stock' | 'unknown'
 
 const STYLES: Record<StockStatus, { classes: string; label: string }> = {
   in_stock: { classes: 'bg-[#E8F0E8] text-[#3A6B3A]', label: 'IN STOCK' },
-  low_stock: { classes: 'bg-[#FFF3E0] text-[#8B5E00]', label: 'LOW STOCK' },
+  low_stock: { classes: 'bg-[#FFF3E0] text-[#7C838B]', label: 'LOW STOCK' },
   out_of_stock: { classes: 'bg-[#FDECEC] text-[#B83A3A]', label: 'OUT OF STOCK' },
   unknown: { classes: 'bg-[#F2F2F0] text-[#6B6B6B]', label: 'NOT CHECKED' },
 }

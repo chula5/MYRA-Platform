@@ -333,7 +333,7 @@ export default async function StyleBrainPage() {
       )}
 
       {!tableReady && (
-        <div className="border border-[#E8D9B8] bg-[#FBF6EA] rounded-[12px] p-5 max-w-[640px]">
+        <div className="border border-[#DCDEE1] bg-[#FBF6EA] rounded-[12px] p-5 max-w-[640px]">
           <p className="text-[11px] tracking-[0.081em] text-[#8A7A4E] mb-2">RUN MIGRATION TO ENABLE LEARNING</p>
           <p className="text-[10px] tracking-[0.054em] text-[#8A7A4E] leading-relaxed">
             Run <span className="font-mono">0016_style_brain.sql</span> and{' '}

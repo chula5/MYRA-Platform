@@ -126,7 +126,7 @@ export default function StockClassPanel({
                   r.stock_level === 'sold_out'
                     ? 'text-[#B83A3A]'
                     : r.stock_level === 'low'
-                      ? 'text-[#8B5E00]'
+                      ? 'text-[#7C838B]'
                       : 'text-[#3A6B3A]'
                 }
               >

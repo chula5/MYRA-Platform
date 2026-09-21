@@ -34,7 +34,7 @@ export default function AuditClient({ entries }: { entries: AuditEntry[] }) {
 
   return (
     <div className="space-y-8">
-      {msg && <p className="text-[9px] tracking-[0.12em] text-[#8B5E00]">{msg}</p>}
+      {msg && <p className="text-[9px] tracking-[0.12em] text-[#7C838B]">{msg}</p>}
       {pending.length === 0 ? (
         <p className="text-[11px] tracking-[0.12em] text-[#A8A8A4] py-12 text-center">NOTHING AWAITING AUDIT.</p>
       ) : (
@@ -50,7 +50,7 @@ export default function AuditClient({ entries }: { entries: AuditEntry[] }) {
                 <p className="text-[7px] tracking-[0.08em] text-[#A8A8A4]">STAGE {e.stage} · {new Date(e.published_at).toLocaleDateString('en-GB')}</p>
                 <div className="flex items-center gap-1 mt-2">
                   <button onClick={() => act(e, 'keep')} disabled={busy[e.id]} className="flex-1 bg-[#0A0A0A] text-white py-1.5 text-[8px] tracking-[0.1em] rounded-full hover:opacity-85 disabled:opacity-50">KEEP</button>
-                  <button onClick={() => act(e, 'swap')} disabled={busy[e.id]} title="Unpublish + open the swap sheet (demotes the stage)" className="px-2 py-1.5 text-[8px] tracking-[0.08em] border border-[#E2E0DB] text-[#8B5E00] rounded-full hover:border-[#8B5E00] disabled:opacity-50">SWAP</button>
+                  <button onClick={() => act(e, 'swap')} disabled={busy[e.id]} title="Unpublish + open the swap sheet (demotes the stage)" className="px-2 py-1.5 text-[8px] tracking-[0.08em] border border-[#E2E0DB] text-[#7C838B] rounded-full hover:border-[#7C838B] disabled:opacity-50">SWAP</button>
                   <button onClick={() => act(e, 'pull')} disabled={busy[e.id]} title="Unpublish immediately (demotes the stage)" className="px-2 py-1.5 text-[8px] tracking-[0.08em] border border-[#E2E0DB] text-[#B83A3A] rounded-full hover:border-[#B83A3A] disabled:opacity-50">PULL</button>
                 </div>
               </div>

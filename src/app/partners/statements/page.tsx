@@ -73,7 +73,7 @@ export default async function PartnerStatements() {
             <p className="text-[11px] tracking-[0.04em] text-[#4A4E57]">
               {inv.invoice_number} · {inv.period_start} → {inv.period_end} · {fmt(Number(inv.total_gbp))}
             </p>
-            <span className={`text-[9px] tracking-[0.08em] ${inv.status === 'paid' ? 'text-[#3D7A50]' : inv.status === 'overdue' ? 'text-[#B83A3A]' : 'text-[#8B5E00]'}`}>
+            <span className={`text-[9px] tracking-[0.08em] ${inv.status === 'paid' ? 'text-[#3D7A50]' : inv.status === 'overdue' ? 'text-[#B83A3A]' : 'text-[#7C838B]'}`}>
               {inv.status.toUpperCase()}{inv.due_at && inv.status === 'issued' ? ` · DUE ${new Date(inv.due_at).toLocaleDateString('en-GB')}` : ''}
             </span>
           </div>

@@ -71,7 +71,7 @@ export default function TagChips({
       {adding && quick.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-1.5">
           {quick.map((s) => (
-            <button key={s} onClick={() => add(s)} className="text-[8px] tracking-[0.05em] text-[#8A7A4E] bg-[#FBF6EA] border border-[#E8D9B8] rounded-full px-2 py-0.5 hover:bg-[#F3E9CF] transition-colors">+ {s.toUpperCase()}</button>
+            <button key={s} onClick={() => add(s)} className="text-[8px] tracking-[0.05em] text-[#8A7A4E] bg-[#FBF6EA] border border-[#DCDEE1] rounded-full px-2 py-0.5 hover:bg-[#F3E9CF] transition-colors">+ {s.toUpperCase()}</button>
           ))}
         </div>
       )}
