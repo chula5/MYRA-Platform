@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import FallbackImage from '@/components/FallbackImage'
+import InstagramImport from './InstagramImport'
 import {
   addArchivalPiece, dismissArchivalPiece, disconnectArchivalInstagram, loadArchivalPanel, nudgeArchival, removeArchivalLook,
   syncArchivalInstagram, uploadArchivalPhoto,
@@ -24,11 +25,20 @@ export default function ArchivalLooks({ testMemberId }: { testMemberId?: string 
   const [msg, setMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState<string[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
+  // The guided import reopens where she left it: step two can take a day.
+  const [importing, setImporting] = useState(false)
   const polling = useRef(false)
 
   const refresh = async () => setView(await loadArchivalPanel(testMemberId))
   const working = (k: string) => busy.includes(k)
   const run = async (k: string, fn: () => Promise<void>) => { setBusy((b) => [...b, k]); try { await fn() } finally { setBusy((b) => b.filter((x) => x !== k)) } }
+
+  useEffect(() => {
+    try {
+      const saved = Number(localStorage.getItem(`myra_ig_import_${testMemberId ?? 'me'}`))
+      if (saved === 2 || saved === 3) setImporting(true)
+    } catch { /* private window */ }
+  }, [testMemberId])
 
   useEffect(() => {
     void refresh()
@@ -126,20 +136,35 @@ export default function ArchivalLooks({ testMemberId }: { testMemberId?: string 
         </div>
       ))}
 
-      <div className="flex flex-wrap gap-3">
-        {!connected.length && (view.instagramReady ? (
-          <a href={igHref} className="text-[22px] xl:text-[25px] 2xl:text-[29px] px-7 py-3.5 bg-[#2B2B2B] text-white rounded-full">Connect Instagram</a>
-        ) : (
-          <span className={`${T} px-6 py-3 border border-[#C3BFB8] text-[#8C8A85] rounded-full`} title="Needs the Instagram app keys set up">Connect Instagram (not set up yet)</span>
-        ))}
-        <button disabled={working('upload')} onClick={() => fileRef.current?.click()} className="text-[22px] xl:text-[25px] 2xl:text-[29px] px-7 py-3.5 border border-[#2B2B2B] text-[#2B2B2B] rounded-full disabled:opacity-40">
-          {working('upload') ? 'Adding…' : 'Add photos'}
-        </button>
-        <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => upload(e.target.files)} />
-      </div>
-      <p className={`${T_SMALL} text-[#6E6B65] max-w-4xl`}>
-        Instagram only lets apps read Creator or Business accounts — switching is free, in Instagram&rsquo;s settings. On a personal account, add photos instead: from your camera roll, or from the file Instagram gives you under <i>Download your information</i>.
-      </p>
+      {/* Three ways in. The import works for every account; one-tap connect only
+          exists for Creator and Business accounts, so it shows only when it can work. */}
+      {!importing && (
+        <>
+          <div className="flex flex-wrap gap-3">
+            <button onClick={() => setImporting(true)} className="text-[22px] xl:text-[25px] 2xl:text-[29px] px-7 py-3.5 bg-[#2B2B2B] text-white rounded-full">
+              Import from Instagram
+            </button>
+            <button disabled={working('upload')} onClick={() => fileRef.current?.click()} className="text-[22px] xl:text-[25px] 2xl:text-[29px] px-7 py-3.5 border border-[#2B2B2B] text-[#2B2B2B] rounded-full disabled:opacity-40">
+              {working('upload') ? 'Adding…' : 'Add photos'}
+            </button>
+            {!connected.length && view.instagramReady && (
+              <a href={igHref} className="text-[22px] xl:text-[25px] 2xl:text-[29px] px-7 py-3.5 border border-[#2B2B2B] text-[#2B2B2B] rounded-full">Connect a Creator or Business account</a>
+            )}
+            <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => upload(e.target.files)} />
+          </div>
+          <p className={`${T_SMALL} text-[#6E6B65] max-w-4xl`}>
+            <b>Import from Instagram</b> works for every account: MYRA walks you through asking Instagram for your photos, step by step. <b>Add photos</b> takes pictures straight from your computer or phone.
+          </p>
+        </>
+      )}
+
+      {importing && (
+        <InstagramImport
+          testMemberId={testMemberId}
+          onClose={() => setImporting(false)}
+          onImported={() => { void refresh() }}
+        />
+      )}
 
       {view.looks.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 min-[2200px]:grid-cols-5 gap-5">

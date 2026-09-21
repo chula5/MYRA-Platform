@@ -482,3 +482,20 @@ html {
 @media (prefers-reduced-motion: reduce) {
   .myra-curtain-mirror, .myra-curtain.leaving, .myra-curtain.leaving .myra-curtain-mirror { animation: none; }
 }
+
+
+/* GUIDES — step-by-step instructions are read, not glanced at. Inside a guide
+   the running text drops the house capitals and weight so a sentence reads as a
+   sentence, and the names of the buttons she must tap stand out in bold.
+   Headings and MYRA's own buttons keep the house style. */
+.myra-guide p,
+.myra-guide li,
+.myra-guide li * {
+  text-transform: none;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.myra-guide p b,
+.myra-guide li b {
+  font-weight: 800;
+}

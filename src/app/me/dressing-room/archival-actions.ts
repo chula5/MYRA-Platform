@@ -9,6 +9,8 @@ import { waitUntil } from '@vercel/functions'
 import { resolveClientMember } from '@/lib/client-member'
 import { createAdminClient } from '@/lib/supabase-server'
 import { emailSecretsConfigured } from '@/lib/email/secrets'
+import { inboxHeadersSince, inboxMessages, memberInboxes } from '@/lib/email/connections'
+import { emailForExtraction } from '@/lib/email/purchase-core'
 import { instagramConfigured } from '@/lib/archival/instagram'
 import {
   MIGRATION_HINT, disconnectInstagram, hideArchivalLook, importArchivalPhoto, listArchivalLooks, listInstagramConnections,
@@ -64,7 +66,13 @@ export async function uploadArchivalPhoto(formData: FormData): Promise<{ lookId?
   if (!(file instanceof File) || file.size === 0) return { error: 'Empty file' }
   if (!file.type.startsWith('image/')) return { error: 'That is not an image' }
   const bytes = Buffer.from(await file.arrayBuffer())
-  const r = await importArchivalPhoto(me.memberId, { bytes, name: file.name, mime: file.type, source: 'upload', sourceId: uploadSourceId(bytes), takenAt: file.lastModified ? new Date(file.lastModified).toISOString() : null })
+  // A photo from her Instagram download carries when she posted it and what she wrote.
+  const postedAt = String(formData.get('taken_at') ?? '')
+  const caption = String(formData.get('caption') ?? '') || null
+  const takenAt = postedAt && !Number.isNaN(new Date(postedAt).getTime())
+    ? new Date(postedAt).toISOString()
+    : file.lastModified ? new Date(file.lastModified).toISOString() : null
+  const r = await importArchivalPhoto(me.memberId, { bytes, name: file.name, mime: file.type, source: 'upload', sourceId: uploadSourceId(bytes), takenAt, caption })
   if (r.lookId && !r.skipped) workInBackground(me.memberId)
   return r
 }
@@ -108,4 +116,32 @@ export async function disconnectArchivalInstagram(connectionId: string, asMember
   const me = await resolveClientMember(asMemberId)
   if (!me) return { error: 'Not signed in' }
   return disconnectInstagram(me.memberId, connectionId)
+}
+
+/**
+ * Has Instagram's "your download is ready" email arrived? She asked Instagram
+ * for her photos; the answer lands in the inbox MYRA already reads for orders,
+ * so MYRA can tell her the moment it is there and hand her the link. The
+ * download itself still happens on Instagram's site, signed in as her.
+ */
+export async function findInstagramExportEmail(asMemberId?: string): Promise<{ inbox: boolean; ready: boolean; link?: string; receivedHint?: string }> {
+  const me = await resolveClientMember(asMemberId)
+  if (!me) return { inbox: false, ready: false }
+  const inboxes = (await memberInboxes(me.memberId).catch(() => [])).filter((c: any) => c.provider === 'gmail')
+  if (!inboxes.length) return { inbox: false, ready: false }
+  const since = new Date(Date.now() - 6 * 86_400_000) // Instagram keeps a download for about four days
+  for (const c of inboxes) {
+    try {
+      const headers = await inboxHeadersSince(c, since, '{from:instagram.com from:facebookmail.com from:meta.com} {download export information}', 12)
+      const hit = headers.find((h) => /instagram|meta|facebook/i.test(h.from) && /(ready|download|export)/i.test(h.subject) && !/request(ed)? received|we.?ve received|started/i.test(h.subject))
+      if (!hit) continue
+      const [m] = await inboxMessages(c, [hit.id])
+      const links = m ? emailForExtraction(m).links : []
+      const link = links.find((u) => /(instagram\.com|accountscenter\.|facebook\.com|meta\.com)/i.test(u) && /(dyi|download|export)/i.test(u)) ?? links.find((u) => /(instagram\.com|accountscenter\.)/i.test(u))
+      return { inbox: true, ready: true, link, receivedHint: hit.subject }
+    } catch {
+      // An inbox that will not answer is the same as no email yet.
+    }
+  }
+  return { inbox: true, ready: false }
 }
