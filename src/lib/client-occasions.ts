@@ -19,6 +19,25 @@ export const CLIENT_CLIMATES = [
   { id: 'cold', label: 'Cold' },
 ] as const
 
+// The fuller brief in her Ask MYRA pop-out. Each kind rides on one of the
+// composer's occasions above; the rest travels as the brief.
+export const ASK_KINDS: { id: string; label: string; occasion: string; where?: string[] }[] = [
+  { id: 'everyday', label: 'Everyday', occasion: 'casual_day', where: ['School run', 'Errands', 'Lunch with friends', 'At home'] },
+  { id: 'work', label: 'Work', occasion: 'work_standard', where: ['Office', 'Client meeting', 'Presenting', 'Working from home'] },
+  { id: 'work_big', label: 'A big day at work', occasion: 'work_elevated' },
+  { id: 'dinner', label: 'Dinner or drinks', occasion: 'dinner_drinks', where: ['Local spot', 'Smart restaurant', "Members' club", "Someone's home"] },
+  { id: 'date', label: 'A date', occasion: 'dinner_drinks', where: ['Local spot', 'Smart restaurant', 'Bar', 'Something outdoors'] },
+  { id: 'event', label: 'An event', occasion: 'event', where: ['Party', 'Gallery or show', 'Garden', 'Daytime do'] },
+  { id: 'wedding', label: 'Wedding or celebration', occasion: 'event', where: ['Church or registry', 'Garden', 'Country house', 'Evening reception'] },
+  { id: 'black_tie', label: 'Black tie', occasion: 'event' },
+  { id: 'trip', label: 'A trip', occasion: 'travel', where: ['City break', 'Beach', 'Countryside', 'Skiing'] },
+]
+export const ASK_WHEN = ['Day', 'Day into night', 'Evening', 'Late'] as const
+export const ASK_FEEL = ['Easy', 'Polished', 'Noticed'] as const
+export const ASK_WEATHER = ['Hot', 'Mild', 'Cold', 'Rain', 'Mostly indoors'] as const
+export const ASK_LIMITS = ['Flat shoes', 'Lots of walking', 'Sitting on the floor', 'Arms covered', 'Nothing dry-clean only'] as const
+export const ASK_BUDGET = ['Only what I own', 'Under £150', '£150–£400', 'Worth investing'] as const
+
 export const OCCASION_LABEL: Record<string, string> = {
   work_standard: 'Work', work_elevated: 'Work — client days',
   casual_day: 'Daytime', dinner_drinks: 'Dinners and drinks',

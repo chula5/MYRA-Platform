@@ -59,7 +59,7 @@ export function ArchiveCard(props: {
 /** The wiggling mirror alone, centred on the set-wall grey — for a page still fetching. */
 export function MirrorLoading({ label }: { label?: string }) {
   return (
-    <div className="myra-texture relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen min-h-[70vh] flex flex-col items-center justify-center gap-8">
+    <div className="myra-pearl relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen min-h-[70vh] flex flex-col items-center justify-center gap-8">
       <style>{WIGGLE_CSS}</style>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/myra-mirror-transparent.png" alt="" className="myra-mirror-wiggle h-40 md:h-64 w-auto" />
