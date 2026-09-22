@@ -105,6 +105,36 @@ export function preferredSitemaps(baseUrl: string, all: string[]): string[] {
   return english.length && all.length > 4 ? english : all
 }
 
+/**
+ * WHICH LOCALE OF A PRODUCT TO KEEP. Lowest rank wins.
+ *
+ *   0  an explicit UK path      /uk/, /gb/, /en-gb/   <- always preferred
+ *   1  no locale segment at all /products/…           <- the site's home market
+ *   2  a generic English path   /en/                  <- English, market unknown
+ *   3  a foreign market         /us/, /de/, /int/     <- last resort
+ *
+ * UK wins outright wherever the site publishes one. The reason rank 1 exists at
+ * all is that some brands have no UK path to find: ME+EM serves the UK from the
+ * unprefixed root and puts other markets under /us/, /de/, /fr/, /int/, so for
+ * those the unprefixed URL IS the British one and has to beat /us/ — otherwise
+ * the American page wins the tie and every price arrives in dollars.
+ *
+ * Exported so the order can be asserted in a test rather than argued about.
+ */
+const FOREIGN_LOCALE = /^\/(us|ca|au|nz|de|fr|es|it|nl|be|dk|se|no|fi|pt|pl|cz|at|ch|ie|jp|kr|cn|hk|sg|ae|int|eu|row)(\/|-)/i
+
+export function localeRank(u: string): number {
+  let path = '/'
+  try { path = new URL(u).pathname } catch { /* keep root */ }
+  const low = path.toLowerCase()
+  if (/^\/(gb|uk)(\/|-)|^\/en-(gb|uk)(\/|$)/.test(low)) return 0
+  if (FOREIGN_LOCALE.test(low)) return 3
+  const first = low.split('/').filter(Boolean)[0] ?? ''
+  if (!/^[a-z]{2}([-_][a-z]{2})?$/.test(first)) return 1
+  if (/^en([-_]|$)/.test(first)) return 2
+  return 3
+}
+
 // Walk robots.txt + sitemap(.xml|index) and return product-page URLs.
 export async function discoverProductUrls(baseUrl: string): Promise<string[]> {
   const origin = new URL(baseUrl).origin
@@ -158,24 +188,6 @@ export async function discoverProductUrls(baseUrl: string): Promise<string[]> {
   // One URL per product. Prefer an English (and ideally GB) locale so the
   // scraped title, description and price are the ones we want.
   const byProduct = new Map<string, string>()
-  // Which locale of a product to keep. ME+EM serves the UK from the UNPREFIXED
-  // root and puts other markets under /us/, /de/, /fr/, /int/ — so "no prefix"
-  // has to outrank a foreign locale, or the US page wins and every price
-  // arrives in dollars.
-  const FOREIGN = /^\/(us|ca|au|nz|de|fr|es|it|nl|be|dk|se|no|fi|pt|pl|cz|at|ch|ie|jp|kr|cn|hk|sg|ae|int|eu|row)(\/|-)/i
-  const localeRank = (u: string): number => {
-    let path = '/'
-    try { path = new URL(u).pathname } catch { /* keep root */ }
-    const low = path.toLowerCase()
-    if (/^\/(gb|uk)(\/|-)|^\/en-(gb|uk)(\/|$)/.test(low)) return 0
-    if (FOREIGN.test(low)) return 3
-    // No locale segment at all — the site's home market, usually the UK for
-    // the brands MYRA watches.
-    const first = low.split('/').filter(Boolean)[0] ?? ''
-    if (!/^[a-z]{2}([-_][a-z]{2})?$/.test(first)) return 1
-    if (/^en([-_]|$)/.test(first)) return 2
-    return 3
-  }
   for (const u of products) {
     const key = canonicalProductKey(u)
     const cur = byProduct.get(key)
