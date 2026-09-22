@@ -17,7 +17,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import ClientWardrobe from './ClientWardrobe'
 import { reactToLook, requestLooks, type ClientView, type ClientLook, type ClientLookItem } from './actions'
-import { CLIENT_OCCASIONS, askKindForEvent, ASK_KINDS, ASK_WHEN, ASK_FEEL, ASK_WEATHER, ASK_LIMITS, ASK_BUDGET } from '@/lib/client-occasions'
+import { CLIENT_OCCASIONS, askKindForEvent, whereFor, ASK_KINDS, ASK_WHEN, ASK_FEEL, ASK_WEATHER, ASK_LIMITS, ASK_BUDGET } from '@/lib/client-occasions'
 import { lookSimilarity, relatedLooks, looksWearing } from '@/lib/look-similarity'
 import FallbackImage from '@/components/FallbackImage'
 import Hotspot from '@/components/hotspot/Hotspot'
@@ -945,8 +945,9 @@ function AskPanel({
   }
   const calHref = `/api/calendar/google/start?return=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/me/looks')}${testMemberId ? `&member=${testMemberId}` : ''}`
   const offered = new Set(occasionIds?.length ? occasionIds : CLIENT_OCCASIONS.map((o) => o.id as string))
-  const kinds = ASK_KINDS.filter((k) => offered.has(k.occasion))
+  const kinds = ASK_KINDS.filter((k) => (k.needs ? offered.has(k.needs) : offered.has(k.occasion)))
   const picked = ASK_KINDS.find((k) => k.id === kind) ?? null
+  const wheres = whereFor(picked, offered)
   const brief = [
     picked?.label, where, when, feel && `feel ${feel.toLowerCase()}`, weather,
     ...limits, around.trim() && `built around ${around.trim()}`, budget, words.trim(),
@@ -1086,11 +1087,11 @@ function AskPanel({
                   </button>
                 )}
               </div>
-              {picked?.where && (
+              {wheres.length > 0 && (
                 <div className="mt-4 rounded-[20px] bg-[#F7F7F5] px-5 py-4">
                   <p className="text-[clamp(18px,1vw,24px)] text-[#6E6B65]">Where?</p>
                   <div className="mt-2.5 flex flex-wrap gap-2.5">
-                    {picked.where.map((w) => <button key={w} type="button" onClick={() => setWhere(where === w ? null : w)} className={pill(where === w).replace('bg-[#F4F4F2]', 'bg-white')}>{w}</button>)}
+                    {wheres.map((w) => <button key={w} type="button" onClick={() => setWhere(where === w ? null : w)} className={pill(where === w).replace('bg-[#F4F4F2]', 'bg-white')}>{w}</button>)}
                   </div>
                 </div>
               )}

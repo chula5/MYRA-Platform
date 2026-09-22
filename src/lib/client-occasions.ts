@@ -21,12 +21,12 @@ export const CLIENT_CLIMATES = [
 
 // The fuller brief in her Ask MYRA pop-out. Each kind rides on one of the
 // composer's occasions above; the rest travels as the brief.
-export const ASK_KINDS: { id: string; label: string; occasion: string; where?: string[]; more?: boolean }[] = [
-  { id: 'everyday', label: 'Everyday', occasion: 'casual_day', where: ['School run', 'Errands', 'Lunch with friends', 'At home'] },
+export const ASK_KINDS: { id: string; label: string; occasion: string; where?: string[]; whereWithKids?: string[]; needs?: string; more?: boolean }[] = [
+  { id: 'everyday', label: 'Everyday', occasion: 'casual_day', where: ['Errands', 'Lunch with friends', 'At home'], whereWithKids: ['School run'] },
   { id: 'work', label: 'Work', occasion: 'work_standard', where: ['Office', 'Client meeting', 'Presenting', 'Working from home'] },
   { id: 'dinner', label: 'Dinner or drinks', occasion: 'dinner_drinks', where: ['Local spot', 'Smart restaurant', "Members' club", "Someone's home"] },
   { id: 'date', label: 'A date', occasion: 'dinner_drinks', where: ['Local spot', 'Smart restaurant', 'Bar', 'Something outdoors'] },
-  { id: 'kids', label: 'A kids\u2019 event', occasion: 'casual_day', where: ['School gate', 'Sports day', 'Kids\u2019 party', 'Nativity or concert', 'Parents\u2019 evening'] },
+  { id: 'kids', label: 'A kids\u2019 event', occasion: 'casual_day', needs: 'kids', where: ['School gate', 'Sports day', 'Kids\u2019 party', 'Nativity or concert', 'Parents\u2019 evening'] },
   { id: 'event', label: 'An event', occasion: 'event', where: ['Party', 'Gallery or show', 'Garden', 'Daytime do'] },
   { id: 'wedding', label: 'Wedding or celebration', occasion: 'event', where: ['Church or registry', 'Garden', 'Country house', 'Evening reception'] },
   { id: 'trip', label: 'A trip', occasion: 'travel', where: ['City break', 'Beach', 'Countryside', 'Skiing'] },
@@ -44,6 +44,12 @@ export const ASK_KINDS: { id: string; label: string; occasion: string; where?: s
   { id: 'weekend_away', label: 'A weekend away', occasion: 'travel', where: ['City', 'Country house', 'By the sea'], more: true },
   { id: 'holiday', label: 'A holiday', occasion: 'travel', where: ['Beach', 'City', 'Villa', 'Skiing'], more: true },
 ]
+
+/** The where options to offer for a kind — school-run answers only for a client with children at home. */
+export function whereFor(kind: { where?: string[]; whereWithKids?: string[] } | null, offered: Set<string>): string[] {
+  if (!kind) return []
+  return [...(kind.whereWithKids && offered.has('kids') ? kind.whereWithKids : []), ...(kind.where ?? [])]
+}
 
 /** The brief's kind for something in her calendar: the title first, then the calendar's own read. */
 export function askKindForEvent(title: string, occasion: string | null): string {
@@ -86,7 +92,9 @@ const FREQUENCY_RANK: Record<string, number> = { 'most days': 3, 'weekly': 2, '1
 export function occasionsForMember(profile: Record<string, string> | null | undefined): string[] {
   const all = CLIENT_OCCASIONS.map((o) => o.id as string)
   if (!profile || !Object.keys(profile).length) return all
-  return all
+  const ranked = all
     .filter((id) => (FREQUENCY_RANK[profile[id]] ?? 0) > 0)
     .sort((a, b) => (FREQUENCY_RANK[profile[b]] ?? 0) - (FREQUENCY_RANK[profile[a]] ?? 0))
+  // Not an occasion MYRA composes for — it says whether children's things belong in her brief at all.
+  return (FREQUENCY_RANK[profile.kids ?? ''] ?? 0) > 0 ? [...ranked, 'kids'] : ranked
 }

@@ -10,7 +10,7 @@ import { disconnectInbox } from './dressing-room/email-actions'
 import { disconnectMyCalendar } from './dressing-room/calendar-actions'
 import { disconnectArchivalInstagram } from './dressing-room/archival-actions'
 import { earlyAccessSignOut } from '@/app/earlyaccess/actions'
-import { COLOUR_SHADES, COLOUR_FAMILY_IDS, SHAPE_PREFERENCES, PIECE_PREFERENCES } from '@/lib/pilot-stylist'
+import { COLOUR_SHADES, COLOUR_FAMILY_IDS, OCCASION_TYPES, SHAPE_PREFERENCES, PIECE_PREFERENCES } from '@/lib/pilot-stylist'
 import { SIZE_CATEGORIES, ladderFor, type SizeCategory } from '@/lib/size-canonical'
 import { MirrorLoading } from '@/components/ArchiveCard'
 import BrandPicker from '@/components/me/BrandPicker'
@@ -41,13 +41,14 @@ export default function YouSettings({ testMemberId, initial }: { testMemberId?: 
   const [typesLoved, setTypesLoved] = useState<string[]>(initial?.typesLoved ?? [])
   const [typesAvoided, setTypesAvoided] = useState<string[]>(initial?.typesAvoided ?? [])
   const [neverWears, setNeverWears] = useState(initial?.neverWears ?? '')
+  const [occasions, setOccasions] = useState<string[]>(initial?.occasions ?? [])
   const [saving, setSaving] = useState(false)
   const [note, setNote] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
 
   const reset = (v: YouSettingsView) => {
     setName(v.name); setSizes(v.sizes); setSecondHand(v.acceptsSecondHand)
-    setLoved(v.coloursLoved); setAvoided(v.coloursAvoided); setNeverWears(v.neverWears)
+    setLoved(v.coloursLoved); setAvoided(v.coloursAvoided); setNeverWears(v.neverWears); setOccasions(v.occasions)
     setShapesLoved(v.shapesLoved); setShapesAvoided(v.shapesAvoided); setTypesLoved(v.typesLoved); setTypesAvoided(v.typesAvoided)
   }
 
@@ -61,17 +62,18 @@ export default function YouSettings({ testMemberId, initial }: { testMemberId?: 
   const dirty = useMemo(() => !!view && (
     name !== view.name || secondHand !== view.acceptsSecondHand || neverWears !== view.neverWears ||
     JSON.stringify(sizes) !== JSON.stringify(view.sizes) ||
+    JSON.stringify(occasions) !== JSON.stringify(view.occasions) ||
     JSON.stringify(loved) !== JSON.stringify(view.coloursLoved) || JSON.stringify(avoided) !== JSON.stringify(view.coloursAvoided) ||
     JSON.stringify(shapesLoved) !== JSON.stringify(view.shapesLoved) || JSON.stringify(shapesAvoided) !== JSON.stringify(view.shapesAvoided) ||
     JSON.stringify(typesLoved) !== JSON.stringify(view.typesLoved) || JSON.stringify(typesAvoided) !== JSON.stringify(view.typesAvoided)
-  ), [view, name, sizes, secondHand, loved, avoided, neverWears, shapesLoved, shapesAvoided, typesLoved, typesAvoided])
+  ), [view, name, sizes, secondHand, loved, avoided, neverWears, occasions, shapesLoved, shapesAvoided, typesLoved, typesAvoided])
 
   if (view === undefined) return <MirrorLoading label="OPENING YOUR SETTINGS" />
   if (view === null || !sizes) return <p className="px-6 sm:px-10 py-16 text-[24px] text-[#55534E]">Sign in to see your settings.</p>
 
   async function save() {
     setSaving(true); setNote(null)
-    const r = await saveMySettings({ name, sizes: sizes!, acceptsSecondHand: secondHand, coloursLoved: loved, coloursAvoided: avoided, shapesLoved, shapesAvoided, typesLoved, typesAvoided, neverWears }, testMemberId)
+    const r = await saveMySettings({ name, sizes: sizes!, acceptsSecondHand: secondHand, coloursLoved: loved, coloursAvoided: avoided, occasions, shapesLoved, shapesAvoided, typesLoved, typesAvoided, neverWears }, testMemberId)
     setSaving(false)
     if (r.error) { setNote(r.error); return }
     const fresh = await loadMySettings(testMemberId)
@@ -178,6 +180,26 @@ export default function YouSettings({ testMemberId, initial }: { testMemberId?: 
             which is far too slow to sit behind the Save button that writes her
             sizes. */}
         <BrandPicker testMemberId={testMemberId} />
+
+        {/* What she dresses for — so MYRA never offers a school run to someone whose children are grown. */}
+        <section className={`${card} lg:col-span-2`}>
+          <div className="flex items-baseline justify-between gap-4 flex-wrap">
+            <h2 className={heading}>What you dress for</h2>
+            <p className={label}>Tap the ones that are part of your life.</p>
+          </div>
+          <div className="mt-6 flex flex-wrap gap-2.5">
+            {OCCASION_TYPES.map((o) => {
+              const on = occasions.includes(o.id)
+              return (
+                <button key={o.id} type="button" aria-pressed={on}
+                  onClick={() => setOccasions((cur) => (cur.includes(o.id) ? cur.filter((x) => x !== o.id) : [...cur, o.id]))}
+                  className={chip(on ? 'loved' : 'none')}>
+                  {titleCase(o.label)}
+                </button>
+              )
+            })}
+          </div>
+        </section>
 
         {/* Colours */}
         <section className={`${card} lg:col-span-2`}>

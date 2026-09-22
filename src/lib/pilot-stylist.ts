@@ -44,6 +44,8 @@ export const OCCASION_TYPES = [
   { id: 'dinner_drinks', label: 'DINNERS & DRINKS' },
   { id: 'event', label: 'OCCASIONS & EVENTS' },
   { id: 'travel', label: 'TRIPS' },
+  // Asked so MYRA never offers a school run to a client whose children are grown.
+  { id: 'kids', label: 'THINGS WITH THE KIDS' },
 ] as const
 
 export type OccasionId = (typeof OCCASION_TYPES)[number]['id']
@@ -70,6 +72,7 @@ export const OCCASION_TILT: Record<OccasionId, RoomWeights> = {
   dinner_drinks: { tailored: 1.0, romantic: 1.4, ease: 0.75 },
   event: { tailored: 0.95, romantic: 1.7, ease: 0.5 },
   travel: { tailored: 0.7, romantic: 1.1, ease: 1.5 },
+  kids: { tailored: 0.6, romantic: 0.9, ease: 1.6 },
 }
 
 // Formality floor: minimum tailored share on WORK occasions, by dress code.
@@ -840,6 +843,7 @@ export const SYNTH_PERSONAS: SynthPersona[] = [
       dinner_drinks: 'weekly',
       event: '1-2 / month',
       travel: '1-2 / month',
+      kids: 'never',
     },
     work_dress_code: 'smart_unwritten',
     known_events: [{ label: 'Greece holiday', event_date: '2026-09' }],
@@ -872,6 +876,7 @@ export const SYNTH_PERSONAS: SynthPersona[] = [
       dinner_drinks: '1-2 / month',
       event: '1-2 / month',
       travel: '1-2 / month',
+      kids: 'never',
     },
     work_dress_code: null,
     known_events: [],

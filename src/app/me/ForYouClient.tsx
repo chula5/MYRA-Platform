@@ -111,7 +111,7 @@ function LookCard({ look, testMemberId }: { look: ForYouLook; testMemberId?: str
         {look.image_url && (
           <FallbackImage src={look.image_url} thumbWidth={900} alt="" className="absolute inset-0 w-full h-full object-cover" />
         )}
-        <span className="absolute top-4 left-4 bg-[rgba(255,255,255,0.92)] rounded-full px-4 py-1.5 text-[18px] tracking-[0.1em] text-[#2B2B2B]">
+        <span className="absolute top-4 left-4 bg-[rgba(255,255,255,0.92)] rounded-full px-5 py-2 text-[clamp(21px,1.25vw,32px)] tracking-[0.08em] text-[#2B2B2B]">
           {look.occasion_label.toUpperCase()}
         </span>
 

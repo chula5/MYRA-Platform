@@ -1889,9 +1889,13 @@ export async function loadComposeHistory(admin: any, memberId: string): Promise<
   // her explicit rejections — the composer ranks those down so each delivery
   // explores the library instead of regenerating the same argmax looks.
   const [{ data: priorLooks }, { data: fb }] = await Promise.all([
-    admin.from('pilot_look').select('items, delivery:delivery_id!inner(member_id)').eq('memberId', memberId),
+    // The member lives on the delivery, not on the look: filtering on a
+    // 'memberId' column errored silently, so her history was always empty and
+    // the composer kept regenerating the same best-scoring looks.
+    admin.from('pilot_look').select('items, delivery:delivery_id!inner(member_id)').eq('delivery.member_id', memberId),
     allFeedbackRows(admin, memberId, 'item_in, item_out, action, created_at'),
   ])
+  if (!priorLooks) console.error('[loadComposeHistory] no prior looks read for', memberId)
   const seenCounts = new Map<string, number>()
   for (const l of priorLooks ?? []) {
     for (const it of (l.items ?? []) as any[]) {
@@ -1914,7 +1918,7 @@ export async function loadComposeHistory(admin: any, memberId: string): Promise<
   // hero_item_id is only written on variant rows.
   const { data: approvedLooks } = await admin
     .from('pilot_look').select('items, hero_item_id, delivery:delivery_id!inner(member_id)')
-    .eq('memberId', memberId).not('approved_at', 'is', null)
+    .eq('delivery.member_id', memberId).not('approved_at', 'is', null)
   const anchoredIds = new Set<string>()
   for (const l of approvedLooks ?? []) {
     if (l.hero_item_id) { anchoredIds.add(l.hero_item_id); continue }

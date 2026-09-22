@@ -6,6 +6,7 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase-server'
 import { loadMemberSizeProfile } from '@/lib/size-availability'
 import { SIZE_CATEGORIES, type SizeCategory } from '@/lib/size-canonical'
+import { OCCASION_TYPES } from '@/lib/pilot-stylist'
 import { listConnections, type EmailConnectionView } from '@/lib/email/connections'
 import { listCalendarConnections, type CalendarConnectionView } from '@/lib/calendar/store'
 import { listInstagramConnections, type InstagramConnectionView } from '@/lib/archival/store'
@@ -25,6 +26,10 @@ export interface YouSettingsView {
   typesLoved: string[]
   typesAvoided: string[]
   neverWears: string
+  /** What she actually dresses for — the ids she has ticked. */
+  occasions: string[]
+  /** The brands she wears, her order. */
+  brands: string[]
   inboxes: EmailConnectionView[]
   calendars: CalendarConnectionView[]
   instagram: InstagramConnectionView[]
@@ -59,6 +64,8 @@ export async function buildYouSettings(memberId: string, test: boolean, fallback
     typesLoved: row?.types_loved ?? [],
     typesAvoided: row?.types_avoided ?? [],
     neverWears: row?.never_wears ?? '',
+    brands: ((row?.brands ?? []) as any[]).map((b) => (typeof b === 'string' ? b : b?.name)).filter(Boolean),
+    occasions: OCCASION_TYPES.map((o) => o.id as string).filter((id) => ((row?.occasions ?? {}) as any)[id] && ((row?.occasions ?? {}) as any)[id] !== 'never'),
     inboxes, calendars, instagram,
   }
 }

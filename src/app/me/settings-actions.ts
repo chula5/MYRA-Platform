@@ -8,7 +8,7 @@
 import { resolveClientMember } from '@/lib/client-member'
 import { createAdminClient } from '@/lib/supabase-server'
 import { SIZE_CATEGORIES, ladderFor, type SizeCategory } from '@/lib/size-canonical'
-import { COLOUR_SHADES, COLOUR_FAMILY_IDS, SHAPE_PREFERENCES, PIECE_PREFERENCES } from '@/lib/pilot-stylist'
+import { COLOUR_SHADES, COLOUR_FAMILY_IDS, OCCASION_TYPES, SHAPE_PREFERENCES, PIECE_PREFERENCES } from '@/lib/pilot-stylist'
 import { buildYouSettings, type YouSettingsView, type YouSizes } from '@/lib/you-settings'
 
 export type { YouSettingsView, YouSizes }
@@ -29,11 +29,14 @@ export interface YouSettingsPatch {
   typesLoved?: string[]
   typesAvoided?: string[]
   neverWears?: string
+  occasions?: string[]
+  brands?: string[]
 }
 
 export async function saveMySettings(patch: YouSettingsPatch, asMemberId?: string): Promise<{ error?: string }> {
   const me = await resolveClientMember(asMemberId)
   if (!me) return { error: 'Not signed in' }
+  const admin = createAdminClient() as any
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
 
   if (patch.name !== undefined) {
@@ -64,9 +67,20 @@ export async function saveMySettings(patch: YouSettingsPatch, asMemberId?: strin
   if (patch.shapesAvoided) update.shapes_avoided = patch.shapesAvoided.filter((x) => shapes.has(x))
   if (patch.typesLoved) update.types_loved = patch.typesLoved.filter((x) => pieces.has(x))
   if (patch.typesAvoided) update.types_avoided = patch.typesAvoided.filter((x) => pieces.has(x))
+  if (patch.brands) {
+    // Ranked in the order she put them, keeping the stylist's note on the ones already there.
+    const { data: had } = await admin.from('pilot_member').select('brands').eq('member_id', me.memberId).maybeSingle()
+    const known = new Map(((had?.brands ?? []) as any[]).map((b) => [String(b?.name ?? '').toLowerCase(), b]))
+    update.brands = patch.brands.map((b) => String(b).trim()).filter(Boolean).slice(0, 40)
+      .map((name, i) => ({ ...(known.get(name.toLowerCase()) ?? {}), name, rank: i + 1 }))
+  }
+  if (patch.occasions) {
+    // Kept as frequencies, the shape the stylist's maths reads; her ticks mean "yes, I dress for this".
+    const ticked = new Set(patch.occasions)
+    update.occasions = Object.fromEntries(OCCASION_TYPES.map((o) => [o.id, ticked.has(o.id) ? 'weekly' : 'never']))
+  }
   if (patch.neverWears !== undefined) update.never_wears = patch.neverWears.trim().slice(0, 600) || null
 
-  const admin = createAdminClient() as any
   const { error } = await admin.from('pilot_member').update(update).eq('member_id', me.memberId)
   return error ? { error: error.message } : {}
 }
