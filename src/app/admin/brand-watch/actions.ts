@@ -5,7 +5,7 @@ import { DEFAULT_CONFIDENCE, type ConfidenceTrust } from '@/lib/brand-watch-conf
 import { houseBanOf } from '@/lib/brand-watch-bans'
 import { keepQueueRows, teachStyleBrain } from '@/lib/brand-watch-keep'
 import {
-  autoKeepForBrand, keepTwinsNow, loadBrandTrust, trustFor, twinOfQueueRow, twinTrustFor, type BrandTrustData,
+  autoKeepForBrand, keepConfidentNow, keepTwinsNow, loadBrandTrust, trustFor, twinOfQueueRow, twinTrustFor, type BrandTrustData,
 } from '@/lib/brand-watch-auto'
 import type { BrandTrust } from '@/lib/brand-watch-trust'
 import type { TwinTrust } from '@/lib/brand-watch-twins'
@@ -350,6 +350,63 @@ export async function setWatchedBrandAutoKeepConfidence(watchedBrandId: string, 
   if (error) return { error: /auto_keep_confidence/.test(error.message) ? 'RUN MIGRATION 0066_brand_watch_confidence.sql IN SUPABASE FIRST' : error.message }
   revalidatePath('/admin/brand-watch')
   return {}
+}
+
+export interface SiteRequestRow {
+  request_id: string
+  host: string
+  url: string | null
+  page_title: string | null
+  reason: string
+  times_asked: number
+  status: string
+  last_asked_at: string
+  member_name?: string | null
+}
+
+/** Shops she asked MYRA to learn, from the mirror. */
+export async function loadSiteRequests(): Promise<{ rows: SiteRequestRow[]; error?: string }> {
+  await assertAdmin()
+  const admin = createAdminClient() as any
+  const { data, error } = await admin.from('mirror_site_request')
+    .select('request_id, host, url, page_title, reason, times_asked, status, last_asked_at, member:member_id(name)')
+    .eq('status', 'open').order('last_asked_at', { ascending: false }).limit(40)
+  if (error) return { rows: [], error: /mirror_site_request/.test(error.message) ? 'RUN MIGRATION 0067_mirror_site_requests.sql IN SUPABASE FIRST' : error.message }
+  return { rows: ((data ?? []) as any[]).map((r) => ({ ...r, member_name: r.member?.name ?? null })) }
+}
+
+/** Put a requested shop on the watchlist, or set it aside. */
+export async function decideSiteRequest(requestId: string, decision: 'watching' | 'declined'): Promise<{ error?: string; result?: BrandCheckResult }> {
+  await assertAdmin()
+  const admin = createAdminClient() as any
+  const { data: row } = await admin.from('mirror_site_request').select('*').eq('request_id', requestId).maybeSingle()
+  if (!row) return { error: 'Request not found' }
+  let result: BrandCheckResult | undefined
+  if (decision === 'watching') {
+    const r = await addWatchedBrand(`https://${row.host}`, 'watch')
+    // A shop MYRA cannot scan says so plainly; the request stays open.
+    if (r.error) return { error: r.error }
+    result = r.result
+  }
+  const { error } = await admin.from('mirror_site_request').update({ status: decision }).eq('request_id', requestId)
+  if (error) return { error: error.message }
+  revalidatePath('/admin/brand-watch')
+  return { result }
+}
+
+/** ADD THE BACKLOG: keep every queued piece for this brand already above her bar. */
+export async function keepConfidentNowForBrand(watchedBrandId: string): Promise<{ kept?: number; error?: string }> {
+  await assertAdmin()
+  const admin = createAdminClient() as any
+  const { data: w } = await admin.from('watched_brand').select('*').eq('watched_brand_id', watchedBrandId).single()
+  if (!w) return { error: 'Watchlist row not found' }
+  try {
+    const r = await keepConfidentNow(admin, w as WatchedBrandRow)
+    revalidatePath('/admin/brand-watch')
+    return r.error ? { error: r.error } : { kept: r.kept }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) }
+  }
 }
 
 /** What MYRA added by itself lately — so nothing lands unseen. */

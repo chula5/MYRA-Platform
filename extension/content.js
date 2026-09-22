@@ -12,7 +12,7 @@
   const state = await send({ type: 'state', host: location.host })
   if (!state || !state.connected || !state.enabled) return
   const vinted = M.isVinted()
-  if (!vinted && !M.isShopify()) return
+  const readable = vinted || M.isShopify()
 
   const LIFT_MIN = 0.6 // named / core-family and above earn the mark
   const WHY = {
@@ -147,6 +147,58 @@
     </div>`
   }
 
+
+  // ── A SHOP MYRA CANNOT READ ───────────────────────────────────────────────
+  // Rather than sit silent on a shop it does not speak, the mirror says so and
+  // offers to pass it on. Once a day per shop, and never again once she has
+  // asked for it.
+  const OFFER_KEY = `myra:mirror:asked:${location.host}`
+  function askedRecently() {
+    try {
+      const at = Number(localStorage.getItem(OFFER_KEY) || 0)
+      return at && Date.now() - at < 24 * 3600_000
+    } catch { return false }
+  }
+  function rememberAsked() { try { localStorage.setItem(OFFER_KEY, String(Date.now())) } catch {} }
+
+  function offerSite(reason) {
+    if (askedRecently() || document.querySelector('.myra-mirror-offer')) return
+    const box = document.createElement('div')
+    box.className = 'myra-mirror-offer'
+    box.style.cssText = `position:fixed;z-index:2147483646;right:16px;bottom:16px;width:min(330px,calc(100vw - 32px));background:linear-gradient(160deg,#F7F7F9 0%,#E9E9EC 100%);border-radius:22px;box-shadow:0 20px 50px rgba(0,0,0,.24);padding:16px 18px;font:400 14px/1.4 ${FONT};color:#2B2B2B;`
+    box.innerHTML = `
+      <div style="display:flex;gap:11px;align-items:flex-start">
+        <img src="${chrome.runtime.getURL('icons/mirror.png')}" alt="" style="width:24px;height:auto;margin-top:1px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;opacity:.5">MYRA</div>
+          <div style="font-size:15px;font-weight:600;margin-top:3px">MYRA can’t read this shop yet</div>
+          <div style="font-size:13px;opacity:.68;margin-top:4px">Ask for it and she’ll learn ${esc(location.host.replace(/^www\./, ''))} — you’ll hear back when it’s in.</div>
+          <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+            <button data-myra="ask" style="border:0;border-radius:999px;background:#141414;color:#F7F6F3;padding:9px 15px;font:500 12.5px/1 ${FONT};letter-spacing:.08em;text-transform:uppercase;cursor:pointer">Ask for this shop</button>
+            <button data-myra="not-now" style="border:0;border-radius:999px;background:#fff;color:#55534E;padding:9px 15px;font:500 12.5px/1 ${FONT};letter-spacing:.08em;text-transform:uppercase;cursor:pointer">Not now</button>
+          </div>
+          <div data-myra="said" style="font-size:13px;margin-top:10px;display:none"></div>
+        </div>
+        <button data-myra="close" aria-label="Close" style="border:0;background:transparent;font-size:17px;line-height:1;color:#55534E;cursor:pointer">×</button>
+      </div>`
+    const close = () => { rememberAsked(); box.remove() }
+    box.querySelector('[data-myra="close"]').addEventListener('click', close)
+    box.querySelector('[data-myra="not-now"]').addEventListener('click', close)
+    box.querySelector('[data-myra="ask"]').addEventListener('click', async (e) => {
+      const btn = e.currentTarget
+      btn.disabled = true
+      btn.textContent = 'Asking…'
+      const r = await send({ type: 'requestSite', host: location.host, url: location.href, title: document.title, reason })
+      const said = box.querySelector('[data-myra="said"]')
+      said.style.display = 'block'
+      said.textContent = r?.error ? r.error : r?.again ? 'Already on her list — she knows you want it.' : 'Passed on to MYRA. She’ll take a look.'
+      btn.remove()
+      rememberAsked()
+      setTimeout(() => box.remove(), 4000)
+    })
+    document.body.appendChild(box)
+  }
+
   function tileImage(tile) {
     const imgs = [...tile.querySelectorAll('img')].map((img) => ({ img, area: (img.naturalWidth || img.width) * (img.naturalHeight || img.height) })).sort((a, b) => b.area - a.area)
     const img = imgs[0]?.img
@@ -243,8 +295,11 @@
     if (running) return
     running = true
     try {
+      if (!readable) { offerSite('unsupported'); return }
       const grids = vinted ? M.vintedGrids() : M.findGrids()
-      if (!grids.length) return
+      // It speaks this shop but found nothing to re-order — a layout it has not
+      // learned. Worth passing on too.
+      if (!grids.length) { if (/shop|collection|catalog|category|products|browse|women/i.test(location.pathname)) offerSite('no_grid'); return }
       const tiles = grids.flatMap((g) => g.tiles)
       const sig = tiles.map((t) => t.key).join(',')
       if (sig === lastSig) return

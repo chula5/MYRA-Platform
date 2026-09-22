@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import { PICKER_COLOURS, PICKER_TYPES } from '@/components/admin/ItemPickerModal'
 import { findSimilarToSkipped } from '@/lib/brand-watch-similar'
 import type { WatchedBrandRow } from '@/lib/brand-watch'
@@ -10,6 +10,7 @@ import {
   addWatchedBrand, checkAllBrandsNow, checkBrandNow, fullScanBrand, keepAllForBrand,
   keepItems, loadQueuePage, removeWatchedBrand, setWatchedBrandActive, setWatchedBrandAutoKeep,
   setWatchedBrandAutoKeepConfidence, setWatchedBrandConfidenceBar, loadAutoAdded, undoAutoKeep,
+  loadSiteRequests, decideSiteRequest, keepConfidentNowForBrand,
   setWatchedBrandAutoKeepTwins, keepTwinsNowForBrand,
   setWatchedBrandMinScore, skipItems, undoSkip, setSkipReason, type QueueFilters, type QueueItemRow, type QueuePage,
 } from './actions'
@@ -76,6 +77,9 @@ export default function BrandWatchClient(props: Props) {
   const confidenceTrust = props.confidenceTrust ?? {}
   // What MYRA added by itself — open it and every one can be sent back.
   const [autoAdded, setAutoAdded] = useState<any[] | null>(null)
+  // Shops she asked for from the mirror, where MYRA could not read the page.
+  const [requests, setRequests] = useState<any[] | null>(null)
+  useEffect(() => { void loadSiteRequests().then((r) => setRequests(r.rows ?? [])) }, [])
   const decided = props.decided ?? {}
   const [pending, startTransition] = useTransition()
   const [url, setUrl] = useState('')
@@ -340,6 +344,16 @@ export default function BrandWatchClient(props: Props) {
                   {decided[w.watched_brand_id] && (
                     <span className="text-[#A8A8A4]">{decided[w.watched_brand_id].kept} KEPT · {decided[w.watched_brand_id].skipped} SKIPPED</span>
                   )}
+                  {confidenceTrust[w.watched_brand_id]?.trusted && inQueue > 0 && (
+                    <button
+                      disabled={pending}
+                      onClick={() => { if (confirm(`Add every queued ${w.name} piece already above ${Math.round(Number(w.confidence_bar ?? 0.92) * 100)}%? You can undo any of them.`)) act(() => keepConfidentNowForBrand(w.watched_brand_id), (r) => { setNotice(r.error ?? `${w.name.toUpperCase()}: ${r.kept} ADDED FROM THE QUEUE — UNDO ANY IN 'WHAT MYRA ADDED BY ITSELF'`); if (!r.error) reloadQueue() }) }}
+                      className="text-[#0A0A0A] underline underline-offset-2"
+                      title="Automation only takes pieces found after it was switched on; this clears what is already waiting"
+                    >
+                      ADD THE BACKLOG
+                    </button>
+                  )}
                 </div>
                 <div className={`mt-0.5 text-[8px] tracking-[0.1em] ${w.auto_keep_confidence && !confidenceTrust[w.watched_brand_id]?.trusted ? 'text-[#B4593A]' : confidenceTrust[w.watched_brand_id]?.trusted ? 'text-[#3D6B45]' : 'text-[#A8A8A4]'}`}>
                   {w.auto_keep_confidence && !confidenceTrust[w.watched_brand_id]?.trusted ? 'AUTO-ADD PAUSED — ' : 'AUTO-ADD: '}{confidenceTrust[w.watched_brand_id]?.summary ?? 'NO ONE-BY-ONE DECISIONS YET'}
@@ -348,6 +362,44 @@ export default function BrandWatchClient(props: Props) {
             )
           })}
         </div>
+
+        {/* SHOPS SHE ASKED FOR — from the mirror, where it could not read the page. */}
+        {requests && requests.length > 0 && (
+          <div className="mt-4 border border-[#E2E0DB] rounded-[10px] p-2.5">
+            <p className="text-[9px] tracking-[0.14em] text-[#0A0A0A] mb-1.5">SHOPS SHE ASKED FOR · {requests.length}</p>
+            {requests.map((r) => (
+              <div key={r.request_id} className="py-1.5 border-b border-[#F1F0ED] last:border-0">
+                <p className="text-[10px] tracking-[0.06em] text-[#4A4E57]">{r.host.toUpperCase()}</p>
+                <p className="text-[8px] tracking-[0.1em] text-[#A8A8A4]">
+                  {r.member_name ? `${r.member_name.toUpperCase()} · ` : ''}ASKED {r.times_asked}×{r.reason === 'no_grid' ? ' · READ IT, FOUND NO GRID' : ' · CANNOT READ IT'}
+                </p>
+                <div className="flex gap-3 mt-1 text-[8px] tracking-[0.12em]">
+                  <button
+                    disabled={pending}
+                    onClick={() => act(() => decideSiteRequest(r.request_id, 'watching'), (x) => {
+                      setNotice(x.error ?? `${r.host.toUpperCase()}: ON THE WATCHLIST${x.result ? ` — ${x.result.queued} QUEUED` : ''}`)
+                      if (!x.error) setRequests((cur) => (cur ?? []).filter((y) => y.request_id !== r.request_id))
+                    })}
+                    className="text-[#0A0A0A] underline underline-offset-2"
+                  >
+                    WATCH IT
+                  </button>
+                  <a href={r.url ?? `https://${r.host}`} target="_blank" rel="noreferrer" className="text-[#6B6B6B] hover:text-[#0A0A0A]">OPEN</a>
+                  <button
+                    disabled={pending}
+                    onClick={() => act(() => decideSiteRequest(r.request_id, 'declined'), (x) => {
+                      if (!x.error) setRequests((cur) => (cur ?? []).filter((y) => y.request_id !== r.request_id))
+                      setNotice(x.error ?? `${r.host.toUpperCase()}: SET ASIDE`)
+                    })}
+                    className="text-[#A8A8A4] hover:text-[#B3202A]"
+                  >
+                    NOT THIS ONE
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {watched.length > 0 && (
           <button
@@ -618,10 +670,10 @@ export default function BrandWatchClient(props: Props) {
                   {/* How sure MYRA is you would keep it — this brand's own model. */}
                   {q.confidence != null && (
                     <span
-                      className={`absolute top-2 left-2 rounded-full px-2 py-0.5 text-[9px] tracking-[0.08em] border ${q.confidence >= 0.9 ? 'bg-[#3D6B45] text-white border-[#3D6B45]' : q.confidence >= 0.7 ? 'bg-white/95 text-[#0A0A0A] border-[#E2E0DB]' : 'bg-white/95 text-[#A8A8A4] border-[#E2E0DB]'}`}
-                      title="How likely you are to keep this, learned from your own decisions for this brand"
+                      className={`absolute bottom-2 left-2 rounded-full px-2 py-[3px] text-[9px] tracking-[0.08em] border ${q.confidence >= 0.9 ? 'bg-[#3D6B45] text-white border-[#3D6B45]' : q.confidence >= 0.8 ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'bg-white/95 text-[#6B6B6B] border-[#E2E0DB]'}`}
+                      title="How likely you are to keep this, learned from your own decisions for this brand. AUTO-ADD keeps the ones above your bar."
                     >
-                      {Math.round(q.confidence * 100)}%
+                      {Math.round(q.confidence * 100)}% SURE
                     </span>
                   )}
                   {q.learned_delta !== 0 && (

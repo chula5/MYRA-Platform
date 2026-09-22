@@ -194,6 +194,18 @@ const handlers = {
     return { ok: true, ...json }
   },
 
+  /** "MYRA cannot read this shop — learn it?" Passed on for Chloe to look at. */
+  async requestSite({ host, url, title, reason }) {
+    const c = await cfg()
+    if (!c.token) return { error: 'Connect MYRA first' }
+    const { status, json } = await api('/api/mirror/site-request', {
+      method: 'POST',
+      body: JSON.stringify({ host, url, title, reason }),
+    })
+    if (status !== 200 || !json || json.error) return { error: json?.error || `Could not pass it on (${status})` }
+    return json
+  },
+
   async pageStats(msg, sender) {
     const tabId = sender?.tab?.id
     if (tabId == null) return { ok: false }

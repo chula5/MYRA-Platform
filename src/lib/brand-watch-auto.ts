@@ -257,6 +257,28 @@ export async function autoKeepForBrand(admin: any, watched: WatchedBrandRow, tru
 }
 
 /** KEEP TWINS NOW: every twin of her keeps already in this brand's queue — her explicit press, backlog included. */
+/**
+ * ADD THE BACKLOG — every queued piece for this brand already above her bar,
+ * on her press. Automation itself only ever takes pieces found after it was
+ * switched on; this is how the queue that built up before it catches up.
+ */
+export async function keepConfidentNow(admin: any, watched: WatchedBrandRow, cap = TWINS_NOW_CAP): Promise<{ kept: number; error?: string }> {
+  if (!watched.brand_id) return { kept: 0, error: 'This brand has no pieces yet' }
+  const data = await loadBrandTrust(admin)
+  const trust = confidenceTrustFor(data, watched as any)
+  if (!trust.trusted) return { kept: 0, error: `NOT YET — ${trust.summary}` }
+  const bar = Number((watched as any).confidence_bar ?? DEFAULT_CONFIDENCE)
+  const ids = (await queuedFor(admin, watched.brand_id, null))
+    .filter((q) => {
+      if (!keepable(q)) return false
+      const p = confidenceOf(data, { ...q, brand_id: watched.brand_id })
+      return p != null && p >= bar
+    })
+    .slice(0, cap)
+    .map((q) => q.queue_id)
+  return { kept: ids.length ? await keepQueueRows(admin, ids, { auto: true }) : 0 }
+}
+
 export async function keepTwinsNow(admin: any, watched: WatchedBrandRow): Promise<{ kept: number; error?: string }> {
   if (!watched.brand_id) return { kept: 0, error: 'This brand has no pieces yet' }
   const data = await loadBrandTrust(admin)
