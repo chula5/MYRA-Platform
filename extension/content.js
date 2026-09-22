@@ -12,7 +12,9 @@
   const state = await send({ type: 'state', host: location.host })
   if (!state || !state.connected || !state.enabled) return
   const vinted = M.isVinted()
-  const readable = vinted || M.isShopify()
+  const shopify = M.isShopify()
+  // Everything else is read from the page itself (adapters.genericGrids).
+  const generic = !vinted && !shopify
 
   const LIFT_MIN = 0.6 // named / core-family and above earn the mark
   const WHY = {
@@ -62,10 +64,15 @@
     document.body.appendChild(menu)
   }
 
+  // A stale service worker answers "unknown message": the page has the new
+  // code and the extension's own background does not. Say what to do.
+  const RELOAD_NOTE = 'Reload MYRA Mirror at chrome://extensions — its background is still the old version.'
+  const friendly = (e) => (/unknown message/i.test(String(e ?? '')) ? RELOAD_NOTE : e)
+
   async function startStyling(product, mode) {
     openPanel({ status: 'loading', product, mode })
     const r = await send({ type: 'styleStart', product, mode })
-    if (r?.error) renderPanel({ status: 'error', product, mode, error: r.error })
+    if (r?.error) renderPanel({ status: 'error', product, mode, error: friendly(r.error) })
     else if (r?.job) renderPanel(r.job)
   }
 
@@ -191,11 +198,50 @@
       const r = await send({ type: 'requestSite', host: location.host, url: location.href, title: document.title, reason })
       const said = box.querySelector('[data-myra="said"]')
       said.style.display = 'block'
-      said.textContent = r?.error ? r.error : r?.again ? 'Already on her list — she knows you want it.' : 'Passed on to MYRA. She’ll take a look.'
+      said.textContent = r?.error ? friendly(r.error) : r?.again ? 'Already on her list — she knows you want it.' : 'Passed on to MYRA. She’ll take a look.'
       btn.remove()
       rememberAsked()
       setTimeout(() => box.remove(), 4000)
     })
+    document.body.appendChild(box)
+  }
+
+
+  // ── ONE PIECE, ON ITS OWN PAGE ────────────────────────────────────────────
+  // Any shop, readable or not: keep it, or ask what to wear with it.
+  function offerProduct(product) {
+    if (document.querySelector('.myra-mirror-product')) return
+    const box = document.createElement('div')
+    box.className = 'myra-mirror-product'
+    box.style.cssText = `position:fixed;z-index:2147483646;right:16px;bottom:16px;width:min(330px,calc(100vw - 32px));background:linear-gradient(160deg,#F7F7F9 0%,#E9E9EC 100%);border-radius:22px;box-shadow:0 20px 50px rgba(0,0,0,.24);padding:15px 17px;font:400 14px/1.4 ${FONT};color:#2B2B2B;`
+    box.innerHTML = `
+      <div style="display:flex;gap:11px;align-items:flex-start">
+        <img src="${chrome.runtime.getURL('icons/mirror.png')}" alt="" style="width:22px;height:auto;margin-top:2px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;opacity:.5">MYRA</div>
+          <div style="font-size:14.5px;font-weight:600;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(product.title)}</div>
+          <div style="font-size:12.5px;opacity:.62;margin-top:2px">${esc(product.brand || '')}${product.price ? ` · £${Math.round(product.price)}` : ''}</div>
+          <div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap">
+            <button data-myra="save" style="border:0;border-radius:999px;background:#141414;color:#F7F6F3;padding:9px 14px;font:500 12px/1 ${FONT};letter-spacing:.08em;text-transform:uppercase;cursor:pointer">♥ Save to MYRA</button>
+            <button data-myra="style" style="border:0;border-radius:999px;background:#fff;color:#2B2B2B;padding:9px 14px;font:500 12px/1 ${FONT};letter-spacing:.08em;text-transform:uppercase;cursor:pointer">What do I wear with this?</button>
+          </div>
+          <div data-myra="said" style="font-size:12.5px;margin-top:9px;display:none;opacity:.75"></div>
+        </div>
+        <button data-myra="close" aria-label="Close" style="border:0;background:transparent;font-size:17px;line-height:1;color:#55534E;cursor:pointer">×</button>
+      </div>`
+    const said = box.querySelector('[data-myra="said"]')
+    const say = (t) => { said.style.display = 'block'; said.textContent = t }
+    box.querySelector('[data-myra="close"]').addEventListener('click', () => box.remove())
+    box.querySelector('[data-myra="save"]').addEventListener('click', async (e) => {
+      const b = e.currentTarget
+      b.disabled = true
+      say('Saving…')
+      const r = await send({ type: 'saveProduct', product })
+      if (r?.error) { say(friendly(r.error)); b.disabled = false; return }
+      b.textContent = '♥ Saved'
+      say('In your saved pieces — MYRA watches its stock and will tell you if it starts to go.')
+    })
+    box.querySelector('[data-myra="style"]').addEventListener('click', (e) => openMenu(e.currentTarget, product))
     document.body.appendChild(box)
   }
 
@@ -295,20 +341,25 @@
     if (running) return
     running = true
     try {
-      if (!readable) { offerSite('unsupported'); return }
-      const grids = vinted ? M.vintedGrids() : M.findGrids()
+      // One piece on its own page: keep it or style it, whatever the shop.
+      const piece = M.pageProduct?.()
+      if (piece) offerProduct(piece)
+
+      const grids = vinted ? M.vintedGrids() : shopify ? M.findGrids() : M.genericGrids()
       // It speaks this shop but found nothing to re-order — a layout it has not
       // learned. Worth passing on too.
-      if (!grids.length) { if (/shop|collection|catalog|category|products|browse|women/i.test(location.pathname)) offerSite('no_grid'); return }
+      if (!grids.length) { if (!piece && /shop|collection|catalog|category|products|browse|women/i.test(location.pathname)) offerSite(generic ? 'unsupported' : 'no_grid'); return }
       const tiles = grids.flatMap((g) => g.tiles)
       const sig = tiles.map((t) => t.key).join(',')
       if (sig === lastSig) return
       lastSig = sig
-      const details = vinted ? M.vintedDetails(tiles.map((t) => t.key)) : await M.details(tiles.map((t) => t.key))
+      const details = vinted
+        ? M.vintedDetails(tiles.map((t) => t.key))
+        : shopify ? await M.details(tiles.map((t) => t.key)) : M.genericDetails(tiles.map((t) => t.key))
       const products = tiles.map((t) => ({ key: t.key, ...(details.get(t.key) || {}) }))
       for (const t of tiles) {
         const d = details.get(t.key) || {}
-        const product = { key: t.key, url: d.url || `${location.origin}/products/${t.key}`, title: d.title || t.key, brand: d.brand || null, type: d.type || null, price: d.price ?? null, available: d.available !== false, image: d.image ?? null }
+        const product = { key: t.key, url: d.url || (generic ? t.key : `${location.origin}/products/${t.key}`), title: d.title || t.key, brand: d.brand || null, type: d.type || null, price: d.price ?? null, available: d.available !== false, image: d.image ?? null }
         productOf.set(t.el, product)
         styleButton(t.el, product)
       }

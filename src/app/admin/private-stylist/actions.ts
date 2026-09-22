@@ -3360,6 +3360,98 @@ export async function loadOwnedPiece(itemId: string, asMemberId?: string): Promi
  * and look check as a delivery; looks that clash or hold a piece not in her
  * size are never shown. Nothing is saved.
  */
+export interface SavedPieceView {
+  item_id: string
+  product_name: string
+  brand: string | null
+  image_url: string | null
+  price_gbp: number | null
+  retailer_url: string | null
+  source_host: string | null
+  saved_at: string
+  stock_status: string | null
+}
+
+/** The pieces she has saved from the shops, newest first (migration 0060). */
+export async function loadSavedPieces(asMemberId?: string): Promise<{ pieces: SavedPieceView[]; error?: string }> {
+  const me = await resolveClientMember(asMemberId)
+  if (!me) return { pieces: [], error: 'Not signed in' }
+  const admin = createAdminClient() as any
+  const { data, error } = await admin.from('member_saved_item')
+    .select('item_id, source_host, saved_at, item:item_id(product_name, image_url, price_gbp, retailer_url, stock_status, brand:brand_id(name))')
+    .eq('member_id', me.memberId).order('saved_at', { ascending: false }).limit(60)
+  if (error) return { pieces: [], error: /member_saved_item/.test(error.message) ? 'Run migration 0060 in Supabase first' : error.message }
+  return {
+    pieces: ((data ?? []) as any[]).filter((r) => r.item).map((r) => ({
+      item_id: r.item_id,
+      product_name: r.item.product_name,
+      brand: r.item.brand?.name ?? null,
+      image_url: r.item.image_url ?? null,
+      price_gbp: r.item.price_gbp != null ? Number(r.item.price_gbp) : null,
+      retailer_url: r.item.retailer_url ?? null,
+      source_host: r.source_host ?? null,
+      saved_at: r.saved_at,
+      stock_status: r.item.stock_status ?? null,
+    })),
+  }
+}
+
+/** Forget a saved piece. */
+export async function unsaveMyPiece(itemId: string, asMemberId?: string): Promise<{ error?: string }> {
+  const me = await resolveClientMember(asMemberId)
+  if (!me) return { error: 'Not signed in' }
+  const admin = createAdminClient() as any
+  const { error } = await admin.from('member_saved_item').delete().eq('member_id', me.memberId).eq('item_id', itemId)
+  return error ? { error: error.message } : {}
+}
+
+/**
+ * STYLE A SAVED PIECE — the same composer as her own wardrobe, around a piece
+ * she saved from a shop (a mirror item, not owned). Her wardrobe is in the pool
+ * too, so it answers "what do I already have that goes with this?".
+ */
+export async function styleSavedPiece(
+  itemId: string,
+  opts: { shuffle?: number; query?: string | null } = {},
+  asMemberId?: string,
+): Promise<{ looks: StyledLook[]; hidden?: number; error?: string }> {
+  const me = await resolveClientMember(asMemberId)
+  if (!me) return { looks: [], error: 'Not signed in' }
+  const admin = createAdminClient() as any
+  const { data: saved } = await admin.from('member_saved_item').select('item_id').eq('member_id', me.memberId).eq('item_id', itemId).maybeSingle()
+  if (!saved) return { looks: [], error: 'That piece is not in your saved list' }
+  const { data: member } = await admin.from('pilot_member').select('*').eq('member_id', me.memberId).single()
+  const { data: hero } = await admin.from('item').select('*, brand(*)').eq('item_id', itemId).maybeSingle()
+  if (!hero) return { looks: [], error: 'MYRA cannot find that piece any more' }
+
+  const library = await loadComposableLibrary(member)
+  const pool = library.some((i) => i.item_id === itemId) ? library : [...library, hero]
+  const [taste, lens, history] = await Promise.all([
+    loadMemberTaste(admin, member),
+    loadPersonaLens(admin, me.memberId),
+    loadComposeHistory(admin, me.memberId),
+  ])
+  const composed = composeMemberVariants(taste, pool as any, itemId, STYLE_THIS_LOOKS + 2, undefined, lens, history, { ownedMode: 'blend', shuffle: opts.shuffle ?? 0 })
+  if (!composed.length) return { looks: [], error: 'Nothing goes with this piece in your size right now' }
+  const judged = await judgeLooksForMember(admin, me.memberId, composed, 'unknown')
+  const rank = (i: number) => (judged[i].check?.verdict === 'works' ? 0 : judged[i].check ? 1 : 2)
+  const passing = composed.map((_, i) => i)
+    .filter((i) => judged[i].check?.verdict !== 'clashes' && !hasPieceOutOfSize(judged[i]))
+    .sort((a, b) => rank(a) - rank(b) || a - b)
+  const dims = new Map<string, any>((pool as any[]).map((i) => [i.item_id, i]))
+  const prefs = readStylePrefs(member)
+  return {
+    hidden: composed.length - passing.length,
+    looks: passing.slice(0, STYLE_THIS_LOOKS).map((i) => ({
+      look_id: null,
+      image_url: null,
+      items: composed[i].items.map((it: any) => ({ ...it, image_url: dims.get(it.item_id ?? '')?.image_url ?? null })),
+      why: whyThisSuitsHer(composed[i].items.map((it) => ({ ...(dims.get(it.item_id ?? '') ?? {}), product_name: it.product_name, owned: !!it.owned })), prefs),
+    })),
+    ...(passing.length ? {} : { error: 'Nothing passed the check for this piece right now' }),
+  }
+}
+
 export async function styleOwnedPiece(
   itemId: string,
   opts: { occasion?: string | null; withType?: string | null; shuffle?: number; query?: string | null } = {},

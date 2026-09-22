@@ -45,6 +45,24 @@ export async function keepStyledLook(
   return impl.keepAskPreview(me.memberId, occ, null, why || '', mix, [{ items, notes: why || null }], [], false)
 }
 
+/** The pieces she saved from the shops, through the mirror. */
+export async function loadMySavedPieces(asMemberId?: string): Promise<{ pieces: impl.SavedPieceView[]; error?: string }> {
+  return impl.loadSavedPieces(asMemberId)
+}
+
+export async function forgetMySavedPiece(itemId: string, asMemberId?: string): Promise<{ error?: string }> {
+  return impl.unsaveMyPiece(itemId, asMemberId)
+}
+
+/** Build outfits around a piece she saved from a shop. */
+export async function styleMySavedPiece(
+  itemId: string,
+  opts: { shuffle?: number; query?: string | null } = {},
+  asMemberId?: string,
+): Promise<{ looks: impl.StyledLook[]; hidden?: number; error?: string }> {
+  return impl.styleSavedPiece(itemId, opts, asMemberId)
+}
+
 /** SWAP a piece in an outfit MYRA built for her. Ranking only — nothing saved. */
 export async function swapInMyOutfit(
   items: LookItem[],

@@ -88,6 +88,167 @@
     return new Map(keys.map((k) => [k, found.get(k) || { brand: null }]))
   }
 
+
+  // ── ANY OTHER SHOP ────────────────────────────────────────────────────────
+  // A third of the brands MYRA watches are not Shopify and not Vinted: ME+EM,
+  // Sessùn, Bimba y Lola, Max Mara, Agnès b., By Malene Birger, Claudie
+  // Pierlot, Adolfo Domínguez, Vanessa Bruno, Varley. They have no product
+  // JSON, so the grid is read the way a person reads it: repeated tiles, each
+  // with one picture, one link and a price. Nothing is invented — a tile that
+  // carries no price or no picture is not a product.
+  const CURRENCY = /(?:[£€$]|GBP|EUR|USD)\s?\d[\d.,]*/i
+  const priceIn = (el) => {
+    const m = (el.innerText || '').match(CURRENCY)
+    if (!m) return null
+    const n = Number(m[0].replace(/[^\d.,]/g, '').replace(/,(\d{2})$/, '.$1').replace(/,/g, ''))
+    return Number.isFinite(n) && n > 0 ? n : null
+  }
+
+  /** The shop's own name: what it calls itself, not its domain. */
+  M.siteBrand = () => {
+    const meta = document.querySelector('meta[property="og:site_name"]')?.getAttribute('content')
+    if (meta && meta.length <= 60) return meta.trim()
+    for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
+      try {
+        const j = JSON.parse(s.textContent || '{}')
+        const nodes = Array.isArray(j) ? j : j['@graph'] ? j['@graph'] : [j]
+        for (const n of nodes) {
+          const b = typeof n?.brand === 'string' ? n.brand : n?.brand?.name
+          if (b) return String(b).slice(0, 60)
+          if (n?.['@type'] === 'Organization' && n?.name) return String(n.name).slice(0, 60)
+        }
+      } catch { /* a shop's bad JSON is not our problem */ }
+    }
+    const host = location.hostname.replace(/^(www|uk|us|intl|en|gb|shop)\./, '').split('.')[0]
+    return host.charAt(0).toUpperCase() + host.slice(1)
+  }
+
+  const sameOrigin = (a) => {
+    try { return new URL(a.getAttribute('href'), location.href).origin === location.origin } catch { return false }
+  }
+  const hrefOf = (a) => {
+    try { const u = new URL(a.getAttribute('href'), location.href); return `${u.origin}${u.pathname}` } catch { return null }
+  }
+
+  // → [{ container, tiles: [{ el, key }] }] on any shop.
+  M.genericGrids = () => {
+    // Every link that wraps (or sits beside) a picture — a product tile's shape.
+    const byHref = new Map()
+    for (const a of document.querySelectorAll('a[href]')) {
+      if (!sameOrigin(a)) continue
+      const href = hrefOf(a)
+      if (!href || href === location.pathname || /\/(cart|account|login|search|help|contact|about|blog|journal)(\/|$)/i.test(href)) continue
+      if (!a.querySelector('img') && !a.parentElement?.querySelector('img')) continue
+      if (!byHref.has(href)) byHref.set(href, [])
+      byHref.get(href).push(a)
+    }
+    if (byHref.size < 4) return []
+
+    // The tile: the highest ancestor that still holds exactly this one product.
+    const tileOf = (a) => {
+      let el = a
+      for (let i = 0; i < 7 && el.parentElement && el.parentElement !== document.body; i++) {
+        const parent = el.parentElement
+        const hrefs = new Set([...parent.querySelectorAll('a[href]')].filter(sameOrigin).map(hrefOf).filter(Boolean))
+        if (hrefs.size !== 1) break
+        el = parent
+      }
+      return el
+    }
+
+    const byContainer = new Map()
+    for (const [href, anchors] of byHref) {
+      const tile = tileOf(anchors[0])
+      const container = tile.parentElement
+      if (!container) continue
+      if (!byContainer.has(container)) byContainer.set(container, [])
+      byContainer.get(container).push({ el: tile, key: href })
+    }
+
+    return [...byContainer.entries()]
+      .filter(([container, tiles]) => {
+        if (tiles.length < 4) return false
+        // A row of four navigation cards is not a grid of products: most tiles
+        // must show a price, and the grid must take real room on the page.
+        const priced = tiles.filter((t) => priceIn(t.el) != null).length
+        if (priced < Math.max(3, tiles.length * 0.5)) return false
+        const box = container.getBoundingClientRect()
+        return box.width > 200 && box.height > 200
+      })
+      .map(([container, tiles]) => ({ container, tiles }))
+  }
+
+  M.genericDetails = (keys) => {
+    const brand = M.siteBrand()
+    const found = new Map()
+    for (const g of M.genericGrids()) {
+      for (const t of g.tiles) {
+        const el = t.el
+        const img = [...el.querySelectorAll('img')]
+          .map((i) => ({ i, area: (i.naturalWidth || i.width || 0) * (i.naturalHeight || i.height || 0) }))
+          .sort((x, y) => y.area - x.area)[0]?.i
+        const heading = el.querySelector('h1, h2, h3, h4, [class*="title"], [class*="name"]')
+        const lines = (el.innerText || '').split('\n').map((x) => x.trim()).filter(Boolean)
+        const title = (heading?.textContent || img?.getAttribute('alt') || lines.find((l) => !CURRENCY.test(l)) || 'Piece').trim().slice(0, 200)
+        found.set(t.key, {
+          brand,
+          title,
+          type: null,
+          price: priceIn(el),
+          url: t.key,
+          available: !/sold out|out of stock/i.test(el.innerText || ''),
+          sizes: [],
+          image: img ? (img.currentSrc || img.src || null) : null,
+        })
+      }
+    }
+    return new Map(keys.map((k) => [k, found.get(k) || { brand: null }]))
+  }
+
+
+  // ── ONE PRODUCT PAGE, ANY SHOP ────────────────────────────────────────────
+  // A product page is not a grid, and every shop writes one the same way for
+  // Google: JSON-LD, then Open Graph. That is enough to save a piece to MYRA
+  // and to style it, on a shop the mirror cannot otherwise read.
+  M.pageProduct = () => {
+    const out = { url: location.href.split(/[?#]/)[0], title: null, brand: null, price: null, image: null, available: true, sizes: [] }
+    for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
+      let json
+      try { json = JSON.parse(s.textContent || '{}') } catch { continue }
+      const nodes = Array.isArray(json) ? json : json['@graph'] ? json['@graph'] : [json]
+      for (const n of nodes) {
+        const type = Array.isArray(n?.['@type']) ? n['@type'] : [n?.['@type']]
+        if (!type.includes('Product')) continue
+        out.title = typeof n.name === 'string' ? n.name.slice(0, 200) : out.title
+        out.brand = (typeof n.brand === 'string' ? n.brand : n.brand?.name) ?? out.brand
+        const offers = Array.isArray(n.offers) ? n.offers[0] : n.offers
+        const price = Number(offers?.price ?? offers?.lowPrice)
+        if (Number.isFinite(price) && price > 0) out.price = price
+        if (typeof offers?.availability === 'string') out.available = !/OutOfStock|SoldOut/i.test(offers.availability)
+        const img = Array.isArray(n.image) ? n.image[0] : n.image
+        if (typeof img === 'string') out.image = img
+      }
+    }
+    const meta = (p) => document.querySelector(`meta[property="${p}"], meta[name="${p}"]`)?.getAttribute('content') || null
+    if (meta('og:type') === 'product' || /\/(product|products|p|item)s?\//i.test(location.pathname)) {
+      out.title = out.title || meta('og:title') || document.querySelector('h1')?.textContent?.trim() || null
+      out.image = out.image || meta('og:image')
+      out.brand = out.brand || meta('product:brand') || M.siteBrand()
+      if (out.price == null) {
+        const p = Number((meta('product:price:amount') || '').replace(/[^\d.]/g, ''))
+        if (Number.isFinite(p) && p > 0) out.price = p
+      }
+    }
+    if (!out.title || !out.image) return null
+    if (out.price == null) {
+      const m = (document.body.innerText || '').match(/(?:[£€$])\s?\d[\d.,]*/)
+      if (m) { const n = Number(m[0].replace(/[^\d.,]/g, '').replace(/,/g, '')); if (Number.isFinite(n) && n > 0) out.price = n }
+    }
+    out.title = String(out.title).slice(0, 200)
+    out.brand = out.brand ? String(out.brand).slice(0, 80) : M.siteBrand()
+    return out
+  }
+
   M.isShopify = () =>
     !!(window.Shopify ||
       document.querySelector('script[src*="cdn.shopify.com"], link[href*="cdn.shopify.com"], meta[name="shopify-checkout-api-token"]'))

@@ -14,6 +14,7 @@ import FallbackImage from '@/components/FallbackImage'
 import type { DressingRoomPiece, DressingRoomView, StyledLook } from '@/app/admin/private-stylist/actions'
 import { keepStyledLook, myLooksWithPiece, styleMyPiece } from './actions'
 import BuiltOutfit from './BuiltOutfit'
+import SavedPieces from './SavedPieces'
 import DressingRoomScene from '@/components/me/DressingRoomScene'
 import EmailFinds from './EmailFinds'
 import ArchivalLooks from './ArchivalLooks'
@@ -377,6 +378,9 @@ export default function DressingRoomClient({
         {/* What she already wears, and how — from Instagram or her own photos. */}
         {/* What is coming up, from her calendar — so MYRA can plan for it. */}
         <CalendarPanel testMemberId={testMemberId} />
+
+        {/* What she kept with the mirror while she was out shopping. */}
+        <SavedPieces testMemberId={testMemberId} />
 
         <ArchivalLooks testMemberId={testMemberId} />
 
