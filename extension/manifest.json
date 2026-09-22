@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MYRA Mirror",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Every brand site, already in your order. MYRA lifts the pieces you'd actually want to the top \u2014 the site stays exactly the brand's own.",
   "permissions": [
     "scripting",
@@ -54,6 +54,16 @@
         "vinted.js"
       ],
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "icons/mirror.png"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ]
 }

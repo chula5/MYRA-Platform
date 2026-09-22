@@ -140,6 +140,17 @@ const handlers = {
     const id = `${Date.now()}`
     styleJob = { id, product, mode: mode === 'wardrobe' ? 'wardrobe' : 'inspiration', status: 'loading', looks: [], startedAt: Date.now() }
     await saveJob()
+    // Two passes: what MYRA composed (seconds), then the same looks after its
+    // eye has been over them. She sees something quickly and it sharpens.
+    api('/api/mirror/style', { method: 'POST', body: JSON.stringify({ ...product, mode: styleJob.mode, quick: true }) })
+      .then(async ({ status, json }) => {
+        if (!styleJob || styleJob.id !== id || styleJob.status !== 'loading') return
+        if (status === 200 && json && !json.error && (json.looks || []).length) {
+          styleJob = { ...styleJob, status: 'partial', looks: json.looks, hero: json.hero || null }
+          await saveJob()
+        }
+      }).catch(() => {})
+
     const body = JSON.stringify({ ...product, mode: styleJob.mode })
     api('/api/mirror/style', { method: 'POST', body }).then(async ({ status, json }) => {
       if (!styleJob || styleJob.id !== id) return // she asked for something else since

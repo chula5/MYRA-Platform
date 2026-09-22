@@ -35,7 +35,14 @@ export interface SiteProduct {
   available?: boolean | null
   sizes?: { label: string; available: boolean }[] | null
 }
-export interface StyleResult { looks: StyledLook[]; hidden?: number; error?: string; hero?: { item_id: string; product_name: string; image_url: string | null } }
+export interface StyleResult {
+  looks: StyledLook[]
+  hidden?: number
+  error?: string
+  hero?: { item_id: string; product_name: string; image_url: string | null }
+  /** False when the looks have not been through MYRA's eye yet (the quick pass). */
+  checked?: boolean
+}
 
 const LOOKS = 3
 const MIN_WARDROBE = 6
@@ -108,7 +115,13 @@ export async function ensureMirrorItem(p: SiteProduct, member: MirrorMember, adm
 }
 
 /** Looks around a mirror item, in her wardrobe or in MYRA's pieces — the STYLE THIS pipeline with a foreign hero. */
-export async function styleExternalPiece(hero: any, mode: StyleMode, member: MirrorMember, adminIn?: any): Promise<StyleResult> {
+export async function styleExternalPiece(
+  hero: any,
+  mode: StyleMode,
+  member: MirrorMember,
+  adminIn?: any,
+  opts: { check?: boolean } = {},
+): Promise<StyleResult> {
   const admin = adminIn ?? (createAdminClient() as any)
   const { data: row } = await admin.from('pilot_member').select('*').eq('member_id', member.member_id).single()
   if (!row) return { looks: [], error: 'Member not found' }
@@ -133,6 +146,23 @@ export async function styleExternalPiece(hero: any, mode: StyleMode, member: Mir
   if (!composed.length) {
     return { looks: [], hero: heroView, error: mode === 'wardrobe' ? 'Nothing in your wardrobe goes with this piece yet' : 'Nothing in MYRA goes with this piece in your size right now' }
   }
+  const dimsAll = new Map<string, any>((pool as any[]).map((i) => [i.item_id, i]))
+  const prefsAll = readStylePrefs(row)
+  const withImages = (items: any[]) => items.map((it) => ({ ...it, image_url: dimsAll.get(it.item_id ?? '')?.image_url ?? null }))
+  // The quick pass: what MYRA composed, before its eye has been over it. The
+  // panel shows these in a few seconds and replaces them with the checked set.
+  if (opts.check === false) {
+    return {
+      hero: heroView,
+      checked: false,
+      looks: composed.slice(0, LOOKS).map((c) => ({
+        look_id: null,
+        image_url: null,
+        items: withImages(c.items),
+        why: whyThisSuitsHer(c.items.map((it) => ({ ...(dimsAll.get(it.item_id ?? '') ?? {}), product_name: it.product_name, owned: !!it.owned })), prefsAll),
+      })),
+    }
+  }
   const judged = await judgeLooksForMember(admin, member.member_id, composed, 'unknown')
   const rank = (i: number) => (judged[i].check?.verdict === 'works' ? 0 : judged[i].check ? 1 : 2)
   const passing = composed.map((_, i) => i)
@@ -142,6 +172,7 @@ export async function styleExternalPiece(hero: any, mode: StyleMode, member: Mir
   const prefs = readStylePrefs(row)
   return {
     hero: heroView,
+    checked: true,
     hidden: composed.length - passing.length,
     looks: passing.slice(0, LOOKS).map((i) => ({
       look_id: null,

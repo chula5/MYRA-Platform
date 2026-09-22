@@ -78,7 +78,7 @@
     if (!panel) {
       panel = document.createElement('div')
       panel.className = 'myra-mirror-panel'
-      panel.style.cssText = `position:fixed;z-index:2147483646;top:12px;right:12px;bottom:12px;width:min(420px,calc(100vw - 24px));background:#FBFBFA;border-radius:22px;box-shadow:0 24px 60px rgba(0,0,0,.26);overflow:hidden auto;font:400 14px/1.4 ${FONT};color:#2B2B2B;transform:translateX(24px);opacity:0;transition:transform .28s ease,opacity .28s ease;`
+      panel.style.cssText = `position:fixed;z-index:2147483646;top:12px;right:12px;bottom:12px;width:min(420px,calc(100vw - 24px));background:linear-gradient(160deg,#F7F7F9 0%,#E9E9EC 55%,#DEDEE2 100%);border-radius:24px;box-shadow:0 24px 60px rgba(0,0,0,.26);overflow:hidden auto;font:400 14px/1.4 ${FONT};color:#2B2B2B;transform:translateX(24px);opacity:0;transition:transform .28s ease,opacity .28s ease;`
       document.body.appendChild(panel)
       // Slides in from the edge, like her dressing room panel.
       requestAnimationFrame(() => { panel.style.transform = 'translateX(0)'; panel.style.opacity = '1' })
@@ -94,17 +94,24 @@
     if (!panel) return
     const modeLabel = job.mode === 'wardrobe' ? 'with your wardrobe' : 'with new pieces'
     const head = `
-      <div style="position:sticky;top:0;background:#FBFBFA;padding:18px 18px 10px;display:flex;gap:12px;align-items:flex-start;">
+      <div style="position:sticky;top:0;background:rgba(247,247,249,.92);backdrop-filter:blur(8px);padding:18px 18px 12px;display:flex;gap:12px;align-items:flex-start;">
+        <img src="${esc(chrome.runtime.getURL('icons/mirror.png'))}" alt="" style="width:26px;height:auto;flex:0 0 auto;margin-top:2px">
         <div style="flex:1;min-width:0">
-          <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;opacity:.55">MYRA</div>
-          <div style="font-size:19px;font-weight:600;line-height:1.2;margin-top:2px">What to wear with this</div>
+          <div style="font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;opacity:.5">MYRA</div>
+          <div style="font-size:19px;font-weight:600;line-height:1.2;margin-top:3px;letter-spacing:.01em">What to wear with this</div>
           <div style="font-size:13px;opacity:.6;margin-top:3px">${esc(job.product?.title || '')} — ${esc(modeLabel)}</div>
         </div>
         <button type="button" data-myra="close" aria-label="Close" style="flex:0 0 auto;width:34px;height:34px;border-radius:50%;border:0;background:#EFEFED;font-size:18px;cursor:pointer;color:#2B2B2B">×</button>
       </div>`
 
     let body = ''
-    if (job.status === 'loading') {
+    if (job.status === 'partial') {
+      const looks = job.looks || []
+      body = `<div style="padding:4px 14px 20px">
+        <div style="font-size:12.5px;letter-spacing:.06em;opacity:.62;padding:0 4px 10px">First thoughts — MYRA is checking them now…</div>
+        ${looks.map((l, i) => lookCard(l, i)).join('')}
+      </div>`
+    } else if (job.status === 'loading') {
       body = `<div style="padding:6px 18px 20px">
         <div style="font-size:14px;opacity:.7;margin-bottom:12px">MYRA is building outfits… this keeps going if you carry on browsing.</div>
         ${[0, 1, 2].map(() => `<div style="height:86px;border-radius:16px;background:linear-gradient(90deg,#EFEFED,#F7F7F5,#EFEFED);background-size:200% 100%;animation:myraShimmer 1.4s infinite;margin-bottom:10px"></div>`).join('')}
@@ -158,8 +165,8 @@
     const ask = document.createElement('button')
     ask.type = 'button'
     ask.className = 'myra-mirror-ask'
-    ask.textContent = 'What do I wear with this?'
-    ask.style.cssText = 'flex:1 1 auto;min-width:0;border:0;border-radius:999px;background:rgba(20,20,20,.92);color:#F7F6F3;padding:9px 12px;cursor:pointer;font:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;backdrop-filter:blur(4px);'
+    ask.innerHTML = `<img src="${chrome.runtime.getURL('icons/mirror.png')}" alt="" style="width:18px;height:18px;object-fit:contain;filter:invert(1)"><span>What do I wear with this?</span>`
+    ask.style.cssText = 'flex:1 1 auto;min-width:0;display:flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:999px;background:rgba(20,20,20,.92);color:#F7F6F3;padding:9px 12px;cursor:pointer;font:500 12.5px/1 ' + FONT + ';letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;overflow:hidden;backdrop-filter:blur(4px);'
     ask.addEventListener('click', (e) => {
       e.preventDefault(); e.stopPropagation()
       openMenu(ask, { ...product, image: product.image || tileImage(tile) })
