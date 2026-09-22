@@ -55,6 +55,13 @@ export interface PersonaLens {
    * as she responds and it never teaches the style.
    */
   reference?: { envelope: { mean: number[]; spread: number[] }; weight: number } | null
+  /**
+   * Her reference looks one by one — the pictures she keeps and the photographs
+   * of what she wears. The envelope above is their average, and an average
+   * blurs a distinctive look into the middle; this keeps each look whole, so a
+   * piece that belongs in ONE of them is recognised as belonging.
+   */
+  referenceLooks?: number[][] | null
 }
 
 /** How much her reference pictures pull, relative to the house style's lens. */
@@ -96,7 +103,35 @@ export function personaFitScore(lens: PersonaLens | undefined, item: ItemWithBra
   if (lens.reference?.envelope?.mean?.length && lens.reference.weight > 0) {
     score += envelopeFit(lens.reference.envelope, item) * lens.reference.weight
   }
+  score += nearestLookFit(lens.referenceLooks, item)
   return score
+}
+
+/**
+ * How close this piece sits to the SINGLE reference look it suits best. Her
+ * average says what she is usually like; this says "this belongs in that
+ * picture". A lift only — a piece unlike every one of her looks is already
+ * answered by the envelope, and punishing it twice would flatten the library.
+ */
+export const NEAREST_LOOK_WEIGHT = 0.35
+/** Below this a piece is no closer to her looks than the library average. */
+export const NEAREST_LOOK_FLOOR = 0.79
+/** At this it belongs in one of her pictures. */
+export const NEAREST_LOOK_FULL = 0.86
+export function nearestLookFit(looks: number[][] | null | undefined, item: ItemWithBrand): number {
+  if (!looks?.length) return 0
+  const v = pseudoVec(item)
+  let best = 0
+  for (const look of looks) {
+    if (look.length !== v.length) continue
+    const c = cosine(v, look)
+    if (c > best) best = c
+  }
+  // Measured on her library: a piece's closest look sits around 0.73 for the
+  // middle of the library and 0.86 for the pieces that genuinely belong in one
+  // of her pictures. Only that top end earns the lift.
+  const t = (best - NEAREST_LOOK_FLOOR) / (NEAREST_LOOK_FULL - NEAREST_LOOK_FLOOR)
+  return Math.max(0, Math.min(1, t)) * NEAREST_LOOK_WEIGHT
 }
 
 /** One envelope's opinion of a piece, before weighting: +1 dead centre, 0 at two sigma. */

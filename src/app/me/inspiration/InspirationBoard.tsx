@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import { ArchiveCard } from '@/components/ArchiveCard'
 import { addMyInspiration, loadMyInspiration, type InspirationBoardView } from './board-actions'
+import MatchPanel from '@/app/me/dressing-room/MatchPanel'
 
 export default function InspirationBoard({ view: initial, testMemberId }: { view: InspirationBoardView; testMemberId?: string }) {
   const [view, setView] = useState(initial)
@@ -16,6 +17,8 @@ export default function InspirationBoard({ view: initial, testMemberId }: { view
   const [msg, setMsg] = useState<string | null>(null)
   const [links, setLinks] = useState('')
   const [dragging, setDragging] = useState(false)
+  // FIND PIECES LIKE THIS — the library, nearest one of her pictures.
+  const [matching, setMatching] = useState<{ id: string; imageUrl: string } | null>(null)
 
   const imagesFrom = (list: DataTransferItemList | FileList | null | undefined): File[] => {
     if (!list) return []
@@ -117,14 +120,22 @@ export default function InspirationBoard({ view: initial, testMemberId }: { view
               </p>
               <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8 gap-4 w-full">
                 {view.pictures.map((p) => (
-                  <div key={p.image_id} className="relative aspect-[3/4] bg-[#E4E2DD] overflow-hidden rounded-[14px]">
+                  <button key={p.image_id} type="button" onClick={() => setMatching({ id: p.image_id, imageUrl: p.image_url })}
+                    aria-label="Find pieces like this"
+                    className="group relative aspect-[3/4] bg-[#E4E2DD] overflow-hidden rounded-[14px] text-left">
                     <FallbackImage src={p.image_url} thumbWidth={500} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                  </div>
+                    <span className="absolute inset-x-0 bottom-0 bg-[rgba(255,255,255,0.92)] text-[#2B2B2B] text-[clamp(17px,0.95vw,22px)] py-2 text-center opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity">
+                      Find pieces like this
+                    </span>
+                  </button>
                 ))}
               </div>
             </>
           )}
         </ArchiveCard>
+        {matching && (
+          <MatchPanel testMemberId={testMemberId} source={{ kind: 'inspiration', id: matching.id, imageUrl: matching.imageUrl }} onClose={() => setMatching(null)} />
+        )}
       </div>
     </div>
   )

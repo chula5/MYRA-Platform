@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import FallbackImage from '@/components/FallbackImage'
 import InstagramImport from './InstagramImport'
+import MatchPanel from './MatchPanel'
 import {
   addArchivalPiece, chooseMyArchivalLooks, dismissArchivalPiece, disconnectArchivalInstagram, loadArchivalPanel, nudgeArchival, removeArchivalLook,
   syncArchivalInstagram, uploadArchivalPhoto,
@@ -28,6 +29,8 @@ export default function ArchivalLooks({ testMemberId }: { testMemberId?: string 
   const fileRef = useRef<HTMLInputElement>(null)
   // The guided import reopens where she left it: step two can take a day.
   const [importing, setImporting] = useState(false)
+  // FIND PIECES LIKE THIS — one of her looks, or a picture she uploads.
+  const [matching, setMatching] = useState<{ kind: 'archival' | 'upload'; id?: string; imageUrl?: string | null } | null>(null)
   const polling = useRef(false)
   // Photos she has ticked to keep as archival looks.
   const [picked, setPicked] = useState<Set<string>>(new Set())
@@ -178,12 +181,23 @@ export default function ArchivalLooks({ testMemberId }: { testMemberId?: string 
             {!connected.length && view.instagramReady && (
               <a href={igHref} className="text-[22px] xl:text-[25px] 2xl:text-[29px] px-7 py-3.5 border border-[#2B2B2B] text-[#2B2B2B] rounded-full">Connect a Creator or Business account</a>
             )}
+            <button onClick={() => setMatching({ kind: 'upload' })} className="text-[22px] xl:text-[25px] 2xl:text-[29px] px-7 py-3.5 border border-[#2B2B2B] text-[#2B2B2B] rounded-full">
+              Find pieces like a picture
+            </button>
             <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => upload(e.target.files)} />
           </div>
           <p className={`${T_SMALL} text-[#6E6B65] max-w-4xl`}>
             <b>Import from Instagram</b> works for every account: MYRA walks you through asking Instagram for your photos, step by step. <b>Add photos</b> takes pictures straight from your computer or phone.
           </p>
         </>
+      )}
+
+      {matching && (
+        <MatchPanel
+          testMemberId={testMemberId}
+          source={matching.kind === 'upload' ? { kind: 'upload' } : { kind: 'archival', id: matching.id!, imageUrl: matching.imageUrl }}
+          onClose={() => setMatching(null)}
+        />
       )}
 
       {importing && (
@@ -250,6 +264,10 @@ export default function ArchivalLooks({ testMemberId }: { testMemberId?: string 
                 </div>
                 <div className="px-4 py-4 space-y-3">
                   {l.summary && <p className={`${T_SMALL} text-[#4A4E57] leading-snug`}>{l.summary}</p>}
+                  <button type="button" onClick={() => setMatching({ kind: 'archival', id: l.look_id, imageUrl: l.image_url })}
+                    className={`${T_SMALL} px-5 py-2 rounded-full bg-white text-[#2B2B2B] shadow-[0_8px_18px_-12px_rgba(43,43,43,0.5)]`}>
+                    Find pieces like this
+                  </button>
                   {looking && <p className={`${T_SMALL} text-[#6E6B65]`}>MYRA is looking at this one…</p>}
                   {!looking && !offered.length && <p className={`${T_SMALL} text-[#6E6B65]`}>{l.photo_status === 'no_garments' ? 'No pieces MYRA could pick out here.' : l.photo_status === 'failed' ? 'MYRA could not read this photo.' : 'Kept as a look.'}</p>}
                   {offered.map((p) => (

@@ -1819,6 +1819,8 @@ export async function loadPersonaLens(admin: any, memberId: string): Promise<Per
     envelope,
     weight: typeof assignment?.weight === 'number' ? assignment.weight : PERSONA_START_WEIGHT,
     reference,
+    // The newest of her looks, kept whole beside their average (nearestLookFit).
+    referenceLooks: vectors.slice(0, 60),
   }
 }
 
