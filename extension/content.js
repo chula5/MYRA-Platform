@@ -78,8 +78,10 @@
     if (!panel) {
       panel = document.createElement('div')
       panel.className = 'myra-mirror-panel'
-      panel.style.cssText = `position:fixed;z-index:2147483646;top:12px;right:12px;bottom:12px;width:min(400px,calc(100vw - 24px));background:#FBFBFA;border-radius:22px;box-shadow:0 24px 60px rgba(0,0,0,.26);overflow:hidden auto;font:400 14px/1.4 ${FONT};color:#2B2B2B;`
+      panel.style.cssText = `position:fixed;z-index:2147483646;top:12px;right:12px;bottom:12px;width:min(420px,calc(100vw - 24px));background:#FBFBFA;border-radius:22px;box-shadow:0 24px 60px rgba(0,0,0,.26);overflow:hidden auto;font:400 14px/1.4 ${FONT};color:#2B2B2B;transform:translateX(24px);opacity:0;transition:transform .28s ease,opacity .28s ease;`
       document.body.appendChild(panel)
+      // Slides in from the edge, like her dressing room panel.
+      requestAnimationFrame(() => { panel.style.transform = 'translateX(0)'; panel.style.opacity = '1' })
     }
     renderPanel(job)
   }
