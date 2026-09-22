@@ -24,46 +24,119 @@
   const touched = new Set()
   const productOf = new Map() // tile el → { key, url, title, brand, type, price, image, available }
 
-  // ── STYLE IN MYRA — a small M on each piece; click → a box pops out beside it ──
+  // ── WHAT DO I WEAR WITH THIS ──────────────────────────────────────────────
+  // On hover a piece offers two things: MYRA's answer to "what do I wear with
+  // this?" and a place to keep it. The answer builds in a panel on the right
+  // that survives her walking on to the next page — the work runs in the
+  // extension, not in this tab.
   const API = state.apiBase.replace(/\/+$/, '')
-  let popout = null
-  function closePopout() {
-    if (!popout) return
-    popout.backdrop.remove(); popout.frame.remove(); popout = null
-    document.removeEventListener('keydown', onKey)
-  }
-  const onKey = (e) => { if (e.key === 'Escape') closePopout() }
-  window.addEventListener('message', async (e) => {
-    if (!popout || e.source !== popout.iframe.contentWindow) return
-    const d = e.data || {}
-    if (d.type === 'myra-style-ready') {
-      const t = await send({ type: 'token' })
-      if (t?.token) popout.iframe.contentWindow.postMessage({ type: 'myra-token', token: t.token, product: popout.product }, API)
+  const FONT = '-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif'
+  let menu = null
+
+  function closeMenu() { menu?.remove(); menu = null }
+  const onKey = (e) => { if (e.key === 'Escape') { closeMenu(); closePanel() } }
+  document.addEventListener('keydown', onKey)
+  document.addEventListener('click', (e) => { if (menu && !menu.contains(e.target)) closeMenu() }, true)
+
+  function openMenu(anchor, product) {
+    closeMenu()
+    const r = anchor.getBoundingClientRect()
+    menu = document.createElement('div')
+    menu.className = 'myra-mirror-menu'
+    menu.style.cssText = `position:fixed;z-index:2147483647;left:${Math.min(r.left, window.innerWidth - 260)}px;top:${Math.min(r.bottom + 8, window.innerHeight - 140)}px;width:248px;background:#fff;border-radius:18px;box-shadow:0 18px 50px rgba(0,0,0,.22);padding:10px;font:500 14px/1.35 ${FONT};color:#2B2B2B;`
+    const opt = (label, hint, mode) => {
+      const b = document.createElement('button')
+      b.type = 'button'
+      b.style.cssText = 'display:block;width:100%;text-align:left;border:0;background:#F4F4F2;border-radius:14px;padding:11px 14px;margin:6px 0;cursor:pointer;font:inherit;color:inherit;'
+      b.innerHTML = `<span style="display:block;font-weight:600">${label}</span><span style="display:block;opacity:.62;font-size:12.5px">${hint}</span>`
+      b.addEventListener('mouseenter', () => { b.style.background = '#E9E9E6' })
+      b.addEventListener('mouseleave', () => { b.style.background = '#F4F4F2' })
+      b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); closeMenu(); startStyling(product, mode) })
+      return b
     }
-    if (d.type === 'myra-style-close') closePopout()
-  })
-  function openPopout(tile, product) {
-    closePopout()
-    const r = tile.getBoundingClientRect()
-    const W = 360, H = Math.min(640, window.innerHeight - 32)
-    const right = r.right + 12 + W <= window.innerWidth
-    const left = right ? r.right + 12 : Math.max(16, r.left - 12 - W)
-    const top = Math.max(16, Math.min(r.top, window.innerHeight - H - 16))
-    const backdrop = document.createElement('div')
-    backdrop.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:transparent;'
-    backdrop.addEventListener('click', closePopout)
-    const frame = document.createElement('div')
-    frame.className = 'myra-mirror-popout'
-    frame.style.cssText = `position:fixed;z-index:2147483647;left:${left}px;top:${top}px;width:${W}px;height:${H}px;background:#F7F6F3;border:1px solid #2B2B2B;box-shadow:0 18px 50px rgba(0,0,0,.22);overflow:hidden;`
-    const iframe = document.createElement('iframe')
-    iframe.src = `${API}/mirror/style?u=${encodeURIComponent(product.url)}`
-    iframe.style.cssText = 'width:100%;height:100%;border:0;display:block;background:#F7F6F3;'
-    iframe.setAttribute('title', 'Style in MYRA')
-    frame.appendChild(iframe)
-    document.body.append(backdrop, frame)
-    document.addEventListener('keydown', onKey)
-    popout = { backdrop, frame, iframe, product }
+    menu.append(
+      opt('Style with my wardrobe', 'Built around pieces you own', 'wardrobe'),
+      opt('Style with new pieces', 'From the brands MYRA knows', 'inspiration'),
+    )
+    document.body.appendChild(menu)
   }
+
+  async function startStyling(product, mode) {
+    openPanel({ status: 'loading', product, mode })
+    const r = await send({ type: 'styleStart', product, mode })
+    if (r?.error) renderPanel({ status: 'error', product, mode, error: r.error })
+    else if (r?.job) renderPanel(r.job)
+  }
+
+  // ── The panel on the right ────────────────────────────────────────────────
+  let panel = null
+  function closePanel() {
+    panel?.remove(); panel = null
+    void send({ type: 'styleClose' })
+  }
+  function openPanel(job) {
+    if (!panel) {
+      panel = document.createElement('div')
+      panel.className = 'myra-mirror-panel'
+      panel.style.cssText = `position:fixed;z-index:2147483646;top:12px;right:12px;bottom:12px;width:min(400px,calc(100vw - 24px));background:#FBFBFA;border-radius:22px;box-shadow:0 24px 60px rgba(0,0,0,.26);overflow:hidden auto;font:400 14px/1.4 ${FONT};color:#2B2B2B;`
+      document.body.appendChild(panel)
+    }
+    renderPanel(job)
+  }
+
+  const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+
+  function renderPanel(job) {
+    if (!job) { panel?.remove(); panel = null; return }
+    if (!panel) openPanel(job)
+    if (!panel) return
+    const modeLabel = job.mode === 'wardrobe' ? 'with your wardrobe' : 'with new pieces'
+    const head = `
+      <div style="position:sticky;top:0;background:#FBFBFA;padding:18px 18px 10px;display:flex;gap:12px;align-items:flex-start;">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;opacity:.55">MYRA</div>
+          <div style="font-size:19px;font-weight:600;line-height:1.2;margin-top:2px">What to wear with this</div>
+          <div style="font-size:13px;opacity:.6;margin-top:3px">${esc(job.product?.title || '')} — ${esc(modeLabel)}</div>
+        </div>
+        <button type="button" data-myra="close" aria-label="Close" style="flex:0 0 auto;width:34px;height:34px;border-radius:50%;border:0;background:#EFEFED;font-size:18px;cursor:pointer;color:#2B2B2B">×</button>
+      </div>`
+
+    let body = ''
+    if (job.status === 'loading') {
+      body = `<div style="padding:6px 18px 20px">
+        <div style="font-size:14px;opacity:.7;margin-bottom:12px">MYRA is building outfits… this keeps going if you carry on browsing.</div>
+        ${[0, 1, 2].map(() => `<div style="height:86px;border-radius:16px;background:linear-gradient(90deg,#EFEFED,#F7F7F5,#EFEFED);background-size:200% 100%;animation:myraShimmer 1.4s infinite;margin-bottom:10px"></div>`).join('')}
+      </div>
+      <style>@keyframes myraShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}</style>`
+    } else if (job.status === 'error') {
+      body = `<div style="padding:6px 18px 20px;font-size:14px;color:#9B3A3A">${esc(job.error || 'MYRA could not style this')}</div>`
+    } else {
+      const looks = job.looks || []
+      body = looks.length
+        ? `<div style="padding:4px 14px 20px">${looks.map((l, i) => lookCard(l, i)).join('')}</div>`
+        : `<div style="padding:6px 18px 20px;font-size:14px;opacity:.7">Nothing MYRA would put with it yet${job.mode === 'wardrobe' ? ' from your own pieces' : ''}.</div>`
+    }
+    panel.innerHTML = head + body
+    panel.querySelector('[data-myra="close"]')?.addEventListener('click', closePanel)
+  }
+
+  function lookCard(look, i) {
+    const pieces = (look.items || []).slice(0, 6)
+    const tiles = pieces.map((p) => `
+      <a href="${esc(p.url || '#')}" target="_blank" rel="noreferrer" style="display:block;flex:0 0 72px;text-decoration:none;color:inherit">
+        <div style="position:relative;width:72px;aspect-ratio:3/4;border-radius:12px;overflow:hidden;background:#EFEFED">
+          ${p.image_url ? `<img src="${esc(p.image_url)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">` : ''}
+          ${p.owned ? '<span style="position:absolute;top:4px;left:4px;background:#141414;color:#fff;border-radius:999px;padding:1px 7px;font-size:10px">Yours</span>' : ''}
+        </div>
+        <div style="font-size:11px;line-height:1.25;margin-top:4px;opacity:.75;max-height:28px;overflow:hidden">${esc(p.product_name || p.brand || '')}</div>
+      </a>`).join('')
+    return `<div style="background:#fff;border-radius:18px;padding:12px;margin-bottom:12px;box-shadow:0 8px 22px -18px rgba(0,0,0,.5)">
+      <div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;opacity:.5;margin-bottom:8px">Look ${i + 1}</div>
+      <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px">${tiles}</div>
+      ${look.why ? `<div style="font-size:12.5px;opacity:.7;margin-top:9px;line-height:1.35">${esc(look.why)}</div>` : ''}
+    </div>`
+  }
+
   function tileImage(tile) {
     const imgs = [...tile.querySelectorAll('img')].map((img) => ({ img, area: (img.naturalWidth || img.width) * (img.naturalHeight || img.height) })).sort((a, b) => b.area - a.area)
     const img = imgs[0]?.img
@@ -71,19 +144,48 @@
     const src = img.currentSrc || img.src
     try { return new URL(src, location.href).href } catch { return null }
   }
+
+  /** The two things a piece offers on hover: MYRA's answer, and somewhere to keep it. */
   function styleButton(tile, product) {
-    if (tile.querySelector(':scope > .myra-mirror-style')) return
+    if (tile.querySelector(':scope > .myra-mirror-actions')) return
     if (getComputedStyle(tile).position === 'static') { tile.dataset.myraPos = '1'; tile.style.position = 'relative' }
-    const b = document.createElement('button')
-    b.className = 'myra-mirror-style'
-    b.type = 'button'
-    b.textContent = 'M'
-    b.title = 'Style in MYRA'
-    b.style.cssText = 'position:absolute;top:10px;right:10px;width:28px;height:28px;border-radius:50%;background:#141414;color:#F7F6F3;border:0;font:600 13px/28px -apple-system,Helvetica,Arial,sans-serif;letter-spacing:.02em;cursor:pointer;z-index:6;opacity:0;transition:opacity .15s;box-shadow:0 0 0 2px rgba(255,255,255,.9);'
-    tile.addEventListener('mouseenter', () => { b.style.opacity = '1' })
-    tile.addEventListener('mouseleave', () => { b.style.opacity = '0' })
-    b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); openPopout(tile, { ...product, image: product.image || tileImage(tile) }) })
-    tile.appendChild(b)
+    const wrap = document.createElement('div')
+    wrap.className = 'myra-mirror-actions'
+    wrap.style.cssText = `position:absolute;left:10px;right:10px;bottom:10px;display:flex;gap:6px;align-items:center;justify-content:space-between;z-index:6;opacity:0;transition:opacity .15s;font:500 13px/1 ${FONT};`
+
+    const ask = document.createElement('button')
+    ask.type = 'button'
+    ask.className = 'myra-mirror-ask'
+    ask.textContent = 'What do I wear with this?'
+    ask.style.cssText = 'flex:1 1 auto;min-width:0;border:0;border-radius:999px;background:rgba(20,20,20,.92);color:#F7F6F3;padding:9px 12px;cursor:pointer;font:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;backdrop-filter:blur(4px);'
+    ask.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation()
+      openMenu(ask, { ...product, image: product.image || tileImage(tile) })
+    })
+
+    const fav = document.createElement('button')
+    fav.type = 'button'
+    fav.className = 'myra-mirror-fav'
+    fav.title = 'Add to Mirror favourites'
+    fav.setAttribute('aria-label', 'Add to Mirror favourites')
+    fav.textContent = '♥'
+    fav.style.cssText = 'flex:0 0 auto;width:34px;height:34px;border-radius:50%;border:0;background:rgba(255,255,255,.95);color:#2B2B2B;font-size:15px;line-height:34px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.18);'
+    fav.addEventListener('click', async (e) => {
+      e.preventDefault(); e.stopPropagation()
+      fav.disabled = true
+      const r = await send({ type: 'saveProduct', product: { ...product, image: product.image || tileImage(tile) } })
+      fav.disabled = false
+      if (r?.error) { fav.title = r.error; fav.style.color = '#9B3A3A'; return }
+      fav.textContent = '♥'
+      fav.style.background = '#141414'
+      fav.style.color = '#F7F6F3'
+      fav.title = 'In your Mirror favourites'
+    })
+
+    wrap.append(ask, fav)
+    tile.addEventListener('mouseenter', () => { wrap.style.opacity = '1' })
+    tile.addEventListener('mouseleave', () => { if (!menu) wrap.style.opacity = '0' })
+    tile.appendChild(wrap)
     touched.add(tile)
   }
 
@@ -161,7 +263,7 @@
     for (const el of touched) {
       if (el.dataset.myraOrder != null) { el.style.order = el.dataset.myraOrder; delete el.dataset.myraOrder }
       if (el.dataset.myraPos) { el.style.position = ''; delete el.dataset.myraPos }
-      el.querySelectorAll(':scope > .myra-mirror-mark, :scope > .myra-mirror-style').forEach((d) => d.remove())
+      el.querySelectorAll(':scope > .myra-mirror-mark, :scope > .myra-mirror-actions').forEach((d) => d.remove())
     }
     const byIndex = [...touched].filter((el) => el.dataset.myraIndex != null).sort((a, b) => Number(a.dataset.myraIndex) - Number(b.dataset.myraIndex))
     for (const el of byIndex) { el.parentElement?.appendChild(el); delete el.dataset.myraIndex }
@@ -171,12 +273,17 @@
   let timer = null
   const schedule = () => { clearTimeout(timer); timer = setTimeout(run, 500) }
   chrome.runtime.onMessage.addListener((msg) => {
-    if (msg?.type === 'restore') { observer.disconnect(); closePopout(); restore() }
+    if (msg?.type === 'restore') { observer.disconnect(); closeMenu(); restore() }
+    if (msg?.type === 'styleUpdate') renderPanel(msg.job)
     if (msg?.type === 'rerun') { lastSig = ''; observer.observe(document.body, { childList: true, subtree: true }); schedule() }
   })
   const observer = new MutationObserver((muts) => {
     if (muts.some((m) => [...m.addedNodes].some((n) => n.nodeType === 1 && !/myra-mirror-/.test(n.className || '')))) schedule()
   })
+  // A panel that was building when she left the last page carries on here.
+  const inFlight = await send({ type: 'styleJob' })
+  if (inFlight?.job) openPanel(inFlight.job)
+
   await run()
   observer.observe(document.body, { childList: true, subtree: true })
 })()

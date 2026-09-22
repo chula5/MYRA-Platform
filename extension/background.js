@@ -5,6 +5,9 @@
 const DEFAULTS = { apiBase: 'http://localhost:3000', token: null, member: null, disabledHosts: [] }
 const RANK_TTL_MS = 10 * 60_000
 const rankCache = new Map() // `${host}|${hash}` → { at, data }
+// The styling job runs HERE, not in the page: she can walk on to the next
+// product, or the next site, and the panel keeps building on the right.
+let styleJob = null // { id, product, mode, status, looks, hero, error, startedAt }
 const tabStats = new Map() // tabId → { host, lifted, total, member, ms }
 
 async function cfg() {
@@ -30,6 +33,18 @@ async function api(path, init = {}) {
   let json = null
   try { json = await res.json() } catch {}
   return { status: res.status, json }
+}
+
+async function saveJob() {
+  try { await chrome.storage.local.set({ styleJob }) } catch {}
+  // Every open tab redraws from the job it is told about.
+  try {
+    const tabs = await chrome.tabs.query({})
+    for (const t of tabs) {
+      if (t.id == null) continue
+      chrome.tabs.sendMessage(t.id, { type: 'styleUpdate', job: styleJob }).catch?.(() => {})
+    }
+  } catch {}
 }
 
 const handlers = {
@@ -112,6 +127,60 @@ const handlers = {
     })
     if (status !== 200 || !json) return { error: json?.error || `MYRA refused the list (${status})` }
     return json
+  },
+
+  /**
+   * WHAT DO I WEAR WITH THIS — start building looks around a piece. Returns at
+   * once; the work carries on in the service worker and every tab is told when
+   * it lands, so leaving the page does not stop it.
+   */
+  async styleStart({ product, mode }) {
+    const c = await cfg()
+    if (!c.token) return { error: 'Connect MYRA first' }
+    const id = `${Date.now()}`
+    styleJob = { id, product, mode: mode === 'wardrobe' ? 'wardrobe' : 'inspiration', status: 'loading', looks: [], startedAt: Date.now() }
+    await saveJob()
+    const body = JSON.stringify({ ...product, mode: styleJob.mode })
+    api('/api/mirror/style', { method: 'POST', body }).then(async ({ status, json }) => {
+      if (!styleJob || styleJob.id !== id) return // she asked for something else since
+      if (status !== 200 || !json || json.error) {
+        styleJob = { ...styleJob, status: 'error', error: json?.error || `MYRA could not style this (${status})` }
+      } else {
+        styleJob = { ...styleJob, status: 'done', looks: json.looks || [], hero: json.hero || null, hidden: json.hidden || 0 }
+      }
+      await saveJob()
+    }).catch(async (e) => {
+      if (!styleJob || styleJob.id !== id) return
+      styleJob = { ...styleJob, status: 'error', error: String(e?.message || e) }
+      await saveJob()
+    })
+    return { job: styleJob }
+  },
+
+  /** What the panel should be showing right now — asked by every page as it loads. */
+  async styleJob() {
+    if (!styleJob) {
+      const stored = await chrome.storage.local.get('styleJob')
+      styleJob = stored?.styleJob ?? null
+      // A job left loading by a restarted worker is not coming back.
+      if (styleJob?.status === 'loading' && Date.now() - (styleJob.startedAt || 0) > 3 * 60_000) {
+        styleJob = { ...styleJob, status: 'error', error: 'That took too long — ask again' }
+      }
+    }
+    return { job: styleJob }
+  },
+
+  async styleClose() {
+    styleJob = null
+    await saveJob()
+    return { ok: true }
+  },
+
+  /** ADD TO MIRROR FAVOURITES — her saved pieces, the same list as /me. */
+  async saveProduct({ product }) {
+    const { status, json } = await api('/api/mirror/save', { method: 'POST', body: JSON.stringify({ product }) })
+    if (status !== 200 || !json || json.error) return { error: json?.error || `Could not save (${status})` }
+    return { ok: true, ...json }
   },
 
   async pageStats(msg, sender) {
