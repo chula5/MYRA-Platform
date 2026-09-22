@@ -2124,6 +2124,14 @@ export interface AskSwapFilters {
  * her avoids, what goes with the rest of the look); nothing is saved and
  * nothing is learned, because playing with an outfit is not a decision.
  */
+/** Her room mix for an occasion — what a delivery records as its effective weights. */
+export async function effectiveWeightsForMember(memberId: string, occasion: string): Promise<Record<string, number>> {
+  const admin = createAdminClient() as any
+  const { data: member } = await admin.from('pilot_member').select('room_weights, work_dress_code').eq('member_id', memberId).maybeSingle()
+  const { effectiveWeights } = await import('@/lib/pilot-stylist')
+  return effectiveWeights(member?.room_weights, occasion as any, member?.work_dress_code) as unknown as Record<string, number>
+}
+
 export async function swapOwnedLookItem(
   memberId: string,
   items: LookItem[],

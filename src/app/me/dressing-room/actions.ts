@@ -27,6 +27,24 @@ export async function styleMyPiece(
   return impl.styleOwnedPiece(itemId, opts, asMemberId)
 }
 
+/**
+ * ACCEPT one of these outfits into her looks — admin only, from HER VIEW. It
+ * lands in DELIVERIES as an approved look she can like or dislike, and teaches
+ * the composer exactly as keeping a test look does.
+ */
+export async function keepStyledLook(
+  items: LookItem[],
+  why: string,
+  occasion: string | null,
+  asMemberId?: string,
+): Promise<{ deliveryId?: string; error?: string }> {
+  const me = await resolveClientMember(asMemberId)
+  if (!me || !me.test) return { error: 'Only her stylist can send a look to her looks' }
+  const occ = occasion || 'casual_day'
+  const mix = await impl.effectiveWeightsForMember(me.memberId, occ)
+  return impl.keepAskPreview(me.memberId, occ, null, why || '', mix, [{ items, notes: why || null }], [], false)
+}
+
 /** SWAP a piece in an outfit MYRA built for her. Ranking only — nothing saved. */
 export async function swapInMyOutfit(
   items: LookItem[],

@@ -12,7 +12,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import type { DressingRoomPiece, DressingRoomView, StyledLook } from '@/app/admin/private-stylist/actions'
-import { myLooksWithPiece, styleMyPiece } from './actions'
+import { keepStyledLook, myLooksWithPiece, styleMyPiece } from './actions'
 import BuiltOutfit from './BuiltOutfit'
 import DressingRoomScene from '@/components/me/DressingRoomScene'
 import EmailFinds from './EmailFinds'
@@ -103,6 +103,14 @@ export default function DressingRoomClient({
     setStyling(false)
     setLooks(r.looks ?? [])
     setNote(r.error ?? (r.looks?.length ? null : 'Nothing in the library goes with this one yet.'))
+  }
+
+  // The stylist can accept a built outfit into her looks (HER VIEW only).
+  const [keptIdx, setKeptIdx] = useState<Record<number, 'saving' | 'done' | string>>({})
+  async function acceptLook(i: number, items: any[], why: string) {
+    setKeptIdx((k) => ({ ...k, [i]: 'saving' }))
+    const r = await keepStyledLook(items, why, null, testMemberId)
+    setKeptIdx((k) => ({ ...k, [i]: r.error ? r.error : 'done' }))
   }
 
   // Ask again for different answers, or ask for something in particular.
@@ -313,13 +321,29 @@ export default function DressingRoomClient({
                     <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
                     {/* Built just now: every piece can be swapped, with undo. */}
                     {looks.map((l, i) => (
-                      <BuiltOutfit
-                        key={`new-${i}`}
-                        items={l.items}
-                        heroId={picked.item_id}
-                        why={l.why}
-                        testMemberId={testMemberId}
-                      />
+                      <div key={`new-${i}`} className="space-y-2">
+                        <BuiltOutfit
+                          items={l.items}
+                          heroId={picked.item_id}
+                          why={l.why}
+                          testMemberId={testMemberId}
+                          onChange={(next) => setLooks((cur) => cur.map((x, j) => (j === i ? { ...x, items: next } : x)))}
+                        />
+                        {testMemberId && (
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <button
+                              onClick={() => acceptLook(i, l.items, l.why)}
+                              disabled={keptIdx[i] === 'saving' || keptIdx[i] === 'done'}
+                              className="text-[19px] xl:text-[22px] px-5 py-2.5 rounded-full bg-[#2B2B2B] text-white disabled:opacity-40"
+                            >
+                              {keptIdx[i] === 'saving' ? 'Sending…' : keptIdx[i] === 'done' ? 'In her looks' : 'Accept — add to her looks'}
+                            </button>
+                            {keptIdx[i] && keptIdx[i] !== 'saving' && keptIdx[i] !== 'done' && (
+                              <span className="text-[19px] text-[#9B3A3A]">{keptIdx[i]}</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     ))}
                     {worn.map((l, i) => (
                       <div key={l.look_id ?? i} className="bg-white rounded-[16px] overflow-hidden shadow-[0_1px_8px_rgba(43,43,43,0.06)]">
