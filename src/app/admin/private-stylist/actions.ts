@@ -1622,6 +1622,8 @@ export async function loadMemberTaste(admin: any, member: { member_id: string; b
     // simply have none.
     prefs: readStylePrefs(member),
     priceBands: readPriceBands(member as any),
+    tasteVector: Array.isArray((member as any).taste_vector) && (member as any).taste_vector.length
+      ? ((member as any).taste_vector as number[]) : undefined,
   }
 
   // Her rules by layer, and what Chloe's rejections have taught everyone.
@@ -1800,9 +1802,14 @@ export async function loadPersonaLens(admin: any, memberId: string): Promise<Per
   // member id) or uploaded by her at /me (user_id = her login). What SHE likes:
   // it does not fade as she responds, and it never shapes the house style.
   const owners = [memberId, member?.auth_user_id].filter(Boolean)
-  const { data: refs } = await admin.from('inspiration_image')
-    .select('vector').in('user_id', owners).in('status', ['scored', 'confirmed'])
-  const vectors = ((refs ?? []) as any[]).map((r) => r.vector).filter((v) => Array.isArray(v))
+  // Two kinds of her own evidence, read into one envelope: the pictures she
+  // keeps (what she likes) and her archival looks (what she actually wears).
+  const [{ data: refs }, { data: archival }] = await Promise.all([
+    admin.from('inspiration_image').select('vector').in('user_id', owners).in('status', ['scored', 'confirmed']),
+    admin.from('archival_look').select('taste_vector').eq('member_id', memberId).eq('hidden', false).not('taste_vector', 'is', null),
+  ])
+  const vectors = [...((refs ?? []) as any[]).map((r) => r.vector), ...((archival ?? []) as any[]).map((r) => r.taste_vector)]
+    .filter((v) => Array.isArray(v) && v.length)
   const refEnv = vectors.length ? computeEnvelope(vectors, 1) : null
   const reference = refEnv ? { envelope: { mean: refEnv.mean, spread: refEnv.spread }, weight: REFERENCE_LENS_WEIGHT } : null
 

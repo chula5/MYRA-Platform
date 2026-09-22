@@ -78,6 +78,8 @@ export function describeClientForCheck(member: {
   shapes_avoided?: string[] | null
   types_loved?: string[] | null
   types_avoided?: string[] | null
+  /** Her own words about what she will not wear — read as a rule, not a hint. */
+  never_wears?: string | null
 }, houseStyle?: string | null): string {
   const list = (label: string, xs?: string[] | null) => (xs?.length ? `${label}: ${xs.join(', ').replace(/_/g, ' ')}.` : '')
   return [
@@ -89,6 +91,7 @@ export function describeClientForCheck(member: {
     list('Shapes she avoids', member.shapes_avoided),
     list('Pieces she loves', member.types_loved),
     list('Pieces she never wears', member.types_avoided),
+    member.never_wears ? `In her own words, she never wears: ${member.never_wears.trim()}. Treat this as a rule: a look that breaks it clashes.` : '',
   ].filter(Boolean).join(' ') || 'No profile yet — judge on the house rules alone.'
 }
 
@@ -221,8 +224,11 @@ export async function judgeLooksForMember(
   looks: { items: any[] }[],
   sizeRefresh: 'none' | 'unknown' | 'all' = 'unknown',
 ): Promise<JudgedLook[]> {
+  // Everything MYRA knows about her, not only her profile: her pictures, her
+  // archival looks, the looks she kept and her own wardrobe (lib/member-memory).
+  const { memberMemory } = await import('@/lib/member-memory')
   const [description, sizeMap] = await Promise.all([
-    loadClientDescription(admin, memberId),
+    memberMemory(memberId).then((m) => m.text).catch(() => loadClientDescription(admin, memberId)),
     checkSizesForMember(admin, memberId, looks.flatMap((l) => l.items), sizeRefresh),
   ])
   const checks = await Promise.all(looks.map((l) => checkLook(l.items, description)))

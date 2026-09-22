@@ -10,6 +10,7 @@ import { createAdminClient } from '@/lib/supabase-server'
 import { SIZE_CATEGORIES, ladderFor, type SizeCategory } from '@/lib/size-canonical'
 import { COLOUR_SHADES, COLOUR_FAMILY_IDS, OCCASION_TYPES, SHAPE_PREFERENCES, PIECE_PREFERENCES } from '@/lib/pilot-stylist'
 import { buildYouSettings, type YouSettingsView, type YouSizes } from '@/lib/you-settings'
+import { forgetMemberMemory } from '@/lib/member-memory'
 
 export type { YouSettingsView, YouSizes }
 
@@ -82,5 +83,7 @@ export async function saveMySettings(patch: YouSettingsPatch, asMemberId?: strin
   if (patch.neverWears !== undefined) update.never_wears = patch.neverWears.trim().slice(0, 600) || null
 
   const { error } = await admin.from('pilot_member').update(update).eq('member_id', me.memberId)
+  // What MYRA knows about her has changed: the brief is rebuilt next time it is read.
+  forgetMemberMemory(me.memberId)
   return error ? { error: error.message } : {}
 }

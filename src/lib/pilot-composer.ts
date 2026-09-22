@@ -181,6 +181,12 @@ export interface MemberTaste {
   // What she actually spends, per kind of piece. Over her ceiling is a gate;
   // below her floor is a nudge, not a veto.
   priceBands?: PriceBands
+  /**
+   * Her own taste vector — built from what she has said yes to, saved, clicked
+   * and bought (recomputeMemberVector). A gentle pull, never a gate: she is
+   * more than her last ten answers.
+   */
+  tasteVector?: number[]
   // The rules her looks are held to, by layer (lib/style-rules): global bans,
   // her house style, or Chloe style. Absent = no rules beyond her own gates.
   rules?: MemberRules
@@ -292,6 +298,11 @@ export function memberItemScore(t: MemberTaste, item: ItemWithBrand): number {
   // normally avoided pieces are gated out entirely before scoring.
   s += lovedScore(t.prefs, item as any)
   if (avoidReasons(t.prefs, item as any).length) s -= 0.5
+  // What she has actually responded to, as a shape rather than a list.
+  if (t.tasteVector?.length) {
+    const c = cosine(pseudoVec(item), t.tasteVector)
+    s += Math.max(-0.1, Math.min(0.1, (c - 0.8) * 1.2))
+  }
   const pv = itemPriceVerdict(t, item)
   // Over her ceiling normally never reaches scoring (it is gated out of the
   // pool); the penalty only bites in the fallback pool. Below her floor is a
