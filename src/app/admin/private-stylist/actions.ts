@@ -2118,6 +2118,70 @@ export interface AskSwapFilters {
   itemType?: string
 }
 
+/**
+ * HER OWN SWAP — the alternates for one piece of an outfit MYRA built around
+ * something she owns. Same ranking and gates as the studio's swap (her size,
+ * her avoids, what goes with the rest of the look); nothing is saved and
+ * nothing is learned, because playing with an outfit is not a decision.
+ */
+export async function swapOwnedLookItem(
+  memberId: string,
+  items: LookItem[],
+  itemIndex: number,
+  filters: AskSwapFilters = {},
+): Promise<{ options?: AskSwapOption[]; brands?: { name: string; count: number }[]; types?: string[]; error?: string }> {
+  const target = items[itemIndex]
+  if (!target) return { error: 'No piece at that position' }
+  const admin = createAdminClient() as any
+  const { data: member } = await admin.from('pilot_member').select('*').eq('member_id', memberId).single()
+  if (!member) return { error: 'Member not found' }
+  const taste = await loadMemberTaste(admin, member)
+  const library = await loadComposableLibrary(member)
+  // A piece with no slot recorded (an older look) still knows what it is.
+  const slot = ((target.slot as Slot | null) ?? null)
+    ?? slotForItemType((library.find((i) => i.item_id === target.item_id)?.item_type ?? '') as any)
+  if (!slot) return { error: 'This piece has no slot to swap within' }
+  const keepIds = items.filter((it, i) => i !== itemIndex && it.item_id).map((it) => it.item_id as string)
+  const keepItems = library.filter((i) => keepIds.includes(i.item_id))
+  const exclude = new Set(items.filter((it) => it.item_id).map((it) => it.item_id as string))
+  const lens = await loadPersonaLens(admin, memberId)
+  const allRanked = rankAlternates(taste, library, slot, keepItems, exclude, 2000, undefined, lens)
+  const brandCounts = new Map<string, number>()
+  const typeSet = new Set<string>()
+  for (const { item } of allRanked) {
+    const b = item.brand?.name
+    if (b) brandCounts.set(b, (brandCounts.get(b) ?? 0) + 1)
+    if (item.item_type) typeSet.add(item.item_type)
+  }
+  const fold = (x: string) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  const terms = fold(filters.q ?? '').split(/\s+/).filter(Boolean)
+  const ranked = allRanked.filter(({ item }) => {
+    if (filters.brand && item.brand?.name !== filters.brand) return false
+    if (filters.colour && (item.colour_family ?? '').toLowerCase() !== filters.colour) return false
+    if (filters.itemType && item.item_type !== filters.itemType) return false
+    if (terms.length) {
+      const hay = fold(`${item.brand?.name ?? ''} ${item.product_name} ${item.item_type ?? ''} ${item.colour_family ?? ''}`)
+      if (!terms.every((term) => hay.includes(term))) return false
+    }
+    return true
+  }).slice(0, 48)
+  return {
+    brands: Array.from(brandCounts.entries()).map(([name, count]) => ({ name, count })).sort((x, y) => x.name.localeCompare(y.name)),
+    types: Array.from(typeSet).sort(),
+    options: ranked.map(({ item, score }) => ({
+      item_id: item.item_id,
+      product_name: item.product_name,
+      brand_name: item.brand?.name ?? null,
+      colour_family: item.colour_family ?? null,
+      item_type: (item as any).item_type ?? null,
+      image_url: item.image_url ?? null,
+      price_gbp: (item as any).price_gbp != null ? Number((item as any).price_gbp) : item.price != null ? Number(item.price) : null,
+      score: Math.round(score * 100) / 100,
+      lookItem: toLookItem(item),
+    })),
+  }
+}
+
 export async function askPreviewAlternates(
   memberId: string,
   occasion: string,
@@ -3290,9 +3354,9 @@ export async function loadOwnedPiece(itemId: string, asMemberId?: string): Promi
  */
 export async function styleOwnedPiece(
   itemId: string,
-  opts: { occasion?: string | null; withType?: string | null } = {},
+  opts: { occasion?: string | null; withType?: string | null; shuffle?: number; query?: string | null } = {},
   asMemberId?: string,
-): Promise<{ looks: StyledLook[]; hidden?: number; error?: string }> {
+): Promise<{ looks: StyledLook[]; hidden?: number; error?: string; read?: string | null }> {
   const me = await resolveClientMember(asMemberId)
   if (!me) return { looks: [], error: 'Not signed in' }
   try {
@@ -3303,6 +3367,32 @@ export async function styleOwnedPiece(
     if (!hero) return { looks: [], error: 'That piece is not in your wardrobe' }
 
     let pool = library
+    // "Find a white shirt to go with this skirt" — her words, read onto the
+    // taxonomy. Only the slots she named are narrowed; the rest stay open.
+    let read: string | null = null
+    if (opts.query && opts.query.trim()) {
+      const { parseQuery } = await import('@/lib/search-taxonomy')
+      const q = parseQuery(opts.query)
+      const types = new Set(q.itemTypes)
+      const colours = new Set(q.colourFamilies)
+      if (types.size || colours.size) {
+        const wantSlots = new Set(Array.from(types).map((t) => slotForItemType(t as any)))
+        pool = library.filter((i) => {
+          if (i.item_id === itemId) return true
+          const slot = slotForItemType(i.item_type)
+          if (types.size && wantSlots.has(slot) && !types.has(i.item_type)) return false
+          // A colour she names applies to the piece she asked for, not the whole look.
+          if (colours.size && types.size && types.has(i.item_type) && !colours.has(String(i.colour_family))) return false
+          if (colours.size && !types.size && !colours.has(String(i.colour_family)) && !isOwnedItem(i as any)) return false
+          return true
+        })
+        read = [Array.from(colours).join('/'), Array.from(types).map((t) => String(t).replace(/_/g, ' ')).join(', ')].filter(Boolean).join(' ')
+        const named = Array.from(types)[0]
+        if (named && pool.filter((i) => i.item_type === named && i.item_id !== itemId).length < 2) {
+          return { looks: [], error: `MYRA has no ${read || named} in your size to put with it right now` }
+        }
+      }
+    }
     if (opts.withType) {
       // Only that kind of piece in its place: a top styled with skirts keeps
       // every other slot open but offers no trousers or jeans.
@@ -3325,7 +3415,7 @@ export async function styleOwnedPiece(
       occ = { id: opts.occasion as any, vector: lookTasteVector(mix), climate: null }
     }
 
-    const composed = composeMemberVariants(taste, pool, itemId, STYLE_THIS_LOOKS + 2, occ, lens, history, { ownedMode: 'blend' })
+    const composed = composeMemberVariants(taste, pool, itemId, STYLE_THIS_LOOKS + 2, occ, lens, history, { ownedMode: 'blend', shuffle: opts.shuffle ?? 0 })
     if (!composed.length) return { looks: [], error: 'Nothing goes with this piece in your size right now' }
     const judged = await judgeLooksForMember(admin, me.memberId, composed, 'unknown')
     const rank = (i: number) => (judged[i].check?.verdict === 'works' ? 0 : judged[i].check ? 1 : 2)
@@ -3336,6 +3426,7 @@ export async function styleOwnedPiece(
     const prefs = readStylePrefs(member)
     return {
       hidden: composed.length - passing.length,
+      read,
       looks: passing.slice(0, STYLE_THIS_LOOKS).map((i) => ({
         look_id: null,
         image_url: null,

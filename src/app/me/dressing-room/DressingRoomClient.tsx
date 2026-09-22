@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import type { DressingRoomPiece, DressingRoomView, StyledLook } from '@/app/admin/private-stylist/actions'
 import { myLooksWithPiece, styleMyPiece } from './actions'
+import BuiltOutfit from './BuiltOutfit'
 import DressingRoomScene from '@/components/me/DressingRoomScene'
 import EmailFinds from './EmailFinds'
 import ArchivalLooks from './ArchivalLooks'
@@ -93,15 +94,24 @@ export default function DressingRoomClient({
   }
 
   /** New outfits are built only when she asks: real composing, checked before it shows. */
-  async function styleNow(p: DressingRoomPiece) {
+  async function styleNow(p: DressingRoomPiece, opts: { shuffle?: number; query?: string } = {}) {
     setStyling(true)
     setNote(null)
     wanted.current = p.item_id
-    const r = await styleMyPiece(p.item_id, {}, testMemberId)
+    const r = await styleMyPiece(p.item_id, { shuffle: opts.shuffle ?? 0, query: opts.query ?? null }, testMemberId)
     if (wanted.current !== p.item_id) return
     setStyling(false)
     setLooks(r.looks ?? [])
     setNote(r.error ?? (r.looks?.length ? null : 'Nothing in the library goes with this one yet.'))
+  }
+
+  // Ask again for different answers, or ask for something in particular.
+  const [shuffle, setShuffle] = useState(0)
+  const [ask, setAsk] = useState('')
+  function reshuffle(p: DressingRoomPiece) {
+    const next = shuffle + 1
+    setShuffle(next)
+    void styleNow(p, { shuffle: next, query: ask })
   }
 
   const openPiece = (itemId: string) => { if (onOpenPiece) onOpenPiece(itemId) }
@@ -243,8 +253,38 @@ export default function DressingRoomClient({
                         >
                           {styling ? 'Building…' : looks.length ? 'Build more outfits' : 'Build new outfits'}
                         </button>
+                        {looks.length > 0 && (
+                          <button
+                            onClick={() => reshuffle(picked)}
+                            disabled={styling}
+                            className="mt-3 ml-3 text-[19px] xl:text-[22px] 2xl:text-[26px] px-5 py-2.5 rounded-full bg-white text-[#2B2B2B] shadow-[0_8px_18px_-12px_rgba(43,43,43,0.5)] disabled:opacity-40"
+                          >
+                            Reshuffle
+                          </button>
+                        )}
                       </div>
                     </div>
+
+                    {/* Ask for something in particular: "a white shirt to go with this". */}
+                    <form
+                      onSubmit={(e) => { e.preventDefault(); void styleNow(picked, { shuffle, query: ask }) }}
+                      className="flex flex-wrap gap-3 items-center"
+                    >
+                      <input
+                        value={ask}
+                        onChange={(e) => setAsk(e.target.value)}
+                        placeholder="Find a white shirt to go with this…"
+                        className="myra-guide-text flex-1 min-w-[240px] rounded-full bg-white px-6 py-3 text-[19px] xl:text-[22px] 2xl:text-[26px] outline-none border-2 border-transparent focus:border-[#C9C9C9]"
+                      />
+                      <button type="submit" disabled={styling || !ask.trim()} className="text-[19px] xl:text-[22px] 2xl:text-[26px] px-5 py-2.5 rounded-full bg-[#2B2B2B] text-white disabled:opacity-40">
+                        Find it
+                      </button>
+                      {ask && (
+                        <button type="button" onClick={() => { setAsk(''); void styleNow(picked, { shuffle }) }} className="text-[19px] xl:text-[22px] text-[#6E6B65] underline underline-offset-4">
+                          Clear
+                        </button>
+                      )}
+                    </form>
 
                     {loadingWorn && <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#6E6B65]">Looking for what you wear it with…</p>}
 
@@ -271,7 +311,17 @@ export default function DressingRoomClient({
                     )}
 
                     <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
-                    {[...looks, ...worn].map((l, i) => (
+                    {/* Built just now: every piece can be swapped, with undo. */}
+                    {looks.map((l, i) => (
+                      <BuiltOutfit
+                        key={`new-${i}`}
+                        items={l.items}
+                        heroId={picked.item_id}
+                        why={l.why}
+                        testMemberId={testMemberId}
+                      />
+                    ))}
+                    {worn.map((l, i) => (
                       <div key={l.look_id ?? i} className="bg-white rounded-[16px] overflow-hidden shadow-[0_1px_8px_rgba(43,43,43,0.06)]">
                         <div className="relative aspect-[3/4] bg-[#F3F2F0] overflow-hidden">
                           {l.image_url ? (

@@ -505,6 +505,8 @@ export interface ComposeOptions {
    */
   ownedMode?: 'blend' | 'style_owned' | 'retail_only'
   ownedTargetShare?: number
+  /** Ask again and get different answers: shifts the rotation, nothing else. */
+  shuffle?: number
 }
 
 export const DEFAULT_OWNED_TARGET_SHARE = 0.6
@@ -841,7 +843,8 @@ export function composeMemberVariants(
 ): ComposedLook[] {
   const mode = opts.ownedMode ?? 'blend'
   const library = mode === 'retail_only' ? libraryIn.filter((i) => !isOwnedItem(i as any)) : libraryIn
-  const seed = history ? Array.from(history.seenCounts.values()).reduce((s, n) => s + n, 0) + history.rejected.size : 0
+  const seed = (history ? Array.from(history.seenCounts.values()).reduce((s, n) => s + n, 0) + history.rejected.size : 0)
+    + (opts.shuffle ?? 0) * 7919
 
   // Same pool construction as composeMemberLooks — kept in step deliberately so
   // a variant is never built from a piece a fresh delivery wouldn't use.
@@ -895,20 +898,35 @@ export function composeMemberVariants(
     const fb = finishIds(b)
     return Array.from(finishIds(a)).some((id) => fb.has(id))
   }
-  // Greedy distinctness: a variant joins only if it shares ≤ half its supporting
-  // pieces with every variant already kept, and not its necklace or bag.
-  for (const c of cands) {
-    if (picked.length >= count) break
-    const ids = supportIds(c)
-    if (picked.every((p) => overlap(ids, supportIds(p)) <= 0.5 && !sharesFinish(c, p))) picked.push(c)
-  }
-  // If the library was too thin to find `count` distinct ones, top up in rank order.
+  // Distinctness, in three passes, so "three ways to wear it" are three
+  // outfits: first no repeated top, shoe, coat, bag or necklace at all; then
+  // allow a repeat except the top and the shoe; then, only if the library is
+  // genuinely too thin, rank order. Sharing half the pieces used to pass, and
+  // that is how one white shirt and one pair of trainers ended up in every look.
+  const keyOf = (c: ComposerCandidate, slot: string) => c.items.find((x) => x.slot === slot)?.item.item_id ?? null
+  const sharesSlot = (a: ComposerCandidate, b: ComposerCandidate, slots: readonly string[]) =>
+    slots.some((sl) => { const x = keyOf(a, sl); return !!x && x === keyOf(b, sl) })
+  const joins = (c: ComposerCandidate, slots: readonly string[], maxOverlap: number) =>
+    picked.every((p) => overlap(supportIds(c), supportIds(p)) <= maxOverlap && !sharesSlot(c, p, slots) && !sharesFinish(c, p))
+  for (const c of cands) { if (picked.length >= count) break; if (joins(c, VARIANT_DISTINCT_SLOTS, 0.34)) picked.push(c) }
+  for (const c of cands) { if (picked.length >= count) break; if (!picked.includes(c) && joins(c, ['top', 'shoe'], 0.5)) picked.push(c) }
   for (const c of cands) { if (picked.length >= count) break; if (!picked.includes(c)) picked.push(c) }
 
   const heroSlot = slotForItemType(anchor.item_type)
   const fillUsed = new Set<string>() // bags added to earlier variants
   const anchorOwned = isOwnedItem(anchor as any)
   const anchorLabel = anchorOwned ? `her own ${anchor.product_name}` : anchor.brand?.name ?? '—'
+  // What each slot has already worn across these variants. The shortlist can be
+  // so lopsided that the same shoe wins every time; when that happens the piece
+  // is replaced with the best one that has not been used here yet, and only
+  // kept if there is genuinely nothing else in her size.
+  const usedBySlot = new Map<string, Set<string>>()
+  const usedIn = (slot: string) => usedBySlot.get(slot) ?? new Set<string>()
+  const noteUsed = (slot: string, id: string) => {
+    const set = usedBySlot.get(slot) ?? new Set<string>()
+    set.add(id)
+    usedBySlot.set(slot, set)
+  }
   return picked.map((best) => {
     const all = [{ item: anchor, slot: heroSlot }, ...best.items]
     for (const need of ENSURE_SLOTS) {
@@ -916,6 +934,15 @@ export function composeMemberVariants(
       const exclude = new Set([...Array.from(fillUsed), ...all.map((x) => x.item.item_id)])
       const pick = pickFill(t, usable, need, all.map((x) => x.item), exclude, occ, lens, history, seed)
       if (pick) { all.push({ item: pick.item, slot: need }); fillUsed.add(pick.item.item_id) }
+    }
+    for (const entry of all) {
+      const slot = entry.slot
+      if (!slot || slot === heroSlot || !VARIANT_DISTINCT_SLOTS.includes(slot as any)) continue
+      if (!usedIn(slot).has(entry.item.item_id)) { noteUsed(slot, entry.item.item_id); continue }
+      const exclude = new Set([...Array.from(usedIn(slot)), ...all.map((x) => x.item.item_id), ...Array.from(fillUsed)])
+      const swap = pickFill(t, usable, slot as any, all.filter((x) => x !== entry).map((x) => x.item), exclude, occ, lens, history, seed)
+      if (swap) entry.item = swap.item
+      noteUsed(slot, entry.item.item_id)
     }
     const ownedCount = all.filter(({ item }) => isOwnedItem(item as any)).length
     const notes = [
@@ -929,6 +956,9 @@ export function composeMemberVariants(
 
 // Ranked alternates for one slot of a look — what the SWAP picker shows.
 // Half member taste, half coherence with the rest of the look.
+/** The slots that make a look look different. Repeat one and it reads as the same outfit. */
+export const VARIANT_DISTINCT_SLOTS = ['top', 'shoe', 'outerwear', 'bag', 'jewellery', 'bottom', 'dress'] as const
+
 /** A sibling look has to be a different OUTFIT, not the same one in other shoes. */
 export const MIN_SUPPORTING_DIFFERENCE = 0.6
 

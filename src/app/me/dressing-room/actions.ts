@@ -7,6 +7,9 @@
 // trusts an id from the browser.
 
 import * as impl from '@/app/admin/private-stylist/actions'
+import { resolveClientMember } from '@/lib/client-member'
+import type { LookItem } from '@/lib/pilot-stylist'
+import type { AskSwapOption } from '@/app/admin/private-stylist/actions'
 
 export async function loadMyDressingRoom(asMemberId?: string): Promise<impl.DressingRoomView> {
   return impl.loadDressingRoom(asMemberId)
@@ -18,10 +21,22 @@ export async function loadMyPiece(itemId: string, asMemberId?: string): Promise<
 
 export async function styleMyPiece(
   itemId: string,
-  opts: { occasion?: string | null; withType?: string | null },
+  opts: { occasion?: string | null; withType?: string | null; shuffle?: number; query?: string | null },
   asMemberId?: string,
-): Promise<{ looks: impl.StyledLook[]; hidden?: number; error?: string }> {
+): Promise<{ looks: impl.StyledLook[]; hidden?: number; error?: string; read?: string | null }> {
   return impl.styleOwnedPiece(itemId, opts, asMemberId)
+}
+
+/** SWAP a piece in an outfit MYRA built for her. Ranking only — nothing saved. */
+export async function swapInMyOutfit(
+  items: LookItem[],
+  itemIndex: number,
+  filters: { q?: string; brand?: string; colour?: string; itemType?: string } = {},
+  asMemberId?: string,
+): Promise<{ options?: AskSwapOption[]; brands?: { name: string; count: number }[]; types?: string[]; error?: string }> {
+  const me = await resolveClientMember(asMemberId)
+  if (!me) return { error: 'Not signed in' }
+  return impl.swapOwnedLookItem(me.memberId, items, itemIndex, filters)
 }
 
 /** Her looks that already use this piece — no composing, nothing paid for. */
