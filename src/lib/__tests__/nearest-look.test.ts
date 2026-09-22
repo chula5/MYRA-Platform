@@ -32,3 +32,17 @@ describe('nearestLookFit', () => {
     expect(nearestLookFit([[0.5, 0.5, 0.5]], piece(3, 1, 3))).toBe(0)
   })
 })
+
+import { lookSignature } from '@/lib/pilot-composer'
+
+describe('lookSignature', () => {
+  it('is the combination, not the order it was composed in', () => {
+    expect(lookSignature(['b', 'a', 'c'])).toBe(lookSignature(['c', 'a', 'b']))
+  })
+  it('ignores pieces with no id, and counts a piece once', () => {
+    expect(lookSignature(['a', null, 'a', undefined, 'b'])).toBe('a|b')
+  })
+  it('tells two different looks apart', () => {
+    expect(lookSignature(['a', 'b'])).not.toBe(lookSignature(['a', 'c']))
+  })
+})

@@ -313,6 +313,10 @@ export function itemPriceVerdict(t: MemberTaste, item: ItemWithBrand) {
 }
 
 // How much this member wants this item, independent of the outfit around it.
+/** A look's combination, order-independent: its item ids, sorted. */
+export const lookSignature = (itemIds: (string | null | undefined)[]): string =>
+  Array.from(new Set(itemIds.filter(Boolean) as string[])).sort().join('|')
+
 export function memberItemScore(t: MemberTaste, item: ItemWithBrand): number {
   const brandId = item.brand_id ?? undefined
   let s = brandId ? (t.affinity.get(brandId) ?? 0.08) : 0.08
@@ -529,6 +533,13 @@ export interface ComposeHistory {
    * being the seed of a fresh composition.
    */
   anchoredIds?: Set<string>
+  /**
+   * Looks MYRA made and Chloe passed over: their combinations (by signature)
+   * and the pieces that anchored them. Ignoring a look is an answer — the same
+   * outfit is not offered again, and its anchor waits its turn.
+   */
+  passedSignatures?: Set<string>
+  passedAnchors?: Set<string>
 }
 
 /**
@@ -681,10 +692,13 @@ export function composeMemberLooks(
   // A piece that already anchored an approved look has had its outfit. Styling
   // it again is what STYLE 3 WAYS does, deliberately; a fresh delivery should
   // be finding her something new. Relaxed only if nothing is left to anchor.
+  // A piece that anchored a look she passed over does not anchor the next one.
+  const passedAnchor = (id: string) => !!history?.passedAnchors?.has(id)
   const unusedAnchors = history?.anchoredIds?.size
     ? anchorPool.filter((i) => !history.anchoredIds!.has(i.item_id))
     : anchorPool
-  const anchors = (unusedAnchors.length ? unusedAnchors : anchorPool)
+  const freshAnchors = unusedAnchors.filter((i) => !passedAnchor(i.item_id))
+  const anchors = (freshAnchors.length ? freshAnchors : unusedAnchors.length ? unusedAnchors : anchorPool)
     .map((i) => ({ item: i, score: itemScore(i) }))
     .sort((a, b) => b.score - a.score)
 
@@ -747,6 +761,10 @@ export function composeMemberLooks(
       const pick = pickFill(t, usable, need, all.map((x) => x.item), exclude, occ, lens, history, seed)
       if (pick) all.push({ item: pick.item, slot: need })
     }
+
+    // She has already passed this exact combination over. Only offer it again
+    // if relaxing everything else still leaves the delivery short.
+    if (strictRules && history?.passedSignatures?.has(lookSignature(all.map(({ item }) => item.item_id)))) return false
 
     all.forEach(({ item }) => usedItems.add(item.item_id))
     if (brandId) usedAnchorBrands.add(brandId)

@@ -56,6 +56,7 @@ import {
   composeMemberVariants,
   rankAlternates,
   toLookItem,
+  lookSignature,
   DEFAULT_OWNED_TARGET_SHARE,
   type ComposeOptions,
   type MemberTaste,
@@ -1893,6 +1894,26 @@ type PlannedLooks = ReturnType<typeof composeMemberLooks>
  * that have already anchored an approved look. Shared by fresh deliveries and
  * the Dressing Room, so both explore rather than replaying the same looks.
  */
+/** Remember the looks MYRA made and Chloe did not take. Best-effort: a missing table never blocks a keep. */
+export async function recordPassedLooks(admin: any, memberId: string, occasion: string | null, looks: { items: LookItem[] }[]): Promise<number> {
+  const rows = looks
+    .map((l) => {
+      const ids = (l.items ?? []).map((it: any) => it?.item_id).filter(Boolean) as string[]
+      if (ids.length < 2) return null
+      return { member_id: memberId, signature: lookSignature(ids), anchor_item: ids[0], items: l.items, occasion }
+    })
+    .filter(Boolean)
+  if (!rows.length) return 0
+  try {
+    const { error } = await admin.from('pilot_passed_look').upsert(rows, { onConflict: 'member_id,signature', ignoreDuplicates: true })
+    if (error) { console.error('[recordPassedLooks]', error.message); return 0 }
+    return rows.length
+  } catch (err) {
+    console.error('[recordPassedLooks]', err)
+    return 0
+  }
+}
+
 export async function loadComposeHistory(admin: any, memberId: string): Promise<ComposeHistory> {
   // Her look history: everything already composed for her (any delivery) plus
   // her explicit rejections — the composer ranks those down so each delivery
@@ -1935,7 +1956,25 @@ export async function loadComposeHistory(admin: any, memberId: string): Promise<
     const anchor = its.find((it) => it.slot === 'dress') ?? its.find((it) => it.slot === 'top')
     if (anchor?.item_id) anchoredIds.add(anchor.item_id)
   }
-  return { seenCounts, keptCounts, rejected, rejectedCounts, anchoredIds }
+  // Looks composed for her that were passed over — the combination and the
+  // piece each was built on. Missing table (pre-0063) simply means none.
+  const passedSignatures = new Set<string>()
+  const passedAnchors = new Set<string>()
+  // Every combination already composed for her — sent or not — is spent. The
+  // same five pieces are not a new answer to a different brief.
+  for (const l of priorLooks ?? []) {
+    const ids = ((l.items ?? []) as any[]).map((it) => it?.item_id).filter(Boolean) as string[]
+    if (ids.length >= 2) passedSignatures.add(lookSignature(ids))
+  }
+  try {
+    const { data: passed } = await admin.from('pilot_passed_look').select('signature, anchor_item').eq('member_id', memberId).limit(2000)
+    for (const p of (passed ?? []) as any[]) {
+      if (p.signature) passedSignatures.add(p.signature)
+      if (p.anchor_item) passedAnchors.add(p.anchor_item)
+    }
+  } catch { /* migration 0063 has not been run */ }
+
+  return { seenCounts, keptCounts, rejected, rejectedCounts, anchoredIds, passedSignatures, passedAnchors }
 }
 
 async function planDeliveryLooks(
@@ -2256,6 +2295,9 @@ export async function keepAskPreview(
   // MYRA offered and Chloe did not take. Style-level only: no piece is marked
   // rejected for having lost to a better look in the same test.
   for (const l of passedOver) await teachHouseStyle(admin, memberId, l.items, 'skip', 'review')
+  // And they are remembered as combinations, so the same outfit is not composed
+  // again for the next brief.
+  await recordPassedLooks(admin, memberId, occasion, passedOver)
   revalidatePath(PATH)
 
   // A light Higgsfield shoot for every kept look, started in the background: a
