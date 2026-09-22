@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase-server'
 import { earlyAccessSignOut } from '@/app/earlyaccess/actions'
 import MeChrome from './MeChrome'
 import MeTour from '@/components/me/MeTour'
+import ClientJourneyTracker from '@/components/analytics/ClientJourneyTracker'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,6 +30,11 @@ export default async function MeLayout({ children }: { children: React.ReactNode
       />
       <main className="w-full px-6 sm:px-10 py-10">{children}</main>
       <MeTour />
+      {/* Her visit, recorded for the JOURNEY tab. Mounted for clients only:
+          admin reaches these pages to check what she sees, and Chloe's own
+          browsing is not a client's journey. The tracker refuses to write for
+          her anyway — this is the first of the two gates, not the only one. */}
+      {!isAdmin && <ClientJourneyTracker />}
     </div>
   )
 }

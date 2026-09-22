@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import HerViewTab from './HerViewTab'
+import JourneyTab from './JourneyTab'
 import { listMemberReferencePictures, addMemberReferencePictures, removeMemberReferencePicture, type ReferencePicture } from './reference-actions'
 import { loadMemberConfidence, sendLookToClient, unsendLook, sendAllShotLooks, createClientLogin, type MemberConfidence } from './confidence-actions'
 import { loadClientAttribution, loadTransferSeries, tagLookScope, loadInheritanceReport, runPromotionPass, alignStylistLayers, type ClientAttribution, type InheritanceReport } from './attribution-actions'
@@ -51,7 +52,7 @@ const ROOM_COLOUR: Record<RoomKey, string> = {
   ease: '#A8A8A4',
 }
 
-const TABS = ['MEMBERS', 'DELIVERIES', 'HER VIEW', 'DRY RUN', 'EXIT ARTEFACT'] as const
+const TABS = ['MEMBERS', 'DELIVERIES', 'HER VIEW', 'JOURNEY', 'DRY RUN', 'EXIT ARTEFACT'] as const
 type Tab = (typeof TABS)[number]
 
 const OCCASION_LABEL: Record<string, string> = Object.fromEntries(
@@ -255,6 +256,9 @@ export default function PrivateStylistClient({ data }: { data: PilotData }) {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('MEMBERS')
   const [herViewMember, setHerViewMember] = useState<string>('')
+  // JOURNEY opens on everyone: the first question is whether the pilot is being
+  // used at all, and only then whose visit to sit down and watch.
+  const [journeyMember, setJourneyMember] = useState<string>('')
   const [msg, setMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
 
@@ -302,6 +306,17 @@ export default function PrivateStylistClient({ data }: { data: PilotData }) {
           members={data.members.map((m) => ({ member_id: m.member_id, name: m.name }))}
           memberId={herViewMember || (data.members[0]?.member_id ?? '')}
           setMemberId={setHerViewMember}
+        />
+      )}
+      {tab === 'JOURNEY' && (
+        <JourneyTab
+          // Synthetic personas are dry-run plumbing and never sign in, so a
+          // chip for one would only ever read zero.
+          members={data.members
+            .filter((m) => !m.is_synthetic)
+            .map((m) => ({ member_id: m.member_id, name: m.name }))}
+          memberId={journeyMember}
+          setMemberId={setJourneyMember}
         />
       )}
       {tab === 'DELIVERIES' && <DeliveriesTab data={data} run={run} busy={busy} />}
