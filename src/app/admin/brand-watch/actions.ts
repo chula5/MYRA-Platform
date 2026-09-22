@@ -1,5 +1,7 @@
 'use server'
 
+import { confidenceOf, confidenceTrustFor } from '@/lib/brand-watch-auto'
+import { DEFAULT_CONFIDENCE, type ConfidenceTrust } from '@/lib/brand-watch-confidence'
 import { houseBanOf } from '@/lib/brand-watch-bans'
 import { keepQueueRows, teachStyleBrain } from '@/lib/brand-watch-keep'
 import {
@@ -35,6 +37,8 @@ export interface QueueItemRow {
   discovery_score: number | null
   discovered_at: string | null
   admin_notes: string | null
+  /** 0..1 — the chance she would keep it, from this brand's own decisions. */
+  confidence?: number | null
   learned_delta: number
   learned_reasons: string
   predicted_skip: boolean
@@ -71,6 +75,10 @@ export interface BrandWatchData extends QueuePage {
   trust?: Record<string, BrandTrust>
   /** Whether twins of her keeps can be kept on their own, by watched_brand_id. */
   twinTrust?: Record<string, TwinTrust>
+  /** How the chance-she-keeps model measured at each brand's bar, by watched_brand_id. */
+  confidenceTrust?: Record<string, ConfidenceTrust>
+  /** Pieces she has kept and skipped per brand — the volume behind the trust. */
+  decided?: Record<string, { kept: number; skipped: number }>
   migrationNeeded?: boolean
 }
 
@@ -78,7 +86,7 @@ const QUEUE_PAGE = 200
 const QUEUE_FIELDS = 'queue_id, product_name, item_type, colour_family, material_category, material_primary, price, currency, price_gbp, image_url, retailer_url, shopify_product_id, shopify_handle, stock_status, stock_sizes, discovery_score, discovered_at, admin_notes, status, brand_id, brand:brand_id(name)'
 
 // The client keys cards by item_id — for queue rows that's the queue_id.
-function mapQueueRow(r: any): Omit<QueueItemRow, 'learned_delta' | 'learned_reasons' | 'predicted_skip' | 'adjusted' | 'twin_of'> {
+function mapQueueRow(r: any): Omit<QueueItemRow, 'learned_delta' | 'learned_reasons' | 'predicted_skip' | 'adjusted' | 'twin_of' | 'confidence'> {
   return {
     item_id: r.queue_id,
     product_name: r.product_name,
@@ -181,7 +189,9 @@ async function queuePage(offset: number, brandName?: string | null, filters: Que
     })
     const minScore = minByBrand.get(foldBrandName(base.brand_name)) ?? 5
     const strong = (base.discovery_score ?? 0) >= minScore + 2
-    return { ...base, learned_delta: v.delta, learned_reasons: v.reasons, predicted_skip: v.predictedSkip && !strong, adjusted: (base.discovery_score ?? 0) + v.delta, twin_of: twinOfQueueRow(trustData, r)?.product_name ?? null }
+    // How sure MYRA is that Chloe would keep it — her own model for this brand.
+    const confidence = confidenceOf(trustData, r)
+    return { ...base, learned_delta: v.delta, learned_reasons: v.reasons, predicted_skip: v.predictedSkip && !strong, adjusted: (base.discovery_score ?? 0) + v.delta, twin_of: twinOfQueueRow(trustData, r)?.product_name ?? null, confidence }
   })
 
   const brandCounts: Record<string, number> = {}
@@ -249,7 +259,15 @@ export async function loadBrandWatch(): Promise<BrandWatchData> {
   const rows = (watched ?? []) as unknown as WatchedBrandRow[]
   const trust = Object.fromEntries(rows.map((w) => [w.watched_brand_id, trustFor(trustData, w)]))
   const twinTrust = Object.fromEntries(rows.map((w) => [w.watched_brand_id, twinTrustFor(trustData, w)]))
-  return { watched: rows, ...page, trust, twinTrust }
+  const confidenceTrust = Object.fromEntries(rows.map((w) => [w.watched_brand_id, confidenceTrustFor(trustData, w as any)]))
+  // How many pieces she has kept and skipped per brand — the volume behind the trust.
+  const decided: Record<string, { kept: number; skipped: number }> = {}
+  for (const w of rows) {
+    if (!w.brand_id) continue
+    const ev = trustData.evidence.get(w.brand_id)?.decisions ?? []
+    decided[w.watched_brand_id] = { kept: ev.filter((d) => d.kept).length, skipped: ev.filter((d) => !d.kept).length }
+  }
+  return { watched: rows, ...page, trust, twinTrust, confidenceTrust, decided }
 }
 
 /**
@@ -311,6 +329,72 @@ export async function setWatchedBrandAutoKeep(watchedBrandId: string, on: boolea
 }
 
 
+
+/**
+ * AUTO-KEEP BY CONFIDENCE — the bar she sets, in plain odds. Switching on needs
+ * the model to have measured at that bar on this brand's own one-by-one
+ * decisions; the check is here, not only in the page.
+ */
+export async function setWatchedBrandAutoKeepConfidence(watchedBrandId: string, on: boolean): Promise<{ error?: string }> {
+  await assertAdmin()
+  const admin = createAdminClient() as any
+  const { data: w } = await admin.from('watched_brand').select('*').eq('watched_brand_id', watchedBrandId).single()
+  if (!w) return { error: 'Watchlist row not found' }
+  if (on) {
+    const trust = confidenceTrustFor(await loadBrandTrust(admin), w)
+    if (!trust.trusted) return { error: `NOT YET — ${trust.summary}` }
+  }
+  const { error } = await admin.from('watched_brand')
+    .update({ auto_keep_confidence: on, auto_keep_confidence_since: on ? new Date().toISOString() : null })
+    .eq('watched_brand_id', watchedBrandId)
+  if (error) return { error: /auto_keep_confidence/.test(error.message) ? 'RUN MIGRATION 0066_brand_watch_confidence.sql IN SUPABASE FIRST' : error.message }
+  revalidatePath('/admin/brand-watch')
+  return {}
+}
+
+/** What MYRA added by itself lately — so nothing lands unseen. */
+export async function loadAutoAdded(limit = 60): Promise<{ rows: { queue_id: string; product_name: string; brand_name: string | null; image_url: string; retailer_url: string; decided_at: string | null; item_id: string | null }[]; error?: string }> {
+  await assertAdmin()
+  const admin = createAdminClient() as any
+  const { data, error } = await admin.from('brand_watch_queue')
+    .select('queue_id, product_name, image_url, retailer_url, decided_at, item_id, brand:brand_id(name)')
+    .eq('status', 'kept').eq('auto_kept', true).order('decided_at', { ascending: false }).limit(limit)
+  if (error) return { rows: [], error: /auto_kept/.test(error.message) ? 'RUN MIGRATION 0056 FIRST' : error.message }
+  return { rows: ((data ?? []) as any[]).map((r) => ({ ...r, brand_name: r.brand?.name ?? null })) }
+}
+
+/**
+ * UNDO an auto-add: the piece leaves the library and goes back in the queue for
+ * her. Recorded as her skip, so the model learns it was wrong to add it.
+ */
+export async function undoAutoKeep(queueId: string): Promise<{ error?: string }> {
+  await assertAdmin()
+  const admin = createAdminClient() as any
+  const { data: row } = await admin.from('brand_watch_queue').select('queue_id, item_id, auto_kept').eq('queue_id', queueId).maybeSingle()
+  if (!row) return { error: 'Not found' }
+  if (!row.auto_kept) return { error: 'This one was kept by you, not by MYRA' }
+  if (row.item_id) {
+    const { error: iErr } = await admin.from('item').update({ status: 'archived' }).eq('item_id', row.item_id)
+    if (iErr) return { error: iErr.message }
+  }
+  const { error } = await admin.from('brand_watch_queue')
+    .update({ status: 'skipped', auto_kept: false, item_id: null, decided_at: new Date().toISOString() })
+    .eq('queue_id', queueId)
+  if (error) return { error: error.message }
+  revalidatePath('/admin/brand-watch')
+  return {}
+}
+
+/** The bar itself: auto-keep only above this chance she would keep it. */
+export async function setWatchedBrandConfidenceBar(watchedBrandId: string, bar: number): Promise<{ error?: string }> {
+  await assertAdmin()
+  const admin = createAdminClient() as any
+  const clamped = Math.max(0.5, Math.min(0.99, Number(bar) || DEFAULT_CONFIDENCE))
+  const { error } = await admin.from('watched_brand').update({ confidence_bar: clamped }).eq('watched_brand_id', watchedBrandId)
+  if (error) return { error: /confidence_bar/.test(error.message) ? 'RUN MIGRATION 0066_brand_watch_confidence.sql IN SUPABASE FIRST' : error.message }
+  revalidatePath('/admin/brand-watch')
+  return {}
+}
 
 // Add a brand to the watchlist. mode 'watch' queues only the last 60 days of
 // on-taste pieces; mode 'full' onboards the whole catalogue (every piece at

@@ -11,7 +11,8 @@
 
   const state = await send({ type: 'state', host: location.host })
   if (!state || !state.connected || !state.enabled) return
-  if (!M.isShopify()) return
+  const vinted = M.isVinted()
+  if (!vinted && !M.isShopify()) return
 
   const LIFT_MIN = 0.6 // named / core-family and above earn the mark
   const WHY = {
@@ -242,17 +243,17 @@
     if (running) return
     running = true
     try {
-      const grids = M.findGrids()
+      const grids = vinted ? M.vintedGrids() : M.findGrids()
       if (!grids.length) return
       const tiles = grids.flatMap((g) => g.tiles)
       const sig = tiles.map((t) => t.key).join(',')
       if (sig === lastSig) return
       lastSig = sig
-      const details = await M.details(tiles.map((t) => t.key))
+      const details = vinted ? M.vintedDetails(tiles.map((t) => t.key)) : await M.details(tiles.map((t) => t.key))
       const products = tiles.map((t) => ({ key: t.key, ...(details.get(t.key) || {}) }))
       for (const t of tiles) {
         const d = details.get(t.key) || {}
-        const product = { key: t.key, url: d.url || `${location.origin}/products/${t.key}`, title: d.title || t.key, brand: d.brand || null, type: d.type || null, price: d.price ?? null, available: d.available !== false, image: null }
+        const product = { key: t.key, url: d.url || `${location.origin}/products/${t.key}`, title: d.title || t.key, brand: d.brand || null, type: d.type || null, price: d.price ?? null, available: d.available !== false, image: d.image ?? null }
         productOf.set(t.el, product)
         styleButton(t.el, product)
       }

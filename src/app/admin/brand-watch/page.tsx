@@ -32,6 +32,7 @@ export default async function BrandWatchPage() {
           watched={data.watched} queue={data.queue} queueTotal={data.queueTotal} predictedSkipTotal={data.predictedSkipTotal}
           decidedCount={data.decidedCount} brandCounts={data.brandCounts} typeCounts={data.typeCounts} colourCounts={data.colourCounts}
           trust={data.trust ?? {}} twinTrust={data.twinTrust ?? {}} twinCounts={data.twinCounts}
+          confidenceTrust={data.confidenceTrust ?? {}} decided={data.decided ?? {}}
         />
       )}
     </div>

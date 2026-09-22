@@ -60,6 +60,10 @@ export interface WatchedBrandRow {
   /** AUTO-KEEP TWINS: new pieces from a design line she kept go to the library (migration 0057). */
   auto_keep_twins?: boolean
   auto_keep_twins_since?: string | null
+  /** AUTO-KEEP BY CONFIDENCE: pieces above her bar, while the model measures (migration 0066). */
+  auto_keep_confidence?: boolean
+  confidence_bar?: number | null
+  auto_keep_confidence_since?: string | null
 }
 
 export interface BrandCheckResult {

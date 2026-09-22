@@ -22,6 +22,10 @@
 import { buildLearning, type DecidedRow } from './brand-watch-learning'
 import { measureBrandTrust, summariseTrust, wouldAutoKeep, type BrandTrust, type TrustDecision } from './brand-watch-trust'
 import { carefulFlags, keptTwinOf, measureTwinTrust, summariseTwinTrust, type TwinDecision, type TwinTrust } from './brand-watch-twins'
+import {
+  confidenceFor, fitBrandModel, measureBoth, summariseConfidence, DEFAULT_CONFIDENCE,
+  type BrandModel, type ConfidenceDecision, type ConfidenceTrust,
+} from './brand-watch-confidence'
 import { houseBanOf } from './brand-watch-bans'
 import { keepQueueRows } from './brand-watch-keep'
 import type { WatchedBrandRow } from './brand-watch'
@@ -39,6 +43,10 @@ export interface BrandTrustData {
   evidence: Map<string, { decisions: TwinDecision[]; careful: boolean[] }>
   /** The learning, trained on every decision Chloe made herself. */
   learn: ReturnType<typeof buildLearning>
+  /** The chance-she-keeps model per brand_id. */
+  confidence: Map<string, BrandModel>
+  /** How that model measured, walk-forward, keyed `${brand_id}|${bar}`. */
+  confidenceTrust: Map<string, ConfidenceTrust>
 }
 
 const DECIDED_BASE = 'queue_id, status, decided_at, discovered_at, discovery_score, product_name, item_type, colour_family, material_category, price, price_gbp, watched_brand_id, brand_id'
@@ -87,11 +95,15 @@ export const asTwinCandidate = (r: any) => ({
 })
 
 export async function loadBrandTrust(admin: any): Promise<BrandTrustData> {
-  const [rows, { data: wbs }] = await Promise.all([
-    loadDecisions(admin),
-    admin.from('watched_brand').select('watched_brand_id, min_score'),
-  ])
-  const minBy = new Map<string, number>(((wbs ?? []) as any[]).map((w) => [w.watched_brand_id, Number(w.min_score ?? 5)]))
+  // confidence_bar arrives with migration 0066; until it is run, read without it.
+  const readWatched = async () => {
+    const withBar = await admin.from('watched_brand').select('watched_brand_id, brand_id, min_score, confidence_bar')
+    if (!withBar.error) return withBar.data ?? []
+    const plain = await admin.from('watched_brand').select('watched_brand_id, brand_id, min_score')
+    return plain.data ?? []
+  }
+  const [rows, wbs] = await Promise.all([loadDecisions(admin), readWatched()])
+  const minBy = new Map<string, number>((wbs as any[]).map((w) => [w.watched_brand_id, Number(w.min_score ?? 5)]))
   const decisions: TrustDecision[] = rows.map((r) => ({
     ...toDecided(r),
     at: String(r.decided_at ?? r.discovered_at),
@@ -108,11 +120,29 @@ export async function loadBrandTrust(admin: any): Promise<BrandTrustData> {
   const evidence = new Map<string, { decisions: TwinDecision[]; careful: boolean[] }>()
   grouped.forEach((list, brand) => evidence.set(brand, { decisions: list, careful: carefulFlags(list) }))
 
+  const learn = buildLearning(decisions.filter((d) => !d.autoKept))
+  const confDecisions: ConfidenceDecision[] = decisions.map((d) => ({ ...d, at: d.at, score: d.score, autoKept: d.autoKept }))
+  const confidence = confidenceModels(confDecisions, learn)
+  // Measured at each brand's own bar, and at the default, so the page can show
+  // what switching it on would have done.
+  const barBy = new Map<string, number>((wbs as any[]).map((w) => [w.brand_id, Number(w.confidence_bar ?? DEFAULT_CONFIDENCE)]))
+  const confidenceTrust = new Map<string, ConfidenceTrust>()
+  const perBrand = new Map<string, ConfidenceDecision[]>()
+  for (const d of confDecisions) if (d.brandName) perBrand.set(d.brandName, [...(perBrand.get(d.brandName) ?? []), d])
+  perBrand.forEach((list, brand) => {
+    for (const bar of Array.from(new Set([barBy.get(brand) ?? DEFAULT_CONFIDENCE, DEFAULT_CONFIDENCE]))) {
+      const both = measureBoth(list, bar)
+      confidenceTrust.set(`${brand}|${bar}`, { ...both.all, trusted: both.trusted, summary: both.summary, careful: both.careful.careful })
+    }
+  })
+
   return {
     byBrandId: measureBrandTrust(decisions),
     twinsByBrandId: measureTwinTrust(twinDecisions),
     evidence,
-    learn: buildLearning(decisions.filter((d) => !d.autoKept)),
+    learn,
+    confidence,
+    confidenceTrust,
   }
 }
 
@@ -127,6 +157,32 @@ export function twinOfQueueRow(data: BrandTrustData, row: any): TwinDecision | n
   const ev = row.brand_id ? data.evidence.get(row.brand_id) : undefined
   return ev ? keptTwinOf(asTwinCandidate(row), ev.decisions, ev.careful) : null
 }
+
+// ── Confidence: the chance she would keep a piece, per brand ────────────────
+
+/** One model per brand, fitted on that brand's own careful decisions. */
+export function confidenceModels(decisions: ConfidenceDecision[], learn: ReturnType<typeof buildLearning>): Map<string, BrandModel> {
+  const byBrand = new Map<string, ConfidenceDecision[]>()
+  for (const d of decisions) {
+    if (d.autoKept || !d.brandName) continue
+    byBrand.set(d.brandName, [...(byBrand.get(d.brandName) ?? []), d])
+  }
+  const models = new Map<string, BrandModel>()
+  byBrand.forEach((list, brand) => {
+    models.set(brand, fitBrandModel(list.map((d) => ({ kept: d.kept, delta: learn(d).delta, score: d.score }))))
+  })
+  return models
+}
+
+export const confidenceOf = (data: BrandTrustData, row: any): number | null => {
+  const model = row.brand_id ? data.confidence.get(row.brand_id) : undefined
+  if (!model) return null
+  return confidenceFor(model, data.learn(toDecided(row)).delta, Number(row.discovery_score ?? 0))
+}
+
+export const confidenceTrustFor = (data: BrandTrustData, watched: { brand_id?: string | null; confidence_bar?: number | null }): ConfidenceTrust =>
+  (watched.brand_id && data.confidenceTrust.get(`${watched.brand_id}|${Number(watched.confidence_bar ?? DEFAULT_CONFIDENCE)}`))
+    || summariseConfidence(0, 0, 0, Number(watched.confidence_bar ?? DEFAULT_CONFIDENCE))
 
 export interface AutoKeepResult {
   autoKept: number
@@ -162,7 +218,23 @@ export async function autoKeepForBrand(admin: any, watched: WatchedBrandRow, tru
         }
       }
     }
-    if (watched.auto_keep) {
+    // BY CONFIDENCE — only above her bar, and only while the model measures at
+  // that bar on this brand's own one-by-one decisions.
+  if ((watched as any).auto_keep_confidence) {
+    const bar = Number((watched as any).confidence_bar ?? DEFAULT_CONFIDENCE)
+    const trust = confidenceTrustFor(data, watched as any)
+    if (!trust.trusted) notes.push(`AUTO-KEEP BY CONFIDENCE PAUSED — ${trust.summary}`)
+    else {
+      const since = (watched as any).auto_keep_confidence_since ?? new Date().toISOString()
+      for (const q of await queuedFor(admin, watched.brand_id, since)) {
+        if (!keepable(q)) continue
+        const p = confidenceOf(data, { ...q, brand_id: watched.brand_id })
+        if (p != null && p >= bar) picks.set(q.queue_id, 200 + p)
+      }
+    }
+  }
+
+  if (watched.auto_keep) {
       const trust = trustFor(data, watched)
       if (!trust.trusted) notes.push(`AUTOMATE PAUSED — ${trust.summary}`)
       else {

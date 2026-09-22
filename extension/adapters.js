@@ -9,6 +9,85 @@
 ;(() => {
   const M = (window.__myraMirror = window.__myraMirror || {})
 
+  // Vinted is not Shopify and has no product JSON: its tiles carry the facts
+  // (brand, size, price, picture, link) in their own markup, so they are read
+  // from the tile itself. Same contract as Shopify: find grids, hand back
+  // tiles with keys, answer details() per key.
+  M.isVinted = () => /(^|\.)vinted\.[a-z.]+$/i.test(location.hostname)
+
+  const vintedItemId = (href) => {
+    try {
+      const u = new URL(href, location.href)
+      const m = u.pathname.match(/\/items\/(\d+)/)
+      return m ? m[1] : null
+    } catch { return null }
+  }
+
+  const vintedTileFacts = (el) => {
+    const a = el.querySelector('a[href*="/items/"]')
+    const img = el.querySelector('img')
+    const text = (el.innerText || '').split('\n').map((t) => t.trim()).filter(Boolean)
+    // Vinted writes brand, then size, then condition, then price.
+    const priceLine = text.find((t) => /^[£€$]\s?\d/.test(t))
+    const price = priceLine ? Number(priceLine.replace(/[^\d.]/g, '')) : null
+    // A catalogue tile's alt reads: "<seller's title>, Brand: X, Condition: Y,
+    // Size: Z, <price>". The brand is the labelled field, never the title.
+    const alt = img?.getAttribute('alt') || ''
+    const brand = (alt.match(/Brand:\s*([^,]+)/i)?.[1] || '').trim() || null
+    const size = (alt.match(/Size:\s*([^,]+)/i)?.[1] || '').trim() || null
+    const title = (alt.split(',')[0] || text.slice(0, 2).join(' ') || 'Vinted piece').trim()
+    return {
+      brand: brand && brand.length <= 60 ? brand : null,
+      title,
+      size,
+      type: null,
+      price,
+      url: a ? new URL(a.getAttribute('href'), location.href).href : location.href,
+      available: true,
+      sizes: size ? [{ label: size, available: true }] : [],
+      image: img ? (img.currentSrc || img.src) : null,
+    }
+  }
+
+  M.vintedGrids = () => {
+    const byItem = new Map()
+    for (const a of document.querySelectorAll('a[href*="/items/"]')) {
+      const id = vintedItemId(a.getAttribute('href') || '')
+      if (!id) continue
+      if (!byItem.has(id)) byItem.set(id, [])
+      byItem.get(id).push(a)
+    }
+    if (byItem.size < 4) return []
+    // The tile is the highest ancestor that still holds exactly this one item.
+    const tileOf = (a) => {
+      let el = a
+      for (let i = 0; i < 6 && el.parentElement; i++) {
+        const parent = el.parentElement
+        const ids = new Set([...parent.querySelectorAll('a[href*="/items/"]')].map((x) => vintedItemId(x.getAttribute('href') || '')).filter(Boolean))
+        if (ids.size !== 1) break
+        el = parent
+      }
+      return el
+    }
+    const byContainer = new Map()
+    for (const [id, anchors] of byItem) {
+      const tile = tileOf(anchors[0])
+      const container = tile.parentElement
+      if (!container) continue
+      if (!byContainer.has(container)) byContainer.set(container, [])
+      byContainer.get(container).push({ el: tile, key: id })
+    }
+    return [...byContainer.entries()]
+      .filter(([, tiles]) => tiles.length >= 4)
+      .map(([container, tiles]) => ({ container, tiles }))
+  }
+
+  M.vintedDetails = (keys) => {
+    const found = new Map()
+    for (const g of M.vintedGrids()) for (const t of g.tiles) found.set(t.key, vintedTileFacts(t.el))
+    return new Map(keys.map((k) => [k, found.get(k) || { brand: null }]))
+  }
+
   M.isShopify = () =>
     !!(window.Shopify ||
       document.querySelector('script[src*="cdn.shopify.com"], link[href*="cdn.shopify.com"], meta[name="shopify-checkout-api-token"]'))

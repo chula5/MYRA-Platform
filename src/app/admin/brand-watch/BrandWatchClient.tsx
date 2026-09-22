@@ -9,6 +9,7 @@ import type { TwinTrust } from '@/lib/brand-watch-twins'
 import {
   addWatchedBrand, checkAllBrandsNow, checkBrandNow, fullScanBrand, keepAllForBrand,
   keepItems, loadQueuePage, removeWatchedBrand, setWatchedBrandActive, setWatchedBrandAutoKeep,
+  setWatchedBrandAutoKeepConfidence, setWatchedBrandConfidenceBar, loadAutoAdded, undoAutoKeep,
   setWatchedBrandAutoKeepTwins, keepTwinsNowForBrand,
   setWatchedBrandMinScore, skipItems, undoSkip, setSkipReason, type QueueFilters, type QueueItemRow, type QueuePage,
 } from './actions'
@@ -54,6 +55,8 @@ interface Props extends QueuePage {
   watched: WatchedBrandRow[]
   trust: Record<string, BrandTrust>
   twinTrust: Record<string, TwinTrust>
+  confidenceTrust?: Record<string, { trusted: boolean; summary: string; coverage: number }>
+  decided?: Record<string, { kept: number; skipped: number }>
 }
 
 // A scan writes { running: true } and clears it when it finishes or fails. If
@@ -70,6 +73,10 @@ function staleScan(state: { running?: boolean; started_at?: string } | null | un
 
 export default function BrandWatchClient(props: Props) {
   const { watched, trust, twinTrust } = props
+  const confidenceTrust = props.confidenceTrust ?? {}
+  // What MYRA added by itself — open it and every one can be sent back.
+  const [autoAdded, setAutoAdded] = useState<any[] | null>(null)
+  const decided = props.decided ?? {}
   const [pending, startTransition] = useTransition()
   const [url, setUrl] = useState('')
   const [notice, setNotice] = useState<string | null>(null)
@@ -309,10 +316,70 @@ export default function BrandWatchClient(props: Props) {
                 <div className={`mt-0.5 text-[8px] tracking-[0.1em] ${w.auto_keep && !trust[w.watched_brand_id]?.trusted ? 'text-[#B4593A]' : trust[w.watched_brand_id]?.trusted ? 'text-[#3D6B45]' : 'text-[#A8A8A4]'}`}>
                   {w.auto_keep && !trust[w.watched_brand_id]?.trusted ? 'AUTOMATE PAUSED — ' : 'AUTOMATE: '}{trust[w.watched_brand_id]?.summary ?? 'NO ONE-BY-ONE DECISIONS YET'}
                 </div>
+
+                {/* BY CONFIDENCE — the bar she sets, and what it measured. */}
+                <div className="mt-1 flex items-center gap-2 text-[8px] tracking-[0.12em]">
+                  <button
+                    disabled={pending || (!w.auto_keep_confidence && !confidenceTrust[w.watched_brand_id]?.trusted)}
+                    onClick={() => act(() => setWatchedBrandAutoKeepConfidence(w.watched_brand_id, !w.auto_keep_confidence), () =>
+                      setNotice(`${w.name.toUpperCase()}: AUTO-ADD ${w.auto_keep_confidence ? 'OFF' : `ON ABOVE ${Math.round(Number(w.confidence_bar ?? 0.92) * 100)}%`}`))}
+                    className={`transition-colors disabled:cursor-not-allowed ${w.auto_keep_confidence ? 'text-[#3D6B45] font-bold' : confidenceTrust[w.watched_brand_id]?.trusted ? 'text-[#0A0A0A] underline underline-offset-2' : 'text-[#C9C7C2]'}`}
+                    title={confidenceTrust[w.watched_brand_id]?.trusted ? 'Pieces above the bar go straight to the library' : 'Unlocks when the model has proven itself at this bar on your one-by-one decisions'}
+                  >
+                    {w.auto_keep_confidence ? 'AUTO-ADD ✓' : 'AUTO-ADD'}
+                  </button>
+                  <select
+                    disabled={pending}
+                    value={String(Number(w.confidence_bar ?? 0.92))}
+                    onChange={(e) => act(() => setWatchedBrandConfidenceBar(w.watched_brand_id, Number(e.target.value)))}
+                    className="bg-transparent text-[8px] tracking-[0.12em] text-[#6B6B6B] border border-[#E2E0DB] rounded-full px-2 py-0.5"
+                    title="Only keep a piece by itself above this chance you would keep it"
+                  >
+                    {[0.8, 0.85, 0.9, 0.92, 0.95, 0.98].map((b) => <option key={b} value={b}>{Math.round(b * 100)}%</option>)}
+                  </select>
+                  {decided[w.watched_brand_id] && (
+                    <span className="text-[#A8A8A4]">{decided[w.watched_brand_id].kept} KEPT · {decided[w.watched_brand_id].skipped} SKIPPED</span>
+                  )}
+                </div>
+                <div className={`mt-0.5 text-[8px] tracking-[0.1em] ${w.auto_keep_confidence && !confidenceTrust[w.watched_brand_id]?.trusted ? 'text-[#B4593A]' : confidenceTrust[w.watched_brand_id]?.trusted ? 'text-[#3D6B45]' : 'text-[#A8A8A4]'}`}>
+                  {w.auto_keep_confidence && !confidenceTrust[w.watched_brand_id]?.trusted ? 'AUTO-ADD PAUSED — ' : 'AUTO-ADD: '}{confidenceTrust[w.watched_brand_id]?.summary ?? 'NO ONE-BY-ONE DECISIONS YET'}
+                </div>
               </div>
             )
           })}
         </div>
+
+        {watched.length > 0 && (
+          <button
+            disabled={pending}
+            onClick={() => act(async () => { const r = await loadAutoAdded(); setAutoAdded(r.rows); return r }, (r) =>
+              setNotice(r.error ?? (r.rows.length ? `${r.rows.length} PIECES MYRA ADDED BY ITSELF — UNDO ANY BELOW` : 'MYRA HAS NOT ADDED ANYTHING BY ITSELF YET')))}
+            className="mt-3 w-full border border-[#E2E0DB] rounded-full px-4 py-2 text-[9px] tracking-[0.14em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors disabled:opacity-40"
+          >
+            WHAT MYRA ADDED BY ITSELF
+          </button>
+        )}
+
+        {autoAdded && autoAdded.length > 0 && (
+          <div className="mt-2 border border-[#E2E0DB] rounded-[10px] p-2 max-h-[280px] overflow-auto">
+            {autoAdded.map((r) => (
+              <div key={r.queue_id} className="flex items-center gap-2 py-1.5 border-b border-[#F1F0ED] last:border-0">
+                {r.image_url && <img src={r.image_url} alt="" className="w-8 h-10 object-cover rounded-[3px] bg-[#F3F2F0]" />}
+                <div className="min-w-0 flex-1">
+                  <p className="text-[8px] tracking-[0.12em] text-[#A8A8A4] truncate">{(r.brand_name ?? '').toUpperCase()}</p>
+                  <p className="text-[9px] tracking-[0.04em] text-[#4A4E57] truncate">{r.product_name.toUpperCase()}</p>
+                </div>
+                <button
+                  disabled={pending}
+                  onClick={() => act(() => undoAutoKeep(r.queue_id), (x) => { if (!x.error) setAutoAdded((cur) => (cur ?? []).filter((y) => y.queue_id !== r.queue_id)); setNotice(x.error ?? 'SENT BACK — MYRA LEARNS IT WAS WRONG TO ADD IT') })}
+                  className="text-[8px] tracking-[0.12em] text-[#B3202A] hover:underline"
+                >
+                  UNDO
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {watched.length > 0 && (
           <button
@@ -548,6 +615,15 @@ export default function BrandWatchClient(props: Props) {
                   >
                     ✓
                   </button>
+                  {/* How sure MYRA is you would keep it — this brand's own model. */}
+                  {q.confidence != null && (
+                    <span
+                      className={`absolute top-2 left-2 rounded-full px-2 py-0.5 text-[9px] tracking-[0.08em] border ${q.confidence >= 0.9 ? 'bg-[#3D6B45] text-white border-[#3D6B45]' : q.confidence >= 0.7 ? 'bg-white/95 text-[#0A0A0A] border-[#E2E0DB]' : 'bg-white/95 text-[#A8A8A4] border-[#E2E0DB]'}`}
+                      title="How likely you are to keep this, learned from your own decisions for this brand"
+                    >
+                      {Math.round(q.confidence * 100)}%
+                    </span>
+                  )}
                   {q.learned_delta !== 0 && (
                     <span
                       className={`absolute top-2 right-2 rounded px-1.5 py-0.5 text-[9px] tracking-[0.08em] border ${q.learned_delta > 0 ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'bg-white/95 text-[#B3202A] border-[#E2E0DB]'}`}
