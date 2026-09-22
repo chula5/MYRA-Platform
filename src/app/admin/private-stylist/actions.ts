@@ -1972,7 +1972,7 @@ export async function loadComposeHistory(admin: any, memberId: string): Promise<
       if (p.signature) passedSignatures.add(p.signature)
       if (p.anchor_item) passedAnchors.add(p.anchor_item)
     }
-  } catch { /* migration 0063 has not been run */ }
+  } catch { /* migration 0065 has not been run */ }
 
   return { seenCounts, keptCounts, rejected, rejectedCounts, anchoredIds, passedSignatures, passedAnchors }
 }
