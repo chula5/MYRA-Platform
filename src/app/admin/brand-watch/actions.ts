@@ -18,6 +18,7 @@ import {
 } from '@/lib/brand-watch'
 import { buildLearning, type DecidedRow } from '@/lib/brand-watch-learning'
 import { discoverProductUrls } from '@/lib/brand-watch-browser'
+import { waitUntil } from '@vercel/functions'
 import { revalidatePath } from 'next/cache'
 import { assertAdmin } from '@/lib/admin-audit'
 
@@ -457,6 +458,66 @@ export async function setWatchedBrandConfidenceBar(watchedBrandId: string, bar: 
 // on-taste pieces; mode 'full' onboards the whole catalogue (every piece at
 // min_score or above, any publish date). Both mark everything seen and set up
 // the Monday watching.
+/**
+ * Add a brand and scan it IN THE BACKGROUND. The row appears at once and the
+ * card shows it working, so the page stays hers while a catalogue is read —
+ * a first scan can take minutes and used to hold the whole page.
+ */
+export async function addWatchedBrandInBackground(url: string, mode: 'watch' | 'full' = 'watch'): Promise<{ watchedBrandId?: string; name?: string; error?: string }> {
+  await assertAdmin()
+  const base = normaliseBaseUrl(url)
+  if (!base) return { error: 'That doesn’t look like a URL' }
+  const admin = createAdminClient() as any
+
+  const { data: exists } = await admin.from('watched_brand').select('watched_brand_id').eq('base_url', base).limit(1)
+  if ((exists ?? []).length) return { error: 'Already on the watchlist' }
+
+  const provisional = provisionalNameFromUrl(base)
+  const { data: created, error } = await admin.from('watched_brand')
+    .insert([{ name: provisional, base_url: base, scan_state: { running: true, started_at: new Date().toISOString() } }] as any)
+    .select('*').single()
+  if (error || !created) return { error: error?.message ?? 'Could not create watchlist row' }
+  const watched = created as unknown as WatchedBrandRow
+
+  const work = (async () => {
+    try {
+      await scanNewBrand(admin, watched, mode)
+    } catch (err) {
+      await admin.from('watched_brand')
+        .update({ scan_state: { running: false, error: err instanceof Error ? err.message : String(err) } })
+        .eq('watched_brand_id', watched.watched_brand_id)
+    }
+  })()
+  try { waitUntil(work) } catch { /* local dev: the promise simply runs */ }
+
+  revalidatePath('/admin/brand-watch')
+  return { watchedBrandId: watched.watched_brand_id, name: provisional }
+}
+
+/** The scan itself — Shopify first, then the browser route. Shared by both add paths. */
+async function scanNewBrand(admin: any, watched: WatchedBrandRow, mode: 'watch' | 'full'): Promise<BrandCheckResult> {
+  const finish = async (result: BrandCheckResult) => {
+    await admin.from('watched_brand').update({ scan_state: { running: false } }).eq('watched_brand_id', watched.watched_brand_id)
+    revalidatePath('/admin/brand-watch')
+    return result
+  }
+  try {
+    return await finish(mode === 'full' ? await onboardBrand(watched) : await baselineBrand(watched))
+  } catch (shopifyError) {
+    const urls = await discoverProductUrls(watched.base_url).catch(() => [] as string[])
+    if (urls.length >= 10) {
+      await admin.from('watched_brand').update({ platform: 'browser', min_score: 0 }).eq('watched_brand_id', watched.watched_brand_id)
+      const browserWatched = { ...watched, platform: 'browser' as const, min_score: 0 }
+      const result = mode === 'full' ? await onboardBrand(browserWatched) : await baselineBrand(browserWatched)
+      return await finish({ ...result, note: `not Shopify — switched to the browser route (sitemap + JSON-LD). ${result.note ?? ''}`.trim() })
+    }
+    // Neither route works — take the row back off the watchlist.
+    await admin.from('watched_brand').delete().eq('watched_brand_id', watched.watched_brand_id)
+    revalidatePath('/admin/brand-watch')
+    throw shopifyError
+  }
+}
+
 export async function addWatchedBrand(url: string, mode: 'watch' | 'full' = 'watch'): Promise<{ result?: BrandCheckResult; error?: string }> {
   await assertAdmin()
   const base = normaliseBaseUrl(url)
@@ -525,6 +586,59 @@ export async function fullScanBrand(watchedBrandId: string): Promise<{ result?: 
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) }
   }
+}
+
+/** Start one of the scans without holding the page: it runs on, the card says so. */
+async function startInBackground(watchedBrandId: string, run: (w: WatchedBrandRow) => Promise<unknown>): Promise<{ started?: true; name?: string; error?: string }> {
+  const admin = createAdminClient() as any
+  const { data } = await admin.from('watched_brand').select('*').eq('watched_brand_id', watchedBrandId).single()
+  if (!data) return { error: 'Watchlist row not found' }
+  const watched = data as unknown as WatchedBrandRow
+  if ((watched.scan_state as any)?.running) return { error: `${watched.name} is already being scanned` }
+  await admin.from('watched_brand')
+    .update({ scan_state: { ...(watched.scan_state ?? {}), running: true, started_at: new Date().toISOString() } })
+    .eq('watched_brand_id', watchedBrandId)
+  const work = (async () => {
+    try { await run(watched) } catch (err) {
+      await admin.from('watched_brand')
+        .update({ scan_state: { running: false, error: err instanceof Error ? err.message : String(err) } })
+        .eq('watched_brand_id', watchedBrandId)
+      return
+    }
+    // onboardBrand keeps its own page counters; only clear the running flag.
+    const { data: after } = await admin.from('watched_brand').select('scan_state').eq('watched_brand_id', watchedBrandId).maybeSingle()
+    await admin.from('watched_brand')
+      .update({ scan_state: { ...((after?.scan_state as any) ?? {}), running: false } })
+      .eq('watched_brand_id', watchedBrandId)
+    revalidatePath('/admin/brand-watch')
+  })()
+  try { waitUntil(work) } catch { /* local dev: the promise simply runs */ }
+  revalidatePath('/admin/brand-watch')
+  return { started: true, name: watched.name }
+}
+
+/** CHECK NOW, in the background. */
+export async function checkBrandNowInBackground(watchedBrandId: string) {
+  await assertAdmin()
+  return startInBackground(watchedBrandId, async (w) => {
+    const admin = createAdminClient() as any
+    await checkWatchedBrand(w)
+    await autoKeepForBrand(admin, w)
+  })
+}
+
+/** FULL SCAN, in the background. */
+export async function fullScanBrandInBackground(watchedBrandId: string) {
+  await assertAdmin()
+  return startInBackground(watchedBrandId, (w) => onboardBrand(w))
+}
+
+/** RUN CHECK NOW across the watchlist, in the background. */
+export async function checkAllBrandsNowInBackground(): Promise<{ started: true }> {
+  await assertAdmin()
+  const work = (async () => { try { await runBrandWatch() } catch { /* each brand records its own error */ } revalidatePath('/admin/brand-watch') })()
+  try { waitUntil(work) } catch { /* local dev */ }
+  return { started: true }
 }
 
 export async function setWatchedBrandActive(watchedBrandId: string, active: boolean): Promise<void> {

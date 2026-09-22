@@ -144,8 +144,12 @@ const BULK_PER_SECOND = 3
 export const CONFIDENCE_MIN_PREDICTIONS = 12
 /** The broad reading counts bulk keeps, so it needs more before it is trusted. */
 export const BROAD_MIN_PREDICTIONS = 40
-/** The bar she sets: auto-keep only above this chance. */
-export const DEFAULT_CONFIDENCE = 0.92
+/**
+ * The bar: anything above this may be kept without her. 85% is her own call
+ * (2026-09-22), and it is where the measurement is strongest — on ME+EM's
+ * history the 85% bar added 79 pieces and was right about 75 of them.
+ */
+export const DEFAULT_CONFIDENCE = 0.85
 /** Measured precision the brand must reach at its bar before automation runs. */
 export const CONFIDENCE_PRECISION = 0.9
 

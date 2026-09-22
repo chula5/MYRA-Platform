@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useState, useTransition } from 'react'
 import { PICKER_COLOURS, PICKER_TYPES } from '@/components/admin/ItemPickerModal'
 import { findSimilarToSkipped } from '@/lib/brand-watch-similar'
+import { useRouter } from 'next/navigation'
+import { DEFAULT_CONFIDENCE } from '@/lib/brand-watch-confidence'
 import type { WatchedBrandRow } from '@/lib/brand-watch'
 import type { BrandTrust } from '@/lib/brand-watch-trust'
 import type { TwinTrust } from '@/lib/brand-watch-twins'
 import {
-  addWatchedBrand, checkAllBrandsNow, checkBrandNow, fullScanBrand, keepAllForBrand,
+  addWatchedBrandInBackground, checkAllBrandsNowInBackground, checkBrandNowInBackground, fullScanBrandInBackground, keepAllForBrand,
   keepItems, loadQueuePage, removeWatchedBrand, setWatchedBrandActive, setWatchedBrandAutoKeep,
   setWatchedBrandAutoKeepConfidence, setWatchedBrandConfidenceBar, loadAutoAdded, undoAutoKeep,
   loadSiteRequests, decideSiteRequest, keepConfidentNowForBrand,
@@ -74,12 +76,29 @@ function staleScan(state: { running?: boolean; started_at?: string } | null | un
 
 export default function BrandWatchClient(props: Props) {
   const { watched, trust, twinTrust } = props
+  const router = useRouter()
   const confidenceTrust = props.confidenceTrust ?? {}
   // What MYRA added by itself — open it and every one can be sent back.
   const [autoAdded, setAutoAdded] = useState<any[] | null>(null)
+  // Every scan runs on its own now; this says so, and the page follows it.
+  const started = (r: any) => {
+    setNotice(r?.error ?? `${(r?.name ?? 'IT').toUpperCase()}: SCANNING IN THE BACKGROUND — CARRY ON, THE PAGE FOLLOWS IT`)
+    if (!r?.error) router.refresh()
+  }
+
   // Shops she asked for from the mirror, where MYRA could not read the page.
   const [requests, setRequests] = useState<any[] | null>(null)
   useEffect(() => { void loadSiteRequests().then((r) => setRequests(r.rows ?? [])) }, [])
+
+  // While a scan is running the page refreshes itself every ten seconds, so
+  // she can carry on keeping and skipping while a catalogue is read.
+  const scanning = watched.some((w) => (w.scan_state as any)?.running)
+  useEffect(() => {
+    if (!scanning) return
+    const t = setInterval(() => { router.refresh(); reloadQueue() }, 10_000)
+    return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scanning])
   const decided = props.decided ?? {}
   const [pending, startTransition] = useTransition()
   const [url, setUrl] = useState('')
@@ -203,14 +222,14 @@ export default function BrandWatchClient(props: Props) {
           <input
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && url.trim()) act(() => addWatchedBrand(url, 'watch'), (r) => addNotice(r, 'FROM THE LAST 60 DAYS')) }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && url.trim()) act(() => addWatchedBrandInBackground(url, 'watch'), started) }}
             placeholder="HTTPS://BRAND.COM"
             className="w-full border border-[#E2E0DB] rounded-[8px] px-3 py-2 text-[10px] tracking-[0.08em] outline-none focus:border-[#0A0A0A] uppercase placeholder:text-[#A8A8A4]"
           />
           <div className="mt-2 flex gap-2">
             <button
               disabled={pending || !url.trim()}
-              onClick={() => act(() => addWatchedBrand(url, 'watch'), (r) => addNotice(r, 'FROM THE LAST 60 DAYS'))}
+              onClick={() => act(() => addWatchedBrandInBackground(url, 'watch'), started)}
               className="flex-1 bg-[#0A0A0A] text-white rounded-full px-4 py-2 text-[9px] tracking-[0.12em] hover:opacity-85 transition-opacity disabled:opacity-40"
               title="Queue only the last 60 days of on-taste pieces, then watch weekly"
             >
@@ -218,7 +237,7 @@ export default function BrandWatchClient(props: Props) {
             </button>
             <button
               disabled={pending || !url.trim()}
-              onClick={() => act(() => addWatchedBrand(url, 'full'), (r) => addNotice(r, 'FROM THE FULL CATALOGUE'))}
+              onClick={() => act(() => addWatchedBrandInBackground(url, 'full'), started)}
               className="flex-1 border border-[#0A0A0A] text-[#0A0A0A] rounded-full px-4 py-2 text-[9px] tracking-[0.12em] hover:bg-[#0A0A0A] hover:text-white transition-colors disabled:opacity-40"
               title="Onboard: queue every on-taste piece in the whole catalogue, then watch weekly"
             >
@@ -253,14 +272,14 @@ export default function BrandWatchClient(props: Props) {
                   <span className="flex gap-1.5 flex-shrink-0">
                     <button
                       disabled={pending}
-                      onClick={() => { setBusyBrand(w.watched_brand_id); act(() => checkBrandNow(w.watched_brand_id), (r) => { setNotice(r.error ?? `${r.result.name}: ${r.result.newProducts} NEW, ${r.result.queued} QUEUED, ${r.result.skippedStock} HELD FOR STOCK, ${r.result.suppressedByLearning ?? 0} SUPPRESSED BY LEARNING, ${r.result.restocked} RESTOCKED${r.result.visionColours ? `, ${r.result.visionColours} COLOURS READ FROM THE IMAGES` : ''}${r.result.autoKept ? `, ${r.result.autoKept} AUTO-KEPT` : ''}${r.result.autoNote ? ` — ${r.result.autoNote}` : ''}`); if (!r.error) reloadQueue() }) }}
+                      onClick={() => act(() => checkBrandNowInBackground(w.watched_brand_id), started)}
                       className="text-[8px] tracking-[0.1em] text-[#4A4E57] border border-[#E2E0DB] rounded-full px-2.5 py-1 hover:border-[#0A0A0A] transition-colors disabled:opacity-40"
                     >
                       {busyBrand === w.watched_brand_id ? <span className="text-[#C4A882]">WORKING…</span> : 'CHECK NOW'}
                     </button>
                     <button
                       disabled={pending}
-                      onClick={() => { setBusyBrand(w.watched_brand_id); act(() => fullScanBrand(w.watched_brand_id), (r) => { setNotice(r.error ?? `${r.result.name}: ${r.result.queued} QUEUED FROM THE FULL CATALOGUE (${r.result.belowScore} BELOW MIN SCORE)${r.result.visionColours ? `, ${r.result.visionColours} COLOURS READ FROM THE IMAGES` : ''}${r.result.note ? ` — ${r.result.note.toUpperCase()}` : ''}`); if (!r.error) reloadQueue() }) }}
+                      onClick={() => act(() => fullScanBrandInBackground(w.watched_brand_id), started)}
                       className="text-[8px] tracking-[0.1em] text-[#4A4E57] border border-[#E2E0DB] rounded-full px-2.5 py-1 hover:border-[#0A0A0A] transition-colors disabled:opacity-40"
                       title="Queue every on-taste piece in the whole catalogue at this brand's min score — lower the min score and run again to go deeper"
                     >
@@ -326,7 +345,7 @@ export default function BrandWatchClient(props: Props) {
                   <button
                     disabled={pending || (!w.auto_keep_confidence && !confidenceTrust[w.watched_brand_id]?.trusted)}
                     onClick={() => act(() => setWatchedBrandAutoKeepConfidence(w.watched_brand_id, !w.auto_keep_confidence), () =>
-                      setNotice(`${w.name.toUpperCase()}: AUTO-ADD ${w.auto_keep_confidence ? 'OFF' : `ON ABOVE ${Math.round(Number(w.confidence_bar ?? 0.92) * 100)}%`}`))}
+                      setNotice(`${w.name.toUpperCase()}: AUTO-ADD ${w.auto_keep_confidence ? 'OFF' : `ON ABOVE ${Math.round(Number(w.confidence_bar ?? DEFAULT_CONFIDENCE) * 100)}%`}`))}
                     className={`transition-colors disabled:cursor-not-allowed ${w.auto_keep_confidence ? 'text-[#3D6B45] font-bold' : confidenceTrust[w.watched_brand_id]?.trusted ? 'text-[#0A0A0A] underline underline-offset-2' : 'text-[#C9C7C2]'}`}
                     title={confidenceTrust[w.watched_brand_id]?.trusted ? 'Pieces above the bar go straight to the library' : 'Unlocks when the model has proven itself at this bar on your one-by-one decisions'}
                   >
@@ -334,12 +353,12 @@ export default function BrandWatchClient(props: Props) {
                   </button>
                   <select
                     disabled={pending}
-                    value={String(Number(w.confidence_bar ?? 0.92))}
+                    value={String(Number(w.confidence_bar ?? DEFAULT_CONFIDENCE))}
                     onChange={(e) => act(() => setWatchedBrandConfidenceBar(w.watched_brand_id, Number(e.target.value)))}
                     className="bg-transparent text-[8px] tracking-[0.12em] text-[#6B6B6B] border border-[#E2E0DB] rounded-full px-2 py-0.5"
                     title="Only keep a piece by itself above this chance you would keep it"
                   >
-                    {[0.8, 0.85, 0.9, 0.92, 0.95, 0.98].map((b) => <option key={b} value={b}>{Math.round(b * 100)}%</option>)}
+                    {[0.75, 0.8, 0.85, 0.9, 0.95].map((b) => <option key={b} value={b}>{Math.round(b * 100)}%</option>)}
                   </select>
                   {decided[w.watched_brand_id] && (
                     <span className="text-[#A8A8A4]">{decided[w.watched_brand_id].kept} KEPT · {decided[w.watched_brand_id].skipped} SKIPPED</span>
@@ -347,7 +366,7 @@ export default function BrandWatchClient(props: Props) {
                   {confidenceTrust[w.watched_brand_id]?.trusted && inQueue > 0 && (
                     <button
                       disabled={pending}
-                      onClick={() => { if (confirm(`Add every queued ${w.name} piece already above ${Math.round(Number(w.confidence_bar ?? 0.92) * 100)}%? You can undo any of them.`)) act(() => keepConfidentNowForBrand(w.watched_brand_id), (r) => { setNotice(r.error ?? `${w.name.toUpperCase()}: ${r.kept} ADDED FROM THE QUEUE — UNDO ANY IN 'WHAT MYRA ADDED BY ITSELF'`); if (!r.error) reloadQueue() }) }}
+                      onClick={() => { if (confirm(`Add every queued ${w.name} piece already above ${Math.round(Number(w.confidence_bar ?? DEFAULT_CONFIDENCE) * 100)}%? You can undo any of them.`)) act(() => keepConfidentNowForBrand(w.watched_brand_id), (r) => { setNotice(r.error ?? `${w.name.toUpperCase()}: ${r.kept} ADDED FROM THE QUEUE — UNDO ANY IN 'WHAT MYRA ADDED BY ITSELF'`); if (!r.error) reloadQueue() }) }}
                       className="text-[#0A0A0A] underline underline-offset-2"
                       title="Automation only takes pieces found after it was switched on; this clears what is already waiting"
                     >
@@ -436,7 +455,7 @@ export default function BrandWatchClient(props: Props) {
         {watched.length > 0 && (
           <button
             disabled={pending}
-            onClick={() => act(() => checkAllBrandsNow(), (r) => { setNotice(r.results.map((x: any) => `${x.name}: ${x.error ?? `${x.queued} queued`}`).join(' · ').toUpperCase()); reloadQueue() })}
+            onClick={() => act(() => checkAllBrandsNowInBackground(), () => setNotice('SCANNING EVERY BRAND IN THE BACKGROUND — THE PAGE KEEPS ITSELF UP TO DATE'))}
             className="mt-3 w-full border border-[#0A0A0A] rounded-full px-4 py-2 text-[9px] tracking-[0.14em] text-[#0A0A0A] hover:bg-[#0A0A0A] hover:text-white transition-colors disabled:opacity-40"
           >
             {pending ? 'WORKING…' : 'RUN CHECK NOW'}
