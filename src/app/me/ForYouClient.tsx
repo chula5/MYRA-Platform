@@ -3,9 +3,10 @@
 // FOR YOU — the first thing she sees. Her newest looks, big; one plain reason
 // under each; one tap to answer. Saying why is offered, never required.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import FallbackImage from '@/components/FallbackImage'
+import ShopTheLookOverlay from '@/components/source-panel/ShopTheLookOverlay'
 import MirrorCurtain from '@/components/me/MirrorCurtain'
 import { answerLook, explainAnswer, type ForYouLook, type ForYouView } from './for-you-actions'
 
@@ -52,6 +53,9 @@ export default function ForYouClient({ view, testMemberId }: { view: ForYouView;
               {view.firstName ? `HELLO ${view.firstName.toUpperCase()}` : 'HELLO'}
             </h1>
             <p className="myra-section-note mt-4">YOUR NEWEST LOOKS</p>
+            <p className="myra-guide-text mt-3 text-[clamp(21px,1.25vw,32px)] text-[#55534E]">
+              Like and dislike the outfits — that is how MYRA learns what you would actually wear.
+            </p>
           </div>
           {view.error && <p className="text-[20px] text-[#B83A3A] text-center mb-6">{view.error}</p>}
           {view.looks.length === 0 ? (
@@ -78,6 +82,11 @@ export default function ForYouClient({ view, testMemberId }: { view: ForYouView;
 
 function LookCard({ look, testMemberId }: { look: ForYouLook; testMemberId?: string }) {
   const [answer, setAnswer] = useState<'yes' | 'no' | null>(look.response)
+  // SOURCE ITEMS — the pieces, over the outfit itself, as on her looks page.
+  const [sourceOpen, setSourceOpen] = useState(false)
+  // A dislike opens the comment straight away, with the cursor already in it:
+  // the reason is worth more than the thumb, and it is asked for once.
+  const whyRef = useRef<HTMLTextAreaElement | null>(null)
   const [askWhy, setAskWhy] = useState(false)
   const [reason, setReason] = useState<string | null>(null)
   const [words, setWords] = useState('')
@@ -95,6 +104,8 @@ function LookCard({ look, testMemberId }: { look: ForYouLook; testMemberId?: str
     setAskWhy(verdict === 'no')
     setThanked(false)
   }
+
+  useEffect(() => { if (askWhy) whyRef.current?.focus({ preventScroll: true }) }, [askWhy])
 
   async function sendWhy() {
     setBusy(true)
@@ -114,6 +125,46 @@ function LookCard({ look, testMemberId }: { look: ForYouLook; testMemberId?: str
         <span className="absolute top-4 left-4 bg-[rgba(255,255,255,0.92)] rounded-full px-5 py-2 text-[clamp(21px,1.25vw,32px)] tracking-[0.08em] text-[#2B2B2B]">
           {look.occasion_label.toUpperCase()}
         </span>
+
+        {sourceOpen && look.pieces.length > 0 && (
+          <div className="absolute inset-0 z-30" onClick={(e) => e.stopPropagation()}>
+            <ShopTheLookOverlay
+              items={look.pieces.map((p) => ({
+                item_id: p.item_id ?? `unlinked-${p.product_name}`,
+                product_name: p.product_name,
+                image_url: p.image_url,
+                retailer_url: p.owned ? null : p.url,
+                price: p.price_gbp != null ? String(p.price_gbp) : null,
+                currency: 'GBP',
+                item_type: p.item_type,
+                brand: { name: p.brand },
+              })) as any}
+              onClose={() => setSourceOpen(false)}
+              size="large"
+            />
+          </div>
+        )}
+
+        {/* What the look is made of, and more like it — over the outfit, never instead of it. */}
+        {!sourceOpen && look.pieces.length > 0 && (
+          <div className="absolute inset-x-0 bottom-0 z-20 pt-12 pb-16 px-3 bg-gradient-to-t from-black/55 via-black/15 to-transparent pointer-events-none">
+            <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
+              <button
+                onClick={(e) => { e.stopPropagation(); setSourceOpen(true) }}
+                className="pointer-events-auto text-white text-[clamp(17px,1.05vw,26px)] tracking-[0.1em] uppercase font-light hover:opacity-70 transition-opacity"
+              >
+                Source items
+              </button>
+              <Link
+                href={`/me/looks?q=${encodeURIComponent(look.occasion_label)}`}
+                onClick={(e) => e.stopPropagation()}
+                className="pointer-events-auto text-white text-[clamp(17px,1.05vw,26px)] tracking-[0.1em] uppercase font-light hover:opacity-70 transition-opacity"
+              >
+                More like this
+              </Link>
+            </div>
+          </div>
+        )}
 
         {/* Thumbs on the photo itself, bottom left and right: small, silver
             until she taps, black once chosen. Tapping the lit one again takes
@@ -156,7 +207,7 @@ function LookCard({ look, testMemberId }: { look: ForYouLook; testMemberId?: str
             {thanked && <p className="text-[21px] text-[#55534E] text-center">Thank you — that really helps.</p>}
             {askWhy && (
               <div className="flex flex-col gap-3">
-                <p className="text-[20px] text-[#2B2B2B]">Want to say why? It&rsquo;s optional.</p>
+                <p className="text-[21px] text-[#2B2B2B]">What didn&rsquo;t you like about it? Optional, and it teaches MYRA more than the thumb does.</p>
                 <div className="flex flex-wrap gap-2.5">
                   {REASONS.map((r) => (
                     <button
@@ -169,11 +220,12 @@ function LookCard({ look, testMemberId }: { look: ForYouLook; testMemberId?: str
                   ))}
                 </div>
                 <textarea
+                  ref={whyRef}
                   value={words}
                   onChange={(e) => setWords(e.target.value)}
                   rows={2}
-                  placeholder="Or in your own words"
-                  className="text-[20px] bg-white rounded-[14px] border border-[#6E6B65] px-4 py-3 placeholder:text-[#8C8A85] focus:outline-none focus:border-[#2B2B2B]"
+                  placeholder="In your own words — the colour, the shape, the price…"
+                  className="myra-guide-text text-[20px] bg-white rounded-[14px] border border-[#6E6B65] px-4 py-3 placeholder:text-[#8C8A85] focus:outline-none focus:border-[#2B2B2B]"
                 />
                 <div className="flex gap-3">
                   <button
@@ -183,7 +235,7 @@ function LookCard({ look, testMemberId }: { look: ForYouLook; testMemberId?: str
                   >
                     Send
                   </button>
-                  <button onClick={() => setAskWhy(false)} className="text-[20px] px-6 py-3 text-[#55534E]">Skip</button>
+                  <button onClick={() => setAskWhy(false)} className="text-[20px] px-6 py-3 text-[#55534E]">No thanks</button>
                 </div>
               </div>
             )}

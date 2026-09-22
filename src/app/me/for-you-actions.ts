@@ -19,7 +19,17 @@ export interface ForYouLook {
   /** One plain sentence on why it suits her. */
   why: string
   response: 'yes' | 'no' | null
-  pieces: { item_id: string | null; brand: string; product_name: string; image_url: string | null; owned: boolean }[]
+  pieces: {
+    item_id: string | null
+    brand: string
+    product_name: string
+    image_url: string | null
+    owned: boolean
+    /** Where to buy it, what it costs and what it is — SOURCE ITEMS reads these. */
+    url: string | null
+    price_gbp: number | null
+    item_type: string | null
+  }[]
 }
 
 export interface ForYouView {
@@ -32,7 +42,7 @@ export interface ForYouView {
 }
 
 const NEWEST = 12
-const DIM_COLUMNS = 'item_id, item_type, colour_family, product_name, fit, leg_opening, length, structure, neckline, sleeve, rise, shoulder, waist_definition, pattern'
+const DIM_COLUMNS = 'item_id, retailer_url, image_url, item_type, colour_family, product_name, fit, leg_opening, length, structure, neckline, sleeve, rise, shoulder, waist_definition, pattern'
 
 export async function loadForYou(asMemberId?: string): Promise<ForYouView> {
   const me = await resolveClientMember(asMemberId)
@@ -78,7 +88,10 @@ export async function loadForYou(asMemberId?: string): Promise<ForYouView> {
           response: l.response ?? null,
           pieces: items.map((it) => ({
             item_id: it.item_id ?? null, brand: it.brand ?? '', product_name: it.product_name ?? '',
-            image_url: it.image_url ?? null, owned: !!it.owned,
+            image_url: it.image_url ?? dims.get(it.item_id)?.image_url ?? null, owned: !!it.owned,
+            url: it.owned ? null : (it.url ?? dims.get(it.item_id)?.retailer_url ?? null),
+            price_gbp: it.price_gbp != null ? Number(it.price_gbp) : null,
+            item_type: it.item_type ?? dims.get(it.item_id)?.item_type ?? null,
           })),
         }
       }),

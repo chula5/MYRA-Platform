@@ -23,7 +23,18 @@ export function startTour() {
   window.dispatchEvent(new Event('myra:tour'))
 }
 
-interface Step { path?: string; target?: string; fallback?: string; title: string; body: string }
+interface Step {
+  path?: string
+  target?: string
+  fallback?: string
+  title: string
+  body: string
+  /** Something to do from the step itself, not only read about. */
+  cta?: { label: string; href: string }
+}
+
+/** The mirror's listing, once it is published; until then, her connect page. */
+const MIRROR_HREF = process.env.NEXT_PUBLIC_MIRROR_STORE_URL || '/me/welcome'
 
 const DRESSING = '/me/dressing-room'
 const STEPS: Step[] = [
@@ -47,6 +58,11 @@ const STEPS: Step[] = [
   { target: '[data-tour="search"]', title: 'SEARCH', body: 'Ask in your own words. Try \u201ca wedding in June\u201d.' },
   { target: '[data-tour="you"]', title: 'YOU', body: 'Your sizes, preferences and account.' },
   { path: '/me/profile', target: '[data-tour="brands"]', title: 'YOUR BRANDS', body: 'The brands you love, and what MYRA found from them. Add one any time.' },
+  {
+    title: 'MYRA WHERE YOU SHOP',
+    body: 'Add MYRA to your browser and every shop you open is in your order — keep a piece, or ask what to wear with it, without leaving the shop.',
+    cta: { label: 'Add MYRA to my browser', href: MIRROR_HREF },
+  },
   { title: 'THAT\u2019S EVERYTHING', body: 'Your wardrobe is still filling in. Start on your For You page.' },
 ]
 
@@ -187,6 +203,16 @@ export default function MeTour() {
           <p className="text-[clamp(18px,1vw,30px)] text-[#6E6B65] shrink-0">{step + 1} of {STEPS.length}</p>
         </div>
         <p className="mt-[0.5em] text-[clamp(27px,1.6vw,48px)] leading-snug text-[#2B2B2B]">{s.body}</p>
+        {s.cta && (
+          <a
+            href={s.cta.href}
+            target={s.cta.href.startsWith('http') ? '_blank' : undefined}
+            rel={s.cta.href.startsWith('http') ? 'noopener noreferrer' : undefined}
+            className="mt-[0.9em] inline-block text-[clamp(22px,1.2vw,36px)] tracking-[0.06em] px-[1.3em] py-[0.55em] rounded-full bg-white text-[#2B2B2B] shadow-[0_10px_24px_-16px_rgba(43,43,43,0.7)]"
+          >
+            {s.cta.label} →
+          </a>
+        )}
         <div className="mt-[1em] flex items-center justify-between gap-4 text-[clamp(22px,1.2vw,36px)]">
           <button onClick={finish} className="text-[clamp(20px,1.1vw,32px)] underline underline-offset-4 text-[#6E6B65]">{last ? 'Close' : 'Skip the tour'}</button>
           <div className="flex items-center gap-3">
