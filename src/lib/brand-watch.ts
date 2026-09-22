@@ -864,7 +864,7 @@ async function markSeen(
 // shift in your taste lets them through. Cross-brand by design: decisions on
 // one site inform scans of every other site.
 async function loadLearnedSkipper(admin: any): Promise<(p: ScannedProduct, brandName: string) => LearnedVerdict> {
-  const none: LearnedVerdict = { delta: 0, reasons: '', predictedSkip: false }
+  const none: LearnedVerdict = { delta: 0, reasons: '', predictedSkip: false, kindKeeps: 0, kindSkips: 0 }
   const rows: any[] = []
   // skip_reason arrives with migration 0055; read without it until then.
   const read = async (cols: string) => {

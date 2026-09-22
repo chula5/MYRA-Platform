@@ -23,7 +23,7 @@ import { buildLearning, type DecidedRow } from './brand-watch-learning'
 import { measureBrandTrust, summariseTrust, wouldAutoKeep, type BrandTrust, type TrustDecision } from './brand-watch-trust'
 import { carefulFlags, keptTwinOf, measureTwinTrust, summariseTwinTrust, type TwinDecision, type TwinTrust } from './brand-watch-twins'
 import {
-  confidenceFor, fitBrandModel, measureBoth, summariseConfidence, DEFAULT_CONFIDENCE,
+  confidenceFor, dampByKind, fitBrandModel, measureBoth, summariseConfidence, DEFAULT_CONFIDENCE,
   type BrandModel, type ConfidenceDecision, type ConfidenceTrust,
 } from './brand-watch-confidence'
 import { houseBanOf } from './brand-watch-bans'
@@ -177,7 +177,10 @@ export function confidenceModels(decisions: ConfidenceDecision[], learn: ReturnT
 export const confidenceOf = (data: BrandTrustData, row: any): number | null => {
   const model = row.brand_id ? data.confidence.get(row.brand_id) : undefined
   if (!model) return null
-  return confidenceFor(model, data.learn(toDecided(row)).delta, Number(row.discovery_score ?? 0))
+  const v = data.learn(toDecided(row))
+  const p = confidenceFor(model, v.delta, Number(row.discovery_score ?? 0))
+  // Never sure about a kind of piece she has never kept.
+  return dampByKind(p, v)
 }
 
 export const confidenceTrustFor = (data: BrandTrustData, watched: { brand_id?: string | null; confidence_bar?: number | null }): ConfidenceTrust =>

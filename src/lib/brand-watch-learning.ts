@@ -23,6 +23,14 @@ export interface LearnedVerdict {
   delta: number // added to the style score for ranking; negative = likely skip
   reasons: string // human-readable top contributors
   predictedSkip: boolean
+  /**
+   * Decisions on this exact KIND of piece — its type in its material. A leather
+   * blazer is not "blazer, and leather": she keeps blazers and she keeps
+   * leather, and had never once kept a leather blazer. Read by the confidence
+   * model, which must not be sure about a combination it has never seen.
+   */
+  kindKeeps: number
+  kindSkips: number
 }
 
 const STOP = new Set(['the', 'and', 'with', 'for', 'from', 'one'])
@@ -35,6 +43,9 @@ function featuresOf(r: {
   if (r.itemType) f.push('type:' + r.itemType)
   if (r.colourFamily) f.push('col:' + r.colourFamily)
   if (r.materialCategory) f.push('mat:' + r.materialCategory)
+  // The combination, not only its parts: a blazer in leather is its own thing.
+  if (r.itemType && r.materialCategory) f.push('kind:' + r.itemType + '|' + r.materialCategory)
+  if (r.itemType && r.colourFamily) f.push('tc:' + r.itemType + '|' + r.colourFamily)
   // Pounds, not the store's own currency: a DKK 2,200 piece is ~£250, not £500+.
   const p = r.priceGbp != null ? Number(r.priceGbp) : parseFloat(String(r.price ?? ''))
   if (!isNaN(p)) f.push('price:' + (p < 150 ? 'under150' : p < 300 ? '150-300' : p < 500 ? '300-500' : '500plus'))
@@ -76,8 +87,18 @@ export function buildLearning(decided: DecidedRow[]): (row: {
   }
   const total = decided.length
 
+  const kindTally = (row: { itemType: string | null; materialCategory: string | null; brandName: string | null }) => {
+    if (!row.itemType || !row.materialCategory) return { k: 0, s: 0 }
+    const f = 'kind:' + row.itemType + '|' + row.materialCategory
+    const g = global.get(f) ?? { k: 0, s: 0 }
+    const b = perBrand.get(row.brandName ?? '')?.get(f) ?? { k: 0, s: 0 }
+    // The brand's own decisions were counted into both maps; take the global.
+    return { k: g.k, s: g.s, brandK: b.k, brandS: b.s }
+  }
+
   return (row) => {
-    if (total === 0) return { delta: 0, reasons: '', predictedSkip: false }
+    const kind = kindTally(row)
+    if (total === 0) return { delta: 0, reasons: '', predictedSkip: false, kindKeeps: 0, kindSkips: 0 }
     const brandMap = perBrand.get(row.brandName ?? '')
     let sum = 0
     const contribs: Array<[string, number]> = []
@@ -99,6 +120,6 @@ export function buildLearning(decided: DecidedRow[]): (row: {
       .slice(0, 3)
       .map(([f, w]) => `${f.replace(/^t:/, '')} ${w > 0 ? '+' : ''}${w.toFixed(1)}`)
       .join(', ')
-    return { delta, reasons, predictedSkip: total >= 15 && delta <= -2 }
+    return { delta, reasons, predictedSkip: total >= 15 && delta <= -2, kindKeeps: kind.k, kindSkips: kind.s }
   }
 }

@@ -28,10 +28,14 @@ export interface ConfidenceSample {
 }
 
 export interface BrandModel {
-  /** log-odds = bias + wDelta × delta + wScore × score */
+  /** log-odds = bias + wDelta × (delta − meanDelta)/sdDelta + wScore × (score − meanScore)/sdScore */
   bias: number
   wDelta: number
   wScore: number
+  meanDelta: number
+  sdDelta: number
+  meanScore: number
+  sdScore: number
   /** Decisions it was fitted on. */
   n: number
   /** Her keep rate for the brand — what the model falls back towards. */
@@ -43,7 +47,7 @@ const sigmoid = (z: number) => 1 / (1 + Math.exp(-Math.max(-30, Math.min(30, z))
 /** The model for a brand with nothing to learn from yet: her keep rate, flat. */
 export function baseModel(baseRate: number, n = 0): BrandModel {
   const p = Math.max(0.02, Math.min(0.98, baseRate))
-  return { bias: Math.log(p / (1 - p)), wDelta: 0, wScore: 0, n, baseRate: p }
+  return { bias: Math.log(p / (1 - p)), wDelta: 0, wScore: 0, meanDelta: 0, sdDelta: 1, meanScore: 0, sdScore: 1, n, baseRate: p }
 }
 
 /**
@@ -57,11 +61,20 @@ export function fitBrandModel(samples: ConfidenceSample[], opts: { l2?: number; 
   const baseRate = n ? kept / n : 0.5
   if (n < 8 || kept === 0 || kept === n) return baseModel(baseRate, n)
 
-  const l2 = opts.l2 ?? 1
-  const iterations = opts.iterations ?? 400
-  const rate = opts.rate ?? 0.08
-  // Scores run roughly −9..9 and deltas −6..6; scaling keeps the step size sane.
-  const x = samples.map((s) => [s.delta / 3, s.score / 3])
+  // Light regularisation and standardised features. With a heavy penalty and a
+  // fixed scale the weights barely moved, so every piece came back at her keep
+  // rate — 88% on everything, which tells her nothing.
+  const l2 = opts.l2 ?? 0.25
+  const iterations = opts.iterations ?? 900
+  const rate = opts.rate ?? 0.35
+  const stats = (xs: number[]) => {
+    const mean = xs.reduce((a, b) => a + b, 0) / xs.length
+    const sd = Math.sqrt(xs.reduce((a, b) => a + (b - mean) ** 2, 0) / xs.length) || 1
+    return { mean, sd: Math.max(sd, 0.25) }
+  }
+  const d = stats(samples.map((s) => s.delta))
+  const sc = stats(samples.map((s) => s.score))
+  const x = samples.map((s) => [(s.delta - d.mean) / d.sd, (s.score - sc.mean) / sc.sd])
   const y = samples.map((s) => (s.kept ? 1 : 0))
   let [bias, wDelta, wScore] = [Math.log(Math.max(0.02, baseRate) / Math.max(0.02, 1 - baseRate)), 0, 0]
 
@@ -76,12 +89,32 @@ export function fitBrandModel(samples: ConfidenceSample[], opts: { l2?: number; 
     wDelta -= (rate * (gD + l2 * wDelta)) / n
     wScore -= (rate * (gS + l2 * wScore)) / n
   }
-  return { bias, wDelta: wDelta / 3, wScore: wScore / 3, n, baseRate }
+  return { bias, wDelta, wScore, meanDelta: d.mean, sdDelta: d.sd, meanScore: sc.mean, sdScore: sc.sd, n, baseRate }
 }
 
 /** The chance she would keep a piece, 0..1. */
 export function confidenceFor(model: BrandModel, delta: number, score: number): number {
-  return sigmoid(model.bias + model.wDelta * delta + model.wScore * score)
+  const z = model.bias
+    + model.wDelta * ((delta - model.meanDelta) / model.sdDelta)
+    + model.wScore * ((score - model.meanScore) / model.sdScore)
+  return sigmoid(z)
+}
+
+/**
+ * What she has decided about this KIND of piece — a blazer in leather, not
+ * "blazer" and "leather" apart. MYRA may not be sure about a combination she
+ * has never seen: she has kept hundreds of leather pieces and hundreds of
+ * blazers, and never once a leather blazer.
+ */
+export const UNSEEN_KIND_CAP = 0.7
+export const SKIPPED_KIND_CAP = 0.45
+export function dampByKind(p: number, kind: { kindKeeps: number; kindSkips: number }): number {
+  const seen = kind.kindKeeps + kind.kindSkips
+  if (seen === 0) return Math.min(p, UNSEEN_KIND_CAP)
+  if (kind.kindKeeps === 0) return Math.min(p, SKIPPED_KIND_CAP)
+  // Thin evidence pulls back towards the cap rather than over it.
+  if (seen < 4) return Math.min(p, UNSEEN_KIND_CAP + (1 - UNSEEN_KIND_CAP) * (seen / 4))
+  return p
 }
 
 // ── Measuring it, before trusting it ─────────────────────────────────────────
@@ -170,7 +203,8 @@ export function measureConfidence(
     for (const d of ordered.slice(i, i + chunk)) {
       if (!careful(d)) continue
       carefulSeen++
-      if (confidenceFor(model, learn(d).delta, d.score) >= threshold) {
+      const v = learn(d)
+      if (dampByKind(confidenceFor(model, v.delta, d.score), v) >= threshold) {
         predictions++
         if (d.kept) right++
       }
