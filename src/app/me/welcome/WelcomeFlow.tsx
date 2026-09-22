@@ -1,12 +1,22 @@
 'use client'
 
-// CONNECT YOUR ACCOUNTS. Four round icons, not cards of text: Instagram,
+// HER FIRST TWO MINUTES, in two phases.
+//
+// FIRST, THE BRANDS SHE LOVES. It comes before connecting anything because it
+// is the only part she can finish on her own, in ten seconds, with no account
+// to authorise — and because it is the single largest thing MYRA can learn
+// about her. Naming three brands seeds her whole taste model; connecting a
+// mailbox that has to be scanned does not pay her back for minutes. Skippable,
+// like everything else here, and she can change it all later in YOU.
+//
+// THEN, CONNECT YOUR ACCOUNTS. Four round icons, not cards of text: Instagram,
 // email, calendar, photos. Hovering one says what MYRA does with it; a tick
 // shows what is connected. All optional, so the way past sits above them,
 // loud. All live on in her Dressing Room. Then: the tour.
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import BrandPicker from '@/components/me/BrandPicker'
 import VirginConnect from '../dressing-room/VirginConnect'
 import InstagramImport from '../dressing-room/InstagramImport'
 import { loadEmailPanel, scanNow, type EmailPanelView } from '../dressing-room/email-actions'
@@ -20,8 +30,12 @@ const MIRROR_STORE_URL = process.env.NEXT_PUBLIC_MIRROR_STORE_URL ?? ''
 const BODY = 'text-[clamp(22px,1.35vw,40px)]'
 const PILL = 'text-[clamp(21px,1.2vw,32px)] inline-block px-[1.3em] py-[0.6em] bg-white text-[#2B2B2B] rounded-full shadow-[0_8px_18px_-12px_rgba(43,43,43,0.5)] hover:bg-[#2B2B2B] hover:text-white transition-colors'
 
+type Phase = 'brands' | 'connect'
+
 export default function WelcomeFlow({ firstName, previewMemberId }: { firstName: string; previewMemberId?: string }) {
   const router = useRouter()
+  const [phase, setPhase] = useState<Phase>('brands')
+  const [brandCount, setBrandCount] = useState(0)
   const [email, setEmail] = useState<EmailPanelView | null>(null)
   const [archival, setArchival] = useState<ArchivalPanelView | null>(null)
   const [calendar, setCalendar] = useState<CalendarPanelView | null>(null)
@@ -75,11 +89,50 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
   const calHref = `/api/calendar/google/start?return=${encodeURIComponent('/me/welcome')}${member}`
   const tour = () => { startTour(); router.push('/me') }
 
+  // ── Phase one: the brands she loves ───────────────────────────────────────
+  if (phase === 'brands') {
+    return (
+      <div className="w-full max-w-[1100px] mx-auto space-y-7 pb-10">
+        {previewMemberId && (
+          <p className="text-center text-[15px] tracking-[0.12em] bg-[#7C838B] text-white py-2.5 rounded-full">
+            PREVIEW · STEP 2 OF 4 · THE BRANDS {firstName.toUpperCase() || 'SHE'} NAMES HERSELF · SAVING HERE IS REAL
+          </p>
+        )}
+
+        <header className="text-center space-y-4 pt-2">
+          <h1 className="text-[clamp(34px,3.6vw,76px)] leading-[1.08] text-[#2B2B2B]">
+            {firstName ? `${firstName}, which brands do you love?` : 'Which brands do you love?'}
+          </h1>
+          <p className={`${BODY} myra-guide-text text-[#4A4E57]`}>
+            Three or four is plenty. MYRA works out the rest from them.
+          </p>
+          {/* The way past, above the work: nothing here is required, and she
+              should never feel stuck on the first screen she is ever shown. */}
+          <button
+            onClick={() => setPhase('connect')}
+            className="text-[clamp(24px,1.5vw,44px)] tracking-[0.1em] px-[1.6em] py-[0.6em] bg-[#2B2B2B] text-white rounded-full hover:opacity-85 transition-opacity"
+          >
+            {brandCount ? 'NEXT: CONNECT YOUR ACCOUNTS →' : 'SKIP FOR NOW →'}
+          </button>
+        </header>
+
+        <div className="rounded-[28px] bg-white/80 shadow-[0_18px_40px_-24px_rgba(43,43,43,0.35)] p-6 sm:p-9">
+          <BrandPicker bare testMemberId={previewMemberId} onChange={setBrandCount} />
+        </div>
+
+        <p className="text-center text-[clamp(18px,1.05vw,30px)] text-[#6E6B65]">
+          You can change these any time in YOU.
+        </p>
+      </div>
+    )
+  }
+
+  // ── Phase two: connect your accounts ──────────────────────────────────────
   return (
     <div className="w-full max-w-[1700px] mx-auto space-y-7 pb-10">
       {previewMemberId && (
         <p className="text-center text-[15px] tracking-[0.12em] bg-[#7C838B] text-white py-2.5 rounded-full">
-          PREVIEW · STEP 2 OF 3 · WHAT {firstName.toUpperCase() || 'SHE'} SEES AFTER MAKING HER LOGIN · CONNECTING HERE IS REAL
+          PREVIEW · STEP 3 OF 4 · WHAT {firstName.toUpperCase() || 'SHE'} SEES AFTER MAKING HER LOGIN · CONNECTING HERE IS REAL
         </p>
       )}
 

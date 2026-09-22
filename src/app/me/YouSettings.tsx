@@ -13,6 +13,7 @@ import { earlyAccessSignOut } from '@/app/earlyaccess/actions'
 import { COLOUR_SHADES, COLOUR_FAMILY_IDS, SHAPE_PREFERENCES, PIECE_PREFERENCES } from '@/lib/pilot-stylist'
 import { SIZE_CATEGORIES, ladderFor, type SizeCategory } from '@/lib/size-canonical'
 import { MirrorLoading } from '@/components/ArchiveCard'
+import BrandPicker from '@/components/me/BrandPicker'
 
 const SIZE_LABEL: Record<SizeCategory, string> = { tops: 'Tops & dresses', bottoms: 'Trousers & skirts', outerwear: 'Coats & jackets', shoes: 'Shoes' }
 
@@ -171,6 +172,12 @@ export default function YouSettings({ testMemberId, initial }: { testMemberId?: 
             ))}
           </div>
         </section>
+
+        {/* Brands — her own list, and MYRA's read of it. Saves on its own as
+            she goes: adding a brand re-seeds her whole brand model server-side,
+            which is far too slow to sit behind the Save button that writes her
+            sizes. */}
+        <BrandPicker testMemberId={testMemberId} />
 
         {/* Colours */}
         <section className={`${card} lg:col-span-2`}>

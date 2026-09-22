@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import HerViewTab from './HerViewTab'
 import JourneyTab from './JourneyTab'
+import BrandRequests from './BrandRequests'
 import { listMemberReferencePictures, addMemberReferencePictures, removeMemberReferencePicture, type ReferencePicture } from './reference-actions'
 import { loadMemberConfidence, sendLookToClient, unsendLook, sendAllShotLooks, createClientLogin, type MemberConfidence } from './confidence-actions'
 import { loadClientAttribution, loadTransferSeries, tagLookScope, loadInheritanceReport, runPromotionPass, alignStylistLayers, type ClientAttribution, type InheritanceReport } from './attribution-actions'
@@ -355,6 +356,11 @@ function MembersTab({ data, run, busy }: { data: PilotData; run: Run; busy: stri
       </div>
 
       {showNew && <NewMemberForm run={run} busy={busy} done={() => setShowNew(false)} />}
+
+      {/* What the clients have named for themselves that MYRA cannot shop.
+          Above the member list because it is the one thing on this page that
+          is about all of them at once — and it hides itself when empty. */}
+      <BrandRequests />
 
       {data.members.map((m) => (
         <MemberCard

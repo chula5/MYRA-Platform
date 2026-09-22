@@ -31,7 +31,7 @@ export default async function WelcomePage({ params, searchParams }: { params: { 
     <main className="min-h-screen myra-pearl flex items-center justify-center px-6 py-14">
       {preview && (
         <p className="fixed top-0 inset-x-0 z-10 text-center text-[15px] tracking-[0.12em] bg-[#7C838B] text-white py-2.5">
-          PREVIEW — THIS IS WHAT {(name ?? 'SHE').toUpperCase()} SEES FROM HER INVITE LINK · STEP 1 OF 3 · NOTHING IS CREATED
+          PREVIEW — THIS IS WHAT {(name ?? 'SHE').toUpperCase()} SEES FROM HER INVITE LINK · STEP 1 OF 4 · NOTHING IS CREATED
         </p>
       )}
       <div className="myra-silver-card w-full max-w-[clamp(600px,42vw,1100px)] text-center px-[clamp(32px,3.5vw,90px)] py-[clamp(40px,3.5vw,90px)]">
@@ -64,7 +64,7 @@ export default async function WelcomePage({ params, searchParams }: { params: { 
                 <button type="submit" className="myra-silver-button !mt-[clamp(32px,2.4vw,60px)] text-[clamp(22px,1.6vw,42px)] tracking-[0.12em] !py-[clamp(18px,1.5vw,40px)] !rounded-[clamp(20px,1.4vw,36px)]">CREATE MY LOGIN →</button>
               )}
             </form>
-            <p className="mt-2 text-[clamp(20px,1.3vw,34px)] text-[#8A8F95]">Next: connect your accounts, then a quick look around.</p>
+            <p className="mt-2 text-[clamp(20px,1.3vw,34px)] text-[#8A8F95]">Next: the brands you love, then connect your accounts, then a quick look around.</p>
           </>
         )}
       </div>

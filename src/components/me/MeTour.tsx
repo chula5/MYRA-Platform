@@ -46,6 +46,7 @@ const STEPS: Step[] = [
   { target: '[data-tour="room-threads"]', title: 'THREADS', body: 'Everything MYRA knows about your style, and why.' },
   { target: '[data-tour="search"]', title: 'SEARCH', body: 'Ask in your own words. Try \u201ca wedding in June\u201d.' },
   { target: '[data-tour="you"]', title: 'YOU', body: 'Your sizes, preferences and account.' },
+  { path: '/me/profile', target: '[data-tour="brands"]', title: 'YOUR BRANDS', body: 'The brands you love, and what MYRA found from them. Add one any time.' },
   { title: 'THAT\u2019S EVERYTHING', body: 'Your wardrobe is still filling in. Start on your For You page.' },
 ]
 

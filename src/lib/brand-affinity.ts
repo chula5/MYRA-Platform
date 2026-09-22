@@ -727,9 +727,14 @@ export async function loadAffinities(adminIn: Admin | undefined, userId: string)
 // the named-brand centroid, lightly.
 export async function seedUserAffinities(
   adminIn: Admin | undefined, userId: string, namedNames: string[],
-  opts: { warmStartPilotVector?: boolean } = {},
+  // `reason` is what the append-only event log records against each named
+  // brand. It defaults to the intake wording because that is where this has
+  // always been called from; a client naming a brand herself passes her own,
+  // so the two are told apart later without changing what `source` means.
+  opts: { warmStartPilotVector?: boolean; reason?: string } = {},
 ): Promise<{ named: number; expanded: number; baseline: number; unmatched: string[] }> {
   const admin = (adminIn ?? createAdminClient()) as any
+  const reason = opts.reason ?? 'named at onboarding'
   const graph = await loadBrandGraph(admin)
   const { matched, unmatched } = resolveBrandNames(graph, namedNames)
   for (const raw of unmatched) {
@@ -742,7 +747,7 @@ export async function seedUserAffinities(
     if (old && old.affinity >= SEED.named && old.source === 'onboarded') continue
     await writeAffinity(admin, userId, b.brand_id,
       { affinity: SEED.named, source: 'onboarded', expansion_trace: null },
-      'onboarded', `named at onboarding`, old?.affinity ?? null)
+      'onboarded', reason, old?.affinity ?? null)
   }
 
   const similarByBrand = new Map<string, SimilarBrand[]>()
