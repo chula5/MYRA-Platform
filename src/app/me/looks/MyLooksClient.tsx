@@ -1371,8 +1371,10 @@ function AskPanel({
                 const keptIdx = preview.looks.map((_, i) => i).filter((i) => accepted.has(i))
                 const chosen = keptIdx.map((i) => ({ items: preview.looks[i].items, notes: preview.looks[i].notes }))
                 const chosenEdits = keptIdx.map((i) => edits[i] ?? { swaps: [], removes: [] })
+                // What MYRA made and you did not take is a lesson as much as what you kept.
+                const passedOver = preview.looks.filter((_, i) => !accepted.has(i)).map((l) => ({ items: l.items, notes: l.notes }))
                 // Kept looks get a light Higgsfield shoot straight away.
-                const r = await keepAskPreview(testMemberId!, occasion, climate, words, preview.mix, chosen, chosenEdits, true)
+                const r = await keepAskPreview(testMemberId!, occasion, climate, words, preview.mix, chosen, chosenEdits, true, passedOver)
                 setBusy(false)
                 if (r.error) setError(r.error)
                 else setKept(true)

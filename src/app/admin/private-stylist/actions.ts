@@ -2162,6 +2162,8 @@ export async function keepAskPreview(
   looks: AskPreviewLook[],
   edits: AskLookEdits[] = [],
   shoot = false,
+  /** Composed in the same test and NOT accepted — MYRA offered these and they were passed over. */
+  passedOver: AskPreviewLook[] = [],
 ): Promise<{ deliveryId?: string; learned?: number; shooting?: number; error?: string }> {
   if (!(await requireAdmin())) return { error: 'Not authorised' }
   if (!looks.length) return { error: 'Nothing to keep' }
@@ -2248,6 +2250,10 @@ export async function keepAskPreview(
   }
   // Keeping a look is approving it, for the style as for a delivery.
   for (const l of looks) await teachHouseStyle(admin, memberId, l.items, 'approve', 'review')
+  // The looks composed beside them and passed over teach the style too — what
+  // MYRA offered and Chloe did not take. Style-level only: no piece is marked
+  // rejected for having lost to a better look in the same test.
+  for (const l of passedOver) await teachHouseStyle(admin, memberId, l.items, 'skip', 'review')
   revalidatePath(PATH)
 
   // A light Higgsfield shoot for every kept look, started in the background: a
