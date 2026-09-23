@@ -97,14 +97,14 @@ export default function ScatterHero() {
           className="absolute inset-0 z-20 flex flex-col items-center justify-center text-center px-4 sm:px-6 pointer-events-none"
           style={{ opacity: 0 }}
         >
-          <h2 className="text-[#0A0A0A] font-semibold uppercase tracking-[0.01em] leading-[0.95] whitespace-nowrap text-[clamp(30px,9vw,420px)] sm:text-[clamp(40px,6vw,240px)]">
+          <h2 className="text-[#0A0A0A] font-semibold uppercase tracking-[0.01em] leading-[0.95] whitespace-nowrap text-[clamp(30px,9vw,420px)] sm:text-[clamp(36px,5.1vw,200px)]">
             OUTFITS, NOT ITEMS
           </h2>
           <ApplyButton
             label="APPLY FOR ACCESS"
             className={`mt-[clamp(40px,4.5vw,120px)] ${BIG_APPLY_CLASS}`}
           />
-          <p className="mt-[clamp(16px,1.6vw,40px)] text-[clamp(15px,1.2vw,32px)] tracking-[0.18em] text-[#2B2B2B]">
+          <p className="mt-[clamp(16px,1.6vw,40px)] text-[clamp(14px,1.05vw,28px)] tracking-[0.18em] text-[#2B2B2B]">
             MEMBERSHIP IS BY APPLICATION
           </p>
         </div>

@@ -8,7 +8,7 @@ export function openApply() {
 
 // The big APPLY FOR ACCESS pill — shared by the hero and every repeat of it.
 export const BIG_APPLY_CLASS =
-  'pointer-events-auto inline-flex items-center justify-center gap-[0.6em] rounded-full bg-[#0A0A0A] text-white w-[clamp(300px,40vw,1100px)] py-[clamp(22px,1.9vw,52px)] text-[clamp(18px,1.75vw,46px)] tracking-[0.18em] shadow-[0_18px_40px_-14px_rgba(0,0,0,0.45)] hover:scale-[1.02] transition-transform'
+  'pointer-events-auto inline-flex items-center justify-center gap-[0.6em] rounded-full bg-[#0A0A0A] text-white w-[clamp(280px,33vw,900px)] py-[clamp(18px,1.55vw,42px)] text-[clamp(16px,1.45vw,38px)] tracking-[0.18em] shadow-[0_18px_40px_-14px_rgba(0,0,0,0.45)] hover:scale-[1.02] transition-transform'
 
 export default function ApplyButton({
   className,
