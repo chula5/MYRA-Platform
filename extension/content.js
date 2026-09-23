@@ -96,6 +96,23 @@
     return t?.token ? t : null
   }
 
+  /** Keep a piece. Through the worker when it knows how, else straight to MYRA. */
+  async function savePiece(product) {
+    const r = await send({ type: 'saveProduct', product })
+    if (r && !r.error) return r
+    if (r && !/unknown message/i.test(String(r.error))) return r
+    const t = await creds()
+    if (!t?.token) return { error: `Connect MYRA first · ${RELOAD_NOTE}` }
+    try {
+      const res = await fetch(`${(t.apiBase || API).replace(/\/+$/, '')}/api/mirror/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t.token}` },
+        body: JSON.stringify({ product }),
+      })
+      return await res.json()
+    } catch (err) { return { error: String(err?.message || err) } }
+  }
+
   async function styleFromPage(product, mode) {
     const t = await creds()
     if (!t?.token) { renderPanel({ status: 'error', product, mode, error: `Connect MYRA first · ${RELOAD_NOTE}` }); return }
@@ -144,8 +161,10 @@
 
   const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
 
+  let panelJob = null
   function renderPanel(job) {
-    if (!job) { panel?.remove(); panel = null; return }
+    if (!job) { panel?.remove(); panel = null; panelJob = null; return }
+    panelJob = job
     if (!panel) openPanel(job)
     if (!panel) return
     const modeLabel = job.mode === 'wardrobe' ? 'with your wardrobe' : 'with new pieces'
@@ -165,7 +184,7 @@
       const looks = job.looks || []
       body = `<div style="padding:4px 14px 20px">
         <div style="font-size:12.5px;letter-spacing:.06em;opacity:.62;padding:0 4px 10px">First thoughts — MYRA is checking them now…</div>
-        ${looks.map((l, i) => lookCard(l, i)).join('')}
+        ${looks.map((l, i) => lookCard(l, i, job.hero?.item_id)).join('')}
       </div>`
     } else if (job.status === 'loading') {
       body = `<div style="padding:6px 18px 20px">
@@ -178,27 +197,68 @@
     } else {
       const looks = job.looks || []
       body = (job.note ? `<div style="padding:0 18px 10px;font-size:12.5px;opacity:.6">${esc(job.note)}</div>` : '') + (looks.length
-        ? `<div style="padding:4px 14px 20px">${looks.map((l, i) => lookCard(l, i)).join('')}</div>`
+        ? `<div style="padding:4px 14px 20px">${looks.map((l, i) => lookCard(l, i, job.hero?.item_id)).join('')}</div>`
         : `<div style="padding:6px 18px 20px;font-size:14px;opacity:.7">Nothing MYRA would put with it yet${job.mode === 'wardrobe' ? ' from your own pieces' : ''}.</div>`)
     }
     panel.innerHTML = head + body
     panel.querySelector('[data-myra="close"]')?.addEventListener('click', closePanel)
+    panel.querySelectorAll('[data-myra-keep]').forEach((b) => b.addEventListener('click', keepFromPanel))
   }
 
-  function lookCard(look, i) {
-    const pieces = (look.items || []).slice(0, 6)
-    const tiles = pieces.map((p) => `
-      <a href="${esc(p.url || '#')}" target="_blank" rel="noreferrer" style="display:block;flex:0 0 72px;text-decoration:none;color:inherit">
-        <div style="position:relative;width:72px;aspect-ratio:3/4;border-radius:12px;overflow:hidden;background:#EFEFED">
-          ${p.image_url ? `<img src="${esc(p.image_url)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">` : ''}
-          ${p.owned ? '<span style="position:absolute;top:4px;left:4px;background:#141414;color:#fff;border-radius:999px;padding:1px 7px;font-size:10px">Yours</span>' : ''}
-        </div>
-        <div style="font-size:11px;line-height:1.25;margin-top:4px;opacity:.75;max-height:28px;overflow:hidden">${esc(p.product_name || p.brand || '')}</div>
-      </a>`).join('')
-    return `<div style="background:#fff;border-radius:18px;padding:12px;margin-bottom:12px;box-shadow:0 8px 22px -18px rgba(0,0,0,.5)">
-      <div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;opacity:.5;margin-bottom:8px">Look ${i + 1}</div>
-      <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px">${tiles}</div>
-      ${look.why ? `<div style="font-size:12.5px;opacity:.7;margin-top:9px;line-height:1.35">${esc(look.why)}</div>` : ''}
+  /** ♥ on a piece inside a look — the same save as a heart on a tile. */
+  async function keepFromPanel(e) {
+    e.preventDefault(); e.stopPropagation()
+    const btn = e.currentTarget
+    const [li, pi] = (btn.dataset.myraKeep || '').split(':').map(Number)
+    const piece = panelJob?.looks?.[li]?.items?.[pi]
+    if (!piece?.url) { btn.title = 'MYRA has no link for this piece'; return }
+    btn.disabled = true
+    btn.textContent = '…'
+    const r = await savePiece({
+      url: piece.url,
+      title: piece.product_name || piece.brand || 'Piece',
+      brand: piece.brand || null,
+      price: typeof piece.price_gbp === 'number' ? piece.price_gbp : null,
+      image: piece.image_url || null,
+    })
+    btn.disabled = false
+    btn.textContent = '♥'
+    if (r?.error) { btn.title = r.error; btn.style.color = '#9B3A3A'; return }
+    btn.style.background = '#141414'
+    btn.style.color = '#F7F6F3'
+    btn.title = 'In your saved pieces — MYRA watches its stock'
+  }
+
+  /**
+   * One outfit, drawn the way MYRA draws it: her composed picture when the look
+   * has one, otherwise the pieces laid out three across on stone — the same
+   * card as the dressing room, not a row of thumbnails. The piece she is
+   * standing in front of is ringed; her own things are marked; anything she
+   * does not own can be kept with one heart.
+   */
+  function lookCard(look, i, heroId) {
+    const pieces = (look.items || []).slice(0, 9)
+    const own = pieces.filter((p) => p.owned).length
+    const body = look.image_url
+      ? `<div style="position:relative;aspect-ratio:3/4;background:#E4E2DD;overflow:hidden">
+           <img src="${esc(look.image_url)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
+         </div>`
+      : `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;background:#E4E2DD">
+          ${pieces.map((p, j) => `
+            <a href="${esc(p.url || '#')}" ${p.url ? 'target="_blank" rel="noreferrer"' : ''} style="position:relative;display:block;aspect-ratio:3/4;background:#fff;overflow:hidden;text-decoration:none;color:inherit${heroId && p.item_id === heroId ? ';box-shadow:inset 0 0 0 2px #2B2B2B' : ''}">
+              ${p.image_url ? `<img src="${esc(p.image_url)}" alt="${esc(p.product_name || '')}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain">` : ''}
+              ${p.owned
+                ? '<span style="position:absolute;top:5px;left:5px;background:#141414;color:#fff;border-radius:999px;padding:2px 8px;font-size:11px;letter-spacing:.02em">Yours</span>'
+                : `<button type="button" data-myra-keep="${i}:${j}" title="Keep this in MYRA" aria-label="Keep this in MYRA" style="position:absolute;top:5px;right:5px;width:26px;height:26px;border:0;border-radius:50%;background:rgba(255,255,255,.94);color:#2B2B2B;font-size:13px;line-height:26px;padding:0;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.16)">♥</button>`}
+              <span style="position:absolute;left:0;right:0;bottom:0;padding:5px 6px;font-size:11px;line-height:1.2;color:#2B2B2B;background:linear-gradient(transparent,rgba(255,255,255,.92) 38%);max-height:34px;overflow:hidden">${esc(p.brand || p.product_name || '')}</span>
+            </a>`).join('')}
+         </div>`
+    return `<div style="background:rgba(255,255,255,.85);border-radius:18px;overflow:hidden;margin-bottom:12px;box-shadow:0 2px 14px rgba(43,43,43,.08)">
+      ${body}
+      <div style="padding:11px 14px 12px">
+        <div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;opacity:.5">Look ${i + 1}${own ? ` · ${own} of your own` : ''}</div>
+        ${look.why ? `<div style="font-size:13.5px;opacity:.72;margin-top:5px;line-height:1.35">${esc(look.why)}</div>` : ''}
+      </div>
     </div>`
   }
 
@@ -284,7 +344,7 @@
       const b = e.currentTarget
       b.disabled = true
       say('Saving…')
-      const r = await send({ type: 'saveProduct', product })
+      const r = await savePiece(product)
       if (r?.error) { say(friendly(r.error)); b.disabled = false; return }
       b.textContent = '♥ Saved'
       say('In your saved pieces — MYRA watches its stock and will tell you if it starts to go.')
@@ -332,7 +392,7 @@
     fav.addEventListener('click', async (e) => {
       e.preventDefault(); e.stopPropagation()
       fav.disabled = true
-      const r = await send({ type: 'saveProduct', product: { ...product, image: product.image || tileImage(tile) } })
+      const r = await savePiece({ ...product, image: product.image || tileImage(tile) })
       fav.disabled = false
       if (r?.error) { fav.title = r.error; fav.style.color = '#9B3A3A'; return }
       fav.textContent = '♥'

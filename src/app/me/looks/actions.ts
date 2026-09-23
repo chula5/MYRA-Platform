@@ -15,6 +15,9 @@ import { createServerClient, createAdminClient } from '@/lib/supabase-server'
 import { revalidatePath } from 'next/cache'
 import { recordMemberLookFeedback } from '@/app/admin/private-stylist/actions'
 import { CLIENT_OCCASIONS, OCCASION_LABEL, occasionsForMember } from '@/lib/client-occasions'
+import { styleExternalPiece } from '@/lib/mirror/style'
+import type { MirrorMember } from '@/lib/mirror/auth'
+import type { StyledLook } from '@/app/admin/private-stylist/actions'
 
 export interface ClientLookItem {
   item_id: string | null
@@ -258,4 +261,82 @@ export async function myRequests(): Promise<{ body: string; when: string; answer
     .eq('member_id', me.memberId).eq('role', 'client')
     .order('created_at', { ascending: false }).limit(5)
   return (data ?? []).map((m: any) => ({ body: m.body, when: m.created_at, answered: false }))
+}
+
+// ── WHAT SHE KEPT WHILE BROWSING ────────────────────────────────────────────
+// The pieces she hearted on other people's sites through MYRA Mirror. They are
+// ordinary item rows (source 'mirror'), so the only new thing here is the list
+// and the fact that it is hers: the member is resolved from her session, never
+// passed in from the browser.
+
+export interface BrowsedPiece {
+  item_id: string
+  product_name: string
+  brand: string | null
+  image_url: string | null
+  price_gbp: number | null
+  url: string | null
+  /** The shop she found it on — "net-a-porter.com". */
+  host: string | null
+  saved_at: string
+  sold: boolean
+}
+
+export async function savedWhileBrowsing(limit = 14): Promise<BrowsedPiece[]> {
+  const me = await memberForCurrentUser()
+  if (!me) return []
+  const admin = createAdminClient() as any
+  const { data, error } = await admin
+    .from('member_saved_item')
+    .select('saved_at, source_host, item:item_id(item_id, product_name, image_url, price_gbp, retailer_url, status, brand:brand_id(name))')
+    .eq('member_id', me.memberId)
+    .order('saved_at', { ascending: false })
+    .limit(Math.min(40, Math.max(1, limit)))
+  // Pre-0060 the table is not there yet: an empty rail, never an error page.
+  if (error) return []
+  return (data ?? []).filter((r: any) => r.item).map((r: any) => ({
+    item_id: r.item.item_id,
+    product_name: r.item.product_name,
+    brand: r.item.brand?.name ?? null,
+    image_url: r.item.image_url ?? null,
+    price_gbp: r.item.price_gbp != null ? Number(r.item.price_gbp) : null,
+    url: r.item.retailer_url ?? null,
+    host: r.source_host ?? null,
+    saved_at: r.saved_at,
+    sold: r.item.status === 'sold',
+  }))
+}
+
+/**
+ * Outfits around one piece she saved while browsing — the same composer the
+ * Mirror's panel uses, so what she saw on the shop's site is what she sees
+ * here. Only her own saved pieces can be styled: the id is checked against
+ * her list before anything is composed.
+ */
+export async function styleSavedPiece(itemId: string): Promise<{ looks: StyledLook[]; error?: string }> {
+  const me = await memberForCurrentUser()
+  if (!me) return { looks: [], error: 'Not signed in' }
+  const admin = createAdminClient() as any
+  const { data: mine } = await admin
+    .from('member_saved_item').select('item_id')
+    .eq('member_id', me.memberId).eq('item_id', itemId).maybeSingle()
+  if (!mine) return { looks: [], error: 'Not one of your saved pieces' }
+  const { data: item } = await admin.from('item').select('*').eq('item_id', itemId).maybeSingle()
+  if (!item) return { looks: [], error: 'That piece is no longer here' }
+  const { data: row } = await admin
+    .from('pilot_member').select('member_id, name, auth_user_id, brands, brands_input_only, sizes')
+    .eq('member_id', me.memberId).maybeSingle()
+  if (!row) return { looks: [], error: 'Not signed in' }
+  const member: MirrorMember = {
+    member_id: row.member_id,
+    name: row.name,
+    auth_user_id: row.auth_user_id ?? null,
+    brands: Array.isArray(row.brands) ? row.brands : [],
+    brands_input_only: row.brands_input_only ?? [],
+    sizes: row.sizes ?? {},
+    actingAdmin: false,
+    actorUserId: null,
+  }
+  const res = await styleExternalPiece(item, 'wardrobe', member, admin, { check: false })
+  return { looks: res.looks ?? [], error: res.error }
 }

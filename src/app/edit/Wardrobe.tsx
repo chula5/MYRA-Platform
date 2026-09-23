@@ -82,12 +82,12 @@ export default function Wardrobe() {
         <button
           onClick={() => setOpen(true)}
           aria-label="Open my wardrobe"
-          className="fixed right-0 top-1/2 -translate-y-1/2 z-[55] flex flex-col items-center gap-2 bg-white border border-r-0 border-[#E2E0DB] rounded-l-[16px] px-2.5 py-4 shadow-[-4px_0_14px_rgba(0,0,0,0.07)] hover:pr-3.5 transition-all duration-300"
+          className="fixed right-0 top-1/2 -translate-y-1/2 z-[55] flex flex-col items-center gap-3 bg-white border border-r-0 border-[#E2E0DB] rounded-l-[18px] px-4 py-6 shadow-[-4px_0_14px_rgba(0,0,0,0.07)] hover:pr-5 transition-all duration-300"
         >
-          <HangerIcon className="w-4 h-4 text-[#4A4E57]" />
-          <span className="text-[8px] tracking-[0.16em] text-[#4A4E57] [writing-mode:vertical-rl] rotate-180">WARDROBE</span>
+          <HangerIcon className="w-7 h-7 text-[#4A4E57]" />
+          <span className="text-[16px] tracking-[0.16em] text-[#4A4E57] [writing-mode:vertical-rl] rotate-180">WARDROBE</span>
           {count > 0 && (
-            <span className="text-[8px] tracking-[0.04em] text-white bg-[#C8302A] rounded-full min-w-[15px] h-[15px] px-1 flex items-center justify-center leading-none">
+            <span className="text-[15px] tracking-[0.04em] text-white bg-[#C8302A] rounded-full min-w-[26px] h-[26px] px-1.5 flex items-center justify-center leading-none">
               {count}
             </span>
           )}

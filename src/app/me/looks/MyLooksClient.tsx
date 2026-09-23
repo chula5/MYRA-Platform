@@ -16,7 +16,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import ClientWardrobe from './ClientWardrobe'
-import { reactToLook, requestLooks, type ClientView, type ClientLook, type ClientLookItem } from './actions'
+import { reactToLook, requestLooks, savedWhileBrowsing, styleSavedPiece, type ClientView, type ClientLook, type ClientLookItem, type BrowsedPiece } from './actions'
+import ComposedLookCard from '@/components/me/ComposedLookCard'
+import type { StyledLook } from '@/app/admin/private-stylist/actions'
 import { CLIENT_OCCASIONS, askKindForEvent, whereFor, ASK_KINDS, ASK_WHEN, ASK_FEEL, ASK_WEATHER, ASK_LIMITS, ASK_BUDGET } from '@/lib/client-occasions'
 import { lookSimilarity, relatedLooks, looksWearing } from '@/lib/look-similarity'
 import FallbackImage from '@/components/FallbackImage'
@@ -377,6 +379,8 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
         {/* ── At rest ─────────────────────────────────────────────────────── */}
         {!related && !searched && !occasion && (
           <>
+            {!readOnly && <SavedWhileBrowsing looks={view.looks} cardProps={cardProps} />}
+
             {waiting.length > 0 && (
               <section className="mb-16">
                 <SectionHead label="Waiting for you" note={`${waiting.length} look${waiting.length === 1 ? '' : 's'} to tell us about`} />
@@ -725,6 +729,101 @@ function slotPosition(slot: string): { x: number; y: number } {
  * The only thing on this page that cannot be answered from what she already
  * has: no other look of hers wears the piece, so MYRA has to make one.
  */
+/**
+ * KEPT WHILE BROWSING — the pieces she hearted on other people's sites,
+ * newest first, along the top of her looks.
+ *
+ * Resting on one opens what to wear it with underneath: her own looks wearing
+ * it when she has some, otherwise MYRA composes around it there and then, the
+ * same way the Mirror's panel does on the shop's own page. Composing starts
+ * only after she has stayed on a piece — passing the cursor along the rail
+ * asks for nothing.
+ */
+function SavedWhileBrowsing({
+  looks, cardProps,
+}: {
+  looks: ClientLook[]
+  cardProps: (l: ClientLook) => any
+}) {
+  const [pieces, setPieces] = useState<BrowsedPiece[] | null>(null)
+  const [open, setOpen] = useState<string | null>(null)
+  const [composed, setComposed] = useState<Record<string, StyledLook[]>>({})
+  const [busy, setBusy] = useState<string | null>(null)
+  const [failed, setFailed] = useState<Record<string, string>>({})
+  const dwell = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => { savedWhileBrowsing().then(setPieces) }, [])
+  useEffect(() => () => { if (dwell.current) clearTimeout(dwell.current) }, [])
+
+  if (!pieces || pieces.length === 0) return null
+
+  const piece = pieces.find((p) => p.item_id === open) ?? null
+  const wearing = piece ? looksWearing(piece.item_id, looks) : []
+
+  async function compose(itemId: string) {
+    if (composed[itemId] || busy || failed[itemId]) return
+    setBusy(itemId)
+    const r = await styleSavedPiece(itemId)
+    setBusy(null)
+    if (r.error || !r.looks.length) { setFailed((f) => ({ ...f, [itemId]: r.error ?? 'Nothing MYRA would put with it yet.' })); return }
+    setComposed((c) => ({ ...c, [itemId]: r.looks }))
+  }
+
+  function rest(p: BrowsedPiece) {
+    setOpen(p.item_id)
+    if (dwell.current) clearTimeout(dwell.current)
+    if (looksWearing(p.item_id, looks).length) return
+    dwell.current = setTimeout(() => compose(p.item_id), 600)
+  }
+
+  return (
+    <section className="mb-16">
+      <SectionHead label="Kept while browsing" note={`${pieces.length} piece${pieces.length === 1 ? '' : 's'} · rest on one to see it styled`} />
+      <div data-lenis-prevent className="flex gap-[6px] overflow-x-auto pb-2">
+        {pieces.map((p) => (
+          <button
+            key={p.item_id}
+            onMouseEnter={() => rest(p)}
+            onFocus={() => rest(p)}
+            onClick={() => { rest(p); compose(p.item_id) }}
+            className={`relative flex-none w-[clamp(150px,13vw,230px)] text-left transition-opacity ${open && open !== p.item_id ? 'opacity-60' : ''}`}
+          >
+            <div className={`relative aspect-[3/4] bg-white overflow-hidden ${open === p.item_id ? 'ring-2 ring-[#2B2B2B]' : ''}`}>
+              {p.image_url && <FallbackImage src={p.image_url} thumbWidth={400} alt={p.product_name} className="absolute inset-0 w-full h-full object-contain" />}
+              {p.sold && <span className="absolute top-2 left-2 bg-[#2B2B2B] text-white text-[13px] tracking-[0.1em] px-2.5 py-1 rounded-full">SOLD</span>}
+            </div>
+            <p className="mt-2 text-[17px] text-[#2B2B2B] leading-[1.25] line-clamp-2">{p.brand ?? p.product_name}</p>
+            <p className="text-[15px] text-[#7C838B]">{p.host ?? ''}{p.price_gbp != null ? `${p.host ? ' · ' : ''}£${Math.round(p.price_gbp)}` : ''}</p>
+          </button>
+        ))}
+      </div>
+
+      {piece && (
+        <div className="mt-6">
+          <p className="myra-section-note mb-4">
+            {wearing.length
+              ? `YOUR LOOKS WEARING THE ${(piece.brand ?? piece.product_name).toUpperCase()}`
+              : `WHAT TO WEAR WITH THE ${(piece.brand ?? piece.product_name).toUpperCase()}`}
+          </p>
+          {wearing.length > 0 ? (
+            <div className={LOOK_GRID}>
+              {wearing.slice(0, 3).map((l) => <LookCard key={l.look_id} {...cardProps(l)} />)}
+            </div>
+          ) : busy === piece.item_id ? (
+            <p className="text-[20px] text-[#55534E]">MYRA is putting outfits together around it…</p>
+          ) : composed[piece.item_id] ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {composed[piece.item_id].map((l, i) => <ComposedLookCard key={i} look={l} heroId={piece.item_id} />)}
+            </div>
+          ) : (
+            <p className="text-[20px] text-[#55534E]">{failed[piece.item_id] ?? 'Resting on it will style it.'}</p>
+          )}
+        </div>
+      )}
+    </section>
+  )
+}
+
 function StyleItemPrompt({ item, look }: { item: ClientLookItem; look: ClientLook }) {
   const [sent, setSent] = useState(false)
   const [busy, setBusy] = useState(false)
