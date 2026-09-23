@@ -75,6 +75,11 @@ const handlers = {
 
   // Only our own content scripts can ask; the token then travels by postMessage
   // straight into the MYRA pop-out frame, never through the brand page's DOM.
+  /** Which build is actually running — the page compares it with its own. */
+  async version() {
+    try { return { version: chrome.runtime.getManifest().version } } catch { return { version: null } }
+  },
+
   async token() {
     const c = await cfg()
     return { token: c.token, apiBase: c.apiBase }

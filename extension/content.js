@@ -66,14 +66,49 @@
 
   // A stale service worker answers "unknown message": the page has the new
   // code and the extension's own background does not. Say what to do.
-  const RELOAD_NOTE = 'Reload MYRA Mirror at chrome://extensions — its background is still the old version.'
+  let loadedVersion = null
+  try { loadedVersion = chrome.runtime.getManifest().version } catch { /* not available in some contexts */ }
+  const RELOAD_NOTE = `Reload MYRA Mirror at chrome://extensions — the page is version ${loadedVersion ?? '?'} and its background is older.`
   const friendly = (e) => (/unknown message/i.test(String(e ?? '')) ? RELOAD_NOTE : e)
 
   async function startStyling(product, mode) {
     openPanel({ status: 'loading', product, mode })
     const r = await send({ type: 'styleStart', product, mode })
-    if (r?.error) renderPanel({ status: 'error', product, mode, error: friendly(r.error) })
-    else if (r?.job) renderPanel(r.job)
+    if (!r?.error) { if (r?.job) renderPanel(r.job) ; return }
+    // An extension whose background is older than this page does not know
+    // styleStart. Rather than stop, ask MYRA from here — the answer is the
+    // same, it just does not survive leaving the page.
+    if (/unknown message/i.test(String(r.error))) return styleFromPage(product, mode)
+    renderPanel({ status: 'error', product, mode, error: friendly(r.error) })
+  }
+
+  /** The fallback path: this page talks to MYRA itself, with the token the worker holds. */
+  async function styleFromPage(product, mode) {
+    const t = await send({ type: 'token' })
+    if (!t?.token) { renderPanel({ status: 'error', product, mode, error: RELOAD_NOTE }); return }
+    const base = (t.apiBase || API).replace(/\/+$/, '')
+    const ask = async (quick) => {
+      const res = await fetch(`${base}/api/mirror/style`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t.token}` },
+        body: JSON.stringify({ ...product, mode, quick }),
+      })
+      return res.json()
+    }
+    try {
+      const quick = await ask(true).catch(() => null)
+      if (quick && !quick.error && (quick.looks || []).length) {
+        renderPanel({ status: 'partial', product, mode, looks: quick.looks })
+      }
+      const full = await ask(false)
+      if (full?.error || !(full?.looks || []).length) {
+        renderPanel({ status: 'error', product, mode, error: `${full?.error || 'MYRA could not style this'} · ${RELOAD_NOTE}` })
+        return
+      }
+      renderPanel({ status: 'done', product, mode, looks: full.looks, note: RELOAD_NOTE })
+    } catch (err) {
+      renderPanel({ status: 'error', product, mode, error: `${err?.message || err} · ${RELOAD_NOTE}` })
+    }
   }
 
   // ── The panel on the right ────────────────────────────────────────────────
@@ -129,9 +164,9 @@
       body = `<div style="padding:6px 18px 20px;font-size:14px;color:#9B3A3A">${esc(job.error || 'MYRA could not style this')}</div>`
     } else {
       const looks = job.looks || []
-      body = looks.length
+      body = (job.note ? `<div style="padding:0 18px 10px;font-size:12.5px;opacity:.6">${esc(job.note)}</div>` : '') + (looks.length
         ? `<div style="padding:4px 14px 20px">${looks.map((l, i) => lookCard(l, i)).join('')}</div>`
-        : `<div style="padding:6px 18px 20px;font-size:14px;opacity:.7">Nothing MYRA would put with it yet${job.mode === 'wardrobe' ? ' from your own pieces' : ''}.</div>`
+        : `<div style="padding:6px 18px 20px;font-size:14px;opacity:.7">Nothing MYRA would put with it yet${job.mode === 'wardrobe' ? ' from your own pieces' : ''}.</div>`)
     }
     panel.innerHTML = head + body
     panel.querySelector('[data-myra="close"]')?.addEventListener('click', closePanel)
