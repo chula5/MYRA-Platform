@@ -34,6 +34,20 @@ export interface YouSettingsPatch {
   brands?: string[]
 }
 
+/**
+ * HER MYRA LINK for an assistant (Claude, ChatGPT). One signed member token in
+ * a URL: a connector that takes only a URL can still ask about her wardrobe.
+ * Asking again mints a fresh one, which is how a link is retired.
+ */
+export async function myAssistantLink(asMemberId?: string): Promise<{ url?: string; days?: number; error?: string }> {
+  const me = await resolveClientMember(asMemberId)
+  if (!me) return { error: 'Not signed in' }
+  const { mintMirrorToken, MIRROR_TOKEN_TTL_S } = await import('@/lib/mirror/auth')
+  const base = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.myraassistant.co.uk').replace(/\/+$/, '')
+  const token = mintMirrorToken(me.memberId, { ttlS: MIRROR_TOKEN_TTL_S })
+  return { url: `${base}/api/mcp/${encodeURIComponent(token)}`, days: Math.round(MIRROR_TOKEN_TTL_S / 86400) }
+}
+
 export async function saveMySettings(patch: YouSettingsPatch, asMemberId?: string): Promise<{ error?: string }> {
   const me = await resolveClientMember(asMemberId)
   if (!me) return { error: 'Not signed in' }

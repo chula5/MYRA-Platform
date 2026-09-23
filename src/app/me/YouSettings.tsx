@@ -5,7 +5,7 @@
 // connected (each one can be let go of here). Full width, big type, round pills.
 
 import { useEffect, useMemo, useState } from 'react'
-import { loadMySettings, saveMySettings, type YouSettingsView, type YouSizes } from './settings-actions'
+import { loadMySettings, myAssistantLink, saveMySettings, type YouSettingsView, type YouSizes } from './settings-actions'
 import { disconnectInbox } from './dressing-room/email-actions'
 import { disconnectMyCalendar } from './dressing-room/calendar-actions'
 import { disconnectArchivalInstagram } from './dressing-room/archival-actions'
@@ -45,6 +45,17 @@ export default function YouSettings({ testMemberId, initial }: { testMemberId?: 
   const [saving, setSaving] = useState(false)
   const [note, setNote] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  // MYRA inside an assistant: one link she pastes into Claude or ChatGPT.
+  const [link, setLink] = useState<{ url: string; days?: number } | null>(null)
+  const [linkBusy, setLinkBusy] = useState(false)
+  async function makeLink() {
+    setLinkBusy(true)
+    const r = await myAssistantLink(testMemberId)
+    setLinkBusy(false)
+    if (r.error || !r.url) { setNote(r.error ?? 'Could not make the link'); return }
+    setLink({ url: r.url, days: r.days })
+    try { await navigator.clipboard.writeText(r.url) } catch { /* she can copy it herself */ }
+  }
 
   const reset = (v: YouSettingsView) => {
     setName(v.name); setSizes(v.sizes); setSecondHand(v.acceptsSecondHand)
@@ -266,6 +277,33 @@ export default function YouSettings({ testMemberId, initial }: { testMemberId?: 
               )
             })}
           </div>
+        </section>
+
+        {/* MYRA where she already talks — Claude, ChatGPT. */}
+        <section className={`${card} lg:col-span-2`}>
+          <div className="flex items-baseline justify-between gap-4 flex-wrap">
+            <h2 className={heading}>MYRA in Claude or ChatGPT</h2>
+            <p className={label}>Ask for outfits where you already chat.</p>
+          </div>
+          <p className={`${label} myra-guide-text mt-3 max-w-4xl`}>
+            Add this link as a connector and you can ask things like &ldquo;find me an outfit for dinner&rdquo; or
+            &ldquo;what can I wear with my navy blazer?&rdquo;. It answers from your wardrobe, your brands and your sizes.
+            It can never buy anything, and it never says you liked a look — only you do that.
+          </p>
+          <div className="mt-5 flex flex-wrap items-center gap-4">
+            <button type="button" onClick={makeLink} disabled={linkBusy} className={pill(true)}>
+              {linkBusy ? 'Making it…' : link ? 'Make a new link' : 'Make my link'}
+            </button>
+            {link && <span className={label}>Copied. It works for {link.days ?? 30} days — making a new one retires the old.</span>}
+          </div>
+          {link && (
+            <input
+              readOnly
+              value={link.url}
+              onFocus={(e) => e.currentTarget.select()}
+              className={`${field} mt-4 !text-[clamp(16px,0.9vw,20px)] myra-guide-text`}
+            />
+          )}
         </section>
 
         {/* Connected accounts */}
