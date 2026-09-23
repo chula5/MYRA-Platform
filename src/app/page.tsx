@@ -3,6 +3,8 @@ import Navigation from '@/components/navigation/Navigation'
 import ScatterHero from '@/components/ScatterHero'
 import { ArchiveCard } from '@/components/ArchiveCard'
 import ManifestoReveal from '@/components/ManifestoReveal'
+import StylesFor from '@/components/StylesFor'
+import OccasionsSection from '@/components/OccasionsSection'
 import StylingAssistant from '@/components/StylingAssistant'
 import ApplyModal from '@/components/ApplyModal'
 import SignupPrompt from '@/components/SignupPrompt'
@@ -47,10 +49,14 @@ export default async function LandingPage({
 
       {/* ── Mirror glides into place, the manifesto + APPLY sit beneath it ── */}
       <main className="myra-texture">
+        {/* MYRA STYLES FOR … occasions flipping in, above the mirror */}
+        <StylesFor />
         <ArchiveCard>
           <></>
         </ArchiveCard>
         <ManifestoReveal />
+        {/* Occasions — copy left, pick-an-occasion look cards right */}
+        <OccasionsSection />
       </main>
 
       {/* ── Your Styling Assistant — the three ideas, stacking on scroll ── */}

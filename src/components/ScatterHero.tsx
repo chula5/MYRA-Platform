@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import ApplyButton from '@/components/ApplyButton'
+import ApplyButton, { BIG_APPLY_CLASS } from '@/components/ApplyButton'
 
 // Scroll-driven collage: the images begin as a tight stack in the centre and,
 // as the section scrolls past, spread out to their scattered resting places,
@@ -94,13 +94,19 @@ export default function ScatterHero() {
         {/* Headline + CTA, revealed as the pile opens. */}
         <div
           ref={textRef}
-          className="absolute inset-0 z-20 flex flex-col items-center justify-center text-center px-6 pointer-events-none"
+          className="absolute inset-0 z-20 flex flex-col items-center justify-center text-center px-4 sm:px-6 pointer-events-none"
           style={{ opacity: 0 }}
         >
-          <h2 className="text-[#0A0A0A] font-semibold uppercase tracking-[0.01em] leading-[0.95] whitespace-nowrap text-[clamp(24px,8.5vw,140px)]">
+          <h2 className="text-[#0A0A0A] font-semibold uppercase tracking-[0.01em] leading-[0.95] whitespace-nowrap text-[clamp(30px,9vw,420px)] sm:text-[clamp(40px,6vw,240px)]">
             OUTFITS, NOT ITEMS
           </h2>
-          <ApplyButton className="pointer-events-auto mt-10 sm:mt-12 inline-flex items-center gap-3.5 rounded-full bg-[#0A0A0A] text-white px-12 sm:px-16 py-6 sm:py-7 text-[16px] sm:text-[19px] tracking-[0.2em] hover:opacity-85 transition-opacity" />
+          <ApplyButton
+            label="APPLY FOR ACCESS"
+            className={`mt-[clamp(40px,4.5vw,120px)] ${BIG_APPLY_CLASS}`}
+          />
+          <p className="mt-[clamp(16px,1.6vw,40px)] text-[clamp(15px,1.2vw,32px)] tracking-[0.18em] text-[#2B2B2B]">
+            MEMBERSHIP IS BY APPLICATION
+          </p>
         </div>
       </div>
     </section>

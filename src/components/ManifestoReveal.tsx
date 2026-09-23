@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import ApplyButton from '@/components/ApplyButton'
+import ApplyButton, { BIG_APPLY_CLASS } from '@/components/ApplyButton'
 
 // The manifesto, revealed word by word from left to right as you scroll. The
 // paragraph is PINNED in the centre of the screen while it reveals, so it
@@ -9,7 +9,7 @@ import ApplyButton from '@/components/ApplyButton'
 // foot). The section is taller than the viewport; the sticky inner holds the
 // text centred and the reveal plays over that extra scroll distance.
 const TEXT =
-  'FED UP WITH THE NOISE? SO WERE WE. TOO MANY TABS, TOO MANY OPTIONS, AND A WARDROBE THAT STILL NEVER WORKS. WE WANT YOU SEEING LESS, BUT MORE OF WHAT YOU LIKE. SMALLER COLLECTIONS, REFINED TO YOUR TASTE.'
+  "FED UP WITH THE NOISE? SO WERE WE. TOO MANY TABS, TOO MANY OPTIONS, AND A WARDROBE THAT STILL DOESN’T WORK. MYRA SHOWS YOU LESS, AND MORE OF WHAT YOU’LL WEAR."
 
 export default function ManifestoReveal() {
   const sectionRef = useRef<HTMLDivElement>(null)
@@ -53,7 +53,7 @@ export default function ManifestoReveal() {
             )
           })}
         </p>
-        <ApplyButton className="mt-12 sm:mt-16 inline-flex items-center gap-3.5 rounded-full bg-[#0A0A0A] text-white px-14 py-6 text-[16px] sm:text-[18px] tracking-[0.2em] hover:opacity-85 transition-opacity" />
+        <ApplyButton label="APPLY FOR ACCESS" className={`mt-12 sm:mt-16 ${BIG_APPLY_CLASS}`} />
       </div>
     </section>
   )

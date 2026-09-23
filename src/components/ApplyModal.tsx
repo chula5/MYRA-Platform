@@ -82,24 +82,27 @@ export default function ApplyModal() {
     else { setDone(true); setForm({ ...EMPTY }); setBrands([]) }
   }
 
-  const labelCls = 'block text-[13px] tracking-[0.14em] text-[#6B6B6B] mb-2 uppercase'
-  const inputCls =
-    'w-full border border-[#D8D5CE] bg-white px-4 py-3.5 text-[16px] text-[#0A0A0A] tracking-[0.02em] outline-none focus:border-[#0A0A0A] transition-colors placeholder:text-[#B4B4AE]'
+  const labelCls = 'block text-[14px] sm:text-[clamp(14px,0.95vw,24px)] tracking-[0.14em] text-[#6B6B6B] mb-[0.6em] uppercase'
+  // Private-stylist field style: white pills with a soft shadow on pearl.
+  const fieldBase =
+    'w-full bg-white px-[1.2em] py-[0.85em] text-[16px] sm:text-[clamp(17px,1.2vw,30px)] text-[#0A0A0A] tracking-[0.02em] shadow-[0_10px_18px_-12px_rgba(120,120,120,0.6)] outline-none ring-1 ring-transparent focus:ring-[#0A0A0A] transition-shadow placeholder:text-[#B4B4AE]'
+  const inputCls = `${fieldBase} rounded-full`
+  const areaCls = `${fieldBase} rounded-[20px]`
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-start sm:items-center justify-center p-4 sm:p-6 bg-black/40 overflow-y-auto"
+      className="fixed inset-0 z-[100] flex items-start sm:items-center justify-center p-4 sm:p-6 bg-[rgba(20,20,20,0.55)] overflow-y-auto"
       onClick={() => setOpen(false)}
     >
       <div
-        className="relative w-full max-w-[760px] my-6 bg-[#FBFAF8] border border-[#2B2B2B] shadow-[0_30px_80px_rgba(0,0,0,0.25)] p-9 sm:p-14"
+        className="relative w-full max-w-[clamp(760px,56vw,1600px)] my-6 myra-pearl rounded-[clamp(26px,1.8vw,48px)] shadow-[0_24px_70px_rgba(0,0,0,0.35)] p-7 sm:p-[clamp(56px,4vw,110px)]"
         onClick={(e) => e.stopPropagation()}
         data-lenis-prevent
       >
         <button
           onClick={() => setOpen(false)}
           aria-label="Close"
-          className="absolute top-4 right-5 text-[22px] leading-none text-[#4A4E57] hover:opacity-60 transition-opacity"
+          className="absolute top-5 right-6 text-[clamp(26px,1.8vw,48px)] leading-none text-[#4A4E57] hover:opacity-60 transition-opacity"
         >
           ×
         </button>
@@ -119,16 +122,16 @@ export default function ApplyModal() {
             </button>
           </div>
         ) : (
-          <form onSubmit={submit} className="flex flex-col gap-5">
+          <form onSubmit={submit} className="flex flex-col gap-[clamp(20px,1.6vw,44px)]">
             <div>
-              <p className="text-[24px] sm:text-[27px] tracking-[0.06em] text-[#0A0A0A] mb-2.5">APPLY FOR YOUR PERSONAL EDIT</p>
-              <p className="text-[15px] text-[#6B6B6B] leading-[1.65]">
+              <p className="text-[24px] sm:text-[clamp(30px,2.4vw,64px)] font-semibold tracking-[0.04em] text-[#0A0A0A] mb-[0.4em] leading-[1.1]">APPLY FOR YOUR PERSONAL EDIT</p>
+              <p className="text-[16px] sm:text-[clamp(18px,1.3vw,34px)] text-[#6B6B6B] leading-[1.55]">
                 A few questions so we can get a feel for your style. If it&rsquo;s a fit, we&rsquo;ll
                 build you a refined edit of your own.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-[clamp(16px,1.2vw,32px)]">
               <div>
                 <label className={labelCls}>Your name</label>
                 <input className={inputCls} value={form.name} onChange={set('name')} placeholder="First & last" />
@@ -174,7 +177,7 @@ export default function ApplyModal() {
                 />
                 {listOpen && (query.length > 0 || matches.length > 0) && (
                   <div
-                    className="absolute z-10 left-0 right-0 mt-1 max-h-60 overflow-y-auto border border-[#D8D5CE] bg-white shadow-[0_16px_40px_rgba(0,0,0,0.14)]"
+                    className="absolute z-10 left-0 right-0 mt-2 max-h-60 overflow-y-auto rounded-[18px] py-1.5 bg-white shadow-[0_16px_40px_rgba(0,0,0,0.14)]"
                     data-lenis-prevent
                   >
                     {matches.map((b) => (
@@ -182,7 +185,7 @@ export default function ApplyModal() {
                         key={b}
                         type="button"
                         onMouseDown={(e) => { e.preventDefault(); addBrand(b) }}
-                        className="w-full text-left px-4 py-2.5 text-[15px] text-[#0A0A0A] hover:bg-[#F1F0EC] transition-colors"
+                        className="w-full text-left px-5 py-2.5 text-[15px] text-[#0A0A0A] hover:bg-[#F1F0EC] transition-colors"
                       >
                         {b}
                       </button>
@@ -191,7 +194,7 @@ export default function ApplyModal() {
                       <button
                         type="button"
                         onMouseDown={(e) => { e.preventDefault(); addBrand(q.trim()) }}
-                        className="w-full text-left px-4 py-2.5 text-[15px] text-[#7C838B] hover:bg-[#F1F0EC] transition-colors"
+                        className="w-full text-left px-5 py-2.5 text-[15px] text-[#7C838B] hover:bg-[#F1F0EC] transition-colors"
                       >
                         + Add &ldquo;{q.trim()}&rdquo;
                       </button>
@@ -214,12 +217,12 @@ export default function ApplyModal() {
 
             <div>
               <label className={labelCls}>Whose style inspires you?</label>
-              <textarea className={`${inputCls} min-h-[68px] resize-none`} value={form.inspiration} onChange={set('inspiration')} placeholder="People, muses, accounts — anyone whose taste you love" />
+              <textarea className={`${areaCls} min-h-[68px] resize-none`} value={form.inspiration} onChange={set('inspiration')} placeholder="People, muses, accounts — anyone whose taste you love" />
             </div>
 
             <div>
               <label className={labelCls}>Anything else <span className="normal-case tracking-normal">(optional)</span></label>
-              <textarea className={`${inputCls} min-h-[56px] resize-none`} value={form.note} onChange={set('note')} placeholder="What you want more of, what you can never find…" />
+              <textarea className={`${areaCls} min-h-[56px] resize-none`} value={form.note} onChange={set('note')} placeholder="What you want more of, what you can never find…" />
             </div>
 
             {error && <p className="text-[13px] text-[#B83A3A]">{error}</p>}
@@ -227,7 +230,7 @@ export default function ApplyModal() {
             <button
               type="submit"
               disabled={busy}
-              className="mt-2 rounded-full bg-[#0A0A0A] text-white px-9 py-5 text-[15px] tracking-[0.2em] hover:opacity-85 transition-opacity disabled:opacity-40"
+              className="mt-2 rounded-full bg-[#0A0A0A] text-white px-9 py-[1.2em] text-[15px] sm:text-[clamp(16px,1.2vw,32px)] tracking-[0.2em] hover:opacity-85 transition-opacity disabled:opacity-40"
             >
               {busy ? 'SENDING…' : 'SUBMIT APPLICATION →'}
             </button>
