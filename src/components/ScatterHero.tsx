@@ -10,17 +10,23 @@ import ApplyButton, { BIG_APPLY_CLASS } from '@/components/ApplyButton'
 //
 // x/y are the FINAL offsets from centre (at full scroll), r the final rotation,
 // wvw/wpx the width (vw, capped at wpx), z the stacking order in the pile.
-type Piece = { src: string; x: number; y: number; r: number; wvw: number; wpx: number; z: number }
+type Piece = {
+  src: string; x: number; y: number; r: number; wvw: number; wpx: number; z: number
+  // Phones: a row above the headline and a row below, smaller, so nothing
+  // sits behind the text.
+  mx: number; my: number; mw: number
+}
 
 const PIECES: Piece[] = [
-  { src: '/scatter/1.webp', x: -20, y: -32, r: -3, wvw: 46, wpx: 560, z: 9 },
-  { src: '/scatter/2.webp', x: -36, y: -15, r: -5, wvw: 27, wpx: 410, z: 3 },
-  { src: '/scatter/3.webp', x: 15, y: -30, r: 3, wvw: 27, wpx: 410, z: 5 },
-  { src: '/scatter/4.webp', x: 35, y: -15, r: 6, wvw: 28, wpx: 425, z: 6 },
-  { src: '/scatter/5.webp', x: -34, y: 24, r: -4, wvw: 28, wpx: 425, z: 4 },
-  { src: '/scatter/6.webp', x: -9, y: 35, r: 2, wvw: 26, wpx: 400, z: 7 },
-  { src: '/scatter/7.webp', x: 34, y: 24, r: 4, wvw: 28, wpx: 425, z: 6 },
-  { src: '/scatter/8.webp', x: 38, y: 34, r: 7, wvw: 25, wpx: 385, z: 5 },
+  { src: '/scatter/1.webp', x: -20, y: -32, r: -3, wvw: 46, wpx: 560, z: 9, mx: -12, my: -31, mw: 30 },
+  { src: '/scatter/2.webp', x: -36, y: -15, r: -5, wvw: 27, wpx: 410, z: 3, mx: -36, my: -29, mw: 26 },
+  { src: '/scatter/3.webp', x: 15, y: -30, r: 3, wvw: 27, wpx: 410, z: 5, mx: 13, my: -32, mw: 26 },
+  { src: '/scatter/4.webp', x: 35, y: -15, r: 6, wvw: 28, wpx: 425, z: 6, mx: 37, my: -28, mw: 26 },
+  { src: '/scatter/5.webp', x: -34, y: 24, r: -4, wvw: 28, wpx: 425, z: 4, mx: -36, my: 31, mw: 26 },
+  { src: '/scatter/6.webp', x: -9, y: 35, r: 2, wvw: 26, wpx: 400, z: 7, mx: -12, my: 34, mw: 26 },
+  { src: '/scatter/7.webp', x: 34, y: 24, r: 4, wvw: 28, wpx: 425, z: 6, mx: 13, my: 31, mw: 26 },
+  // Sits clear of the green dress (7) rather than tucked under it.
+  { src: '/scatter/8.webp', x: 14, y: 38, r: 5, wvw: 25, wpx: 385, z: 5, mx: 37, my: 34, mw: 26 },
 ]
 
 export default function ScatterHero() {
@@ -43,12 +49,16 @@ export default function ScatterHero() {
       // Big at the start (a hero image), a touch smaller once spread so the
       // scattered pieces sit clear of the headline.
       const scale = 1 - 0.15 * e
+      const phone = window.innerWidth < 640
       for (let i = 0; i < PIECES.length; i++) {
         const el = pieceRefs.current[i]
         if (!el) continue
         const pc = PIECES[i]
+        const x = phone ? pc.mx : pc.x
+        const y = phone ? pc.my : pc.y
+        el.style.width = phone ? `${pc.mw}vw` : `clamp(88px, ${pc.wvw}vw, ${pc.wpx}px)`
         el.style.transform =
-          `translate(-50%, -50%) translate(${pc.x * e}vw, ${pc.y * e}vh) rotate(${pc.r * e}deg) scale(${scale})`
+          `translate(-50%, -50%) translate(${x * e}vw, ${y * e}vh) rotate(${pc.r * e}deg) scale(${scale})`
       }
       if (textRef.current) {
         // Headline fades in over the middle third of the spread.
