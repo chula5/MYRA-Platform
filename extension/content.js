@@ -140,7 +140,7 @@
       <div style="position:sticky;top:0;background:rgba(247,247,249,.92);backdrop-filter:blur(8px);padding:18px 18px 12px;display:flex;gap:12px;align-items:flex-start;">
         <img src="${esc(chrome.runtime.getURL('icons/mirror.png'))}" alt="" style="width:26px;height:auto;flex:0 0 auto;margin-top:2px">
         <div style="flex:1;min-width:0">
-          <div style="font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;opacity:.5">MYRA</div>
+          <div style="font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;opacity:.5">MYRA <span style="opacity:.55">${esc(loadedVersion ?? '?')}</span></div>
           <div style="font-size:19px;font-weight:600;line-height:1.2;margin-top:3px;letter-spacing:.01em">What to wear with this</div>
           <div style="font-size:13px;opacity:.6;margin-top:3px">${esc(job.product?.title || '')} — ${esc(modeLabel)}</div>
         </div>
