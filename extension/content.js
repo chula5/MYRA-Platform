@@ -82,10 +82,23 @@
     renderPanel({ status: 'error', product, mode, error: friendly(r.error) })
   }
 
-  /** The fallback path: this page talks to MYRA itself, with the token the worker holds. */
-  async function styleFromPage(product, mode) {
+  /**
+   * The fallback path: this page talks to MYRA itself. The token is read from
+   * chrome.storage directly — the same store the worker keeps it in — so a
+   * background of any age cannot stand between her and an answer.
+   */
+  async function creds() {
+    try {
+      const st = await chrome.storage.local.get(['token', 'apiBase'])
+      if (st?.token) return { token: st.token, apiBase: st.apiBase }
+    } catch { /* an older Chrome, or storage denied: ask the worker instead */ }
     const t = await send({ type: 'token' })
-    if (!t?.token) { renderPanel({ status: 'error', product, mode, error: RELOAD_NOTE }); return }
+    return t?.token ? t : null
+  }
+
+  async function styleFromPage(product, mode) {
+    const t = await creds()
+    if (!t?.token) { renderPanel({ status: 'error', product, mode, error: `Connect MYRA first · ${RELOAD_NOTE}` }); return }
     const base = (t.apiBase || API).replace(/\/+$/, '')
     const ask = async (quick) => {
       const res = await fetch(`${base}/api/mirror/style`, {
@@ -281,7 +294,10 @@
   }
 
   function tileImage(tile) {
-    const imgs = [...tile.querySelectorAll('img')].map((img) => ({ img, area: (img.naturalWidth || img.width) * (img.naturalHeight || img.height) })).sort((a, b) => b.area - a.area)
+    // A tile whose picture has not loaded yet holds a 1×1 placeholder.
+    const imgs = [...tile.querySelectorAll('img')]
+      .filter((img) => !/^data:/i.test(img.currentSrc || img.src || ''))
+      .map((img) => ({ img, area: (img.naturalWidth || img.width) * (img.naturalHeight || img.height) })).sort((a, b) => b.area - a.area)
     const img = imgs[0]?.img
     if (!img) return null
     const src = img.currentSrc || img.src

@@ -130,35 +130,138 @@
     try { const u = new URL(a.getAttribute('href'), location.href); return `${u.origin}${u.pathname}` } catch { return null }
   }
 
+  // ── WHAT THE SHOP ITSELF PUBLISHES ────────────────────────────────────────
+  // A retailer writes its listing out for Google before a single picture has
+  // loaded: JSON-LD ItemList, one Product per tile, with the brand, the name,
+  // the price and the picture. On a shop that carries other people's labels —
+  // NET-A-PORTER, MR PORTER, MatchesFashion — that is the only honest source
+  // of the brand: the shop's own name is not the label in the piece, and
+  // ranking her by "Net-a-porter" would rank nothing at all. Read before the
+  // markup, and still nothing invented: only what the page states.
+  const pathKey = (url) => {
+    try { const u = new URL(url, location.href); return u.pathname.replace(/\/+$/, '').toLowerCase() || '/' } catch { return null }
+  }
+  const ldTyped = (n, t) => { const a = Array.isArray(n?.['@type']) ? n['@type'] : [n?.['@type']]; return a.includes(t) }
+  const ldPrice = (offers) => {
+    const o = Array.isArray(offers) ? offers[0] : offers
+    // In a sale the shop states both prices; the struck-through one is what it
+    // used to cost, never what she pays.
+    const specs = Array.isArray(o?.priceSpecification) ? o.priceSpecification : o?.priceSpecification ? [o.priceSpecification] : []
+    const paid = specs.filter((x) => !/Strikethrough|ListPrice|MSRP/i.test(String(x?.priceType || '')))
+    const spec = paid[0] ?? specs[0]
+    const n = Number(o?.price ?? o?.lowPrice ?? spec?.price)
+    return Number.isFinite(n) && n > 0 ? n : null
+  }
+  const ldImage = (image) => {
+    const first = Array.isArray(image) ? image[0] : image
+    const url = typeof first === 'string' ? first : first?.url
+    return typeof url === 'string' && !/^data:/i.test(url) ? url : null
+  }
+  const ldStock = (offers) => {
+    const o = Array.isArray(offers) ? offers[0] : offers
+    return typeof o?.availability === 'string' ? !/OutOfStock|SoldOut|Discontinued/i.test(o.availability) : null
+  }
+  const ldUrl = (n) => {
+    const o = Array.isArray(n?.offers) ? n.offers[0] : n?.offers
+    const u = typeof n?.url === 'string' ? n.url : typeof o?.url === 'string' ? o.url : null
+    return u || null
+  }
+  /** Every Product / ProductGroup node in the page's JSON-LD, however it is nested. */
+  function* ldProducts() {
+    for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
+      let json
+      try { json = JSON.parse(s.textContent || '{}') } catch { continue }
+      const stack = Array.isArray(json) ? [...json] : [json]
+      let guard = 0
+      while (stack.length && guard++ < 5000) {
+        const n = stack.pop()
+        if (!n || typeof n !== 'object') continue
+        if (ldTyped(n, 'Product') || ldTyped(n, 'ProductGroup')) yield n
+        for (const k of ['@graph', 'itemListElement', 'item', 'hasVariant', 'mainEntity']) {
+          const v = n[k]
+          if (Array.isArray(v)) stack.push(...v)
+          else if (v && typeof v === 'object') stack.push(v)
+        }
+      }
+    }
+  }
+
+  // url path → { brand, title, price, image, available }. Re-read only when the
+  // page's own JSON changes, so "load more" is picked up and scrolling is free.
+  let ldMemo = { sig: null, map: new Map() }
+  M.listFacts = () => {
+    const scripts = [...document.querySelectorAll('script[type="application/ld+json"]')]
+    const sig = scripts.map((s) => (s.textContent || '').length).join(',')
+    if (sig === ldMemo.sig) return ldMemo.map
+    const map = new Map()
+    for (const n of ldProducts()) {
+      const url = ldUrl(n)
+      const key = url ? pathKey(url) : null
+      if (!key || map.has(key)) continue
+      const brand = typeof n.brand === 'string' ? n.brand : n.brand?.name
+      const title = typeof n.name === 'string' ? n.name : null
+      if (!brand && !title) continue
+      map.set(key, {
+        brand: brand ? String(brand).slice(0, 80) : null,
+        title: title ? String(title).slice(0, 200) : null,
+        price: ldPrice(n.offers),
+        image: ldImage(n.image),
+        available: ldStock(n.offers),
+        url: String(url).split(/[?#]/)[0],
+      })
+    }
+    ldMemo = { sig, map }
+    return map
+  }
+
   // → [{ container, tiles: [{ el, key }] }] on any shop.
   M.genericGrids = () => {
-    // Every link that wraps (or sits beside) a picture — a product tile's shape.
+    const facts = M.listFacts()
+    // Every link that wraps (or sits beside) a picture — a product tile's
+    // shape. A shop that holds its pictures back until she scrolls has no
+    // picture to find yet, so a link the page's own JSON-LD calls a product
+    // is a tile too, loaded or not.
     const byHref = new Map()
     for (const a of document.querySelectorAll('a[href]')) {
       if (!sameOrigin(a)) continue
       const href = hrefOf(a)
       if (!href || href === location.pathname || /\/(cart|account|login|search|help|contact|about|blog|journal)(\/|$)/i.test(href)) continue
-      if (!a.querySelector('img') && !a.parentElement?.querySelector('img')) continue
+      const known = facts.has(pathKey(href))
+      if (!known && !a.querySelector('img, picture') && !a.parentElement?.querySelector('img, picture')) continue
       if (!byHref.has(href)) byHref.set(href, [])
       byHref.get(href).push(a)
     }
     if (byHref.size < 4) return []
 
-    // The tile: the highest ancestor that still holds exactly this one product.
+    // The tile: the highest ancestor that is still about this one piece. A
+    // tile often links out to the same piece in another colour, so a second
+    // link does not end the tile — the block is about whichever piece it
+    // links to most. Four pieces and up is a grid, never a tile.
     const tileOf = (a) => {
+      const mine = hrefOf(a)
       let el = a
       for (let i = 0; i < 7 && el.parentElement && el.parentElement !== document.body; i++) {
         const parent = el.parentElement
-        const hrefs = new Set([...parent.querySelectorAll('a[href]')].filter(sameOrigin).map(hrefOf).filter(Boolean))
-        if (hrefs.size !== 1) break
+        const counts = new Map()
+        for (const x of parent.querySelectorAll('a[href]')) {
+          if (!sameOrigin(x)) continue
+          const h = hrefOf(x)
+          if (h) counts.set(h, (counts.get(h) || 0) + 1)
+        }
+        const others = [...counts.entries()].filter(([h]) => h !== mine).map(([, n]) => n)
+        const aboutThisPiece = counts.size === 1 || (counts.size <= 3 && (counts.get(mine) || 0) > Math.max(0, ...others))
+        if (!aboutThisPiece) break
         el = parent
       }
       return el
     }
 
+    // The same piece can sit in a closed menu as well as in the grid. The copy
+    // she can see is the tile; the one folded away is not.
+    const shown = (a) => { const r = a.getBoundingClientRect(); return r.width > 0 && r.height > 0 }
     const byContainer = new Map()
     for (const [href, anchors] of byHref) {
-      const tile = tileOf(anchors[0])
+      const tile = tileOf(anchors.find(shown) || anchors[0])
       const container = tile.parentElement
       if (!container) continue
       if (!byContainer.has(container)) byContainer.set(container, [])
@@ -170,7 +273,7 @@
         if (tiles.length < 4) return false
         // A row of four navigation cards is not a grid of products: most tiles
         // must show a price, and the grid must take real room on the page.
-        const priced = tiles.filter((t) => priceIn(t.el) != null).length
+        const priced = tiles.filter((t) => priceIn(t.el) != null || facts.get(pathKey(t.key))?.price != null).length
         if (priced < Math.max(3, tiles.length * 0.5)) return false
         const box = container.getBoundingClientRect()
         return box.width > 200 && box.height > 200
@@ -179,26 +282,32 @@
   }
 
   M.genericDetails = (keys) => {
-    const brand = M.siteBrand()
+    const facts = M.listFacts()
+    const shopName = M.siteBrand()
     const found = new Map()
     for (const g of M.genericGrids()) {
       for (const t of g.tiles) {
         const el = t.el
+        const f = facts.get(pathKey(t.key)) || {}
+        // A skeleton tile's <img> is a 1×1 placeholder: it is not her picture.
         const img = [...el.querySelectorAll('img')]
+          .filter((i) => !/^data:/i.test(i.currentSrc || i.src || ''))
           .map((i) => ({ i, area: (i.naturalWidth || i.width || 0) * (i.naturalHeight || i.height || 0) }))
           .sort((x, y) => y.area - x.area)[0]?.i
         const heading = el.querySelector('h1, h2, h3, h4, [class*="title"], [class*="name"]')
         const lines = (el.innerText || '').split('\n').map((x) => x.trim()).filter(Boolean)
         const title = (heading?.textContent || img?.getAttribute('alt') || lines.find((l) => !CURRENCY.test(l)) || 'Piece').trim().slice(0, 200)
         found.set(t.key, {
-          brand,
-          title,
+          // The label in the piece, not the shop's sign over the door: on a
+          // multi-brand shop the shop's own name is the last resort.
+          brand: f.brand || shopName,
+          title: f.title || title,
           type: null,
-          price: priceIn(el),
+          price: f.price ?? priceIn(el),
           url: t.key,
-          available: !/sold out|out of stock/i.test(el.innerText || ''),
+          available: f.available ?? !/sold out|out of stock/i.test(el.innerText || ''),
           sizes: [],
-          image: img ? (img.currentSrc || img.src || null) : null,
+          image: f.image || (img ? (img.currentSrc || img.src || null) : null),
         })
       }
     }
@@ -212,21 +321,36 @@
   // and to style it, on a shop the mirror cannot otherwise read.
   M.pageProduct = () => {
     const out = { url: location.href.split(/[?#]/)[0], title: null, brand: null, price: null, image: null, available: true, sizes: [] }
-    for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
-      let json
-      try { json = JSON.parse(s.textContent || '{}') } catch { continue }
-      const nodes = Array.isArray(json) ? json : json['@graph'] ? json['@graph'] : [json]
-      for (const n of nodes) {
-        const type = Array.isArray(n?.['@type']) ? n['@type'] : [n?.['@type']]
-        if (!type.includes('Product')) continue
+    // A piece with sizes is written either as one Product, or — NET-A-PORTER,
+    // MR PORTER — as a ProductGroup whose variants ARE the sizes. Read the
+    // group first: it is the only place the sizes are stated, and a size that
+    // cannot be hers is what stops MYRA styling a piece she can't have.
+    const groups = [], singles = []
+    for (const n of ldProducts()) (ldTyped(n, 'ProductGroup') ? groups : singles).push(n)
+    const group = groups.find((g) => Array.isArray(g.hasVariant) && g.hasVariant.length)
+    if (group) {
+      out.title = typeof group.name === 'string' ? group.name.slice(0, 200) : out.title
+      out.brand = (typeof group.brand === 'string' ? group.brand : group.brand?.name) ?? out.brand
+      const byLabel = new Map()
+      for (const v of group.hasVariant) {
+        const label = typeof v?.size === 'string' ? v.size : null
+        const inStock = ldStock(v?.offers)
+        if (label) byLabel.set(label, (byLabel.get(label) || false) || inStock !== false)
+        if (out.price == null) out.price = ldPrice(v?.offers)
+        if (!out.image) out.image = ldImage(v?.image)
+      }
+      out.sizes = [...byLabel].slice(0, 60).map(([label, available]) => ({ label: String(label).slice(0, 40), available }))
+      out.available = out.sizes.length ? out.sizes.some((x) => x.available) : out.available
+    } else {
+      for (const n of singles) {
         out.title = typeof n.name === 'string' ? n.name.slice(0, 200) : out.title
         out.brand = (typeof n.brand === 'string' ? n.brand : n.brand?.name) ?? out.brand
-        const offers = Array.isArray(n.offers) ? n.offers[0] : n.offers
-        const price = Number(offers?.price ?? offers?.lowPrice)
-        if (Number.isFinite(price) && price > 0) out.price = price
-        if (typeof offers?.availability === 'string') out.available = !/OutOfStock|SoldOut/i.test(offers.availability)
-        const img = Array.isArray(n.image) ? n.image[0] : n.image
-        if (typeof img === 'string') out.image = img
+        const price = ldPrice(n.offers)
+        if (price != null) out.price = price
+        const stock = ldStock(n.offers)
+        if (stock !== null) out.available = stock
+        const img = ldImage(n.image)
+        if (img) out.image = img
       }
     }
     const meta = (p) => document.querySelector(`meta[property="${p}"], meta[name="${p}"]`)?.getAttribute('content') || null
