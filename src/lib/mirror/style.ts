@@ -18,7 +18,8 @@ import { loadBrandGraph, resolveBrandNames } from '@/lib/brand-affinity'
 import { composeMemberVariants } from '@/lib/pilot-composer'
 import { judgeLooksForMember, hasPieceOutOfSize } from '@/lib/look-check'
 import { whyThisSuitsHer } from '@/lib/look-why'
-import { readStylePrefs } from '@/lib/pilot-stylist'
+import { readStylePrefs, effectiveWeights, normalise, lookTasteVector } from '@/lib/pilot-stylist'
+import { occasionsForMember, OCCASION_LABEL } from '@/lib/client-occasions'
 import {
   loadComposableLibrary, loadMemberTaste, loadPersonaLens, loadComposeHistory, type StyledLook,
 } from '@/app/admin/private-stylist/actions'
@@ -142,9 +143,51 @@ export async function styleExternalPiece(
     loadPersonaLens(admin, member.member_id),
     loadComposeHistory(admin, member.member_id),
   ])
-  const composed = composeMemberVariants(taste, pool as any, hero.item_id, LOOKS + 2, undefined, lens, history, { ownedMode: mode === 'wardrobe' ? 'blend' : 'retail_only' })
+  // ONE PIECE, THREE LIVES. A blazer she is looking at is worth having only if
+  // she can see where she would wear it, so the panel answers in her own
+  // occasions — the ones she actually dresses for, most often first — rather
+  // than three variations on the same afternoon.
+  const occasionIds = occasionsForMember(row.occasions).filter((id) => id !== 'kids').slice(0, LOOKS)
+  const ownedMode = mode === 'wardrobe' ? 'blend' : 'retail_only'
+  const perOccasion: { id: string | null; label: string; look: any }[] = []
+  for (const id of occasionIds.length ? occasionIds : [null]) {
+    const occ = id
+      ? { id: id as any, vector: lookTasteVector(normalise(effectiveWeights(row.room_weights, id as any, row.work_dress_code))), climate: null }
+      : undefined
+    for (const look of composeMemberVariants(taste, pool as any, hero.item_id, 2, occ, lens, history, { ownedMode })) {
+      perOccasion.push({ id, label: id ? (OCCASION_LABEL[id] ?? id) : '', look })
+    }
+  }
+  const composed = perOccasion.map((p) => p.look)
   if (!composed.length) {
     return { looks: [], hero: heroView, error: mode === 'wardrobe' ? 'Nothing in your wardrobe goes with this piece yet' : 'Nothing in MYRA goes with this piece in your size right now' }
+  }
+  /**
+   * One look per occasion, best first — each occasion composes a pair, so the
+   * second is its reserve. Two occasions that would show her the same outfit
+   * are not two answers: the later one takes its reserve instead.
+   */
+  const sigOf = (i: number) => composed[i].items.map((x: any) => x.item_id).sort().join('|')
+  const oneEach = (order: number[]) => {
+    const takenOcc = new Set<string>()
+    const takenLook = new Set<string>()
+    const out: number[] = []
+    for (const i of order) {
+      const occ = perOccasion[i].id ?? ''
+      if (takenOcc.has(occ) || takenLook.has(sigOf(i))) continue
+      takenOcc.add(occ)
+      takenLook.add(sigOf(i))
+      out.push(i)
+    }
+    // Room left over (she dresses for fewer occasions than we show): fill it
+    // with the reserves rather than showing her two looks when three passed.
+    for (const i of order) {
+      if (out.length >= LOOKS) break
+      if (out.includes(i) || takenLook.has(sigOf(i))) continue
+      takenLook.add(sigOf(i))
+      out.push(i)
+    }
+    return out
   }
   const dimsAll = new Map<string, any>((pool as any[]).map((i) => [i.item_id, i]))
   const prefsAll = readStylePrefs(row)
@@ -155,28 +198,33 @@ export async function styleExternalPiece(
     return {
       hero: heroView,
       checked: false,
-      looks: composed.slice(0, LOOKS).map((c) => ({
+      looks: oneEach(composed.map((_, i) => i)).slice(0, LOOKS).map((i) => ({
         look_id: null,
         image_url: null,
-        items: withImages(c.items),
-        why: whyThisSuitsHer(c.items.map((it) => ({ ...(dimsAll.get(it.item_id ?? '') ?? {}), product_name: it.product_name, owned: !!it.owned })), prefsAll),
+        occasion_id: perOccasion[i].id,
+        occasion_label: perOccasion[i].label,
+        items: withImages(composed[i].items),
+        why: whyThisSuitsHer(composed[i].items.map((it) => ({ ...(dimsAll.get(it.item_id ?? '') ?? {}), product_name: it.product_name, owned: !!it.owned })), prefsAll),
       })),
     }
   }
   const judged = await judgeLooksForMember(admin, member.member_id, composed, 'unknown')
   const rank = (i: number) => (judged[i].check?.verdict === 'works' ? 0 : judged[i].check ? 1 : 2)
-  const passing = composed.map((_, i) => i)
+  const survived = composed.map((_, i) => i)
     .filter((i) => judged[i].check?.verdict !== 'clashes' && !hasPieceOutOfSize(judged[i]))
     .sort((a, b) => rank(a) - rank(b) || a - b)
+  const passing = oneEach(survived)
   const dims = new Map<string, any>(pool.map((i) => [i.item_id, i]))
   const prefs = readStylePrefs(row)
   return {
     hero: heroView,
     checked: true,
-    hidden: composed.length - passing.length,
+    hidden: composed.length - survived.length,
     looks: passing.slice(0, LOOKS).map((i) => ({
       look_id: null,
       image_url: null,
+      occasion_id: perOccasion[i].id,
+      occasion_label: perOccasion[i].label,
       // Each piece carries its picture: the pop-out and the extension's panel
       // both show the look, and a composed LookItem has no image of its own.
       items: composed[i].items.map((it) => ({ ...it, image_url: dims.get(it.item_id ?? '')?.image_url ?? null })),

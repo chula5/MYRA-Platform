@@ -3212,6 +3212,9 @@ export interface StyledLook {
   image_url: string | null
   items: LookItem[]
   why: string
+  /** Set when the look was composed FOR an occasion — "Daytime", "Dinners and drinks". */
+  occasion_id?: string | null
+  occasion_label?: string | null
 }
 
 export interface OwnedPieceView extends DressingRoomView {

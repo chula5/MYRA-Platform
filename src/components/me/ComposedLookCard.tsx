@@ -27,9 +27,14 @@ export default function ComposedLookCard({ look, heroId }: { look: StyledLook; h
         </div>
       )}
       {/* The outfit speaks for itself; how many of her own pieces are in it does not. */}
-      <p className="px-5 py-4 text-[19px] text-[#6E6B65]">
-        {look.items.filter((it) => it.owned).length} of your own
-      </p>
+      <div className="px-5 py-4">
+        {look.occasion_label && (
+          <p className="myra-section-note mb-1">{look.occasion_label.toUpperCase()}</p>
+        )}
+        <p className="text-[19px] text-[#6E6B65]">
+          {look.items.filter((it) => it.owned).length} of your own
+        </p>
+      </div>
     </article>
   )
 }

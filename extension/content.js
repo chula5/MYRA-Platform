@@ -256,7 +256,7 @@
     return `<div style="background:rgba(255,255,255,.85);border-radius:18px;overflow:hidden;margin-bottom:12px;box-shadow:0 2px 14px rgba(43,43,43,.08)">
       ${body}
       <div style="padding:11px 14px 12px">
-        <div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;opacity:.5">Look ${i + 1}${own ? ` · ${own} of your own` : ''}</div>
+        <div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;opacity:.5">${esc(look.occasion_label || `Look ${i + 1}`)}${own ? ` · ${own} of your own` : ''}</div>
         ${look.why ? `<div style="font-size:13.5px;opacity:.72;margin-top:5px;line-height:1.35">${esc(look.why)}</div>` : ''}
       </div>
     </div>`
@@ -315,16 +315,34 @@
   }
 
 
-  // ── ONE PIECE, ON ITS OWN PAGE ────────────────────────────────────────────
-  // Any shop, readable or not: keep it, or ask what to wear with it.
-  function offerProduct(product) {
-    if (document.querySelector('.myra-mirror-product')) return
-    const box = document.createElement('div')
-    box.className = 'myra-mirror-product'
-    box.style.cssText = `position:fixed;z-index:2147483646;right:16px;bottom:16px;width:min(330px,calc(100vw - 32px));background:linear-gradient(160deg,#F7F7F9 0%,#E9E9EC 100%);border-radius:22px;box-shadow:0 20px 50px rgba(0,0,0,.24);padding:15px 17px;font:400 14px/1.4 ${FONT};color:#2B2B2B;`
-    box.innerHTML = `
+  // ── THE PIECE SHE IS LOOKING AT ───────────────────────────────────────────
+  // One card at the bottom of the screen, and it follows her: the piece whose
+  // page she is on, or — in a grid — whichever tile is under the cursor. It is
+  // rebuilt for each piece rather than left where it was, because a shop that
+  // never reloads the page (a listing that turns into a product, a product
+  // that turns into the next one) would otherwise leave her reading the last
+  // piece's name over this piece's picture.
+  let pill = null, pillFor = null, pillFrom = null, pillRevert = null
+
+  function hidePiece() { pill?.remove(); pill = null; pillFor = null; pillFrom = null }
+
+  function showPiece(product, from = 'page') {
+    if (!product?.title) return
+    const key = product.url || product.title
+    // Already showing this piece: only note where the cursor now is, so
+    // leaving a tile knows whether to go back to her own page's piece.
+    if (pill && pillFor === key) { pillFrom = from; return }
+    if (!pill) {
+      pill = document.createElement('div')
+      pill.className = 'myra-mirror-product'
+      pill.style.cssText = `position:fixed;z-index:2147483646;right:16px;bottom:16px;width:min(330px,calc(100vw - 32px));background:linear-gradient(160deg,#F7F7F9 0%,#E9E9EC 100%);border-radius:22px;box-shadow:0 20px 50px rgba(0,0,0,.24);padding:15px 17px;font:400 14px/1.4 ${FONT};color:#2B2B2B;`
+      document.body.appendChild(pill)
+    }
+    pillFor = key
+    pillFrom = from
+    pill.innerHTML = `
       <div style="display:flex;gap:11px;align-items:flex-start">
-        <img src="${chrome.runtime.getURL('icons/mirror.png')}" alt="" style="width:22px;height:auto;margin-top:2px">
+        ${product.image ? `<img src="${esc(product.image)}" alt="" style="width:46px;height:61px;object-fit:contain;background:#fff;border-radius:6px;flex:0 0 auto">` : `<img src="${chrome.runtime.getURL('icons/mirror.png')}" alt="" style="width:22px;height:auto;margin-top:2px">`}
         <div style="flex:1;min-width:0">
           <div style="font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;opacity:.5">MYRA</div>
           <div style="font-size:14.5px;font-weight:600;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(product.title)}</div>
@@ -337,10 +355,10 @@
         </div>
         <button data-myra="close" aria-label="Close" style="border:0;background:transparent;font-size:17px;line-height:1;color:#55534E;cursor:pointer">×</button>
       </div>`
-    const said = box.querySelector('[data-myra="said"]')
+    const said = pill.querySelector('[data-myra="said"]')
     const say = (t) => { said.style.display = 'block'; said.textContent = t }
-    box.querySelector('[data-myra="close"]').addEventListener('click', () => box.remove())
-    box.querySelector('[data-myra="save"]').addEventListener('click', async (e) => {
+    pill.querySelector('[data-myra="close"]').addEventListener('click', () => { hidePiece(); pillOff = true })
+    pill.querySelector('[data-myra="save"]').addEventListener('click', async (e) => {
       const b = e.currentTarget
       b.disabled = true
       say('Saving…')
@@ -349,8 +367,19 @@
       b.textContent = '♥ Saved'
       say('In your saved pieces — MYRA watches its stock and will tell you if it starts to go.')
     })
-    box.querySelector('[data-myra="style"]').addEventListener('click', (e) => openMenu(e.currentTarget, product))
-    document.body.appendChild(box)
+    pill.querySelector('[data-myra="style"]').addEventListener('click', (e) => openMenu(e.currentTarget, product))
+  }
+
+  // Closed once, closed until she opens a new page.
+  let pillOff = false
+
+  /** The cursor has left the grid: her own page's piece comes back. */
+  function revertPiece(pageProduct) {
+    clearTimeout(pillRevert)
+    pillRevert = setTimeout(() => {
+      if (pillFrom !== 'hover') return
+      if (pageProduct) showPiece(pageProduct, 'page')
+    }, 400)
   }
 
   function tileImage(tile) {
@@ -402,8 +431,12 @@
     })
 
     wrap.append(ask, fav)
-    tile.addEventListener('mouseenter', () => { wrap.style.opacity = '1' })
-    tile.addEventListener('mouseleave', () => { if (!menu) wrap.style.opacity = '0' })
+    tile.addEventListener('mouseenter', () => {
+      wrap.style.opacity = '1'
+      clearTimeout(pillRevert)
+      if (!pillOff) showPiece({ ...product, image: product.image || tileImage(tile) }, 'hover')
+    })
+    tile.addEventListener('mouseleave', () => { if (!menu) wrap.style.opacity = '0'; revertPiece(pagePiece) })
     tile.appendChild(wrap)
     touched.add(tile)
   }
@@ -448,13 +481,21 @@
     return lifted
   }
 
+  let lastHref = location.href
+  let pagePiece = null
+
   async function run() {
     if (running) return
     running = true
     try {
+      // A shop that changes the page without reloading it is a new page to
+      // her: everything starts again, including anything she had closed.
+      if (location.href !== lastHref) { lastHref = location.href; lastSig = ''; pillOff = false; hidePiece() }
       // One piece on its own page: keep it or style it, whatever the shop.
-      const piece = M.pageProduct?.()
-      if (piece) offerProduct(piece)
+      pagePiece = M.pageProduct?.() ?? null
+      // Not while the cursor is resting on a tile — hers to follow, not to fight.
+      if (pagePiece && !pillOff && pillFrom !== 'hover') showPiece(pagePiece, 'page')
+      else if (!pagePiece && pillFrom === 'page') hidePiece()
 
       const grids = vinted ? M.vintedGrids() : shopify ? M.findGrids() : M.genericGrids()
       // It speaks this shop but found nothing to re-order — a layout it has not
