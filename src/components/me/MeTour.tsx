@@ -48,6 +48,7 @@ const STEPS: Step[] = [
   { path: '/me/looks', target: '[data-tour="look-open"] button[aria-label^="Style "]', fallback: '[data-tour="look-open"]', title: 'STYLE ITEM', body: 'The see-through circles on a look. Tap one to see that piece in other outfits.' },
   { path: DRESSING, target: '[data-tour="wardrobe"]', title: 'YOUR WARDROBE', body: 'Your own pieces. Tap one to see it styled.' },
   { path: DRESSING, target: '[data-tour="styling-pane"]', title: 'STYLED FOR YOU', body: 'Outfits around the piece you tapped. Build new ones here.' },
+  { path: DRESSING, target: '[data-tour="builder"]', title: 'BUILD AN OUTFIT', body: 'Your own pieces and the ones you saved. Put them together and MYRA says what it thinks.' },
   { path: DRESSING, target: '[data-tour="email-sync"]', fallback: '#email-finds', title: 'UPDATE EMAIL SYNC', body: 'Finds what you have bought from your order emails.' },
   { path: DRESSING, target: '#coming-up', title: 'COMING UP', body: 'Your calendar. Tap Plan an outfit for anything you want dressed.' },
   { path: DRESSING, target: '#archival-looks', title: 'ARCHIVAL LOOKS', body: 'Photos of what you already wear. Add the pieces you still own.' },

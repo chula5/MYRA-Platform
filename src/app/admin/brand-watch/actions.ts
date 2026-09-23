@@ -121,19 +121,53 @@ async function fetchSkipReasons(admin: any): Promise<Map<string, string>> {
   return out
 }
 
+/**
+ * Everything the ranking, the counts, the learning and the twin check read —
+ * and nothing that is only there to be looked at.
+ *
+ * Selecting one brand still has to walk the WHOLE queue (the brand counts and
+ * the cross-brand learning both need it), so this read is the floor on how fast
+ * a brand chip can respond. image_url and retailer_url are most of a row's
+ * bytes and neither is consulted until 200 rows have been picked, so they are
+ * fetched afterwards, for those 200 only.
+ */
+const RANK_FIELDS = 'queue_id, brand_id, product_name, item_type, colour_family, material_category, material_primary, price, price_gbp, discovery_score, discovered_at, brand:brand_id(name)'
+
+/**
+ * What buildLearning reads off a decided row. There are far more kept and
+ * skipped rows than queued ones — they accumulate forever — and not one of them
+ * is ever rendered, so pulling their images was the largest read on the page.
+ */
+const DECIDED_FIELDS = 'queue_id, status, product_name, item_type, colour_family, material_category, price, price_gbp, brand:brand_id(name)'
+
 // All queue rows for the given statuses (paged past PostgREST's 1,000-row cap).
-async function fetchBrandWatchRows(admin: any, statuses: string[]): Promise<any[]> {
+async function fetchBrandWatchRows(admin: any, statuses: string[], fields = QUEUE_FIELDS): Promise<any[]> {
   const out: any[] = []
   for (let from = 0; ; from += 1000) {
     const { data, error } = await admin
       .from('brand_watch_queue')
-      .select(QUEUE_FIELDS)
+      .select(fields)
       .in('status', statuses)
       .order('queue_id')
       .range(from, from + 999)
     if (error) throw new Error(error.message)
     out.push(...(data ?? []))
     if (!data || data.length < 1000) break
+  }
+  return out
+}
+
+/** The display fields for the rows that actually reached the page. */
+async function hydrateRows(admin: any, queueIds: string[]): Promise<Map<string, any>> {
+  const out = new Map<string, any>()
+  if (!queueIds.length) return out
+  for (let i = 0; i < queueIds.length; i += 200) {
+    const { data, error } = await admin
+      .from('brand_watch_queue')
+      .select(QUEUE_FIELDS)
+      .in('queue_id', queueIds.slice(i, i + 200))
+    if (error) throw new Error(error.message)
+    for (const r of data ?? []) out.set(r.queue_id, r)
   }
   return out
 }
@@ -152,8 +186,8 @@ async function queuePage(offset: number, brandName?: string | null, filters: Que
   let drafts: any[]
   let decidedRows: any[]
   try {
-    drafts = await fetchBrandWatchRows(admin, ['queued'])
-    decidedRows = await fetchBrandWatchRows(admin, ['kept', 'skipped'])
+    drafts = await fetchBrandWatchRows(admin, ['queued'], RANK_FIELDS)
+    decidedRows = await fetchBrandWatchRows(admin, ['kept', 'skipped'], DECIDED_FIELDS)
   } catch (e) {
     return { queue: [], queueTotal: 0, predictedSkipTotal: 0, decidedCount: 0, brandCounts: {}, error: e instanceof Error ? e.message : String(e) }
   }
@@ -181,34 +215,66 @@ async function queuePage(offset: number, brandName?: string | null, filters: Que
   const minByBrand = new Map<string, number>(((wbs ?? []) as any[]).map((w) => [foldBrandName(w.name), Number(w.min_score ?? 5)]))
 
   // A banned piece already in the queue from before the bans is not shown.
-  const annotated: QueueItemRow[] = drafts.filter((r) => !houseBanOf({ title: r.product_name, materialPrimary: r.material_primary, itemType: r.item_type })).map((r) => {
-    const base = mapQueueRow(r)
-    const v = learn({
-      brandName: base.brand_name, productName: base.product_name, itemType: base.item_type,
-      colourFamily: base.colour_family, materialCategory: base.material_category, price: base.price,
-      priceGbp: base.price_gbp,
-    })
-    const minScore = minByBrand.get(foldBrandName(base.brand_name)) ?? 5
-    const strong = (base.discovery_score ?? 0) >= minScore + 2
-    // How sure MYRA is that Chloe would keep it — her own model for this brand.
-    const confidence = confidenceOf(trustData, r)
-    return { ...base, learned_delta: v.delta, learned_reasons: v.reasons, predicted_skip: v.predictedSkip && !strong, adjusted: (base.discovery_score ?? 0) + v.delta, twin_of: twinOfQueueRow(trustData, r)?.product_name ?? null, confidence }
-  })
+  const live = drafts.filter((r) => !houseBanOf({ title: r.product_name, materialPrimary: r.material_primary, itemType: r.item_type }))
 
+  // The brand chips count the whole queue, so this tally runs over all of it.
+  // It is only a tally: none of the expensive per-row work below is needed to
+  // say how many pieces a brand has waiting.
   const brandCounts: Record<string, number> = {}
-  const twinCounts: Record<string, number> = {}
-  for (const q of annotated) {
-    const b = q.brand_name ?? '?'
+  for (const r of live) {
+    const b = r.brand?.name ?? '?'
     brandCounts[b] = (brandCounts[b] ?? 0) + 1
-    if (q.twin_of) twinCounts[b] = (twinCounts[b] ?? 0) + 1
   }
 
   // Filters run over the whole queue, not the loaded page: filtering the page
   // hid the SNEAKER chip under ALL BRANDS whenever the top 200 pieces held no
   // sneakers, and a colour filter could only find what happened to be loaded.
-  const scope = brandName ? annotated.filter((q) => q.brand_name === brandName) : annotated
+  //
+  // Scoping BEFORE the annotation, not after, is what makes a brand chip quick:
+  // running the learning and the twin check over every brand's queue to then
+  // throw all but one brand's away was the whole cost of the click.
+  const scoped = brandName ? live.filter((r) => (r.brand?.name ?? null) === brandName) : live
+
+  const annotated = scoped.map((r) => {
+    const brand_name = r.brand?.name ?? null
+    const discovery_score = r.discovery_score != null ? Number(r.discovery_score) : null
+    const price_gbp = r.price_gbp != null ? Number(r.price_gbp) : null
+    const v = learn({
+      brandName: brand_name, productName: r.product_name, itemType: r.item_type,
+      colourFamily: r.colour_family, materialCategory: r.material_category, price: r.price,
+      priceGbp: price_gbp,
+    })
+    const brandMin = minByBrand.get(foldBrandName(brand_name)) ?? 5
+    const strong = (discovery_score ?? 0) >= brandMin + 2
+    return {
+      queue_id: r.queue_id as string,
+      brand_name,
+      item_type: r.item_type as string | null,
+      colour_family: r.colour_family as string | null,
+      discovery_score,
+      discovered_at: r.discovered_at as string | null,
+      learned_delta: v.delta,
+      learned_reasons: v.reasons,
+      predicted_skip: v.predictedSkip && !strong,
+      adjusted: (discovery_score ?? 0) + v.delta,
+      twin_of: twinOfQueueRow(trustData, r)?.product_name ?? null,
+      // How sure MYRA is that Chloe would keep it — her own model for this brand.
+      confidence: confidenceOf(trustData, r),
+    }
+  })
+
+  // Only ever read for the selected brand, so it is counted over the scope.
+  const twinCounts: Record<string, number> = {}
+  for (const q of annotated) {
+    if (q.twin_of) {
+      const b = q.brand_name ?? '?'
+      twinCounts[b] = (twinCounts[b] ?? 0) + 1
+    }
+  }
+
+  const scope = annotated
   const { itemType = '', colour = '', minScore = null, showPredicted = false } = filters
-  const passes = (q: QueueItemRow, skip: 'type' | 'colour' | 'predicted' | null) =>
+  const passes = (q: (typeof annotated)[number], skip: 'type' | 'colour' | 'predicted' | null) =>
     (skip === 'type' || !itemType || q.item_type === itemType) &&
     (skip === 'colour' || !colour || q.colour_family === colour) &&
     (minScore === null || (q.discovery_score ?? -99) >= minScore) &&
@@ -226,8 +292,20 @@ async function queuePage(offset: number, brandName?: string | null, filters: Que
   const filtered = scope.filter((q) => passes(q, null))
   filtered.sort((a, b) => (b.adjusted - a.adjusted) || String(b.discovered_at ?? '').localeCompare(String(a.discovered_at ?? '')))
 
+  // Only now, with the page decided, are the display fields worth reading.
+  const pageRows = filtered.slice(offset, offset + QUEUE_PAGE)
+  const full = await hydrateRows(admin, pageRows.map((q) => q.queue_id))
+  const queue: QueueItemRow[] = pageRows.flatMap((q) => {
+    const row = full.get(q.queue_id)
+    // A piece decided in another tab between the ranking and this read is gone
+    // rather than half-rendered.
+    if (!row) return []
+    const { queue_id, ...annotation } = q
+    return [{ ...mapQueueRow(row), ...annotation }]
+  })
+
   return {
-    queue: filtered.slice(offset, offset + QUEUE_PAGE),
+    queue,
     queueTotal: filtered.length,
     predictedSkipTotal: scope.filter((q) => q.predicted_skip && passes(q, 'predicted')).length,
     decidedCount: decided.length,
