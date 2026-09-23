@@ -63,6 +63,13 @@ const STEPS: Step[] = [
     body: 'Add MYRA to your browser and every shop you open is in your order — keep a piece, or ask what to wear with it, without leaving the shop.',
     cta: { label: 'Add MYRA to my browser', href: MIRROR_HREF },
   },
+  {
+    path: '/me/profile',
+    target: '#assistant',
+    title: 'MYRA IN CLAUDE',
+    body: 'Want to ask MYRA for outfits inside Claude or ChatGPT? Make your link here and paste it in as a connector. It lives under YOU, so you can do it whenever you like.',
+    cta: { label: 'Take me to it', href: '/me/profile#assistant' },
+  },
   { title: 'THAT\u2019S EVERYTHING', body: 'Your wardrobe is still filling in. Start on your For You page.' },
 ]
 

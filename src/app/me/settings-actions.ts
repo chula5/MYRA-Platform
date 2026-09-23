@@ -37,15 +37,59 @@ export interface YouSettingsPatch {
 /**
  * HER MYRA LINK for an assistant (Claude, ChatGPT). One signed member token in
  * a URL: a connector that takes only a URL can still ask about her wardrobe.
- * Asking again mints a fresh one, which is how a link is retired.
+ * Only the hash is stored — enough to say whether she has a link, when it was
+ * last used, and to turn it off. Making a new one turns the old one off.
  */
 export async function myAssistantLink(asMemberId?: string): Promise<{ url?: string; days?: number; error?: string }> {
   const me = await resolveClientMember(asMemberId)
   if (!me) return { error: 'Not signed in' }
   const { mintMirrorToken, MIRROR_TOKEN_TTL_S } = await import('@/lib/mirror/auth')
+  const { hashAssistantToken } = await import('@/lib/mcp/link')
   const base = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.myraassistant.co.uk').replace(/\/+$/, '')
   const token = mintMirrorToken(me.memberId, { ttlS: MIRROR_TOKEN_TTL_S })
+  const admin = createAdminClient() as any
+  try {
+    await admin.from('member_assistant_link').upsert(
+      { member_id: me.memberId, token_hash: hashAssistantToken(token), issued_at: new Date().toISOString(), last_used_at: null, uses: 0 },
+      { onConflict: 'member_id' },
+    )
+  } catch { /* before migration 0068 the link still works, it just cannot be turned off */ }
   return { url: `${base}/api/mcp/${encodeURIComponent(token)}`, days: Math.round(MIRROR_TOKEN_TTL_S / 86400) }
+}
+
+export interface AssistantLinkState {
+  connected: boolean
+  issuedAt: string | null
+  lastUsedAt: string | null
+  uses: number
+  /** The link is not shown again — she copies it when she makes it. */
+  needsMigration?: boolean
+}
+
+/** Whether she has a link, and whether anything has used it. */
+export async function myAssistantLinkState(asMemberId?: string): Promise<AssistantLinkState> {
+  const me = await resolveClientMember(asMemberId)
+  const none = { connected: false, issuedAt: null, lastUsedAt: null, uses: 0 }
+  if (!me) return none
+  const admin = createAdminClient() as any
+  try {
+    const { data, error } = await admin.from('member_assistant_link')
+      .select('issued_at, last_used_at, uses').eq('member_id', me.memberId).maybeSingle()
+    if (error) return { ...none, needsMigration: /member_assistant_link/.test(error.message) }
+    if (!data) return none
+    return { connected: true, issuedAt: data.issued_at, lastUsedAt: data.last_used_at ?? null, uses: data.uses ?? 0 }
+  } catch {
+    return { ...none, needsMigration: true }
+  }
+}
+
+/** Turn the link off: whatever holds it stops being able to ask. */
+export async function revokeMyAssistantLink(asMemberId?: string): Promise<{ error?: string }> {
+  const me = await resolveClientMember(asMemberId)
+  if (!me) return { error: 'Not signed in' }
+  const admin = createAdminClient() as any
+  const { error } = await admin.from('member_assistant_link').delete().eq('member_id', me.memberId)
+  return error ? { error: error.message } : {}
 }
 
 export async function saveMySettings(patch: YouSettingsPatch, asMemberId?: string): Promise<{ error?: string }> {

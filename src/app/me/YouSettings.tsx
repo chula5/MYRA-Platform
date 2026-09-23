@@ -5,7 +5,10 @@
 // connected (each one can be let go of here). Full width, big type, round pills.
 
 import { useEffect, useMemo, useState } from 'react'
-import { loadMySettings, myAssistantLink, saveMySettings, type YouSettingsView, type YouSizes } from './settings-actions'
+import {
+  loadMySettings, myAssistantLink, myAssistantLinkState, revokeMyAssistantLink, saveMySettings,
+  type AssistantLinkState, type YouSettingsView, type YouSizes,
+} from './settings-actions'
 import { disconnectInbox } from './dressing-room/email-actions'
 import { disconnectMyCalendar } from './dressing-room/calendar-actions'
 import { disconnectArchivalInstagram } from './dressing-room/archival-actions'
@@ -47,15 +50,28 @@ export default function YouSettings({ testMemberId, initial }: { testMemberId?: 
   const [busy, setBusy] = useState<string | null>(null)
   // MYRA inside an assistant: one link she pastes into Claude or ChatGPT.
   const [link, setLink] = useState<{ url: string; days?: number } | null>(null)
+  const [linkState, setLinkState] = useState<AssistantLinkState | null>(null)
   const [linkBusy, setLinkBusy] = useState(false)
+  useEffect(() => { void myAssistantLinkState(testMemberId).then(setLinkState) }, [testMemberId])
   async function makeLink() {
     setLinkBusy(true)
     const r = await myAssistantLink(testMemberId)
     setLinkBusy(false)
     if (r.error || !r.url) { setNote(r.error ?? 'Could not make the link'); return }
     setLink({ url: r.url, days: r.days })
+    setLinkState(await myAssistantLinkState(testMemberId))
     try { await navigator.clipboard.writeText(r.url) } catch { /* she can copy it herself */ }
   }
+  async function turnLinkOff() {
+    if (!window.confirm('Turn the link off? Claude and ChatGPT stop being able to ask MYRA anything.')) return
+    setLinkBusy(true)
+    const r = await revokeMyAssistantLink(testMemberId)
+    setLinkBusy(false)
+    if (r.error) { setNote(r.error); return }
+    setLink(null)
+    setLinkState(await myAssistantLinkState(testMemberId))
+  }
+  const when = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : null)
 
   const reset = (v: YouSettingsView) => {
     setName(v.name); setSizes(v.sizes); setSecondHand(v.acceptsSecondHand)
@@ -280,7 +296,7 @@ export default function YouSettings({ testMemberId, initial }: { testMemberId?: 
         </section>
 
         {/* MYRA where she already talks — Claude, ChatGPT. */}
-        <section className={`${card} lg:col-span-2`}>
+        <section id="assistant" className={`${card} lg:col-span-2 scroll-mt-8`}>
           <div className="flex items-baseline justify-between gap-4 flex-wrap">
             <h2 className={heading}>MYRA in Claude or ChatGPT</h2>
             <p className={label}>Ask for outfits where you already chat.</p>
@@ -292,9 +308,20 @@ export default function YouSettings({ testMemberId, initial }: { testMemberId?: 
           </p>
           <div className="mt-5 flex flex-wrap items-center gap-4">
             <button type="button" onClick={makeLink} disabled={linkBusy} className={pill(true)}>
-              {linkBusy ? 'Making it…' : link ? 'Make a new link' : 'Make my link'}
+              {linkBusy ? 'Making it…' : linkState?.connected ? 'Make a new link' : 'Make my link'}
             </button>
-            {link && <span className={label}>Copied. It works for {link.days ?? 30} days — making a new one retires the old.</span>}
+            {linkState?.connected && (
+              <button type="button" onClick={turnLinkOff} disabled={linkBusy} className={pill(false)}>Turn it off</button>
+            )}
+            {link
+              ? <span className={label}>Copied. It works for {link.days ?? 30} days.</span>
+              : linkState?.connected
+                ? <span className={label}>
+                    Connected{when(linkState.issuedAt) ? ` since ${when(linkState.issuedAt)}` : ''}
+                    {linkState.lastUsedAt ? ` · last asked ${when(linkState.lastUsedAt)}` : ' · nothing has asked yet'}.
+                    The link itself is only shown once; make a new one if you need it again.
+                  </span>
+                : <span className={label}>Not connected yet.</span>}
           </div>
           {link && (
             <input

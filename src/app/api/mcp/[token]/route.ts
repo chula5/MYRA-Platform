@@ -1,5 +1,7 @@
 import { NextRequest } from 'next/server'
 import { resolveMirrorToken } from '@/lib/mirror/auth'
+import { createAdminClient } from '@/lib/supabase-server'
+import { hashAssistantToken } from '@/lib/mcp/link'
 import {
   brandsFor, outfitToText, outfitsAroundPiece, outfitsFor, savedFor, styleFor, wardrobeFor,
 } from '@/lib/mcp/myra-tools'
@@ -73,8 +75,32 @@ export async function GET() {
   return json({ name: 'MYRA', protocol: PROTOCOL, transport: 'streamable-http', note: 'POST JSON-RPC here. Add this URL as a custom connector.' })
 }
 
+/**
+ * A link she has turned off stops working, even though it is still signed.
+ * Before migration 0068 there is nothing to check against, and the token's own
+ * signature and expiry still stand.
+ */
+async function linkLive(memberId: string, token: string): Promise<boolean> {
+  const admin = createAdminClient() as any
+  try {
+    const { data, error } = await admin.from('member_assistant_link').select('token_hash, uses').eq('member_id', memberId).maybeSingle()
+    if (error) return true
+    if (!data) return false
+    if (data.token_hash !== hashAssistantToken(token)) return false
+    void admin.from('member_assistant_link')
+      .update({ last_used_at: new Date().toISOString(), uses: (data.uses ?? 0) + 1 })
+      .eq('member_id', memberId)
+      .then(() => undefined, () => undefined)
+    return true
+  } catch {
+    return true
+  }
+}
+
 export async function POST(req: NextRequest, { params }: { params: { token: string } }) {
-  const claim = resolveMirrorToken(decodeURIComponent(params.token ?? ''))
+  const raw = decodeURIComponent(params.token ?? '')
+  const signed = resolveMirrorToken(raw)
+  const claim = signed && (await linkLive(signed.memberId, raw)) ? signed : null
   let body: any
   try { body = await req.json() } catch { return rpcError(null, -32700, 'Parse error') }
 
@@ -86,7 +112,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
     // A notification (no id) expects no answer at all.
     if (id === undefined || id === null) continue
 
-    if (!claim) { answers.push({ jsonrpc: '2.0', id, error: { code: -32001, message: 'This MYRA link has expired — get a new one from YOU in MYRA.' } }); continue }
+    if (!claim) { answers.push({ jsonrpc: '2.0', id, error: { code: -32001, message: 'This MYRA link is not live any more — make a new one under YOU in MYRA.' } }); continue }
 
     switch (method) {
       case 'initialize':
