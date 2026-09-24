@@ -15,7 +15,8 @@ import { isOwnedItem } from '@/lib/wardrobe/owned-items'
 import { analyseProductImage } from '@/app/admin/items/analyse-image'
 import { scoreUpdateFor } from '@/lib/item-scoring'
 import { loadBrandGraph, resolveBrandNames } from '@/lib/brand-affinity'
-import { composeMemberVariants } from '@/lib/pilot-composer'
+import { composeMemberVariants, tooSimilarVariant } from '@/lib/pilot-composer'
+import { slotForItemType } from '@/lib/composer'
 import { judgeLooksForMember, hasPieceOutOfSize } from '@/lib/look-check'
 import { whyThisSuitsHer } from '@/lib/look-why'
 import { readStylePrefs, effectiveWeights, normalise, lookTasteVector } from '@/lib/pilot-stylist'
@@ -150,46 +151,76 @@ export async function styleExternalPiece(
   const occasionIds = occasionsForMember(row.occasions).filter((id) => id !== 'kids').slice(0, LOOKS)
   const ownedMode = mode === 'wardrobe' ? 'blend' : 'retail_only'
   const perOccasion: { id: string | null; label: string; look: any }[] = []
-  for (const id of occasionIds.length ? occasionIds : [null]) {
+  // Each occasion composes on its own, so they all start from the same rotation
+  // and the same best bag and best earrings win every time — three looks that
+  // finished identically. Shifting the rotation per occasion asks for a
+  // different answer each time, the way Reshuffle does in the Dressing Room.
+  ;(occasionIds.length ? occasionIds : [null]).forEach((id, oi) => {
     const occ = id
       ? { id: id as any, vector: lookTasteVector(normalise(effectiveWeights(row.room_weights, id as any, row.work_dress_code))), climate: null }
       : undefined
-    for (const look of composeMemberVariants(taste, pool as any, hero.item_id, 2, occ, lens, history, { ownedMode })) {
+    for (const look of composeMemberVariants(taste, pool as any, hero.item_id, 2, occ, lens, history, { ownedMode, shuffle: oi })) {
       perOccasion.push({ id, label: id ? (OCCASION_LABEL[id] ?? id) : '', look })
     }
-  }
+  })
   const composed = perOccasion.map((p) => p.look)
   if (!composed.length) {
     return { looks: [], hero: heroView, error: mode === 'wardrobe' ? 'Nothing in your wardrobe goes with this piece yet' : 'Nothing in MYRA goes with this piece in your size right now' }
   }
+  const dimsAll = new Map<string, any>((pool as any[]).map((i) => [i.item_id, i]))
   /**
    * One look per occasion, best first — each occasion composes a pair, so the
    * second is its reserve. Two occasions that would show her the same outfit
    * are not two answers: the later one takes its reserve instead.
+   *
+   * Distinctness is judged HERE, across occasions, not inside the composer.
+   * The composer only keeps its own pair apart, so three occasions each took
+   * the single best bag and the single best earrings and the panel showed one
+   * outfit three times with a coat added to one of them. Same test the
+   * composer uses on its siblings: the supporting pieces have to differ, and
+   * no two looks may finish on the same bag or the same jewellery.
    */
   const sigOf = (i: number) => composed[i].items.map((x: any) => x.item_id).sort().join('|')
+  const idsOf = (i: number): (string | null | undefined)[] =>
+    (composed[i].items as any[]).map((x) => x.item_id as string | null | undefined)
+  const finishOf = (i: number) => new Set(
+    idsOf(i).filter((id): id is string => {
+      if (!id || id === hero.item_id) return false
+      const slot = slotForItemType(dimsAll.get(id)?.item_type)
+      return slot === 'bag' || slot === 'jewellery'
+    }),
+  )
   const oneEach = (order: number[]) => {
     const takenOcc = new Set<string>()
     const takenLook = new Set<string>()
     const out: number[] = []
-    for (const i of order) {
-      const occ = perOccasion[i].id ?? ''
-      if (takenOcc.has(occ) || takenLook.has(sigOf(i))) continue
-      takenOcc.add(occ)
+    const sharesFinish = (i: number) => {
+      const f = finishOf(i)
+      return out.some((j) => Array.from(finishOf(j)).some((id) => f.has(id)))
+    }
+    const tooSimilar = (i: number) => out.some((j) => tooSimilarVariant(idsOf(i), idsOf(j), hero.item_id))
+    const take = (i: number, ok: (i: number) => boolean) => {
+      if (out.includes(i) || takenLook.has(sigOf(i)) || !ok(i)) return false
       takenLook.add(sigOf(i))
       out.push(i)
+      return true
+    }
+    // One look per occasion, best first, each a different outfit finished
+    // differently — then loosen only as far as her library forces: a repeated
+    // bag or earring, and finally rank order, so this never returns fewer
+    // looks than it did before.
+    for (const i of order) {
+      if (out.length >= LOOKS) break
+      const occ = perOccasion[i].id ?? ''
+      if (takenOcc.has(occ)) continue
+      if (take(i, (x) => !tooSimilar(x) && !sharesFinish(x))) takenOcc.add(occ)
     }
     // Room left over (she dresses for fewer occasions than we show): fill it
     // with the reserves rather than showing her two looks when three passed.
-    for (const i of order) {
-      if (out.length >= LOOKS) break
-      if (out.includes(i) || takenLook.has(sigOf(i))) continue
-      takenLook.add(sigOf(i))
-      out.push(i)
-    }
+    for (const i of order) { if (out.length >= LOOKS) break; take(i, (x) => !tooSimilar(x)) }
+    for (const i of order) { if (out.length >= LOOKS) break; take(i, () => true) }
     return out
   }
-  const dimsAll = new Map<string, any>((pool as any[]).map((i) => [i.item_id, i]))
   const prefsAll = readStylePrefs(row)
   const withImages = (items: any[]) => items.map((it) => ({ ...it, image_url: dimsAll.get(it.item_id ?? '')?.image_url ?? null }))
   // The quick pass: what MYRA composed, before its eye has been over it. The
