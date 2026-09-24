@@ -13,7 +13,9 @@ import { memberMemory } from '@/lib/member-memory'
 import { listOwnedItems } from '@/lib/wardrobe/store'
 import { ownerRefsForMember } from '@/lib/wardrobe/owned-items'
 import { effectiveWeights, lookTasteVector, normalise, readStylePrefs } from '@/lib/pilot-stylist'
-import { composeMemberLooks, composeMemberVariants, type OccasionContext } from '@/lib/pilot-composer'
+import { composeMemberLooks, composeMemberVariants, personaFitScore, toLookItem, type OccasionContext } from '@/lib/pilot-composer'
+import type { LookItem } from '@/lib/pilot-stylist'
+import { judgeAgainstBrief, briefAffinity, parseBrief, briefIsEmpty } from '@/lib/stylist-brief'
 import { judgeLooksForMember, hasPieceOutOfSize } from '@/lib/look-check'
 import { whyThisSuitsHer } from '@/lib/look-why'
 import { CLIENT_OCCASIONS, ASK_KINDS, askKindForEvent } from '@/lib/client-occasions'
@@ -26,7 +28,18 @@ const LOOKS = 3
 export interface OutfitAnswer {
   pieces: { name: string; brand: string; price_gbp: number | null; owned: boolean; url: string | null }[]
   why: string
+  /** The same pieces with their pictures, for a surface that draws the look. */
+  items?: LookItem[]
 }
+
+/** Which stylist's eye and nevers to style through — her assigned one by default. */
+export interface ThroughStylist { stylistId?: string | null }
+
+const answerFor = (items: LookItem[], why: string): OutfitAnswer => ({
+  pieces: items.map((it) => ({ name: it.product_name, brand: it.brand, price_gbp: it.price_gbp ?? null, owned: !!it.owned, url: it.url ?? null })),
+  why,
+  items,
+})
 
 const lineFor = (p: OutfitAnswer['pieces'][number]) =>
   `${p.owned ? '◈ ' : ''}${p.brand} — ${p.name}${p.owned ? ' (hers already)' : p.price_gbp != null ? ` · £${Math.round(p.price_gbp)}` : ''}${p.url ? ` · ${p.url}` : ''}`
@@ -56,7 +69,7 @@ export function occasionFromWords(words: string): { occasion: string; label: str
  */
 export async function outfitsFor(
   memberId: string,
-  opts: { occasion?: string | null; words?: string | null; count?: number } = {},
+  opts: { occasion?: string | null; words?: string | null; count?: number } & ThroughStylist = {},
 ): Promise<{ looks: OutfitAnswer[]; occasionLabel: string; error?: string }> {
   const admin = createAdminClient() as any
   const { data: member } = await admin.from('pilot_member').select('*').eq('member_id', memberId).maybeSingle()
@@ -67,9 +80,9 @@ export async function outfitsFor(
     : occasionFromWords(opts.words ?? '')
 
   const [taste, library, lens, history] = await Promise.all([
-    loadMemberTaste(admin, member),
+    loadMemberTaste(admin, member, { personaId: opts.stylistId }),
     loadComposableLibrary(member),
-    loadPersonaLens(admin, memberId),
+    loadPersonaLens(admin, memberId, opts.stylistId),
     loadComposeHistory(admin, memberId),
   ])
   const mix = normalise(effectiveWeights(member.room_weights, asked.occasion as any, member.work_dress_code))
@@ -89,20 +102,18 @@ export async function outfitsFor(
 
   return {
     occasionLabel: asked.label,
-    looks: chosen.map((i) => ({
-      pieces: composed[i].items.map((it) => ({
-        name: it.product_name, brand: it.brand, price_gbp: it.price_gbp ?? null, owned: !!it.owned, url: it.url ?? null,
-      })),
-      why: whyThisSuitsHer(
+    looks: chosen.map((i) => answerFor(
+      composed[i].items,
+      whyThisSuitsHer(
         composed[i].items.map((it) => ({ ...(dims.get(it.item_id ?? '') ?? {}), product_name: it.product_name, owned: !!it.owned })),
         prefs,
       ),
-    })),
+    )),
   }
 }
 
 /** Outfits around one piece she owns or has saved, found by name. */
-export async function outfitsAroundPiece(memberId: string, query: string): Promise<{ piece?: string; looks: OutfitAnswer[]; error?: string }> {
+export async function outfitsAroundPiece(memberId: string, query: string, opts: ThroughStylist = {}): Promise<{ piece?: string; looks: OutfitAnswer[]; error?: string }> {
   const admin = createAdminClient() as any
   const { data: member } = await admin.from('pilot_member').select('*').eq('member_id', memberId).maybeSingle()
   if (!member) return { looks: [], error: 'No MYRA account behind this link' }
@@ -121,9 +132,9 @@ export async function outfitsAroundPiece(memberId: string, query: string): Promi
   if (!hit) return { looks: [], error: `Nothing in her wardrobe or saved pieces matches “${query}”` }
 
   const [taste, library, lens, history] = await Promise.all([
-    loadMemberTaste(admin, member),
+    loadMemberTaste(admin, member, { personaId: opts.stylistId }),
     loadComposableLibrary(member),
-    loadPersonaLens(admin, memberId),
+    loadPersonaLens(admin, memberId, opts.stylistId),
     loadComposeHistory(admin, memberId),
   ])
   const pool = (library as any[]).some((i) => i.item_id === hit.item_id) ? library : [...(library as any[]), hit]
@@ -135,10 +146,83 @@ export async function outfitsAroundPiece(memberId: string, query: string): Promi
   const prefs = readStylePrefs(member)
   return {
     piece: hit.product_name,
-    looks: (passing.length ? passing : composed.map((_, i) => i)).slice(0, LOOKS).map((i) => ({
-      pieces: composed[i].items.map((it) => ({ name: it.product_name, brand: it.brand, price_gbp: it.price_gbp ?? null, owned: !!it.owned, url: it.url ?? null })),
-      why: whyThisSuitsHer(composed[i].items.map((it) => ({ ...(dims.get(it.item_id ?? '') ?? {}), product_name: it.product_name, owned: !!it.owned })), prefs),
-    })),
+    looks: (passing.length ? passing : composed.map((_, i) => i)).slice(0, LOOKS).map((i) => answerFor(
+      composed[i].items,
+      whyThisSuitsHer(composed[i].items.map((it) => ({ ...(dims.get(it.item_id ?? '') ?? {}), product_name: it.product_name, owned: !!it.owned })), prefs),
+    )),
+  }
+}
+
+/** A piece found for her, with its picture. */
+export interface ItemAnswer {
+  item_id: string
+  name: string
+  brand: string
+  price_gbp: number | null
+  url: string | null
+  image_url: string | null
+  owned: boolean
+  item_type: string | null
+}
+
+/**
+ * PIECES IN HER SIZE that match some words — a brand, a kind of piece, a
+ * colour, a material — seen through a stylist: her nevers remove pieces, her
+ * brands and signature pieces lift them, her eye orders the rest.
+ */
+export async function findItems(
+  memberId: string,
+  opts: { words: string; brand?: string | null; type?: string | null; count?: number } & ThroughStylist,
+): Promise<{ items: ItemAnswer[]; removed: number; error?: string }> {
+  const admin = createAdminClient() as any
+  const { data: member } = await admin.from('pilot_member').select('*').eq('member_id', memberId).maybeSingle()
+  if (!member) return { items: [], removed: 0, error: 'No MYRA account behind this link' }
+
+  const [library, lens, stylistRow] = await Promise.all([
+    loadComposableLibrary(member),
+    loadPersonaLens(admin, memberId, opts.stylistId),
+    opts.stylistId ? admin.from('stylist').select('name, brief').eq('stylist_id', opts.stylistId).maybeSingle() : Promise.resolve({ data: null }),
+  ])
+  const parsed = stylistRow?.data ? parseBrief(stylistRow.data.brief, stylistRow.data.name ?? '') : null
+  const brief = parsed && !briefIsEmpty(parsed) ? parsed : null
+
+  const words = (opts.words ?? '').toLowerCase().split(/[^a-z0-9&+é]+/).filter((w) => w.length > 1)
+  const brand = opts.brand?.toLowerCase() ?? null
+  const type = opts.type?.toLowerCase() ?? null
+  const textOf = (it: any) => [it.product_name, it.item_type, it.colour_family, it.material_primary, it.material_category, it.brand?.name]
+    .filter(Boolean).join(' ').toLowerCase().replace(/_/g, ' ')
+  const piece = (it: any) => ({
+    product_name: it.product_name, item_type: it.item_type, material_primary: it.material_primary, material_category: it.material_category,
+    colour_family: it.colour_family, print_flag: it.print_flag, brand_name: it.brand?.name ?? null,
+  })
+
+  let removed = 0
+  const scored = (library as any[]).map((it) => {
+    const text = textOf(it)
+    if (brand && !(it.brand?.name ?? '').toLowerCase().includes(brand)) return null
+    if (type && !text.includes(type)) return null
+    const wordHits = words.filter((w) => text.includes(w)).length
+    if (words.length && !wordHits && !brand && !type) return null
+    if (brief) {
+      const j = judgeAgainstBrief([piece(it)], brief)
+      if (j.blocked && !it.owned) { removed++; return null }
+    }
+    const fit = lens ? personaFitScore(lens, it) : 0
+    const lift = brief ? briefAffinity(piece(it), brief) : 0
+    return { it, s: wordHits * 2 + lift + fit }
+  }).filter(Boolean) as { it: any; s: number }[]
+  scored.sort((a, b) => b.s - a.s)
+
+  const want = Math.max(1, Math.min(opts.count ?? 8, 12))
+  return {
+    removed,
+    items: scored.slice(0, want).map(({ it }) => {
+      const li = toLookItem(it)
+      return {
+        item_id: it.item_id, name: li.product_name, brand: li.brand, price_gbp: li.price_gbp ?? null,
+        url: li.url ?? null, image_url: li.image_url ?? null, owned: li.owned, item_type: it.item_type ?? null,
+      }
+    }),
   }
 }
 

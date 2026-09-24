@@ -14,6 +14,7 @@
 //
 // Server use only (reads ANTHROPIC_API_KEY). ~2p and 5–10s per look.
 
+import { parseBrief, briefIsEmpty, briefText } from '@/lib/stylist-brief'
 import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
 import { checkSizesForMember, type PieceSize } from '@/lib/look-size-check'
@@ -80,10 +81,12 @@ export function describeClientForCheck(member: {
   types_avoided?: string[] | null
   /** Her own words about what she will not wear — read as a rule, not a hint. */
   never_wears?: string | null
-}, houseStyle?: string | null): string {
+}, houseStyle?: string | null, houseBrief?: string | null): string {
   const list = (label: string, xs?: string[] | null) => (xs?.length ? `${label}: ${xs.join(', ').replace(/_/g, ' ')}.` : '')
   return [
     houseStyle ? `Styled in the ${houseStyle} house style.` : '',
+    // The stylist's brief: her nevers are rules here, exactly as the member's own are.
+    houseBrief ? `The ${houseStyle} brief — ${houseBrief}` : '',
     member.notes ? `Stylist's notes: ${member.notes}` : '',
     list('Colours she loves', member.colours_loved),
     list('Colours she avoids', member.colours_avoided),
@@ -181,9 +184,12 @@ export async function loadClientDescription(admin: any, memberId: string): Promi
     admin.from('user_persona').select('persona_id').eq('user_id', memberId).maybeSingle(),
   ])
   let houseStyle: string | null = null
+  let houseBrief: string | null = null
   if (assignment?.persona_id) {
-    const { data: persona } = await admin.from('stylist').select('name').eq('stylist_id', assignment.persona_id).maybeSingle()
+    const { data: persona } = await admin.from('stylist').select('name, brief').eq('stylist_id', assignment.persona_id).maybeSingle()
     houseStyle = persona?.name ?? null
+    const brief = parseBrief(persona?.brief, persona?.name ?? '')
+    houseBrief = briefIsEmpty(brief) ? null : briefText(persona?.name ?? '', brief)
   }
   // What her own reference pictures keep showing — her taste in her pictures,
   // not only in the words on her profile.
@@ -201,7 +207,7 @@ export async function loadClientDescription(admin: any, memberId: string): Promi
     const avg = (k: string) => (scored.reduce((s, x) => s + (Number(x[k]) || 0), 0) / scored.length).toFixed(1)
     pictures = ` Her own reference pictures (${scored.length} outfits) mostly show: ${common.join(', ')}; formality ${avg('formality')}/5, pattern ${avg('pattern')}/5, volume ${avg('volume')}/5.`
   }
-  return describeClientForCheck(member ?? {}, houseStyle) + pictures
+  return describeClientForCheck(member ?? {}, houseStyle, houseBrief) + pictures
 }
 
 export interface JudgedLook {

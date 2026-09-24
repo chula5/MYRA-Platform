@@ -1,3 +1,4 @@
+import { parseBrief, briefIsEmpty, briefText } from '@/lib/stylist-brief'
 import 'server-only'
 
 // WHAT MYRA KNOWS ABOUT HER — one brief, read fresh, assembled from every place
@@ -78,16 +79,19 @@ export async function memberMemory(memberId: string): Promise<MemberMemory> {
   ])
 
   let houseStyle: string | null = null
+  let houseBrief: string | null = null
   if (assignment?.persona_id) {
-    const { data: persona } = await admin.from('stylist').select('name').eq('stylist_id', assignment.persona_id).maybeSingle()
+    const { data: persona } = await admin.from('stylist').select('name, brief').eq('stylist_id', assignment.persona_id).maybeSingle()
     houseStyle = persona?.name ?? null
+    const brief = parseBrief(persona?.brief, persona?.name ?? '')
+    houseBrief = briefIsEmpty(brief) ? null : briefText(persona?.name ?? '', brief)
   }
 
   const sections: { label: string; detail: string }[] = []
   const add = (label: string, detail: string) => { if (detail) sections.push({ label, detail }) }
 
   // What she has told MYRA, plus her own words — the check already knows how to read these.
-  add('Her profile', describeClientForCheck(member ?? {}, houseStyle))
+  add('Her profile', describeClientForCheck(member ?? {}, houseStyle, houseBrief))
 
   // What she dresses for.
   const occ = (member?.occasions ?? {}) as Record<string, string>

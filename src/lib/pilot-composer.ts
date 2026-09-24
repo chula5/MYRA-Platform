@@ -28,6 +28,7 @@ import { toHouseItem } from '@/lib/house-item'
 import { learnedBonus, blendStrength, type StyleModel, type FeatureItem } from '@/lib/style-brain'
 import { isExcluded, formalityBand, hardSkipPairs, type EjectionConstraints } from '@/lib/pipeline'
 import { pieceBreaksLearnedRule, type LearnedRuleMatch } from '@/lib/learning-scope'
+import { judgeAgainstBrief, briefAffinity, type StylistBrief } from '@/lib/stylist-brief'
 import { priceOfItem } from '@/lib/brand-affinity'
 import { itemPseudoVector } from '@/lib/brand-affinity'
 import { cosine } from '@/lib/taste-vector'
@@ -225,6 +226,9 @@ export interface MemberTaste {
   // The rules her looks are held to, by layer (lib/style-rules): global bans,
   // her house style, or Chloe style. Absent = no rules beyond her own gates.
   rules?: MemberRules
+  // Her stylist's brief (lib/stylist-brief): its bans gate, its preferences
+  // score. Absent when she has no persona, or the persona has no brief.
+  brief?: StylistBrief
   // What Chloe's rejections have taught: Style Brain learning, Composer
   // ejections and learned material pairings. Shared by every client so the
   // system keeps getting smarter from what she turns down.
@@ -290,8 +294,23 @@ export function styleLearningBonus(t: MemberTaste, anchor: ItemWithBrand, items:
   if (t.houseStyleModel) b += blendStrength(t.houseStyleModel) * learnedBonus(t.houseStyleModel, features)
   const j = judgeMemberLook(t, all, [undefined, ...items.map((x) => x.slot)])
   if (j) b -= j.penalty
+  if (t.brief) {
+    b -= judgeAgainstBrief(all.map(briefPiece), t.brief).penalty
+    // Her stylist's signature pieces, brands and fabrics pull a look her way —
+    // the only pull she has before her reference outfits are confirmed.
+    b += Math.min(BRIEF_LIFT_CAP, all.reduce((acc, it) => acc + briefAffinity(briefPiece(it), t.brief!), 0) * BRIEF_LIFT_PER_HIT)
+  }
   return b
 }
+
+const BRIEF_LIFT_PER_HIT = 0.06
+const BRIEF_LIFT_CAP = 0.3
+
+const briefPiece = (it: ItemWithBrand) => ({
+  product_name: it.product_name, item_type: it.item_type, material_primary: (it as any).material_primary,
+  material_category: (it as any).material_category, colour_family: (it as any).colour_family,
+  print_flag: (it as any).print_flag, brand_name: it.brand?.name ?? null,
+})
 
 const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`)
 
@@ -446,6 +465,10 @@ export function memberGate(
     // Relaxed pass: only the global bans still block.
     if (strict || j.violations.some((v) => GLOBAL_BAN_CODES.has(v.code))) return false
   }
+  // Her stylist's NEVERS — a ban is a ban in the relaxed pass too: a piece the
+  // stylist would never put on her is not "nearly right". What she already
+  // owns is exempt (it is hers, not a recommendation) and is penalised instead.
+  if (t.brief && judgeAgainstBrief(all.filter((it) => !isOwnedItem(it as any)).map(briefPiece), t.brief).blocked) return false
   return true
 }
 

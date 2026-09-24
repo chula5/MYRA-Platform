@@ -91,6 +91,7 @@ import { DEFAULT_SCOPE, parsePatternKey, type LearnedRuleMatch } from '@/lib/lea
 import { tooSimilarVariant, REFERENCE_LENS_WEIGHT } from '@/lib/pilot-composer'
 import { pieceVerdicts } from '@/lib/piece-verdicts'
 import { rulesForMember, type MemberRules } from '@/lib/style-rules'
+import { parseBrief, briefIsEmpty, type StylistBrief } from '@/lib/stylist-brief'
 import { loadStyleModel, recordStyleDecision } from '@/lib/style-brain-store'
 import { computeEnvelope } from '@/lib/inspiration'
 import { linkMemberToStyleProfile } from '@/lib/style-profile-store'
@@ -1592,25 +1593,38 @@ async function teachHouseStyle(
  * Which rules her looks are held to (lib/style-rules). Her assigned house style
  * (a persona in user_persona) wins; with none, a Chloe client gets Chloe style.
  */
-async function loadMemberRules(admin: any, member: { member_id: string; stylist_id?: string | null }): Promise<MemberRules> {
+async function loadMemberRules(
+  admin: any,
+  member: { member_id: string; stylist_id?: string | null },
+  /** Style her through THIS stylist instead of her assigned one (a chat with another stylist). */
+  personaOverride?: string | null,
+): Promise<{ rules: MemberRules; brief?: StylistBrief }> {
   const { data: assignment } = await admin
     .from('user_persona').select('persona_id').eq('user_id', member.member_id).maybeSingle()
-  if (assignment?.persona_id) {
+  const personaId = personaOverride || assignment?.persona_id
+  if (personaId) {
     const { data: style } = await admin
-      .from('stylist').select('name, constitution').eq('stylist_id', assignment.persona_id).maybeSingle()
+      .from('stylist').select('name, constitution, brief').eq('stylist_id', personaId).maybeSingle()
+    const parsed = parseBrief(style?.brief, style?.name ?? '')
+    const brief = briefIsEmpty(parsed) ? undefined : parsed
     if (style?.constitution?.articles?.length) {
-      return rulesForMember({ name: style.name ?? null, constitution: style.constitution }, false)
+      return { rules: rulesForMember({ name: style.name ?? null, constitution: style.constitution }, false), brief }
     }
+    if (brief) return { rules: rulesForMember(null, false), brief }
   }
   let chloeStyle = false
   if (member.stylist_id) {
     const { data: stylist } = await admin.from('stylist').select('name, type').eq('stylist_id', member.stylist_id).maybeSingle()
     chloeStyle = stylist?.type === 'real' && /^chlo/i.test(stylist?.name ?? '')
   }
-  return rulesForMember(null, chloeStyle)
+  return { rules: rulesForMember(null, chloeStyle) }
 }
 
-export async function loadMemberTaste(admin: any, member: { member_id: string; brands: RankedBrand[]; brands_input_only: string[] } & Partial<StylePrefs>): Promise<MemberTaste> {
+export async function loadMemberTaste(
+  admin: any,
+  member: { member_id: string; brands: RankedBrand[]; brands_input_only: string[] } & Partial<StylePrefs>,
+  opts: { personaId?: string | null } = {},
+): Promise<MemberTaste> {
   const t: MemberTaste = {
     affinity: new Map(),
     families: new Map(),
@@ -1631,15 +1645,17 @@ export async function loadMemberTaste(admin: any, member: { member_id: string; b
   try {
     const { data: styleAssignment } = await admin
       .from('user_persona').select('persona_id').eq('user_id', member.member_id).maybeSingle()
-    const [rules, styleModel, houseStyleModel, learnedRules, ejections, learnedPairs] = await Promise.all([
-      loadMemberRules(admin, member as any),
+    const housePersona = opts.personaId || styleAssignment?.persona_id
+    const [ruleSet, styleModel, houseStyleModel, learnedRules, ejections, learnedPairs] = await Promise.all([
+      loadMemberRules(admin, member as any, opts.personaId),
       loadStyleModel((member as any).stylist_id ?? null),
-      styleAssignment?.persona_id ? loadStyleModel(styleAssignment.persona_id) : Promise.resolve(undefined),
+      housePersona ? loadStyleModel(housePersona) : Promise.resolve(undefined),
       loadLearnedRulesFor(admin, member as any),
       loadEjectionConstraints(),
       loadLearnedMaterialPairs(),
     ])
-    t.rules = rules
+    t.rules = ruleSet.rules
+    t.brief = ruleSet.brief
     t.styleModel = styleModel
     t.houseStyleModel = houseStyleModel
     t.learnedRules = learnedRules
@@ -1784,11 +1800,17 @@ export async function assignMemberPersona(memberId: string, personaId: string): 
  * confirmed images has no envelope and therefore no influence — the moodboard
  * has to have been reviewed before it can style anyone.
  */
-export async function loadPersonaLens(admin: any, memberId: string): Promise<PersonaLens | undefined> {
-  const [{ data: assignment }, { data: member }] = await Promise.all([
+export async function loadPersonaLens(
+  admin: any,
+  memberId: string,
+  /** See her through THIS stylist's eye instead of her assigned one — at full prior weight. */
+  personaOverride?: string | null,
+): Promise<PersonaLens | undefined> {
+  const [{ data: assigned }, { data: member }] = await Promise.all([
     admin.from('user_persona').select('persona_id, weight').eq('user_id', memberId).maybeSingle(),
     admin.from('pilot_member').select('auth_user_id').eq('member_id', memberId).maybeSingle(),
   ])
+  const assignment = personaOverride ? { persona_id: personaOverride, weight: PERSONA_START_WEIGHT } : assigned
   let name: string | null = null
   let envelope: { mean: number[]; spread: number[] } | null = null
   if (assignment?.persona_id) {

@@ -27,6 +27,7 @@ import { loadForYou, type ForYouView } from '@/app/me/for-you-actions'
 import { loadMyDressingRoom, loadMyPiece } from '@/app/me/dressing-room/actions'
 import { loadMyInspiration, type InspirationBoardView } from '@/app/me/inspiration/board-actions'
 import type { DressingRoomView, OwnedPieceView } from '@/app/admin/private-stylist/actions'
+import StylistChat from '@/app/me/StylistChat'
 
 type Room = RoomId
 
@@ -200,6 +201,9 @@ export default function HerViewTab({
           <PieceClient view={piece} testMemberId={memberId} onBack={() => setPiece(null)} />
         </div>
       )}
+
+      {/* Her stylists, as she has them — testing as her keeps no thread. */}
+      {memberId && <StylistChat key={`chat-${memberId}`} asMemberId={memberId} />}
     </div>
   )
 }

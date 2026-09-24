@@ -44,7 +44,7 @@ export interface BrandTrustData {
   /** The learning, trained on every decision Chloe made herself. */
   learn: ReturnType<typeof buildLearning>
   /** The chance-she-keeps model per brand_id. */
-  confidence: Map<string, BrandModel>
+  confidence: ConfidenceModels
   /** How that model measured, walk-forward, keyed `${brand_id}|${bar}`. */
   confidenceTrust: Map<string, ConfidenceTrust>
 }
@@ -160,27 +160,65 @@ export function twinOfQueueRow(data: BrandTrustData, row: any): TwinDecision | n
 
 // ── Confidence: the chance she would keep a piece, per brand ────────────────
 
-/** One model per brand, fitted on that brand's own careful decisions. */
-export function confidenceModels(decisions: ConfidenceDecision[], learn: ReturnType<typeof buildLearning>): Map<string, BrandModel> {
-  const byBrand = new Map<string, ConfidenceDecision[]>()
-  for (const d of decisions) {
-    if (d.autoKept || !d.brandName) continue
-    byBrand.set(d.brandName, [...(byBrand.get(d.brandName) ?? []), d])
-  }
-  const models = new Map<string, BrandModel>()
-  byBrand.forEach((list, brand) => {
-    models.set(brand, fitBrandModel(list.map((d) => ({ kept: d.kept, delta: learn(d).delta, score: d.score }))))
-  })
-  return models
+export interface ConfidenceModels {
+  /** Fitted on one brand's own careful decisions. */
+  byBrand: Map<string, BrandModel>
+  /** Fitted on every brand's careful decisions — the house's taste so far. */
+  house: BrandModel | null
 }
 
+/**
+ * A model per brand, and one for the house.
+ *
+ * A brand she has never decided on has no history of its own, but the library
+ * does: thousands of keeps and skips across every other brand. That pooled
+ * model is what a new brand starts from, so its first piece carries a number
+ * rather than nothing. As she keeps and skips from the brand itself, its own
+ * model takes over (see `confidenceOf`).
+ */
+export function confidenceModels(decisions: ConfidenceDecision[], learn: ReturnType<typeof buildLearning>): ConfidenceModels {
+  const byBrand = new Map<string, ConfidenceDecision[]>()
+  const careful: ConfidenceDecision[] = []
+  for (const d of decisions) {
+    if (d.autoKept) continue
+    careful.push(d)
+    if (!d.brandName) continue
+    byBrand.set(d.brandName, [...(byBrand.get(d.brandName) ?? []), d])
+  }
+  const sample = (d: ConfidenceDecision) => ({ kept: d.kept, delta: learn(d).delta, score: d.score })
+  const models = new Map<string, BrandModel>()
+  byBrand.forEach((list, brand) => { models.set(brand, fitBrandModel(list.map(sample))) })
+  return { byBrand: models, house: careful.length >= 8 ? fitBrandModel(careful.map(sample)) : null }
+}
+
+/**
+ * How much of its own evidence a brand needs before its model outweighs the
+ * house's. At 12 decisions a brand speaks for half of the answer.
+ */
+export const BRAND_EVIDENCE_K = 12
+
 export const confidenceOf = (data: BrandTrustData, row: any): number | null => {
-  const model = row.brand_id ? data.confidence.get(row.brand_id) : undefined
-  if (!model) return null
+  const brand = row.brand_id ? data.confidence.byBrand.get(row.brand_id) : undefined
+  const house = data.confidence.house
+  if (!brand && !house) return null
   const v = data.learn(toDecided(row))
-  const p = confidenceFor(model, v.delta, Number(row.discovery_score ?? 0))
+  const score = Number(row.discovery_score ?? 0)
+  const pBrand = brand ? confidenceFor(brand, v.delta, score) : null
+  const pHouse = house ? confidenceFor(house, v.delta, score) : null
+  // A new brand is read by the house; a brand with its own history speaks for
+  // itself, in proportion to how much of it there is.
+  const w = pBrand == null ? 0 : pHouse == null ? 1 : (brand!.n) / (brand!.n + BRAND_EVIDENCE_K)
+  const p = (pBrand ?? 0) * w + (pHouse ?? 0) * (1 - w)
   // Never sure about a kind of piece she has never kept.
   return dampByKind(p, v)
+}
+
+/** Where a piece's number came from — for the label under it. */
+export const confidenceSourceOf = (data: BrandTrustData, brandId: string | null | undefined): 'brand' | 'house' | 'blend' | null => {
+  const n = (brandId ? data.confidence.byBrand.get(brandId)?.n : 0) ?? 0
+  if (!data.confidence.house) return n ? 'brand' : null
+  if (!n) return 'house'
+  return n >= BRAND_EVIDENCE_K * 3 ? 'brand' : 'blend'
 }
 
 export const confidenceTrustFor = (data: BrandTrustData, watched: { brand_id?: string | null; confidence_bar?: number | null }): ConfidenceTrust =>

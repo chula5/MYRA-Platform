@@ -8,6 +8,7 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase-server'
 import { buildOutfitVector, VECTOR_DIM } from '@/lib/taste-vector'
 import type { OutfitWithItems } from '@/types/database'
+import { parseBrief, type StylistBrief } from '@/lib/stylist-brief'
 import {
   emptyAutonomy,
   recordReview,
@@ -39,6 +40,10 @@ export interface Stylist {
   envelope?: { mean: number[]; spread: number[]; n: number; tightness: number } | null
   envelope_status?: 'current' | 'needs_review' | null
   envelope_computed_at?: string | null
+  // 0069: her brief (signature, brands, palette, nevers, siblings) and her
+  // role — 'chief' is Sciura, who routes members to stylists and styles nothing.
+  brief: StylistBrief
+  role: 'stylist' | 'chief'
 }
 
 const DEFAULT_SLUG = 'chloe'
@@ -55,6 +60,11 @@ function parseStylist(r: any): Stylist {
     moodboard: Array.isArray(r.moodboard) ? r.moodboard : [],
     centroid: Array.isArray(r.centroid) ? r.centroid : null,
     voice_notes: r.voice_notes ?? null,
+    envelope: r.envelope ?? null,
+    envelope_status: r.envelope_status ?? null,
+    envelope_computed_at: r.envelope_computed_at ?? null,
+    brief: parseBrief(r.brief, r.name),
+    role: r.role === 'chief' ? 'chief' : 'stylist',
   }
 }
 

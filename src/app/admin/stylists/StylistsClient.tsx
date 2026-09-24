@@ -17,6 +17,8 @@ import {
 import InspirationReview from './InspirationReview'
 import { loadStyleLearning, type StyleLearning } from './style-learning-actions'
 import ClientsPanel from './ClientsPanel'
+import BriefPanel from './BriefPanel'
+import SciuraPanel from './SciuraPanel'
 
 const STATUS_TONE: Record<string, string> = {
   draft: 'text-[#7C838B] border-[#DCDEE1]',
@@ -63,6 +65,8 @@ export default function StylistsClient({
     <div className="space-y-8">
       {msg && <p className="text-[9px] tracking-[0.12em] text-[#C4A882]">{msg}</p>}
 
+      <SciuraPanel />
+
       <ClientsPanel personas={personaOptions} />
 
       {/* Stylist cards */}
@@ -74,7 +78,7 @@ export default function StylistsClient({
                 <div className="flex items-center gap-2">
                   <p className="text-[15px] tracking-[0.08em] text-[#0A0A0A]">{s.name.toUpperCase()}</p>
                   <span className={`border rounded-full px-2 py-0.5 text-[8px] tracking-[0.12em] ${STATUS_TONE[s.status] ?? ''}`}>{s.status.toUpperCase()}</span>
-                  <span className="text-[8px] tracking-[0.1em] text-[#A8A8A4]">{s.type.toUpperCase()}</span>
+                  <span className="text-[8px] tracking-[0.1em] text-[#A8A8A4]">{s.role === 'chief' ? 'CHIEF STYLIST' : s.type.toUpperCase()}</span>
                 </div>
                 <p className="text-[9px] tracking-[0.06em] text-[#6B6B6B] mt-1">
                   AUTONOMY STAGE {s.autonomy.stage} — {s.autonomy.stageLabel} · {s.liveOutfits} LIVE OUTFITS
@@ -91,7 +95,7 @@ export default function StylistsClient({
                     {busy === 'backfill' ? 'RUNNING…' : 'RUN CHLOE BACKFILL'}
                   </button>
                 )}
-                {s.type === 'persona' && s.status === 'draft' && (
+                {s.type === 'persona' && s.role !== 'chief' && s.status === 'draft' && (
                   <>
                     <button onClick={() => run(`score-${s.stylist_id}`, () => scoreMoodboard(s.stylist_id), (r) => `MOODBOARD SCORED: ${r.scored} IMAGES (${r.failed} FAILED) — RANGE + DRAFT CONSTITUTION PROPOSED`)} disabled={!!busy} className="border border-[#E2E0DB] px-3 py-1.5 text-[9px] tracking-[0.1em] rounded-full text-[#6B6B6B] hover:border-[#0A0A0A] disabled:opacity-50">
                       {busy === `score-${s.stylist_id}` ? 'SCORING…' : '1 · SCORE MOODBOARD'}
@@ -104,7 +108,7 @@ export default function StylistsClient({
                     </button>
                   </>
                 )}
-                {s.type === 'persona' && s.status === 'seeding' && (
+                {s.type === 'persona' && s.role !== 'chief' && s.status === 'seeding' && (
                   <button onClick={() => run(`live-${s.stylist_id}`, () => setStylistLive(s.stylist_id), () => `${s.name} IS LIVE`)} disabled={!!busy} className="bg-[#0A0A0A] text-white px-4 py-1.5 text-[9px] tracking-[0.12em] rounded-full hover:opacity-85 disabled:opacity-50">
                     GO LIVE →
                   </button>
@@ -119,7 +123,7 @@ export default function StylistsClient({
                 >
                   {editing === s.stylist_id ? 'CLOSE' : 'EDIT RULES'}
                 </button>
-                {s.type === 'persona' && (
+                {s.role !== 'chief' && (
                   <button
                     onClick={() => setInspecting(inspecting === s.stylist_id ? null : s.stylist_id)}
                     className={`px-3 py-1.5 text-[9px] tracking-[0.1em] rounded-full border transition-colors ${
@@ -135,6 +139,12 @@ export default function StylistsClient({
               </div>
             </div>
 
+            {s.role !== 'chief' && s.confirmedImages === 0 && (
+              <p className="text-[9px] tracking-[0.08em] text-[#C4A882] mt-3">
+                NO REFERENCE OUTFITS YET — OPEN INSPIRATION &amp; SCORING AND DROP HER LOOKS IN (RUNWAY, STREET STYLE, PINTEREST), THEN SCORE AND CONFIRM THEM.
+              </p>
+            )}
+
             {/* Moodboard strip */}
             {s.moodboard.length > 0 && (
               <div className="flex gap-2 mt-3 overflow-x-auto">
@@ -148,7 +158,18 @@ export default function StylistsClient({
               </div>
             )}
 
-            {s.type === 'persona' && <StyleLearningPanel personaId={s.stylist_id} />}
+            {/* Her brief — nevers and overlaps in plain sight, editable */}
+            {s.type === 'persona' && (
+              <BriefPanel
+                stylistId={s.stylist_id}
+                name={s.name}
+                brief={s.brief}
+                overlaps={s.overlaps}
+                confirmedImages={s.confirmedImages}
+              />
+            )}
+
+            {s.type === 'persona' && s.role !== 'chief' && <StyleLearningPanel personaId={s.stylist_id} />}
 
             {/* Scoring review — the surface where the vision pass gets corrected */}
             {inspecting === s.stylist_id && (

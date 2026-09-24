@@ -27,11 +27,16 @@ import { MIN_CONFIRMED_IMAGES } from '@/lib/inspiration'
 import { CONSTITUTION_ARTICLES } from '@/lib/house-style'
 import { autonomyProgress, type AutonomyProgress } from '@/lib/autonomy'
 import { assertAdmin } from '@/lib/admin-audit'
+import { overlapsFor, parseBrief, type Overlap, type StylistBrief } from '@/lib/stylist-brief'
 
 export interface StylistListEntry extends Stylist {
   autonomy: AutonomyProgress
   liveOutfits: number
   pendingSeeds: number
+  /** Stylists this one is easily confused with, and the line that separates them. */
+  overlaps: Overlap[]
+  /** Reference outfits confirmed so far (what builds her eye). */
+  confirmedImages: number
 }
 
 export async function loadStylistList(): Promise<StylistListEntry[]> {
@@ -50,9 +55,25 @@ export async function loadStylistList(): Promise<StylistListEntry[]> {
       autonomy: autonomyProgress(autonomyState),
       liveOutfits: liveOutfits ?? 0,
       pendingSeeds: pendingSeeds ?? 0,
+      confirmedImages: s.role === 'chief' ? 0 : await confirmedImageCount(s.stylist_id).catch(() => 0),
+      overlaps: overlapsFor(
+        { slug: s.slug, brief: s.brief, mean: s.envelope?.mean ?? s.centroid },
+        stylists.filter((o) => o.type === 'persona' && o.role === 'stylist')
+          .map((o) => ({ slug: o.slug, name: o.name, brief: o.brief, mean: o.envelope?.mean ?? o.centroid })),
+      ),
     })
   }
   return out
+}
+
+/** Save her brief — signature, brands, palette, nevers, siblings. Whole document, from the editor. */
+export async function updateStylistBrief(stylistId: string, brief: StylistBrief): Promise<{ error?: string }> {
+  await assertAdmin()
+  const clean = parseBrief(brief, '')
+  const admin = createAdminClient() as any
+  const { error } = await admin.from('stylist')
+    .update({ brief: clean, updated_at: new Date().toISOString() }).eq('stylist_id', stylistId)
+  return error ? { error: error.message } : {}
 }
 
 const slugify = (name: string) =>
