@@ -483,6 +483,39 @@
 
   let lastHref = location.href
   let pagePiece = null
+  let navSettle = null
+
+  // ── THE SHOP THAT NEVER RELOADS ───────────────────────────────────────────
+  // Waiting for the DOM to settle is not the same as noticing she has moved.
+  // A listing that turns into a product changes the URL first, and on a busy
+  // shop the mutation debounce can be pushed back indefinitely — which is how
+  // she ended up reading the last piece's name on this piece's page. So the
+  // URL is watched in its own right: she clicks a piece, and the pill is that
+  // piece. (A content script cannot see the page's own pushState — it runs in
+  // its own world — so the address is polled and popstate listened for.)
+  function onNavigated() {
+    if (location.href === lastHref) return
+    lastHref = location.href
+    lastSig = ''
+    pillOff = false
+    pagePiece = null
+    clearTimeout(pillRevert)
+    clearInterval(navSettle)
+    hidePiece()
+    // The shop writes the new piece a beat after the address changes. Watch
+    // for it rather than guessing at one delay, so the pill is this piece as
+    // soon as this piece exists — and give up quietly if it never arrives.
+    let tries = 0
+    navSettle = setInterval(() => {
+      const p = M.pageProduct?.() ?? null
+      if (p) {
+        pagePiece = p
+        if (!pillOff && pillFrom !== 'hover') showPiece(p, 'page')
+      }
+      if (p || ++tries >= 20) clearInterval(navSettle)
+    }, 150)
+    schedule()
+  }
 
   async function run() {
     if (running) return
@@ -524,7 +557,7 @@
       const top = res.products.filter((p) => p.score >= LIFT_MIN).sort((a, b) => b.score - a.score).slice(0, 6)
         .map((p) => ({ brand: p.brand, title: (details.get(p.key) || {}).title || p.key, confidence: p.confidence, why: WHY[p.why] || '', fit: FIT[p.fit] || '' }))
       await send({ type: 'pageStats', host: location.host, lifted: lastLifted, total: lastTotal, member: res.member?.name, ms: Math.round(performance.now() - t0), top })
-    } finally { running = false }
+    } finally { running = false; lastRunAt = Date.now() }
   }
 
   function restore() {
@@ -539,7 +572,15 @@
   }
 
   let timer = null
-  const schedule = () => { clearTimeout(timer); timer = setTimeout(run, 500) }
+  let lastRunAt = 0
+  // A shop whose DOM never settles — carousels, lazy pictures, analytics
+  // dropping nodes in — would push this debounce back for as long as it kept
+  // moving, and the mirror would never run at all. After MAX_WAIT it goes.
+  const MAX_WAIT = 2000
+  const schedule = () => {
+    clearTimeout(timer)
+    timer = setTimeout(run, Date.now() - lastRunAt > MAX_WAIT ? 0 : 500)
+  }
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg?.type === 'restore') { observer.disconnect(); closeMenu(); restore() }
     if (msg?.type === 'styleUpdate') renderPanel(msg.job)
@@ -551,6 +592,10 @@
   // A panel that was building when she left the last page carries on here.
   const inFlight = await send({ type: 'styleJob' })
   if (inFlight?.job) openPanel(inFlight.job)
+
+  addEventListener('popstate', onNavigated)
+  addEventListener('hashchange', onNavigated)
+  setInterval(onNavigated, 300)
 
   await run()
   observer.observe(document.body, { childList: true, subtree: true })
