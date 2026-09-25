@@ -19,6 +19,7 @@ import { loadStyleLearning, type StyleLearning } from './style-learning-actions'
 import ClientsPanel from './ClientsPanel'
 import BriefPanel from './BriefPanel'
 import SciuraPanel from './SciuraPanel'
+import BenchPanel from './BenchPanel'
 
 const STATUS_TONE: Record<string, string> = {
   draft: 'text-[#7C838B] border-[#DCDEE1]',
@@ -66,6 +67,8 @@ export default function StylistsClient({
       {msg && <p className="text-[9px] tracking-[0.12em] text-[#C4A882]">{msg}</p>}
 
       <SciuraPanel />
+
+      <BenchPanel />
 
       <ClientsPanel personas={personaOptions} />
 
