@@ -8,6 +8,7 @@ import Link from 'next/link'
 import FallbackImage from '@/components/FallbackImage'
 import ShopTheLookOverlay from '@/components/source-panel/ShopTheLookOverlay'
 import MirrorCurtain from '@/components/me/MirrorCurtain'
+import ShopBrain from './ShopBrain'
 import { answerLook, explainAnswer, type ForYouLook, type ForYouView } from './for-you-actions'
 
 const REASONS: { id: string; label: string }[] = [
@@ -52,7 +53,14 @@ export default function ForYouClient({ view, testMemberId }: { view: ForYouView;
             <h1 className="text-[clamp(32px,5vw,76px)] tracking-[0.045em] text-[#4A4E57] leading-[1.05]">
               {view.firstName ? `HELLO ${view.firstName.toUpperCase()}` : 'HELLO'}
             </h1>
-            <p className="myra-section-note mt-4">YOUR NEWEST LOOKS</p>
+          </div>
+
+          {/* What she kept on other people's sites, already worked on. Draws
+              nothing until there is something to show. */}
+          <ShopBrain testMemberId={testMemberId} />
+
+          <div className="text-center mb-10">
+            <p className="myra-section-note">YOUR NEWEST LOOKS</p>
             <p className="myra-guide-text mt-3 text-[clamp(21px,1.25vw,32px)] text-[#55534E]">
               Like and dislike the outfits — that is how MYRA learns what you would actually wear.
             </p>
