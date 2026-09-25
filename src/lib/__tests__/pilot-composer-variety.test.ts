@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { composeMemberLooks, composeMemberVariants, type ComposeHistory, type MemberTaste } from '../pilot-composer'
 import { generateCandidates } from '../composer'
 import type { ItemWithBrand } from '../admin-queries'
+import { parseBrief } from '../stylist-brief'
 
 // Identical pieces except their ids — so fit ties, and only history and
 // rotation can decide between them.
@@ -64,5 +65,46 @@ describe('generateCandidates without a shortlist nudge', () => {
     const a = generateCandidates({ anchor, library: lib, perSlotPool: 2 })
     const b = generateCandidates({ anchor, library: lib, perSlotPool: 2, shortlistAdjust: () => 0 })
     expect(a.map((c) => c.items.map((x) => x.item.item_id))).toEqual(b.map((c) => c.items.map((x) => x.item.item_id)))
+  })
+})
+
+describe('a stylist brief shapes the shortlist, not only the score', () => {
+  const withBrief = (brief: unknown): MemberTaste => ({ ...taste(), brief: parseBrief(brief, 'T') })
+
+  it('reaches for the brand in the brief when the pieces are otherwise identical', () => {
+    const lib = library()
+    const bot2 = lib.find((i) => i.item_id === 'bot2')!
+    const [look] = composeMemberVariants(withBrief({ brands: [bot2.brand!.name] }), lib, 'top1', 1, undefined, undefined, history())
+    expect(ids(look.items)).toContain('bot2')
+  })
+
+  it('never shortlists a piece the brief bans while there is another', () => {
+    const [look] = composeMemberVariants(withBrief({ nevers: [{ kind: 'ban', text: 'not that one', match: ['bot1'] }] }), library(), 'top1', 1, undefined, undefined, history())
+    expect(ids(look.items)).toContain('bot2')
+    expect(ids(look.items)).not.toContain('bot1')
+  })
+})
+
+describe("a client's loved shoe type is a hard rule", () => {
+  // Four sneakers: enough for the type to own the slot (SHOE_PREFERENCE_MIN).
+  const shoes = () => [
+    item('sneaker', 'sn1'), item('sneaker', 'sn2'), item('sneaker', 'sn3'), item('sneaker', 'sn4'),
+    item('flat', 'fl1'), item('flat', 'fl2'),
+  ]
+  const lib = () => [item('shirt', 'top1'), item('shirt', 'top2'), item('trousers', 'bot1'), item('trousers', 'bot2'), ...shoes()]
+  const lovesSneakers = (): MemberTaste => ({
+    ...taste(),
+    prefs: { colours_loved: [], colours_avoided: [], shapes_loved: [], shapes_avoided: [], types_loved: ['sneaker'], types_avoided: [] },
+  })
+
+  it('puts her in the sneaker she loves, never the flat', () => {
+    const [look] = composeMemberVariants(lovesSneakers(), lib(), 'top1', 1, undefined, undefined, history())
+    expect(ids(look.items).some((id) => String(id).startsWith('sn'))).toBe(true)
+    expect(ids(look.items).some((id) => String(id).startsWith('fl'))).toBe(false)
+  })
+
+  it('outranks a stylist who bans sneakers — the stylist declines rather than breaking her rule', () => {
+    const t: MemberTaste = { ...lovesSneakers(), brief: parseBrief({ nevers: [{ kind: 'ban', text: 'No trainers', match: ['sneaker'] }] }, 'Corporate') }
+    expect(composeMemberVariants(t, lib(), 'top1', 1, undefined, undefined, history())).toEqual([])
   })
 })

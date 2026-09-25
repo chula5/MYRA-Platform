@@ -28,7 +28,7 @@ import { toHouseItem } from '@/lib/house-item'
 import { learnedBonus, blendStrength, type StyleModel, type FeatureItem } from '@/lib/style-brain'
 import { isExcluded, formalityBand, hardSkipPairs, type EjectionConstraints } from '@/lib/pipeline'
 import { pieceBreaksLearnedRule, type LearnedRuleMatch } from '@/lib/learning-scope'
-import { judgeAgainstBrief, briefAffinity, type StylistBrief } from '@/lib/stylist-brief'
+import { judgeAgainstBrief, briefAffinity, briefBlocks, briefPull, type StylistBrief } from '@/lib/stylist-brief'
 import { priceOfItem } from '@/lib/brand-affinity'
 import { itemPseudoVector } from '@/lib/brand-affinity'
 import { cosine } from '@/lib/taste-vector'
@@ -311,6 +311,37 @@ const briefPiece = (it: ItemWithBrand) => ({
   material_category: (it as any).material_category, colour_family: (it as any).colour_family,
   print_flag: (it as any).print_flag, brand_name: it.brand?.name ?? null,
 })
+
+/**
+ * The brief at the SHORTLIST, not only at the score. Each slot is cut to its
+ * best few pieces by compatibility before any combination is scored, so a pull
+ * applied to combinations could never reach a piece outside those few. Eight
+ * stylists handed one top all came back in the same trousers, sneaker and
+ * jacket — the house, wearing name badges — because their briefs were
+ * consulted after the cut. Scaled against pairwise compatibility (0–1): a
+ * brand in the brief is worth about a quarter of it, a signature piece an
+ * eighth. The moodboard's envelope goes into the shortlist the same way.
+ */
+const BRIEF_SHORTLIST_SCALE = 0.12
+const PERSONA_SHORTLIST_SCALE = 0.2
+function stylistPull(t: MemberTaste, lens: PersonaLens | undefined, item: ItemWithBrand): number {
+  return BRIEF_SHORTLIST_SCALE * briefPull(briefPiece(item), t.brief) + PERSONA_SHORTLIST_SCALE * personaFitScore(lens, item)
+}
+
+/**
+ * A piece the stylist would never put on her is not shortlisted at all.
+ * memberGate refuses the COMBINATION, but by then the most compatible
+ * trousers were all jeans, and a stylist who bans denim had nothing left to
+ * build with while 78 tailored trousers sat outside the cut. What she owns
+ * is exempt, as in the gate; the piece she asked about is kept and the gate
+ * decides. Only if the bans leave nothing composable does the unfiltered pool
+ * come back, where the gate then behaves exactly as it did before.
+ */
+function withoutBanned(t: MemberTaste, pool: ItemWithBrand[], heroId?: string | null): ItemWithBrand[] {
+  if (!t.brief?.nevers.some((n) => n.kind === 'ban')) return pool
+  const kept = pool.filter((i) => i.item_id === heroId || isOwnedItem(i as any) || !briefBlocks(briefPiece(i), t.brief))
+  return canBuildLooks(kept) ? kept : pool
+}
 
 const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`)
 
@@ -644,14 +675,16 @@ function pickFill(
 // A pool can build looks if it can dress the body: a dress, or a top and a
 // bottom. Accessories alone are not an outfit.
 function canBuildLooks(pool: ItemWithBrand[]): boolean {
-  let dress = 0, top = 0, bottom = 0
+  let dress = 0, top = 0, bottom = 0, shoe = 0
   for (const i of pool) {
     const slot = slotForItemType(i.item_type)
     if (slot === 'dress') dress++
     else if (slot === 'top') top++
     else if (slot === 'bottom') bottom++
+    else if (slot === 'shoe') shoe++
   }
-  return dress >= 2 || (top >= 2 && bottom >= 2)
+  // Every plan needs a shoe: a pool with none is not one to fall back on.
+  return shoe >= 1 && (dress >= 2 || (top >= 2 && bottom >= 2))
 }
 
 export function composeMemberLooks(
@@ -703,7 +736,7 @@ export function composeMemberLooks(
     : canBuildLooks(weatherOk)
       ? weatherOk
       : inStock
-  const usable = preferLovedShoes(t, usableBase)
+  const usable = withoutBanned(t, preferLovedShoes(t, usableBase), undefined)
 
   const itemScore = (i: ItemWithBrand) =>
     memberItemScore(t, i) + occasionItemScore(occ, i) + climateScore(occ?.climate, i as any) + personaFitScore(lens, i)
@@ -758,7 +791,7 @@ export function composeMemberLooks(
       library: usable,
       perSlotPool: 5,
       maxCandidates: 5,
-      shortlistAdjust: (i) => varietyAdjust(history, i.item_id, seed),
+      shortlistAdjust: (i) => varietyAdjust(history, i.item_id, seed) + stylistPull(t, lens, i),
       minScore: 0.5,
       excludeItemIds: Array.from(usedItems),
       learnedBonus: (items) =>
@@ -882,7 +915,7 @@ export function composeMemberVariants(
       // Same as a fresh delivery: a piece she last rejected is not styled in.
       (i.item_id === heroId || !rejectedEnoughToBlock(history, i.item_id)),
   )
-  const usable = preferLovedShoes(t, canBuildLooks(preferred) ? preferred : canBuildLooks(weatherOk) ? weatherOk : inStock)
+  const usable = withoutBanned(t, preferLovedShoes(t, canBuildLooks(preferred) ? preferred : canBuildLooks(weatherOk) ? weatherOk : inStock), heroId)
 
   const anchor = usable.find((i) => i.item_id === heroId)
     ?? inStock.find((i) => i.item_id === heroId)
@@ -894,7 +927,7 @@ export function composeMemberVariants(
     library: usable,
     perSlotPool: 8,
     maxCandidates: 20,
-    shortlistAdjust: (i) => varietyAdjust(history, i.item_id, seed),
+    shortlistAdjust: (i) => varietyAdjust(history, i.item_id, seed) + stylistPull(t, lens, i),
     minScore: 0.45,
     excludeItemIds: [],
     learnedBonus: (items) =>
@@ -1039,7 +1072,9 @@ export function rankAlternates(
       !climateReason(occ?.climate, i as any) &&
       // A swap must not put white next to cream — the rule applies to every
       // client, so it holds in the picker as well as in composing.
-      !mixesWhiteAndCream([...keepItems, i] as any),
+      !mixesWhiteAndCream([...keepItems, i] as any) &&
+      // Her stylist's bans hold in the picker as they do in the shortlist.
+      (isOwnedItem(i as any) || !briefBlocks(briefPiece(i), t.brief)),
   )
   return (allowed.length ? allowed : inSlot)
     .map((i) => {
@@ -1047,7 +1082,7 @@ export function rankAlternates(
         keepItems.length > 0
           ? keepItems.reduce((s, k) => s + pairCompat(k, i).total, 0) / keepItems.length
           : 0.7
-      return { item: i, score: 0.5 * memberItemScore(t, i) + 0.5 * compat + occasionItemScore(occ, i) + personaFitScore(lens, i) - learnedRulePenalty(t, i, occ?.id) }
+      return { item: i, score: 0.5 * memberItemScore(t, i) + 0.5 * compat + occasionItemScore(occ, i) + personaFitScore(lens, i) + BRIEF_SHORTLIST_SCALE * briefPull(briefPiece(i), t.brief) - learnedRulePenalty(t, i, occ?.id) }
     })
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)

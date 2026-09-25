@@ -190,3 +190,63 @@ export function overlapsFor(
   }
   return out.sort((a, b) => (b.cosine ?? 0) - (a.cosine ?? 0))
 }
+
+// ── WHAT THE COMPOSER REACHES FOR ───────────────────────────────────────────
+//
+// briefAffinity above is a yes/no for search and routing. This is the pull the
+// COMPOSER applies when it shortlists — before each slot is cut to its best
+// few by compatibility, not after — so a stylist's brands, signature pieces,
+// fabrics and palette decide which pieces are even in the room. Applied only
+// to finished combinations, a brief could never reach a piece that had not
+// made the cut: eight stylists handed one top came back in the same trousers,
+// sneaker and jacket. Units are raw; the composer scales them.
+
+/** A palette word as a brief writes it, read onto the library's colour families. */
+const PALETTE_FAMILY: Record<string, string> = {
+  oatmeal: 'cream', chalk: 'cream', ivory: 'cream', butter: 'cream', ecru: 'cream', stone: 'cream',
+  charcoal: 'grey', 'washed grey': 'grey', slate: 'grey',
+  'soft sage': 'green', sage: 'green', 'hunter green': 'green', olive: 'green', khaki: 'green', forest: 'green',
+  'cherry red': 'red', scarlet: 'red',
+  bordeaux: 'burgundy', oxblood: 'burgundy', wine: 'burgundy', claret: 'burgundy',
+  chocolate: 'brown', tobacco: 'brown', rust: 'brown', cognac: 'brown', tan: 'brown',
+  'pale pink': 'pink', blush: 'pink',
+  'butter yellow': 'yellow', mustard: 'yellow',
+  denim: 'blue', 'faded denim': 'blue', indigo: 'blue', cobalt: 'blue',
+}
+export const paletteFamily = (word: string): string => {
+  const w = word.toLowerCase().trim()
+  return PALETTE_FAMILY[w] ?? w
+}
+
+/** "Vanessa Bruno" in a brief and "Vanessabruno" in the brand table are one house. */
+const normBrand = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+
+/** A single piece the stylist's bans refuse — kept out of the shortlist, not just the look. */
+export function briefBlocks(p: BriefPiece, brief: StylistBrief | null | undefined): boolean {
+  if (!brief?.nevers.length) return false
+  const text = pieceText(p)
+  return brief.nevers.some((n) => n.kind === 'ban' && n.match.length > 0 && hits(text, n))
+}
+
+/** How hard this stylist reaches for one piece: brand 2, signature 1, palette 0.75, fabric 0.5; a preference-never −1. */
+export function briefPull(p: BriefPiece, brief: StylistBrief | null | undefined): number {
+  if (!brief) return 0
+  const text = pieceText(p)
+  let n = 0
+  if (p.brand_name) {
+    const b = normBrand(p.brand_name)
+    if (b && brief.brands.some((x) => normBrand(x) === b)) n += 2
+  }
+  for (const sig of brief.signature_pieces) {
+    const words = sig.toLowerCase().split(/\s+/).filter((w) => w.length > 3)
+    if (words.length && words.every((w) => text.includes(w))) { n += 1; break }
+  }
+  if (p.colour_family) {
+    const fam = String(p.colour_family).toLowerCase()
+    if (brief.palette.some((c) => paletteFamily(c) === fam)) n += 0.75
+  }
+  if (brief.fabrics.some((f) => text.includes(f.toLowerCase()))) n += 0.5
+  // Not a ban — but not the first thing she reaches for either.
+  for (const nv of brief.nevers) if (nv.kind === 'preference' && nv.match.length > 0 && hits(text, nv)) n -= 1
+  return n
+}
