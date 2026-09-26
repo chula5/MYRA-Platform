@@ -15,11 +15,12 @@ import {
   type StylistListEntry,
 } from './actions'
 import InspirationReview from './InspirationReview'
-import { loadStyleLearning, type StyleLearning } from './style-learning-actions'
+import { loadStyleLearning, rebuildStylistModel, type StyleLearning } from './style-learning-actions'
 import ClientsPanel from './ClientsPanel'
 import BriefPanel from './BriefPanel'
 import SciuraPanel from './SciuraPanel'
 import BenchPanel from './BenchPanel'
+import TrialsPanel from './TrialsPanel'
 
 const STATUS_TONE: Record<string, string> = {
   draft: 'text-[#7C838B] border-[#DCDEE1]',
@@ -69,6 +70,8 @@ export default function StylistsClient({
       <SciuraPanel />
 
       <BenchPanel />
+
+      <TrialsPanel />
 
       <ClientsPanel personas={personaOptions} />
 
@@ -292,6 +295,8 @@ function StyleLearningPanel({ personaId }: { personaId: string }) {
   const [open, setOpen] = useState(false)
   const [data, setData] = useState<StyleLearning | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [rebuilding, setRebuilding] = useState(false)
+  const [reload, setReload] = useState(0)
 
   useEffect(() => {
     if (!open) return
@@ -301,7 +306,7 @@ function StyleLearningPanel({ personaId }: { personaId: string }) {
       if ('images' in r) { setData(r); setError(null) } else setError(r.error)
     })
     return () => { alive = false }
-  }, [open, personaId])
+  }, [open, personaId, reload])
 
   const row = 'flex flex-wrap items-baseline justify-between gap-3 border-b border-[#F2F2F0] py-2.5'
   const k = 'text-[16px] tracking-[0.12em] text-[#6B6B6B]'
@@ -336,6 +341,16 @@ function StyleLearningPanel({ personaId }: { personaId: string }) {
               {data.brain.decisions
                 ? `${data.brain.decisions} (${data.brain.approves} kept · ${data.brain.skips} turned down)`
                 : 'none yet — it learns from approvals, swaps, removals and her verdicts'}
+              {' '}
+              <button
+                type="button"
+                disabled={rebuilding}
+                title="Replay this stylist's own decision log into its model"
+                onClick={async () => { setRebuilding(true); const r = await rebuildStylistModel(personaId); setRebuilding(false); if (r.error) setError(r.error); else setReload((n) => n + 1) }}
+                className="ml-2 border border-[#E2E0DB] rounded-full px-2 py-0.5 text-[11px] tracking-[0.1em] text-[#6B6B6B] hover:border-[#0A0A0A] disabled:opacity-40"
+              >
+                {rebuilding ? 'REBUILDING…' : 'REBUILD'}
+              </button>
             </span>
           </div>
           <div className={row}>

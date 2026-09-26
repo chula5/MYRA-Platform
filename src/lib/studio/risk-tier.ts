@@ -144,6 +144,7 @@ export interface DueItem {
   status: string
   stock_class: StockClass
   stock_status: string | null
+  stock_checked_at: string | null
   oos_strikes: number
   oos_since: string | null
   status_before_oos: string | null
@@ -164,7 +165,7 @@ export async function selectDueItems(limit: number): Promise<DueItem[]> {
   const nowIso = new Date().toISOString()
   const { data } = await admin
     .from('item' as any)
-    .select('item_id, product_name, retailer_url, item_type, brand_id, merchant_id, status, stock_class, stock_status, oos_strikes, oos_since, status_before_oos, image_url, poll_tier, risk_score, live_since, next_check_at')
+    .select('item_id, product_name, retailer_url, item_type, brand_id, merchant_id, status, stock_class, stock_status, stock_checked_at, oos_strikes, oos_since, status_before_oos, image_url, poll_tier, risk_score, live_since, next_check_at')
     .not('status', 'in', '("archived","sold")')
     .not('retailer_url', 'is', null)
     .neq('retailer_url', '')

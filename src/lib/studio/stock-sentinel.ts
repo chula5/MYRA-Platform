@@ -42,6 +42,7 @@ import { upsertSizeAvailability, loadBrandOffsets } from '@/lib/size-availabilit
 import { raiseSizeAlerts } from '@/lib/stock-alerts'
 import { markUniqueSold } from '@/lib/rescue'
 import { actImmediately, classifySignal } from '@/lib/second-hand'
+import { unknownStrike } from '@/lib/stock-sellable'
 
 const OOS_STRIKES_REQUIRED = 2
 const ARCHIVE_AFTER_DAYS = 30
@@ -140,10 +141,47 @@ export async function runStockSentinel(
     await scheduleNextCheck(item.item_id, item.poll_tier)
 
     if (checked.status === 'unknown') {
-      // Failed fetch — retailer downtime is not a strike, just note the check.
+      // Unreadable. A retailer's downtime is not a strike, and a first failure
+      // never changes anything. But a page that stays unreadable is a piece
+      // MYRA cannot vouch for: two daily failures make it unsellable (the
+      // composer refuses 'unknown' — lib/stock-sellable), and a week retires
+      // it as an out-of-stock piece is retired. Before this, an unreadable
+      // page stayed live forever — a skirt gone since April was still being
+      // styled in September.
+      const { strikes, unsellable, dead } = unknownStrike(item, new Date(now))
+      if (!dead || item.status === 'out_of_stock') {
+        await (admin.from('item') as any)
+          .update({
+            stock_checked_at: now, stock_signal: 'sentinel:unknown', oos_strikes: strikes,
+            ...(unsellable ? { stock_status: 'unknown' } : {}),
+          })
+          .eq('item_id', item.item_id)
+        continue
+      }
+      if (report.outfitsPaused >= MAX_PAUSES_PER_RUN) {
+        await (admin.from('item') as any)
+          .update({ stock_status: 'unknown', stock_checked_at: now, stock_signal: 'sentinel:unknown-deferred', oos_strikes: strikes })
+          .eq('item_id', item.item_id)
+        report.deferred++
+        continue
+      }
       await (admin.from('item') as any)
-        .update({ stock_checked_at: now, stock_signal: 'sentinel:unknown' })
+        .update({
+          status: 'out_of_stock',
+          status_before_oos: item.status,
+          oos_since: now,
+          stock_status: 'out_of_stock',
+          stock_checked_at: now,
+          stock_signal: 'sentinel:unverifiable',
+          oos_strikes: strikes,
+        })
         .eq('item_id', item.item_id)
+      report.itemsDown.push({ id: item.item_id, name: item.product_name })
+      await writeAudit({
+        action: 'oos_detected', entity: 'item', entityId: item.item_id,
+        trigger: 'stock_sentinel', before: { status: item.status }, after: { status: 'out_of_stock', reason: 'unverifiable_for_a_week' },
+      })
+      await handleItemDown(item.item_id, item.product_name, guards, library, report)
       continue
     }
 

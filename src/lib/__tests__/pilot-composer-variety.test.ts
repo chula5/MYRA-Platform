@@ -108,3 +108,40 @@ describe("a client's loved shoe type is a hard rule", () => {
     expect(composeMemberVariants(t, lib(), 'top1', 1, undefined, undefined, history())).toEqual([])
   })
 })
+
+describe('a piece MYRA cannot vouch for is never composed', () => {
+  it('leaves an unverifiable piece out as it would an out-of-stock one', () => {
+    const lib = library().map((i) => (i.item_id === 'bot1' ? { ...i, stock_status: 'unknown' } : i))
+    const [look] = composeMemberVariants(taste(), lib as any, 'top1', 1, undefined, undefined, history())
+    expect(ids(look.items)).not.toContain('bot1')
+    expect(ids(look.items)).toContain('bot2')
+  })
+})
+
+describe('ties are broken per stylist, and the same way every time for one stylist', () => {
+  // Eight identical flats: nothing but the tie-break can choose between them.
+  const lib = () => [
+    item('shirt', 'top1'), item('shirt', 'top2'), item('trousers', 'bot1'), item('trousers', 'bot2'),
+    ...Array.from({ length: 8 }, (_, i) => item('flat', `flat${i}`)),
+  ]
+  const lens = (name: string) => ({ name, envelope: null, weight: 0.9 })
+  const shoeOf = (name: string) => {
+    const [look] = composeMemberVariants(taste(), lib(), 'top1', 1, undefined, lens(name), history())
+    return ids(look.items).find((id) => String(id).startsWith('flat'))
+  }
+
+  it('one stylist reaches for the same shoe run after run', () => {
+    expect(shoeOf('Rosie')).toBe(shoeOf('Rosie'))
+  })
+
+  it('eight stylists do not all reach for the same shoe', () => {
+    const shoes = new Set(['Rosie', 'Clara', 'Ines', 'Margot', 'Sylvie', 'Anouk', 'Beatrice', 'Ottilie'].map(shoeOf))
+    expect(shoes.size).toBeGreaterThan(1)
+  })
+
+  it('with no stylist at all, nothing changes', () => {
+    const [a] = composeMemberVariants(taste(), lib(), 'top1', 1, undefined, undefined, history())
+    const [b] = composeMemberVariants(taste(), lib(), 'top1', 1, undefined, undefined, history())
+    expect(ids(a.items)).toEqual(ids(b.items))
+  })
+})

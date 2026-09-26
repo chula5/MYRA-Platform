@@ -341,7 +341,7 @@ async function saveStyleModel(model: StyleModel, stylistId?: string | null): Pro
 export async function recordStyleDecision(opts: {
   items: FeatureItem[]
   decision: 'approve' | 'skip'
-  source: 'composer' | 'review' | 'swap' | 'brand_watch'
+  source: 'composer' | 'review' | 'swap' | 'brand_watch' | 'bench'
   anchorItemId?: string | null
   itemIds?: string[]
   baseScore?: number | null
@@ -378,7 +378,7 @@ export async function recordStyleDecision(opts: {
 // write per call). Fire-and-forget safe — never throws into the caller.
 export async function recordStyleOffers(
   offers: { items: FeatureItem[]; anchorItemId?: string | null; itemIds?: string[] }[],
-  source: 'composer' | 'review' | 'pipeline',
+  source: 'composer' | 'review' | 'pipeline' | 'bench',
   stylistId?: string | null,
 ): Promise<void> {
   if (!offers.length) return
@@ -405,11 +405,18 @@ export async function recordStyleOffers(
 
 // Rebuild the model from scratch from the full decision log (use after changing
 // the feature logic, or to repair drift). Returns the decision count processed.
-export async function recomputeStyleModel(): Promise<number> {
+// Scoped to ONE stylist: every persona keeps its own model, and a rebuild that
+// read the whole log would fold every stylist's decisions into Chloe's. Rows
+// older than the stylist column (null stylist_id) were Chloe's, and stay hers.
+export async function recomputeStyleModel(stylistId?: string | null): Promise<number> {
   const admin = createAdminClient()
-  const { data } = await admin
+  const { resolveStylistId, getStylistBySlug } = await import('@/lib/stylist-store')
+  const sid = await resolveStylistId(stylistId)
+  const chloe = await getStylistBySlug('chloe')
+  const own = (q: any) => (sid && chloe?.stylist_id === sid ? q.or(`stylist_id.eq.${sid},stylist_id.is.null`) : sid ? q.eq('stylist_id', sid) : q)
+  const { data } = await own(admin
     .from('style_decision' as any)
-    .select('decision, features')
+    .select('decision, features'))
     .order('created_at', { ascending: true })
     .limit(100000)
   const rows = (data ?? []) as { decision: 'approve' | 'skip'; features: { singles: string[]; pairs: string[] } }[]
@@ -429,9 +436,9 @@ export async function recomputeStyleModel(): Promise<number> {
   }
   // Rebuild offer counts from the offer log too (rates need both sides).
   try {
-    const { data: offerRows } = await admin
+    const { data: offerRows } = await own(admin
       .from('style_offer' as any)
-      .select('features')
+      .select('features'))
       .limit(100000)
     for (const o of (offerRows ?? []) as { features: { singles?: string[]; pairs?: string[] } }[]) {
       for (const k of [...(o.features?.singles ?? []), ...(o.features?.pairs ?? [])]) {
@@ -440,6 +447,6 @@ export async function recomputeStyleModel(): Promise<number> {
       model.offerCount += 1
     }
   } catch { /* style_offer table not there yet — rates fall back to acted-on counts */ }
-  await saveStyleModel(model)
+  await saveStyleModel(model, sid)
   return rows.length
 }

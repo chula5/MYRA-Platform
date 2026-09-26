@@ -286,8 +286,11 @@ export async function confirmAllScored(personaId: string): Promise<{ confirmed?:
  * envelope rebuilt at once, so confirming an image is what teaches the style.
  */
 async function rebuildOrFlag(admin: any, personaId: string): Promise<void> {
-  const { data } = await admin.from('stylist').select('status').eq('stylist_id', personaId).single()
-  if (data?.status === 'live') return flagIfLive(admin, personaId)
+  const { data } = await admin.from('stylist').select('status, envelope').eq('stylist_id', personaId).single()
+  // A FIRST envelope cannot move under anyone. A persona that went live before
+  // this pipeline existed (Chloe) has confirmed images and no envelope at all,
+  // and flagging it for review built nothing — so it is built here, once.
+  if (data?.status === 'live' && data?.envelope) return flagIfLive(admin, personaId)
   await recomputeEnvelope(personaId)
 }
 

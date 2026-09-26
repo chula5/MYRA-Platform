@@ -1,71 +1,27 @@
 'use server'
 
-// THE BENCH — one piece, every stylist, side by side.
-//
-// A house of stylists is only a house if they disagree. This styles ONE item
-// for ONE member with only the stylist swapped, so the difference on screen is
-// the stylist and nothing else: same library, same size, same occasion, same
-// history. If two columns come back identical, they are identical — that is
-// the point of the tool, not a fault in it.
-//
-// What actually makes a stylist differ, so the answer can be read honestly:
-//   · brief    — bans gate, preferences score (lib/stylist-brief, in the composer)
-//   · envelope — the moodboard's shape, via personaFitScore
-// A stylist with neither is styling as the house would. The column says so.
+// THE BENCH'S ACTIONS — every export here is browser-callable, so each one
+// gates first and hands the work to plain modules: the run itself lives in
+// ./bench-run (so the trials can run it too), the measuring in
+// lib/stylist-bench, the learning in lib/style-brain-store.
 
 import { createAdminClient } from '@/lib/supabase-server'
 import { assertAdmin } from '@/lib/admin-audit'
-import { composeMemberVariants, type MemberTaste, type PersonaLens, type ComposeHistory } from '@/lib/pilot-composer'
-import { rulesForMember } from '@/lib/style-rules'
-import { PERSONA_START_WEIGHT } from '@/lib/user-persona'
-import {
-  loadComposableLibrary, loadMemberTaste, loadPersonaLens, loadComposeHistory,
-} from '@/app/admin/private-stylist/actions'
-import { effectiveWeights, normalise, lookTasteVector } from '@/lib/pilot-stylist'
-import { parseBrief, briefIsEmpty, type StylistBrief } from '@/lib/stylist-brief'
-import { isOwnedItem } from '@/lib/wardrobe/owned-items'
-import { OCCASION_LABEL } from '@/lib/client-occasions'
+import { benchRun, type BenchItem, type BenchResult } from './bench-run'
+import { recordStyleDecision, loadStyleModel } from '@/lib/style-brain-store'
+import type { FeatureItem } from '@/lib/style-brain'
+import { parseBrief, briefText } from '@/lib/stylist-brief'
+import { neverFromPiece, appendNever, type NeverAttr } from '@/lib/stylist-bench'
+import { updateStylistBrief } from './actions'
+import { checkLook, describeClientForCheck, confidenceFromCheck, type LookCheck } from '@/lib/look-check'
 
-export interface BenchItem {
-  item_id: string
-  product_name: string
-  image_url: string | null
-  brand_name: string | null
-  item_type: string
-}
-
-export interface BenchPiece {
-  item_id: string | null
-  product_name: string
-  brand: string
-  image_url: string | null
-  price_gbp: number | null
-  is_hero: boolean
-}
-
-export interface BenchColumn {
-  stylist_id: string
-  stylist_name: string
-  status: string
-  /** What this stylist has to style WITH — an empty one styles as the house. */
-  has_brief: boolean
-  has_envelope: boolean
-  pieces: BenchPiece[]
-  brands: string[]
-  notes: string
-  error?: string
-}
-
-export interface BenchResult {
-  hero?: BenchItem
-  occasion_label?: string | null
-  /** Null when the bench ran with no client — the stylist alone. */
-  member_name?: string | null
-  columns: BenchColumn[]
-  /** True when every stylist returned the same pieces — the house, wearing name badges. */
-  identical?: boolean
-  error?: string
-}
+/**
+ * How much one bench verdict counts toward the Style Brain's ramp (full
+ * strength at 40). One, like every other decision: Chloe's eye on the bench
+ * is deliberate, but inflating it would make the ramp lie about how much a
+ * stylist has actually been taught. The dial is here if she wants it.
+ */
+const BENCH_DECISION_WEIGHT = 1
 
 export async function searchBenchItems(query: string): Promise<{ items: BenchItem[]; error?: string }> {
   await assertAdmin()
@@ -84,11 +40,8 @@ export async function searchBenchItems(query: string): Promise<{ items: BenchIte
     if (error) return { items: [], error: error.message }
     return {
       items: (data ?? []).map((r: any) => ({
-        item_id: r.item_id,
-        product_name: r.product_name,
-        image_url: r.image_url ?? null,
-        item_type: r.item_type,
-        brand_name: r.brand?.name ?? null,
+        item_id: r.item_id, product_name: r.product_name, image_url: r.image_url ?? null,
+        item_type: r.item_type, brand_name: r.brand?.name ?? null,
       })),
     }
   } catch (err) {
@@ -96,32 +49,16 @@ export async function searchBenchItems(query: string): Promise<{ items: BenchIte
   }
 }
 
-/** Whose size and library the bench styles in — the comparison needs one client. */
+/** Whose size and library the bench styles in — or none: the stylist alone. */
 export async function listBenchMembers(): Promise<{ members: { member_id: string; name: string }[]; error?: string }> {
   await assertAdmin()
   try {
     const admin = createAdminClient() as any
-    const { data, error } = await admin
-      .from('pilot_member').select('member_id, name').order('created_at', { ascending: true })
+    const { data, error } = await admin.from('pilot_member').select('member_id, name').order('created_at', { ascending: true })
     if (error) return { members: [], error: error.message }
     return { members: (data ?? []).map((m: any) => ({ member_id: m.member_id, name: m.name ?? 'Unnamed' })) }
   } catch (err) {
     return { members: [], error: err instanceof Error ? err.message : 'Load failed' }
-  }
-}
-
-/**
- * What the bench styles with when no client is chosen: the global rules, the
- * stylist's brief, and nothing else — no preferences, no brand affinity, no
- * history. The client dynamic is real and right for a client; on the bench
- * it was all anyone could see.
- */
-function stylistOnlyTaste(brief: StylistBrief | undefined): MemberTaste {
-  return {
-    affinity: new Map(), families: new Map(), excludedPairs: new Set(), inputOnlyBrands: new Set(),
-    itemSwapOut: new Map(), brandSwapOut: new Map(), pairNet: new Map(),
-    rules: rulesForMember(null, false),
-    brief,
   }
 }
 
@@ -133,110 +70,107 @@ export async function styleAcrossStylists(
 ): Promise<BenchResult> {
   await assertAdmin()
   try {
-    const admin = createAdminClient() as any
-    const member = memberId
-      ? (await admin.from('pilot_member').select('*').eq('member_id', memberId).single()).data
-      : null
-    if (memberId && !member) return { columns: [], error: 'Member not found' }
-
-    const { data: stylists } = await admin
-      .from('stylist').select('stylist_id, name, status, role, brief, envelope')
-      .order('created_at', { ascending: true })
-    const bench = (stylists ?? []).filter((s: any) => s.role !== 'chief')
-    if (!bench.length) return { columns: [], error: 'No stylists to compare' }
-
-    // With a client: her size, her history. Without one: the whole library,
-    // no history — so the only thing that differs between columns is the
-    // stylist, and the only thing shared is the piece.
-    const library = await loadComposableLibrary(member)
-    const hero = library.find((i: any) => i.item_id === itemId)
-    if (!hero) return { columns: [], error: member ? 'That piece is not in the library in her size' : 'That piece is not in the library' }
-    // The bench is about what each stylist REACHES FOR, so it shops the whole
-    // library rather than her wardrobe: two stylists handed the same six owned
-    // pieces would agree for reasons that have nothing to do with taste.
-    const pool = library.filter((i: any) => !isOwnedItem(i) || i.item_id === itemId) as any[]
-    const history: ComposeHistory = member
-      ? await loadComposeHistory(admin, member.member_id)
-      : { seenCounts: new Map(), rejected: new Set() }
-    const occ = occasionId
-      ? {
-          id: occasionId as any,
-          // Her rooms shape the occasion's target; with no client the occasion
-          // is its type priors alone — no sneakers at dinner, still.
-          vector: member ? lookTasteVector(normalise(effectiveWeights(member.room_weights, occasionId as any, member.work_dress_code))) : null,
-          climate: null,
-        }
-      : undefined
-
-    const dims = new Map<string, any>(pool.map((i: any) => [i.item_id, i]))
-    const heroView: BenchItem = {
-      item_id: hero.item_id,
-      product_name: hero.product_name,
-      image_url: hero.image_url ?? null,
-      brand_name: hero.brand?.name ?? null,
-      item_type: hero.item_type,
-    }
-
-    const columns: BenchColumn[] = []
-    for (const s of bench) {
-      const parsed = parseBrief(s.brief, s.name ?? '')
-      const has_brief = !briefIsEmpty(parsed)
-      const has_envelope = !!s.envelope?.mean?.length
-      const base: BenchColumn = {
-        stylist_id: s.stylist_id, stylist_name: s.name, status: s.status,
-        has_brief, has_envelope, pieces: [], brands: [], notes: '',
-      }
-      try {
-        // Only the stylist changes between columns. With a client, the persona
-        // override carries its rules and brief into her taste and its envelope
-        // into her lens; without one, both are built from the stylist alone.
-        const [taste, lens] = member
-          ? await Promise.all([
-              loadMemberTaste(admin, member, { personaId: s.stylist_id }),
-              loadPersonaLens(admin, member.member_id, s.stylist_id),
-            ])
-          : [
-              stylistOnlyTaste(has_brief ? parsed : undefined),
-              {
-                name: s.name,
-                envelope: has_envelope ? { mean: s.envelope.mean, spread: s.envelope.spread ?? [] } : null,
-                weight: PERSONA_START_WEIGHT,
-              } as PersonaLens,
-            ]
-        const looks = composeMemberVariants(taste, pool as any, hero.item_id, 1, occ, lens, history, { ownedMode: 'retail_only' })
-        const look = looks[0]
-        if (!look) { columns.push({ ...base, error: 'Nothing this stylist would put with it' }); continue }
-        const pieces: BenchPiece[] = look.items.map((it: any) => ({
-          item_id: it.item_id ?? null,
-          product_name: it.product_name,
-          brand: it.brand,
-          image_url: dims.get(it.item_id ?? '')?.image_url ?? null,
-          price_gbp: it.price_gbp ?? null,
-          is_hero: it.item_id === hero.item_id,
-        }))
-        columns.push({
-          ...base,
-          pieces,
-          brands: Array.from(new Set(pieces.filter((p) => !p.is_hero).map((p) => p.brand).filter(Boolean))),
-          notes: look.notes ?? '',
-        })
-      } catch (err) {
-        columns.push({ ...base, error: err instanceof Error ? err.message : 'Compose failed' })
-      }
-    }
-
-    const signature = (c: BenchColumn) => c.pieces.map((p) => p.item_id).sort().join('|')
-    const done = columns.filter((c) => c.pieces.length)
-    const identical = done.length > 1 && new Set(done.map(signature)).size === 1
-
-    return {
-      hero: heroView,
-      occasion_label: occasionId ? (OCCASION_LABEL[occasionId] ?? occasionId) : null,
-      member_name: member?.name ?? null,
-      columns,
-      identical,
-    }
+    return await benchRun(createAdminClient() as any, itemId, occasionId, memberId)
   } catch (err) {
     return { columns: [], error: err instanceof Error ? err.message : 'Bench failed' }
+  }
+}
+
+/**
+ * A verdict on one column teaches that stylist, and only that stylist. A YES
+ * approves the look. A NO with the wrong pieces named teaches the pairs that
+ * carry the blame — the hero with each named piece — not the whole look; and
+ * each never asked for is written into the brief at once, where it works
+ * without waiting for the model's ramp.
+ */
+export async function recordBenchVerdict(input: {
+  stylistId: string
+  heroId: string
+  itemIds: string[]
+  score: number
+  verdict: 'yes' | 'no'
+  wrongItemIds?: string[]
+  nevers?: { itemId: string; attr: NeverAttr; word?: string | null }[]
+  trialRunId?: string | null
+}): Promise<{ error?: string; decisions?: number; nevers_added?: number }> {
+  await assertAdmin()
+  try {
+    const admin = createAdminClient() as any
+    const ids = Array.from(new Set([input.heroId, ...input.itemIds]))
+    const { data: rows, error } = await admin
+      .from('item')
+      .select('item_id, product_name, item_type, colour_family, pattern, material_formality, material_primary, brand:brand_id(name, price_tier)')
+      .in('item_id', ids)
+    if (error) return { error: error.message }
+    const byId = new Map<string, any>((rows ?? []).map((r: any) => [r.item_id, r]))
+    const feat = (r: any): FeatureItem => ({
+      item_type: r.item_type, colour_family: r.colour_family ?? null, pattern: r.pattern ?? null,
+      material_formality: r.material_formality ?? null, brand_name: r.brand?.name ?? null, price_tier: r.brand?.price_tier ?? null,
+    })
+    const wrong = (input.wrongItemIds ?? []).filter((id) => byId.has(id) && id !== input.heroId)
+    const taught = input.verdict === 'no' && wrong.length ? [input.heroId, ...wrong] : ids
+    await recordStyleDecision({
+      items: taught.map((id) => byId.get(id)).filter(Boolean).map(feat),
+      decision: input.verdict === 'yes' ? 'approve' : 'skip',
+      source: 'bench',
+      anchorItemId: input.heroId,
+      itemIds: input.itemIds,
+      baseScore: input.score,
+      weight: BENCH_DECISION_WEIGHT,
+      extraFeatures: {
+        bench: true,
+        ...(input.trialRunId ? { trial_run_id: input.trialRunId } : {}),
+        ...(wrong.length ? { wrong_item_ids: wrong } : {}),
+      },
+      stylistId: input.stylistId,
+    })
+
+    let nevers_added = 0
+    if (input.verdict === 'no' && input.nevers?.length) {
+      const { data: st } = await admin.from('stylist').select('name, brief').eq('stylist_id', input.stylistId).single()
+      let brief = parseBrief(st?.brief, st?.name ?? '')
+      for (const n of input.nevers) {
+        const r = byId.get(n.itemId)
+        if (!r) continue
+        const never = neverFromPiece(
+          { product_name: r.product_name, item_type: r.item_type, colour_family: r.colour_family, brand_name: r.brand?.name, material_primary: r.material_primary },
+          n.attr, new Date(), typeof n.word === 'string' ? n.word.slice(0, 40) : null,
+        )
+        if (!never) continue
+        const next = appendNever(brief, never)
+        if (next !== brief) { brief = next; nevers_added++ }
+      }
+      if (nevers_added) {
+        const r = await updateStylistBrief(input.stylistId, brief)
+        if (r.error) return { error: r.error }
+      }
+    }
+    const model = await loadStyleModel(input.stylistId)
+    return { decisions: Math.round(model.decisions), nevers_added }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Verdict failed' }
+  }
+}
+
+/**
+ * MYRA's eye on one column: the same photo check the Dressing Room runs,
+ * with the stylist's brief as the client. One Opus call, ~2p, 5–10 seconds,
+ * no cache — which is why the bench asks rather than assumes.
+ */
+export async function checkBenchLook(
+  stylistId: string,
+  pieces: { image_url: string | null; item_type: string | null; product_name: string }[],
+): Promise<{ check: LookCheck | null; confidence: number | null; error?: string }> {
+  await assertAdmin()
+  try {
+    const admin = createAdminClient() as any
+    const { data: st } = await admin.from('stylist').select('name, brief').eq('stylist_id', stylistId).single()
+    const name = st?.name ?? 'the stylist'
+    const brief = parseBrief(st?.brief, name)
+    const check = await checkLook(pieces, describeClientForCheck({}, name, briefText(name, brief)))
+    if (!check) return { check: null, confidence: null, error: 'MYRA could not look at this one' }
+    return { check, confidence: confidenceFromCheck(check.verdict, check.colourHarmony, check.piecesGoTogether) }
+  } catch (err) {
+    return { check: null, confidence: null, error: err instanceof Error ? err.message : 'Check failed' }
   }
 }

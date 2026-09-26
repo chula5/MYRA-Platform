@@ -7,6 +7,7 @@
 import { createAdminClient, createServerClient } from '@/lib/supabase-server'
 import { rulesForMember, GLOBAL_RULE_CODES } from '@/lib/style-rules'
 import { CONSTITUTION_RULES } from '@/lib/house-style'
+import { assertAdmin } from '@/lib/admin-audit'
 
 export interface StyleLearning {
   name: string
@@ -80,5 +81,17 @@ export async function loadStyleLearning(personaId: string): Promise<StyleLearnin
     }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Could not read what the style has learned' }
+  }
+}
+
+/** Replay this persona's own decision log into its model — after a bad bench day, or a feature change. */
+export async function rebuildStylistModel(personaId: string): Promise<{ count?: number; error?: string }> {
+  await assertAdmin()
+  try {
+    const { recomputeStyleModel } = await import('@/lib/style-brain-store')
+    const count = await recomputeStyleModel(personaId)
+    return { count }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Rebuild failed' }
   }
 }

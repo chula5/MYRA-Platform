@@ -219,7 +219,7 @@ export const paletteFamily = (word: string): string => {
 }
 
 /** "Vanessa Bruno" in a brief and "Vanessabruno" in the brand table are one house. */
-const normBrand = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+export const normBrand = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
 
 /** A single piece the stylist's bans refuse — kept out of the shortlist, not just the look. */
 export function briefBlocks(p: BriefPiece, brief: StylistBrief | null | undefined): boolean {

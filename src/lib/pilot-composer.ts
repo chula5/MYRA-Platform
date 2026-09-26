@@ -29,6 +29,7 @@ import { learnedBonus, blendStrength, type StyleModel, type FeatureItem } from '
 import { isExcluded, formalityBand, hardSkipPairs, type EjectionConstraints } from '@/lib/pipeline'
 import { pieceBreaksLearnedRule, type LearnedRuleMatch } from '@/lib/learning-scope'
 import { judgeAgainstBrief, briefAffinity, briefBlocks, briefPull, type StylistBrief } from '@/lib/stylist-brief'
+import { sellable } from '@/lib/stock-sellable'
 import { priceOfItem } from '@/lib/brand-affinity'
 import { itemPseudoVector } from '@/lib/brand-affinity'
 import { cosine } from '@/lib/taste-vector'
@@ -258,7 +259,7 @@ export function learnedRulePenalty(t: MemberTaste, item: ItemWithBrand, occasion
 }
 
 /** A library piece as the Style Brain reads it — same fields as the Composer. */
-function toFeature(it: ItemWithBrand): FeatureItem {
+export function toFeature(it: ItemWithBrand): FeatureItem {
   return {
     item_type: it.item_type,
     colour_family: (it as any).colour_family ?? null,
@@ -306,7 +307,7 @@ export function styleLearningBonus(t: MemberTaste, anchor: ItemWithBrand, items:
 const BRIEF_LIFT_PER_HIT = 0.06
 const BRIEF_LIFT_CAP = 0.3
 
-const briefPiece = (it: ItemWithBrand) => ({
+export const briefPiece = (it: ItemWithBrand) => ({
   product_name: it.product_name, item_type: it.item_type, material_primary: (it as any).material_primary,
   material_category: (it as any).material_category, colour_family: (it as any).colour_family,
   print_flag: (it as any).print_flag, brand_name: it.brand?.name ?? null,
@@ -517,7 +518,7 @@ export function toLookItem(item: ItemWithBrand): LookItem {
     estimated_value_gbp: owned ? estimatedValueOf(item as any) : undefined,
     url: owned ? undefined : item.retailer_url ?? undefined,
     owned,
-    in_stock: owned ? true : item.stock_status !== 'out_of_stock',
+    in_stock: owned ? true : sellable(item),
     stock_checked_at: (item as any).stock_checked_at ?? null,
     item_id: item.item_id,
     brand_id: item.brand_id ?? null,
@@ -641,6 +642,23 @@ function historyPenalty(h: ComposeHistory | undefined, itemId: string): number {
 // Deterministic tie-rotation: a small per-item offset seeded by how much
 // history exists, so two back-to-back compositions with near-tied scores pick
 // different pieces — and the same inputs still reproduce the same output.
+/**
+ * Ties, broken per stylist. Hundreds of black flats score the same against an
+ * ivory blouse, and the jitter decides which eight make the shortlist. With
+ * no history and no reshuffle that jitter was identical for every stylist, so
+ * eight stylists shortlisted the same eight shoes in the same order and,
+ * unless a brief pulled another in, wore the same one. Her name in the seed
+ * keeps each stylist's habits stable run to run and different from the next
+ * stylist's — a tie-break, never a preference.
+ */
+function stylistSeed(lens: PersonaLens | undefined): number {
+  const name = lens?.name
+  if (!name) return 0
+  let h = 0x811c9dc5
+  for (let i = 0; i < name.length; i++) h = Math.imul(h ^ name.charCodeAt(i), 0x01000193) >>> 0
+  return (h % 100000) * 104729
+}
+
 function varietyJitter(itemId: string, seed: number): number {
   let h = (0x811c9dc5 ^ seed) >>> 0
   for (let i = 0; i < itemId.length; i++) h = Math.imul(h ^ itemId.charCodeAt(i), 0x01000193) >>> 0
@@ -699,11 +717,12 @@ export function composeMemberLooks(
   const mode = opts.ownedMode ?? 'blend'
   const library = mode === 'retail_only' ? libraryIn.filter((i) => !isOwnedItem(i as any)) : libraryIn
 
-  const seed = history ? Array.from(history.seenCounts.values()).reduce((s, n) => s + n, 0) + history.rejected.size : 0
+  const seed = (history ? Array.from(history.seenCounts.values()).reduce((s, n) => s + n, 0) + history.rejected.size : 0)
+    + stylistSeed(lens)
   const inStock = library.filter(
     (i) =>
       i.image_url &&
-      i.stock_status !== 'out_of_stock' &&
+      sellable(i) &&
       // owned pieces are exempt from the input-only (Zara) rule — see memberGate
       (isOwnedItem(i as any) || !(i.brand?.name && t.inputOnlyBrands.has(i.brand.name.toLowerCase()))),
   )
@@ -901,11 +920,12 @@ export function composeMemberVariants(
   const library = mode === 'retail_only' ? libraryIn.filter((i) => !isOwnedItem(i as any)) : libraryIn
   const seed = (history ? Array.from(history.seenCounts.values()).reduce((s, n) => s + n, 0) + history.rejected.size : 0)
     + (opts.shuffle ?? 0) * 7919
+    + stylistSeed(lens)
 
   // Same pool construction as composeMemberLooks — kept in step deliberately so
   // a variant is never built from a piece a fresh delivery wouldn't use.
   const inStock = library.filter(
-    (i) => i.image_url && i.stock_status !== 'out_of_stock' &&
+    (i) => i.image_url && sellable(i) &&
       (isOwnedItem(i as any) || !(i.brand?.name && t.inputOnlyBrands.has(i.brand.name.toLowerCase()))),
   )
   const weatherOk = inStock.filter((i) => !climateReason(occ?.climate, i as any))
@@ -1056,7 +1076,7 @@ export function rankAlternates(
       slotForItemType(i.item_type) === slot &&
       !excludeIds.has(i.item_id) &&
       i.image_url &&
-      i.stock_status !== 'out_of_stock' &&
+      sellable(i) &&
       (isOwnedItem(i as any) || !(i.brand?.name && t.inputOnlyBrands.has(i.brand.name.toLowerCase()))),
   )
   // The swap and add pickers were offering everything the COMPOSER refuses:
