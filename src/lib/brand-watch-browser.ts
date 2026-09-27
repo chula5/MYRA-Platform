@@ -101,6 +101,12 @@ export function preferredSitemaps(baseUrl: string, all: string[]): string[] {
   })()
   const hinted = localeHint ? all.filter((u) => u.toLowerCase().includes(`/${localeHint}/`)) : []
   if (hinted.length) return hinted
+  // No hint: a sitemap published under an explicit UK path wins outright.
+  // Agnès b. lists fr-eu, en-eu, en-uk, en-us and en-ca side by side, and
+  // "English-looking" took four of the five — the same catalogue four times,
+  // three of them priced in euros and dollars.
+  const uk = all.filter((u) => localeRank(u) === 0)
+  if (uk.length) return uk
   const english = all.filter((u) => LOCALE_SITEMAP.test(u))
   return english.length && all.length > 4 ? english : all
 }

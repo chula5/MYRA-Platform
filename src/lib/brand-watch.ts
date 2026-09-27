@@ -514,8 +514,16 @@ export function classifyExternalProduct(p: ParsedProduct): ScannedProduct {
     categoryTiers: [[p.category, titleExtra].filter(Boolean).join(' '), pathText, cleanTitle],
   })
   product.currency = p.currency ?? null
+  // The path names the range before the title does: /enfant/, /kids/, /homme/,
+  // /men/. Agnès b. queued 73 children's pieces whose titles never said so.
+  if (KIDS_PATH_RE.test(path)) product.nonFashion = true
+  else if (MEN_PATH_RE.test(path) && !WOMEN_PATH_RE.test(path)) product.menswear = true
   return product
 }
+
+const KIDS_PATH_RE = /\/(enfant|enfants|kids?|children|child|baby|babies|bebe|b%c3%a9b%c3%a9|girls?|boys?|junior|petit|mini-me)(\/|$)/i
+const MEN_PATH_RE = /\/(homme|hommes|men|mens|man|herren|uomo|hombre|male)(\/|$)/i
+const WOMEN_PATH_RE = /\/(femme|femmes|women|womens|woman|damen|donna|mujer|female|ladies)(\/|$)/i
 
 // Domain label → provisional display name, skipping locale/storefront
 // subdomains so en.munthe.com yields "Munthe", never "En". Only a placeholder

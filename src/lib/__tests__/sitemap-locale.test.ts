@@ -32,3 +32,21 @@ describe('preferredSitemaps', () => {
     expect(preferredSitemaps('https://shop.com/collections/new', all)).toEqual(all)
   })
 })
+
+describe('preferredSitemaps — no hint in the address', () => {
+  const AGNES = [
+    'https://www.agnesb.com/fr-eu/sitemap_index.xml',
+    'https://www.agnesb.com/en-eu/sitemap_index.xml',
+    'https://www.agnesb.com/en-uk/sitemap_index.xml',
+    'https://www.agnesb.com/en-us/sitemap_index.xml',
+    'https://www.agnesb.com/en-ca/sitemap_index.xml',
+  ]
+  it('takes the UK sitemap alone when the site publishes one per locale', () => {
+    expect(preferredSitemaps('https://www.agnesb.com', AGNES)).toEqual(['https://www.agnesb.com/en-uk/sitemap_index.xml'])
+  })
+  it('still falls back to English on a long list, and to everything on a short one', () => {
+    const noUk = [...AGNES.filter((u) => !u.includes('en-uk')), 'https://www.agnesb.com/fr-ca/sitemap_index.xml']
+    expect(preferredSitemaps('https://www.agnesb.com', noUk)).toEqual(noUk.filter((u) => u.includes('/en-')))
+    expect(preferredSitemaps('https://x.com', ['https://x.com/sitemap.xml'])).toEqual(['https://x.com/sitemap.xml'])
+  })
+})
