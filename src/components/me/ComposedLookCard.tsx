@@ -31,7 +31,7 @@ export default function ComposedLookCard({ look, heroId }: { look: StyledLook; h
         {look.occasion_label && (
           <p className="myra-section-note mb-1">{look.occasion_label.toUpperCase()}</p>
         )}
-        <p className="text-[19px] text-[#6E6B65]">
+        <p className="text-[21px] xl:text-[24px] text-[#6E6B65]">
           {look.items.filter((it) => it.owned).length} of your own
         </p>
       </div>

@@ -80,10 +80,10 @@ export default function StylistChat({ asMemberId }: { asMemberId?: string }) {
         <button
           onClick={() => setOpen(true)}
           aria-label="Talk to a stylist"
-          className="fixed right-6 bottom-6 sm:right-8 sm:bottom-8 z-[56] flex items-center gap-4 bg-[#2B2B2B] text-white rounded-full pl-7 pr-9 py-5 sm:pl-8 sm:pr-10 sm:py-6 shadow-[0_8px_30px_rgba(43,43,43,0.3)] hover:bg-[#0A0A0A] hover:scale-[1.03] transition-[background-color,transform]"
+          className="fixed right-6 bottom-6 sm:right-8 sm:bottom-8 z-[56] flex items-center gap-4 bg-[#2B2B2B] text-white rounded-full pl-8 pr-10 py-6 sm:pl-10 sm:pr-12 sm:py-7 shadow-[0_8px_30px_rgba(43,43,43,0.3)] hover:bg-[#0A0A0A] hover:scale-[1.03] transition-[background-color,transform]"
         >
-          <SpeechIcon className="w-8 h-8 sm:w-10 sm:h-10" />
-          <span className="text-[22px] sm:text-[clamp(24px,1.5vw,32px)] tracking-[0.14em]">STYLIST</span>
+          <SpeechIcon className="w-9 h-9 sm:w-12 sm:h-12" />
+          <span className="text-[24px] sm:text-[clamp(28px,1.8vw,40px)] tracking-[0.14em]">STYLIST</span>
         </button>
       )}
 
@@ -93,38 +93,38 @@ export default function StylistChat({ asMemberId }: { asMemberId?: string }) {
           <div className="border-b border-[rgba(43,43,43,0.14)] px-8 pt-7 pb-5 flex items-start justify-between gap-4 flex-shrink-0">
             <div className="min-w-0">
               {current ? (
-                <button onClick={() => setCurrent(null)} className="text-[18px] tracking-[0.16em] text-[#7C838B] hover:text-[#2B2B2B] mb-2">← STYLIST LENS</button>
+                <button onClick={() => setCurrent(null)} className="text-[20px] xl:text-[23px] tracking-[0.16em] text-[#7C838B] hover:text-[#2B2B2B] mb-2">← STYLIST LENS</button>
               ) : (
-                <p className="text-[18px] tracking-[0.16em] text-[#7C838B] mb-2">MYRA</p>
+                <p className="text-[20px] xl:text-[23px] tracking-[0.16em] text-[#7C838B] mb-2">MYRA</p>
               )}
               {current ? (
                 <div className="flex items-center gap-4">
                   <Avatar s={current} size={80} />
                   <div className="min-w-0">
-                    <p className="text-[32px] tracking-[0.04em] text-[#0A0A0A] leading-tight truncate">{current.name.toUpperCase()}</p>
-                    <p className="myra-guide-text text-[20px] text-[#55534E] leading-snug">{current.chief ? 'Chief stylist — routes and blends every look' : current.tagline}</p>
+                    <p className="text-[36px] xl:text-[44px] tracking-[0.04em] text-[#0A0A0A] leading-tight truncate">{current.name.toUpperCase()}</p>
+                    <p className="myra-guide-text text-[22px] xl:text-[26px] text-[#55534E] leading-snug">{current.chief ? 'Chief stylist — routes and blends every look' : current.tagline}</p>
                   </div>
                 </div>
               ) : (
-                <p className="text-[44px] tracking-[0.04em] text-[#0A0A0A] leading-none">STYLIST LENS</p>
+                <p className="text-[44px] xl:text-[52px] tracking-[0.04em] text-[#0A0A0A] leading-none">STYLIST LENS</p>
               )}
             </div>
-            <button onClick={() => setOpen(false)} aria-label="Close" className="text-[#7C838B] hover:text-[#0A0A0A] text-[34px] leading-none -mt-1">×</button>
+            <button onClick={() => setOpen(false)} aria-label="Close" className="text-[#7C838B] hover:text-[#0A0A0A] text-[40px] leading-none -mt-1">×</button>
           </div>
 
           <div ref={scroller} data-lenis-prevent className="flex-1 overflow-y-auto px-8 py-6">
             {!current ? (
               <>
-                <p className="myra-guide-text text-[24px] text-[#2B2B2B] mb-7">
+                <p className="myra-guide-text text-[26px] xl:text-[30px] text-[#2B2B2B] mb-7">
                   {memberName ? `${memberName.split(' ')[0]}, who would you like to dress you today?` : 'Who would you like to dress you today?'}
                 </p>
-                {error && <p className="myra-guide-text text-[20px] text-[#B83A3A] mb-4">{error}</p>}
+                {error && <p className="myra-guide-text text-[22px] xl:text-[25px] text-[#B83A3A] mb-4">{error}</p>}
                 <div className="flex flex-wrap gap-4">
                   {stylists.map((s) => (
                     <button
                       key={s.stylist_id}
                       onClick={() => setCurrent(s)}
-                      className={`rounded-full px-8 py-4 text-[clamp(20px,1.3vw,26px)] tracking-[0.08em] leading-none transition-colors ${s.chief ? 'bg-[#2B2B2B] text-white hover:bg-[#0A0A0A]' : 'bg-white/90 text-[#0A0A0A] border border-[rgba(43,43,43,0.2)] hover:bg-[#2B2B2B] hover:text-white hover:border-[#2B2B2B]'}`}
+                      className={`rounded-full px-9 py-5 text-[clamp(22px,1.5vw,30px)] tracking-[0.08em] leading-none transition-colors ${s.chief ? 'bg-[#2B2B2B] text-white hover:bg-[#0A0A0A]' : 'bg-white/90 text-[#0A0A0A] border border-[rgba(43,43,43,0.2)] hover:bg-[#2B2B2B] hover:text-white hover:border-[#2B2B2B]'}`}
                     >
                       {s.name.toUpperCase()}
                     </button>
@@ -135,15 +135,15 @@ export default function StylistChat({ asMemberId }: { asMemberId?: string }) {
             ) : (
               <div className="space-y-5">
                 {!messages.length && !busy && (
-                  <p className="myra-guide-text text-[22px] text-[#55534E]">
+                  <p className="myra-guide-text text-[24px] xl:text-[28px] text-[#55534E]">
                     {current.chief
                       ? `Ask me who should dress you. I read your pictures, your dressing room and your brands, and I say who — in one line.`
                       : `Tell me where you are going, or what you want to wear, and I will dress you my way.`}
                   </p>
                 )}
                 {messages.map((m) => <Bubble key={m.message_id} m={m} stylist={current} />)}
-                {busy && <p className="myra-guide-text text-[20px] text-[#A8A8A4]">{current.name} is thinking…</p>}
-                {error && <p className="myra-guide-text text-[20px] text-[#B83A3A]">{error}</p>}
+                {busy && <p className="myra-guide-text text-[22px] xl:text-[25px] text-[#A8A8A4]">{current.name} is thinking…</p>}
+                {error && <p className="myra-guide-text text-[22px] xl:text-[25px] text-[#B83A3A]">{error}</p>}
               </div>
             )}
           </div>
@@ -152,7 +152,7 @@ export default function StylistChat({ asMemberId }: { asMemberId?: string }) {
             <div className="border-t border-[rgba(43,43,43,0.14)] px-8 pt-4 pb-6 flex-shrink-0 myra-pearl">
               <div className="flex gap-2 overflow-x-auto pb-3 -mx-1 px-1">
                 {quick.map((q) => (
-                  <button key={q.label} onClick={() => send(q.ask)} disabled={busy} className="whitespace-nowrap border border-[rgba(43,43,43,0.25)] rounded-full px-5 py-2 text-[16px] tracking-[0.1em] text-[#2B2B2B] hover:bg-[#2B2B2B] hover:text-white transition-colors disabled:opacity-50">
+                  <button key={q.label} onClick={() => send(q.ask)} disabled={busy} className="whitespace-nowrap border border-[rgba(43,43,43,0.25)] rounded-full px-6 py-3 text-[19px] xl:text-[22px] tracking-[0.1em] text-[#2B2B2B] hover:bg-[#2B2B2B] hover:text-white transition-colors disabled:opacity-50">
                     {q.label.toUpperCase()}
                   </button>
                 ))}
@@ -162,13 +162,13 @@ export default function StylistChat({ asMemberId }: { asMemberId?: string }) {
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   placeholder={current.chief ? 'Ask Sciura…' : `Ask ${current.name}…`}
-                  className="myra-guide-text flex-1 bg-white border border-[rgba(43,43,43,0.25)] rounded-full px-6 py-4 text-[20px] text-[#2B2B2B] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#2B2B2B]"
+                  className="myra-guide-text flex-1 bg-white border border-[rgba(43,43,43,0.25)] rounded-full px-7 py-5 text-[22px] xl:text-[26px] text-[#2B2B2B] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#2B2B2B]"
                 />
-                <button type="submit" disabled={busy || !draft.trim()} aria-label="Send" className="w-14 h-14 rounded-full bg-[#2B2B2B] text-white flex items-center justify-center hover:bg-[#0A0A0A] disabled:opacity-40">
-                  <SendIcon className="w-5 h-5" />
+                <button type="submit" disabled={busy || !draft.trim()} aria-label="Send" className="w-16 h-16 xl:w-[72px] xl:h-[72px] rounded-full bg-[#2B2B2B] text-white flex items-center justify-center hover:bg-[#0A0A0A] disabled:opacity-40">
+                  <SendIcon className="w-6 h-6 xl:w-7 xl:h-7" />
                 </button>
               </form>
-              {test && <p className="text-[15px] tracking-[0.1em] text-[#7C838B] mt-2">TESTING AS HER — NOTHING IS KEPT</p>}
+              {test && <p className="text-[17px] xl:text-[19px] tracking-[0.1em] text-[#7C838B] mt-3">TESTING AS HER — NOTHING IS KEPT</p>}
             </div>
           )}
       </aside>
@@ -181,8 +181,8 @@ function Bubble({ m, stylist }: { m: ChatMessage; stylist: ChatStylist }) {
   return (
     <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
       <div className={`max-w-[92%] ${mine ? '' : 'w-full'}`}>
-        {!mine && <p className="text-[15px] tracking-[0.14em] text-[#7C838B] mb-1">{stylist.name.toUpperCase()}</p>}
-        <p className={`myra-guide-text text-[20px] leading-relaxed whitespace-pre-wrap rounded-[20px] px-6 py-4 ${mine ? 'bg-[#2B2B2B] text-white' : 'bg-white/85 text-[#2B2B2B] shadow-[0_2px_14px_rgba(43,43,43,0.08)]'}`}>{m.body}</p>
+        {!mine && <p className="text-[17px] xl:text-[19px] tracking-[0.14em] text-[#7C838B] mb-1">{stylist.name.toUpperCase()}</p>}
+        <p className={`myra-guide-text text-[22px] xl:text-[26px] leading-relaxed whitespace-pre-wrap rounded-[22px] px-7 py-5 ${mine ? 'bg-[#2B2B2B] text-white' : 'bg-white/85 text-[#2B2B2B] shadow-[0_2px_14px_rgba(43,43,43,0.08)]'}`}>{m.body}</p>
         {!!m.looks?.length && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
             {m.looks.map((l) => <ComposedLookCard key={l.look_id} look={l as any} />)}
@@ -196,9 +196,9 @@ function Bubble({ m, stylist }: { m: ChatMessage; stylist: ChatStylist }) {
                   {it.image_url && <FallbackImage src={it.image_url} thumbWidth={300} alt={it.name} className="absolute inset-0 w-full h-full object-contain" />}
                 </div>
                 <div className="px-2 py-2">
-                  <p className="text-[15px] tracking-[0.1em] text-[#0A0A0A] truncate">{it.brand.toUpperCase()}</p>
-                  <p className="myra-guide-text text-[16px] text-[#55534E] leading-snug line-clamp-2">{it.name}</p>
-                  <p className="text-[15px] tracking-[0.06em] text-[#7C838B] mt-1">{it.owned ? 'YOURS' : it.price_gbp != null ? `£${Math.round(it.price_gbp)}` : ''}</p>
+                  <p className="text-[17px] xl:text-[19px] tracking-[0.1em] text-[#0A0A0A] truncate">{it.brand.toUpperCase()}</p>
+                  <p className="myra-guide-text text-[18px] xl:text-[21px] text-[#55534E] leading-snug line-clamp-2">{it.name}</p>
+                  <p className="text-[17px] xl:text-[19px] tracking-[0.06em] text-[#7C838B] mt-1">{it.owned ? 'YOURS' : it.price_gbp != null ? `£${Math.round(it.price_gbp)}` : ''}</p>
                 </div>
               </a>
             ))}
