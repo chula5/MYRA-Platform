@@ -196,7 +196,14 @@ export default function BrandWatchClient(props: Props) {
     // optimistically, so a decision must never block the next one. Each skip/keep
     // fires its own independent request, so rapid tapping never freezes the grid.
     ;(keep ? keepItems(ids) : skipItems(ids))
-      .then((r) => setNotice(`${r.updated} ${keep ? 'KEPT → ADDED TO LIBRARY AS READY' : 'SKIPPED — NEVER ENTERS THE LIBRARY'} — LEARNING UPDATES ON NEXT LOAD`))
+      .then((r: any) => {
+        const oos: string[] = r.outOfStock ?? []
+        const low: string[] = r.lowStock ?? []
+        const stock = oos.length
+          ? ` · ${oos.length === 1 ? oos[0].toUpperCase() : `${oos.length} PIECES`} SOLD OUT RIGHT NOW — KEPT ON THE RESTOCK WATCH, NOT IN OUTFITS UNTIL IT IS BACK`
+          : low.length ? ` · ${low.length === 1 ? low[0].toUpperCase() : `${low.length} PIECES`} LOW IN STOCK` : ''
+        setNotice(`${r.updated} ${keep ? 'KEPT → ADDED TO LIBRARY AS READY' : 'SKIPPED — NEVER ENTERS THE LIBRARY'}${keep ? stock : ''} — LEARNING UPDATES ON NEXT LOAD`)
+      })
       .catch((e) => setNotice(e instanceof Error ? e.message : String(e)))
   }
 
@@ -700,12 +707,13 @@ export default function BrandWatchClient(props: Props) {
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={q.image_url} alt="" loading="lazy" className="w-full h-full object-cover" />
                   )}
-                  {/* Pre-launch and thin stock are queueable now — say so. */}
+                  {/* Stock as of the last scan; KEEP checks the shop live. Sits above
+                      the confidence pill, which used to cover it. */}
                   {q.stock_status === 'out_of_stock' && (
-                    <span className="absolute bottom-2 left-2 bg-[#0A0A0A]/85 text-white rounded px-1.5 py-0.5 text-[8px] tracking-[0.1em]">COMING SOON</span>
+                    <span className="absolute bottom-10 left-2 bg-[#0A0A0A]/85 text-white rounded px-1.5 py-0.5 text-[8px] tracking-[0.1em]">NOT IN STOCK</span>
                   )}
                   {q.stock_status === 'low_stock' && (
-                    <span className="absolute bottom-2 left-2 bg-[#C4A882] text-white rounded px-1.5 py-0.5 text-[8px] tracking-[0.1em]">LOW STOCK</span>
+                    <span className="absolute bottom-10 left-2 bg-[#C4A882] text-white rounded px-1.5 py-0.5 text-[8px] tracking-[0.1em]">LOW STOCK</span>
                   )}
                   {q.discovery_score != null && (
                     <span className="absolute top-2 left-2 bg-white/95 border border-[#E2E0DB] rounded px-1.5 py-0.5 text-[9px] tracking-[0.08em] text-[#4A4E57]">

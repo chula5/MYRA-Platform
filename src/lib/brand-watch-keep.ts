@@ -6,9 +6,29 @@
 // Moved out of the server-actions file so the Monday scan can keep pieces too.
 
 import { houseBanOf } from '@/lib/brand-watch-bans'
+import { checkStockDetailed } from '@/app/admin/items/stock-check'
+import { upsertSizeAvailability } from '@/lib/size-availability'
 import { recordStyleDecision } from '@/lib/style-brain-store'
 
-export async function keepQueueRows(admin: any, queueIds: string[], opts: { auto?: boolean } = {}): Promise<number> {
+export interface KeepReport {
+  /** Kept, but sold out right now — filed on the restock watch, not in the pool. */
+  outOfStock: string[]
+  lowStock: string[]
+}
+
+/**
+ * Keep queued pieces into the library.
+ *
+ * The queue's stock is from scan day, which may be weeks ago. With `liveStock`
+ * each piece is checked on the shop as it is kept: a sold-out piece is still
+ * kept — she wants it — but goes in as status `out_of_stock`, which the stock
+ * sentinel watches and restores to `ready` the moment it is back, and which the
+ * composer never draws from. Sizes come back with the check and are written
+ * as size rows, so "in her size" is right from the first day.
+ */
+export async function keepQueueRows(
+  admin: any, queueIds: string[], opts: { auto?: boolean; liveStock?: boolean; report?: KeepReport } = {},
+): Promise<number> {
   let created = 0
   const skippedUntyped: string[] = []
   for (let i = 0; i < queueIds.length; i += 100) {
@@ -36,6 +56,28 @@ export async function keepQueueRows(admin: any, queueIds: string[], opts: { auto
         skippedUntyped.push(q.product_name)
         continue
       }
+      // What the shop says today, not what it said on scan day.
+      let stockStatus: string | null = q.stock_status ?? null
+      let stockSizes: string[] | null = q.stock_sizes ?? null
+      let sizeEntries: { label: string; inStock: boolean; level: 'in_stock' | 'sold_out' | 'low' | 'unknown' }[] = []
+      let stockSignal = 'brand_watch:scan'
+      if (opts.liveStock && q.retailer_url) {
+        try {
+          const live = await checkStockDetailed(q.retailer_url)
+          if (live.status !== 'unknown') {
+            stockStatus = live.status
+            stockSignal = `keep:${live.source}`
+            if (live.sizes.length) {
+              sizeEntries = live.sizes
+              stockSizes = live.sizes.filter((x) => x.inStock).map((x) => x.label)
+            }
+          }
+        } catch { /* the scan-day reading stands */ }
+      }
+      const soldOut = stockStatus === 'out_of_stock'
+      if (soldOut) opts.report?.outOfStock.push(q.product_name)
+      else if (stockStatus === 'low_stock') opts.report?.lowStock.push(q.product_name)
+
       const { data: item, error: ierr } = await admin
         .from('item')
         .insert([{
@@ -55,11 +97,15 @@ export async function keepQueueRows(admin: any, queueIds: string[], opts: { auto
           material_primary: q.material_primary,
           shopify_product_id: q.shopify_product_id,
           shopify_handle: q.shopify_handle,
-          stock_status: q.stock_status,
-          stock_sizes: q.stock_sizes,
+          stock_status: stockStatus,
+          stock_sizes: stockSizes,
           stock_checked_at: new Date().toISOString(),
-          available: q.stock_status !== 'out_of_stock',
-          status: 'ready',
+          stock_signal: stockSignal,
+          available: !soldOut,
+          // Sold out today: kept, wanted, and on the restock watch. The sentinel
+          // puts it back to `ready` when it returns; until then it is never composed.
+          status: soldOut ? 'out_of_stock' : 'ready',
+          ...(soldOut ? { status_before_oos: 'ready', oos_since: new Date().toISOString() } : {}),
           source: 'retailer_api',
           in_inventory: false,
           discovery_source: 'brand_watch',
@@ -70,6 +116,9 @@ export async function keepQueueRows(admin: any, queueIds: string[], opts: { auto
         .select('item_id')
         .single()
       if (ierr) throw new Error(`item insert failed: ${ierr.message}`)
+      if (sizeEntries.length) {
+        try { await upsertSizeAvailability(item.item_id, sizeEntries, { itemType: q.item_type }) } catch { /* sizes are a bonus */ }
+      }
       const decided = { status: 'kept', decided_at: new Date().toISOString(), item_id: item.item_id }
       // auto_kept arrives with migration 0056. The row MUST leave the queue
       // either way, or the piece would be kept again next scan.

@@ -3,7 +3,7 @@
 import { confidenceOf, confidenceTrustFor } from '@/lib/brand-watch-auto'
 import { DEFAULT_CONFIDENCE, type ConfidenceTrust } from '@/lib/brand-watch-confidence'
 import { houseBanOf } from '@/lib/brand-watch-bans'
-import { keepQueueRows, teachStyleBrain } from '@/lib/brand-watch-keep'
+import { keepQueueRows, teachStyleBrain, type KeepReport } from '@/lib/brand-watch-keep'
 import {
   autoKeepForBrand, keepConfidentNow, keepTwinsNow, loadBrandTrust, trustFor, twinOfQueueRow, twinTrustFor, type BrandTrustData,
 } from '@/lib/brand-watch-auto'
@@ -751,16 +751,19 @@ export async function checkAllBrandsNow(): Promise<{ results: BrandCheckResult[]
 }
 
 
-export async function keepItems(itemIds: string[]): Promise<{ updated: number }> {
+export async function keepItems(itemIds: string[]): Promise<{ updated: number; outOfStock: string[]; lowStock: string[] }> {
   await assertAdmin()
-  if (!itemIds.length) return { updated: 0 }
+  if (!itemIds.length) return { updated: 0, outOfStock: [], lowStock: [] }
   const admin = createAdminClient() as any
-  const updated = await keepQueueRows(admin, itemIds)
+  // One-by-one and small batches check the shop live; a bulk keep-all does not
+  // (hundreds of fetches inside one action) — the sentinel catches up on those.
+  const report: KeepReport = { outOfStock: [], lowStock: [] }
+  const updated = await keepQueueRows(admin, itemIds, { liveStock: itemIds.length <= 25, report })
   // No revalidatePath: the client hides the card optimistically and re-queries
   // fresh (with retrained learning) on the next queue load. Revalidating here
   // re-rendered the whole heavy admin page on every single click, which froze
   // rapid keep/skip.
-  return { updated }
+  return { updated, outOfStock: report.outOfStock, lowStock: report.lowStock }
 }
 
 // Keep EVERY queued draft for one brand in a single stroke — the whole queue,

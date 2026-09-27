@@ -946,6 +946,32 @@ export function houseBanFor(p: ScannedProduct): string | null {
 // (matched by shopify_product_id) and counts restocks: out_of_stock → back in.
 // Only the stock_* fields are written — item.status transitions stay with the
 // stock sentinel, which already handles oos_strikes / status_before_oos.
+/**
+ * The queue's stock was read on the day a piece was found. Every scan reads the
+ * catalogue again, so queued rows take today's stock too — a card no longer
+ * says LOW STOCK for a piece that sold out a fortnight ago.
+ */
+async function refreshQueueStock(admin: ReturnType<typeof createAdminClient>, products: ScannedProduct[]): Promise<number> {
+  const byPid = new Map(products.map((p) => [p.shopifyProductId, p]))
+  const pids = Array.from(byPid.keys())
+  let changed = 0
+  for (let i = 0; i < pids.length; i += 100) {
+    const chunk = pids.slice(i, i + 100)
+    const { data: rows } = await (admin as any)
+      .from('brand_watch_queue').select('queue_id, shopify_product_id, stock_status')
+      .eq('status', 'queued').in('shopify_product_id', chunk)
+    for (const r of rows ?? []) {
+      const p = byPid.get(String(r.shopify_product_id))
+      if (!p || r.stock_status === p.stockStatus) continue
+      await (admin as any).from('brand_watch_queue')
+        .update({ stock_status: p.stockStatus, stock_sizes: p.sizesInStock } as any)
+        .eq('queue_id', r.queue_id)
+      changed++
+    }
+  }
+  return changed
+}
+
 async function refreshBrandStock(
   admin: ReturnType<typeof createAdminClient>,
   products: ScannedProduct[],
@@ -1088,6 +1114,7 @@ async function scanAndQueue(
   const queued = await queueProducts(admin, watched, candidates)
   await logUnresolvedColours(admin, watched.name, fashion)
   const restocked = await refreshBrandStock(admin, products)
+  await refreshQueueStock(admin, products)
   // Stock-held and learning-suppressed pieces are NOT marked seen — later
   // scans re-evaluate them (restock lets one through; a taste shift lets the
   // other through).
@@ -1331,6 +1358,7 @@ async function browserScanAndQueue(watchedRow: WatchedBrandRow, mode: 'watch' | 
     const suppressed = new Set(inStock.filter((p) => vetoed(p)).map((p) => p.shopifyProductId))
     const queued = await queueProducts(admin, watched, candidates)
     const restocked = await refreshBrandStock(admin, products)
+    await refreshQueueStock(admin, products)
     // stock-held and learning-suppressed pieces stay unseen — restocks and
     // taste shifts both get another chance on later scans
     const stockHeld = new Set(onTaste.filter((p) => !queueableStock(p)).map((p) => p.shopifyProductId))
@@ -1403,6 +1431,7 @@ export async function checkWatchedBrand(watchedIn: WatchedBrandRow): Promise<Bra
   const suppressed = new Set(inStock.filter((p) => vetoed(p)).map((p) => p.shopifyProductId))
   const queued = await queueProducts(admin, watched, candidates)
   const restocked = await refreshBrandStock(admin, products)
+  await refreshQueueStock(admin, products)
   const stockHeld = new Set(
     products
       .filter((p) => !p.nonFashion && !p.menswear && p.score >= watched.min_score && !queueableStock(p))
