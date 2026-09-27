@@ -217,11 +217,11 @@ export default function RoomNav({
 
   return (
     <div className="w-full">
-      <div className="w-full px-6 sm:px-10 pt-7 pb-6">
+      <div className="w-full px-4 sm:px-10 pt-4 sm:pt-7 pb-4 sm:pb-6">
         {/* Search — the same pill as the header's, at her front door's scale */}
         <form onSubmit={submit} onReset={() => setQuery('')} data-tour="search" className="relative w-full md:w-1/2 mx-auto">
-          <button type="submit" aria-label="Search" className="absolute top-1/2 -translate-y-1/2 left-[clamp(20px,1.3vw,44px)] p-1 text-[#55534E] hover:text-[#2B2B2B]">
-            <svg viewBox="0 0 17 16" fill="none" className="w-[clamp(24px,1.4vw,48px)] h-[clamp(24px,1.4vw,48px)]" aria-hidden>
+          <button type="submit" aria-label="Search" className="absolute top-1/2 -translate-y-1/2 left-4 sm:left-[clamp(20px,1.3vw,44px)] p-1 text-[#55534E] hover:text-[#2B2B2B]">
+            <svg viewBox="0 0 17 16" fill="none" className="w-5 h-5 sm:w-[clamp(24px,1.4vw,48px)] sm:h-[clamp(24px,1.4vw,48px)]" aria-hidden>
               <path d="M7.667 12.667A5.333 5.333 0 107.667 2a5.333 5.333 0 000 10.667zM14.334 14l-2.9-2.9" stroke="currentColor" strokeWidth="1.333" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
@@ -231,11 +231,11 @@ export default function RoomNav({
             placeholder={searchPlaceholder}
             aria-label="Search"
             type="text"
-            className="w-full rounded-full bg-white border-2 border-transparent shadow-md transition-all duration-300 focus:outline-none focus:border-[#2B2B2B] text-[clamp(21px,1.3vw,44px)] text-[#2B2B2B] placeholder:text-[#8C8A85] pl-[clamp(64px,4.2vw,140px)] pr-[clamp(60px,4vw,130px)] py-[clamp(16px,1vw,36px)]"
+            className="w-full rounded-full bg-white border-2 border-transparent shadow-md transition-all duration-300 focus:outline-none focus:border-[#2B2B2B] text-[16px] sm:text-[clamp(21px,1.3vw,44px)] text-[#2B2B2B] placeholder:text-[#8C8A85] pl-12 sm:pl-[clamp(64px,4.2vw,140px)] pr-10 sm:pr-[clamp(60px,4vw,130px)] py-3 sm:py-[clamp(16px,1vw,36px)]"
           />
           {query && (
-            <button type="reset" aria-label="Clear search" className="absolute top-1/2 -translate-y-1/2 right-[clamp(20px,1.3vw,44px)] p-1 text-[#55534E] hover:text-[#2B2B2B]">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-[clamp(24px,1.4vw,48px)] h-[clamp(24px,1.4vw,48px)]" aria-hidden>
+            <button type="reset" aria-label="Clear search" className="absolute top-1/2 -translate-y-1/2 right-3 sm:right-[clamp(20px,1.3vw,44px)] p-1 text-[#55534E] hover:text-[#2B2B2B]">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-5 h-5 sm:w-[clamp(24px,1.4vw,48px)] sm:h-[clamp(24px,1.4vw,48px)]" aria-hidden>
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
@@ -243,18 +243,18 @@ export default function RoomNav({
         </form>
 
         {/* The rooms, spread across the screen */}
-        <nav data-lenis-prevent data-tour="rooms" className="mt-9 w-full grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-6 gap-x-2 gap-y-8 items-start">
+        <nav data-lenis-prevent data-tour="rooms" className="mt-5 sm:mt-9 w-full grid grid-cols-3 lg:grid-cols-6 gap-x-1 sm:gap-x-2 gap-y-4 sm:gap-y-8 items-start">
           {ROW_ROOMS.map((r) => {
             const on = r.id === active
             const inner = (
               <>
-                <span className={`block w-[clamp(54px,4vw,150px)] h-[clamp(54px,4vw,150px)] mx-auto transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
+                <span className={`block w-10 h-10 sm:w-[clamp(54px,4vw,150px)] sm:h-[clamp(54px,4vw,150px)] mx-auto transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
                   <Icon id={r.id} />
                 </span>
-                <span className={`block mt-[clamp(12px,0.8vw,28px)] text-[clamp(20px,1.35vw,46px)] tracking-[0.02em] transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
+                <span className={`block mt-1.5 sm:mt-[clamp(12px,0.8vw,28px)] text-[12px] sm:text-[clamp(20px,1.35vw,46px)] leading-tight tracking-[0.06em] sm:tracking-[0.02em] transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
                   {r.label}
                 </span>
-                <span className={`block mx-auto mt-2 h-px w-10 ${on ? 'bg-[#2B2B2B]' : 'bg-transparent'}`} />
+                <span className={`block mx-auto mt-1 sm:mt-2 h-px w-8 sm:w-10 ${on ? 'bg-[#2B2B2B]' : 'bg-transparent'}`} />
               </>
             )
             const cls = 'group text-center px-1'

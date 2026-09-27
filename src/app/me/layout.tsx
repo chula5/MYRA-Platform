@@ -24,7 +24,7 @@ export default async function MeLayout({ children }: { children: React.ReactNode
       <MeChrome
         signOut={
           <form action={earlyAccessSignOut}>
-            <button type="submit" className="text-[20px] tracking-[0.1em] text-[#A8A8A4] hover:text-[#4A4E57] transition-colors">OUT</button>
+            <button type="submit" className="text-[14px] sm:text-[20px] tracking-[0.1em] text-[#A8A8A4] hover:text-[#4A4E57] transition-colors">OUT</button>
           </form>
         }
       />

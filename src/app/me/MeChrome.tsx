@@ -16,17 +16,17 @@ export default function MeChrome({ signOut }: { signOut: React.ReactNode }) {
   const home = active === 'for_you'
 
   return (
-    <header className="sticky top-0 z-30 myra-pearl border-b border-[rgba(43,43,43,0.18)]">
+    <header className="relative md:sticky md:top-0 z-30 myra-pearl border-b border-[rgba(43,43,43,0.18)]">
       {/* Her front door shows the rooms full width, under the search. Inside a
           room they step aside into the top right, so the room has the screen. */}
       {home ? (
         <>
-          <div className="flex items-start justify-end gap-7 px-6 sm:px-10 pt-4">
+          <div className="flex items-start justify-end gap-5 sm:gap-7 px-4 sm:px-10 pt-3 sm:pt-4">
             <YouButton />
             {signOut}
           </div>
-          <Link href="/me" className="block px-6 sm:px-10 -mt-12">
-            <img src="/myra-logo-black.png" alt="MYRA" className="mx-auto h-[110px] sm:h-[150px] w-auto" />
+          <Link href="/me" className="block px-4 sm:px-10 -mt-2 sm:-mt-12">
+            <img src="/myra-logo-black.png" alt="MYRA" className="mx-auto h-[64px] sm:h-[150px] w-auto" />
           </Link>
           <RoomNav active={active} searchPlaceholder="What are you wearing today?" />
         </>

@@ -203,7 +203,7 @@ export default function OutfitCard({
         <div className="absolute inset-x-0 bottom-0 z-40 pt-10 pb-3.5 px-3 bg-gradient-to-t from-black/55 via-black/20 to-transparent pointer-events-none">
             {/* Source Items + Similar Looks on one line, Explore Styles below —
                 the cards are too narrow to fit all three on a single row. */}
-            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2">
+            <div className="flex flex-nowrap sm:flex-wrap items-center justify-center gap-x-2 sm:gap-x-3 gap-y-2">
               <button onClick={(e) => { e.stopPropagation(); setSourcePanelOpen((v) => !v) }} className={actionClass}>Source Items</button>
               <button onClick={(e) => { e.stopPropagation(); trackEngagement('similar_looks', outfit.outfit_id); onSimilarLooks?.(outfit) }} className={actionClass}>Similar Looks</button>
             </div>
