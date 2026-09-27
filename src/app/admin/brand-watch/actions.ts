@@ -21,6 +21,8 @@ import { discoverProductUrls } from '@/lib/brand-watch-browser'
 import { waitUntil } from '@vercel/functions'
 import { revalidatePath } from 'next/cache'
 import { assertAdmin } from '@/lib/admin-audit'
+import { createWatchedBrandAndScan } from '@/lib/brand-onboarding'
+import type { CatalogueAssessment } from '@/lib/brand-onboarding-rules'
 
 export interface QueueItemRow {
   item_id: string
@@ -441,36 +443,68 @@ export interface SiteRequestRow {
   status: string
   last_asked_at: string
   member_name?: string | null
+  /** MYRA's judgement (migration 0071): accepted | review | declined | unreadable | admin. */
+  verdict?: string | null
+  verdict_note?: string | null
+  assessed_at?: string | null
+  decided_by?: string | null
+  watched_brand_id?: string | null
+  assessment?: Pick<CatalogueAssessment, 'total' | 'fashion' | 'onTaste' | 'medianPriceGbp' | 'route'> | null
 }
 
-/** Shops she asked MYRA to learn, from the mirror. */
+/**
+ * Shops asked for from the Mirror: the ones waiting on Chloe (open, or being
+ * read), and what MYRA decided by itself in the last fortnight — so nothing
+ * is watched or turned away unseen.
+ */
 export async function loadSiteRequests(): Promise<{ rows: SiteRequestRow[]; error?: string }> {
   await assertAdmin()
   const admin = createAdminClient() as any
-  const { data, error } = await admin.from('mirror_site_request')
-    .select('request_id, host, url, page_title, reason, times_asked, status, last_asked_at, member:member_id(name)')
-    .eq('status', 'open').order('last_asked_at', { ascending: false }).limit(40)
-  if (error) return { rows: [], error: /mirror_site_request/.test(error.message) ? 'RUN MIGRATION 0067_mirror_site_requests.sql IN SUPABASE FIRST' : error.message }
-  return { rows: ((data ?? []) as any[]).map((r) => ({ ...r, member_name: r.member?.name ?? null })) }
+  const cols = 'request_id, host, url, page_title, reason, times_asked, status, last_asked_at, member:member_id(name), verdict, verdict_note, assessed_at, decided_by, watched_brand_id, assessment'
+  const since = new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString()
+  const [waiting, decided] = await Promise.all([
+    admin.from('mirror_site_request').select(cols).in('status', ['open', 'assessing']).order('last_asked_at', { ascending: false }).limit(40),
+    admin.from('mirror_site_request').select(cols).eq('decided_by', 'myra').in('status', ['watching', 'declined']).gte('assessed_at', since).order('assessed_at', { ascending: false }).limit(40),
+  ])
+  const error = waiting.error ?? decided.error
+  if (error) {
+    if (/mirror_site_request/.test(error.message)) return { rows: [], error: 'RUN MIGRATION 0067_mirror_site_requests.sql IN SUPABASE FIRST' }
+    if (/verdict|decided_by|assessment/.test(error.message)) return { rows: [], error: 'RUN MIGRATION 0071_brand_onboarding.sql IN SUPABASE FIRST' }
+    return { rows: [], error: error.message }
+  }
+  const shape = (r: any): SiteRequestRow => ({
+    ...r,
+    member_name: r.member?.name ?? null,
+    assessment: r.assessment ? {
+      total: r.assessment.total, fashion: r.assessment.fashion, onTaste: r.assessment.onTaste,
+      medianPriceGbp: r.assessment.medianPriceGbp ?? null, route: r.assessment.route,
+    } : null,
+  })
+  return { rows: [...((waiting.data ?? []) as any[]).map(shape), ...((decided.data ?? []) as any[]).map(shape)] }
 }
 
-/** Put a requested shop on the watchlist, or set it aside. */
-export async function decideSiteRequest(requestId: string, decision: 'watching' | 'declined'): Promise<{ error?: string; result?: BrandCheckResult }> {
+/** Put a requested shop on the watchlist, or set it aside — Chloe's word, over MYRA's. */
+export async function decideSiteRequest(requestId: string, decision: 'watching' | 'declined'): Promise<{ error?: string; result?: BrandCheckResult; name?: string }> {
   await assertAdmin()
   const admin = createAdminClient() as any
   const { data: row } = await admin.from('mirror_site_request').select('*').eq('request_id', requestId).maybeSingle()
   if (!row) return { error: 'Request not found' }
-  let result: BrandCheckResult | undefined
+  let watchedBrandId: string | null = row.watched_brand_id ?? null
+  let name: string | undefined
   if (decision === 'watching') {
-    const r = await addWatchedBrand(`https://${row.host}`, 'watch')
-    // A shop MYRA cannot scan says so plainly; the request stays open.
-    if (r.error) return { error: r.error }
-    result = r.result
+    // Full scan: the whole catalogue queued with its confidence, like Chloe's own adds.
+    const r = await createWatchedBrandAndScan(admin, `https://${row.host}`, 'full')
+    // A shop MYRA cannot scan says so plainly; the request stays as it was.
+    if (r.error && !r.watchedBrandId) return { error: r.error }
+    watchedBrandId = r.watchedBrandId ?? null
+    name = r.name
   }
-  const { error } = await admin.from('mirror_site_request').update({ status: decision }).eq('request_id', requestId)
+  const { error } = await admin.from('mirror_site_request')
+    .update({ status: decision, decided_by: 'chloe', watched_brand_id: watchedBrandId, assessed_at: row.assessed_at ?? new Date().toISOString() })
+    .eq('request_id', requestId)
   if (error) return { error: error.message }
   revalidatePath('/admin/brand-watch')
-  return { result }
+  return { name }
 }
 
 /** ADD THE BACKLOG: keep every queued piece for this brand already above her bar. */
@@ -543,57 +577,8 @@ export async function setWatchedBrandConfidenceBar(watchedBrandId: string, bar: 
  */
 export async function addWatchedBrandInBackground(url: string, mode: 'watch' | 'full' = 'watch'): Promise<{ watchedBrandId?: string; name?: string; error?: string }> {
   await assertAdmin()
-  const base = normaliseBaseUrl(url)
-  if (!base) return { error: 'That doesn’t look like a URL' }
-  const admin = createAdminClient() as any
-
-  const { data: exists } = await admin.from('watched_brand').select('watched_brand_id').eq('base_url', base).limit(1)
-  if ((exists ?? []).length) return { error: 'Already on the watchlist' }
-
-  const provisional = provisionalNameFromUrl(base)
-  const { data: created, error } = await admin.from('watched_brand')
-    .insert([{ name: provisional, base_url: base, scan_state: { running: true, started_at: new Date().toISOString() } }] as any)
-    .select('*').single()
-  if (error || !created) return { error: error?.message ?? 'Could not create watchlist row' }
-  const watched = created as unknown as WatchedBrandRow
-
-  const work = (async () => {
-    try {
-      await scanNewBrand(admin, watched, mode)
-    } catch (err) {
-      await admin.from('watched_brand')
-        .update({ scan_state: { running: false, error: err instanceof Error ? err.message : String(err) } })
-        .eq('watched_brand_id', watched.watched_brand_id)
-    }
-  })()
-  try { waitUntil(work) } catch { /* local dev: the promise simply runs */ }
-
-  revalidatePath('/admin/brand-watch')
-  return { watchedBrandId: watched.watched_brand_id, name: provisional }
-}
-
-/** The scan itself — Shopify first, then the browser route. Shared by both add paths. */
-async function scanNewBrand(admin: any, watched: WatchedBrandRow, mode: 'watch' | 'full'): Promise<BrandCheckResult> {
-  const finish = async (result: BrandCheckResult) => {
-    await admin.from('watched_brand').update({ scan_state: { running: false } }).eq('watched_brand_id', watched.watched_brand_id)
-    revalidatePath('/admin/brand-watch')
-    return result
-  }
-  try {
-    return await finish(mode === 'full' ? await onboardBrand(watched) : await baselineBrand(watched))
-  } catch (shopifyError) {
-    const urls = await discoverProductUrls(watched.base_url).catch(() => [] as string[])
-    if (urls.length >= 10) {
-      await admin.from('watched_brand').update({ platform: 'browser', min_score: 0 }).eq('watched_brand_id', watched.watched_brand_id)
-      const browserWatched = { ...watched, platform: 'browser' as const, min_score: 0 }
-      const result = mode === 'full' ? await onboardBrand(browserWatched) : await baselineBrand(browserWatched)
-      return await finish({ ...result, note: `not Shopify — switched to the browser route (sitemap + JSON-LD). ${result.note ?? ''}`.trim() })
-    }
-    // Neither route works — take the row back off the watchlist.
-    await admin.from('watched_brand').delete().eq('watched_brand_id', watched.watched_brand_id)
-    revalidatePath('/admin/brand-watch')
-    throw shopifyError
-  }
+  const r = await createWatchedBrandAndScan(createAdminClient() as any, url, mode)
+  return r.error ? { error: r.error } : r
 }
 
 export async function addWatchedBrand(url: string, mode: 'watch' | 'full' = 'watch'): Promise<{ result?: BrandCheckResult; error?: string }> {

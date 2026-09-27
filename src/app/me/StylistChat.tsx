@@ -80,10 +80,10 @@ export default function StylistChat({ asMemberId }: { asMemberId?: string }) {
         <button
           onClick={() => setOpen(true)}
           aria-label="Talk to a stylist"
-          className="fixed right-5 bottom-5 z-[56] flex items-center gap-3 bg-[#2B2B2B] text-white rounded-full pl-4 pr-5 py-3 shadow-[0_6px_24px_rgba(43,43,43,0.28)] hover:bg-[#0A0A0A] transition-colors"
+          className="fixed right-6 bottom-6 sm:right-8 sm:bottom-8 z-[56] flex items-center gap-4 bg-[#2B2B2B] text-white rounded-full pl-7 pr-9 py-5 sm:pl-8 sm:pr-10 sm:py-6 shadow-[0_8px_30px_rgba(43,43,43,0.3)] hover:bg-[#0A0A0A] hover:scale-[1.03] transition-[background-color,transform]"
         >
-          <SpeechIcon className="w-6 h-6" />
-          <span className="text-[16px] tracking-[0.16em]">STYLIST</span>
+          <SpeechIcon className="w-8 h-8 sm:w-10 sm:h-10" />
+          <span className="text-[22px] sm:text-[clamp(24px,1.5vw,32px)] tracking-[0.14em]">STYLIST</span>
         </button>
       )}
 
@@ -119,22 +119,14 @@ export default function StylistChat({ asMemberId }: { asMemberId?: string }) {
                   {memberName ? `${memberName.split(' ')[0]}, who would you like to dress you today?` : 'Who would you like to dress you today?'}
                 </p>
                 {error && <p className="myra-guide-text text-[20px] text-[#B83A3A] mb-4">{error}</p>}
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
+                <div className="flex flex-wrap gap-4">
                   {stylists.map((s) => (
-                    <button key={s.stylist_id} onClick={() => setCurrent(s)} className="text-left bg-white/85 rounded-[16px] overflow-hidden shadow-[0_2px_14px_rgba(43,43,43,0.08)] hover:shadow-[0_4px_20px_rgba(43,43,43,0.16)] transition-shadow">
-                      <div className="relative aspect-[4/5] bg-[#E4E2DD]">
-                        {s.image_url ? (
-                          <FallbackImage src={s.image_url} thumbWidth={500} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                        ) : (
-                          <span className="absolute inset-0 flex items-center justify-center text-[72px] text-[#7C838B]">{s.name.slice(0, 1)}</span>
-                        )}
-                        {s.chief && <span className="absolute top-2 left-2 bg-[#2B2B2B] text-white text-[13px] tracking-[0.14em] px-2.5 py-1 rounded-full">CHIEF</span>}
-                        {s.hers && <span className="absolute top-2 right-2 bg-white text-[#2B2B2B] text-[13px] tracking-[0.14em] px-2.5 py-1 rounded-full">YOURS</span>}
-                      </div>
-                      <div className="px-4 py-4">
-                        <p className="text-[22px] tracking-[0.08em] text-[#0A0A0A] leading-tight">{s.name.toUpperCase()}</p>
-                        <p className="myra-guide-text text-[18px] text-[#55534E] leading-snug mt-1">{s.chief ? 'Routes and blends every look' : s.ready ? s.tagline : `${s.tagline} · still learning`}</p>
-                      </div>
+                    <button
+                      key={s.stylist_id}
+                      onClick={() => setCurrent(s)}
+                      className={`rounded-full px-8 py-4 text-[clamp(20px,1.3vw,26px)] tracking-[0.08em] leading-none transition-colors ${s.chief ? 'bg-[#2B2B2B] text-white hover:bg-[#0A0A0A]' : 'bg-white/90 text-[#0A0A0A] border border-[rgba(43,43,43,0.2)] hover:bg-[#2B2B2B] hover:text-white hover:border-[#2B2B2B]'}`}
+                    >
+                      {s.name.toUpperCase()}
                     </button>
                   ))}
                   {!stylists.length && !error && <p className="myra-guide-text text-[17px] text-[#A8A8A4] col-span-full py-10 text-center">Opening the house…</p>}

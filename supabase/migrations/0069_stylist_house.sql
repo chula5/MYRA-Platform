@@ -76,7 +76,7 @@ insert into public.stylist (name, slug, type, status, role, brief) values
 }'::jsonb),
 
 ('Ralph Lauren', 'ralph-lauren', 'persona', 'draft', 'stylist', '{
-  "public_name": "Old-Money Americana",
+  "public_name": "Americana",
   "tagline": "Navy, cable knit and a riding boot",
   "signature_pieces": ["navy blazer", "cable-knit jumper", "crisp oxford shirt", "cream wide-leg trouser", "riding boot", "camel coat", "silk scarf", "tweed hacking jacket", "loafer"],
   "brands": ["Ralph Lauren", "Polo Ralph Lauren", "Brunello Cucinelli", "Loro Piana", "Toteme", "Holland Cooper", "Purdey", "Sézane"],

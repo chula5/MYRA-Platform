@@ -306,10 +306,18 @@
       const r = await send({ type: 'requestSite', host: location.host, url: location.href, title: document.title, reason })
       const said = box.querySelector('[data-myra="said"]')
       said.style.display = 'block'
-      said.textContent = r?.error ? friendly(r.error) : r?.again ? 'Already on her list — she knows you want it.' : 'Passed on to MYRA. She’ll take a look.'
+      said.textContent = r?.error ? friendly(r.error) : r?.message || (r?.again ? 'Already on her list — she knows you want it.' : 'Passed on to MYRA. She’ll take a look.')
       btn.remove()
       rememberAsked()
-      setTimeout(() => box.remove(), 4000)
+      // MYRA reads the shop after answering; stay long enough to say what it decided.
+      let tries = 0
+      const follow = async () => {
+        if (!r || r.error || r.status !== 'assessing' || ++tries > 20) { setTimeout(() => box.remove(), 5000); return }
+        const again = await send({ type: 'siteStatus', host: location.host })
+        if (again?.message) said.textContent = again.message
+        if (again?.status === 'assessing') setTimeout(follow, 4000); else setTimeout(() => box.remove(), 6000)
+      }
+      setTimeout(follow, 4000)
     })
     document.body.appendChild(box)
   }
@@ -483,6 +491,44 @@
 
   let lastHref = location.href
   let pagePiece = null
+
+  // ── WHAT SHE LINGERS ON ───────────────────────────────────────────────────
+  // A piece she stays on for a few seconds, and what she types into a shop's
+  // search, go to MYRA quietly — so FOR YOU can carry on from where she was
+  // without her having to save anything. Once per piece, once per search.
+  const VIEW_AFTER_MS = 4000
+  const viewedSent = new Set()
+  let viewTimer = null, viewKey = null
+  function noteView(product) {
+    if (vinted) return
+    const key = product?.url || null
+    if (key === viewKey) return
+    clearTimeout(viewTimer); viewKey = key
+    if (!key || viewedSent.has(key)) return
+    const openedAt = Date.now()
+    viewTimer = setTimeout(() => {
+      if (viewKey !== key || document.hidden) return
+      viewedSent.add(key)
+      Promise.resolve(send({ type: 'viewedProduct', product, dwellMs: Date.now() - openedAt })).catch(() => {})
+    }, VIEW_AFTER_MS)
+  }
+  const searchedSent = new Set()
+  function noteSearch() {
+    if (vinted) return
+    let q = ''
+    try {
+      const u = new URL(location.href)
+      for (const k of ['q', 'query', 'search', 'search_query', 'searchTerm', 's', 'keyword', 'keywords', 'k', 'text']) {
+        const v = u.searchParams.get(k)
+        if (v && v.trim()) { q = v.trim(); break }
+      }
+      if (!q && /\/search\/./.test(u.pathname)) q = decodeURIComponent(u.pathname.split('/search/')[1] || '').replace(/[-+_/]+/g, ' ').trim()
+    } catch {}
+    q = q.slice(0, 80)
+    if (q.length < 3 || searchedSent.has(q.toLowerCase())) return
+    searchedSent.add(q.toLowerCase())
+    Promise.resolve(send({ type: 'searched', host: location.host, query: q })).catch(() => {})
+  }
   let navSettle = null
 
   // ── THE SHOP THAT NEVER RELOADS ───────────────────────────────────────────
@@ -510,6 +556,7 @@
       const p = M.pageProduct?.() ?? null
       if (p) {
         pagePiece = p
+        noteView(p)
         if (!pillOff && pillFrom !== 'hover') showPiece(p, 'page')
       }
       if (p || ++tries >= 20) clearInterval(navSettle)
@@ -526,6 +573,8 @@
       if (location.href !== lastHref) { lastHref = location.href; lastSig = ''; pillOff = false; hidePiece() }
       // One piece on its own page: keep it or style it, whatever the shop.
       pagePiece = M.pageProduct?.() ?? null
+      noteView(pagePiece)
+      noteSearch()
       // Not while the cursor is resting on a tile — hers to follow, not to fight.
       if (pagePiece && !pillOff && pillFrom !== 'hover') showPiece(pagePiece, 'page')
       else if (!pagePiece && pillFrom === 'page') hidePiece()

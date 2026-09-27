@@ -17,7 +17,6 @@ import BuiltOutfit from './BuiltOutfit'
 import SavedPieces from './SavedPieces'
 import DressingRoomScene from '@/components/me/DressingRoomScene'
 import EmailFinds from './EmailFinds'
-import ArchivalLooks from './ArchivalLooks'
 import CalendarPanel from './CalendarPanel'
 import OutfitBuilder from './OutfitBuilder'
 import { loadEmailPanel } from './email-actions'
@@ -157,9 +156,11 @@ export default function DressingRoomClient({
 
             {/* The two ways to fill the room, from the top of it. */}
             <div className="flex flex-wrap gap-4 mb-4">
-              <a href="#archival-looks" className="text-[20px] xl:text-[23px] underline underline-offset-4 text-[#2B2B2B]">
-                Add from Instagram or your photos
-              </a>
+              {!testMemberId && (
+                <Link href="/me/inspiration#archival-looks" className="text-[20px] xl:text-[23px] underline underline-offset-4 text-[#2B2B2B]">
+                  Add from Instagram or your photos
+                </Link>
+              )}
               <a href="#email-finds" className="text-[20px] xl:text-[23px] underline underline-offset-4 text-[#2B2B2B]">
                 Find what you&rsquo;ve bought
               </a>
@@ -380,14 +381,11 @@ export default function DressingRoomClient({
             other. It sits under the rail because the rail is what it draws on. */}
         <OutfitBuilder testMemberId={testMemberId} />
 
-        {/* What she already wears, and how — from Instagram or her own photos. */}
         {/* What is coming up, from her calendar — so MYRA can plan for it. */}
         <CalendarPanel testMemberId={testMemberId} />
 
         {/* What she kept with the mirror while she was out shopping. */}
         <SavedPieces testMemberId={testMemberId} />
-
-        <ArchivalLooks testMemberId={testMemberId} />
 
         {/* Fill the dressing room from her order emails. */}
         <EmailFinds testMemberId={testMemberId} />

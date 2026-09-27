@@ -140,7 +140,7 @@ export default function ArchivalLooks({ testMemberId }: { testMemberId?: string 
     )
   }
   if (!view.memberId) return null
-  const returnPath = typeof window !== 'undefined' ? window.location.pathname : '/me/dressing-room'
+  const returnPath = typeof window !== 'undefined' ? window.location.pathname : '/me/inspiration'
   const igHref = `/api/instagram/start?return=${encodeURIComponent(returnPath)}${testMemberId ? `&member=${testMemberId}` : ''}`
   const connected = view.connections.filter((c) => c.status !== 'disconnected')
   // Kept but not yet chosen: waiting for her to pick. Everything else is an archival look.
@@ -152,7 +152,7 @@ export default function ArchivalLooks({ testMemberId }: { testMemberId?: string 
       <div className="space-y-2">
         <h2 className="text-[26px] xl:text-[29px] 2xl:text-[33px] tracking-[0.06em] text-[#2B2B2B]">ARCHIVAL LOOKS</h2>
         <p className={`${T} text-[#4A4E57] max-w-4xl`}>
-          Photos of what you already wear. MYRA keeps them here to learn how you put things together — and picks out the pieces, so you can add the ones you still own to your wardrobe.
+          Photos of what you already wear. MYRA keeps them here to learn how you put things together — and picks out the pieces, so you can add the ones you still own to your wardrobe in the Dressing Room.
         </p>
       </div>
 

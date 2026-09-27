@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { PICKER_COLOURS, PICKER_TYPES } from '@/components/admin/ItemPickerModal'
 import { findSimilarToSkipped } from '@/lib/brand-watch-similar'
 import { useRouter } from 'next/navigation'
@@ -90,12 +90,17 @@ export default function BrandWatchClient(props: Props) {
   const [requests, setRequests] = useState<any[] | null>(null)
   useEffect(() => { void loadSiteRequests().then((r) => setRequests(r.rows ?? [])) }, [])
 
-  // While a scan is running the page refreshes itself every ten seconds, so
-  // she can carry on keeping and skipping while a catalogue is read.
-  const scanning = watched.some((w) => (w.scan_state as any)?.running)
+  // While a scan is running the page follows it, so she can carry on keeping
+  // and skipping while a catalogue is read. A flag left behind by a scan that
+  // died is not a running scan — it used to keep the page refreshing forever,
+  // greying every button and throwing the grid back to ALL BRANDS. The reload
+  // goes through a ref so it always sees the brand and filters she has now,
+  // and it runs outside the shared transition so nothing is disabled by it.
+  const scanning = watched.some((w) => (w.scan_state as any)?.running && !staleScan(w.scan_state as any))
+  const quietReload = useRef<() => void>(() => undefined)
   useEffect(() => {
     if (!scanning) return
-    const t = setInterval(() => { router.refresh(); reloadQueue() }, 10_000)
+    const t = setInterval(() => { router.refresh(); quietReload.current() }, 20_000)
     return () => clearInterval(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scanning])
@@ -117,6 +122,8 @@ export default function BrandWatchClient(props: Props) {
   // selected (the learning re-trains server-side on every load)
   const [page, setPage] = useState<QueuePage>(props)
   const [fBrand, setFBrand] = useState('')
+  const brandRef = useRef(fBrand)
+  brandRef.current = fBrand
   const [showPredicted, setShowPredicted] = useState(false)
 
   const [fType, setFType] = useState('')
@@ -163,6 +170,12 @@ export default function BrandWatchClient(props: Props) {
   }
 
   const reloadQueue = () => load(fBrand, filtersNow())
+  quietReload.current = () => {
+    const brand = fBrand
+    void loadQueuePage(0, brand || undefined, filtersNow())
+      .then((r) => { if (brandRef.current === brand) { setPage(r); setGone(new Set()) } })
+      .catch(() => undefined)
+  }
 
   const decide = (ids: string[], keep: boolean) => {
     // A single-card skip looks for its near-twins still on screen — same brand
@@ -382,41 +395,61 @@ export default function BrandWatchClient(props: Props) {
           })}
         </div>
 
-        {/* SHOPS SHE ASKED FOR — from the mirror, where it could not read the page. */}
+        {/* SHOPS ASKED FOR — from the Mirror. MYRA judges each one (brand-onboarding-rules):
+            watched, turned away, or set aside here for Chloe with the numbers. What it
+            decided alone in the last fortnight is listed too, so nothing happens unseen. */}
         {requests && requests.length > 0 && (
           <div className="mt-4 border border-[#E2E0DB] rounded-[10px] p-2.5">
-            <p className="text-[9px] tracking-[0.14em] text-[#0A0A0A] mb-1.5">SHOPS SHE ASKED FOR · {requests.length}</p>
-            {requests.map((r) => (
-              <div key={r.request_id} className="py-1.5 border-b border-[#F1F0ED] last:border-0">
-                <p className="text-[10px] tracking-[0.06em] text-[#4A4E57]">{r.host.toUpperCase()}</p>
-                <p className="text-[8px] tracking-[0.1em] text-[#A8A8A4]">
-                  {r.member_name ? `${r.member_name.toUpperCase()} · ` : ''}ASKED {r.times_asked}×{r.reason === 'no_grid' ? ' · READ IT, FOUND NO GRID' : ' · CANNOT READ IT'}
-                </p>
-                <div className="flex gap-3 mt-1 text-[8px] tracking-[0.12em]">
-                  <button
-                    disabled={pending}
-                    onClick={() => act(() => decideSiteRequest(r.request_id, 'watching'), (x) => {
-                      setNotice(x.error ?? `${r.host.toUpperCase()}: ON THE WATCHLIST${x.result ? ` — ${x.result.queued} QUEUED` : ''}`)
-                      if (!x.error) setRequests((cur) => (cur ?? []).filter((y) => y.request_id !== r.request_id))
-                    })}
-                    className="text-[#0A0A0A] underline underline-offset-2"
-                  >
-                    WATCH IT
-                  </button>
-                  <a href={r.url ?? `https://${r.host}`} target="_blank" rel="noreferrer" className="text-[#6B6B6B] hover:text-[#0A0A0A]">OPEN</a>
-                  <button
-                    disabled={pending}
-                    onClick={() => act(() => decideSiteRequest(r.request_id, 'declined'), (x) => {
-                      if (!x.error) setRequests((cur) => (cur ?? []).filter((y) => y.request_id !== r.request_id))
-                      setNotice(x.error ?? `${r.host.toUpperCase()}: SET ASIDE`)
-                    })}
-                    className="text-[#A8A8A4] hover:text-[#B3202A]"
-                  >
-                    NOT THIS ONE
-                  </button>
+            <p className="text-[9px] tracking-[0.14em] text-[#0A0A0A] mb-1.5">SHOPS ASKED FOR · {requests.length}</p>
+            {requests.map((r) => {
+              const a = r.assessment
+              const numbers = a ? ` · ${a.onTaste} OF ${a.fashion} ON TASTE · ${a.total} PRODUCTS${a.medianPriceGbp != null ? ` · MEDIAN £${Math.round(a.medianPriceGbp)}` : ''}` : ''
+              const line =
+                r.status === 'assessing' ? { text: 'MYRA IS READING THE SHOP…', tone: 'text-[#C4A882]' }
+                : r.status === 'watching' ? { text: `MYRA ADDED IT · ${(r.verdict_note ?? '').toUpperCase()}${numbers}`, tone: 'text-[#3D6B45]' }
+                : r.status === 'declined' ? { text: `MYRA SAID NO · ${(r.verdict_note ?? '').toUpperCase()}${numbers}`, tone: 'text-[#B4593A]' }
+                : r.verdict === 'review' ? { text: `FOR YOU · ${(r.verdict_note ?? '').toUpperCase()}${numbers}`, tone: 'text-[#0A0A0A]' }
+                : r.verdict === 'unreadable' ? { text: `CANNOT READ IT · ${(r.verdict_note ?? '').toUpperCase()}`, tone: 'text-[#B4593A]' }
+                : { text: r.reason === 'no_grid' ? 'READ IT, FOUND NO GRID' : r.reason === 'add' ? 'ASKED TO ADD IT' : 'CANNOT READ IT', tone: 'text-[#A8A8A4]' }
+              const settled = r.status === 'watching'
+              return (
+                <div key={r.request_id} className="py-1.5 border-b border-[#F1F0ED] last:border-0">
+                  <p className="text-[10px] tracking-[0.06em] text-[#4A4E57]">{r.host.toUpperCase()}</p>
+                  <p className="text-[8px] tracking-[0.1em] text-[#A8A8A4]">
+                    {r.member_name ? `${r.member_name.toUpperCase()} · ` : ''}ASKED {r.times_asked}×
+                  </p>
+                  <p className={`text-[8px] tracking-[0.1em] ${line.tone}`}>{line.text}</p>
+                  <div className="flex gap-3 mt-1 text-[8px] tracking-[0.12em]">
+                    {!settled && (
+                      <button
+                        disabled={pending || r.status === 'assessing'}
+                        onClick={() => act(() => decideSiteRequest(r.request_id, 'watching'), (x) => {
+                          setNotice(x.error ?? `${r.host.toUpperCase()}: ON THE WATCHLIST — FULL SCAN RUNNING IN THE BACKGROUND`)
+                          if (!x.error) { setRequests((cur) => (cur ?? []).filter((y) => y.request_id !== r.request_id)); router.refresh() }
+                        })}
+                        className="text-[#0A0A0A] underline underline-offset-2 disabled:opacity-40"
+                      >
+                        {r.status === 'declined' || r.verdict === 'review' ? 'WATCH ANYWAY' : 'WATCH IT'}
+                      </button>
+                    )}
+                    <a href={r.url ?? `https://${r.host}`} target="_blank" rel="noreferrer" className="text-[#6B6B6B] hover:text-[#0A0A0A]">OPEN</a>
+                    {!settled && r.status !== 'declined' && (
+                      <button
+                        disabled={pending || r.status === 'assessing'}
+                        onClick={() => act(() => decideSiteRequest(r.request_id, 'declined'), (x) => {
+                          setNotice(x.error ?? `${r.host.toUpperCase()}: SET ASIDE`)
+                          if (!x.error) setRequests((cur) => (cur ?? []).filter((y) => y.request_id !== r.request_id))
+                        })}
+                        className="text-[#6B6B6B] hover:text-[#0A0A0A] disabled:opacity-40"
+                      >
+                        SET ASIDE
+                      </button>
+                    )}
+                    {settled && <span className="text-[#A8A8A4]">ON THE WATCHLIST</span>}
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
 

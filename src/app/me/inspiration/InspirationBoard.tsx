@@ -10,6 +10,7 @@ import FallbackImage from '@/components/FallbackImage'
 import { ArchiveCard } from '@/components/ArchiveCard'
 import { addMyInspiration, loadMyInspiration, type InspirationBoardView } from './board-actions'
 import MatchPanel from '@/app/me/dressing-room/MatchPanel'
+import ArchivalLooks from '@/app/me/dressing-room/ArchivalLooks'
 
 export default function InspirationBoard({ view: initial, testMemberId }: { view: InspirationBoardView; testMemberId?: string }) {
   const [view, setView] = useState(initial)
@@ -133,6 +134,12 @@ export default function InspirationBoard({ view: initial, testMemberId }: { view
             </>
           )}
         </ArchiveCard>
+
+        {/* Her own outfits, from Instagram or her photos — the other half of
+            what she loves. The pieces MYRA picks out go to the Dressing Room. */}
+        <div className="mt-10">
+          <ArchivalLooks testMemberId={testMemberId} />
+        </div>
         {matching && (
           <MatchPanel testMemberId={testMemberId} source={{ kind: 'inspiration', id: matching.id, imageUrl: matching.imageUrl }} onClose={() => setMatching(null)} />
         )}

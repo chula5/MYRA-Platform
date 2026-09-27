@@ -211,6 +211,27 @@ const handlers = {
     return json
   },
 
+  /** A piece she stayed on. Quiet: FOR YOU carries on from it without her saving anything. */
+  async viewedProduct({ product, dwellMs }) {
+    const { status, json } = await api('/api/mirror/viewed', { method: 'POST', body: JSON.stringify({ product, dwell_ms: dwellMs }) })
+    return status === 200 ? json : { error: json?.error || `(${status})` }
+  },
+
+  /** What she typed into a shop's search. */
+  async searched({ host, query }) {
+    const { status, json } = await api('/api/mirror/viewed', { method: 'POST', body: JSON.stringify({ host, query }) })
+    return status === 200 ? json : { error: json?.error || `(${status})` }
+  },
+
+  /** Where a shop stands with MYRA: watched, being read, set aside, or turned away. */
+  async siteStatus({ host }) {
+    const c = await cfg()
+    if (!c.token) return { error: 'Connect MYRA first' }
+    const { status, json } = await api(`/api/mirror/site-request?host=${encodeURIComponent(host)}`)
+    if (status !== 200 || !json || json.error) return { error: json?.error || `Could not check (${status})` }
+    return json
+  },
+
   async pageStats(msg, sender) {
     const tabId = sender?.tab?.id
     if (tabId == null) return { ok: false }

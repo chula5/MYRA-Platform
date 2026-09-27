@@ -563,7 +563,7 @@ async function adoptRealBrandName(
   return { name: clean, brand_id: watched.brand_id }
 }
 
-function vendorMode(products: ScannedProduct[]): string | null {
+export function vendorMode(products: ScannedProduct[]): string | null {
   const counts = new Map<string, { n: number; name: string }>()
   for (const p of products) {
     const v = (p.vendor ?? '').trim()
@@ -755,7 +755,7 @@ function isGbpStore(baseUrl: string): boolean {
  * check is the fallback, and an unknown currency stays null rather than being
  * guessed as GBP.
  */
-async function detectStoreCurrency(baseUrl: string): Promise<string | null> {
+export async function detectStoreCurrency(baseUrl: string): Promise<string | null> {
   try {
     const res = await fetch(`${baseUrl}/cart.js`, {
       headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh) MYRA-BrandWatch/1.0', Accept: 'application/json' },

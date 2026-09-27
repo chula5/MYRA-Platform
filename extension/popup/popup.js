@@ -42,6 +42,11 @@ async function render() {
   // Her own Vinted orders page: offer to send the purchases to MYRA.
   $('vintedBox').hidden = !/(^|\.)vinted\.(co\.uk|com)$/i.test(host)
 
+  // Add this brand: any shop that is not Vinted. Shows where it stands already.
+  const shop = !!site && !/(^|\.)vinted\.(co\.uk|com)$/i.test(host)
+  $('addBrandCard').hidden = !shop
+  if (shop) { currentSite = { host: site, url: tab?.url || '', title: tab?.title || '' }; showSiteStatus(await send({ type: 'siteStatus', host: site })) }
+
   const stats = tab?.id != null ? await send({ type: 'getStats', tabId: tab.id }) : null
   const picks = $('picks'); picks.innerHTML = ''
   if (!state.enabled) {
@@ -66,6 +71,36 @@ async function render() {
     $('statusSmall').textContent = 'Open a shop\u2019s product page, like New In or Dresses, and your picks jump to the top.'
   }
 }
+
+let currentSite = null
+let statusPoll = null
+
+// The shop's standing under the ADD button: watched (button gone), being read
+// (keeps asking until MYRA answers), set aside, or turned away.
+function showSiteStatus(r) {
+  const note = $('addBrandNote'), btn = $('addBrand')
+  if (!r || r.error) return
+  if (r.message) note.textContent = r.message
+  btn.hidden = r.status === 'watching' || r.status === 'assessing' || r.status === 'declined'
+  if (r.status === 'assessing' && !statusPoll && currentSite) {
+    let tries = 0
+    statusPoll = setInterval(async () => {
+      const again = await send({ type: 'siteStatus', host: currentSite.host })
+      if (again?.status !== 'assessing' || ++tries > 45) { clearInterval(statusPoll); statusPoll = null }
+      showSiteStatus(again)
+    }, 4000)
+  }
+}
+
+$('addBrand').addEventListener('click', async () => {
+  if (!currentSite) return
+  const btn = $('addBrand')
+  btn.disabled = true; btn.textContent = 'Adding…'
+  const r = await send({ type: 'requestSite', host: currentSite.host, url: currentSite.url, title: currentSite.title, reason: 'add' })
+  btn.disabled = false; btn.textContent = 'Add this brand'
+  if (r?.error) { $('addBrandNote').textContent = r.error; return }
+  showSiteStatus(r)
+})
 
 $('connect').addEventListener('click', async () => {
   const state = await send({ type: 'state', host: '' })
