@@ -228,7 +228,7 @@ export function siteRequestMessage(row: { status?: string | null; verdict?: stri
   if (watchedName) return `MYRA is learning ${watchedName} — its pieces are being scored now.`
   if (!row) return ''
   if (row.status === 'assessing') return 'MYRA is reading the shop…'
-  if (row.status === 'declined') return row.verdict_note ? `MYRA won't carry this shop: ${row.verdict_note.toLowerCase()}.` : "MYRA won't carry this shop."
+  if (row.status === 'declined') return row.verdict_note ? `MYRA won't carry this shop. ${row.verdict_note}.` : "MYRA won't carry this shop."
   if (row.verdict === 'unreadable') return "MYRA can't read this shop yet — Chloe will look at it."
   if (row.verdict === 'review') return 'Set aside for Chloe to look at.'
   return 'Passed on to MYRA. She’ll take a look.'
