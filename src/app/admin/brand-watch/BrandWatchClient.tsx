@@ -312,7 +312,7 @@ export default function BrandWatchClient(props: Props) {
                     MIN SCORE
                     <input
                       type="number" min={-9} max={9} defaultValue={w.min_score}
-                      onBlur={(e) => { const v = parseInt(e.target.value, 10); if (!isNaN(v) && v !== w.min_score) act(() => setWatchedBrandMinScore(w.watched_brand_id, v)) }}
+                      onBlur={(e) => { const v = parseInt(e.target.value, 10); if (!isNaN(v) && v !== w.min_score) act(() => setWatchedBrandMinScore(w.watched_brand_id, v), (r) => { if (r?.rescanning) setNotice(`${w.name.toUpperCase()}: MIN SCORE LOWERED TO ${v} — FULL SCAN RUNNING IN THE BACKGROUND, THE PAGE FOLLOWS IT`); router.refresh() }) }}
                       className="w-10 border border-[#E2E0DB] rounded px-1 py-0.5 text-[9px] text-[#4A4E57] outline-none focus:border-[#0A0A0A]"
                     />
                   </label>

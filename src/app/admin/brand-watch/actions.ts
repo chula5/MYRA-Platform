@@ -711,12 +711,27 @@ export async function setWatchedBrandActive(watchedBrandId: string, active: bool
   revalidatePath('/admin/brand-watch')
 }
 
-export async function setWatchedBrandMinScore(watchedBrandId: string, minScore: number): Promise<void> {
+/**
+ * The bar a piece must clear to queue. Lowering it starts a FULL SCAN by itself:
+ * the weekly check only looks at pieces it has never seen, and everything below
+ * the old bar was marked seen without queueing — Antik Batik sat at 2 in queue
+ * with a whole new collection scoring 3, because the bar had come down from 5
+ * and nothing re-read the catalogue.
+ */
+export async function setWatchedBrandMinScore(watchedBrandId: string, minScore: number): Promise<{ rescanning?: boolean }> {
   await assertAdmin()
-  const admin = createAdminClient()
+  const admin = createAdminClient() as any
   const clamped = Math.max(-9, Math.min(9, Math.round(minScore)))
-  await (admin as any).from('watched_brand').update({ min_score: clamped } as any).eq('watched_brand_id', watchedBrandId)
+  const { data: before } = await admin.from('watched_brand').select('min_score, scan_state').eq('watched_brand_id', watchedBrandId).maybeSingle()
+  await admin.from('watched_brand').update({ min_score: clamped }).eq('watched_brand_id', watchedBrandId)
+  const lowered = before && clamped < Number(before.min_score ?? 5)
+  let rescanning = false
+  if (lowered && !(before.scan_state as any)?.running) {
+    const r = await startInBackground(watchedBrandId, (w) => onboardBrand({ ...w, min_score: clamped }))
+    rescanning = !!r.started
+  }
   revalidatePath('/admin/brand-watch')
+  return { rescanning }
 }
 
 export async function removeWatchedBrand(watchedBrandId: string): Promise<void> {
