@@ -42,7 +42,7 @@ export default function ResetPasswordPage() {
     const supabase = createClient()
     const { error } = await supabase.auth.updateUser({ password })
     if (error) { setErr('Could not update your password — the link may have expired'); setBusy(false); return }
-    router.push('/edit')
+    router.push('/me')
   }
 
   return (

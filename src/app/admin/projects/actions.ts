@@ -334,7 +334,7 @@ export async function updateOutfitTags(
       revalidatePath(`/admin/projects/${(existing as any).project_id}/outfits/${outfitId}/edit`)
     }
     revalidatePath('/admin/the-edit')
-    revalidatePath('/edit')
+    revalidatePath('/me')
     revalidatePath('/feed')
     return {}
   } catch (err: unknown) {

@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createServerClient } from '@/lib/supabase-server'
 import { loadUserSizeProfile } from '@/lib/size-availability'
 import SizeSettings from './SizeSettings'
+import { resolveClientMember } from '@/lib/client-member'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,15 +15,16 @@ export default async function SizeSettingsPage() {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/signin')
+  if (user.id !== process.env.ADMIN_USER_ID && !(await resolveClientMember())) redirect('/')
 
   const ctx = await loadUserSizeProfile(user.id)
 
   return (
     <div className="min-h-screen bg-white">
       <header className="sticky top-0 z-30 flex items-center justify-between px-5 h-14 border-b border-[#E2E0DB] bg-white">
-        <Link href="/edit" className="text-[13px] tracking-[0.135em] text-[#4A4E57]">MYRA</Link>
+        <Link href="/me" className="text-[13px] tracking-[0.135em] text-[#4A4E57]">MYRA</Link>
         <Link
-          href="/edit"
+          href="/me"
           className="text-[13px] tracking-[0.1em] text-[#6B6B6B] hover:text-[#0A0A0A] transition-colors"
         >
           DONE

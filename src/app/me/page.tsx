@@ -5,8 +5,7 @@ import ForYouClient from './ForYouClient'
 
 export const dynamic = 'force-dynamic'
 
-// FOR YOU — her home. A client without a private-stylist record (the older
-// persona flow) keeps her profile as home.
+// FOR YOU — the member home for the private-stylist experience.
 export default async function ForYouPage() {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()

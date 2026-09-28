@@ -92,7 +92,7 @@ export default function OnboardingFlow({
       likedOutfitIds: likedFinal,
       dislikedOutfitIds: dislikedFinal,
     })
-    router.push('/edit')
+      router.push('/me')
     router.refresh()
   }
 
@@ -146,7 +146,7 @@ export default function OnboardingFlow({
         {/* The quiz is optional — let users leave at any point and browse. */}
         {!preview && (
           <button
-            onClick={() => router.push('/edit')}
+            onClick={() => router.push('/me')}
             className="absolute right-6 sm:right-8 text-[9px] tracking-[0.09em] text-[#A8A8A4] hover:text-[#4A4E57] transition-colors"
           >
             SKIP FOR NOW →

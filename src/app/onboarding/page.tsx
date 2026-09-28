@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createServerClient, createAdminClient } from '@/lib/supabase-server'
 import OnboardingFlow, { type OnboardingOutfit } from './OnboardingFlow'
+import { resolveClientMember } from '@/lib/client-member'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,9 +21,10 @@ export default async function OnboardingPage({
   // redirecting away. Only the admin account gets this.
   const isAdmin = user.id === process.env.ADMIN_USER_ID
   const previewMode = preview === '1' && isAdmin
+  if (!isAdmin && !(await resolveClientMember())) redirect('/')
 
   // Already done — straight to browsing (unless previewing).
-  if (!previewMode && user.user_metadata?.onboarded) redirect('/edit')
+  if (!previewMode && user.user_metadata?.onboarded) redirect('/me')
 
   // Fetch all live outfits (lightweight — just what the rating cards need).
   // age_ranges drives which outfits we show per the user's selected age.

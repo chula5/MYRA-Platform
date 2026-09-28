@@ -27,7 +27,7 @@ export async function earlyAccessSignIn(formData: FormData) {
 
   // Pilot clients have their own area; everyone else browses The Edit.
   if ((data.user?.user_metadata as any)?.role === 'client') redirect('/me')
-  redirect('/edit')
+  redirect('/me')
 }
 
 // Public self-sign-up via the shareable invite link (/earlyaccess/join?key=…).
@@ -67,7 +67,7 @@ export async function earlyAccessSignUp(formData: FormData) {
   }
   if (data.user) await recordEarlyAccessLogin(data.user.id)
   await recordLandingEvent('account_signup')
-  redirect('/edit')
+  redirect('/me')
 }
 
 // Open, public sign-up (no invite key) — lets anyone create a login from the
@@ -103,7 +103,7 @@ export async function publicSignUp(formData: FormData) {
   if (signErr) redirect(`/signin?error=${encodeURIComponent('Account created — please sign in')}`)
   if (data.user) await recordEarlyAccessLogin(data.user.id)
   await recordLandingEvent('account_signup', '/', ref)
-  redirect('/edit')
+  redirect('/me')
 }
 
 export async function earlyAccessSignOut() {

@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createServerClient } from '@/lib/supabase-server'
 import AuthForm from '@/app/earlyaccess/AuthForm'
+import { resolveClientMember } from '@/lib/client-member'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,10 +13,13 @@ export default async function SignInPage({
 }) {
   const { error, mode } = await searchParams
 
-  // Already signed in → straight to the edit.
+  // Already signed in → straight to the private member area.
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (user) redirect('/edit')
+  if (user) {
+    const isAdmin = user.id === process.env.ADMIN_USER_ID
+    redirect(isAdmin || (await resolveClientMember()) ? '/me' : '/')
+  }
 
   return (
     <main className="min-h-screen bg-white flex flex-col items-center justify-center px-6">

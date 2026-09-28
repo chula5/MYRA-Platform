@@ -4,7 +4,7 @@
 // cross-site saved list, a stock subscription frozen to HER sizes, and a size
 // baseline for the sentinel to diff against — so "sold out in your size" and
 // "back in your size" arrive for a piece MYRA had never stocked. Members with
-// an auth user also get the ordinary saved_item so /edit shows it.
+// an auth user also get the ordinary saved_item so the private member area shows it.
 
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase-server'

@@ -543,7 +543,7 @@ export default function OutfitDetailClient({
                   soldItemId={soldItemId}
                   onFindSimilar={
                     rescueId
-                      ? () => { void findSomethingSimilar(rescueId); router.push('/edit') }
+                      ? () => { void findSomethingSimilar(rescueId); router.push('/me') }
                       : undefined
                   }
                 />

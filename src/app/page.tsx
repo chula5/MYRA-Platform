@@ -35,8 +35,8 @@ export default async function LandingPage({
 
   // The landing is now a sign-up page for the private-stylist model: the scatter
   // hero, the mirror, the manifesto and APPLY. The feed (search + occasions +
-  // recommendations) is no longer shown here — it lives on /edit for accepted
-  // members, each with their own refined edit.
+  // recommendations) is no longer shown here — it lives in /me for accepted
+  // members, each with their own private-stylist experience.
 
   return (
     <>

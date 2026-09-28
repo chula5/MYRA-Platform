@@ -21,7 +21,7 @@ export default function SessionTracker() {
   useEffect(() => {
     if (typeof window === 'undefined') return
     // Any browser that touches /admin is the team's — flag it and never track it
-    // (excludes our own visits to / and /edit from the analytics).
+    // (excludes our own visits to / and the private member area from analytics).
     if (window.location.pathname.startsWith('/admin')) {
       try { localStorage.setItem('myra_is_admin', '1') } catch { /* ignore */ }
       return

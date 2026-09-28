@@ -502,7 +502,7 @@ function digestHtml(rows: PendingRow[]): string {
 
   return emailShell(
     'YOUR SAVED PIECES',
-    `${body}${closing}<p style="margin:22px 0 0 0;">${emailButton(siteUrl('/edit'), 'OPEN YOUR WARDROBE')}</p>`,
+    `${body}${closing}<p style="margin:22px 0 0 0;">${emailButton(siteUrl('/me'), 'OPEN YOUR WARDROBE')}</p>`,
     'MYRA · YOU CAN CHANGE WHAT YOU HEAR ABOUT IN YOUR SETTINGS',
   )
 }

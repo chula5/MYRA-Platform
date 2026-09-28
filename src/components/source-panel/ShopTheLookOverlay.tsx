@@ -43,7 +43,7 @@ export default function ShopTheLookOverlay({
   offsetTop?: boolean
   /** 'feed' is the editorial micro-type of the public feed. 'large' is the
    *  client area — a wider column and 20px product text, for reading on a
-   *  phone. The feed never passes it, so /feed and /edit are unchanged. */
+   *  phone. The private member feed never passes it, so the member area remains unchanged. */
   size?: 'feed' | 'large'
 }) {
   const large = size === 'large'

@@ -5,6 +5,7 @@ import MeChrome from './MeChrome'
 import MeTour from '@/components/me/MeTour'
 import ClientJourneyTracker from '@/components/analytics/ClientJourneyTracker'
 import StylistChat from './StylistChat'
+import { resolveClientMember } from '@/lib/client-member'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,9 +17,8 @@ export default async function MeLayout({ children }: { children: React.ReactNode
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/signin')
 
-  const role = (user.user_metadata as any)?.role
   const isAdmin = user.id === process.env.ADMIN_USER_ID
-  if (role !== 'client' && !isAdmin) redirect('/edit')
+  if (!isAdmin && !(await resolveClientMember())) redirect('/')
 
   return (
     <div className="min-h-screen myra-pearl">

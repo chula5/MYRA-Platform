@@ -80,7 +80,7 @@ export default function Navigation({ transparent = false, authed = false, showAu
           {/* Auth link — hidden on the invite-only landing (showAuth={false}). */}
           {showAuth && (
             <Link
-              href={authed ? '/edit' : '/signin'}
+              href={authed ? '/me' : '/signin'}
               className={`whitespace-nowrap text-[13px] sm:text-[17px] lg:text-[20px] leading-none tracking-[0.06em] sm:tracking-[0.12em] hover:opacity-60 transition-colors duration-500 ${textColor}`}
             >
               {authed ? 'MY EDIT' : 'LOG IN / SIGN UP'}

@@ -7,34 +7,9 @@ export const dynamic = 'force-dynamic'
 export default async function ProductViewPage() {
   const admin = createAdminClient()
 
-  // The detail preview points at a real WEEKEND AWAY outfit (falls back to any
-  // live outfit if none are tagged).
-  const { data: weekendOutfit } = await admin
-    .from('outfit')
-    .select('outfit_id')
-    .eq('status', 'live')
-    .contains('occasion_tags', ['weekend away'])
-    .order('published_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  let detailId = (weekendOutfit as any)?.outfit_id as string | undefined
-  if (!detailId) {
-    const { data: anyOutfit } = await admin
-      .from('outfit')
-      .select('outfit_id')
-      .eq('status', 'live')
-      .order('published_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    detailId = (anyOutfit as any)?.outfit_id as string | undefined
-  }
-
   const previews: Preview[] = [
     { key: 'landing', label: 'LANDING PAGE', title: 'A different way to get dressed', path: '/' },
-    { key: 'edit', label: 'THE EDIT', title: 'Pick an occasion → see the outfits', path: '/edit' },
-    ...(detailId
-      ? [{ key: 'detail', label: 'OUTFIT DETAIL', title: 'Shop the look · swipe between looks', path: `/edit/${detailId}` } as Preview]
-      : []),
+    { key: 'member', label: 'PRIVATE MEMBER AREA', title: 'For You, Dressing Room, Inspiration', path: '/me' },
   ]
 
   // Demo-video clips (optional). The table may not exist yet.
