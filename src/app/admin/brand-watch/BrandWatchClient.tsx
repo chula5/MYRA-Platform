@@ -130,6 +130,8 @@ export default function BrandWatchClient(props: Props) {
   const [fColour, setFColour] = useState('')
   const [minScore, setMinScore] = useState<number | null>(null)
   const [fSort, setFSort] = useState<QueueSort>('rank')
+  // The season we are heading into, by default. Summer waits behind a chip.
+  const [fSeason, setFSeason] = useState<'in' | 'out' | 'all'>('in')
 
   const queue = page.queue
   // Type, colour, score and predicted-skip filters run on the SERVER over the
@@ -151,7 +153,7 @@ export default function BrandWatchClient(props: Props) {
     })
 
   const filtersNow = (over: Partial<QueueFilters> = {}): QueueFilters =>
-    ({ itemType: fType, colour: fColour, minScore, showPredicted, sort: fSort, ...over })
+    ({ itemType: fType, colour: fColour, minScore, showPredicted, sort: fSort, season: fSeason, ...over })
 
   const load = (brand: string, filters: QueueFilters) =>
     act(() => loadQueuePage(0, brand || undefined, filters), (r: QueuePage) => { setPage(r); setGone(new Set()) })
@@ -168,6 +170,7 @@ export default function BrandWatchClient(props: Props) {
     if ('minScore' in over) setMinScore(over.minScore ?? null)
     if ('showPredicted' in over) setShowPredicted(!!over.showPredicted)
     if ('sort' in over) setFSort(over.sort ?? 'rank')
+    if ('season' in over) setFSeason(over.season ?? 'in')
     load(fBrand, filtersNow(over))
   }
 
@@ -548,6 +551,18 @@ export default function BrandWatchClient(props: Props) {
             </>
           )}
         </div>
+          <div className="flex flex-wrap gap-2 mb-3 items-center">
+            <span className="text-[8px] tracking-[0.14em] text-[#A8A8A4] mr-1">SEASON</span>
+            <button onClick={() => setFilter({ season: 'in' })} className={fSeason === 'in' ? CHIP_ON : CHIP_OFF} title="Autumn/winter from August, spring/summer from February — plus anything the shop did not place">
+              {new Date().getUTCMonth() + 1 >= 8 || new Date().getUTCMonth() + 1 <= 1 ? 'AUTUMN / WINTER' : 'SPRING / SUMMER'}
+            </button>
+            {(page.outOfSeasonTotal ?? 0) > 0 || fSeason === 'out' ? (
+              <button onClick={() => setFilter({ season: 'out' })} className={fSeason === 'out' ? CHIP_ON : CHIP_OFF} title="The season on its way out — kept out of the library unless you say so">
+                {new Date().getUTCMonth() + 1 >= 8 || new Date().getUTCMonth() + 1 <= 1 ? 'SUMMER' : 'WINTER'} · {page.outOfSeasonTotal ?? 0}
+              </button>
+            ) : null}
+            <button onClick={() => setFilter({ season: 'all' })} className={fSeason === 'all' ? CHIP_ON : CHIP_OFF}>ALL SEASONS</button>
+          </div>
           <div className="flex flex-wrap gap-2 mb-4 items-center">
             <span className="text-[8px] tracking-[0.14em] text-[#A8A8A4] mr-1">SORT</span>
             {([['rank', "MYRA'S ORDER"], ['sure_desc', 'MOST SURE FIRST'], ['sure_asc', 'LEAST SURE FIRST']] as [QueueSort, string][]).map(([v, label]) => (
@@ -670,7 +685,7 @@ export default function BrandWatchClient(props: Props) {
                 onClick={() => {
                   const n = page.brandCounts[fBrand] ?? 0
                   if (confirm(`Keep ALL ${n} ${fBrand} pieces in the queue — including ones not loaded on this page?`))
-                    act(() => keepAllForBrand(fBrand), (r) => { setNotice(r.error?.toUpperCase() ?? `${r.updated} ${fBrand.toUpperCase()} PIECES KEPT → READY`); reloadQueue() })
+                    act(() => keepAllForBrand(fBrand, { includeOutOfSeason: fSeason !== 'in' }), (r) => { setNotice(r.error?.toUpperCase() ?? `${r.updated} ${fBrand.toUpperCase()} PIECES KEPT → READY${r.leftOutOfSeason ? ` · ${r.leftOutOfSeason} OUT-OF-SEASON PIECES LEFT IN THE QUEUE` : ''}`); reloadQueue() })
                 }}
                 className="bg-[#C4A882] text-white rounded-full px-4 py-2 text-[9px] tracking-[0.12em] hover:opacity-85 transition-opacity disabled:opacity-40"
                 title="Keep every queued draft for this brand — the whole queue, not just the loaded page"
@@ -722,6 +737,11 @@ export default function BrandWatchClient(props: Props) {
                   )}
                   {q.stock_status === 'low_stock' && (
                     <span className="absolute bottom-10 left-2 bg-[#C4A882] text-white rounded px-1.5 py-0.5 text-[8px] tracking-[0.1em]">LOW STOCK</span>
+                  )}
+                  {q.season && q.season !== 'all' && (
+                    <span className={`absolute top-2 left-1/2 -translate-x-1/2 rounded px-1.5 py-0.5 text-[8px] tracking-[0.1em] ${q.season === 'aw' ? 'bg-white/95 border border-[#E2E0DB] text-[#4A4E57]' : 'bg-[#B4593A] text-white'}`}>
+                      {q.season_code ?? (q.season === 'aw' ? 'A/W' : 'S/S')}
+                    </span>
                   )}
                   {q.discovery_score != null && (
                     <span className="absolute top-2 left-2 bg-white/95 border border-[#E2E0DB] rounded px-1.5 py-0.5 text-[9px] tracking-[0.08em] text-[#4A4E57]">

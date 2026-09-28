@@ -7,6 +7,7 @@
 
 import { createAdminClient } from '@/lib/supabase-server'
 import { toGbpAmount } from '@/lib/currency'
+import { seasonOf } from '@/lib/season'
 import { classifyProductGender, type GenderRead } from '@/app/admin/ai/classify-gender'
 import { classifyProductColour } from '@/app/admin/ai/classify-colour'
 import { houseBanOf } from '@/lib/brand-watch-bans'
@@ -823,16 +824,28 @@ async function queueProducts(
       material_primary: p.materialPrimary,
       stock_status: p.stockStatus,
       stock_sizes: p.sizesInStock,
+      ...seasonFields(p),
       discovery_score: p.score,
       discovered_at: new Date().toISOString(),
       admin_notes: `Brand Watch ${p.score > 0 ? '+' : ''}${p.score}${p.reasons.length ? ` (${p.reasons.join(', ')})` : ''} — score the 1–5 dimensions before READY.`,
     }))
 
   for (let i = 0; i < rows.length; i += 100) {
-    const { error } = await (admin as any).from('brand_watch_queue').insert(rows.slice(i, i + 100) as any)
+    const chunk = rows.slice(i, i + 100)
+    let { error } = await (admin as any).from('brand_watch_queue').insert(chunk as any)
+    // Pre-0073 the season columns are not there yet: queue without them.
+    if (error && /season/.test(error.message)) {
+      ;({ error } = await (admin as any).from('brand_watch_queue').insert(chunk.map(({ season: _s, season_code: _c, ...r }) => r) as any))
+    }
     if (error) throw new Error(`queue insert failed: ${error.message}`)
   }
   return rows.length
+}
+
+/** The season a scanned piece belongs to, from the shop's tags, its kind and its material. */
+function seasonFields(p: ScannedProduct): { season: string | null; season_code: string | null } {
+  const r = seasonOf({ tags: p.tags, title: p.title, productType: p.productType, itemType: p.itemType, materialCategory: p.materialCategory, materialPrimary: p.materialPrimary })
+  return { season: r.season, season_code: r.code }
 }
 
 // Forget product ids so a later check treats them as new again — used for
@@ -957,14 +970,20 @@ async function refreshQueueStock(admin: ReturnType<typeof createAdminClient>, pr
   let changed = 0
   for (let i = 0; i < pids.length; i += 100) {
     const chunk = pids.slice(i, i + 100)
-    const { data: rows } = await (admin as any)
-      .from('brand_watch_queue').select('queue_id, shopify_product_id, stock_status')
+    let { data: rows } = await (admin as any)
+      .from('brand_watch_queue').select('queue_id, shopify_product_id, stock_status, season, season_code')
       .eq('status', 'queued').in('shopify_product_id', chunk)
+    // Pre-0073: no season columns yet.
+    if (!rows) rows = (await (admin as any).from('brand_watch_queue').select('queue_id, shopify_product_id, stock_status').eq('status', 'queued').in('shopify_product_id', chunk)).data
     for (const r of rows ?? []) {
       const p = byPid.get(String(r.shopify_product_id))
-      if (!p || r.stock_status === p.stockStatus) continue
+      if (!p) continue
+      const sf = seasonFields(p)
+      const stockChanged = r.stock_status !== p.stockStatus
+      const seasonChanged = 'season' in r && (r.season !== sf.season || r.season_code !== sf.season_code)
+      if (!stockChanged && !seasonChanged) continue
       await (admin as any).from('brand_watch_queue')
-        .update({ stock_status: p.stockStatus, stock_sizes: p.sizesInStock } as any)
+        .update({ stock_status: p.stockStatus, stock_sizes: p.sizesInStock, ...('season' in r ? sf : {}) } as any)
         .eq('queue_id', r.queue_id)
       changed++
     }
