@@ -14,7 +14,7 @@ import {
   setWatchedBrandAutoKeepConfidence, setWatchedBrandConfidenceBar, loadAutoAdded, undoAutoKeep,
   loadSiteRequests, decideSiteRequest, keepConfidentNowForBrand,
   setWatchedBrandAutoKeepTwins, keepTwinsNowForBrand,
-  setWatchedBrandMinScore, skipItems, undoSkip, setSkipReason, type QueueFilters, type QueueItemRow, type QueuePage,
+  setWatchedBrandMinScore, skipItems, undoSkip, setSkipReason, type QueueFilters, type QueueItemRow, type QueuePage, type QueueSort,
 } from './actions'
 
 const CHIP = 'px-3 py-1.5 rounded-full text-[9px] tracking-[0.12em] border transition-colors'
@@ -129,6 +129,7 @@ export default function BrandWatchClient(props: Props) {
   const [fType, setFType] = useState('')
   const [fColour, setFColour] = useState('')
   const [minScore, setMinScore] = useState<number | null>(null)
+  const [fSort, setFSort] = useState<QueueSort>('rank')
 
   const queue = page.queue
   // Type, colour, score and predicted-skip filters run on the SERVER over the
@@ -150,7 +151,7 @@ export default function BrandWatchClient(props: Props) {
     })
 
   const filtersNow = (over: Partial<QueueFilters> = {}): QueueFilters =>
-    ({ itemType: fType, colour: fColour, minScore, showPredicted, ...over })
+    ({ itemType: fType, colour: fColour, minScore, showPredicted, sort: fSort, ...over })
 
   const load = (brand: string, filters: QueueFilters) =>
     act(() => loadQueuePage(0, brand || undefined, filters), (r: QueuePage) => { setPage(r); setGone(new Set()) })
@@ -166,6 +167,7 @@ export default function BrandWatchClient(props: Props) {
     if ('colour' in over) setFColour(over.colour ?? '')
     if ('minScore' in over) setMinScore(over.minScore ?? null)
     if ('showPredicted' in over) setShowPredicted(!!over.showPredicted)
+    if ('sort' in over) setFSort(over.sort ?? 'rank')
     load(fBrand, filtersNow(over))
   }
 
@@ -546,6 +548,12 @@ export default function BrandWatchClient(props: Props) {
             </>
           )}
         </div>
+          <div className="flex flex-wrap gap-2 mb-4 items-center">
+            <span className="text-[8px] tracking-[0.14em] text-[#A8A8A4] mr-1">SORT</span>
+            {([['rank', "MYRA'S ORDER"], ['sure_desc', 'MOST SURE FIRST'], ['sure_asc', 'LEAST SURE FIRST']] as [QueueSort, string][]).map(([v, label]) => (
+              <button key={v} onClick={() => setFilter({ sort: v })} className={fSort === v ? CHIP_ON : CHIP_OFF}>{label}</button>
+            ))}
+          </div>
 
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
           <p className="text-[10px] tracking-[0.12em] text-[#6B6B6B]">

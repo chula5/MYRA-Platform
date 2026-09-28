@@ -65,11 +65,15 @@ export interface QueuePage {
 }
 
 /** Queue filters, applied server-side so they search every queued piece. */
+export type QueueSort = 'rank' | 'sure_desc' | 'sure_asc'
+
 export interface QueueFilters {
   itemType?: string
   colour?: string
   minScore?: number | null
   showPredicted?: boolean
+  /** MYRA's order (style score + learning), or by how sure she is, either way. */
+  sort?: QueueSort
 }
 
 export interface BrandWatchData extends QueuePage {
@@ -275,7 +279,7 @@ async function queuePage(offset: number, brandName?: string | null, filters: Que
   }
 
   const scope = annotated
-  const { itemType = '', colour = '', minScore = null, showPredicted = false } = filters
+  const { itemType = '', colour = '', minScore = null, showPredicted = false, sort = 'rank' } = filters
   const passes = (q: (typeof annotated)[number], skip: 'type' | 'colour' | 'predicted' | null) =>
     (skip === 'type' || !itemType || q.item_type === itemType) &&
     (skip === 'colour' || !colour || q.colour_family === colour) &&
@@ -292,7 +296,16 @@ async function queuePage(offset: number, brandName?: string | null, filters: Que
   }
 
   const filtered = scope.filter((q) => passes(q, null))
-  filtered.sort((a, b) => (b.adjusted - a.adjusted) || String(b.discovered_at ?? '').localeCompare(String(a.discovered_at ?? '')))
+  const byRank = (a: (typeof annotated)[number], b: (typeof annotated)[number]) =>
+    (b.adjusted - a.adjusted) || String(b.discovered_at ?? '').localeCompare(String(a.discovered_at ?? ''))
+  // Sorting by confidence puts pieces with no number last either way — a brand
+  // with no model yet has nothing to say about them.
+  const sure = (q: (typeof annotated)[number]) => q.confidence
+  filtered.sort(
+    sort === 'sure_desc' ? (a, b) => ((sure(b) ?? -1) - (sure(a) ?? -1)) || byRank(a, b)
+    : sort === 'sure_asc' ? (a, b) => ((sure(a) ?? 2) - (sure(b) ?? 2)) || byRank(a, b)
+    : byRank,
+  )
 
   // Only now, with the page decided, are the display fields worth reading.
   const pageRows = filtered.slice(offset, offset + QUEUE_PAGE)
