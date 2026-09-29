@@ -53,3 +53,6 @@ next-env.d.ts
 /tools/brand-scanner/logs/
 /tools/brand-scanner/images/
 /tools/brand-scanner/state.json
+
+# brand-watch scoring evaluation snapshots
+/scripts/.eval/
