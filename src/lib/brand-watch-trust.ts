@@ -16,8 +16,23 @@
 
 import { buildLearning, type DecidedRow } from './brand-watch-learning'
 
-/** Learned lift a piece needs before it may be kept automatically. */
-export const AUTO_KEEP_DELTA = 2
+/**
+ * Learned lift a piece needs before it may be kept automatically — log-odds
+ * above her base keep rate, on the scale brand-watch-learning now returns.
+ *
+ * Measured across four chronological splits of her 5,553 decisions
+ * (2026-09-29): the bar that holds 90% precision moves from "nothing clears
+ * it" at a 50/50 split to 0.64 at an 80/20 one, because her keep rate itself
+ * drifts between 64% and 71% across the year. So NO fixed number is safe on
+ * its own, and this is deliberately set near the strict end of that range — at
+ * 2.5 the same splits measured 90-96% precision over roughly 7-9% of the queue.
+ *
+ * It is a candidate filter, not the safety mechanism. What actually protects
+ * the library is measureBrandTrust below, which re-measures every brand
+ * walk-forward and refuses automation until that brand's own recent decisions
+ * prove the bar out.
+ */
+export const AUTO_KEEP_DELTA = 2.5
 /** Recent one-by-one decisions per brand that trust is judged on. */
 export const TRUST_WINDOW = 40
 /** Auto-keep predictions needed in that window before trust can be earned. */

@@ -105,16 +105,131 @@ export function confidenceFor(model: BrandModel, delta: number, score: number): 
  * "blazer" and "leather" apart. MYRA may not be sure about a combination she
  * has never seen: she has kept hundreds of leather pieces and hundreds of
  * blazers, and never once a leather blazer.
+ *
+ * Thin evidence now pulls the number TOWARDS her base keep rate rather than
+ * clipping it. The clip was doing most of the ranking and doing it badly: it
+ * put 1,832 queued pieces on exactly 0.70 with no way to order them, and
+ * because `Math.min` only ever pushes down, a piece the model disliked and a
+ * piece it had simply never seen came out identical. Shrinking says the true
+ * thing — "we don't know yet" — while leaving pieces comparable.
+ *
+ * It does NOT push a never-seen kind down on purpose: that the kind is unknown
+ * is already in the learning's `kind:` feature, and punishing it twice is the
+ * double-counting this scorer exists to avoid. Automation guards itself with
+ * `kindIsUnproven` instead.
  */
-export const UNSEEN_KIND_CAP = 0.7
-export const SKIPPED_KIND_CAP = 0.45
-export function dampByKind(p: number, kind: { kindKeeps: number; kindSkips: number }): number {
+export const KIND_EVIDENCE_K = 6
+export function dampByKind(
+  p: number,
+  kind: { kindKeeps: number; kindSkips: number },
+  baseRate = 0.5,
+): number {
   const seen = kind.kindKeeps + kind.kindSkips
-  if (seen === 0) return Math.min(p, UNSEEN_KIND_CAP)
-  if (kind.kindKeeps === 0) return Math.min(p, SKIPPED_KIND_CAP)
-  // Thin evidence pulls back towards the cap rather than over it.
-  if (seen < 4) return Math.min(p, UNSEEN_KIND_CAP + (1 - UNSEEN_KIND_CAP) * (seen / 4))
-  return p
+  const w = seen / (seen + KIND_EVIDENCE_K)
+  return baseRate + (p - baseRate) * w
+}
+
+/** Decisions on a kind before automation may act on it unsupervised. */
+export const KIND_PROVEN_AT = 4
+/**
+ * A kind she has never kept, or has barely seen. The queue still shows a
+ * number for these — they have to be rankable — but AUTO-ADD will not take
+ * one on its own.
+ */
+export const kindIsUnproven = (kind: { kindKeeps: number; kindSkips: number }): boolean =>
+  kind.kindKeeps === 0 || kind.kindKeeps + kind.kindSkips < KIND_PROVEN_AT
+
+/**
+ * The one gate automation acts on — and the one the trust measure is taken
+ * through, so what she is promised is what the machine does.
+ */
+export const wouldAutoKeepByConfidence = (
+  p: number | null | undefined,
+  kind: { kindKeeps: number; kindSkips: number },
+  bar: number,
+): boolean => p != null && p >= bar && !kindIsUnproven(kind)
+
+// ── The models, and one piece's number ───────────────────────────────────────
+// Pure, and deliberately NOT in brand-watch-auto: that module reaches the
+// database and the Style Brain, so anything importing it drags a server-only
+// world along. Keeping the composition here lets the offline evaluator
+// (scripts/brand-watch-eval.ts) measure exactly what the queue shows, rather
+// than a copy of it that quietly drifts.
+
+export interface ConfidenceModels {
+  /** Fitted on one brand's own careful decisions. */
+  byBrand: Map<string, BrandModel>
+  /** Fitted on every brand's careful decisions — the house's taste so far. */
+  house: BrandModel | null
+}
+
+/** A decision the models are fitted on: the learning's features plus its score. */
+export type ModelSample = DecidedRow & { score: number; autoKept?: boolean }
+
+/**
+ * A model per brand, and one for the house.
+ *
+ * A brand she has never decided on has no history of its own, but the library
+ * does: thousands of keeps and skips across every other brand. That pooled
+ * model is what a new brand starts from, so its first piece carries a number
+ * rather than nothing. As she keeps and skips from the brand itself, its own
+ * model takes over (see `confidenceFromModels`).
+ */
+export function confidenceModels(
+  decisions: ModelSample[],
+  learn: ReturnType<typeof buildLearning>,
+): ConfidenceModels {
+  const byBrand = new Map<string, ModelSample[]>()
+  const careful: ModelSample[] = []
+  for (const d of decisions) {
+    if (d.autoKept) continue
+    careful.push(d)
+    if (!d.brandName) continue
+    byBrand.set(d.brandName, [...(byBrand.get(d.brandName) ?? []), d])
+  }
+  const sample = (d: ModelSample) => ({ kept: d.kept, delta: learn(d).delta, score: d.score })
+  const models = new Map<string, BrandModel>()
+  byBrand.forEach((list, brand) => { models.set(brand, fitBrandModel(list.map(sample))) })
+  return { byBrand: models, house: careful.length >= 8 ? fitBrandModel(careful.map(sample)) : null }
+}
+
+/**
+ * How much of its own evidence a brand needs before its model outweighs the
+ * house's. At 12 decisions a brand speaks for half of the answer.
+ */
+export const BRAND_EVIDENCE_K = 12
+
+/** The chance she keeps this piece, blending the brand's model with the house's. */
+export function confidenceFromModels(
+  models: ConfidenceModels,
+  learn: ReturnType<typeof buildLearning>,
+  row: DecidedRow,
+  score: number,
+): number | null {
+  const brand = row.brandName ? models.byBrand.get(row.brandName) : undefined
+  const house = models.house
+  if (!brand && !house) return null
+  const v = learn(row)
+  const pBrand = brand ? confidenceFor(brand, v.delta, score) : null
+  const pHouse = house ? confidenceFor(house, v.delta, score) : null
+  // A new brand is read by the house; a brand with its own history speaks for
+  // itself, in proportion to how much of it there is.
+  const w = pBrand == null ? 0 : pHouse == null ? 1 : brand!.n / (brand!.n + BRAND_EVIDENCE_K)
+  const p = (pBrand ?? 0) * w + (pHouse ?? 0) * (1 - w)
+  // Never sure about a kind of piece she has never kept. Shrunk towards the
+  // rate she keeps at overall, which is the honest answer when nothing is known.
+  return dampByKind(p, v, (house ?? brand)!.baseRate)
+}
+
+/** Where a piece's number came from — for the label under it. */
+export function confidenceSource(
+  models: ConfidenceModels,
+  brandName: string | null | undefined,
+): 'brand' | 'house' | 'blend' | null {
+  const n = (brandName ? models.byBrand.get(brandName)?.n : 0) ?? 0
+  if (!models.house) return n ? 'brand' : null
+  if (!n) return 'house'
+  return n >= BRAND_EVIDENCE_K * 3 ? 'brand' : 'blend'
 }
 
 // ── Measuring it, before trusting it ─────────────────────────────────────────
@@ -208,7 +323,10 @@ export function measureConfidence(
       if (!careful(d)) continue
       carefulSeen++
       const v = learn(d)
-      if (dampByKind(confidenceFor(model, v.delta, d.score), v) >= threshold) {
+      const p = dampByKind(confidenceFor(model, v.delta, d.score), v, model.baseRate)
+      // Measured through the SAME gate automation acts on, or the trust number
+      // would be a promise about something the machine never does.
+      if (wouldAutoKeepByConfidence(p, v, threshold)) {
         predictions++
         if (d.kept) right++
       }

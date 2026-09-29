@@ -936,6 +936,11 @@ const LEARNED_LIFT_CAP = 2
  * What her keeps say lifts a piece's score, so a piece like the ones she keeps
  * can clear the brand's min score. Only lifts — a negative verdict keeps its
  * existing, capped veto below. Recorded in the piece's reasons.
+ *
+ * `delta` is log-odds above her base keep rate, so 0 is an ordinary piece and
+ * only a genuinely better-than-average one is lifted. It used to be a clamped
+ * sum whose median was the maximum, which meant this handed nearly every piece
+ * the full +2 and lifted the whole catalogue rather than picking anything out.
  */
 function applyLearnedLift(products: ScannedProduct[], learned: (p: ScannedProduct, brandName: string) => LearnedVerdict, brandName: string): void {
   for (const p of products) {

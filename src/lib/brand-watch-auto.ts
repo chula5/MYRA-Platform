@@ -23,8 +23,9 @@ import { buildLearning, type DecidedRow } from './brand-watch-learning'
 import { measureBrandTrust, summariseTrust, wouldAutoKeep, type BrandTrust, type TrustDecision } from './brand-watch-trust'
 import { carefulFlags, keptTwinOf, measureTwinTrust, summariseTwinTrust, type TwinDecision, type TwinTrust } from './brand-watch-twins'
 import {
-  confidenceFor, dampByKind, fitBrandModel, measureBoth, summariseConfidence, DEFAULT_CONFIDENCE,
-  type BrandModel, type ConfidenceDecision, type ConfidenceTrust,
+  confidenceModels, confidenceFromModels, confidenceSource, measureBoth, summariseConfidence,
+  wouldAutoKeepByConfidence, BRAND_EVIDENCE_K, DEFAULT_CONFIDENCE,
+  type ConfidenceDecision, type ConfidenceModels, type ConfidenceTrust,
 } from './brand-watch-confidence'
 import { houseBanOf } from './brand-watch-bans'
 import { keepQueueRows } from './brand-watch-keep'
@@ -159,67 +160,18 @@ export function twinOfQueueRow(data: BrandTrustData, row: any): TwinDecision | n
 }
 
 // ── Confidence: the chance she would keep a piece, per brand ────────────────
+// The models and the blend are pure, and live in brand-watch-confidence so the
+// offline evaluator can measure the very same code. These are the DB-shaped
+// wrappers the queue and AUTOMATE call.
 
-export interface ConfidenceModels {
-  /** Fitted on one brand's own careful decisions. */
-  byBrand: Map<string, BrandModel>
-  /** Fitted on every brand's careful decisions — the house's taste so far. */
-  house: BrandModel | null
-}
+export { confidenceModels, BRAND_EVIDENCE_K, type ConfidenceModels }
 
-/**
- * A model per brand, and one for the house.
- *
- * A brand she has never decided on has no history of its own, but the library
- * does: thousands of keeps and skips across every other brand. That pooled
- * model is what a new brand starts from, so its first piece carries a number
- * rather than nothing. As she keeps and skips from the brand itself, its own
- * model takes over (see `confidenceOf`).
- */
-export function confidenceModels(decisions: ConfidenceDecision[], learn: ReturnType<typeof buildLearning>): ConfidenceModels {
-  const byBrand = new Map<string, ConfidenceDecision[]>()
-  const careful: ConfidenceDecision[] = []
-  for (const d of decisions) {
-    if (d.autoKept) continue
-    careful.push(d)
-    if (!d.brandName) continue
-    byBrand.set(d.brandName, [...(byBrand.get(d.brandName) ?? []), d])
-  }
-  const sample = (d: ConfidenceDecision) => ({ kept: d.kept, delta: learn(d).delta, score: d.score })
-  const models = new Map<string, BrandModel>()
-  byBrand.forEach((list, brand) => { models.set(brand, fitBrandModel(list.map(sample))) })
-  return { byBrand: models, house: careful.length >= 8 ? fitBrandModel(careful.map(sample)) : null }
-}
-
-/**
- * How much of its own evidence a brand needs before its model outweighs the
- * house's. At 12 decisions a brand speaks for half of the answer.
- */
-export const BRAND_EVIDENCE_K = 12
-
-export const confidenceOf = (data: BrandTrustData, row: any): number | null => {
-  const brand = row.brand_id ? data.confidence.byBrand.get(row.brand_id) : undefined
-  const house = data.confidence.house
-  if (!brand && !house) return null
-  const v = data.learn(toDecided(row))
-  const score = Number(row.discovery_score ?? 0)
-  const pBrand = brand ? confidenceFor(brand, v.delta, score) : null
-  const pHouse = house ? confidenceFor(house, v.delta, score) : null
-  // A new brand is read by the house; a brand with its own history speaks for
-  // itself, in proportion to how much of it there is.
-  const w = pBrand == null ? 0 : pHouse == null ? 1 : (brand!.n) / (brand!.n + BRAND_EVIDENCE_K)
-  const p = (pBrand ?? 0) * w + (pHouse ?? 0) * (1 - w)
-  // Never sure about a kind of piece she has never kept.
-  return dampByKind(p, v)
-}
+export const confidenceOf = (data: BrandTrustData, row: any): number | null =>
+  confidenceFromModels(data.confidence, data.learn, toDecided(row), Number(row.discovery_score ?? 0))
 
 /** Where a piece's number came from — for the label under it. */
-export const confidenceSourceOf = (data: BrandTrustData, brandId: string | null | undefined): 'brand' | 'house' | 'blend' | null => {
-  const n = (brandId ? data.confidence.byBrand.get(brandId)?.n : 0) ?? 0
-  if (!data.confidence.house) return n ? 'brand' : null
-  if (!n) return 'house'
-  return n >= BRAND_EVIDENCE_K * 3 ? 'brand' : 'blend'
-}
+export const confidenceSourceOf = (data: BrandTrustData, brandId: string | null | undefined): 'brand' | 'house' | 'blend' | null =>
+  confidenceSource(data.confidence, brandId)
 
 export const confidenceTrustFor = (data: BrandTrustData, watched: { brand_id?: string | null; confidence_bar?: number | null }): ConfidenceTrust =>
   (watched.brand_id && data.confidenceTrust.get(`${watched.brand_id}|${Number(watched.confidence_bar ?? DEFAULT_CONFIDENCE)}`))
@@ -269,8 +221,11 @@ export async function autoKeepForBrand(admin: any, watched: WatchedBrandRow, tru
       const since = (watched as any).auto_keep_confidence_since ?? new Date().toISOString()
       for (const q of await queuedFor(admin, watched.brand_id, since)) {
         if (!keepable(q)) continue
-        const p = confidenceOf(data, { ...q, brand_id: watched.brand_id })
-        if (p != null && p >= bar) picks.set(q.queue_id, 200 + p)
+        const row = { ...q, brand_id: watched.brand_id }
+        const p = confidenceOf(data, row)
+        // The same gate the trust measure was taken through — a kind she has
+        // never kept is shown a number but is never taken unsupervised.
+        if (wouldAutoKeepByConfidence(p, data.learn(toDecided(row)), bar)) picks.set(q.queue_id, 200 + p!)
       }
     }
   }
@@ -312,8 +267,8 @@ export async function keepConfidentNow(admin: any, watched: WatchedBrandRow, cap
   const ids = (await queuedFor(admin, watched.brand_id, null))
     .filter((q) => {
       if (!keepable(q)) return false
-      const p = confidenceOf(data, { ...q, brand_id: watched.brand_id })
-      return p != null && p >= bar
+      const row = { ...q, brand_id: watched.brand_id }
+      return wouldAutoKeepByConfidence(confidenceOf(data, row), data.learn(toDecided(row)), bar)
     })
     .slice(0, cap)
     .map((q) => q.queue_id)

@@ -19,23 +19,30 @@ function sniff(b: Uint8Array): VisionImage['mediaType'] | null {
 
 /** Shopify's CDN resizes on request — a 900px copy is plenty to read a
  *  garment from and a tenth of the bytes of the 3,333px original. */
-function shrink(url: string): string {
+function shrink(url: string, width: number): string {
   try {
     const u = new URL(url)
     if (/(^|\.)cdn\.shopify\.com$/.test(u.hostname) && !u.searchParams.has('width')) {
-      u.searchParams.set('width', '900')
+      u.searchParams.set('width', String(width))
       return u.toString()
     }
   } catch { /* leave it alone */ }
   return url
 }
 
+/**
+ * @param width how wide to ask the CDN for. Claude charges by image area, so a
+ *   512px copy costs about a third of a 900px one. Naming a colour or reading
+ *   a cut needs far less than the default; anything relying on fine detail
+ *   should stay at 900.
+ */
 export async function fetchImageForVision(
   imageUrl: string,
+  width = 900,
 ): Promise<{ image?: VisionImage; error?: string }> {
   if (!imageUrl || !/^https?:\/\//.test(imageUrl)) return { error: 'no image' }
   try {
-    const res = await fetch(shrink(imageUrl), { signal: AbortSignal.timeout(20000) })
+    const res = await fetch(shrink(imageUrl, width), { signal: AbortSignal.timeout(20000) })
     if (!res.ok) return { error: `image fetch ${res.status}` }
     const buf = new Uint8Array(await res.arrayBuffer())
     if (buf.byteLength > MAX_BYTES) return { error: 'image too large' }
