@@ -25,8 +25,12 @@ export async function earlyAccessSignIn(formData: FormData) {
 
   if (data.user) await recordEarlyAccessLogin(data.user.id)
 
-  // Pilot clients have their own area; everyone else browses The Edit.
-  if ((data.user?.user_metadata as any)?.role === 'client') redirect('/me')
+  // Where she was on her way to — the Mirror connect flow, for one — wins
+  // over the member home. Only a same-origin path is honoured.
+  const next = ((formData.get('next') as string) || '').trim()
+  if (next && next.startsWith('/') && !next.startsWith('//') && !next.includes('\\')) redirect(next)
+  // Accepted members land in the private member area; anyone else is turned
+  // away by the /me layout.
   redirect('/me')
 }
 
@@ -103,6 +107,9 @@ export async function publicSignUp(formData: FormData) {
   if (signErr) redirect(`/signin?error=${encodeURIComponent('Account created — please sign in')}`)
   if (data.user) await recordEarlyAccessLogin(data.user.id)
   await recordLandingEvent('account_signup', '/', ref)
+  // A sign-up from the middle of another flow (Mirror connect) returns there.
+  const next = ((formData.get('next') as string) || '').trim()
+  if (next && next.startsWith('/') && !next.startsWith('//') && !next.includes('\\')) redirect(next)
   redirect('/me')
 }
 

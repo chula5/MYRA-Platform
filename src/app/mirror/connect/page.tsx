@@ -34,9 +34,9 @@ export default async function MirrorConnectPage({ searchParams }: { searchParams
           <>
             <h1 style={{ fontSize: 30, lineHeight: 1.2, fontWeight: 500, margin: '0 0 18px' }}>Sign in to MYRA first</h1>
             <p style={{ fontSize: 19, lineHeight: 1.5, opacity: 0.8, margin: '0 0 28px' }}>
-              The mirror needs to know whose taste it is carrying onto other sites. Sign in, then come back to this page.
+              The mirror needs to know whose taste it is carrying onto other sites. Sign in and come straight back here to connect.
             </p>
-            <Link href="/earlyaccess" style={{ display: 'inline-block', fontSize: 15, letterSpacing: '0.18em', textTransform: 'uppercase', padding: '14px 26px', border: '1px solid #141414', textDecoration: 'none', color: 'inherit' }}>
+            <Link href={`/signin?next=${encodeURIComponent('/mirror/connect')}`} style={{ display: 'inline-block', fontSize: 15, letterSpacing: '0.18em', textTransform: 'uppercase', padding: '14px 26px', border: '1px solid #141414', textDecoration: 'none', color: 'inherit' }}>
               Sign in
             </Link>
           </>

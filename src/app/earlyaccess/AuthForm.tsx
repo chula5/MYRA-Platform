@@ -8,7 +8,7 @@ import { createClient } from '@/lib/supabase'
 const INPUT =
   'w-full border border-[#E2E0DB] bg-white rounded-[14px] px-4 py-3 text-[12px] tracking-[0.054em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors'
 
-export default function AuthForm({ initialMode = 'signin', error }: { initialMode?: 'signin' | 'signup'; error?: string }) {
+export default function AuthForm({ initialMode = 'signin', error, next }: { initialMode?: 'signin' | 'signup'; error?: string; next?: string }) {
   const [mode, setMode] = useState<'signin' | 'signup' | 'reset'>(initialMode)
   const isSignup = mode === 'signup'
   // Carry the referral code into the sign-up so it can be attributed to a source.
@@ -111,6 +111,7 @@ export default function AuthForm({ initialMode = 'signin', error }: { initialMod
           {isSignup ? (
             <form action={publicSignUp} className="flex flex-col gap-3">
               <input type="hidden" name="ref" value={refCode} readOnly />
+              <input type="hidden" name="next" value={next ?? ''} readOnly />
               <input type="email" name="email" required autoComplete="email" placeholder="EMAIL" className={INPUT} />
               <input type="password" name="password" required autoComplete="new-password" placeholder="PASSWORD (MIN 8 CHARS)" className={INPUT} />
               <input type="password" name="confirm" required autoComplete="new-password" placeholder="CONFIRM PASSWORD" className={INPUT} />
@@ -121,6 +122,7 @@ export default function AuthForm({ initialMode = 'signin', error }: { initialMod
             </form>
           ) : (
             <form action={earlyAccessSignIn} className="flex flex-col gap-3">
+              <input type="hidden" name="next" value={next ?? ''} readOnly />
               <input type="email" name="email" required autoComplete="email" placeholder="EMAIL" className={INPUT} />
               <input type="password" name="password" required autoComplete="current-password" placeholder="PASSWORD" className={INPUT} />
               {error && <p className="text-[10px] tracking-[0.068em] text-[#B83A3A]">{error.toUpperCase()}</p>}
