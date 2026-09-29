@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MYRA Mirror",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Every brand site, already in your order. MYRA lifts the pieces you'd actually want to the top — the site stays exactly the brand's own.",
   "icons": {
     "16": "icons/icon-16.png",

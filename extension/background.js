@@ -2,7 +2,8 @@
 // caches a page's ranking for ten minutes so a revisit reorders instantly,
 // and keeps the per-tab "lifted N pieces" count for the badge and popup.
 
-const DEFAULTS = { apiBase: 'http://localhost:3000', token: null, member: null, disabledHosts: [] }
+// A fresh install talks to the live site; the popup's field switches it to a dev server.
+const DEFAULTS = { apiBase: 'https://www.myraassistant.co.uk', token: null, member: null, disabledHosts: [] }
 const RANK_TTL_MS = 10 * 60_000
 const rankCache = new Map() // `${host}|${hash}` → { at, data }
 // The styling job runs HERE, not in the page: she can walk on to the next

@@ -7,7 +7,7 @@ async function render() {
   try { host = new URL(tab?.url || '').host } catch {}
   const site = host.replace(/^www\./, '')
   const state = await send({ type: 'state', host })
-  const base = (state?.apiBase || 'http://localhost:3000').replace(/\/+$/, '')
+  const base = (state?.apiBase || 'https://www.myraassistant.co.uk').replace(/\/+$/, '')
   $('apiBase').value = state?.apiBase || ''
   $('disconnected').hidden = !!state?.connected
   $('connected').hidden = !state?.connected
@@ -69,7 +69,7 @@ async function render() {
 
 $('connect').addEventListener('click', async () => {
   const state = await send({ type: 'state', host: '' })
-  chrome.tabs.create({ url: `${(state?.apiBase || 'http://localhost:3000').replace(/\/+$/, '')}/mirror/connect` })
+  chrome.tabs.create({ url: `${(state?.apiBase || 'https://www.myraassistant.co.uk').replace(/\/+$/, '')}/mirror/connect` })
 })
 $('vinted').addEventListener('click', async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })

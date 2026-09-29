@@ -147,3 +147,32 @@ editor before using these features.
 **Crons** (`vercel.json`) — requires the Vercel Pro plan (Hobby is daily-only):
 digest at 07:00 & 12:00 UTC, sentinel at 05:30 & 17:30 UTC, render-queue
 drainer every 15 minutes. UK local time drifts +1h during BST.
+
+## Safari extension on iPhone (MYRA Mirror)
+
+The `extension/` folder is a Manifest V3 extension. It runs unchanged in
+Chrome and in Safari 16.4+; on iPhone a Safari extension can only be delivered
+inside an App Store app, so it ships inside the MYRA app (`ios/App`). The YOU
+page's "MYRA in Safari and Chrome" section is already wired for it: it shows
+whether the extension is connected (from `member_mirror_link`, migration 0069)
+and "Connect it to me" opens `/mirror/connect` in Safari itself.
+
+One-off, on a Mac with Xcode:
+
+1. Open `ios/App/App.xcodeproj`. File → New → Target → iOS → **Safari Extension**.
+   Product name `MYRA Mirror`, bundle id `uk.co.myraassistant.app.mirror`,
+   language Swift. Keep the generated `SafariWebExtensionHandler.swift`.
+2. In the new target, delete the generated `Resources` folder contents and add
+   the repo's `extension/` folder as a **folder reference** (blue), so the
+   Chrome and Safari builds stay one code base. Set the target's Info.plist
+   `NSExtension → NSExtensionPrincipalClass` to the handler and leave
+   `SFSafariWebExtensionConverterVersion` out.
+3. In Signing & Capabilities, sign both the app and the extension with the
+   MYRA team. Build to a device, then on the phone: Settings → Apps → Safari →
+   Extensions → MYRA Mirror → On, and allow it on all websites.
+4. Ship via TestFlight / App Store as a normal app update. Once live, set
+   `NEXT_PUBLIC_MIRROR_SAFARI_URL` to the app's App Store link so "Add to
+   Safari" on the YOU page points somewhere.
+
+Run migration `0069_member_mirror_link.sql` in the Supabase SQL editor so the
+YOU page can say "Connected in Safari on iPhone since …".
