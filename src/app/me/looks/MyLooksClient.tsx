@@ -16,7 +16,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import ClientWardrobe from './ClientWardrobe'
-import { reactToLook, requestLooks, savedWhileBrowsing, styleSavedPiece, type ClientView, type ClientLook, type ClientLookItem, type BrowsedPiece } from './actions'
+import { myRequests, reactToLook, requestLooks, savedWhileBrowsing, styleSavedPiece, type ClientView, type ClientLook, type ClientLookItem, type BrowsedPiece } from './actions'
 import ComposedLookCard from '@/components/me/ComposedLookCard'
 import type { StyledLook } from '@/app/admin/private-stylist/actions'
 import { CLIENT_OCCASIONS, askKindForEvent, whereFor, ASK_KINDS, ASK_WHEN, ASK_FEEL, ASK_WEATHER, ASK_LIMITS, ASK_BUDGET } from '@/lib/client-occasions'
@@ -74,6 +74,17 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
   >(null)
   const [savedItems, setSavedItems] = useState<Set<string>>(new Set())
   const [asking, setAsking] = useState(false)
+  // What she has asked for that has not come back yet — kept under the ask
+  // button, so a sent request never feels like it vanished into a spinner.
+  const [pendingAsks, setPendingAsks] = useState<{ body: string; when: string }[]>([])
+  useEffect(() => {
+    if (readOnly) return
+    let live = true
+    myRequests()
+      .then((r) => { if (live) setPendingAsks(r.filter((a) => !a.answered).map(({ body, when }) => ({ body, when }))) })
+      .catch(() => {})
+    return () => { live = false }
+  }, [readOnly, asking])
   // Tapping a look opens it — the feed's own detail view, hosted over this page.
   const [openLook, setOpenLook] = useState<ClientLook | null>(null)
   const [openMode, setOpenMode] = useState<'similar' | 'explore' | null>(null)
@@ -293,6 +304,15 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
                 >
                   {readOnly ? `ASK MYRA — TEST AS ${(view.name.split(' ')[0] || 'HER').toUpperCase()}` : 'ASK MYRA FOR SOMETHING NEW'}
                 </button>
+              )}
+              {!asking && pendingAsks.length > 0 && (
+                <div className="mt-5 space-y-2">
+                  {pendingAsks.map((a, i) => (
+                    <p key={i} className="text-[19px] text-[#55534E] text-center leading-[1.4]">
+                      MYRA is working on “{a.body}”. Your stylist checks the looks before they land here.
+                    </p>
+                  ))}
+                </div>
               )}
             </div>
 

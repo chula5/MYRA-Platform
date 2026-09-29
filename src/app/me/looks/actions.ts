@@ -12,6 +12,7 @@
 // one feedback trail and the scorecard cannot disagree with what she said.
 
 import { createServerClient, createAdminClient } from '@/lib/supabase-server'
+import { waitUntil } from '@vercel/functions'
 import { revalidatePath } from 'next/cache'
 import { recordMemberLookFeedback } from '@/app/admin/private-stylist/actions'
 import { CLIENT_OCCASIONS, OCCASION_LABEL, occasionsForMember } from '@/lib/client-occasions'
@@ -239,10 +240,14 @@ export async function requestLooks(
       intent: { occasion, climate },
     })
 
-    // Composing takes a while and must not block her page.
+    // Composing takes a while and must not block her page — and must not die
+    // with it either. Without waitUntil the function is frozen the moment the
+    // response lands, and her delivery sits empty until the stylist composes
+    // it by hand.
     const { composeDeliveryLooks } = await import('@/app/admin/private-stylist/actions')
-    composeDeliveryLooks(created.delivery_id).catch((e) =>
+    const work = composeDeliveryLooks(created.delivery_id).catch((e) =>
       console.error('[requestLooks] compose', e))
+    try { waitUntil(work) } catch { /* local dev: the promise simply runs */ }
 
     revalidatePath('/me/looks')
     return { ok: true }
@@ -251,16 +256,28 @@ export async function requestLooks(
   }
 }
 
-/** What she has asked for, and whether it has come back yet. */
+/** What she has asked for, and whether anything from it has reached her yet. */
 export async function myRequests(): Promise<{ body: string; when: string; answered: boolean }[]> {
   const me = await memberForCurrentUser()
   if (!me) return []
   const admin = createAdminClient() as any
-  const { data } = await admin
-    .from('pilot_chat_message').select('body, created_at')
-    .eq('member_id', me.memberId).eq('role', 'client')
-    .order('created_at', { ascending: false }).limit(5)
-  return (data ?? []).map((m: any) => ({ body: m.body, when: m.created_at, answered: false }))
+  const { data: dels } = await admin
+    .from('pilot_delivery')
+    .select('delivery_id, request_text, created_at')
+    .eq('member_id', me.memberId)
+    .eq('trigger', 'request')
+    .order('created_at', { ascending: false })
+    .limit(3)
+  const ids = (dels ?? []).map((d: any) => d.delivery_id)
+  const { data: looks } = ids.length
+    ? await admin.from('pilot_look').select('delivery_id').in('delivery_id', ids).eq('visible_to_client', true)
+    : { data: [] as any[] }
+  const sentIds = new Set(((looks ?? []) as any[]).map((l: any) => l.delivery_id))
+  return (dels ?? []).map((d: any) => ({
+    body: String(d.request_text ?? '').trim() || 'Something new',
+    when: d.created_at,
+    answered: sentIds.has(d.delivery_id),
+  }))
 }
 
 // ── WHAT SHE KEPT WHILE BROWSING ────────────────────────────────────────────

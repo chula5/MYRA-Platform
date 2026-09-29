@@ -196,7 +196,30 @@ export default function ShopBrain({ testMemberId }: { testMemberId?: string }) {
   const openRef = useRef<HTMLDivElement>(null)
   const scrollTo = useScrollTo()
 
-  useEffect(() => { void loadShopBrain(testMemberId).then(setView) }, [testMemberId])
+  // The section draws nothing until the view arrives, and on a phone the call
+  // can be dropped with the page — a suspended tab, a flaky network — so it
+  // retries, and picks the load back up when she returns with nothing shown.
+  const viewRef = useRef<ShopBrainView | null>(null)
+  useEffect(() => {
+    let live = true
+    const load = async (attempt: number) => {
+      try {
+        const v = await loadShopBrain(testMemberId)
+        if (!live) return
+        viewRef.current = v
+        setView(v)
+      } catch {
+        if (live && attempt < 2) setTimeout(() => void load(attempt + 1), 1500 * (attempt + 1))
+      }
+    }
+    void load(0)
+    const onVisible = () => { if (document.visibilityState === 'visible' && !viewRef.current) void load(1) }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      live = false
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [testMemberId])
 
   // The pieces she kept are styled without being asked — three outfits each,
   // newest first, one after another — so the work is done before she looks.
