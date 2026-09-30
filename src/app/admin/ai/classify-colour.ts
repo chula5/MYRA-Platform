@@ -14,8 +14,7 @@
 // the only evidence — Venetian names like BOTTIGLIA and SALINA, and house
 // words like DUSK, BLOSSOM and APPLE that no lexicon will ever cover.
 
-import Anthropic from '@anthropic-ai/sdk'
-import { fetchImageForVision } from '@/lib/vision-image'
+import { readWordFromImage } from '@/lib/openai-vision'
 // The shade list lives in a plain module: a 'use server' file may export only
 // async functions, and exporting a constant here took Brand Watch down.
 import { PALE_SHADES, type PaleShade } from '@/lib/pale-tone'
@@ -46,33 +45,16 @@ How to decide:
 export async function classifyProductColour(
   imageUrl: string,
 ): Promise<{ colour: string | null; error?: string }> {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) return { colour: null, error: 'ANTHROPIC_API_KEY not configured' }
-
-  const { image, error } = await fetchImageForVision(imageUrl)
-  if (!image) return { colour: null, error }
-
   try {
-    const client = new Anthropic({ apiKey })
-    const r = await client.messages.create({
-      // Naming the colour of a garment is a far easier read than judging who
-      // it is cut for, and this runs once per unreadable product across a
-      // whole catalogue. Checked against Sonnet on THE POSSE: identical on
-      // every unambiguous piece, so the cheap model is the right one here.
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 8,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.data } },
-          { type: 'text', text: PROMPT },
-        ],
-      }],
-    })
-    const block = r.content.find((b) => b.type === 'text')
-    const word = (block && block.type === 'text' ? block.text : '').trim().toLowerCase().replace(/[^a-z]/g, '')
-    const hit = FAMILIES.find((f) => f === word)
-    return hit ? { colour: hit } : { colour: null, error: word ? `unusable read "${word}"` : 'empty read' }
+    // The cheap reader (lib/openai-vision). Anthropic was doing this for a
+    // measured 10x the cost and is out of credit, which left every unreadable
+    // piece with no colour at all — and colour is 3 of the 7 house-style
+    // points, so those pieces could never clear a min score of 5.
+    const { word, error } = await readWordFromImage(imageUrl, PROMPT)
+    if (error) return { colour: null, error }
+    const read = word.trim().toLowerCase().replace(/[^a-z]/g, '')
+    const hit = FAMILIES.find((f) => f === read)
+    return hit ? { colour: hit } : { colour: null, error: read ? `unusable read "${read}"` : 'empty read' }
   } catch (err) {
     return { colour: null, error: err instanceof Error ? err.message : 'vision failed' }
   }
@@ -101,28 +83,15 @@ not_pale — anything else (beige, sand, grey, a colour, a print, black)
 Never explain.`
 
 export async function classifyPaleShade(imageUrl: string): Promise<{ shade: PaleShade | null; error?: string }> {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) return { shade: null, error: 'ANTHROPIC_API_KEY not configured' }
-  const { image, error } = await fetchImageForVision(imageUrl)
-  if (!image) return { shade: null, error }
   try {
-    const client = new Anthropic({ apiKey })
-    const r = await client.messages.create({
-      // Same read class as the family read above, once per pale product.
-      model: 'claude-haiku-4-5',
-      max_tokens: 10,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.data } },
-          { type: 'text', text: SHADE_PROMPT },
-        ],
-      }],
-    })
-    const block = r.content.find((b) => b.type === 'text')
-    const word = (block && block.type === 'text' ? block.text : '').trim().toLowerCase().replace(/[^a-z_]/g, '')
-    const hit = PALE_SHADES.find((x) => x === word)
-    return hit ? { shade: hit } : { shade: null, error: word ? `unusable read "${word}"` : 'empty read' }
+    // High detail here, unlike the family read: ivory against cream is a
+    // question about a few degrees of warmth, and the coarse read cannot see
+    // that. It still costs a fifth of the Haiku read that used to do this.
+    const { word, error } = await readWordFromImage(imageUrl, SHADE_PROMPT, { maxTokens: 10, detail: 'high' })
+    if (error) return { shade: null, error }
+    const read = word.trim().toLowerCase().replace(/[^a-z_]/g, '')
+    const hit = PALE_SHADES.find((x) => x === read)
+    return hit ? { shade: hit } : { shade: null, error: read ? `unusable read "${read}"` : 'empty read' }
   } catch (err) {
     return { shade: null, error: err instanceof Error ? err.message : 'vision failed' }
   }

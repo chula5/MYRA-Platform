@@ -13,17 +13,11 @@
 // piece cannot be kept: it sat in the queue for ever while ACCEPT did nothing.
 //
 // Where the words are silent the picture is the evidence: one cheap read per
-// otherwise-unnamable piece, and only where the text has already failed.
-//
-// OpenAI rather than the Anthropic vision reads beside it, because that is the
-// provider with credit: the gender and colour reads were returning "credit
-// balance is too low" for every call, which is no evidence about any garment.
+// otherwise-unnamable piece, and only where the text has already failed. The
+// reader and its cost are in lib/openai-vision, shared with the colour reads.
 
-import { fetchImageForVision } from '@/lib/vision-image'
+import { readWordFromImage } from '@/lib/openai-vision'
 import type { ItemType } from '@/types/database'
-
-/** Same cheap reader as the tagging pipeline, at the same low detail. */
-export const TYPE_MODEL = process.env.BRAND_WATCH_TYPE_MODEL || 'gpt-6-luna'
 
 /**
  * The whole taxonomy, so a confident answer can be filed without a mapping
@@ -83,34 +77,9 @@ How to decide, in order:
    thing, which is worse than leaving it unnamed.`
 
 export async function classifyItemTypeFromImage(imageUrl: string): Promise<{ itemType: ItemType | null; error?: string }> {
-  const apiKey = process.env.OPENAI_API_KEY
-  if (!apiKey) return { itemType: null, error: 'OPENAI_API_KEY not configured' }
-
-  // The media type is sniffed from the bytes, as in the gender read: CDN
-  // headers lie often enough to matter.
-  const { image, error } = await fetchImageForVision(imageUrl)
-  if (!image) return { itemType: null, error }
-
   try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: TYPE_MODEL,
-        max_completion_tokens: 12,
-        reasoning_effort: 'none',
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'text', text: PROMPT },
-            { type: 'image_url', image_url: { url: `data:${image.mediaType};base64,${image.data}`, detail: 'low' } },
-          ],
-        }],
-      }),
-    })
-    const j: any = await res.json().catch(() => ({}))
-    if (!res.ok) return { itemType: null, error: `HTTP ${res.status}: ${String(j?.error?.message ?? '').slice(0, 160)}` }
-    const word = String(j.choices?.[0]?.message?.content ?? '')
+    const { word, error } = await readWordFromImage(imageUrl, PROMPT)
+    if (error) return { itemType: null, error }
     if (/unclear|unknown|cannot|can't/i.test(word)) return { itemType: null }
     return { itemType: asItemType(word) }
   } catch (err) {
