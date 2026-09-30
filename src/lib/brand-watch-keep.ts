@@ -6,6 +6,8 @@
 // Moved out of the server-actions file so the Monday scan can keep pieces too.
 
 import { houseBanOf } from '@/lib/brand-watch-bans'
+import { typeFromStoredRow } from '@/lib/brand-watch'
+import { classifyItemTypeFromImage } from '@/app/admin/ai/classify-item-type'
 import { checkStockDetailed } from '@/app/admin/items/stock-check'
 import { upsertSizeAvailability } from '@/lib/size-availability'
 import { recordStyleDecision } from '@/lib/style-brain-store'
@@ -14,6 +16,8 @@ export interface KeepReport {
   /** Kept, but sold out right now — filed on the restock watch, not in the pool. */
   outOfStock: string[]
   lowStock: string[]
+  /** Left in the queue: nothing in the row or the name says what kind of piece it is. */
+  untyped: string[]
 }
 
 /**
@@ -26,6 +30,19 @@ export interface KeepReport {
  * composer never draws from. Sizes come back with the check and are written
  * as size rows, so "in her size" is right from the first day.
  */
+/**
+ * The type read from the picture, for a piece whose name says nothing. One
+ * cheap call, only on the pieces that would otherwise be refused: AFLALO's
+ * "Racquet String" bracelets are jewellery made from tennis string, and the
+ * name is the only text those rows carry.
+ */
+async function typeFromImage(imageUrl: string | null | undefined): Promise<string | null> {
+  if (!imageUrl) return null
+  try {
+    return (await classifyItemTypeFromImage(String(imageUrl))).itemType
+  } catch { return null }
+}
+
 export async function keepQueueRows(
   admin: any, queueIds: string[], opts: { auto?: boolean; liveStock?: boolean; report?: KeepReport } = {},
 ): Promise<number> {
@@ -50,10 +67,18 @@ export async function keepQueueRows(
         console.warn(`[keepQueueRows] ${q.product_name}: not kept — ${ban}`)
         continue
       }
-      if (!q.item_type) {
-        // Left in the queue rather than kept as the wrong thing — the type can
-        // be set by hand and it can be kept again.
+      // The scan writes the type it read on scan day. A shop that states no
+      // product_type leaves the name as the only signal — AFLALO sends the
+      // literal string "undefined" — so those rows arrive untyped, and an
+      // untyped piece cannot be kept: ACCEPT did nothing at all and the piece
+      // stayed in the queue for ever. Read the piece's own name first, with the
+      // same rules the scan uses, and if the name says nothing either, read the
+      // picture. Never a default: a piece that neither the name nor the image
+      // can name stays put rather than being filed as the wrong thing.
+      const itemType = q.item_type ?? typeFromStoredRow(q) ?? await typeFromImage(q.image_url)
+      if (!itemType) {
         skippedUntyped.push(q.product_name)
+        opts.report?.untyped.push(q.product_name)
         continue
       }
       // What the shop says today, not what it said on scan day.
@@ -85,7 +110,7 @@ export async function keepQueueRows(
           // NEVER default. item_type is a NOT NULL enum, so an untyped piece
           // used to be silently filed as a blouse — which is how a swimsuit
           // and a bikini top ended up composed as tops in a client's outfits.
-          item_type: q.item_type,
+          item_type: itemType,
           product_name: q.product_name,
           retailer_url: q.retailer_url,
           image_url: q.image_url,
@@ -117,7 +142,7 @@ export async function keepQueueRows(
         .single()
       if (ierr) throw new Error(`item insert failed: ${ierr.message}`)
       if (sizeEntries.length) {
-        try { await upsertSizeAvailability(item.item_id, sizeEntries, { itemType: q.item_type }) } catch { /* sizes are a bonus */ }
+        try { await upsertSizeAvailability(item.item_id, sizeEntries, { itemType }) } catch { /* sizes are a bonus */ }
       }
       const decided = { status: 'kept', decided_at: new Date().toISOString(), item_id: item.item_id }
       // auto_kept arrives with migration 0056. The row MUST leave the queue

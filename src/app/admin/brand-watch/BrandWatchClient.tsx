@@ -203,10 +203,18 @@ export default function BrandWatchClient(props: Props) {
       .then((r: any) => {
         const oos: string[] = r.outOfStock ?? []
         const low: string[] = r.lowStock ?? []
+        const untyped: string[] = r.untyped ?? []
         const stock = oos.length
           ? ` · ${oos.length === 1 ? oos[0].toUpperCase() : `${oos.length} PIECES`} SOLD OUT RIGHT NOW — KEPT ON THE RESTOCK WATCH, NOT IN OUTFITS UNTIL IT IS BACK`
           : low.length ? ` · ${low.length === 1 ? low[0].toUpperCase() : `${low.length} PIECES`} LOW IN STOCK` : ''
-        setNotice(`${r.updated} ${keep ? 'KEPT → ADDED TO LIBRARY AS READY' : 'SKIPPED — NEVER ENTERS THE LIBRARY'}${keep ? stock : ''} — LEARNING UPDATES ON NEXT LOAD`)
+        // A piece MYRA cannot name stays in the queue, so this must not say it
+        // was added. It said "0 KEPT → ADDED TO LIBRARY AS READY" while the
+        // card came back on the next load, which reads as a broken button.
+        const left = untyped.length
+          ? `${untyped.length === 1 ? untyped[0].toUpperCase() : `${untyped.length} PIECES`} STAYED IN THE QUEUE — NOTHING IN THE NAME SAYS WHAT KIND OF PIECE IT IS, AND MYRA WILL NOT FILE A GUESS`
+          : ''
+        if (keep && r.updated === 0 && left) { setNotice(left); return }
+        setNotice(`${r.updated} ${keep ? 'KEPT → ADDED TO LIBRARY AS READY' : 'SKIPPED — NEVER ENTERS THE LIBRARY'}${keep ? stock : ''}${left ? ` · ${left}` : ''} — LEARNING UPDATES ON NEXT LOAD`)
       })
       .catch((e) => setNotice(e instanceof Error ? e.message : String(e)))
   }

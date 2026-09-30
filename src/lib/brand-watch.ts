@@ -10,6 +10,7 @@ import { toGbpAmount } from '@/lib/currency'
 import { seasonOf, inSeason, inCurrentSeason, type Season, type SeasonInput } from '@/lib/season'
 import { fetchShopSignals, type SeasonByHandle, type ShopSignals } from '@/lib/brand-watch-collections'
 import { classifyProductGender, type GenderRead } from '@/app/admin/ai/classify-gender'
+import { classifyItemTypeFromImage } from '@/app/admin/ai/classify-item-type'
 import { classifyProductColour } from '@/app/admin/ai/classify-colour'
 import { houseBanOf } from '@/lib/brand-watch-bans'
 import {
@@ -80,7 +81,13 @@ export interface BrandCheckResult {
   skippedSeason?: number // new on-taste pieces NOT queued because they are last season's stock
   suppressedByLearning: number // predicted-skip by your keep/skip history — left unseen, re-evaluated as the model evolves
   restocked: number // existing library items that went out-of-stock → back in stock
-  visionColours?: number // colours read from the product image because the feed stated none
+  visionColours?: number
+  /**
+   * Vision gender reads made this run — pieces with no textual gender signal.
+   * Declared here because the scan writes it: it was being set on the result
+   * without the type ever naming it.
+   */
+  menswearRead?: number // colours read from the product image because the feed stated none
   note?: string // e.g. browser scan chunking: "350 of 812 pages this run"
   autoKept?: number // AUTOMATE: new pieces kept straight into the library
   autoNote?: string | null // e.g. "AUTOMATE PAUSED — NOT YET — RIGHT 6 OF 11"
@@ -231,8 +238,24 @@ const TYPE_RULES: Array<[RegExp, string]> = [
   [/knit|sweater|jumper|cardigan|pullover|turtleneck|roll.?neck|polo.?neck/, 'knitwear'],
   // Everything else called a vest: a sleeveless top.
   [/\bblouse|camisole|\bcami\b|\btop\b|\btops\b|\btank\b|\bvest\b|\bwaistcoat/, 'blouse'], [/\bovershirt|\bshirt/, 'shirt'],
-  [/\bjeans|\bdenim\b/, 'jeans'], [/trouser|\bpants|chino|legging/, 'trousers'],
-  [/\bshorts|bermuda/, 'shorts'], [/\bskirt/, 'skirt'],
+  [/\bjeans|\bdenim\b/, 'jeans'],
+  // Singular, too. American shops name a piece "Bradum Pant in Wool", and a
+  // feed with no product_type leaves the title as the only signal — AFLALO
+  // sends product_type as the literal string "undefined". `\bpants` matched
+  // none of it, so 14 pieces sat in its queue with no type at all, and an
+  // untyped piece cannot be kept: ACCEPT logged "left in the queue" and did
+  // nothing while the count stayed put.
+  //
+  // The singular word is only trusted where it NAMES the piece — at the end of
+  // the name, or followed by "in <material>" / a size. Mid-name it is usually
+  // describing something else, and the corpus is full of those: "PANT IX
+  // Glasses Black" is eyewear (a brand name), "Pant Skirt Grey Melange" is a
+  // skirt, "Short black double breasted wool bomber" is a jacket, "Short
+  // Glove" is a glove. Every one of those rules is tested below this one, so
+  // an unguarded "pant"/"short" wins by being read first.
+  [/trouser|\bpants|\bpant\b(?=[\s-]*(?:$|\d|[-–|,]|in\b))|chino|legging/, 'trousers'],
+  [/bermuda|\bshorts|\bshort\b(?=[\s-]*(?:$|\d|[-–|,]|in\b))(?<!\bskirt\b[\s\w-]{0,40})/, 'shorts'],
+  [/\bskirt/, 'skirt'],
   [/\bjacket|bomber|anorak|windbreaker/, 'jacket'],
   [/\bbelt/, 'belt'], [/\bscarf|shawl|bandana|\bstole\b|\bsnood\b/, 'scarf'],
   // Earrings first: "Fine chain earrings with stones" was a necklace, because
@@ -492,6 +515,42 @@ function classifyAndScore(p: {
 // shape. No structured tags — category comes from the JSON-LD category and
 // the de-slugged URL path (e.g. /catalogue/dresses/robin-rosamuse.html), the
 // description feeds the wider scoring haystack like a Shopify body would.
+/**
+ * What kind of piece a stored queue row says it is, when the scan read nothing.
+ *
+ * The same classifier the scan runs, minus the feed fields the queue does not
+ * keep. Some shops state no product_type at all — AFLALO sends the literal
+ * string "undefined" — so there the name is the only signal, and a piece that
+ * arrives untyped can never be kept: ACCEPT left it in the queue and the count
+ * did not move. Reads the name only, so it can never contradict a type the
+ * scan did resolve.
+ */
+export function typeFromStoredRow(row: {
+  product_name?: string | null
+  retailer_url?: string | null
+  price?: string | number | null
+  currency?: string | null
+  image_url?: string | null
+  stock_status?: string | null
+}): string | null {
+  const title = String(row.product_name ?? '').trim()
+  if (!title) return null
+  const p = row.price != null ? Number(row.price) : null
+  try {
+    return classifyExternalProduct({
+      url: String(row.retailer_url ?? ''),
+      title,
+      description: '',
+      category: '',
+      brand: null,
+      price: p != null && Number.isFinite(p) ? p : null,
+      currency: row.currency ?? null,
+      images: row.image_url ? [String(row.image_url)] : [],
+      available: row.stock_status !== 'out_of_stock',
+    }).itemType
+  } catch { return null }
+}
+
 export function classifyExternalProduct(p: ParsedProduct): ScannedProduct {
   const path = (() => { try { return new URL(p.url).pathname } catch { return '' } })()
   const pathText = path.replace(/\.html?$/, '').split('/').filter(Boolean).map((s) => s.replace(/[-_]+/g, ' ')).join(' ')
@@ -803,6 +862,46 @@ export async function detectStoreCurrency(baseUrl: string): Promise<string | nul
 // not know, so no piece is exempted by it, and no piece is placed by a season
 // collection. A piece whose season is unknown still queues: an unplaced piece is
 // not evidence of the wrong season.
+/**
+ * The pieces whose own words name nothing get one cheap vision read, for the
+ * same reason the gender check exists: where the text is silent, the picture is
+ * the only evidence. AFLALO states no product_type at all and sells "Racquet
+ * String" bracelets — jewellery made from tennis string — so no rule can read
+ * them, and an untyped row can never be kept: those pieces sat in the queue
+ * while ACCEPT did nothing at all.
+ *
+ * Only pieces already being queued are read, only where the text gave nothing,
+ * and an answer outside the taxonomy counts as no answer. Unlike the gender
+ * pass this never fails a scan: an unreadable piece stays untyped and waits for
+ * her, which is exactly where it was before.
+ */
+async function applyVisionItemType(products: ScannedProduct[]): Promise<number> {
+  const needs = products.filter((p) => !p.itemType && p.images[0])
+  if (!needs.length) return 0
+
+  const verdicts: Array<{ itemType: string | null; error?: string }> = []
+  const CONC = 6
+  for (let i = 0; i < needs.length; i += CONC) {
+    verdicts.push(...await Promise.all(needs.slice(i, i + CONC).map((p) => classifyItemTypeFromImage(p.images[0]))))
+  }
+
+  // A pass that is broadly broken is not evidence about a garment. It fills
+  // nothing and says so, rather than reading a catalogue as jewellery.
+  const infraFailed = verdicts.filter((v) => v.error).length
+  if (verdicts.length && infraFailed / verdicts.length > 0.25) {
+    console.warn(`[brand-watch] item type read failed for ${infraFailed} of ${verdicts.length} pieces (${verdicts.find((v) => v.error)?.error ?? 'unknown'}) — leaving them untyped`)
+    return 0
+  }
+
+  let filled = 0
+  needs.forEach((p, i) => {
+    const t = verdicts[i]?.itemType
+    if (t) { p.itemType = t; filled++ }
+  })
+  if (filled) console.log(`[brand-watch] ${filled} of ${needs.length} untyped pieces named from their image`)
+  return filled
+}
+
 async function queueProducts(
   admin: ReturnType<typeof createAdminClient>,
   watched: WatchedBrandRow,
@@ -810,6 +909,8 @@ async function queueProducts(
   signals: ShopSignals | null = null,
 ): Promise<{ queued: number; skippedSeason: number }> {
   if (!products.length) return { queued: 0, skippedSeason: 0 }
+  // Name the pieces whose own words could not, before their rows are written.
+  await applyVisionItemType(products)
   const brandId = watched.brand_id ?? (await resolveBrandId(admin, watched.name))
   if (!watched.brand_id) {
     await (admin as any).from('watched_brand').update({ brand_id: brandId } as any).eq('watched_brand_id', watched.watched_brand_id)
@@ -853,7 +954,11 @@ async function queueProducts(
       currency: p.currency ?? storeCurrency,
       // Converted at queue time so every price in the queue is comparable.
       price_gbp: toGbpAmount(p.price, p.currency ?? storeCurrency),
-      item_type: p.itemType, // null = unmapped — honest in the queue; the keep flow defaults at item-creation
+      // null = the scan could not name the piece. It is honest in the queue,
+      // and the keep flow reads the name itself before giving up — a piece it
+      // still cannot name stays in the queue rather than being filed as the
+      // wrong thing.
+      item_type: p.itemType,
       colour_family: p.colourFamily,
       material_category: p.materialCategory,
       material_primary: p.materialPrimary,

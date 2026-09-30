@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { classifyExternalProduct } from '@/lib/brand-watch'
+import { classifyExternalProduct, typeFromStoredRow } from '@/lib/brand-watch'
+import { asItemType } from '@/app/admin/ai/classify-item-type'
 
 const parsed = (title: string, url = 'https://uk.varley.com/products/x') => ({
   url, title, brand: 'Varley', description: '', category: '',
@@ -28,6 +29,46 @@ describe('item types the scanner was missing', () => {
     expect(typeOf('Cashmere Boxy Polo Neck')).toBe('knitwear')
   })
 
+  it('reads the singular words American shops use for the same garment', () => {
+    // AFLALO sends no product_type and names every piece "Bradum Pant in
+    // Wool". `\bpants` matched none of them, so 14 pieces of its queue were
+    // untyped — and an untyped piece cannot be kept, which left ACCEPT looking
+    // broken while the queue count never moved.
+    expect(typeOf('Bradum Pant in Wool')).toBe('trousers')
+    expect(typeOf('Marroc Pant in Silk')).toBe('trousers')
+    expect(typeOf('Tavi Pant in Wool')).toBe('trousers')
+    expect(typeOf('Bromer Short in Viscose')).toBe('shorts')
+  })
+
+  it('does not read a length as the garment', () => {
+    // The singular "short" must never beat the piece it describes.
+    expect(typeOf('Short Sleeve Shirt')).toBe('shirt')
+    // A puffer is filed as a coat by the rule above this one; the point here
+    // is only that the length did not turn it into a pair of shorts.
+    expect(typeOf('Short Puffer Jacket')).toBe('coat')
+    expect(typeOf('Short Bomber Jacket')).toBe('jacket')
+    expect(typeOf('Short Pleated Skirt')).toBe('skirt')
+    expect(typeOf('Short Cashmere Dress')).toBe('midi_dress')
+  })
+
+  it('does not let the singular words beat a different garment named after them', () => {
+    // Every rule for these sits below the trousers and shorts rules, so an
+    // unguarded singular word wins by being read first.
+    expect(typeOf('PANT IX Glasses Black')).toBe('sunglasses')
+    expect(typeOf('Pant Skirt Grey Melange')).toBe('skirt')
+    expect(typeOf('Short Sleeve Shirt')).toBe('shirt')
+    expect(typeOf('Short black double breasted wool bomber')).toBe('jacket')
+    expect(typeOf('Short Glove')).toBe('gloves')
+    // A piece its own name calls a skirt does not become a pair of shorts for
+    // having a "detachable mini short" inside it.
+    expect(typeOf('COLETTE - Sheer chiffon midi skirt with detachable mini short')).toBe('skirt')
+  })
+
+  it('does not let a cuff or a belt beat the trousers they belong to', () => {
+    expect(typeOf('The Slim Cuff Pant 27.5')).toBe('trousers')
+    expect(typeOf('Belted Cotton Pant')).toBe('trousers')
+  })
+
   it('still keeps homeware and trinkets out', () => {
     for (const t of ['Leather Keychain', 'Card Holder', 'Passport Holder']) {
       expect(classifyExternalProduct(parsed(t)).nonFashion).toBe(true)
@@ -42,6 +83,49 @@ describe('names that must not be mistyped', () => {
   })
   it('keeps a cashmere stole a scarf, not a jumper', () => {
     expect(classifyExternalProduct(parsed2('Cashmere Stole')).itemType).toBe('scarf')
+  })
+})
+
+describe('reading a type back off a stored queue row', () => {
+  it('names the pieces whose shop states no product_type at all', () => {
+    // AFLALO sends product_type as the literal string "undefined", so its rows
+    // sit in the queue with no type — and an untyped piece cannot be kept, so
+    // ACCEPT did nothing and the count never moved.
+    expect(typeFromStoredRow({ product_name: 'Bradum Pant in Wool', retailer_url: 'https://aflalo.com/products/bradum-pant-in-wool' })).toBe('trousers')
+    expect(typeFromStoredRow({ product_name: 'Tavi Pant in Wool', retailer_url: 'https://aflalo.com/products/tavi-pant-in-wool' })).toBe('trousers')
+    expect(typeFromStoredRow({ product_name: 'Bromer Short in Viscose', retailer_url: 'https://aflalo.com/products/bromer-short-in-viscose' })).toBe('shorts')
+  })
+
+  it('still refuses to guess', () => {
+    // Tennis string is not a garment, and a nameless row is still nameless.
+    expect(typeFromStoredRow({ product_name: 'Racquet String in Khaki', retailer_url: 'https://aflalo.com/products/racquet-string-in-khaki' })).toBeNull()
+    expect(typeFromStoredRow({ product_name: '' })).toBeNull()
+    expect(typeFromStoredRow({ product_name: 'Solstice' })).toBeNull()
+  })
+})
+
+describe('reading an item type out of the picture', () => {
+  it('files a taxonomy label straight through', () => {
+    expect(asItemType('bracelet')).toBe('bracelet')
+    expect(asItemType(' Trousers\n')).toBe('trousers')
+    expect(asItemType('structured_bag')).toBe('structured_bag')
+    expect(asItemType('t-shirt')).toBe('t-shirt')
+  })
+
+  it('takes the plain word for a label the taxonomy spells differently', () => {
+    expect(asItemType('tee')).toBe('t-shirt')
+    expect(asItemType('jumper')).toBe('knitwear')
+    expect(asItemType('bag')).toBe('structured_bag')
+    expect(asItemType('earring')).toBe('earrings')
+  })
+
+  it('refuses anything that is not one of the labels', () => {
+    // A bracelet woven from tennis string must not be filed as "string", and
+    // "jewellery" is too broad to be one row in the library.
+    expect(asItemType('string')).toBeNull()
+    expect(asItemType('jewellery')).toBeNull()
+    expect(asItemType('unclear')).toBeNull()
+    expect(asItemType('')).toBeNull()
   })
 })
 

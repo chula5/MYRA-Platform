@@ -20,6 +20,7 @@
 //  · at most AUTO_KEEP_PER_SCAN pieces a scan, so a drop can't flood the library
 
 import { buildLearning, type DecidedRow } from './brand-watch-learning'
+import { typeFromStoredRow } from './brand-watch'
 import { automationOn, measureBrandTrust, summariseTrust, trustForAutomation, wouldAutoKeep, type BrandTrust, type TrustDecision } from './brand-watch-trust'
 import { carefulFlags, keptTwinOf, measureTwinTrust, summariseTwinTrust, type TwinDecision, type TwinTrust } from './brand-watch-twins'
 import {
@@ -240,8 +241,15 @@ export interface AutoKeepResult {
   note: string | null
 }
 
-const QUEUED_COLS = 'queue_id, brand_id, product_name, item_type, colour_family, material_category, material_primary, price, price_gbp, discovery_score'
-const keepable = (q: any) => q.item_type && !houseBanOf({ title: q.product_name, materialPrimary: q.material_primary, itemType: q.item_type })
+const QUEUED_COLS = 'queue_id, brand_id, product_name, item_type, colour_family, material_category, material_primary, price, price_gbp, discovery_score, retailer_url, currency, image_url, stock_status'
+/**
+ * The row with the type it is actually going to be kept as: what the scan read,
+ * or what the piece's own name gives when the shop stated nothing — AFLALO
+ * sends product_type as the literal string "undefined". Without this, every
+ * piece from such a feed is invisible to automation for ever.
+ */
+const typedRow = (q: any) => (q.item_type ? q : { ...q, item_type: typeFromStoredRow(q) })
+const keepable = (q: any) => { const r = typedRow(q); return r.item_type && !houseBanOf({ title: r.product_name, materialPrimary: r.material_primary, itemType: r.item_type }) }
 
 async function queuedFor(admin: any, brandId: string, since: string | null): Promise<any[]> {
   let query = admin.from('brand_watch_queue').select(QUEUED_COLS).eq('status', 'queued').eq('brand_id', brandId)
@@ -265,7 +273,8 @@ export async function autoKeepForBrand(admin: any, watched: WatchedBrandRow, tru
       else {
         const since = watched.auto_keep_twins_since ?? new Date().toISOString()
         for (const q of await queuedFor(admin, watched.brand_id, since)) {
-          if (keepable(q) && twinOfQueueRow(data, q)) picks.set(q.queue_id, 100 + Number(q.discovery_score ?? 0))
+          const row = typedRow(q)
+          if (row.item_type && keepable(row) && twinOfQueueRow(data, row)) picks.set(q.queue_id, 100 + Number(q.discovery_score ?? 0))
         }
       }
     }
@@ -279,7 +288,7 @@ export async function autoKeepForBrand(admin: any, watched: WatchedBrandRow, tru
         const since = watched.auto_keep_confidence_since ?? new Date().toISOString()
         for (const q of await queuedFor(admin, watched.brand_id, since)) {
           if (!keepable(q)) continue
-          const row = { ...q, brand_id: watched.brand_id }
+          const row = { ...typedRow(q), brand_id: watched.brand_id }
           const p = confidenceOf(data, row)
           // The same gate the trust measure was taken through — a kind she has
           // never kept is shown a number but is never taken unsupervised.
@@ -295,7 +304,7 @@ export async function autoKeepForBrand(admin: any, watched: WatchedBrandRow, tru
         const since = watched.auto_keep_since ?? new Date().toISOString()
         for (const q of await queuedFor(admin, watched.brand_id, since)) {
           if (!keepable(q) || picks.has(q.queue_id)) continue
-          const delta = data.learnOwn(toDecided({ ...q, brand_id: watched.brand_id })).delta
+          const delta = data.learnOwn(toDecided({ ...typedRow(q), brand_id: watched.brand_id })).delta
           const score = Number(q.discovery_score ?? 0)
           if (wouldAutoKeep(delta, score, watched.min_score)) picks.set(q.queue_id, score + delta)
         }
@@ -324,7 +333,7 @@ export async function keepConfidentNow(admin: any, watched: WatchedBrandRow, cap
   const ids = (await queuedFor(admin, watched.brand_id, null))
     .filter((q) => {
       if (!keepable(q)) return false
-      const row = { ...q, brand_id: watched.brand_id }
+      const row = { ...typedRow(q), brand_id: watched.brand_id }
       return wouldAutoKeepByConfidence(confidenceOf(data, row), data.learnOwn(toDecided(row)), bar)
     })
     .slice(0, cap)
@@ -339,7 +348,7 @@ export async function keepTwinsNow(admin: any, watched: WatchedBrandRow): Promis
   const trust = twinTrustFor(data, watched)
   if (!trust.trusted) return { kept: 0, error: `NOT YET TRUSTED — ${trust.summary}` }
   const ids = (await queuedFor(admin, watched.brand_id, null))
-    .filter((q) => keepable(q) && twinOfQueueRow(data, q))
+    .filter((q) => { const r = typedRow(q); return keepable(r) && twinOfQueueRow(data, r) })
     .slice(0, TWINS_NOW_CAP)
     .map((q) => q.queue_id)
   return { kept: ids.length ? await keepQueueRows(admin, ids, { auto: true }) : 0 }
