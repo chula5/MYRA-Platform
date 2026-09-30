@@ -57,3 +57,6 @@ next-env.d.ts
 
 # brand-watch scoring evaluation snapshots
 /scripts/.eval/
+
+# supabase CLI scratch
+/supabase/.temp/
