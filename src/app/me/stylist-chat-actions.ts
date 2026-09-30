@@ -10,7 +10,7 @@ import { createAdminClient } from '@/lib/supabase-server'
 import { resolveClientMember } from '@/lib/client-member'
 import { listStylists, getStylist } from '@/lib/stylist-store'
 import { replyAsStylist, type ChatTurn, type ChatLook } from '@/lib/stylist-chat'
-import type { ItemAnswer } from '@/lib/mcp/myra-tools'
+import { outfitsFor, type ItemAnswer } from '@/lib/mcp/myra-tools'
 
 export interface ChatStylist {
   stylist_id: string
@@ -90,4 +90,33 @@ export async function sendToStylist(
     ])
   }
   return { reply: { message_id: `r-${Date.now()}`, role: 'stylist', body: reply.body, looks: reply.looks, items: reply.items, created_at: now } }
+}
+
+/** MYRA without a named stylist lens. This is intentionally not persisted. */
+export async function askMyraForOutfits(message: string, asMemberId?: string): Promise<{ reply?: ChatMessage; error?: string }> {
+  const me = await resolveClientMember(asMemberId)
+  if (!me) return { error: 'Not signed in' }
+  const body = (message ?? '').trim().slice(0, 1500)
+  if (!body) return { error: 'Say something first' }
+
+  const result = await outfitsFor(me.memberId, { words: body, count: 3 })
+  if (result.error) return { error: result.error }
+  const looks: ChatLook[] = result.looks.filter((look) => look.items?.length).map((look, index) => ({
+    look_id: `myra-${Date.now()}-${index}`,
+    image_url: null,
+    items: look.items!,
+    why: look.why,
+    occasion_label: result.occasionLabel,
+  }))
+  if (!looks.length) return { error: 'MYRA could not make an outfit for that yet' }
+  return {
+    reply: {
+      message_id: `myra-${Date.now()}`,
+      role: 'stylist',
+      body: `I pulled together ${looks.length === 1 ? 'an outfit' : `${looks.length} outfits`} for ${result.occasionLabel.toLowerCase()}.`,
+      looks,
+      items: [],
+      created_at: new Date().toISOString(),
+    },
+  }
 }
