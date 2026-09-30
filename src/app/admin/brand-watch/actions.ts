@@ -5,7 +5,7 @@ import { DEFAULT_CONFIDENCE, type ConfidenceTrust } from '@/lib/brand-watch-conf
 import { houseBanOf } from '@/lib/brand-watch-bans'
 import { keepQueueRows, teachStyleBrain, type KeepReport } from '@/lib/brand-watch-keep'
 import {
-  autoKeepForBrand, keepConfidentNow, keepTwinsNow, loadBrandTrust, trustFor, twinOfQueueRow, twinTrustFor, type BrandTrustData,
+  autoKeepForBrand, keepConfidentNow, keepTwinsNow, loadBrandTrust, loadQueueTrust, trustFor, twinOfQueueRow, twinTrustFor, type QueueTrustData,
 } from '@/lib/brand-watch-auto'
 import type { BrandTrust } from '@/lib/brand-watch-trust'
 import type { TwinTrust } from '@/lib/brand-watch-twins'
@@ -16,7 +16,6 @@ import {
   foldBrandName,
   type BrandCheckResult, type WatchedBrandRow,
 } from '@/lib/brand-watch'
-import { buildLearning, type DecidedRow } from '@/lib/brand-watch-learning'
 import { discoverProductUrls } from '@/lib/brand-watch-browser'
 import { waitUntil } from '@vercel/functions'
 import { revalidatePath } from 'next/cache'
@@ -100,6 +99,8 @@ export interface BrandWatchData extends QueuePage {
 }
 
 const QUEUE_PAGE = 200
+/** Pages fetched per concurrent wave — a 1,000-row page is one round trip, and reading eleven of them in a row was most of a second. */
+const WAVE = 8
 const QUEUE_FIELDS = 'queue_id, product_name, item_type, colour_family, material_category, material_primary, price, currency, price_gbp, image_url, retailer_url, shopify_product_id, shopify_handle, stock_status, stock_sizes, discovery_score, discovered_at, admin_notes, status, brand_id, brand:brand_id(name), season, season_code, new_in'
 
 // The client keys cards by item_id — for queue rows that's the queue_id.
@@ -126,60 +127,49 @@ function mapQueueRow(r: any): Omit<QueueItemRow, 'learned_delta' | 'learned_reas
   }
 }
 
-/** Skip reasons by queue id (migration 0055). Empty until the column exists. */
-async function fetchSkipReasons(admin: any): Promise<Map<string, string>> {
-  const out = new Map<string, string>()
-  for (let from = 0; ; from += 1000) {
-    const { data, error } = await admin.from('brand_watch_queue')
-      .select('queue_id, skip_reason').eq('status', 'skipped').not('skip_reason', 'is', null)
-      .order('queue_id').range(from, from + 999)
-    if (error) return out
-    for (const r of data ?? []) out.set(r.queue_id, r.skip_reason)
-    if (!data || data.length < 1000) break
-  }
-  return out
-}
-
 /**
- * Everything the ranking, the counts, the learning and the twin check read —
- * and nothing that is only there to be looked at.
- *
- * Selecting one brand still has to walk the WHOLE queue (the brand counts and
- * the cross-brand learning both need it), so this read is the floor on how fast
- * a brand chip can respond. image_url and retailer_url are most of a row's
- * bytes and neither is consulted until 200 rows have been picked, so they are
- * fetched afterwards, for those 200 only.
+ * Everything the ranking, the counts and the twin check read — and nothing
+ * that is only there to be looked at. image_url and retailer_url are most of
+ * a row's bytes and neither is consulted until 200 rows have been picked, so
+ * they are fetched afterwards, for those 200 only.
  */
 const RANK_FIELDS = 'queue_id, brand_id, product_name, item_type, colour_family, material_category, material_primary, price, price_gbp, discovery_score, discovered_at, brand:brand_id(name), season, season_code, new_in'
 
 /**
- * What buildLearning reads off a decided row. There are far more kept and
- * skipped rows than queued ones — they accumulate forever — and not one of them
- * is ever rendered, so pulling their images was the largest read on the page.
+ * Just enough of a queued row to count the brand chips: the brand name plus
+ * the three fields a house ban reads. Selecting a brand needs every brand's
+ * count, but none of the ranking fields — this read of the whole queue costs
+ * a fraction of the RANK_FIELDS one.
  */
-const DECIDED_FIELDS = 'queue_id, status, product_name, item_type, colour_family, material_category, price, price_gbp, brand:brand_id(name)'
+const LIGHT_FIELDS = 'brand:brand_id(name), product_name, item_type, material_primary'
 
-// All queue rows for the given statuses (paged past PostgREST's 1,000-row cap).
-async function fetchBrandWatchRows(admin: any, statuses: string[], fields = QUEUE_FIELDS): Promise<any[]> {
+// All queue rows for the given statuses, paged past PostgREST's 1,000-row cap
+// in concurrent waves (a page is one round trip; eleven in a row was most of
+// a second). `where` narrows the read in the database, so a brand chip
+// fetches one brand's rows instead of everyone's.
+async function fetchBrandWatchRows(admin: any, statuses: string[], fields = QUEUE_FIELDS, where?: (q: any) => any): Promise<any[]> {
+  const page = async (from: number): Promise<any[]> => {
+    let cols = fields
+    for (;;) {
+      let q = admin.from('brand_watch_queue').select(cols).in('status', statuses)
+      if (where) q = where(q)
+      const { data, error } = await q.order('queue_id').range(from, from + 999)
+      // Pre-0073 the season columns are not there yet; pre-0076 neither is
+      // new_in. Read on without whichever the schema is missing.
+      if (error && /season/.test(error.message) && /season/.test(cols)) { cols = cols.replace(', season, season_code', ''); continue }
+      if (error && /new_in/.test(error.message) && /new_in/.test(cols)) { cols = cols.replace(', new_in', ''); continue }
+      if (error) throw new Error(error.message)
+      return (data ?? []) as any[]
+    }
+  }
   const out: any[] = []
-  for (let from = 0; ; from += 1000) {
-    let { data, error } = await admin
-      .from('brand_watch_queue')
-      .select(fields)
-      .in('status', statuses)
-      .order('queue_id')
-      .range(from, from + 999)
-    // Pre-0073 the season columns are not there yet: read without them.
-    if (error && /season/.test(error.message) && /season/.test(fields)) {
-      ;({ data, error } = await admin.from('brand_watch_queue').select(fields.replace(', season, season_code', '')).in('status', statuses).order('queue_id').range(from, from + 999))
+  for (let from = 0; ; from += WAVE * 1000) {
+    let short = false
+    for (const rows of await Promise.all(Array.from({ length: WAVE }, (_, i) => page(from + i * 1000)))) {
+      out.push(...rows)
+      if (rows.length < 1000) short = true
     }
-    // Pre-0076 the new_in column is not there yet: read without it.
-    if (error && /new_in/.test(error.message) && /new_in/.test(fields)) {
-      ;({ data, error } = await admin.from('brand_watch_queue').select(fields.replace(', new_in', '')).in('status', statuses).order('queue_id').range(from, from + 999))
-    }
-    if (error) throw new Error(error.message)
-    out.push(...(data ?? []))
-    if (!data || data.length < 1000) break
+    if (short) break
   }
   return out
 }
@@ -213,48 +203,65 @@ export async function loadQueuePage(offset: number, brandName?: string | null, f
   return queuePage(offset, brandName, filters)
 }
 
-// trustIn lets the page load share one read of every decision with the brand cards.
-async function queuePage(offset: number, brandName?: string | null, filters: QueueFilters = {}, trustIn?: BrandTrustData): Promise<QueuePage> {
+// trustIn lets the page load share one read of the trust models with the brand
+// cards. A selected-brand click builds the queue-only trust itself, overlapped
+// with the queue reads below.
+async function queuePage(offset: number, brandName?: string | null, filters: QueueFilters = {}, trustIn?: QueueTrustData): Promise<QueuePage> {
   const admin = createAdminClient() as any
+  // Started first, so the trust read overlaps the queue reads instead of
+  // queueing behind them.
+  const trust = trustIn ? Promise.resolve(trustIn) : loadQueueTrust(admin)
   let drafts: any[]
-  let decidedRows: any[]
+  let chipRows: any[] | null = null
+  let wbs: any[] = []
   try {
-    drafts = await fetchBrandWatchRows(admin, ['queued'], RANK_FIELDS)
-    decidedRows = await fetchBrandWatchRows(admin, ['kept', 'skipped'], DECIDED_FIELDS)
+    if (brandName) {
+      // One brand selected: the rows to rank come narrowed from the database
+      // (Antik Batik is 315 rows, not all 10,000), while the chips keep their
+      // whole-queue counts from a much lighter read of it. The brand name
+      // resolves through the brand table — the same names its queue rows
+      // carry, so the scope is exactly the one the chips promise.
+      const { data: brands } = await admin.from('brand').select('brand_id').eq('name', brandName)
+      const ids = ((brands ?? []) as any[]).map((b) => b.brand_id)
+      const [light, scoped, wb] = await Promise.all([
+        fetchBrandWatchRows(admin, ['queued'], LIGHT_FIELDS),
+        ids.length ? fetchBrandWatchRows(admin, ['queued'], RANK_FIELDS, (q) => q.in('brand_id', ids)) : Promise.resolve([] as any[]),
+        admin.from('watched_brand').select('name, min_score'),
+      ])
+      chipRows = light
+      drafts = scoped
+      wbs = (wb.data ?? []) as any[]
+    } else {
+      const [all, wb] = await Promise.all([
+        fetchBrandWatchRows(admin, ['queued'], RANK_FIELDS),
+        admin.from('watched_brand').select('name, min_score'),
+      ])
+      drafts = all
+      wbs = (wb.data ?? []) as any[]
+    }
   } catch (e) {
     return { queue: [], queueTotal: 0, predictedSkipTotal: 0, decidedCount: 0, brandCounts: {}, error: e instanceof Error ? e.message : String(e) }
   }
+  const trustData = await trust
 
-  const reasons = await fetchSkipReasons(admin)
-  const decided: DecidedRow[] = decidedRows.map((r) => ({
-    kept: r.status === 'kept',
-    brandName: r.brand?.name ?? null,
-    productName: r.product_name,
-    itemType: r.item_type,
-    colourFamily: r.colour_family,
-    materialCategory: r.material_category,
-    price: r.price,
-    priceGbp: r.price_gbp != null ? Number(r.price_gbp) : null,
-    skipReason: reasons.get(r.queue_id) ?? null,
-  }))
-  const learn = buildLearning(decided)
-  const trustData = trustIn ?? (await loadBrandTrust(admin))
+  const learn = trustData.learn
 
   // The learning may fold a piece away, but never one the house style rates
   // well: anything two points clear of its brand's min score stays visible.
   // Same cap as the scan-time veto — a 7-score jean was being hidden on
   // 'light' and grey learned negative from bag skips.
-  const { data: wbs } = await admin.from('watched_brand').select('name, min_score')
   const minByBrand = new Map<string, number>(((wbs ?? []) as any[]).map((w) => [foldBrandName(w.name), Number(w.min_score ?? 5)]))
 
   // A banned piece already in the queue from before the bans is not shown.
-  const live = drafts.filter((r) => !houseBanOf({ title: r.product_name, materialPrimary: r.material_primary, itemType: r.item_type }))
+  const banned = (r: any) => !houseBanOf({ title: r.product_name, materialPrimary: r.material_primary, itemType: r.item_type })
+  const live = drafts.filter(banned)
 
   // The brand chips count the whole queue, so this tally runs over all of it.
   // It is only a tally: none of the expensive per-row work below is needed to
-  // say how many pieces a brand has waiting.
+  // say how many pieces a brand has waiting. On a brand click that is the
+  // light read, not the ranking one.
   const brandCounts: Record<string, number> = {}
-  for (const r of live) {
+  for (const r of (chipRows ?? live).filter(banned)) {
     const b = r.brand?.name ?? '?'
     brandCounts[b] = (brandCounts[b] ?? 0) + 1
   }
@@ -262,18 +269,20 @@ async function queuePage(offset: number, brandName?: string | null, filters: Que
   // Filters run over the whole queue, not the loaded page: filtering the page
   // hid the SNEAKER chip under ALL BRANDS whenever the top 200 pieces held no
   // sneakers, and a colour filter could only find what happened to be loaded.
-  //
-  // Scoping BEFORE the annotation, not after, is what makes a brand chip quick:
-  // running the learning and the twin check over every brand's queue to then
-  // throw all but one brand's away was the whole cost of the click.
-  const scoped = brandName ? live.filter((r) => (r.brand?.name ?? null) === brandName) : live
+  // A selected brand's scope came out of the query itself — the read was
+  // narrowed to that brand's rows before it ever left the database.
+  const scoped = live
 
   const annotated = scoped.map((r) => {
     const brand_name = r.brand?.name ?? null
     const discovery_score = r.discovery_score != null ? Number(r.discovery_score) : null
     const price_gbp = r.price_gbp != null ? Number(r.price_gbp) : null
     const v = learn({
-      brandName: brand_name, productName: r.product_name, itemType: r.item_type,
+      // The shared learning is keyed by brand_id — brand-watch-auto trains it
+      // that way — so passing the display name here silently dropped every
+      // brand-specific lesson from the ranking.
+      brandName: (r.brand_id as string | null) ?? null,
+      productName: r.product_name, itemType: r.item_type,
       colourFamily: r.colour_family, materialCategory: r.material_category, price: r.price,
       priceGbp: price_gbp,
     })
@@ -377,7 +386,7 @@ async function queuePage(offset: number, brandName?: string | null, filters: Que
     queueTotal: filtered.length,
     predictedSkipTotal: scope.filter((q) => q.predicted_skip && passes(q, 'predicted')).length,
     outOfSeasonTotal: scope.filter((q) => !current(q) && passes(q, 'season')).length,
-    decidedCount: decided.length,
+    decidedCount: trustData.decidedCount,
     brandCounts,
     typeCounts,
     colourCounts,

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  measureBrandTrust, summariseTrust, trustForAutomation, TRUST_MIN_PREDICTIONS,
+  automationOn, measureBrandTrust, summariseTrust, trustForAutomation, TRUST_MIN_PREDICTIONS,
   type TrustDecision,
 } from '../brand-watch-trust'
 
@@ -68,5 +68,21 @@ describe('trustForAutomation', () => {
 
   it('does not approve AFLALO when one of the nine predictions was wrong', () => {
     expect(trustForAutomation(summariseTrust(20, 9, 8), 'AFLALO').trusted).toBe(false)
+  })
+})
+
+describe('automationOn', () => {
+  it('runs for a brand switched on by ANY single level', () => {
+    expect(automationOn({ auto_keep: true })).toBe(true)
+    expect(automationOn({ auto_keep_twins: true })).toBe(true)
+    // BY CONFIDENCE alone was left out of this check once, and every scan for
+    // such a brand kept nothing while the page showed the switch as on.
+    expect(automationOn({ auto_keep_confidence: true })).toBe(true)
+  })
+
+  it('does not run when every level is off', () => {
+    expect(automationOn({})).toBe(false)
+    expect(automationOn({ auto_keep: false, auto_keep_twins: false, auto_keep_confidence: false })).toBe(false)
+    expect(automationOn({ auto_keep: null, auto_keep_twins: null, auto_keep_confidence: null })).toBe(false)
   })
 })

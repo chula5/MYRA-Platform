@@ -74,6 +74,20 @@ export interface BrandTrust {
 export const wouldAutoKeep = (delta: number, score: number, minScore: number): boolean =>
   delta >= AUTO_KEEP_DELTA && score >= minScore
 
+/**
+ * Is ANY level of automation switched on for this brand?
+ *
+ * Every level that can keep a piece on its own has to be named here. Leaving
+ * BY CONFIDENCE out of the equivalent check meant a brand switched on by that
+ * level alone was turned away before its queue was ever read: the switch read
+ * as on in the page, and every scan quietly kept nothing.
+ */
+export const automationOn = (w: {
+  auto_keep?: boolean | null
+  auto_keep_twins?: boolean | null
+  auto_keep_confidence?: boolean | null
+}): boolean => Boolean(w.auto_keep || w.auto_keep_twins || w.auto_keep_confidence)
+
 export function summariseTrust(careful: number, predictions: number, right: number): BrandTrust {
   const precision = predictions ? right / predictions : null
   const trusted = predictions >= TRUST_MIN_PREDICTIONS && (precision ?? 0) >= TRUST_PRECISION
