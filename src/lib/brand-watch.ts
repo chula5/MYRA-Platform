@@ -1314,7 +1314,7 @@ async function scanAndQueue(
     // A vision outage must not stop the scan. Most brands state their gender in
     // the feed, so this leaves only the quiet ones unchecked — and their pieces
     // still reach the queue for review, rather than the whole brand failing.
-    genderNote = `GENDER CHECK SKIPPED — ${e instanceof Error ? e.message : String(e)}`
+    genderNote = genderSkipNote(e)
   }
   const womens = inStock.filter((p) => !p.menswear)
   const shouldSuppress = (p: ScannedProduct, brandName: string) => learned(p, brandName).predictedSkip
@@ -1464,6 +1464,16 @@ async function saveColourReads(admin: any, rows: Array<{ image_url: string; colo
  * cheap vision call is made only when that product has no textual gender signal
  * — a product already labelled women's or men's never pays for this.
  */
+/**
+ * What a run says when the men's/women's image read could not run. The read
+ * failing is infrastructure, not evidence about a garment, and both routes
+ * treat it that way: the pieces queue unverified and the run says so, rather
+ * than the brand looking broken.
+ */
+function genderSkipNote(e: unknown): string {
+  return `GENDER CHECK SKIPPED — pieces whose feed states no gender queued unverified (${e instanceof Error ? e.message : String(e)})`
+}
+
 async function applyVisionGender(products: ScannedProduct[], opts: { excludeUnclear?: boolean } = {}): Promise<number> {
   // Unclear counts as women unless the caller says otherwise. The browser route
   // asks for the strict reading — only a positive women's read gets through —
@@ -1501,12 +1511,14 @@ async function applyVisionGender(products: ScannedProduct[], opts: { excludeUncl
   // Infrastructure failures — no credit, no key, a timeout — are not evidence
   // about a garment. If the pass is broadly broken, it gets no vote at all,
   // rather than reading a whole catalogue as menswear (Bimba y Lola once queued
-  // nothing because every call came back as an out-of-credit error).
+  // nothing because every call came back as an out-of-credit error). The
+  // message describes the pass only: what the caller does about it is the
+  // caller's business, and both of them carry on with the pieces unverified.
   const infraFailed = verdicts.filter((v) => v.error && !/no image/i.test(v.error)).length
   if (verdicts.length && infraFailed / verdicts.length > 0.25) {
     throw new Error(
       `womenswear check could not run — ${infraFailed} of ${verdicts.length} image reads failed ` +
-      `(${verdicts.find((v) => v.error)?.error ?? 'unknown'}). Nothing was queued rather than guessing at gender.`,
+      `(${verdicts.find((v) => v.error)?.error ?? 'unknown'}). No gender was read for these pieces.`,
     )
   }
 
@@ -1566,7 +1578,17 @@ async function browserScanAndQueue(watchedRow: WatchedBrandRow, mode: 'watch' | 
     const products = res.parsed.map(classifyExternalProduct)
     // Sites with no textual gender signal get one vision call per product.
     // A positive men's read is excluded; an unclear read remains reviewable.
-    await applyVisionGender(products, { excludeUnclear: true })
+    // A read that cannot run must not take the scan with it: this used to throw
+    // straight out of the run, so an empty account meant nothing queued,
+    // nothing marked seen and last_checked_at never moving — the brand looked
+    // dead while the only broken thing was the reader. The browser route has
+    // always carried on and said so; now this one does too.
+    let genderNote: string | undefined
+    try {
+      await applyVisionGender(products, { excludeUnclear: true })
+    } catch (e) {
+      genderNote = genderSkipNote(e)
+    }
     const visionColours = await applyVisionColour(products, watched.min_score)
     const learned = await loadLearnedSkipper(admin)
     applyLearnedLift(products, learned, watched.name)
@@ -1604,9 +1626,12 @@ async function browserScanAndQueue(watchedRow: WatchedBrandRow, mode: 'watch' | 
       belowScore: fashion.length - onTaste.length, skippedStock: stockHeld.size,
       suppressedByLearning: suppressed.size, restocked, visionColours,
       skippedSeason,
-      note: res.remaining > 0
-        ? `${res.processedUrls.length} pages this run, ${res.remaining} remaining — run FULL SCAN again to continue`
-        : undefined,
+      note: [
+        res.remaining > 0
+          ? `${res.processedUrls.length} pages this run, ${res.remaining} remaining — run FULL SCAN again to continue`
+          : undefined,
+        genderNote,
+      ].filter(Boolean).join(' · ') || undefined,
     }
   } catch (e) {
     await writeState(null)
