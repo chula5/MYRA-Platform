@@ -85,6 +85,26 @@ describe('a stylist brief shapes the shortlist, not only the score', () => {
   })
 })
 
+describe('her preferred brands shape the shortlist, not only the finished score', () => {
+  it('keeps a declared-brand piece in a six-piece compatible slot', () => {
+    // The composer only keeps five pieces per slot before it starts building
+    // outfits. With identical compatibility, bot6 used to be cut before
+    // member affinity was read, purely because it arrived sixth.
+    const lib = [...library(),
+      item('trousers', 'bot3'), item('trousers', 'bot4'),
+      item('trousers', 'bot5'), item('trousers', 'bot6'),
+    ]
+    const preferred = lib.find((i) => i.item_id === 'bot6')!
+    const t: MemberTaste = {
+      ...taste(),
+      affinity: new Map([[preferred.brand_id!, 0.9]]),
+    }
+
+    const [look] = composeMemberLooks(t, lib, 1, undefined, undefined, history())
+    expect(ids(look.items)).toContain('bot6')
+  })
+})
+
 describe("a client's loved shoe type is a hard rule", () => {
   // Four sneakers: enough for the type to own the slot (SHOE_PREFERENCE_MIN).
   const shoes = () => [

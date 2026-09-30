@@ -821,7 +821,15 @@ export function composeMemberLooks(
       library: usable,
       perSlotPool: 5,
       maxCandidates: 5,
-      shortlistAdjust: (i) => varietyAdjust(history, i.item_id, seed) + stylistPull(t, lens, i),
+      // Compatibility makes the outfit work; this makes sure her own brand
+      // priorities can get into the small per-slot pool where that outfit is
+      // assembled. Previously affinity only arrived after five items had
+      // already been shortlisted by visual fit, so a 0.10 baseline brand
+      // could repeatedly beat a declared 0.90 brand before taste had a say.
+      shortlistAdjust: (i) =>
+        varietyAdjust(history, i.item_id, seed) +
+        stylistPull(t, lens, i) +
+        0.15 * memberItemScore(t, i),
       minScore: 0.5,
       excludeItemIds: Array.from(usedItems),
       learnedBonus: (items) =>
@@ -958,7 +966,13 @@ export function composeMemberVariants(
     library: usable,
     perSlotPool: 8,
     maxCandidates: 20,
-    shortlistAdjust: (i) => varietyAdjust(history, i.item_id, seed) + stylistPull(t, lens, i),
+    // Keep "style this three ways" on the same brand-priority policy as a
+    // fresh delivery. A named or learned label should reach the shortlist
+    // before a merely stocked baseline label when their visual fit is close.
+    shortlistAdjust: (i) =>
+      varietyAdjust(history, i.item_id, seed) +
+      stylistPull(t, lens, i) +
+      0.15 * memberItemScore(t, i),
     minScore: 0.45,
     excludeItemIds: [],
     learnedBonus: (items) =>
