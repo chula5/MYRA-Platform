@@ -13,6 +13,13 @@
 
   const state = await send({ type: 'state', host: location.host })
   if (!state || !state.connected || !state.enabled) return
+  // Not every page is a shop. On a search engine or a social feed there is
+  // nothing to rank, nothing to save and nothing to say: no pill, no badge,
+  // no panel, and nothing sent home. A styling job that lands while she is
+  // here simply waits for the next shop. MYRA follows her round shops, not
+  // round the internet.
+  const NON_SHOP_HOST = /(^|\.)(google\.[a-z.]+|bing\.com|duckduckgo\.com|search\.(yahoo|aol)\.[a-z.]+|yandex\.[a-z.]+|ecosia\.org|baidu\.com|qwant\.com|startpage\.com|brave\.com|perplexity\.ai|chatgpt\.com|openai\.com|claude\.ai|reddit\.com|pinterest\.[a-z.]+|youtube\.com|instagram\.com|tiktok\.com|facebook\.com)$/i
+  if (NON_SHOP_HOST.test(location.host.replace(/^www\./i, '').toLowerCase())) return
   const vinted = M.isVinted()
   const shopify = M.isShopify()
   // Everything else is read from the page itself (adapters.genericGrids).
@@ -275,7 +282,7 @@
   // look built from what she owns and what MYRA carries together. The work is
   // asked for here, never on page load — composing a piece MYRA has never seen
   // means reading its picture first.
-  let picksBadge = null, picksPanel = null, picksJob = null, pageProducts = []
+  let picksBadge = null, picksPanel = null, picksJob = null, pageProducts = [], pageHasPicks = false
 
   const SLOT_NOUN = { outerwear: 'outerwear', top: 'tops', bottom: 'bottoms', dress: 'dresses', shoe: 'shoes', bag: 'bags', jewellery: 'jewellery', accessory: 'accessories' }
   const REASON = {
@@ -289,6 +296,10 @@
   /** The mark appears once this page has pieces MYRA could pick from. */
   function maybePicksBadge() {
     if (picksBadge || picksPanel || panel) return
+    // The badge earns its corner: it appears only where MYRA would actually
+    // put something from this page in front of her (the same bar the picks
+    // themselves are held to), never on a page that merely has links.
+    if (!pageHasPicks) return
     if (pageProducts.length < 2 || !pageProducts.some((p) => p.image && p.url && p.title)) return
     picksBadge = document.createElement('button')
     picksBadge.type = 'button'
@@ -669,12 +680,13 @@
   }
   const searchedSent = new Set()
   // A search typed at Google is about anything at all; only a search typed at
-  // a shop is a style brief. The same list guards the read in MYRA — this
-  // keeps the table itself clean so nothing downstream inherits the trap.
-  const SEARCH_ENGINE_HOST = /(^|\.)(google\.[a-z.]+|bing\.com|duckduckgo\.com|search\.(yahoo|aol)\.[a-z.]+|yandex\.[a-z.]+|ecosia\.org|baidu\.com|qwant\.com|startpage\.com|brave\.com|perplexity\.ai|chatgpt\.com|openai\.com|claude\.ai|reddit\.com|pinterest\.[a-z.]+|youtube\.com|instagram\.com|tiktok\.com|facebook\.com)$/i
+  // a shop is a style brief. Those hosts never reach here (the guard at the
+  // top of the script returns before any of this), and the same list guards
+  // the read in MYRA — this belt-and-braces check keeps the table clean even
+  // if the top guard is ever narrowed.
   function noteSearch() {
     if (vinted) return
-    if (SEARCH_ENGINE_HOST.test(location.host.replace(/^www\./i, '').toLowerCase())) return
+    if (NON_SHOP_HOST.test(location.host.replace(/^www\./i, '').toLowerCase())) return
     let q = ''
     try {
       const u = new URL(location.href)
@@ -705,9 +717,12 @@
     lastSig = ''
     pillOff = false
     pagePiece = null
+    pageProducts = []
+    pageHasPicks = false
     clearTimeout(pillRevert)
     clearInterval(navSettle)
     hidePiece()
+    hidePicksBadge()
     // The shop writes the new piece a beat after the address changes. Watch
     // for it rather than guessing at one delay, so the pill is this piece as
     // soon as this piece exists — and give up quietly if it never arrives.
@@ -763,6 +778,18 @@
       const scores = new Map(res.products.map((p) => [p.key, p]))
       lastLifted = grids.reduce((n, g) => n + apply(g, scores), 0)
       lastTotal = tiles.length
+      // The page is ranked and has pieces worth picking from: the top-right
+      // badge may appear. 0.4 is the bar the picks themselves are held to.
+      pageProducts = products
+      pageHasPicks = res.products.some((p) => (p.score ?? 0) >= 0.4)
+      maybePicksBadge()
+      // A job that finished while this page was still being read, or while she
+      // was somewhere that is not a shop, belongs here: this is the first shop
+      // page since. (One she closed is already gone from the worker.)
+      if (!panel) {
+        const waiting = await send({ type: 'styleJob' })
+        if (waiting?.job && waiting.job.status !== 'loading') openPanel(waiting.job)
+      }
       const top = res.products.filter((p) => p.score >= LIFT_MIN).sort((a, b) => b.score - a.score).slice(0, 6)
         .map((p) => ({ brand: p.brand, title: (details.get(p.key) || {}).title || p.key, confidence: p.confidence, why: WHY[p.why] || '', fit: FIT[p.fit] || '' }))
       await send({ type: 'pageStats', host: location.host, lifted: lastLifted, total: lastTotal, member: res.member?.name, ms: Math.round(performance.now() - t0), top })
@@ -791,21 +818,25 @@
     timer = setTimeout(run, Date.now() - lastRunAt > MAX_WAIT ? 0 : 500)
   }
   onMessage((msg) => {
-    if (msg?.type === 'restore') { observer.disconnect(); closeMenu(); restore() }
-    if (msg?.type === 'styleUpdate') renderPanel(msg.job)
+    if (msg?.type === 'restore') { observer.disconnect(); closeMenu(); closePicks(); hidePiece(); restore() }
+    // A finished job pops the panel open where she asked for it — on a shop.
+    // On any other page the update waits: the job is held in the worker and
+    // the next shop page she lands on picks it up.
+    if (msg?.type === 'styleUpdate') { if (panel || pagePiece || productOf.size) renderPanel(msg.job) }
     if (msg?.type === 'rerun') { lastSig = ''; observer.observe(document.body, { childList: true, subtree: true }); schedule() }
   })
   const observer = new MutationObserver((muts) => {
     if (muts.some((m) => [...m.addedNodes].some((n) => n.nodeType === 1 && !/myra-mirror-/.test(n.className || '')))) schedule()
   })
-  // A panel that was building when she left the last page carries on here.
-  const inFlight = await send({ type: 'styleJob' })
-  if (inFlight?.job) openPanel(inFlight.job)
-
   addEventListener('popstate', onNavigated)
   addEventListener('hashchange', onNavigated)
   setInterval(onNavigated, 300)
 
   await run()
+  // A panel that was building when she left the last page carries on here —
+  // if here is a shop. Anywhere else it waits in the worker rather than
+  // interrupting, and the next shop page picks it up.
+  const inFlight = await send({ type: 'styleJob' })
+  if (inFlight?.job && (panel || pagePiece || productOf.size)) openPanel(inFlight.job)
   observer.observe(document.body, { childList: true, subtree: true })
 })()
