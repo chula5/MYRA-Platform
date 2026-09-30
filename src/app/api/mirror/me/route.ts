@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { memberFromRequest } from '@/lib/mirror/auth'
+import { touchMirrorPresence } from '@/lib/mirror/presence'
 import { mirrorJson, mirrorOptions } from '@/lib/mirror/cors'
 import { cachedGraph } from '@/lib/mirror/rank'
 import { memberBrandSignals } from '@/lib/mirror/brand-signals'
@@ -15,6 +16,8 @@ export async function OPTIONS() { return mirrorOptions() }
 export async function GET(req: NextRequest) {
   const member = await memberFromRequest(req)
   if (!member) return mirrorJson({ connected: false }, { status: 401 })
+  // Her YOU page reads this to say the extension is connected, and where.
+  await touchMirrorPresence(member.member_id, req.headers.get('user-agent'))
   const admin = createAdminClient() as any
   const [sig, sizeCtx] = await Promise.all([memberBrandSignals(member, await cachedGraph(admin), admin), loadMemberSizeProfile(member.member_id)])
   const sizes = SIZE_CATEGORIES.filter((c) => sizeCtx.profile[c]?.value != null)

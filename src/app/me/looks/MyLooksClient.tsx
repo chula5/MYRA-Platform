@@ -62,7 +62,7 @@ const REASONS = [
 
 const RECENT_KEY = 'myra:me:recent'
 
-const ACTION = 'pointer-events-auto text-[clamp(15px,1.05vw,32px)] tracking-[0.1em] uppercase font-light myra-action'
+const ACTION = 'pointer-events-auto text-[11px] sm:text-[clamp(15px,1.05vw,32px)] tracking-[0.1em] uppercase font-light myra-action'
 
 export default function MyLooksClient({ view, readOnly = false, initialQuery = '' }: { view: ClientView; readOnly?: boolean; initialQuery?: string }) {
   const [query, setQuery] = useState(initialQuery)
@@ -610,9 +610,10 @@ function LookCard({
         )}
 
         {/* Actions — Source Items + Similar Looks on one line, Explore Styles
-            underneath. Same rows, same class, same z-40 as the feed card. */}
+            underneath. Same rows, same class, same z-40 as the feed card. On a
+            phone the first row never wraps, so the pair stays side by side. */}
         <div className="absolute inset-x-0 bottom-0 z-40 pt-10 pb-3.5 px-3 bg-gradient-to-t from-black/55 via-black/20 to-transparent pointer-events-none">
-          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2">
+          <div className="flex flex-nowrap sm:flex-wrap items-center justify-center gap-x-2 sm:gap-x-3 gap-y-2">
             <button data-tour="look-source" onClick={(e) => { e.stopPropagation(); if (!sourcePanelOpen) onOpen?.(); setSourcePanelOpen((v) => !v) }} className={ACTION}>
               Source Items
             </button>

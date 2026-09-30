@@ -221,8 +221,8 @@ export default function RoomNav({
       <div className="w-full px-5 sm:px-10 pt-4 sm:pt-7 pb-5 sm:pb-6">
         {/* Search — the same pill as the header's, at her front door's scale */}
         <form onSubmit={submit} onReset={() => setQuery('')} data-tour="search" className="relative w-full md:w-1/2 mx-auto">
-          <button type="submit" aria-label="Search" className="absolute top-1/2 -translate-y-1/2 left-[clamp(20px,1.3vw,44px)] p-1 text-[#55534E] hover:text-[#2B2B2B]">
-            <svg viewBox="0 0 17 16" fill="none" className="w-[clamp(24px,1.4vw,48px)] h-[clamp(24px,1.4vw,48px)]" aria-hidden>
+          <button type="submit" aria-label="Search" className="absolute top-1/2 -translate-y-1/2 left-4 sm:left-[clamp(20px,1.3vw,44px)] p-1 text-[#55534E] hover:text-[#2B2B2B]">
+            <svg viewBox="0 0 17 16" fill="none" className="w-5 h-5 sm:w-[clamp(24px,1.4vw,48px)] sm:h-[clamp(24px,1.4vw,48px)]" aria-hidden>
               <path d="M7.667 12.667A5.333 5.333 0 107.667 2a5.333 5.333 0 000 10.667zM14.334 14l-2.9-2.9" stroke="currentColor" strokeWidth="1.333" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
@@ -232,11 +232,11 @@ export default function RoomNav({
             placeholder={searchPlaceholder}
             aria-label="Search"
             type="text"
-            className="w-full rounded-full bg-white border-2 border-transparent shadow-md transition-all duration-300 focus:outline-none focus:border-[#2B2B2B] text-[clamp(21px,1.3vw,44px)] text-[#2B2B2B] placeholder:text-[#8C8A85] pl-[clamp(64px,4.2vw,140px)] pr-[clamp(60px,4vw,130px)] py-[clamp(16px,1vw,36px)]"
+            className="w-full rounded-full bg-white border-2 border-transparent shadow-md transition-all duration-300 focus:outline-none focus:border-[#2B2B2B] text-[16px] sm:text-[clamp(21px,1.3vw,44px)] text-[#2B2B2B] placeholder:text-[#8C8A85] pl-12 sm:pl-[clamp(64px,4.2vw,140px)] pr-10 sm:pr-[clamp(60px,4vw,130px)] py-3 sm:py-[clamp(16px,1vw,36px)]"
           />
           {query && (
-            <button type="reset" aria-label="Clear search" className="absolute top-1/2 -translate-y-1/2 right-[clamp(20px,1.3vw,44px)] p-1 text-[#55534E] hover:text-[#2B2B2B]">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-[clamp(24px,1.4vw,48px)] h-[clamp(24px,1.4vw,48px)]" aria-hidden>
+            <button type="reset" aria-label="Clear search" className="absolute top-1/2 -translate-y-1/2 right-3 sm:right-[clamp(20px,1.3vw,44px)] p-1 text-[#55534E] hover:text-[#2B2B2B]">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-5 h-5 sm:w-[clamp(24px,1.4vw,48px)] sm:h-[clamp(24px,1.4vw,48px)]" aria-hidden>
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>

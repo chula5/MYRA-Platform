@@ -10,6 +10,7 @@ import { OCCASION_TYPES } from '@/lib/pilot-stylist'
 import { listConnections, type EmailConnectionView } from '@/lib/email/connections'
 import { listCalendarConnections, type CalendarConnectionView } from '@/lib/calendar/store'
 import { listInstagramConnections, type InstagramConnectionView } from '@/lib/archival/store'
+import { mirrorLinkState, NO_MIRROR, type MirrorLinkState } from '@/lib/mirror/presence'
 
 export interface YouSizes { value: number | null; adjacent: number | null }
 
@@ -33,6 +34,8 @@ export interface YouSettingsView {
   inboxes: EmailConnectionView[]
   calendars: CalendarConnectionView[]
   instagram: InstagramConnectionView[]
+  /** The MYRA Mirror browser extension: connected, where, and when last seen. */
+  mirror: MirrorLinkState
 }
 
 // Before a connection's migration has run its table is missing: show nothing, not an error.
@@ -40,12 +43,13 @@ const quiet = async <T,>(p: Promise<T>, fallback: T): Promise<T> => { try { retu
 
 export async function buildYouSettings(memberId: string, test: boolean, fallbackName = ''): Promise<YouSettingsView> {
   const admin = createAdminClient() as any
-  const [{ data: row }, sizeCtx, inboxes, calendars, instagram] = await Promise.all([
+  const [{ data: row }, sizeCtx, inboxes, calendars, instagram, mirror] = await Promise.all([
     admin.from('pilot_member').select('name, colours_loved, colours_avoided, shapes_loved, shapes_avoided, types_loved, types_avoided, never_wears').eq('member_id', memberId).maybeSingle(),
     loadMemberSizeProfile(memberId),
     quiet(listConnections(memberId), [] as EmailConnectionView[]),
     quiet(listCalendarConnections(memberId), [] as CalendarConnectionView[]),
     quiet(listInstagramConnections(memberId), [] as InstagramConnectionView[]),
+    quiet(mirrorLinkState(memberId), NO_MIRROR),
   ])
   const sizes = Object.fromEntries(SIZE_CATEGORIES.map((c) => [c, {
     value: sizeCtx.profile[c]?.value ?? null,
@@ -66,7 +70,7 @@ export async function buildYouSettings(memberId: string, test: boolean, fallback
     neverWears: row?.never_wears ?? '',
     brands: ((row?.brands ?? []) as any[]).map((b) => (typeof b === 'string' ? b : b?.name)).filter(Boolean),
     occasions: OCCASION_TYPES.map((o) => o.id as string).filter((id) => ((row?.occasions ?? {}) as any)[id] && ((row?.occasions ?? {}) as any)[id] !== 'never'),
-    inboxes, calendars, instagram,
+    inboxes, calendars, instagram, mirror,
   }
 }
 

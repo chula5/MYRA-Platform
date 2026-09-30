@@ -20,7 +20,24 @@ import BrandPicker from '@/components/me/BrandPicker'
 
 const SIZE_LABEL: Record<SizeCategory, string> = { tops: 'Tops & dresses', bottoms: 'Trousers & skirts', outerwear: 'Coats & jackets', shoes: 'Shoes' }
 
-const card = 'rounded-[28px] bg-white/80 shadow-[0_18px_40px_-24px_rgba(43,43,43,0.35)] p-6 sm:p-9'
+// The MYRA Mirror extension: where each browser's "Add" button sends her. The
+// Chrome one is the Web Store listing; the Safari one is the MYRA app on the
+// App Store, because on iPhone the extension ships inside the app.
+const MIRROR_CHROME_URL = process.env.NEXT_PUBLIC_MIRROR_STORE_URL ?? ''
+const MIRROR_SAFARI_URL = process.env.NEXT_PUBLIC_MIRROR_SAFARI_URL ?? ''
+const SITE = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.myraassistant.co.uk').replace(/\/+$/, '')
+
+/** True inside the MYRA iPhone app (the Capacitor shell), where the page is not in Safari. */
+function inNativeApp(): boolean {
+  if (typeof window === 'undefined') return false
+  try { return !!(window as any).Capacitor?.isNativePlatform?.() } catch { return false }
+}
+/** Safari, or something pretending: the extension only lives in Safari on iPhone. */
+function onIphone(): boolean {
+  return typeof navigator !== 'undefined' && /iPhone|iPad/.test(navigator.userAgent)
+}
+
+const card = 'min-w-0 rounded-[28px] bg-white/80 shadow-[0_18px_40px_-24px_rgba(43,43,43,0.35)] p-6 sm:p-9'
 const heading = 'text-[clamp(26px,1.7vw,40px)] text-[#2B2B2B]'
 const label = 'text-[clamp(20px,1.1vw,28px)] text-[#55534E]'
 const field = 'w-full rounded-full bg-white px-6 py-4 text-[clamp(20px,1.1vw,28px)] text-[#2B2B2B] shadow-[0_10px_18px_-12px_rgba(120,120,120,0.6)] outline-none border-2 border-transparent focus:border-[#C9C9C9]'
@@ -72,6 +89,22 @@ export default function YouSettings({ testMemberId, initial }: { testMemberId?: 
     setLinkState(await myAssistantLinkState(testMemberId))
   }
   const when = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : null)
+
+  // MYRA in her browser: the Mirror extension. Connecting means opening
+  // /mirror/connect IN THE BROWSER THAT HAS THE EXTENSION — inside the iPhone
+  // app that is not Safari, so the app hands the page to Safari itself.
+  const connectPath = `/mirror/connect${testMemberId ? `?as=${testMemberId}` : ''}`
+  const [native, setNative] = useState(false)
+  const [iphone, setIphone] = useState(false)
+  const [copiedConnect, setCopiedConnect] = useState(false)
+  useEffect(() => { setNative(inNativeApp()); setIphone(onIphone()) }, [])
+  function connectMirror() {
+    if (native) { window.location.href = `x-safari-${SITE}${connectPath}`; return }
+    window.open(connectPath, '_blank', 'noopener')
+  }
+  async function copyConnectLink() {
+    try { await navigator.clipboard.writeText(`${SITE}${connectPath}`); setCopiedConnect(true); setTimeout(() => setCopiedConnect(false), 2500) } catch { /* she can type it */ }
+  }
 
   const reset = (v: YouSettingsView) => {
     setName(v.name); setSizes(v.sizes); setSecondHand(v.acceptsSecondHand)
@@ -168,7 +201,7 @@ export default function YouSettings({ testMemberId, initial }: { testMemberId?: 
         </div>
       </div>
 
-      <div className="grid gap-6 sm:gap-8 lg:grid-cols-2">
+      <div className="grid gap-6 sm:gap-8 grid-cols-[minmax(0,1fr)] lg:grid-cols-2">
         {/* Name */}
         <section className={card}>
           <h2 className={heading}>Your name</h2>
@@ -185,15 +218,16 @@ export default function YouSettings({ testMemberId, initial }: { testMemberId?: 
         {/* Sizes */}
         <section className={card}>
           <h2 className={heading}>Your sizes <span className="text-[#A8A8A4]">(UK)</span></h2>
+          {/* On a phone the label takes its own line and the two dropdowns share the next. */}
           <div className="mt-5 space-y-4">
             {SIZE_CATEGORIES.map((c) => (
-              <div key={c} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3">
-                <span className={label}>{SIZE_LABEL[c]}</span>
-                <select aria-label={`${SIZE_LABEL[c]} size`} className={`${field} !w-[132px] !px-5 !py-3`} value={sizes[c].value ?? ''} onChange={(e) => setSize(c, 'value', e.target.value)}>
+              <div key={c} className="grid grid-cols-2 sm:grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3">
+                <span className={`${label} col-span-2 sm:col-span-1`}>{SIZE_LABEL[c]}</span>
+                <select aria-label={`${SIZE_LABEL[c]} size`} className={`${field} !w-full sm:!w-[132px] !px-5 !py-3`} value={sizes[c].value ?? ''} onChange={(e) => setSize(c, 'value', e.target.value)}>
                   <option value="">—</option>
                   {ladderFor(c).map((n) => <option key={n} value={n}>{n}</option>)}
                 </select>
-                <select aria-label={`${SIZE_LABEL[c]} — also wears`} className={`${field} !w-[168px] !px-5 !py-3`} value={sizes[c].adjacent ?? ''} onChange={(e) => setSize(c, 'adjacent', e.target.value)} disabled={sizes[c].value == null}>
+                <select aria-label={`${SIZE_LABEL[c]} — also wears`} className={`${field} !w-full sm:!w-[168px] !px-5 !py-3`} value={sizes[c].adjacent ?? ''} onChange={(e) => setSize(c, 'adjacent', e.target.value)} disabled={sizes[c].value == null}>
                   <option value="">or also…</option>
                   {ladderFor(c).filter((n) => n !== sizes[c].value).map((n) => <option key={n} value={n}>also {n}</option>)}
                 </select>
@@ -293,6 +327,48 @@ export default function YouSettings({ testMemberId, initial }: { testMemberId?: 
               )
             })}
           </div>
+        </section>
+
+        {/* MYRA in her browser — the Mirror extension, Safari on her phone or Chrome on a laptop. */}
+        <section id="mirror" className={`${card} lg:col-span-2 scroll-mt-8`}>
+          <div className="flex items-baseline justify-between gap-4 flex-wrap">
+            <h2 className={heading}>MYRA in Safari and Chrome</h2>
+            <p className={label}>Every brand site, already in your order.</p>
+          </div>
+          <p className={`${label} myra-guide-text mt-3 max-w-4xl`}>
+            Add the MYRA Mirror extension to your browser, then connect it to you. After that, any brand site you open
+            shows the pieces you would actually wear first — the site itself stays the brand&rsquo;s own. It only reads
+            the shop pages you open, and it can never buy anything.
+          </p>
+          <div className="mt-5 flex flex-wrap items-center gap-4">
+            {MIRROR_SAFARI_URL
+              ? <a href={MIRROR_SAFARI_URL} target="_blank" rel="noopener noreferrer" className={pill(false)}>Add to Safari</a>
+              : <span className={`${pill(false)} opacity-60`}>Add to Safari · coming in the next app update</span>}
+            {MIRROR_CHROME_URL
+              ? <a href={MIRROR_CHROME_URL} target="_blank" rel="noopener noreferrer" className={pill(false)}>Add to Chrome</a>
+              : <span className={`${pill(false)} opacity-60`}>Add to Chrome · link coming soon</span>}
+            <button type="button" onClick={connectMirror} className={pill(true)}>
+              {view.mirror.connected ? 'Connect it again' : 'Connect it to me'}
+            </button>
+          </div>
+          <p className={`${label} mt-4`}>
+            {view.mirror.connected
+              ? <>Connected{view.mirror.browser ? ` in ${view.mirror.browser}` : ''}{when(view.mirror.connectedAt) ? ` since ${when(view.mirror.connectedAt)}` : ''}
+                  {when(view.mirror.lastSeenAt) ? ` · last open ${when(view.mirror.lastSeenAt)}` : ''}. To disconnect, open the extension and tap Disconnect.</>
+              : 'Not connected yet.'}
+          </p>
+          {(iphone || native) && (
+            <div className={`${label} myra-guide-text mt-4 max-w-4xl space-y-2`}>
+              <p>
+                On your iPhone: the extension lives inside the MYRA app. Once it is there, turn it on in
+                Settings &rarr; Apps &rarr; Safari &rarr; Extensions &rarr; MYRA Mirror, then come back and tap Connect.
+              </p>
+              <p className="flex flex-wrap items-center gap-3">
+                <span className="[overflow-wrap:anywhere]">Connect opens Safari. If it doesn&rsquo;t, open Safari yourself and go to {SITE.replace(/^https?:\/\//, '')}{connectPath}.</span>
+                <button type="button" onClick={copyConnectLink} className="underline underline-offset-4 text-[#2B2B2B]">{copiedConnect ? 'Copied' : 'Copy the link'}</button>
+              </p>
+            </div>
+          )}
         </section>
 
         {/* MYRA where she already talks — Claude, ChatGPT. */}
