@@ -192,6 +192,20 @@ export function computeEnvelope(vectors: number[][], minImages = MIN_CONFIRMED_I
 }
 
 /**
+ * The moodboard's looks kept whole beside their average — every one while the
+ * moodboard is small, an even stride sample when it is large — so the composer
+ * can score a piece against the look it actually belongs to. A moodboard with
+ * range (a sharp suit beside a fluid dress) averages into a middle nothing in
+ * it occupies; the nearest whole look never does that to her.
+ */
+export const LOOKS_KEPT = 240
+export function sampleLooks(vectors: number[][]): number[][] {
+  if (vectors.length <= LOOKS_KEPT) return vectors
+  const stride = Math.ceil(vectors.length / LOOKS_KEPT)
+  return vectors.filter((_, i) => i % stride === 0).slice(0, LOOKS_KEPT)
+}
+
+/**
  * The envelope as the min/max VectorRange the item mask already speaks.
  * Width is mean ± (k × spread), floored so a dimension every image agrees on
  * doesn't collapse to a range nothing can satisfy.

@@ -30,8 +30,16 @@ export const VECTOR_WEIGHT = 0.6
 export const AFFINITY_WEIGHT = 0.4
 export const HERO_WEIGHT = 2
 export const DISCOVERY_EVERY_N = 6
-export const THIN_VECTOR_ITEMS = 5 // 5+ scored items is enough to position a brand
+export const THIN_VECTOR_ITEMS = 8 // 8+ scored items is enough to position a brand
 export const MIN_VECTOR_NEIGHBOUR = 0.5 // below this an unfamilied brand is an orphan
+// Vector seeds ride on the seeding brand's centroid. Below ~12 scored items
+// that centroid is a hint, not a position (a 5-item Claudie Pierlot scattered
+// Scandi minimalists into a French-contemporary world) — only curated
+// families may expand from it. The 0.85 floor keeps weak provisional cosines
+// (0.72–0.80) out of her world. Codes-based similarity is exempt: authored,
+// not sampled.
+export const VECTOR_SEED_MIN_ITEMS = 12
+export const VECTOR_SEED_MIN_AESTHETIC = 0.85
 export const WARM_START_WEIGHT = 10 // ≈ 2-3 swipes' worth; real swipes dominate by ~20 events
 export const RE_EXPANSION_THRESHOLD = 0.8
 export const POSITIVE_EVENTS = ['yes', 'save', 'click_out', 'purchase']
@@ -386,28 +394,77 @@ export interface ExpansionSeed {
 // to suggest.
 export const EXPANSION_PRICE_HEADROOM = 1.5
 
+export interface MemberPriceBands { [band: string]: { min?: number | null; max?: number | null } | undefined }
+
+// pilot_member.price_bands keys → the brand price categories they speak for.
+// Knitwear rolls into the brand's 'tops' median; both of her bands apply.
+const PRICE_CATEGORY_BANDS: Record<string, string[]> = {
+  dresses: ['dress'],
+  tops: ['top', 'knitwear'],
+  bottoms: ['bottom'],
+  outerwear: ['outerwear'],
+  shoes: ['shoes'],
+  bags: ['bag'],
+  jewellery: ['jewellery'],
+  accessories: ['default'],
+}
+
+// A brand whose typical price sits far above what she actually spends should
+// never be SUGGESTED to her, however close its aesthetic. Her own named brands
+// and anything her responses have confirmed are exempt — a real signal always
+// outranks an inferred one. Like-for-like per category: a brand is reachable
+// when its median in ANY category she has a band for fits that band (with
+// headroom) — a £700-dress house that sells £250 tops is reachable through
+// its tops, which is exactly how she shops Zimmermann. Only when no category
+// overlaps do we fall back to overall median vs her highest ceiling.
 export function withinMemberPriceReach(
-  ceiling: number | null | undefined,
-  brandMedian: number | null | undefined,
+  bands: MemberPriceBands | null | undefined,
+  brand: Pick<BrandLite, 'median_price_by_category' | 'median_price_overall'> | null | undefined,
 ): boolean {
-  if (ceiling == null || !(ceiling > 0)) return true // no stated ceiling → no opinion
-  if (brandMedian == null || !(brandMedian > 0)) return true // unpriced → cannot judge
-  // A brand priced somewhat above her ceiling still stocks pieces she can
-  // reach; far above it, she would almost never find one.
-  return brandMedian <= ceiling * EXPANSION_PRICE_HEADROOM
+  const maxFor = (keys: string[]): number | null => {
+    const m = Math.max(0, ...keys.map((k) => Number(bands?.[k]?.max) || 0))
+    return m > 0 ? m : null
+  }
+  const anyBand = Object.values(bands ?? {}).some((b) => (b?.max ?? 0) > 0)
+  if (!anyBand) return true // no stated ceilings → no opinion
+  if (!brand) return true // unknown brand → cannot judge
+  let compared = false
+  for (const [cat, stats] of Object.entries(brand.median_price_by_category ?? {})) {
+    if (!stats?.count || !stats.median) continue
+    const bandMax = maxFor(PRICE_CATEGORY_BANDS[cat] ?? ['default'])
+    if (!bandMax) continue
+    compared = true
+    if (stats.median <= bandMax * EXPANSION_PRICE_HEADROOM) return true
+  }
+  if (compared) return false
+  // No overlapping category: overall median vs her highest ceiling.
+  const overallMax = maxFor(Object.keys(bands ?? {}))
+  const median = brand.median_price_overall
+  if (!overallMax || median == null || !(median > 0)) return true
+  return median <= overallMax * EXPANSION_PRICE_HEADROOM
 }
 
 export function expansionSeeds(
   named: BrandLite[],
   similarByBrand: Map<string, SimilarBrand[]>,
-  opts: { priceCeiling?: number | null; medianById?: Map<string, number | null> } = {},
+  opts: {
+    priceBands?: MemberPriceBands | null
+    brandById?: Map<string, Pick<BrandLite, 'median_price_overall' | 'median_price_by_category'>>
+  } = {},
 ): Map<string, ExpansionSeed> {
   const out = new Map<string, ExpansionSeed>()
   const namedIds = new Set(named.map((b) => b.brand_id))
   for (const n of named) {
     for (const s of similarByBrand.get(n.brand_id) ?? []) {
       if (namedIds.has(s.brand_id)) continue
-      if (opts.priceCeiling != null && !withinMemberPriceReach(opts.priceCeiling, opts.medianById?.get(s.brand_id))) continue
+      // Provisional (item-centroid) similarity may only expand from a centroid
+      // worth trusting, and only when the match is strong. Curated families
+      // and authored codes are exempt — a human vouched for those.
+      if (s.mechanism === 'vector' && s.basis !== 'codes') {
+        if ((n.vector_item_count ?? 0) < VECTOR_SEED_MIN_ITEMS) continue
+        if ((s.aesthetic ?? s.score ?? 0) < VECTOR_SEED_MIN_AESTHETIC) continue
+      }
+      if (opts.priceBands && !withinMemberPriceReach(opts.priceBands, opts.brandById?.get(s.brand_id) ?? null)) continue
       const value =
         s.mechanism === 'core_family' ? SEED.coreFamily :
         s.mechanism === 'adjacent_family' ? SEED.adjacentFamily : SEED.vectorOnly
@@ -752,20 +809,16 @@ export async function seedUserAffinities(
 
   const similarByBrand = new Map<string, SimilarBrand[]>()
   for (const b of matched) similarByBrand.set(b.brand_id, await getSimilarBrands(admin, b.brand_id, graph))
-  // Her stated clothing ceiling gates what may be suggested. Best-effort: an
-  // auth user (or a pre-0049 row) simply has none, and nothing is gated.
-  let priceCeiling: number | null = null
+  // Her stated price bands gate what may be suggested, like-for-like per
+  // category. Best-effort: an auth user (or a pre-0049 row) simply has none,
+  // and nothing is gated.
+  let priceBands: MemberPriceBands | null = null
   try {
     const { data: pm } = await admin.from('pilot_member').select('price_bands').eq('member_id', userId).maybeSingle()
-    const bands = (pm?.price_bands ?? {}) as Record<string, { min?: number | null; max?: number | null }>
-    const clothingMaxes = Object.entries(bands)
-      .filter(([k]) => !['bag', 'shoes', 'jewellery'].includes(k))
-      .map(([, v]) => v?.max)
-      .filter((v): v is number => typeof v === 'number' && v > 0)
-    if (clothingMaxes.length) priceCeiling = Math.max(...clothingMaxes)
+    if (pm?.price_bands) priceBands = pm.price_bands as MemberPriceBands
   } catch { /* no bands → no gate */ }
-  const medianById = new Map<string, number | null>(graph.brands.map((b: any) => [b.brand_id, b.median_price_overall]))
-  const seeds = expansionSeeds(matched, similarByBrand, { priceCeiling, medianById })
+  const brandById = new Map(graph.brands.map((b: any) => [b.brand_id, b]))
+  const seeds = expansionSeeds(matched, similarByBrand, { priceBands, brandById })
   let expanded = 0
   const seedList = Array.from(seeds.values())
   for (const s of seedList) {
@@ -1153,18 +1206,30 @@ export async function runBrandAffinityWeekly(adminIn?: Admin): Promise<{ vectors
     .gte('affinity', RE_EXPANSION_THRESHOLD)
     .limit(2000)
   const graph = await loadBrandGraph(admin)
+  const brandById = new Map(graph.brands.map((b: any) => [b.brand_id, b]))
   const byUser = new Map<string, string[]>()
   for (const r of confirmed ?? []) {
     const list = byUser.get(r.user_id) ?? []
     list.push(r.brand_id)
     byUser.set(r.user_id, list)
   }
+  // The price gate must hold here exactly as at onboarding — re-expansion
+  // used to run ungated, re-suggesting brands her budget had already ruled
+  // out. Members without bands (or non-pilot users) stay ungated.
+  const userIds = Array.from(byUser.keys())
+  const bandsByUser = new Map<string, MemberPriceBands>()
+  try {
+    const { data: pms } = await admin.from('pilot_member').select('member_id, price_bands').in('member_id', userIds)
+    for (const pm of pms ?? []) {
+      if (pm?.price_bands) bandsByUser.set(pm.member_id, pm.price_bands as MemberPriceBands)
+    }
+  } catch { /* no bands → no gate */ }
   const userEntries = Array.from(byUser.entries())
   for (const [userId, brandIds] of userEntries) {
     const named = brandIds.map((id) => graph.byId.get(id)).filter(Boolean) as BrandLite[]
     const similarByBrand = new Map<string, SimilarBrand[]>()
     for (const b of named) similarByBrand.set(b.brand_id, await getSimilarBrands(admin, b.brand_id, graph))
-    const seeds = expansionSeeds(named, similarByBrand)
+    const seeds = expansionSeeds(named, similarByBrand, { priceBands: bandsByUser.get(userId) ?? null, brandById })
     const existing = await loadAffinities(admin, userId)
     const seedRows = Array.from(seeds.values())
     for (const s of seedRows) {

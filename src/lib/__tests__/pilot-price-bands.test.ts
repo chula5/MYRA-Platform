@@ -78,34 +78,68 @@ describe('readPriceBands', () => {
 
 import { withinMemberPriceReach, expansionSeeds, EXPANSION_PRICE_HEADROOM } from '@/lib/brand-affinity'
 
+const priced = (byCat: Record<string, number>, overall?: number) => ({
+  median_price_by_category: Object.fromEntries(
+    Object.entries(byCat).map(([cat, median]) => [cat, { median, count: 10 }]),
+  ),
+  median_price_overall: overall ?? Object.values(byCat)[0] ?? null,
+})
+
 describe('price gate on brand suggestions', () => {
-  it('lets a brand near her ceiling through and blocks one far above it', () => {
-    // £300 clothing ceiling, 1.5x headroom → up to £450 is reachable
-    expect(withinMemberPriceReach(300, 280)).toBe(true)
-    expect(withinMemberPriceReach(300, 440)).toBe(true)
-    expect(withinMemberPriceReach(300, 508)).toBe(false) // the Cult Gaia case
+  it('lets a brand near her ceiling through and blocks one far above it, per category', () => {
+    // £300 dress ceiling, 1.5x headroom → dresses up to £450 are reachable
+    const bands = { dress: { min: null, max: 300 } }
+    expect(withinMemberPriceReach(bands, priced({ dresses: 280 }))).toBe(true)
+    expect(withinMemberPriceReach(bands, priced({ dresses: 440 }))).toBe(true)
+    expect(withinMemberPriceReach(bands, priced({ dresses: 508 }))).toBe(false) // the Cult Gaia case
     expect(EXPANSION_PRICE_HEADROOM).toBe(1.5)
   })
 
+  it('judges like-for-like: a dear dress house with reachable tops is reachable', () => {
+    // The Zimmermann case: dresses far above her dress ceiling, tops within
+    // her tops band — she shops the brand through its cheaper categories.
+    const bands = { dress: { min: null, max: 400 }, top: { min: null, max: 300 } }
+    expect(withinMemberPriceReach(bands, priced({ dresses: 900, tops: 380 }))).toBe(true)
+    expect(withinMemberPriceReach(bands, priced({ dresses: 900, tops: 700 }))).toBe(false)
+  })
+
+  it('uses her outerwear budget for coats, not for dresses — no cross-category leak', () => {
+    // Regression: a single max ceiling let a £700 dress brand through on the
+    // strength of a £570 outerwear band.
+    const bands = { dress: { min: null, max: 400 }, outerwear: { min: null, max: 570 } }
+    expect(withinMemberPriceReach(bands, priced({ dresses: 700 }))).toBe(false)
+    expect(withinMemberPriceReach(bands, priced({ outerwear: 700 }))).toBe(true)
+  })
+
+  it('falls back to overall median vs her highest ceiling when no category overlaps', () => {
+    const bands = { dress: { min: null, max: 300 } }
+    expect(withinMemberPriceReach(bands, { median_price_by_category: null, median_price_overall: 280 })).toBe(true)
+    expect(withinMemberPriceReach(bands, { median_price_by_category: null, median_price_overall: 900 })).toBe(false)
+  })
+
   it('holds no opinion when either side is unknown', () => {
-    expect(withinMemberPriceReach(null, 900)).toBe(true) // she stated no ceiling
-    expect(withinMemberPriceReach(300, null)).toBe(true) // brand has no median
-    expect(withinMemberPriceReach(0, 900)).toBe(true)
+    expect(withinMemberPriceReach(null, priced({ dresses: 900 }))).toBe(true) // she stated no ceiling
+    expect(withinMemberPriceReach({ dress: { min: null, max: 300 } }, null)).toBe(true) // unknown brand
+    expect(withinMemberPriceReach({ dress: { min: null, max: 300 } }, { median_price_by_category: null, median_price_overall: null })).toBe(true)
+    expect(withinMemberPriceReach({}, priced({ dresses: 900 }))).toBe(true)
   })
 
   it('drops an over-priced brand from the expansion set entirely', () => {
-    const named = [{ brand_id: 'sessun', name: 'Sessùn' } as any]
+    const named = [{ brand_id: 'sessun', name: 'Sessùn', vector_item_count: 20 } as any]
     const similar = new Map([['sessun', [
-      { brand_id: 'cheap', name: 'Sézane', mechanism: 'vector', score: 0.9 } as any,
-      { brand_id: 'dear', name: 'Cult Gaia', mechanism: 'vector', score: 0.94 } as any,
+      { brand_id: 'cheap', name: 'Sézane', mechanism: 'vector', score: 0.9, aesthetic: 0.9 } as any,
+      { brand_id: 'dear', name: 'Cult Gaia', mechanism: 'vector', score: 0.94, aesthetic: 0.94 } as any,
     ]]])
-    const medians = new Map<string, number | null>([['cheap', 132], ['dear', 508]])
+    const brandById = new Map<string, any>([
+      ['cheap', priced({ dresses: 132 })],
+      ['dear', priced({ dresses: 508 })],
+    ])
 
     const ungated = expansionSeeds(named, similar)
-    expect([...ungated.keys()].sort()).toEqual(['cheap', 'dear'])
+    expect(Array.from(ungated.keys()).sort()).toEqual(['cheap', 'dear'])
 
-    const gated = expansionSeeds(named, similar, { priceCeiling: 300, medianById: medians })
-    expect([...gated.keys()]).toEqual(['cheap'])
+    const gated = expansionSeeds(named, similar, { priceBands: { dress: { min: null, max: 300 } }, brandById })
+    expect(Array.from(gated.keys())).toEqual(['cheap'])
   })
 })
 

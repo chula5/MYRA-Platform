@@ -39,6 +39,12 @@ export const TRUST_WINDOW = 40
 export const TRUST_MIN_PREDICTIONS = 10
 /** Share of those predictions she must actually have kept. */
 export const TRUST_PRECISION = 0.9
+/**
+ * Chloe explicitly approved AFLALO after its first nine predictions were all
+ * right. This is an automation exception, not a change to the normal trust
+ * bar: every other brand still needs TRUST_MIN_PREDICTIONS.
+ */
+export const AFLALO_AUTOMATION_MIN_PREDICTIONS = TRUST_MIN_PREDICTIONS - 1
 /** More decisions than this in one second is a bulk action, not a judgement. */
 const BULK_PER_SECOND = 3
 
@@ -79,6 +85,24 @@ export function summariseTrust(careful: number, predictions: number, right: numb
         ? `LEARNING — ${predictions} OF ${TRUST_MIN_PREDICTIONS} PREDICTIONS${predictions ? `, ${right} RIGHT` : ''}`
         : `NOT YET — RIGHT ${right} OF ${predictions} (${Math.round((precision ?? 0) * 100)}%, NEEDS ${Math.round(TRUST_PRECISION * 100)}%)`
   return { careful, predictions, right, precision, trusted, summary }
+}
+
+/**
+ * Apply Chloe's one-brand approval to the measured trust result used by
+ * AUTOMATE. The underlying measurement remains unchanged, and this never
+ * lowers the bar for any other brand.
+ */
+export function trustForAutomation(trust: BrandTrust, brandName: string | null | undefined): BrandTrust {
+  if (trust.trusted || String(brandName ?? '').trim().toLowerCase() !== 'aflalo') return trust
+  if (
+    trust.predictions < AFLALO_AUTOMATION_MIN_PREDICTIONS
+    || (trust.precision ?? 0) < TRUST_PRECISION
+  ) return trust
+  return {
+    ...trust,
+    trusted: true,
+    summary: `TRUSTED FOR AFLALO — RIGHT ${trust.right} OF ${trust.predictions} (approved exception)`,
+  }
 }
 
 /** Trust per brand name. Brands with no decisions are absent. */

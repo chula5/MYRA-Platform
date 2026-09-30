@@ -108,14 +108,18 @@ function StyledPiece({ piece, looks, working, note, active, onPick }: {
       aria-label={`See your ${piece.brand ?? piece.product_name} styled`}
       className={`group block w-full text-left outline-none focus:outline-none`}
     >
-      <div className={`relative aspect-[3/4] bg-white rounded-[18px] overflow-hidden [perspective:1000px] shadow-[0_2px_14px_rgba(43,43,43,0.06)] ${active ? 'shadow-[0_4px_22px_rgba(43,43,43,0.16)]' : ''}`}>
-        {piece.image_url && <FallbackImage src={piece.image_url} thumbWidth={600} alt={piece.product_name} className="absolute inset-0 w-full h-full object-contain p-6" />}
+      {/* No card, no frame: the piece sits on the page the way it does in
+          every other grid, and only its own picture holds the eye. */}
+      <div className="relative aspect-[3/4] bg-white rounded-[14px] overflow-hidden [perspective:1000px]">
+        {piece.image_url && <FallbackImage src={piece.image_url} thumbWidth={600} alt={piece.product_name} className="absolute inset-0 w-full h-full object-contain" />}
         <div className={`absolute inset-0 bg-[#F2F2F2] p-3 flex flex-col justify-center origin-bottom [transform:rotateX(-90deg)]
           group-hover:[transform:rotateX(0deg)] group-focus-visible:[transform:rotateX(0deg)] motion-reduce:transition-none ${FLIP}`}>
           <ThreeLooks looks={looks} heroId={piece.item_id} working={working} note={note} />
         </div>
       </div>
-      <p className="mt-3 text-[19px] xl:text-[22px] text-[#2B2B2B] leading-[1.2]">{piece.brand ?? piece.product_name}</p>
+      {/* The piece whose outfits are open below says so in its name — there is
+          no card left to shade. */}
+      <p className={`mt-3 text-[19px] xl:text-[22px] text-[#2B2B2B] leading-[1.2] ${active ? 'underline underline-offset-4' : ''}`}>{piece.brand ?? piece.product_name}</p>
       <p className="text-[17px] xl:text-[19px] text-[#7C838B] leading-[1.25] line-clamp-1">{piece.product_name}</p>
     </button>
   )

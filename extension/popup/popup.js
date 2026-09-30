@@ -1,13 +1,15 @@
-const send = (msg) => new Promise((r) => chrome.runtime.sendMessage(msg, r))
+const { api: ext, isSafari, sendMessage } = globalThis.__myraBrowser
+const send = sendMessage
 const $ = (id) => document.getElementById(id)
 
 async function render() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  const [tab] = await ext.tabs.query({ active: true, currentWindow: true })
   let host = ''
   try { host = new URL(tab?.url || '').host } catch {}
   const site = host.replace(/^www\./, '')
   const state = await send({ type: 'state', host })
-  const base = (state?.apiBase || 'http://localhost:3000').replace(/\/+$/, '')
+  const base = (state?.apiBase || 'https://www.myraassistant.co.uk').replace(/\/+$/, '')
+  $('connect').href = `${base}/mirror/connect`
   $('apiBase').value = state?.apiBase || ''
   $('disconnected').hidden = !!state?.connected
   $('connected').hidden = !state?.connected
@@ -102,12 +104,14 @@ $('addBrand').addEventListener('click', async () => {
   showSiteStatus(r)
 })
 
-$('connect').addEventListener('click', async () => {
+$('connect').addEventListener('click', async (e) => {
+  if (isSafari) return
+  e.preventDefault()
   const state = await send({ type: 'state', host: '' })
-  chrome.tabs.create({ url: `${(state?.apiBase || 'http://localhost:3000').replace(/\/+$/, '')}/mirror/connect` })
+  await ext.tabs.create({ url: `${(state?.apiBase || 'https://www.myraassistant.co.uk').replace(/\/+$/, '')}/mirror/connect` })
 })
 $('vinted').addEventListener('click', async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  const [tab] = await ext.tabs.query({ active: true, currentWindow: true })
   if (tab?.id == null) return
   $('vinted').disabled = true
   $('vintedNote').textContent = 'Reading your orders…'
@@ -119,11 +123,11 @@ $('vinted').addEventListener('click', async () => {
 })
 $('disconnect').addEventListener('click', async () => { await send({ type: 'disconnect' }); render() })
 $('toggle').addEventListener('change', async (e) => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  const [tab] = await ext.tabs.query({ active: true, currentWindow: true })
   let host = ''
   try { host = new URL(tab?.url || '').host } catch {}
   await send({ type: 'toggleHost', host, enabled: e.target.checked })
-  if (tab?.id != null) { try { await chrome.tabs.sendMessage(tab.id, { type: e.target.checked ? 'rerun' : 'restore' }) } catch {} }
+  if (tab?.id != null) { try { await ext.tabs.sendMessage(tab.id, { type: e.target.checked ? 'rerun' : 'restore' }) } catch {} }
   render()
 })
 $('apiBase').addEventListener('change', async (e) => { await send({ type: 'setApiBase', apiBase: e.target.value.trim() }); render() })

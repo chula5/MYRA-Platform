@@ -36,6 +36,16 @@ export default function PrivacyPage() {
           </section>
 
           <section>
+            <h2 className="text-[14px] tracking-[0.06em] text-[#4A4E57] mb-3">MYRA FOR CHROME (THE MIRROR EXTENSION)</h2>
+            <ul className="list-disc pl-5 space-y-2">
+              <li><strong>What it reads</strong> — only the shop pages you open in Chrome that contain a product listing or a single product: the product names, prices, images and product links on that page. It does nothing on any other page, and it never reads what you type.</li>
+              <li><strong>What it sends</strong> — those product details, with your signed MYRA member token, to MYRA (myraassistant.co.uk) so we can order the page to your taste and, if you ask, save a piece or build looks around it. We do not keep a history of the sites you visit.</li>
+              <li><strong>What it keeps in your browser</strong> — your MYRA connection (a signed token and your first name) and the list of sites you have switched it off for. Nothing else. Disconnecting from the extension&rsquo;s menu removes the connection.</li>
+              <li><strong>What it is for</strong> — showing you the pieces you would wear first, and nothing unrelated. We do not sell or share this data, and we never use it to judge creditworthiness or for lending.</li>
+            </ul>
+          </section>
+
+          <section>
             <h2 className="text-[14px] tracking-[0.06em] text-[#4A4E57] mb-3">HOW WE USE IT</h2>
             <ul className="list-disc pl-5 space-y-2">
               <li>To provide and personalise MYRA — curating outfits and recommendations to your taste.</li>

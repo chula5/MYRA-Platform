@@ -168,10 +168,23 @@ export async function rankPageForMember(member: MirrorMember, products: PageProd
           if (p.url && p.title && !item) unknown.push(p)
         }
       }
-      // Queue the unknown for the nightly pass — best effort, table arrives with 0060.
-      if (unknown.length) {
+      // Queue the unknown for the nightly pass — best effort, table arrives
+      // with 0060. Only pieces that read as womenswear fashion: the mirror
+      // follows her on every site, but what it REMEMBERS must be clothes —
+      // a hardware store's catalogue logged against her is tracking, not
+      // styling.
+      const learnable = unknown.filter((p) => {
         try {
-          await admin.from('mirror_page_product').upsert(unknown.slice(0, 200).map((p) => ({
+          const s = classifyExternalProduct({
+            url: p.url ?? 'https://x/products/x', title: p.title ?? '', description: '', category: p.type ?? '',
+            brand: p.brand ?? null, price: p.price ?? null, currency: null, images: [], available: true,
+          })
+          return !!s.itemType && !s.nonFashion && !s.menswear
+        } catch { return false }
+      })
+      if (learnable.length) {
+        try {
+          await admin.from('mirror_page_product').upsert(learnable.slice(0, 200).map((p) => ({
             host: host ?? (p.url ? new URL(p.url).host : 'unknown'), url: baseOf(p.url!), brand_name: p.brand ?? null, title: p.title,
             product_type: p.type ?? null, price_gbp: p.price ?? null, member_id: member.member_id,
           })), { onConflict: 'url', ignoreDuplicates: true })

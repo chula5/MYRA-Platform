@@ -22,7 +22,7 @@ import { waitUntil } from '@vercel/functions'
 import { revalidatePath } from 'next/cache'
 import { assertAdmin } from '@/lib/admin-audit'
 import { createWatchedBrandAndScan } from '@/lib/brand-onboarding'
-import { inSeason, seasonOf, type Season } from '@/lib/season'
+import { inSeason, inCurrentSeason, seasonOf, type Season } from '@/lib/season'
 import type { CatalogueAssessment } from '@/lib/brand-onboarding-rules'
 
 export interface QueueItemRow {
@@ -46,6 +46,8 @@ export interface QueueItemRow {
   /** aw | ss | all — from the shop's codes, the kind of piece, or its material. */
   season?: Season | null
   season_code?: string | null
+  /** The shop has it in its new-in section, so it leads the queue. */
+  new_in?: boolean
   learned_delta: number
   learned_reasons: string
   predicted_skip: boolean
@@ -80,7 +82,7 @@ export interface QueueFilters {
   showPredicted?: boolean
   /** MYRA's order (style score + learning), or by how sure she is, either way. */
   sort?: QueueSort
-  /** 'in' (default): the season we are heading into plus anything unplaced; 'out': the other one; 'all'. */
+  /** Kept for compatibility with older callers; Brand Watch currently exposes autumn/current stock only. */
   season?: 'in' | 'out' | 'all'
 }
 
@@ -98,7 +100,7 @@ export interface BrandWatchData extends QueuePage {
 }
 
 const QUEUE_PAGE = 200
-const QUEUE_FIELDS = 'queue_id, product_name, item_type, colour_family, material_category, material_primary, price, currency, price_gbp, image_url, retailer_url, shopify_product_id, shopify_handle, stock_status, stock_sizes, discovery_score, discovered_at, admin_notes, status, brand_id, brand:brand_id(name), season, season_code'
+const QUEUE_FIELDS = 'queue_id, product_name, item_type, colour_family, material_category, material_primary, price, currency, price_gbp, image_url, retailer_url, shopify_product_id, shopify_handle, stock_status, stock_sizes, discovery_score, discovered_at, admin_notes, status, brand_id, brand:brand_id(name), season, season_code, new_in'
 
 // The client keys cards by item_id — for queue rows that's the queue_id.
 function mapQueueRow(r: any): Omit<QueueItemRow, 'learned_delta' | 'learned_reasons' | 'predicted_skip' | 'adjusted' | 'twin_of' | 'confidence'> {
@@ -110,6 +112,7 @@ function mapQueueRow(r: any): Omit<QueueItemRow, 'learned_delta' | 'learned_reas
     colour_family: r.colour_family,
     season: (r.season ?? null) as Season | null,
     season_code: (r.season_code ?? null) as string | null,
+    new_in: Boolean(r.new_in),
     material_category: r.material_category,
     price: r.price,
     currency: r.currency,
@@ -147,7 +150,7 @@ async function fetchSkipReasons(admin: any): Promise<Map<string, string>> {
  * bytes and neither is consulted until 200 rows have been picked, so they are
  * fetched afterwards, for those 200 only.
  */
-const RANK_FIELDS = 'queue_id, brand_id, product_name, item_type, colour_family, material_category, material_primary, price, price_gbp, discovery_score, discovered_at, brand:brand_id(name), season, season_code'
+const RANK_FIELDS = 'queue_id, brand_id, product_name, item_type, colour_family, material_category, material_primary, price, price_gbp, discovery_score, discovered_at, brand:brand_id(name), season, season_code, new_in'
 
 /**
  * What buildLearning reads off a decided row. There are far more kept and
@@ -170,6 +173,10 @@ async function fetchBrandWatchRows(admin: any, statuses: string[], fields = QUEU
     if (error && /season/.test(error.message) && /season/.test(fields)) {
       ;({ data, error } = await admin.from('brand_watch_queue').select(fields.replace(', season, season_code', '')).in('status', statuses).order('queue_id').range(from, from + 999))
     }
+    // Pre-0076 the new_in column is not there yet: read without it.
+    if (error && /new_in/.test(error.message) && /new_in/.test(fields)) {
+      ;({ data, error } = await admin.from('brand_watch_queue').select(fields.replace(', new_in', '')).in('status', statuses).order('queue_id').range(from, from + 999))
+    }
     if (error) throw new Error(error.message)
     out.push(...(data ?? []))
     if (!data || data.length < 1000) break
@@ -182,10 +189,16 @@ async function hydrateRows(admin: any, queueIds: string[]): Promise<Map<string, 
   const out = new Map<string, any>()
   if (!queueIds.length) return out
   for (let i = 0; i < queueIds.length; i += 200) {
-    const { data, error } = await admin
-      .from('brand_watch_queue')
-      .select(QUEUE_FIELDS)
-      .in('queue_id', queueIds.slice(i, i + 200))
+    const ids = queueIds.slice(i, i + 200)
+    let { data, error } = await admin.from('brand_watch_queue').select(QUEUE_FIELDS).in('queue_id', ids)
+    // Pre-0076 the new_in column is not there yet: read without it.
+    if (error && /new_in/.test(error.message)) {
+      ;({ data, error } = await admin.from('brand_watch_queue').select(QUEUE_FIELDS.replace(', new_in', '')).in('queue_id', ids))
+    }
+    // Pre-0073 the season columns are not there yet either.
+    if (error && /season/.test(error.message)) {
+      ;({ data, error } = await admin.from('brand_watch_queue').select(QUEUE_FIELDS.replace(', season, season_code', '').replace(', new_in', '')).in('queue_id', ids))
+    }
     if (error) throw new Error(error.message)
     for (const r of data ?? []) out.set(r.queue_id, r)
   }
@@ -279,6 +292,12 @@ async function queuePage(offset: number, brandName?: string | null, filters: Que
       adjusted: (discovery_score ?? 0) + v.delta,
       season: (r.season as Season | null | undefined)
         ?? seasonOf({ title: r.product_name, itemType: r.item_type, materialCategory: r.material_category, materialPrimary: r.material_primary }).season,
+      // The shop's own code where the row has one ("AW26", "AW25"). Needed to
+      // tell this season's stock from last season's — the half-year test alone
+      // cannot, and it is what let 223 pieces of past autumn stock show as
+      // in-season on Antik Batik.
+      season_code: (r.season_code as string | null | undefined) ?? null,
+      new_in: Boolean(r.new_in),
       twin_of: twinOfQueueRow(trustData, r)?.product_name ?? null,
       // How sure MYRA is that Chloe would keep it — her own model for this brand.
       confidence: confidenceOf(trustData, r),
@@ -295,10 +314,18 @@ async function queuePage(offset: number, brandName?: string | null, filters: Que
   }
 
   const scope = annotated
-  const { itemType = '', colour = '', minScore = null, showPredicted = false, sort = 'rank', season = 'in' } = filters
+  const { itemType = '', colour = '', minScore = null, showPredicted = false, sort = 'rank' } = filters
+  // For now the queue is autumn/current-season only. Future dated collections
+  // and explicit pre-orders pass through inCurrentSeason; old summer stock does
+  // not. Keep the old filter type above so stale client callers cannot widen it.
+  const season = 'in' as const
   const now = new Date()
+  // "In season" means the season we are heading into AND not filed under one
+  // already gone by: a piece the shop tagged AW25 is last autumn's stock, and
+  // showing it beside AW26 makes the count meaningless.
+  const current = (q: (typeof annotated)[number]) => inCurrentSeason(q.season, q.season_code, now)
   const seasonOk = (q: (typeof annotated)[number]) =>
-    season === 'all' ? true : season === 'out' ? !inSeason(q.season, now) : inSeason(q.season, now)
+    season === 'all' ? true : season === 'out' ? !current(q) : current(q)
   const passes = (q: (typeof annotated)[number], skip: 'type' | 'colour' | 'predicted' | 'season' | null) =>
     (skip === 'type' || !itemType || q.item_type === itemType) &&
     (skip === 'colour' || !colour || q.colour_family === colour) &&
@@ -316,10 +343,14 @@ async function queuePage(offset: number, brandName?: string | null, filters: Que
   }
 
   const filtered = scope.filter((q) => passes(q, null))
-  // MYRA's order leads with the season we are heading into whenever both are shown.
-  const seasonRank = (q: (typeof annotated)[number]) => (inSeason(q.season, now) ? 1 : 0)
+  // MYRA's order leads with what the shop has just put out, then the season we
+  // are heading into whenever both are shown. New-in leads because the shop is
+  // actively pushing those pieces, and they are the ones exempt from the
+  // no-summer rule — so they are also the summer pieces still worth reviewing.
+  const seasonRank = (q: (typeof annotated)[number]) => (current(q) ? 1 : 0)
+  const newInRank = (q: (typeof annotated)[number]) => (q.new_in ? 1 : 0)
   const byRank = (a: (typeof annotated)[number], b: (typeof annotated)[number]) =>
-    (seasonRank(b) - seasonRank(a)) || (b.adjusted - a.adjusted) || String(b.discovered_at ?? '').localeCompare(String(a.discovered_at ?? ''))
+    (newInRank(b) - newInRank(a)) || (seasonRank(b) - seasonRank(a)) || (b.adjusted - a.adjusted) || String(b.discovered_at ?? '').localeCompare(String(a.discovered_at ?? ''))
   // Sorting by confidence puts pieces with no number last either way — a brand
   // with no model yet has nothing to say about them.
   const sure = (q: (typeof annotated)[number]) => q.confidence
@@ -345,7 +376,7 @@ async function queuePage(offset: number, brandName?: string | null, filters: Que
     queue,
     queueTotal: filtered.length,
     predictedSkipTotal: scope.filter((q) => q.predicted_skip && passes(q, 'predicted')).length,
-    outOfSeasonTotal: scope.filter((q) => !inSeason(q.season, now) && passes(q, 'season')).length,
+    outOfSeasonTotal: scope.filter((q) => !current(q) && passes(q, 'season')).length,
     decidedCount: decided.length,
     brandCounts,
     typeCounts,
@@ -833,18 +864,23 @@ export async function keepAllForBrand(brandName: string, opts: { includeOutOfSea
   for (let from = 0; ; from += 1000) {
     let { data, error } = await admin
       .from('brand_watch_queue')
-      .select('queue_id, season, product_name, item_type, material_category, material_primary')
+      .select('queue_id, season, season_code, product_name, item_type, material_category, material_primary')
       .eq('status', 'queued')
       .in('brand_id', ids)
       .order('queue_id')
       .range(from, from + 999)
+    if (error && /season_code/.test(error.message)) {
+      ;({ data, error } = await admin.from('brand_watch_queue').select('queue_id, season, product_name, item_type, material_category, material_primary').eq('status', 'queued').in('brand_id', ids).order('queue_id').range(from, from + 999))
+    }
     if (error && /season/.test(error.message)) {
       ;({ data, error } = await admin.from('brand_watch_queue').select('queue_id, product_name, item_type, material_category, material_primary').eq('status', 'queued').in('brand_id', ids).order('queue_id').range(from, from + 999))
     }
     if (error) return { updated: 0, error: error.message }
     for (const r of (data ?? []) as any[]) {
       const season = (r.season as Season | null | undefined) ?? seasonOf({ title: r.product_name, itemType: r.item_type, materialCategory: r.material_category, materialPrimary: r.material_primary }).season
-      if (!opts.includeOutOfSeason && !inSeason(season)) { leftOut++; continue }
+      // A piece from a season already gone by is left in the queue too, unless
+      // she is looking at it — same rule the queue filter uses.
+      if (!opts.includeOutOfSeason && !inCurrentSeason(season, r.season_code)) { leftOut++; continue }
       queueIds.push(r.queue_id)
     }
     if (!data || data.length < 1000) break

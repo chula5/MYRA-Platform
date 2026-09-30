@@ -26,7 +26,14 @@ import {
 } from '@/app/admin/private-stylist/actions'
 import type { MirrorMember } from './auth'
 
-export type StyleMode = 'wardrobe' | 'inspiration'
+/**
+ * wardrobe    — only what she owns goes around the piece.
+ * inspiration — only MYRA's brands go around it.
+ * blend       — both, competing for every slot. What the Mirror's picks use:
+ *               a look she can half-wear today is the one worth showing, and
+ *               splitting the pool forced a choice she never asked for.
+ */
+export type StyleMode = 'wardrobe' | 'inspiration' | 'blend'
 export interface SiteProduct {
   url: string
   title: string
@@ -135,6 +142,10 @@ export async function styleExternalPiece(
     const owned = library.filter((i) => isOwnedItem(i as any))
     if (owned.length < MIN_WARDROBE) return { looks: [], hero: heroView, error: 'Import your wardrobe in MYRA to style with it' }
     pool = [...owned, hero]
+  } else if (mode === 'blend') {
+    // loadComposableLibrary already returns her owned pieces alongside the
+    // retail ones in her size, so the whole library IS the blend.
+    pool = [...library, hero]
   } else {
     pool = [...library.filter((i) => !isOwnedItem(i as any)), hero]
   }
@@ -149,7 +160,7 @@ export async function styleExternalPiece(
   // occasions — the ones she actually dresses for, most often first — rather
   // than three variations on the same afternoon.
   const occasionIds = occasionsForMember(row.occasions).filter((id) => id !== 'kids').slice(0, LOOKS)
-  const ownedMode = mode === 'wardrobe' ? 'blend' : 'retail_only'
+  const ownedMode = mode === 'inspiration' ? 'retail_only' : 'blend'
   const perOccasion: { id: string | null; label: string; look: any }[] = []
   // Each occasion composes on its own, so they all start from the same rotation
   // and the same best bag and best earrings win every time — three looks that
@@ -165,7 +176,12 @@ export async function styleExternalPiece(
   })
   const composed = perOccasion.map((p) => p.look)
   if (!composed.length) {
-    return { looks: [], hero: heroView, error: mode === 'wardrobe' ? 'Nothing in your wardrobe goes with this piece yet' : 'Nothing in MYRA goes with this piece in your size right now' }
+    return {
+      looks: [], hero: heroView,
+      error: mode === 'wardrobe'
+        ? 'Nothing in your wardrobe goes with this piece yet'
+        : 'Nothing in MYRA goes with this piece in your size right now',
+    }
   }
   const dimsAll = new Map<string, any>((pool as any[]).map((i) => [i.item_id, i]))
   /**

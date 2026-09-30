@@ -130,8 +130,8 @@ export default function BrandWatchClient(props: Props) {
   const [fColour, setFColour] = useState('')
   const [minScore, setMinScore] = useState<number | null>(null)
   const [fSort, setFSort] = useState<QueueSort>('rank')
-  // The season we are heading into, by default. Summer waits behind a chip.
-  const [fSeason, setFSeason] = useState<'in' | 'out' | 'all'>('in')
+  // Autumn/current-season only for now. Outgoing summer is not reviewable.
+  const fSeason: 'in' = 'in'
 
   const queue = page.queue
   // Type, colour, score and predicted-skip filters run on the SERVER over the
@@ -170,7 +170,6 @@ export default function BrandWatchClient(props: Props) {
     if ('minScore' in over) setMinScore(over.minScore ?? null)
     if ('showPredicted' in over) setShowPredicted(!!over.showPredicted)
     if ('sort' in over) setFSort(over.sort ?? 'rank')
-    if ('season' in over) setFSeason(over.season ?? 'in')
     load(fBrand, filtersNow(over))
   }
 
@@ -288,6 +287,7 @@ export default function BrandWatchClient(props: Props) {
                     <span className="block text-[8px] tracking-[0.08em] text-[#A8A8A4]">
                       {inQueue} IN QUEUE{w.last_checked_at ? ` · CHECKED ${w.last_checked_at.slice(0, 10)}` : ' · NEVER CHECKED'}
                       {w.platform === 'browser' && ' · BROWSER'}
+                      {w.platform === 'mirror' && ' · MIRROR'}
                       {w.scan_state?.running && (staleScan(w.scan_state)
                         ? <span className="text-[#B4593A]"> · SCAN STOPPED PART-WAY — RUN FULL SCAN AGAIN</span>
                         : <span className="text-[#C4A882]"> · SCANNING {w.scan_state.done ?? 0}/{w.scan_state.total ?? '?'}</span>)}
@@ -553,15 +553,9 @@ export default function BrandWatchClient(props: Props) {
         </div>
           <div className="flex flex-wrap gap-2 mb-3 items-center">
             <span className="text-[8px] tracking-[0.14em] text-[#A8A8A4] mr-1">SEASON</span>
-            <button onClick={() => setFilter({ season: 'in' })} className={fSeason === 'in' ? CHIP_ON : CHIP_OFF} title="Autumn/winter from August, spring/summer from February — plus anything the shop did not place">
-              {new Date().getUTCMonth() + 1 >= 8 || new Date().getUTCMonth() + 1 <= 1 ? 'AUTUMN / WINTER' : 'SPRING / SUMMER'}
+            <button className={CHIP_ON} title="Current autumn/winter stock, plus future dated collections and pre-orders">
+              AUTUMN / WINTER
             </button>
-            {(page.outOfSeasonTotal ?? 0) > 0 || fSeason === 'out' ? (
-              <button onClick={() => setFilter({ season: 'out' })} className={fSeason === 'out' ? CHIP_ON : CHIP_OFF} title="The season on its way out — kept out of the library unless you say so">
-                {new Date().getUTCMonth() + 1 >= 8 || new Date().getUTCMonth() + 1 <= 1 ? 'SUMMER' : 'WINTER'} · {page.outOfSeasonTotal ?? 0}
-              </button>
-            ) : null}
-            <button onClick={() => setFilter({ season: 'all' })} className={fSeason === 'all' ? CHIP_ON : CHIP_OFF}>ALL SEASONS</button>
           </div>
           <div className="flex flex-wrap gap-2 mb-4 items-center">
             <span className="text-[8px] tracking-[0.14em] text-[#A8A8A4] mr-1">SORT</span>
@@ -741,6 +735,13 @@ export default function BrandWatchClient(props: Props) {
                   {q.season && q.season !== 'all' && (
                     <span className={`absolute top-2 left-1/2 -translate-x-1/2 rounded px-1.5 py-0.5 text-[8px] tracking-[0.1em] ${q.season === 'aw' ? 'bg-white/95 border border-[#E2E0DB] text-[#4A4E57]' : 'bg-[#B4593A] text-white'}`}>
                       {q.season_code ?? (q.season === 'aw' ? 'A/W' : 'S/S')}
+                    </span>
+                  )}
+                  {/* New-in pieces lead the queue when they are otherwise current
+                      or future stock. Old summer stock is never queued. */}
+                  {q.new_in && (
+                    <span className="absolute top-2 right-2 bg-[#0A0A0A] text-white rounded px-1.5 py-0.5 text-[8px] tracking-[0.1em]" title="In the shop's new-in section">
+                      NEW IN
                     </span>
                   )}
                   {q.discovery_score != null && (

@@ -7,7 +7,8 @@
 
 import { createAdminClient } from '@/lib/supabase-server'
 import { toGbpAmount } from '@/lib/currency'
-import { seasonOf } from '@/lib/season'
+import { seasonOf, inSeason, inCurrentSeason, type Season, type SeasonInput } from '@/lib/season'
+import { fetchShopSignals, type SeasonByHandle, type ShopSignals } from '@/lib/brand-watch-collections'
 import { classifyProductGender, type GenderRead } from '@/app/admin/ai/classify-gender'
 import { classifyProductColour } from '@/app/admin/ai/classify-colour'
 import { houseBanOf } from '@/lib/brand-watch-bans'
@@ -53,7 +54,8 @@ export interface WatchedBrandRow {
   min_score: number
   last_checked_at: string | null
   last_new_count: number
-  platform?: 'shopify' | 'browser'
+  /** 'mirror' is fed by the extension as she browses — nothing is fetched from a server. */
+  platform?: 'shopify' | 'browser' | 'mirror'
   scan_state?: { running?: boolean; done?: number; total?: number; remaining?: number; started_at?: string } | null
   /** AUTOMATE: new pieces the learning would keep go straight to the library (migration 0056). */
   auto_keep?: boolean
@@ -74,6 +76,7 @@ export interface BrandCheckResult {
   queued: number
   belowScore: number
   skippedStock: number // new on-taste pieces NOT queued because low/out of stock
+  skippedSeason?: number // new on-taste pieces NOT queued because they are last season's stock
   suppressedByLearning: number // predicted-skip by your keep/skip history — left unseen, re-evaluated as the model evolves
   restocked: number // existing library items that went out-of-stock → back in stock
   visionColours?: number // colours read from the product image because the feed stated none
@@ -662,7 +665,7 @@ async function siblingBrandIds(admin: ReturnType<typeof createAdminClient>, bran
   return ((rows ?? []) as any[]).filter((r) => foldBrandName(r.name) === key).map((r) => r.brand_id)
 }
 
-async function resolveBrandId(admin: ReturnType<typeof createAdminClient>, name: string): Promise<string> {
+export async function resolveBrandId(admin: ReturnType<typeof createAdminClient>, name: string): Promise<string> {
   const clean = name.trim()
   // Fold-compare against every brand, not ilike — spacing and casing variants
   // must resolve to the same row or the library splits.
@@ -783,12 +786,29 @@ export async function detectStoreCurrency(baseUrl: string): Promise<string | nul
 // decisions so the piece never resurfaces and never touches the library.
 // Dedupes against the queue (any status) and existing library items by
 // shopify_product_id, then retailer_url.
+//
+// Two pieces of season handling happen here, and this is the only place they
+// need to, because every scan route ends up in this function:
+//
+//   * a piece from the season on its way out is NOT queued. Chloe's rule, and
+//     the reason is stock, not taste: a summer dress queued in September will be
+//     destocked before anyone buys it, so queueing it is wasted review. Future
+//     dated collections and explicit pre-orders remain eligible.
+//   * new-in pieces are marked, so the queue can lead with them when they are
+//     otherwise in the current or future season.
+//
+// `signals` is null when the shop could not be asked (not Shopify, blocked, no
+// collections). Null must not be read as "nothing is new in" — it means we do
+// not know, so no piece is exempted by it, and no piece is placed by a season
+// collection. A piece whose season is unknown still queues: an unplaced piece is
+// not evidence of the wrong season.
 async function queueProducts(
   admin: ReturnType<typeof createAdminClient>,
   watched: WatchedBrandRow,
   products: ScannedProduct[],
-): Promise<number> {
-  if (!products.length) return 0
+  signals: ShopSignals | null = null,
+): Promise<{ queued: number; skippedSeason: number }> {
+  if (!products.length) return { queued: 0, skippedSeason: 0 }
   const brandId = watched.brand_id ?? (await resolveBrandId(admin, watched.name))
   if (!watched.brand_id) {
     await (admin as any).from('watched_brand').update({ brand_id: brandId } as any).eq('watched_brand_id', watched.watched_brand_id)
@@ -804,8 +824,22 @@ async function queueProducts(
 
   // The store's real currency, not a guess from the domain.
   const storeCurrency = await detectStoreCurrency(watched.base_url)
+  const isNewIn = (p: ScannedProduct) => signals !== null && signals.newIn !== null && signals.newIn.has(p.handle)
+  let skippedSeason = 0
   const rows = products
     .filter((p) => !isKnown(known, { pid: p.shopifyProductId, url: p.url, name: p.title, colour: p.colourFamily }))
+    // Not worth reviewing: last season's stock, and not something the shop has
+    // just put out. That is the opposite season AND anything the shop filed under
+    // a season already gone by — a piece tagged AW25 is last autumn's stock, and
+    // queueing it in AW26 is the same wasted review as queueing summer. Unknown
+    // season and unknown date both pass, and this reads the same season that gets
+    // written, so the queue can never hold a piece this test rejected.
+    .filter((p) => {
+      const sf = seasonFields(p, signals?.seasonByHandle, signals?.preOrderByHandle)
+      if (inCurrentSeason(sf.season, sf.season_code)) return true
+      skippedSeason++
+      return false
+    })
     .map((p) => ({
       watched_brand_id: watched.watched_brand_id,
       brand_id: brandId,
@@ -824,7 +858,8 @@ async function queueProducts(
       material_primary: p.materialPrimary,
       stock_status: p.stockStatus,
       stock_sizes: p.sizesInStock,
-      ...seasonFields(p),
+      ...seasonFields(p, signals?.seasonByHandle),
+      new_in: isNewIn(p),
       discovery_score: p.score,
       discovered_at: new Date().toISOString(),
       admin_notes: `Brand Watch ${p.score > 0 ? '+' : ''}${p.score}${p.reasons.length ? ` (${p.reasons.join(', ')})` : ''} — score the 1–5 dimensions before READY.`,
@@ -837,14 +872,29 @@ async function queueProducts(
     if (error && /season/.test(error.message)) {
       ;({ error } = await (admin as any).from('brand_watch_queue').insert(chunk.map(({ season: _s, season_code: _c, ...r }) => r) as any))
     }
+    // Pre-0076 the new_in column is not there yet: queue without it.
+    if (error && /new_in/.test(error.message)) {
+      ;({ error } = await (admin as any).from('brand_watch_queue').insert(chunk.map(({ new_in: _n, ...r }) => r) as any))
+    }
     if (error) throw new Error(`queue insert failed: ${error.message}`)
   }
-  return rows.length
+  return { queued: rows.length, skippedSeason }
 }
 
-/** The season a scanned piece belongs to, from the shop's tags, its kind and its material. */
-function seasonFields(p: ScannedProduct): { season: string | null; season_code: string | null } {
-  const r = seasonOf({ tags: p.tags, title: p.title, productType: p.productType, itemType: p.itemType, materialCategory: p.materialCategory, materialPrimary: p.materialPrimary })
+/** The season a scanned piece belongs to, from the shop's own collections, tags, kind and material. */
+function seasonFields(
+  p: ScannedProduct,
+  seasonByHandle?: SeasonByHandle | null,
+  preOrderByHandle?: Set<string> | null,
+): { season: Season | null; season_code: string | null } {
+  const fromShop = seasonByHandle?.get(p.handle) ?? null
+  const r = seasonOf({
+    tags: p.tags, title: p.title, productType: p.productType, itemType: p.itemType,
+    materialCategory: p.materialCategory, materialPrimary: p.materialPrimary,
+    collectionSeason: fromShop?.season ?? null,
+    collectionCode: fromShop?.code ?? null,
+    preOrder: preOrderByHandle?.has(p.handle) ?? false,
+  })
   return { season: r.season, season_code: r.code }
 }
 
@@ -1048,9 +1098,23 @@ function isRecent(p: ScannedProduct, days: number): boolean {
   return Date.now() - Date.parse(p.publishedAt) < days * 86_400_000
 }
 
+/**
+ * A mirror-fed brand has nothing to scan. Every scan entry point answers with
+ * this rather than throwing, so the weekly run, CHECK NOW and FULL SCAN all
+ * say the same true thing instead of reporting a failure she cannot fix.
+ */
+export function mirrorFedResult(watched: WatchedBrandRow): BrandCheckResult {
+  return {
+    name: watched.name, scanned: 0, newProducts: 0, queued: 0, belowScore: 0,
+    skippedStock: 0, suppressedByLearning: 0, restocked: 0,
+    note: 'fed by the Mirror — this shop cannot be read from a server, so its pieces arrive as you browse it',
+  }
+}
+
 // Add a brand: scan, queue only the last 60 days of on-taste pieces (so a
 // 2,000-product back catalogue doesn't land at once), mark everything seen.
 export async function baselineBrand(watched: WatchedBrandRow): Promise<BrandCheckResult> {
+  if (watched.platform === 'mirror') return mirrorFedResult(watched)
   if (watched.platform === 'browser') return browserScanAndQueue(watched, 'watch')
   return scanAndQueue(watched, (p) => p.score >= watched.min_score && isRecent(p, HOUSE_STYLE.newDays))
 }
@@ -1059,6 +1123,7 @@ export async function baselineBrand(watched: WatchedBrandRow): Promise<BrandChec
 // publish date. The threshold is the brand's min_score — lower it and run
 // again to pull in the next band down (already-queued pieces are deduped).
 export async function onboardBrand(watched: WatchedBrandRow): Promise<BrandCheckResult> {
+  if (watched.platform === 'mirror') return mirrorFedResult(watched)
   if (watched.platform === 'browser') return browserScanAndQueue(watched, 'scan')
   return scanAndQueue(watched, (p) => p.score >= watched.min_score)
 }
@@ -1125,6 +1190,27 @@ async function scanAndQueue(
   // Low or out of stock isn't worth adding — it gets another chance on a
   // later check if it restocks (queueing only marks items, not seen state).
   const inStock = onTaste.filter((p) => queueableStock(p))
+  // MYRA is womenswear only, and most Shopify feeds say the gender in a product
+  // type, tag or handle — read for free above. Some say it NOWHERE: Phoebe Philo
+  // tags everything with internal merchandising codes (A_Collection, PC_B, DTC),
+  // names its collections by garment (shirts-tops, trousers), and states no
+  // gender on the product page either, so its menswear reached the queue with
+  // nothing to stop it. For those the image is the only evidence.
+  //
+  // Run on the pieces that would otherwise be QUEUED, not the whole catalogue:
+  // that is the only point where the answer changes anything, and it keeps the
+  // cost to the queue rather than to several hundred products a brand.
+  let visionGender = 0
+  let genderNote: string | undefined
+  try {
+    visionGender = await applyVisionGender(inStock)
+  } catch (e) {
+    // A vision outage must not stop the scan. Most brands state their gender in
+    // the feed, so this leaves only the quiet ones unchecked — and their pieces
+    // still reach the queue for review, rather than the whole brand failing.
+    genderNote = `GENDER CHECK SKIPPED — ${e instanceof Error ? e.message : String(e)}`
+  }
+  const womens = inStock.filter((p) => !p.menswear)
   const shouldSuppress = (p: ScannedProduct, brandName: string) => learned(p, brandName).predictedSkip
   // The learned skipper may thin the queue, but it may not VETO the house
   // style: scan-time suppression removes a piece invisibly (unlike the queue's
@@ -1133,9 +1219,10 @@ async function scanAndQueue(
   // skips took out a wide-leg jean. Anything two points clear of the brand's
   // min score always queues; the queue-time learning can still fold it away.
   const vetoed = (p: ScannedProduct) => shouldSuppress(p, watched.name) && p.score < watched.min_score + 2
-  const candidates = inStock.filter((p) => !vetoed(p))
-  const suppressed = new Set(inStock.filter((p) => vetoed(p)).map((p) => p.shopifyProductId))
-  const queued = await queueProducts(admin, watched, candidates)
+  const candidates = womens.filter((p) => !vetoed(p))
+  const suppressed = new Set(womens.filter((p) => vetoed(p)).map((p) => p.shopifyProductId))
+  const signals = await fetchShopSignals(watched.base_url)
+  const { queued, skippedSeason } = await queueProducts(admin, watched, candidates, signals)
   await logUnresolvedColours(admin, watched.name, fashion)
   const restocked = await refreshBrandStock(admin, products)
   await refreshQueueStock(admin, products)
@@ -1152,11 +1239,13 @@ async function scanAndQueue(
     .from('watched_brand')
     .update({ last_checked_at: new Date().toISOString(), last_new_count: queued } as any)
     .eq('watched_brand_id', watched.watched_brand_id)
+  const diagnostic = scanDiagnostic(fashion, watched.min_score, queued)
   return {
     name: watched.name, scanned: products.length, newProducts: onTaste.length,
     queued, belowScore: fashion.length - onTaste.length,
     skippedStock: stockHeld.size, suppressedByLearning: suppressed.size, restocked, visionColours,
-    note: scanDiagnostic(fashion, watched.min_score, queued),
+    skippedSeason, menswearRead: visionGender,
+    note: [diagnostic, genderNote].filter(Boolean).join(' · ') || undefined,
   }
 }
 
@@ -1265,11 +1354,19 @@ async function saveColourReads(admin: any, rows: Array<{ image_url: string; colo
  * JS-rendered women's section, and 168 men's pieces reached the queue because
  * "no signal" was treated as womenswear.
  *
- * For those, the product image is the only evidence. One cheap vision call per
- * otherwise-unknowable product, and only when the brand shows no textual gender
- * signal at all — a feed that labels its women's pieces never pays for this.
+ * For each otherwise-unknowable product, the image is the only evidence. One
+ * cheap vision call is made only when that product has no textual gender signal
+ * — a product already labelled women's or men's never pays for this.
  */
-async function applyVisionGender(products: ScannedProduct[]): Promise<number> {
+async function applyVisionGender(products: ScannedProduct[], opts: { excludeUnclear?: boolean } = {}): Promise<number> {
+  // Unclear counts as women unless the caller says otherwise. The browser route
+  // asks for the strict reading — only a positive women's read gets through —
+  // because Adolfo Domínguez publishes no gender anywhere and 168 men's pieces
+  // reached the queue there. The Shopify route does NOT: those shops shoot
+  // flat-lays and cropped details, so "unclear" is the common answer for
+  // perfectly good womenswear, and excluding it would quietly empty a queue
+  // rather than tidy it. There, only a positive MEN read is acted on.
+  const excludeUnclear = opts.excludeUnclear ?? false
   // PER-PRODUCT, not all-or-nothing. A product with a textual signal is already
   // decided — WOMEN by text stays, MEN by text is already flagged menswear — so
   // it never pays for a vision call. Only products with NO textual gender signal
@@ -1285,10 +1382,6 @@ async function applyVisionGender(products: ScannedProduct[]): Promise<number> {
   })
   if (!needsVision.length) return 0
 
-  // On a piece that states gender NOWHERE the image is the only evidence, and
-  // only a positive women's read gets through: a flat-lay trench or a cropped
-  // shot returns "unclear", and MYRA is womenswear only, so an item nobody can
-  // confirm as women's is not worth showing.
   const verdicts: Array<{ gender: GenderRead; error?: string }> = []
   const CONC = 6
   for (let i = 0; i < needsVision.length; i += CONC) {
@@ -1313,7 +1406,10 @@ async function applyVisionGender(products: ScannedProduct[]): Promise<number> {
 
   let excluded = 0
   verdicts.forEach((r, k) => {
-    if (r.gender !== 'women') { products[needsVision[k]].menswear = true; excluded++ }
+    if (r.gender === 'men' || (excludeUnclear && r.gender !== 'women')) {
+      products[needsVision[k]].menswear = true
+      excluded++
+    }
   })
   return excluded
 }
@@ -1363,7 +1459,8 @@ async function browserScanAndQueue(watchedRow: WatchedBrandRow, mode: 'watch' | 
     const watched = { ...watchedRow, ...adopted }
     const products = res.parsed.map(classifyExternalProduct)
     // Sites with no textual gender signal get one vision call per product.
-    await applyVisionGender(products)
+    // A positive men's read is excluded; an unclear read remains reviewable.
+    await applyVisionGender(products, { excludeUnclear: true })
     const visionColours = await applyVisionColour(products, watched.min_score)
     const learned = await loadLearnedSkipper(admin)
     applyLearnedLift(products, learned, watched.name)
@@ -1380,7 +1477,8 @@ async function browserScanAndQueue(watchedRow: WatchedBrandRow, mode: 'watch' | 
   const vetoed = (p: ScannedProduct) => shouldSuppress(p, watched.name) && p.score < watched.min_score + 2
   const candidates = inStock.filter((p) => !vetoed(p))
     const suppressed = new Set(inStock.filter((p) => vetoed(p)).map((p) => p.shopifyProductId))
-    const queued = await queueProducts(admin, watched, candidates)
+    const signals = await fetchShopSignals(watched.base_url)
+    const { queued, skippedSeason } = await queueProducts(admin, watched, candidates, signals)
     const restocked = await refreshBrandStock(admin, products)
     await refreshQueueStock(admin, products)
     // stock-held and learning-suppressed pieces stay unseen — restocks and
@@ -1399,6 +1497,7 @@ async function browserScanAndQueue(watchedRow: WatchedBrandRow, mode: 'watch' | 
       name: watched.name, scanned: res.discovered, newProducts: onTaste.length, queued,
       belowScore: fashion.length - onTaste.length, skippedStock: stockHeld.size,
       suppressedByLearning: suppressed.size, restocked, visionColours,
+      skippedSeason,
       note: res.remaining > 0
         ? `${res.processedUrls.length} pages this run, ${res.remaining} remaining — run FULL SCAN again to continue`
         : undefined,
@@ -1412,6 +1511,10 @@ async function browserScanAndQueue(watchedRow: WatchedBrandRow, mode: 'watch' | 
 // Weekly check: anything not in brand_watch_seen is new. On-taste new pieces
 // are queued as drafts; everything is marked seen either way.
 export async function checkWatchedBrand(watchedIn: WatchedBrandRow): Promise<BrandCheckResult> {
+  // A mirror-fed brand has no catalogue to fetch — its pieces arrive as she
+  // browses. Reporting that is the honest answer; throwing would show the
+  // weekly run a failure it can never fix.
+  if (watchedIn.platform === 'mirror') return mirrorFedResult(watchedIn)
   if (watchedIn.platform === 'browser') return browserScanAndQueue(watchedIn, 'scan')
   const admin = createAdminClient()
   const products = await fetchCatalogue(watchedIn.base_url)
@@ -1453,7 +1556,8 @@ export async function checkWatchedBrand(watchedIn: WatchedBrandRow): Promise<Bra
   const vetoed = (p: ScannedProduct) => shouldSuppress(p, watched.name) && p.score < watched.min_score + 2
   const candidates = inStock.filter((p) => !vetoed(p))
   const suppressed = new Set(inStock.filter((p) => vetoed(p)).map((p) => p.shopifyProductId))
-  const queued = await queueProducts(admin, watched, candidates)
+  const signals = await fetchShopSignals(watched.base_url)
+  const { queued, skippedSeason } = await queueProducts(admin, watched, candidates, signals)
   const restocked = await refreshBrandStock(admin, products)
   await refreshQueueStock(admin, products)
   const stockHeld = new Set(
@@ -1473,6 +1577,7 @@ export async function checkWatchedBrand(watchedIn: WatchedBrandRow): Promise<Bra
     name: watched.name, scanned: products.length, newProducts: fresh.length,
     queued, belowScore: fresh.length - onTaste.length,
     skippedStock: stockHeld.size, suppressedByLearning: suppressed.size, restocked, visionColours,
+    skippedSeason,
     note: scanDiagnostic(products.filter((p) => !p.nonFashion && !p.menswear), watched.min_score, queued),
   }
 }

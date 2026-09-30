@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { measureBrandTrust, summariseTrust, TRUST_MIN_PREDICTIONS, type TrustDecision } from '../brand-watch-trust'
+import {
+  measureBrandTrust, summariseTrust, trustForAutomation, TRUST_MIN_PREDICTIONS,
+  type TrustDecision,
+} from '../brand-watch-trust'
 
 const at = (n: number) => new Date(Date.UTC(2026, 8, 1) + n * 60_000).toISOString()
 const decision = (n: number, brand: string, kept: boolean, name: string, extra: Partial<TrustDecision> = {}): TrustDecision => ({
@@ -46,5 +49,24 @@ describe('summariseTrust', () => {
     expect(summariseTrust(12, 4, 4).summary).toMatch(/^LEARNING — 4 OF 10/)
     expect(summariseTrust(20, 11, 6).summary).toMatch(/^NOT YET — RIGHT 6 OF 11/)
     expect(summariseTrust(25, 20, 20).summary).toBe('TRUSTED — RIGHT 20 OF 20')
+  })
+})
+
+describe('trustForAutomation', () => {
+  it('allows the explicitly approved AFLALO exception at nine perfect predictions', () => {
+    const measured = summariseTrust(20, 9, 9)
+    const effective = trustForAutomation(measured, 'AFLALO')
+    expect(effective.trusted).toBe(true)
+    expect(effective.summary).toContain('TRUSTED FOR AFLALO')
+  })
+
+  it('keeps the normal ten-prediction bar for every other brand', () => {
+    const measured = summariseTrust(20, 9, 9)
+    expect(trustForAutomation(measured, 'Antik Batik').trusted).toBe(false)
+    expect(trustForAutomation(measured, 'AFLALO Studio').trusted).toBe(false)
+  })
+
+  it('does not approve AFLALO when one of the nine predictions was wrong', () => {
+    expect(trustForAutomation(summariseTrust(20, 9, 8), 'AFLALO').trusted).toBe(false)
   })
 })

@@ -20,7 +20,7 @@
 //  · at most AUTO_KEEP_PER_SCAN pieces a scan, so a drop can't flood the library
 
 import { buildLearning, type DecidedRow } from './brand-watch-learning'
-import { measureBrandTrust, summariseTrust, wouldAutoKeep, type BrandTrust, type TrustDecision } from './brand-watch-trust'
+import { measureBrandTrust, summariseTrust, trustForAutomation, wouldAutoKeep, type BrandTrust, type TrustDecision } from './brand-watch-trust'
 import { carefulFlags, keptTwinOf, measureTwinTrust, summariseTwinTrust, type TwinDecision, type TwinTrust } from './brand-watch-twins'
 import {
   confidenceModels, confidenceFromModels, confidenceSource, measureBoth, summariseConfidence,
@@ -147,8 +147,11 @@ export async function loadBrandTrust(admin: any): Promise<BrandTrustData> {
   }
 }
 
-export const trustFor = (data: BrandTrustData, watched: Pick<WatchedBrandRow, 'brand_id'>): BrandTrust =>
-  (watched.brand_id && data.byBrandId.get(watched.brand_id)) || summariseTrust(0, 0, 0)
+export const trustFor = (data: BrandTrustData, watched: Pick<WatchedBrandRow, 'brand_id' | 'name'>): BrandTrust =>
+  trustForAutomation(
+    (watched.brand_id && data.byBrandId.get(watched.brand_id)) || summariseTrust(0, 0, 0),
+    watched.name,
+  )
 
 export const twinTrustFor = (data: BrandTrustData, watched: Pick<WatchedBrandRow, 'brand_id'>): TwinTrust =>
   (watched.brand_id && data.twinsByBrandId.get(watched.brand_id)) || summariseTwinTrust(0, 0)

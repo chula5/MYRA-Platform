@@ -58,6 +58,16 @@ export interface PersonaLens {
    */
   reference?: { envelope: { mean: number[]; spread: number[] }; weight: number } | null
   /**
+   * The persona's own moodboard, look by look — the confirmed inspiration
+   * vectors the envelope above is the average of. The average says what this
+   * style is USUALLY like, and a moodboard with range (a sharp suit beside a
+   * fluid dress) averages into a middle nothing in it occupies. Keeping each
+   * look whole lets a piece be recognised as belonging to ONE of them. Scored
+   * exactly like her referenceLooks below — but this is the style's eye, so it
+   * fades with the persona weight as her own answers come in.
+   */
+  looks?: number[][] | null
+  /**
    * Her reference looks one by one — the pictures she keeps and the photographs
    * of what she wears. The envelope above is their average, and an average
    * blurs a distinctive look into the middle; this keeps each look whole, so a
@@ -102,6 +112,7 @@ export function personaFitScore(lens: PersonaLens | undefined, item: ItemWithBra
   if (!lens) return 0
   let score = 0
   if (lens.envelope?.mean?.length && lens.weight > 0) score += envelopeFit(lens.envelope, item) * lens.weight
+  if (lens.looks?.length && lens.weight > 0) score += nearestLookFit(lens.looks, item) * lens.weight
   if (lens.reference?.envelope?.mean?.length && lens.reference.weight > 0) {
     score += envelopeFit(lens.reference.envelope, item) * lens.reference.weight
   }

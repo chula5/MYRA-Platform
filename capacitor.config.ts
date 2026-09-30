@@ -9,9 +9,9 @@ const config: CapacitorConfig = {
   appName: 'MYRA',
   webDir: 'cap-shell',
   server: {
-    // The app opens straight into The Edit (the website landing page is unchanged
-    // for web visitors). Not-signed-in users get the early-access sign-in first.
-    url: 'https://www.myraassistant.co.uk/edit',
+    // The app opens straight into the private-stylist member area. Not-signed-in
+    // users are sent through the member sign-in flow by the server.
+    url: 'https://www.myraassistant.co.uk/me',
     // Allow the in-app browser to navigate the live site over HTTPS.
     allowNavigation: ['www.myraassistant.co.uk', 'myraassistant.co.uk'],
   },

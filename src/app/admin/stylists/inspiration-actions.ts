@@ -21,6 +21,7 @@ import {
   computeEnvelope,
   envelopeToRange,
   proposeRulesFromEnvelope,
+  sampleLooks,
   vectorFromInspiration,
   occasionProfile,
   MIN_CONFIRMED_IMAGES,
@@ -335,6 +336,11 @@ export async function recomputeEnvelope(personaId: string): Promise<{
     const env = computeEnvelope(vectors, 1)
     if (!env) return { confirmed: 0, belowMinimum: true, error: 'No confirmed images with vectors yet' }
 
+    // The looks themselves travel with the envelope, so the composer can score
+    // a piece against the look it actually belongs to — the range of the
+    // moodboard, not only its average.
+    const looks = sampleLooks(vectors)
+
     const itemTypeCounts: Record<string, number> = {}
     for (const r of rows) {
       for (const t of r.scores?.item_types ?? []) itemTypeCounts[t] = (itemTypeCounts[t] ?? 0) + 1
@@ -346,7 +352,7 @@ export async function recomputeEnvelope(personaId: string): Promise<{
     const proposed = proposeRulesFromEnvelope(env, itemTypeCounts)
 
     await admin.from('stylist').update({
-      envelope: { ...env, item_types: itemTypeCounts, occasions },
+      envelope: { ...env, looks, item_types: itemTypeCounts, occasions },
       envelope_computed_at: new Date().toISOString(),
       envelope_status: 'current',
       vector_range: range,

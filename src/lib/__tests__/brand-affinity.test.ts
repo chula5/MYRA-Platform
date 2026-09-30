@@ -92,12 +92,12 @@ describe('computeSimilarBrands', () => {
 
 describe('expansionSeeds', () => {
   it('seeds 0.6 core / 0.45 adjacent / 0.35 vector with a one-line trace', () => {
-    const named = [b('sez', 'Sézane', 2, vec(0.9))]
+    const named = [{ ...b('sez', 'Sézane', 2, vec(0.9)), vector_item_count: 20 }]
     const similar = new Map([[
       'sez', [
         { brand_id: 'cp', name: 'Claudie Pierlot', mechanism: 'core_family' as const, family_name: 'French contemporary' },
         { brand_id: 'maje', name: 'Maje', mechanism: 'adjacent_family' as const, family_name: 'French contemporary' },
-        { brand_id: 'near', name: 'Nearby', mechanism: 'vector' as const, score: 0.72 },
+        { brand_id: 'near', name: 'Nearby', mechanism: 'vector' as const, score: 0.9, aesthetic: 0.9, basis: 'vector' as const },
       ],
     ]])
     const seeds = expansionSeeds(named, similar)
@@ -105,16 +105,42 @@ describe('expansionSeeds', () => {
     expect(seeds.get('cp')!.trace).toBe("core family 'French contemporary' via Sézane")
     expect(seeds.get('maje')!.value).toBe(SEED.adjacentFamily)
     expect(seeds.get('near')!.value).toBe(SEED.vectorOnly)
-    expect(seeds.get('near')!.trace).toContain('vector 0.72')
+    expect(seeds.get('near')!.trace).toContain('vector 0.9')
   })
 
   it('when two named brands seed the same brand, the higher value wins', () => {
-    const named = [b('a', 'A', 2), b('x', 'X', 2)]
+    const named = [{ ...b('a', 'A', 2), vector_item_count: 20 }, b('x', 'X', 2)]
     const similar = new Map([
-      ['a', [{ brand_id: 'z', name: 'Z', mechanism: 'vector' as const, score: 0.6 }]],
+      ['a', [{ brand_id: 'z', name: 'Z', mechanism: 'vector' as const, score: 0.9, aesthetic: 0.9, basis: 'vector' as const }]],
       ['x', [{ brand_id: 'z', name: 'Z', mechanism: 'core_family' as const, family_name: 'F' }]],
     ])
     expect(expansionSeeds(named, similar).get('z')!.value).toBe(SEED.coreFamily)
+  })
+
+  it('provisional vector seeds need a trustworthy centroid AND a strong match', () => {
+    // The MKDT/CMMN SWDN case: a 5-item Claudie Pierlot scattered Scandi
+    // minimalists into a French-contemporary world on cosines of 0.72–0.86.
+    const thin = { ...b('cp', 'Claudie Pierlot', 2, vec(0.85)), vector_item_count: 5 }
+    const strong = { ...b('im', 'Isabel Marant', 3, vec(0.9)), vector_item_count: 496 }
+    const similar = new Map([
+      ['cp', [{ brand_id: 'mkdt', name: 'MKDT Studio', mechanism: 'vector' as const, score: 0.753, aesthetic: 0.94, basis: 'vector' as const }]],
+      ['im', [
+        { brand_id: 'weak', name: 'Weak Match', mechanism: 'vector' as const, score: 0.72, aesthetic: 0.78, basis: 'vector' as const },
+        { brand_id: 'good', name: 'Good Match', mechanism: 'vector' as const, score: 0.86, aesthetic: 0.92, basis: 'vector' as const },
+      ]],
+    ])
+    const seeds = expansionSeeds([thin, strong], similar)
+    expect(seeds.has('mkdt')).toBe(false) // strong match, but a 5-item centroid may not scatter
+    expect(seeds.has('weak')).toBe(false) // deep centroid, but 0.78 is noise at this sample size
+    expect(seeds.has('good')).toBe(true)
+  })
+
+  it('codes-based similarity is exempt from the centroid bar — it is authored, not sampled', () => {
+    const thin = { ...b('cp', 'Claudie Pierlot', 2, vec(0.85)), vector_item_count: 5 }
+    const similar = new Map([
+      ['cp', [{ brand_id: 'mz', name: 'Me+Em', mechanism: 'vector' as const, score: 0.7, aesthetic: 0.88, basis: 'codes' as const }]],
+    ])
+    expect(expansionSeeds([thin], similar).has('mz')).toBe(true)
   })
 })
 

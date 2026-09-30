@@ -258,9 +258,11 @@ export async function loadPilotData(): Promise<PilotData> {
 
   // Personas a member can be styled through, and who is currently assigned.
   // Both degrade to empty if migrations 0039/0043 haven't been run.
+  // Real stylists belong here too: Chloe is a stylist row of type 'real', and
+  // a member can be styled through her eye like any other lens.
   const adminAny = admin as any
   const [personaRes, assignRes] = await Promise.all([
-    adminAny.from('stylist').select('stylist_id, name, envelope, type').eq('type', 'persona').order('name'),
+    adminAny.from('stylist').select('stylist_id, name, envelope, type').in('type', ['persona', 'real']).order('name'),
     adminAny.from('user_persona').select('user_id, persona_id, weight').eq('subject_kind', 'pilot_member'),
   ])
   const personas = ((personaRes?.data ?? []) as any[]).map((p) => ({
@@ -1813,12 +1815,17 @@ export async function loadPersonaLens(
   const assignment = personaOverride ? { persona_id: personaOverride, weight: PERSONA_START_WEIGHT } : assigned
   let name: string | null = null
   let envelope: { mean: number[]; spread: number[] } | null = null
+  let looks: number[][] | null = null
   if (assignment?.persona_id) {
     const { data: persona } = await admin
       .from('stylist').select('name, envelope').eq('stylist_id', assignment.persona_id).maybeSingle()
     name = persona?.name ?? null
     const env = persona?.envelope
     if (env?.mean?.length) envelope = { mean: env.mean, spread: env.spread ?? [] }
+    // The moodboard's looks kept whole, stored beside their average when the
+    // envelope was computed. Older envelopes predate them — the mean alone
+    // carries those until the envelope is recomputed.
+    if (Array.isArray(env?.looks)) looks = env.looks.filter((v: any) => Array.isArray(v) && v.length)
   }
 
   // Her own reference pictures — added on her profile by Chloe (user_id = her
@@ -1844,6 +1851,9 @@ export async function loadPersonaLens(
     reference,
     // The newest of her looks, kept whole beside their average (nearestLookFit).
     referenceLooks: vectors.slice(0, 60),
+    // The style's own moodboard, kept whole for the same reason — the range of
+    // the persona's eye, not only its centre.
+    looks,
   }
 }
 

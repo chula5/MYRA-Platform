@@ -1,10 +1,11 @@
 // Runs only on MYRA's /mirror/connect. Reads the member token the page
 // rendered for the signed-in member and hands it to the service worker.
 ;(async () => {
+  const { sendMessage } = globalThis.__myraBrowser
   const token = document.querySelector('meta[name="myra-mirror-token"]')?.content
   const member = document.querySelector('meta[name="myra-mirror-member"]')?.content
   if (!token) return
-  const res = await new Promise((r) => chrome.runtime.sendMessage({ type: 'setToken', token, member, apiBase: location.origin }, r))
+  const res = await sendMessage({ type: 'setToken', token, member, apiBase: location.origin })
   const h = document.getElementById('myra-mirror-status')
   const p = document.getElementById('myra-mirror-help')
   if (res?.ok) {

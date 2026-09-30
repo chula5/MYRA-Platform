@@ -2,16 +2,22 @@
 // caches a page's ranking for ten minutes so a revisit reorders instantly,
 // and keeps the per-tab "lifted N pieces" count for the badge and popup.
 
-const DEFAULTS = { apiBase: 'http://localhost:3000', token: null, member: null, disabledHosts: [] }
+// Production by default: this is what the store build ships with. Chloe's
+// unpacked dev copy points at her dev server through the popup's advanced
+// field, once, on her machine only.
+importScripts('browser-api.js')
+const { api: ext, onMessage } = globalThis.__myraBrowser
+const DEFAULTS = { apiBase: 'https://www.myraassistant.co.uk', token: null, member: null, disabledHosts: [] }
 const RANK_TTL_MS = 10 * 60_000
 const rankCache = new Map() // `${host}|${hash}` → { at, data }
+const picksCache = new Map() // same key → { at, data } — the panel reopens instantly
 // The styling job runs HERE, not in the page: she can walk on to the next
 // product, or the next site, and the panel keeps building on the right.
 let styleJob = null // { id, product, mode, status, looks, hero, error, startedAt }
 const tabStats = new Map() // tabId → { host, lifted, total, member, ms }
 
 async function cfg() {
-  const stored = await chrome.storage.local.get(null)
+  const stored = await ext.storage.local.get(null)
   return { ...DEFAULTS, ...stored }
 }
 
@@ -29,20 +35,20 @@ async function api(path, init = {}) {
     ...init,
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${c.token}`, ...(init.headers || {}) },
   })
-  if (res.status === 401) await chrome.storage.local.set({ token: null, member: null })
+  if (res.status === 401) await ext.storage.local.set({ token: null, member: null })
   let json = null
   try { json = await res.json() } catch {}
   return { status: res.status, json }
 }
 
 async function saveJob() {
-  try { await chrome.storage.local.set({ styleJob }) } catch {}
+  try { await ext.storage.local.set({ styleJob }) } catch {}
   // Every open tab redraws from the job it is told about.
   try {
-    const tabs = await chrome.tabs.query({})
+    const tabs = await ext.tabs.query({})
     for (const t of tabs) {
       if (t.id == null) continue
-      chrome.tabs.sendMessage(t.id, { type: 'styleUpdate', job: styleJob }).catch?.(() => {})
+      Promise.resolve(ext.tabs.sendMessage(t.id, { type: 'styleUpdate', job: styleJob })).catch(() => {})
     }
   } catch {}
 }
@@ -63,12 +69,30 @@ const handlers = {
     return json
   },
 
+  /**
+   * Her top picks for this page — the gaps in her wardrobe and her taste, each
+   * piece with a look around it. Expensive to build, so it is asked for when
+   * she opens the panel, never on page load, and the answer is cached like a
+   * ranking so reopening it is instant.
+   */
+  async picks({ host, products }) {
+    const c = await cfg()
+    if (!c.token) return { error: 'Connect MYRA first' }
+    const key = `${host}|${hashKeys(products)}`
+    const hit = picksCache.get(key)
+    if (hit && Date.now() - hit.at < RANK_TTL_MS) return hit.data
+    const { status, json } = await api('/api/mirror/picks', { method: 'POST', body: JSON.stringify({ host, products }) })
+    if (status !== 200 || !json) return { error: json?.error || `picks failed (${status})` }
+    picksCache.set(key, { at: Date.now(), data: json })
+    return json
+  },
+
   async setToken({ token, member, apiBase }) {
-    if (apiBase) await chrome.storage.local.set({ apiBase })
-    await chrome.storage.local.set({ token, member: member || null })
+    if (apiBase) await ext.storage.local.set({ apiBase })
+    await ext.storage.local.set({ token, member: member || null })
     const { status, json } = await api('/api/mirror/me')
     if (status !== 200) return { ok: false, error: 'token rejected' }
-    await chrome.storage.local.set({ member: json.name })
+    await ext.storage.local.set({ member: json.name })
     rankCache.clear()
     return { ok: true, member: json.name }
   },
@@ -77,7 +101,7 @@ const handlers = {
   // straight into the MYRA pop-out frame, never through the brand page's DOM.
   /** Which build is actually running — the page compares it with its own. */
   async version() {
-    try { return { version: chrome.runtime.getManifest().version } } catch { return { version: null } }
+    try { return { version: ext.runtime.getManifest().version } } catch { return { version: null } }
   },
 
   async token() {
@@ -91,13 +115,13 @@ const handlers = {
   },
 
   async disconnect() {
-    await chrome.storage.local.set({ token: null, member: null })
+    await ext.storage.local.set({ token: null, member: null })
     rankCache.clear()
     return { ok: true }
   },
 
   async setApiBase({ apiBase }) {
-    await chrome.storage.local.set({ apiBase })
+    await ext.storage.local.set({ apiBase })
     rankCache.clear()
     return { ok: true }
   },
@@ -106,7 +130,7 @@ const handlers = {
     const c = await cfg()
     const set = new Set(c.disabledHosts)
     enabled ? set.delete(host) : set.add(host)
-    await chrome.storage.local.set({ disabledHosts: [...set] })
+    await ext.storage.local.set({ disabledHosts: [...set] })
     return { enabled }
   },
 
@@ -120,7 +144,7 @@ const handlers = {
     if (!c.token) return { error: 'Connect MYRA first' }
     let res
     try {
-      res = await chrome.tabs.sendMessage(tabId, { type: 'readVintedOrders' })
+      res = await ext.tabs.sendMessage(tabId, { type: 'readVintedOrders' })
     } catch {
       return { error: 'Open your Vinted orders page in this tab, then try again' }
     }
@@ -176,7 +200,7 @@ const handlers = {
   /** What the panel should be showing right now — asked by every page as it loads. */
   async styleJob() {
     if (!styleJob) {
-      const stored = await chrome.storage.local.get('styleJob')
+      const stored = await ext.storage.local.get('styleJob')
       styleJob = stored?.styleJob ?? null
       // A job left loading by a restarted worker is not coming back.
       if (styleJob?.status === 'loading' && Date.now() - (styleJob.startedAt || 0) > 3 * 60_000) {
@@ -237,8 +261,8 @@ const handlers = {
     if (tabId == null) return { ok: false }
     tabStats.set(tabId, { host: msg.host, lifted: msg.lifted, total: msg.total, member: msg.member, ms: msg.ms })
     try {
-      await chrome.action.setBadgeBackgroundColor({ tabId, color: '#141414' })
-      await chrome.action.setBadgeText({ tabId, text: msg.lifted > 0 ? String(msg.lifted) : '' })
+      await ext.action.setBadgeBackgroundColor({ tabId, color: '#141414' })
+      await ext.action.setBadgeText({ tabId, text: msg.lifted > 0 ? String(msg.lifted) : '' })
     } catch {}
     return { ok: true }
   },
@@ -248,11 +272,10 @@ const handlers = {
   },
 }
 
-chrome.runtime.onMessage.addListener((msg, sender, respond) => {
+onMessage((msg, sender) => {
   const fn = handlers[msg?.type]
-  if (!fn) { respond({ error: `unknown message ${msg?.type}` }); return false }
-  fn(msg, sender).then(respond, (e) => respond({ error: String(e?.message || e) }))
-  return true
+  if (!fn) return { error: `unknown message ${msg?.type}` }
+  return fn(msg, sender)
 })
 
-chrome.tabs.onRemoved.addListener((tabId) => tabStats.delete(tabId))
+ext.tabs.onRemoved.addListener((tabId) => tabStats.delete(tabId))

@@ -17,10 +17,11 @@
 import { createAdminClient } from '@/lib/supabase-server'
 import { resolveClientMember } from '@/lib/client-member'
 import { loadComposableLibrary, type StyledLook } from '@/app/admin/private-stylist/actions'
-import { itemPseudoVector, loadBrandGraph, computeSimilarBrands } from '@/lib/brand-affinity'
-import { cosine } from '@/lib/taste-vector'
+import { itemPseudoVector, brandCosine, loadBrandGraph, computeSimilarBrands } from '@/lib/brand-affinity'
 import { isOwnedItem } from '@/lib/wardrobe/owned-items'
 import { slotForItemType } from '@/lib/composer'
+import { classifyExternalProduct } from '@/lib/brand-watch'
+import { readPriceBands, priceVerdict } from '@/lib/pilot-stylist'
 import { styleExternalPiece } from '@/lib/mirror/style'
 import type { MirrorMember } from '@/lib/mirror/auth'
 import { blockedName } from '@/lib/brand-onboarding-rules'
@@ -69,6 +70,55 @@ const PER_SECTION = 12
 /** Per saved piece, so one heavily-saved brand cannot own a whole row. */
 const PER_ANCHOR = 3
 
+/**
+ * A SEARCH IS ONLY A STYLE BRIEF ON A SHOP.
+ *
+ * The Mirror notes what she types into any search box on any site it runs on,
+ * and a search engine is where most typing happens. Her recorded searches were
+ * "anna wintour podcast" and "factory ai does not work from mobile?" — read as
+ * briefs, the second one matched the word WORK and asked MYRA to dress her for
+ * the office, which is how a crossbody bag and a grey skirt arrived under MORE
+ * OF THE SAME. What she types at a shop is about clothes; what she types at
+ * Google is about anything at all.
+ */
+const SEARCH_ENGINE = /(^|\.)(google\.[a-z.]+|bing\.com|duckduckgo\.com|search\.(yahoo|aol)\.[a-z.]+|yandex\.[a-z.]+|ecosia\.org|baidu\.com|qwant\.com|startpage\.com|brave\.com|perplexity\.ai|chatgpt\.com|openai\.com|claude\.ai|reddit\.com|pinterest\.[a-z.]+|youtube\.com|instagram\.com|tiktok\.com|facebook\.com)$/i
+
+const isShopHost = (host: string | null | undefined): boolean => {
+  const h = String(host ?? '').replace(/^www\./i, '').toLowerCase()
+  return !!h && !SEARCH_ENGINE.test(h)
+}
+
+/**
+ * What a piece IS, when nothing has read it yet.
+ *
+ * A piece kept through the Mirror is written down instantly and scored later,
+ * or never — six of her seven saves carry no colour, no material and no
+ * measured dimensions at all. Matching on a vector that is almost entirely
+ * defaults is matching on nothing. The same rules Brand Watch uses to read a
+ * product page are pure text, so they can recover colour and material from the
+ * name she saved it under ("faux fur gilet", "silk-twill shorts") without a
+ * single call out.
+ */
+function readFromName(it: any): any {
+  if (it.colour_family && it.material_category) return it
+  try {
+    const read = classifyExternalProduct({
+      url: it.retailer_url ?? 'https://x/products/x',
+      title: String(it.product_name ?? ''),
+      description: '',
+      category: String(it.item_type ?? ''),
+      brand: it.brand?.name ?? null,
+      price: null, currency: null, images: [], available: true,
+    })
+    return {
+      ...it,
+      colour_family: it.colour_family ?? read.colourFamily,
+      material_category: it.material_category ?? read.materialCategory,
+      material_primary: it.material_primary ?? read.materialPrimary,
+    }
+  } catch { return it }
+}
+
 /** "AMUN SHOULDER BAG - RAINBOW MULTI" and "- BLACK" are one idea, not two. */
 const styleKey = (it: any): string =>
   `${it.brand?.name ?? ''}|${String(it.product_name ?? '').split(/\s+[-–—]\s+/)[0].toLowerCase().trim()}`
@@ -105,10 +155,13 @@ export async function loadShopBrain(asMemberId?: string): Promise<ShopBrainView>
   try {
     const since = new Date(Date.now() - LOOK_DAYS * 24 * 3600 * 1000).toISOString()
     const itemSel = 'item:item_id(*, brand:brand_id(name))'
-    const [savedRes, viewedFirst, searchRes] = await Promise.all([
+    const [savedRes, viewedFirst, searchRes, bandRes] = await Promise.all([
       admin.from('member_saved_item').select(`saved_at, source_host, ${itemSel}`).eq('member_id', me.memberId).order('saved_at', { ascending: false }).limit(SAVED),
       admin.from('recently_viewed').select(`viewed_at, host, dwell_ms, views, ${itemSel}`).eq('member_id', me.memberId).gte('viewed_at', since).order('viewed_at', { ascending: false }).limit(VIEWED),
-      admin.from('mirror_search').select('host, query, times_searched, last_searched_at').eq('member_id', me.memberId).gte('last_searched_at', since).order('last_searched_at', { ascending: false }).limit(SEARCHES),
+      // Read more than we will use: the ones typed at a search engine are
+      // dropped below, and dropping them must not leave the list empty.
+      admin.from('mirror_search').select('host, query, times_searched, last_searched_at').eq('member_id', me.memberId).gte('last_searched_at', since).order('last_searched_at', { ascending: false }).limit(SEARCHES * 4),
+      admin.from('pilot_member').select('price_bands').eq('member_id', me.memberId).maybeSingle(),
     ])
     // Pre-0060 the table is not there yet: no sections, never an error page.
     if (savedRes.error) return { ...EMPTY, test: me.test }
@@ -123,16 +176,48 @@ export async function loadShopBrain(asMemberId?: string): Promise<ShopBrainView>
       .filter((r) => r.item?.item_id && !savedIds.has(r.item.item_id) && !isOwnedItem(r.item))
       .sort((a, b) => (Number(b.views ?? 1) - Number(a.views ?? 1)) || (Number(b.dwell_ms ?? 0) - Number(a.dwell_ms ?? 0)))
       .map((r) => ({ ...r.item, __host: r.host, __kind: 'viewed' as const }))
-    const searches: string[] = ((searchRes.data ?? []) as any[]).map((r) => String(r.query)).filter(Boolean)
+    const searches: string[] = ((searchRes.data ?? []) as any[])
+      .filter((r) => isShopHost(r.host))
+      .map((r) => String(r.query))
+      .filter(Boolean)
+      .slice(0, SEARCHES)
+    // What she will not pay for this kind of piece, set on her own profile.
+    const bands = readPriceBands(bandRes?.data ?? null)
+    /** Over her ceiling for its bucket — never put forward, whatever it scores. */
+    const overBudget = (i: any): boolean =>
+      priceVerdict(bands, { item_type: i.item_type, price_gbp: i.price_gbp != null ? Number(i.price_gbp) : null }) === 'over'
     if (!savedItems.length && !viewedItems.length && !searches.length) return { ...EMPTY, test: me.test }
 
-    // Saves first, then what she looked at most.
-    const anchors = [...savedItems, ...viewedItems]
+    // Saves first, then what she looked at most. A piece nothing has scored
+    // yet has its colour and material read out of its own name, so the match
+    // below has something true to work with.
+    const anchors = [...savedItems, ...viewedItems].map(readFromName)
     const anchorIds = new Set(anchors.map((i) => i.item_id))
 
     const member = { member_id: me.memberId, auth_user_id: me.authUserId }
     const library = await loadComposableLibrary(member)
-    const pool = library.filter((i: any) => !anchorIds.has(i.item_id) && !isOwnedItem(i))
+    // Her size is already a hard gate inside loadComposableLibrary. Her price
+    // ceiling was not one anywhere: a £1,005 dress was being put in front of a
+    // woman whose dress ceiling is £400. A piece she has told us she would not
+    // buy is not a recommendation, so it never enters the pool.
+    const pool = library.filter((i: any) => !anchorIds.has(i.item_id) && !isOwnedItem(i) && !overBudget(i))
+
+    /** The parts of an outfit she actually keeps — nothing else is "for her". */
+    const savedSlots = new Set(anchors.map((s) => slotForItemType(s.item_type)))
+
+    // How close a piece is to the ones she kept: same kind wins, then same
+    // part of an outfit, then the masked cosine.
+    const closeness = (it: any, against: any[]): number => {
+      const v = itemPseudoVector(it)
+      let best = -Infinity
+      for (const a of against) {
+        const kind = it.item_type === a.item_type ? 2 : slotForItemType(it.item_type) === slotForItemType(a.item_type) ? 1 : 0
+        const c = brandCosine(v, itemPseudoVector(a))
+        const score = kind + (Number.isFinite(c) ? c : 0)
+        if (score > best) best = score
+      }
+      return best
+    }
 
     // ── 1. MORE OF THE SAME ──────────────────────────────────────────────
     // Closest in the 34 dimensions MYRA reads a garment on, in the same kind
@@ -149,9 +234,22 @@ export async function loadShopBrain(asMemberId?: string): Promise<ShopBrainView>
       const near = candidates
         .map((i: any) => ({
           i,
-          c: cosine(itemPseudoVector(i), v)
+          // brandCosine, not cosine. A single-item pseudo-vector holds eleven
+          // outfit-only dimensions at a constant 0.5, which lifts plain cosine
+          // above 0.97 for every candidate on the page and leaves the ordering
+          // to rounding — the reason a khaki skirt came back for an aqua one.
+          // Masking those dimensions is what gives an honest spread; see the
+          // note on brandCosine in brand-affinity.ts.
+          c: brandCosine(itemPseudoVector(i), v)
             + (anchor.colour_family && i.colour_family === anchor.colour_family ? 0.15 : 0)
-            + (anchor.material_category && i.material_category === anchor.material_category ? 0.1 : 0),
+            + (anchor.material_category && i.material_category === anchor.material_category ? 0.1 : 0)
+            // THE FINISH SHE REACHED FOR. Colour family is coarse — aqua and
+            // khaki are both "green" — and the family of a material says only
+            // "woven". The material itself is the thing she recognises: satin
+            // answers satin, faux fur answers faux fur, which is why those are
+            // the matches that landed. It outweighs both family signals.
+            + (anchor.material_primary && i.material_primary
+              && String(anchor.material_primary).toLowerCase() === String(i.material_primary).toLowerCase() ? 0.3 : 0),
         }))
         .filter((x) => Number.isFinite(x.c))
         .sort((a, b) => b.c - a.c)
@@ -183,9 +281,17 @@ export async function loadShopBrain(asMemberId?: string): Promise<ShopBrainView>
         const tagged = tag ? await itemsInLiveOutfitsTagged(admin, tag) : new Set<string>()
         const [lo, hi] = q.formalityRange ?? [3, 5]
         const dressed = pool
+          // A formality number is not a brief. Every bag and every skirt in
+          // the library sits at some formality, so this asked only "is this
+          // piece dressy enough" and then ranked on a tie — which is however
+          // the pool happened to be stacked. It has to be a kind of piece she
+          // actually keeps, and among those the closest to what she has been
+          // keeping comes first.
+          .filter((i: any) => savedSlots.has(slotForItemType(i.item_type)))
           .map((i: any) => {
             const f = i.material_formality != null ? Number(i.material_formality) : null
-            return { i, c: (tagged.has(i.item_id) ? 2 : 0) + (f == null ? 0 : f >= lo && f <= hi ? 1 : -9) }
+            const fits = (tagged.has(i.item_id) ? 2 : 0) + (f == null ? 0 : f >= lo && f <= hi ? 1 : -9)
+            return { i, c: fits <= 0 ? fits : fits + closeness(i, anchors) }
           })
           .filter((x) => x.c > 0)
           .sort((a, b) => b.c - a.c)
@@ -264,24 +370,11 @@ export async function loadShopBrain(asMemberId?: string): Promise<ShopBrainView>
         .not('retailer_url', 'is', null)
         .limit(200)
       const shoppable = ((drafts ?? []) as any[]).filter((i) =>
-        !anchorIds.has(i.item_id) && i.available !== false && i.stock_status !== 'out_of_stock' && !isOwnedItem(i))
+        !anchorIds.has(i.item_id) && i.available !== false && i.stock_status !== 'out_of_stock' && !isOwnedItem(i) && !overBudget(i))
       const ctx = await loadMemberSizeProfile(me.memberId)
       draftDirect = await filterItemsForShopper(shoppable, ctx, { strict: true })
     }
 
-    // How close a piece is to the saved pieces of its own label (or, for a
-    // neighbour, to any saved piece): same kind wins, then same slot, then cosine.
-    const closeness = (it: any, anchors: any[]): number => {
-      const v = itemPseudoVector(it)
-      let best = -Infinity
-      for (const a of anchors) {
-        const kind = it.item_type === a.item_type ? 2 : slotForItemType(it.item_type) === slotForItemType(a.item_type) ? 1 : 0
-        const c = cosine(v, itemPseudoVector(a))
-        const score = kind + (Number.isFinite(c) ? c : 0)
-        if (score > best) best = score
-      }
-      return best
-    }
     const anchorsFor = (brandId: string) => anchors.filter((s) => s.brand_id === brandId)
     const direct = [...liveDirect, ...draftDirect]
       .map((i: any) => ({ i, score: closeness(i, anchorsFor(i.brand_id)) + (i.status === 'live' ? 0.05 : 0) }))
@@ -290,7 +383,6 @@ export async function loadShopBrain(asMemberId?: string): Promise<ShopBrainView>
 
     // Then a few from the labels that stand beside hers — the same kind of
     // piece only, so a saved short never answers with earrings.
-    const savedSlots = new Set(anchors.map((s) => slotForItemType(s.item_type)))
     const graph = await loadBrandGraph(admin)
     const nextTo = new Map<string, string>() // neighbour brand → the saved label it stands beside
     for (const [savedBrandId, meta] of Array.from(brandCount.entries())) {
@@ -372,6 +464,11 @@ export async function styleSavedPieceFor(itemId: string, asMemberId?: string): P
     actingAdmin: false,
     actorUserId: null,
   }
-  const res = await styleExternalPiece(item, 'wardrobe', member, admin, { check: false })
+  // BLEND, not wardrobe-only. Styling a piece she found out there against her
+  // own clothes alone answers "what have I got for this" — useful, and not
+  // what this section is for. She wants to see the piece living in her style,
+  // so her wardrobe and the pieces MYRA carries in her persona's eye compete
+  // for every slot, and a look can be half hers and half new.
+  const res = await styleExternalPiece(item, 'blend', member, admin, { check: false })
   return { looks: res.looks ?? [], error: res.error }
 }

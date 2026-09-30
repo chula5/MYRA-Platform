@@ -6,6 +6,7 @@
 // what she can see on screen. Nothing is written back to Vinted.
 
 ;(() => {
+  const { onMessage } = globalThis.__myraBrowser
   const ORDER_LINK = /\/(orders?|transactions?)\/(\d+)/i
   const ITEM_LINK = /\/items\/(\d+)/i
 
@@ -65,13 +66,12 @@
     return out
   }
 
-  chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
+  onMessage((msg) => {
     if (msg?.type !== 'readVintedOrders') return false
     try {
-      respond({ ok: true, url: location.href, orders: readOrders() })
+      return { ok: true, url: location.href, orders: readOrders() }
     } catch (e) {
-      respond({ ok: false, error: String(e?.message || e) })
+      return { ok: false, error: String(e?.message || e) }
     }
-    return true
   })
 })()

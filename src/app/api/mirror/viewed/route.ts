@@ -15,6 +15,14 @@ export async function OPTIONS() { return mirrorOptions() }
 
 const hostOf = (url: string) => { try { return new URL(url).host.replace(/^www\./, '') } catch { return null } }
 
+/**
+ * A search is only a style brief when it was typed at a shop. The extension
+ * already declines to send searches typed at a search engine (content.js keeps
+ * the same list), but the client is not the boundary — this is. Anything on
+ * this list that arrives anyway is acknowledged and thrown away.
+ */
+const SEARCH_ENGINE = /(^|\.)(google\.[a-z.]+|bing\.com|duckduckgo\.com|search\.(yahoo|aol)\.[a-z.]+|yandex\.[a-z.]+|ecosia\.org|baidu\.com|qwant\.com|startpage\.com|brave\.com|perplexity\.ai|chatgpt\.com|openai\.com|claude\.ai|reddit\.com|pinterest\.[a-z.]+|youtube\.com|instagram\.com|tiktok\.com|facebook\.com)$/i
+
 export async function POST(req: NextRequest) {
   const member = await memberFromRequest(req)
   if (!member) return mirrorJson({ error: 'not connected' }, { status: 401 })
@@ -25,6 +33,7 @@ export async function POST(req: NextRequest) {
   const query = typeof b?.query === 'string' ? b.query.trim().slice(0, 80) : ''
   if (query.length >= 3) {
     const host = String(b?.host ?? '').toLowerCase().replace(/^www\./, '').slice(0, 200) || 'unknown'
+    if (SEARCH_ENGINE.test(host)) return mirrorJson({ ok: true, noted: 'ignored' })
     const now = new Date().toISOString()
     const { data: prev } = await admin.from('mirror_search').select('times_searched').eq('member_id', member.member_id).eq('host', host).eq('query', query).maybeSingle()
     const { error } = prev
