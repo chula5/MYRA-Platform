@@ -561,26 +561,56 @@ export const applicableDimensions = (itemType: string | null | undefined): TagDi
 // ------------------------------------------------- the look, in words
 
 /**
- * THE BETTER REPRESENTATION, though not the decisive one.
+ * THE BETTER REPRESENTATION, though not a solution to the new-brand problem.
  *
  * The seventeen dimensions above describe how a garment is MADE — rise,
  * shoulder, leg opening. Asking instead how a piece LOOKS, and comparing the
  * descriptions as embeddings, beat both those dimensions and the existing
- * confidence model on every chronological split tested, by +0.048 to +0.083
- * AUC. The absolute figures move with which pieces are being judged, so treat
- * the ordering as the finding, not the size.
+ * confidence model on all four chronological splits tested, on 3,139 decisions
+ * across 32 brands: 0.619 overall against 0.537 and 0.561.
  *
  * It is NOT evidence that a new brand can be judged from its clothes alone:
- * within a single brand the advantage disappears (0.610 against 0.618 over 806
- * pieces). That caveat is set out in full in brand-watch-style-fit.ts, next to
- * the scorer itself.
+ * within a single brand the advantage disappears (0.643 against 0.651). That
+ * caveat, and the modest ceiling in absolute terms, is set out in full in
+ * brand-watch-style-fit.ts next to the scorer itself.
  *
  * Material, care and brand are named as forbidden because a description
  * mentioning "Mos Mosh" would let a similarity search recognise the label, and
  * the whole point is to judge the item. Composition is left out for the same
  * reason: it is a proxy for price and provenance, not a look.
+ *
+ * "ONLY the single garment" and "ignore anything styled with it" are load
+ * bearing and were added after inspection. Without them the model described the
+ * whole outfit — a knitwear pullover came back as "high-waisted wide-leg
+ * trousers" and a pair of shorts as "white tee and lace-trim shorts". A phrase
+ * about the styling rather than the garment is a channel for brand recognition,
+ * because a shop photographs its pieces in a consistent house style. Measured
+ * on 396 pieces against the old wording, the fixed prompt scored 0.659 against
+ * 0.578.
  */
-export const PHRASE_PROMPT = `Describe this garment's STYLE as a short phrase of 8 to 16 words.
+export const PHRASE_PROMPT = `Describe ONLY the single garment or accessory being sold in this product photo.
+
+Reply with a short phrase of 8 to 16 words covering its aesthetic, mood and silhouette — for example: "minimal oversized wool coat, quiet luxury, sharp menswear edge" or "romantic floral tea dress, soft feminine, vintage-inspired".
+
+Ignore the model, the background, and anything else styled with it. Do not describe the outfit, the other garments, or how it is being worn. Do not mention material composition, care, sizing, price, or any brand name.
+Reply with the phrase only, no explanation.`
+
+/**
+ * The earlier wording, kept so the two can be measured against each other
+ * rather than assumed apart. Without "ONLY the single garment" and an explicit
+ * instruction to ignore what it is styled with, the model described the whole
+ * outfit — a knitwear pullover came back as "high-waisted wide-leg trousers"
+ * and a pair of shorts as "white tee and lace-trim shorts".
+ *
+ * That failure is worse than noise: a phrase about the styling rather than the
+ * garment lets similarity search recognise a shop's look. Brands photograph
+ * their pieces in a consistent house style, so two garments from one label
+ * resemble each other whether or not they resemble each other as clothes. That
+ * would score well overall and collapse inside a single brand — which is
+ * exactly the pattern the first measurements showed, and a reason to distrust
+ * them until this prompt is re-measured.
+ */
+export const PHRASE_PROMPT_V1 = `Describe this garment's STYLE as a short phrase of 8 to 16 words.
 
 Cover the aesthetic, the mood, and the silhouette — for example: "minimal oversized wool coat, quiet luxury, sharp menswear edge" or "romantic floral tea dress, soft feminine, vintage-inspired".
 
@@ -597,8 +627,11 @@ export interface StylePhraseResult {
   error?: string
 }
 
-/** Describe the look of one piece. One image per call; ~$0.00004 each. */
-export async function describeStyle(imageUrl: string, opts: { model?: string } = {}): Promise<StylePhraseResult> {
+/** Describe the look of one piece. One image per call; ~$0.00008 each. */
+export async function describeStyle(
+  imageUrl: string,
+  opts: { model?: string; prompt?: string } = {},
+): Promise<StylePhraseResult> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) return { phrase: '', error: 'OPENAI_API_KEY not configured' }
   const model = opts.model ?? OPENAI_TAG_MODEL
@@ -612,7 +645,7 @@ export async function describeStyle(imageUrl: string, opts: { model?: string } =
         reasoning_effort: 'none',
         messages: [{ role: 'user', content: [
           { type: 'image_url', image_url: { url: imageUrl, detail: OPENAI_TAG_DETAIL } },
-          { type: 'text', text: PHRASE_PROMPT },
+          { type: 'text', text: opts.prompt ?? PHRASE_PROMPT },
         ]}],
       }),
     })

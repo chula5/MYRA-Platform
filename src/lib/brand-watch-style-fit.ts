@@ -268,28 +268,33 @@ export function styleSimilarity(a: StyleTags, b: StyleTags): { similarity: numbe
 // ---------------------------------------------------------------- the look
 
 /**
- * THE SCORER TO USE, with one caveat that must travel with it.
+ * THE BETTER GENERAL SIGNAL, and not a solution to the new-brand problem.
  *
  * Everything above this line describes how a garment is built; this describes
- * how it looks. Across eight chronological splits of her decision history the
- * look was never once worse than the existing confidence model, beating it by
- * +0.048 to +0.083 AUC, and it also beat the construction dimensions every time:
+ * how it looks. Measured on 3,139 tagged decisions across 32 brands, over four
+ * chronological splits:
  *
- *   sample          existing model   construction dims   the look
- *   1,495 pieces         0.526             0.555           0.609
- *   1,495 pieces         0.708             0.655           0.756  (other draw)
+ *   scorer                      overall AUC     within one brand
+ *   the look (embeddings)          0.619            0.643
+ *   existing confidence model      0.537            0.651
+ *   17 construction dimensions     0.561            0.546
  *
- * The absolute numbers move with the sample — the second row is a different
- * draw of pieces with a much higher keep rate — so only the ordering should be
- * relied on, not the magnitude.
+ * The look beat the existing model on every one of the four splits, by +0.028
+ * to +0.082 AUC, and beat the construction dimensions on every one. That is the
+ * finding, and it is consistent.
  *
- * THE CAVEAT: within a single brand, where brand habit cannot help and a new
- * brand would actually land, the advantage disappears — 0.610 for the look
- * against 0.618 for the existing model over 806 pieces. An earlier run showed a
- * large within-brand win (0.721 against 0.605), but on 160 pieces, and it does
- * not reproduce. So this is a better general signal and NOT yet proof that a
- * brand new to the catalogue can be judged from its clothes alone. Do not quote
- * the new-brand case as settled.
+ * THE CAVEAT, which is why this is not the win it first looked like: within a
+ * single brand the advantage disappears — 0.643 against 0.651, a tie. A new
+ * brand lands in exactly that position, so this is NOT evidence that a brand
+ * new to the catalogue can be judged from its clothes alone. An earlier run
+ * appeared to show a large within-brand win (0.721 against 0.605); it rested on
+ * 160 pieces and did not reproduce. Do not quote the new-brand case as settled.
+ *
+ * AND THE CEILING: in absolute terms this is still modest. On the deep sample
+ * the top quartile by look is right 41.7% of the time against a 33.9% base
+ * rate. That is a real lift and nowhere near enough to auto-accept on. Nothing
+ * here should be trusted as an automation gate without the per-brand trust
+ * measure in brand-watch-trust.
  *
  * Descriptions come from describeStyle() in brand-watch-tag and are stored as
  * vectors, so a piece is scored without paying to read anything again.

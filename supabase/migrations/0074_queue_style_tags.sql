@@ -51,26 +51,26 @@ alter table public.brand_watch_queue add column if not exists tagged_at timestam
 --
 -- The seventeen 1-5 dimensions above describe how a garment is MADE — rise,
 -- shoulder, leg opening. Asked instead to describe how the piece LOOKS, and
--- compared as an embedding, the look scores better than those dimensions and
--- better than the existing confidence model, on every split tested.
+-- compared as an embedding, the look is the better general signal. Measured on
+-- 3,139 tagged decisions across 32 brands, over four chronological splits:
 --
--- Measured on two independent samples, because the size of the gap depends on
--- which pieces are being judged and only the SIGN is stable:
+--   scorer                      overall AUC     within one brand
+--   the look (embeddings)          0.619            0.643
+--   existing confidence model      0.537            0.651
+--   17 construction dimensions     0.561            0.546
 --
---   sample        existing model   construction dims   the look
---   1,495 pieces      0.526             0.555           0.609
---   1,495 pieces      0.708             0.655           0.756   (different draw)
+-- The look beat the existing model on all four splits, by +0.028 to +0.082 AUC.
 --
--- Across eight chronological splits the look was never once worse than the
--- existing model, and its margin ranged from +0.048 to +0.083 AUC.
+-- TWO CAVEATS, both of which matter more than the win:
 --
--- THE CAVEAT MATTERS: holding the brand constant — the new-brand case, which
--- is the whole reason this is being built — the advantage disappears. On 806
--- within-brand pieces the look scored 0.610 against the existing model's 0.618,
--- a tie. An earlier run showed a large within-brand win (0.721 vs 0.605), but
--- that rested on 160 pieces and does not reproduce. So this is worth having as
--- a better general signal, and it is NOT yet evidence that a brand new to the
--- catalogue can be judged from its clothes alone.
+--   Within a single brand the advantage disappears — 0.643 against 0.651, a
+--   tie. A new brand lands in exactly that position, so this is NOT evidence
+--   that a brand new to the catalogue can be judged from its clothes alone.
+--
+--   In absolute terms it is modest: the top quartile by look is right 41.7% of
+--   the time against a 33.9% base rate. Real, and nowhere near enough to
+--   auto-accept on. The per-brand trust gate in brand-watch-trust remains the
+--   safety mechanism, not this number.
 --
 -- jsonb rather than pgvector on purpose: it needs no extension, and scoring
 -- loads one brand's exemplars at a time rather than the whole catalogue.

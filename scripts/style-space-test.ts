@@ -26,6 +26,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createClient } from '@supabase/supabase-js'
 import { fitStyleModel, styleVector, buildStyleIndex, neighbourStyleScore } from '../src/lib/brand-watch-style-fit'
+import { PHRASE_PROMPT, describeStyle, embedPhrases } from '../src/lib/brand-watch-tag'
 import type { StyleTags } from '../src/lib/brand-watch-tag'
 import { buildLearning, type DecidedRow } from '../src/lib/brand-watch-learning'
 import { confidenceModels, confidenceFromModels } from '../src/lib/brand-watch-confidence'
@@ -35,7 +36,10 @@ const arg = (n: string): string | undefined =>
 const flag = (n: string): boolean => process.argv.includes(`--${n}`)
 
 const TAGS_FILE = path.join(process.cwd(), 'scripts', '.eval', 'tags.json')
-const OUT_FILE = path.join(process.cwd(), 'scripts', '.eval', 'style-phrases.json')
+// Versioned, because the prompt changed: phrases written by the old wording
+// described the shoot rather than the garment and must never be mixed with the
+// new ones, or a measurement would silently blend the two.
+const OUT_FILE = path.join(process.cwd(), 'scripts', '.eval', 'style-phrases-v2.json')
 
 function readEnv(): Record<string, string> {
   const out: Record<string, string> = {}
@@ -53,54 +57,26 @@ function readEnv(): Record<string, string> {
  * is the distinction the construction dimensions collapsed. Brand names are
  * excluded because a descriptor containing "Mos Mosh" would let the embedding
  * recognise the label, and the point is to test the garment.
+ *
+ * The prompt and the readers come from brand-watch-tag rather than being
+ * restated here: an evaluator that paraphrases production drifts from it, and
+ * this one already had — it was still sending the old wording, which described
+ * the shoot instead of the garment, long after the module was fixed.
  */
-const PHRASE_PROMPT = `Describe this garment's STYLE as a short phrase of 8 to 16 words.
-
-Cover the aesthetic, the mood, and the silhouette — for example: "minimal oversized wool coat, quiet luxury, sharp menswear edge" or "romantic floral tea dress, soft feminine, vintage-inspired".
-
-Describe how it LOOKS. Do not mention materials composition, care, sizing, price, the model, the background, or any brand name.
-Reply with the phrase only, no punctuation at the start, no explanation.`
 
 interface PhraseResult { phrase: string; ok: boolean; error?: string }
 
-async function phraseFor(key: string, imageUrl: string): Promise<PhraseResult> {
-  try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'gpt-6-luna',
-        max_completion_tokens: 200,
-        reasoning_effort: 'none',
-        messages: [{ role: 'user', content: [
-          { type: 'image_url', image_url: { url: imageUrl, detail: 'low' } },
-          { type: 'text', text: PHRASE_PROMPT },
-        ]}],
-      }),
-    })
-    const j: any = await res.json().catch(() => ({}))
-    if (!res.ok) return { phrase: '', ok: false, error: `HTTP ${res.status}: ${(j?.error?.message ?? '').slice(0, 90)}` }
-    const phrase = String(j.choices?.[0]?.message?.content ?? '').trim().replace(/\s+/g, ' ')
-    return phrase ? { phrase, ok: true } : { phrase: '', ok: false, error: 'empty phrase' }
-  } catch (err) {
-    return { phrase: '', ok: false, error: err instanceof Error ? err.message : 'fetch failed' }
-  }
+/** One description, through the same reader production uses. */
+async function phraseFor(_key: string, imageUrl: string): Promise<PhraseResult> {
+  const out = await describeStyle(imageUrl)
+  return out.phrase ? { phrase: out.phrase, ok: true } : { phrase: '', ok: false, error: out.error }
 }
 
-/** Embeddings come back in batches; 256 phrases per call keeps this to a few calls. */
-async function embed(key: string, texts: string[]): Promise<number[][]> {
-  const out: number[][] = []
-  for (let i = 0; i < texts.length; i += 256) {
-    const res = await fetch('https://api.openai.com/v1/embeddings', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'text-embedding-3-small', input: texts.slice(i, i + 256) }),
-    })
-    const j: any = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(`embeddings failed: HTTP ${res.status} ${(j?.error?.message ?? '').slice(0, 120)}`)
-    for (const e of j.data ?? []) out.push(e.embedding)
-  }
-  return out
+/** Batched through the same embedder production uses. */
+async function embed(_key: string, texts: string[]): Promise<number[][]> {
+  const { vectors, error } = await embedPhrases(texts)
+  if (error && vectors.length !== texts.length) throw new Error(`embeddings failed: ${error}`)
+  return vectors
 }
 
 const cosine = (a: number[], b: number[]) => {
@@ -132,6 +108,10 @@ async function main() {
   const env = readEnv()
   const key = env.OPENAI_API_KEY
   if (!key) throw new Error('OPENAI_API_KEY must be in .env.local')
+  // The readers read process.env at call time, so reading the file is not
+  // enough. Without this every call returns "not configured" and the run
+  // reports a clean zero, which is the worst kind of wrong answer.
+  process.env.OPENAI_API_KEY = key
   const db = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } })
 
   const tags: Record<string, { tags: StyleTags; source: string }> = JSON.parse(fs.readFileSync(TAGS_FILE, 'utf8'))
@@ -167,7 +147,8 @@ async function main() {
   const keptN = sample.filter((r) => r.status === 'kept').length
   console.log(`${usable.length} decided pieces available; sampling ${sample.length} (${keptN} kept / ${sample.length - keptN} skipped)\n`)
 
-  const store: Record<string, { phrase: string; brand_id: string; kept: boolean }> = fs.existsSync(OUT_FILE) ? JSON.parse(fs.readFileSync(OUT_FILE, 'utf8')) : {}
+  interface StoredPhrase { phrase: string; brand_id: string; kept: boolean; embedding?: number[] }
+  const store: Record<string, StoredPhrase> = fs.existsSync(OUT_FILE) ? JSON.parse(fs.readFileSync(OUT_FILE, 'utf8')) : {}
   const todo = sample.filter((r) => !store[r.queue_id])
   const CONC = Number(arg('concurrency') ?? 8)
   if (todo.length) console.log(`writing style phrases for ${todo.length} pieces (${sample.length - todo.length} cached)…`)
@@ -189,17 +170,24 @@ async function main() {
   if (withPhrase.length < 100) throw new Error(`only ${withPhrase.length} phrases — too few to measure`)
   console.log(`measuring on ${withPhrase.length} pieces with a style phrase\n`)
 
-  const phrases = withPhrase.map((r) => store[r.queue_id].phrase)
   console.log('  example phrases:')
-  for (const p of phrases.slice(0, 4)) console.log(`    · ${p}`)
+  for (const r of withPhrase.slice(0, 4)) console.log(`    · ${store[r.queue_id].phrase}`)
 
-  const vectors = await embed(key, phrases)
-  if (vectors.length !== phrases.length) throw new Error(`embedded ${vectors.length} of ${phrases.length}`)
+  // Embedded once and kept, so a rerun of the analysis costs nothing at all.
+  const needVec = withPhrase.filter((r) => !store[r.queue_id].embedding?.length)
+  if (needVec.length) {
+    process.stdout.write(`  embedding ${needVec.length} phrases…              \r`)
+    const vectors = await embed(key, needVec.map((r) => store[r.queue_id].phrase))
+    if (vectors.length !== needVec.length) throw new Error(`embedded ${vectors.length} of ${needVec.length}`)
+    needVec.forEach((r, i) => { store[r.queue_id].embedding = vectors[i] })
+    fs.writeFileSync(OUT_FILE, JSON.stringify(store))
+  }
+  const vecOfAll = new Map(withPhrase.map((r) => [r.queue_id, store[r.queue_id].embedding as number[]]))
 
   if (flag('phrases')) {
     console.log('\n  random sample:')
     for (let i = 0; i < withPhrase.length; i += Math.max(1, Math.floor(withPhrase.length / 15))) {
-      console.log(`    [${withPhrase[i].status.padEnd(7)}] ${phrases[i]}`)
+      console.log(`    [${withPhrase[i].status.padEnd(7)}] ${store[withPhrase[i].queue_id].phrase}`)
     }
   }
 
@@ -208,7 +196,7 @@ async function main() {
   const cut = Math.floor(withPhrase.length * Number(arg('split') ?? 0.7))
   const train = withPhrase.slice(0, cut)
   const test = withPhrase.slice(cut)
-  const vecOf = new Map(withPhrase.map((r, i) => [r.queue_id, vectors[i]]))
+  const vecOf = vecOfAll
 
   // ---- scorer 1: construction dimensions, the existing representation
   const dimModel = fitStyleModel(train.map((r) => ({ tags: tags[r.queue_id].tags, kept: r.status === 'kept' })))
