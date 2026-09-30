@@ -292,7 +292,8 @@ export function isStaleSeasonCode(code: string | null | undefined, now: Date = n
 export function isFutureSeasonCode(code: string | null | undefined, now: Date = new Date()): boolean {
   const y = seasonCodeYear(code)
   const current = seasonCodeYear(currentSeasonCode(now))
-  return y !== null && current !== null && y > current
+  const refYear = now.getUTCFullYear()
+  return y !== null && current !== null && y > current && y <= refYear + YEARS_AHEAD
 }
 
 /**
@@ -307,6 +308,10 @@ export function inCurrentSeason(
   code: string | null | undefined,
   now: Date = new Date(),
 ): boolean {
+  const y = seasonCodeYear(code)
+  // Older rows can still carry an internal code such as SS96/FW99 from before
+  // the plausibility bound was added. Do not let it masquerade as future stock.
+  if (y !== null && y > now.getUTCFullYear() + YEARS_AHEAD) return false
   // A future-dated collection is upcoming stock, even when its half-year is
   // different from the calendar half we are currently entering.
   if (isFutureSeasonCode(code, now)) return true

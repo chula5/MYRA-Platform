@@ -164,6 +164,8 @@ describe('inCurrentSeason — the one test the queue, keep-all and filter share'
     expect(isFutureSeasonCode('SS27', sept)).toBe(true)
     expect(inCurrentSeason('ss', 'SS27', sept)).toBe(true)
     expect(inCurrentSeason('ss', 'SS26', sept)).toBe(false)
+    expect(isFutureSeasonCode('SS96', sept)).toBe(false)
+    expect(inCurrentSeason('ss', 'SS96', sept)).toBe(false)
   })
 })
 
