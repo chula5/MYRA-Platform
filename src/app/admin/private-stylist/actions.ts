@@ -49,7 +49,7 @@ import {
   type StylePrefs,
   type PriceBands,
 } from '@/lib/pilot-stylist'
-import { accumulate, zeroVector } from '@/lib/taste-vector'
+import { accumulate, buildOutfitVector, zeroVector } from '@/lib/taste-vector'
 import { getAllItems, type ItemWithBrand } from '@/lib/admin-queries'
 import {
   composeMemberLooks,
@@ -93,7 +93,7 @@ import { pieceVerdicts } from '@/lib/piece-verdicts'
 import { rulesForMember, type MemberRules } from '@/lib/style-rules'
 import { parseBrief, briefIsEmpty, type StylistBrief } from '@/lib/stylist-brief'
 import { loadStyleModel, recordStyleDecision } from '@/lib/style-brain-store'
-import { computeEnvelope } from '@/lib/inspiration'
+import { computeEnvelope, sampleLooks } from '@/lib/inspiration'
 import { linkMemberToStyleProfile } from '@/lib/style-profile-store'
 import { correctPaleColour } from '@/lib/pale-colour-store'
 import { loadEjectionConstraints } from '@/lib/pipeline-store'
@@ -1796,6 +1796,51 @@ export async function assignMemberPersona(memberId: string, personaId: string): 
   }
 }
 
+/** A pgvector arrives from PostgREST as either its array or its `[1,2,…]` string. */
+function readTasteVector(value: unknown): number[] | null {
+  if (Array.isArray(value) && value.length) return value.filter((n): n is number => typeof n === 'number')
+  if (typeof value !== 'string') return null
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) && parsed.length && parsed.every((n) => typeof n === 'number') ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Chloe has explicitly named the Composer drafts project as her own taste
+ * reference. Projects are otherwise global and have no member owner, so this
+ * source must stay scoped to Chloe rather than silently shaping another
+ * member's lens. The looks remain global; only their influence is personal.
+ */
+async function chloeComposerDraftVectors(admin: any, memberName?: string | null): Promise<number[][]> {
+  if (!/^chloe cotter$/i.test(memberName ?? '')) return []
+  try {
+    const { data: project } = await admin.from('admin_project')
+      .select('outfit_ids').eq('title', 'Composer drafts').maybeSingle()
+    const ids = Array.from(new Set((project?.outfit_ids ?? []).filter(Boolean)))
+    if (!ids.length) return []
+    // PostgREST puts an `.in()` list into the request URL. Composer drafts is
+    // hundreds of looks, so read it in small pages rather than exceeding the
+    // proxy header limit and silently returning no Chloe evidence.
+    const outfits: any[] = []
+    for (let from = 0; from < ids.length; from += 40) {
+      const { data, error } = await admin.from('outfit')
+        .select('outfit_id, taste_vector, outfit_item(item(*, brand(*)))').in('outfit_id', ids.slice(from, from + 40))
+      if (error) throw new Error(error.message)
+      outfits.push(...(data ?? []))
+    }
+    return outfits
+      .map((outfit) => readTasteVector(outfit.taste_vector) ?? buildOutfitVector(outfit as any))
+      .filter((vector): vector is number[] => Array.isArray(vector) && vector.length)
+  } catch {
+    // A member's own pictures remain useful even when a pre-project schema is
+    // missing one of these tables. The private stylist must still compose.
+    return []
+  }
+}
+
 /**
  * The member's persona lens: the envelope computed from that persona's
  * CONFIRMED moodboard images, plus the current weight. A persona with no
@@ -1810,7 +1855,7 @@ export async function loadPersonaLens(
 ): Promise<PersonaLens | undefined> {
   const [{ data: assigned }, { data: member }] = await Promise.all([
     admin.from('user_persona').select('persona_id, weight').eq('user_id', memberId).maybeSingle(),
-    admin.from('pilot_member').select('auth_user_id').eq('member_id', memberId).maybeSingle(),
+    admin.from('pilot_member').select('auth_user_id, name').eq('member_id', memberId).maybeSingle(),
   ])
   const assignment = personaOverride ? { persona_id: personaOverride, weight: PERSONA_START_WEIGHT } : assigned
   let name: string | null = null
@@ -1834,11 +1879,16 @@ export async function loadPersonaLens(
   const owners = [memberId, member?.auth_user_id].filter(Boolean)
   // Two kinds of her own evidence, read into one envelope: the pictures she
   // keeps (what she likes) and her archival looks (what she actually wears).
-  const [{ data: refs }, { data: archival }] = await Promise.all([
+  const [{ data: refs }, { data: archival }, composerDraftLooks] = await Promise.all([
     admin.from('inspiration_image').select('vector').in('user_id', owners).in('status', ['scored', 'confirmed']),
     admin.from('archival_look').select('taste_vector').eq('member_id', memberId).eq('hidden', false).not('taste_vector', 'is', null),
+    chloeComposerDraftVectors(admin, member?.name),
   ])
-  const vectors = [...((refs ?? []) as any[]).map((r) => r.vector), ...((archival ?? []) as any[]).map((r) => r.taste_vector)]
+  const vectors = [
+    ...((refs ?? []) as any[]).map((r) => r.vector),
+    ...((archival ?? []) as any[]).map((r) => r.taste_vector),
+    ...composerDraftLooks,
+  ]
     .filter((v) => Array.isArray(v) && v.length)
   const refEnv = vectors.length ? computeEnvelope(vectors, 1) : null
   const reference = refEnv ? { envelope: { mean: refEnv.mean, spread: refEnv.spread }, weight: REFERENCE_LENS_WEIGHT } : null
@@ -1850,7 +1900,7 @@ export async function loadPersonaLens(
     weight: typeof assignment?.weight === 'number' ? assignment.weight : PERSONA_START_WEIGHT,
     reference,
     // The newest of her looks, kept whole beside their average (nearestLookFit).
-    referenceLooks: vectors.slice(0, 60),
+    referenceLooks: sampleLooks(vectors),
     // The style's own moodboard, kept whole for the same reason — the range of
     // the persona's eye, not only its centre.
     looks,
