@@ -48,7 +48,8 @@ function hanging(x: number, y: number): string {
     + `M${x - 7} ${y + 6}l-1.5 4 2 1.5 1-2v13h11v-13l1 2 2-1.5-1.5-4`
 }
 
-function Icon({ id }: { id: RoomId }) {
+/** Drawn line-art icons for the rooms — also used by the phone's tab bar. */
+export function RoomIcon({ id }: { id: RoomId }) {
   const common = { viewBox: '0 0 64 64', className: 'w-full h-full', 'aria-hidden': true } as const
   switch (id) {
     case 'for_you': // her mirror, standing
@@ -152,7 +153,7 @@ export default function RoomNav({
     const inner = (
       <>
         <span className={`block ${compact ? 'w-[clamp(42px,2.9vw,104px)] h-[clamp(42px,2.9vw,104px)]' : 'w-[clamp(68px,4vw,150px)] h-[clamp(68px,4vw,150px)]'} mx-auto transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
-          <Icon id={r.id} />
+          <RoomIcon id={r.id} />
         </span>
         <span className={`block ${compact ? 'mt-1.5 text-[clamp(18px,1.15vw,40px)]' : 'mt-3 text-[clamp(22px,1.35vw,46px)]'} tracking-[0.02em] transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
           {compact ? r.short : r.label}
@@ -217,7 +218,7 @@ export default function RoomNav({
 
   return (
     <div className="w-full">
-      <div className="w-full px-6 sm:px-10 pt-7 pb-6">
+      <div className="w-full px-5 sm:px-10 pt-4 sm:pt-7 pb-5 sm:pb-6">
         {/* Search — the same pill as the header's, at her front door's scale */}
         <form onSubmit={submit} onReset={() => setQuery('')} data-tour="search" className="relative w-full md:w-1/2 mx-auto">
           <button type="submit" aria-label="Search" className="absolute top-1/2 -translate-y-1/2 left-[clamp(20px,1.3vw,44px)] p-1 text-[#55534E] hover:text-[#2B2B2B]">
@@ -242,19 +243,21 @@ export default function RoomNav({
           )}
         </form>
 
-        {/* The rooms, spread across the screen */}
-        <nav data-lenis-prevent data-tour="rooms" className="mt-9 w-full grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-6 gap-x-2 gap-y-8 items-start">
+        {/* The rooms, spread across the screen. On a phone they are one row
+            of icons with no words — the tab bar at the foot carries the same
+            six, always a thumb away. */}
+        <nav data-lenis-prevent data-tour="rooms" className="mt-5 sm:mt-9 w-full grid grid-cols-6 sm:grid-cols-3 lg:grid-cols-6 gap-x-1 sm:gap-x-2 gap-y-8 items-start">
           {ROW_ROOMS.map((r) => {
             const on = r.id === active
             const inner = (
               <>
-                <span className={`block w-[clamp(54px,4vw,150px)] h-[clamp(54px,4vw,150px)] mx-auto transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
-                  <Icon id={r.id} />
+                <span className={`block w-10 h-10 sm:w-[clamp(54px,4vw,150px)] sm:h-[clamp(54px,4vw,150px)] mx-auto transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
+                  <RoomIcon id={r.id} />
                 </span>
-                <span className={`block mt-[clamp(12px,0.8vw,28px)] text-[clamp(20px,1.35vw,46px)] tracking-[0.02em] transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
+                <span className={`hidden sm:block mt-[clamp(12px,0.8vw,28px)] text-[clamp(20px,1.35vw,46px)] tracking-[0.02em] transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
                   {r.label}
                 </span>
-                <span className={`block mx-auto mt-2 h-px w-10 ${on ? 'bg-[#2B2B2B]' : 'bg-transparent'}`} />
+                <span className={`block mx-auto mt-1.5 sm:mt-2 h-px w-6 sm:w-10 ${on ? 'bg-[#2B2B2B]' : 'bg-transparent'}`} />
               </>
             )
             const cls = 'group text-center px-1'

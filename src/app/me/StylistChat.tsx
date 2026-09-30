@@ -80,7 +80,7 @@ export default function StylistChat({ asMemberId }: { asMemberId?: string }) {
         <button
           onClick={() => setOpen(true)}
           aria-label="Talk to a stylist"
-          className="fixed right-6 bottom-6 sm:right-8 sm:bottom-8 z-[56] flex items-center gap-4 bg-[#2B2B2B] text-white rounded-full pl-8 pr-10 py-6 sm:pl-10 sm:pr-12 sm:py-7 shadow-[0_8px_30px_rgba(43,43,43,0.3)] hover:bg-[#0A0A0A] hover:scale-[1.03] transition-[background-color,transform]"
+          className="fixed right-6 bottom-[calc(64px+env(safe-area-inset-bottom))] sm:right-8 sm:bottom-8 z-[56] flex items-center gap-4 bg-[#2B2B2B] text-white rounded-full pl-8 pr-10 py-6 sm:pl-10 sm:pr-12 sm:py-7 shadow-[0_8px_30px_rgba(43,43,43,0.3)] hover:bg-[#0A0A0A] hover:scale-[1.03] transition-[background-color,transform]"
         >
           <SpeechIcon className="w-9 h-9 sm:w-12 sm:h-12" />
           <span className="text-[24px] sm:text-[clamp(28px,1.8vw,40px)] tracking-[0.14em]">STYLIST</span>

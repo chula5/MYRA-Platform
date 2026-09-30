@@ -125,8 +125,12 @@ export default function MeTour() {
     let tries = 0
     const find = () => {
       if (!live) return
-      const found = document.querySelector(s.target!) ?? (s.fallback ? document.querySelector(s.fallback) : null)
-      if (found && (found as HTMLElement).getBoundingClientRect().width > 0) {
+      // The desktop header and the phone's slim one are both in the DOM with
+      // the same data-tour marks — light the one she can actually see.
+      const visible = (sel: string): Element | null =>
+        Array.from(document.querySelectorAll(sel)).find((e) => (e as HTMLElement).getBoundingClientRect().width > 0) ?? null
+      const found = visible(s.target!) ?? (s.fallback ? visible(s.fallback) : null)
+      if (found) {
         el.current = found
         if (!found.closest('header')) {
           const r = found.getBoundingClientRect()
