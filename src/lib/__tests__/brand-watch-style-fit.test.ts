@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   fitStyleModel, scoreStyle, catalogueStyleMean, styleSimilarity,
   styleVector, buildStyleIndex, neighbourStyleScore,
+  cosineSimilarity, buildLookIndex, lookSimilarityScore, combinedStyleScore,
 } from '@/lib/brand-watch-style-fit'
 import type { StyleTags } from '@/lib/brand-watch-tag'
 
@@ -204,5 +205,79 @@ describe('the neighbour vote', () => {
     ])
     const score = neighbourStyleScore(idx, styleVector(model, { ...flat(3), neckline: 1, length: 1 }), 20).score
     expect(score).toBeLessThan(0.5)
+  })
+})
+
+describe('the look, as embeddings', () => {
+  /** Two-axis vectors stand in for descriptions: [minimal, romantic]. */
+  const minimal = [1, 0]
+  const romantic = [0, 1]
+  const index = buildLookIndex([
+    { embedding: minimal, kept: true },
+    { embedding: [0.9, 0.1], kept: true },
+    { embedding: romantic, kept: false },
+    { embedding: [0.1, 0.9], kept: false },
+  ])
+
+  it('scores a look like the kept ones above a look like the skipped ones', () => {
+    expect(lookSimilarityScore(index, minimal).score).toBeGreaterThan(0.8)
+    expect(lookSimilarityScore(index, romantic).score).toBeLessThan(0.2)
+  })
+
+  it('returns a coin flip when there is nothing to compare against', () => {
+    expect(lookSimilarityScore([], minimal).score).toBe(0.5)
+    expect(lookSimilarityScore(index, []).score).toBe(0.5)
+    expect(buildLookIndex([{ embedding: [], kept: true }])).toHaveLength(0)
+  })
+
+  it('measures cosine similarity in the usual way', () => {
+    expect(cosineSimilarity([1, 0], [1, 0])).toBeCloseTo(1, 6)
+    expect(cosineSimilarity([1, 0], [0, 1])).toBeCloseTo(0, 6)
+    expect(cosineSimilarity([1, 0], [-1, 0])).toBeCloseTo(-1, 6)
+    expect(cosineSimilarity([], [1, 0])).toBe(0)
+  })
+
+  /**
+   * Similarity clusters high and narrow, so an unweighted mean barely moves
+   * between a piece she would love and one she would not. The fourth power is
+   * what makes the score actually separate them.
+   */
+  it('sharpens onto the closest neighbours rather than averaging every one', () => {
+    // Ten near-identical kept pieces from one corner of the space, ten skipped
+    // from a different corner, and the query sits beside the kept corner.
+    const spread = buildLookIndex([
+      ...Array.from({ length: 10 }, (_, i) => ({ embedding: [1, i * 0.01], kept: true })),
+      ...Array.from({ length: 10 }, (_, i) => ({ embedding: [i * 0.01, 1], kept: false })),
+    ])
+    const nearKept = lookSimilarityScore(spread, [1, 0.02]).score
+    const nearSkipped = lookSimilarityScore(spread, [0.02, 1]).score
+    expect(nearKept).toBeGreaterThan(0.9)
+    expect(nearSkipped).toBeLessThan(0.1)
+  })
+
+  it('does not let an unrelated piece vote against, only fail to vote for', () => {
+    // A negative cosine means unrelated at this scale, not the opposite.
+    const onlyOpposite = buildLookIndex([{ embedding: [-1, 0], kept: false }])
+    const score = lookSimilarityScore(onlyOpposite, [1, 0]).score
+    expect(score).toBe(0.5) // nothing voted, so nothing was concluded
+  })
+})
+
+describe('combinedStyleScore', () => {
+  it('prefers the look, which measured better in every split', () => {
+    const score = combinedStyleScore({ score: 0.9, neighbours: 20 }, { score: 0.1, coverage: 12 })
+    expect(score).toBeGreaterThan(0.6)
+  })
+
+  it('falls back to the dimensions when no look was read', () => {
+    expect(combinedStyleScore({ score: 0.5, neighbours: 0 }, { score: 0.8, coverage: 12 })).toBe(0.8)
+  })
+
+  it('falls back to the look when no dimensions were read', () => {
+    expect(combinedStyleScore({ score: 0.8, neighbours: 20 }, { score: 0, coverage: 0 })).toBe(0.8)
+  })
+
+  it('says "no evidence" rather than "a middling piece" when it has neither', () => {
+    expect(combinedStyleScore({ score: 0.5, neighbours: 0 }, { score: 0, coverage: 0 })).toBeNull()
   })
 })

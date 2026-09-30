@@ -50,15 +50,27 @@ alter table public.brand_watch_queue add column if not exists tagged_at timestam
 -- into a vector.
 --
 -- The seventeen 1-5 dimensions above describe how a garment is MADE — rise,
--- shoulder, leg opening. Measured on 1,495 decisions they scored AUC 0.655,
--- and the reason is that "style" is not a construction. Asked instead to
--- describe how the piece LOOKS, and compared as an embedding, the same pieces
--- scored 0.756 — beating the existing confidence model's 0.708 on the same
--- held-out set, and holding at 0.698-0.756 across every split tested.
+-- shoulder, leg opening. Asked instead to describe how the piece LOOKS, and
+-- compared as an embedding, the look scores better than those dimensions and
+-- better than the existing confidence model, on every split tested.
 --
--- Within a single brand, where brand habit cannot help at all, style scores
--- 0.721 and the dimensions 0.751 against the existing model's 0.605. That is
--- the new-brand case, and it is the whole reason this is being built.
+-- Measured on two independent samples, because the size of the gap depends on
+-- which pieces are being judged and only the SIGN is stable:
+--
+--   sample        existing model   construction dims   the look
+--   1,495 pieces      0.526             0.555           0.609
+--   1,495 pieces      0.708             0.655           0.756   (different draw)
+--
+-- Across eight chronological splits the look was never once worse than the
+-- existing model, and its margin ranged from +0.048 to +0.083 AUC.
+--
+-- THE CAVEAT MATTERS: holding the brand constant — the new-brand case, which
+-- is the whole reason this is being built — the advantage disappears. On 806
+-- within-brand pieces the look scored 0.610 against the existing model's 0.618,
+-- a tie. An earlier run showed a large within-brand win (0.721 vs 0.605), but
+-- that rested on 160 pieces and does not reproduce. So this is worth having as
+-- a better general signal, and it is NOT yet evidence that a brand new to the
+-- catalogue can be judged from its clothes alone.
 --
 -- jsonb rather than pgvector on purpose: it needs no extension, and scoring
 -- loads one brand's exemplars at a time rather than the whole catalogue.

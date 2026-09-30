@@ -493,7 +493,8 @@ export const costOf = (
   return (usage.input_tokens / 1e6) * pi + (usage.output_tokens / 1e6) * po
 }
 
-/** Dimensions worth paying to learn for this kind of piece. */
+/**
+ * Dimensions worth paying to learn for this kind of piece. */
 const NEVER_APPLIES: Record<string, TagDimension[]> = {
   bag: ['rise', 'leg_opening', 'neckline', 'sleeve', 'shoulder', 'waist_definition', 'length'],
   shoe: ['rise', 'leg_opening', 'neckline', 'sleeve', 'shoulder', 'waist_definition'],
@@ -555,4 +556,129 @@ export const applicableDimensions = (itemType: string | null | undefined): TagDi
       : []),
   ])
   return TAG_DIMENSIONS.filter((d) => !never.has(d))
+}
+
+// ------------------------------------------------- the look, in words
+
+/**
+ * THE BETTER REPRESENTATION, though not the decisive one.
+ *
+ * The seventeen dimensions above describe how a garment is MADE — rise,
+ * shoulder, leg opening. Asking instead how a piece LOOKS, and comparing the
+ * descriptions as embeddings, beat both those dimensions and the existing
+ * confidence model on every chronological split tested, by +0.048 to +0.083
+ * AUC. The absolute figures move with which pieces are being judged, so treat
+ * the ordering as the finding, not the size.
+ *
+ * It is NOT evidence that a new brand can be judged from its clothes alone:
+ * within a single brand the advantage disappears (0.610 against 0.618 over 806
+ * pieces). That caveat is set out in full in brand-watch-style-fit.ts, next to
+ * the scorer itself.
+ *
+ * Material, care and brand are named as forbidden because a description
+ * mentioning "Mos Mosh" would let a similarity search recognise the label, and
+ * the whole point is to judge the item. Composition is left out for the same
+ * reason: it is a proxy for price and provenance, not a look.
+ */
+export const PHRASE_PROMPT = `Describe this garment's STYLE as a short phrase of 8 to 16 words.
+
+Cover the aesthetic, the mood, and the silhouette — for example: "minimal oversized wool coat, quiet luxury, sharp menswear edge" or "romantic floral tea dress, soft feminine, vintage-inspired".
+
+Describe how it LOOKS. Do not mention materials composition, care, sizing, price, the model, the background, or any brand name.
+Reply with the phrase only, no punctuation at the start, no explanation.`
+
+/** The embedding model, small and cheap enough to run over a whole catalogue. */
+export const EMBED_MODEL = 'text-embedding-3-small'
+
+export interface StylePhraseResult {
+  phrase: string
+  usage?: { input_tokens: number; output_tokens: number }
+  model?: string
+  error?: string
+}
+
+/** Describe the look of one piece. One image per call; ~$0.00004 each. */
+export async function describeStyle(imageUrl: string, opts: { model?: string } = {}): Promise<StylePhraseResult> {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) return { phrase: '', error: 'OPENAI_API_KEY not configured' }
+  const model = opts.model ?? OPENAI_TAG_MODEL
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        max_completion_tokens: 200,
+        reasoning_effort: 'none',
+        messages: [{ role: 'user', content: [
+          { type: 'image_url', image_url: { url: imageUrl, detail: OPENAI_TAG_DETAIL } },
+          { type: 'text', text: PHRASE_PROMPT },
+        ]}],
+      }),
+    })
+    const j: any = await res.json().catch(() => ({}))
+    if (!res.ok) return { phrase: '', error: `HTTP ${res.status}: ${(j?.error?.message ?? '').slice(0, 160)}` }
+    const phrase = String(j.choices?.[0]?.message?.content ?? '').trim().replace(/\s+/g, ' ')
+    return {
+      phrase,
+      model,
+      usage: { input_tokens: j.usage?.prompt_tokens ?? 0, output_tokens: j.usage?.completion_tokens ?? 0 },
+      ...(phrase ? {} : { error: 'empty phrase' }),
+    }
+  } catch (err) {
+    return { phrase: '', error: err instanceof Error ? err.message : 'describe failed' }
+  }
+}
+
+/** Dollars per million tokens for the embedding model. */
+const EMBED_PRICE_PER_M = 0.02
+
+/**
+ * Turn phrases into vectors, batched. Descriptions are stored, not recomputed,
+ * so this runs once per phrase and never again.
+ */
+export async function embedPhrases(
+  phrases: string[],
+  opts: { model?: string } = {},
+): Promise<{ vectors: number[][]; cost: number; error?: string }> {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) return { vectors: [], cost: 0, error: 'OPENAI_API_KEY not configured' }
+  const model = opts.model ?? EMBED_MODEL
+  const vectors: number[][] = []
+  let tokens = 0
+  try {
+    for (let i = 0; i < phrases.length; i += 256) {
+      const res = await fetch('https://api.openai.com/v1/embeddings', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, input: phrases.slice(i, i + 256) }),
+      })
+      const j: any = await res.json().catch(() => ({}))
+      if (!res.ok) return { vectors, cost: (tokens / 1e6) * EMBED_PRICE_PER_M, error: `HTTP ${res.status}: ${(j?.error?.message ?? '').slice(0, 160)}` }
+      for (const e of j.data ?? []) vectors.push(e.embedding)
+      tokens += j.usage?.total_tokens ?? 0
+    }
+    return { vectors, cost: (tokens / 1e6) * EMBED_PRICE_PER_M }
+  } catch (err) {
+    return { vectors, cost: (tokens / 1e6) * EMBED_PRICE_PER_M, error: err instanceof Error ? err.message : 'embed failed' }
+  }
+}
+
+/**
+ * Read one piece's look and make it comparable: describe, then embed.
+ * Cached by the caller against the image URL, so it is never paid for twice.
+ */
+export async function styleVectorFor(
+  imageUrl: string,
+): Promise<{ phrase: string; embedding: number[]; cost: number; error?: string }> {
+  const described = await describeStyle(imageUrl)
+  if (!described.phrase) return { phrase: '', embedding: [], cost: 0, error: described.error ?? 'no phrase' }
+  const embedded = await embedPhrases([described.phrase])
+  const vec = embedded.vectors[0]
+  if (!vec) return { phrase: described.phrase, embedding: [], cost: embedded.cost, error: embedded.error ?? 'no embedding' }
+  return {
+    phrase: described.phrase,
+    embedding: vec,
+    cost: costOf(described.usage, described.model) + embedded.cost,
+  }
 }
