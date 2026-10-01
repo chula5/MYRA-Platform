@@ -68,11 +68,28 @@ export async function browseSearch(query: string, asMemberId?: string): Promise<
   if (q.length < 2) return { query: q, pieces: [], read: [] }
 
   const admin = createAdminClient() as any
-  const parsed = parseQuery(q)
   const needle = q.toLowerCase()
+  // Every word she typed counts on its own, so "silk slip skirt" still finds a
+  // slip whose name never says all three words together.
+  const safe = needle.replace(/[^a-z0-9]+/g, ' ').trim()
+  if (!safe) return { query: q, pieces: [], read: [] }
+  const words = Array.from(new Set(safe.split(' ').filter((w) => w.length >= 3))).slice(0, 6)
+  const nameFilter = words.length > 1
+    ? words.map((w) => `product_name.ilike.%${w}%`).join(',')
+    : `product_name.ilike.%${words[0] ?? safe}%`
+
+  // The labels she may have named, looked up first so the taxonomy can spot
+  // one of them in her words.
+  const { data: brandRows } = await admin
+    .from('brand').select('brand_id, name')
+    .or((words.length ? words : [safe]).map((w) => `name.ilike.%${w}%`).join(','))
+    .limit(12)
+  const brands = ((brandRows ?? []) as any[]).filter((b) => b?.name)
+  const brandIds = brands.map((b) => b.brand_id)
+  const parsed = parseQuery(q, brands.map((b) => String(b.name)))
 
   const byName = admin.from('item').select(CARD).in('status', SHOWABLE)
-    .ilike('product_name', `%${q}%`).not('image_url', 'is', null).limit(60)
+    .or(nameFilter).not('image_url', 'is', null).limit(60)
   const byPiece = parsed.itemTypes.length
     ? admin.from('item').select(CARD).in('status', SHOWABLE)
       .in('item_type', parsed.itemTypes).not('image_url', 'is', null).limit(60)
@@ -82,12 +99,8 @@ export async function browseSearch(query: string, asMemberId?: string): Promise<
       .in('colour_family', parsed.colourFamilies).not('image_url', 'is', null).limit(60)
     : null
 
-  const [named, typed, coloured, brands] = await Promise.all([
-    byName, byPiece, byColour,
-    admin.from('brand').select('brand_id, name').ilike('name', `%${q}%`).limit(10),
-  ])
+  const [named, typed, coloured] = await Promise.all([byName, byPiece, byColour])
 
-  const brandIds = ((brands?.data ?? []) as any[]).map((b) => b.brand_id)
   let byBrand: any[] = []
   if (brandIds.length) {
     const { data } = await admin.from('item').select(CARD).in('status', SHOWABLE)
@@ -103,7 +116,10 @@ export async function browseSearch(query: string, asMemberId?: string): Promise<
     if (!it?.item_id || seen.has(it.item_id) || !showable(it)) return
     seen.add(it.item_id)
     let score = 0
-    if (String(it.product_name ?? '').toLowerCase().includes(needle)) score += 3
+    const name = String(it.product_name ?? '').toLowerCase()
+    const hits = words.filter((w) => name.includes(w)).length
+    if (hits) score += 1 + Math.min(hits, 3)
+    if (name.includes(needle)) score += 2
     if (parsed.brand && String(it.brand?.name ?? '').toLowerCase() === parsed.brand.toLowerCase()) score += 3
     if (brandIds.includes(it.brand_id)) score += 2.5
     if (parsed.itemTypes.length && parsed.itemTypes.includes(String(it.item_type ?? ''))) score += 2
@@ -141,7 +157,10 @@ export async function styleBrowsedPiece(
   if (!me) return { looks: [], error: 'Not signed in' }
 
   const admin = createAdminClient() as any
-  const { data: item } = await admin.from('item').select('*').eq('item_id', itemId).maybeSingle()
+  // Only a piece she could have found in Browse: no archived rows, and none of
+  // her own wardrobe, however the id reached the browser.
+  const { data: item } = await admin.from('item').select('*')
+    .eq('item_id', itemId).in('status', SHOWABLE).maybeSingle()
   if (!item) return { looks: [], error: 'That piece is no longer here' }
 
   const { data: row } = await admin
