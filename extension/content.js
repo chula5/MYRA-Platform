@@ -159,6 +159,9 @@
   }
   function openPanel(job) {
     closePicks()
+    // Opening the panel answers the dot: whatever was waiting is now in view.
+    jobWaiting = false
+    badgeMark()
     if (!panel) {
       panel = document.createElement('div')
       panel.className = 'myra-mirror-panel'
@@ -293,22 +296,13 @@
   function hidePicksBadge() { picksBadge?.remove(); picksBadge = null }
   function closePicks() { hidePicksBadge(); picksPanel?.remove(); picksPanel = null; picksJob = null }
 
-  /** The mark appears once this page has pieces MYRA could pick from. */
+  // No corner badge of its own any more. That this page has pieces worth
+  // picking from is recorded here and becomes one of the things the edge
+  // badge's dot stands for — the same bar as before (the bar the picks
+  // themselves are held to), just no element of its own.
   function maybePicksBadge() {
-    if (picksBadge || picksPanel || panel) return
-    // The badge earns its corner: it appears only where MYRA would actually
-    // put something from this page in front of her (the same bar the picks
-    // themselves are held to), never on a page that merely has links.
-    if (!pageHasPicks) return
-    if (pageProducts.length < 2 || !pageProducts.some((p) => p.image && p.url && p.title)) return
-    picksBadge = document.createElement('button')
-    picksBadge.type = 'button'
-    picksBadge.className = 'myra-mirror-picks-badge'
-    picksBadge.style.cssText = `position:fixed;z-index:2147483645;top:12px;right:12px;display:flex;align-items:center;gap:7px;border:0;border-radius:999px;background:rgba(20,20,20,.94);color:#F7F6F3;padding:9px 15px;cursor:pointer;font:600 10.5px/1 ${FONT};letter-spacing:.14em;text-transform:uppercase;box-shadow:0 8px 28px rgba(0,0,0,.3);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);`
-    picksBadge.innerHTML = `<img src="${ext.runtime.getURL('icons/mirror.png')}" alt="" style="width:14px;height:14px;object-fit:contain;filter:invert(1)"><span>MYRA picks</span>`
-    picksBadge.title = 'What MYRA would take from this page — for the gaps in your wardrobe and for your taste'
-    picksBadge.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); openPicks() })
-    document.body.appendChild(picksBadge)
+    picksWorth = pageHasPicks && pageProducts.length >= 2 && pageProducts.some((p) => p.image && p.url && p.title)
+    badgeMark()
   }
 
   /**
@@ -427,6 +421,58 @@
     btn.style.color = '#F7F6F3'
     btn.title = 'In your saved pieces — MYRA watches its stock'
   }
+
+
+  // ── THE BADGE ON THE EDGE ───────────────────────────────────────────────
+  // Nothing opens on its own any more: not the card over a tile, not the
+  // panel when a styling lands, not a corner badge when the page has picks.
+  // This one small disc, midway down the right edge, is the only thing MYRA
+  // puts on a page unasked — quiet, out of the way, always in the same
+  // place. A dot on it means something is waiting for her: a finished
+  // styling, or picks this page can offer. Everything else is one click
+  // away, and a second click puts it away again.
+  let badge = null, badgeDot = null, jobWaiting = false, picksWorth = false
+
+  function badgeMark() {
+    if (!badgeDot) return
+    badgeDot.style.display = jobWaiting || picksWorth ? 'block' : 'none'
+  }
+
+  function makeBadge() {
+    if (badge || !document.body) return
+    badge = document.createElement('button')
+    badge.type = 'button'
+    badge.className = 'myra-mirror-badge'
+    badge.title = 'MYRA — open what is waiting here'
+    badge.setAttribute('aria-label', 'Open MYRA')
+    badge.style.cssText = `position:fixed;z-index:2147483645;right:0;top:50%;transform:translateY(-50%);width:38px;height:38px;border:0;border-radius:19px 0 0 19px;background:rgba(255,255,255,.96);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0 6px 0 10px;box-shadow:-3px 4px 18px rgba(0,0,0,.18);font:400 14px/1.4 ${FONT};color:#2B2B2B;`
+    badge.innerHTML = `<img src="${ext.runtime.getURL('icons/mirror.png')}" alt="" style="width:20px;height:20px;object-fit:contain"><span class="myra-mirror-badge-dot" style="position:absolute;top:4px;left:6px;width:8px;height:8px;border-radius:50%;background:#141414;box-shadow:0 0 0 2px rgba(255,255,255,.9);display:none"></span>`
+    badgeDot = badge.querySelector('.myra-mirror-badge-dot')
+    badge.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); badgeClick() })
+    document.body.appendChild(badge)
+    badgeMark()
+  }
+
+  /**
+   * The one door in. What a click opens depends on what there is to open, in
+   * the order she would want it: the styling she asked for first, then this
+   * page's own piece, then MYRA's picks from this page, then simply the
+   * first piece the page has. Clicking while what it opened is showing
+   * closes it again — nothing is ever stuck on screen.
+   */
+  async function badgeClick() {
+    if (panel) { closePanel(); return }
+    if (picksPanel) { closePicks(); return }
+    if (pill) { hidePiece(); return }
+    const waiting = await send({ type: 'styleJob' })
+    if (waiting?.job) { openPanel(waiting.job); return }
+    if (pagePiece) { showPiece(pagePiece, 'badge'); return }
+    if (pageHasPicks) { openPicks(); return }
+    if (pageProducts.length) { showPiece(pageProducts[0], 'badge'); return }
+  }
+
+  if (document.body) makeBadge()
+  else document.addEventListener('DOMContentLoaded', makeBadge, { once: true })
 
 
   // ── A SHOP MYRA CANNOT READ ───────────────────────────────────────────────
@@ -608,7 +654,8 @@
     tile.addEventListener('mouseenter', () => {
       wrap.style.opacity = '1'
       clearTimeout(pillRevert)
-      if (!pillOff) showPiece({ ...product, image: product.image || tileImage(tile) }, 'hover')
+      // The card no longer follows the cursor: crossing a tile only reveals
+      // this tile's own buttons — the badge on the edge opens the card.
     })
     tile.addEventListener('mouseleave', () => { if (!menu) wrap.style.opacity = '0'; revertPiece(pagePiece) })
     tile.appendChild(wrap)
@@ -723,6 +770,8 @@
     clearInterval(navSettle)
     hidePiece()
     hidePicksBadge()
+    // The picks the dot stood for belonged to the page she just left.
+    maybePicksBadge()
     // The shop writes the new piece a beat after the address changes. Watch
     // for it rather than guessing at one delay, so the pill is this piece as
     // soon as this piece exists — and give up quietly if it never arrives.
@@ -732,7 +781,7 @@
       if (p) {
         pagePiece = p
         noteView(p)
-        if (!pillOff && pillFrom !== 'hover') showPiece(p, 'page')
+        // Noted, not shown: the badge opens this piece's card when she asks.
       }
       if (p || ++tries >= 20) clearInterval(navSettle)
     }, 150)
@@ -750,9 +799,9 @@
       pagePiece = M.pageProduct?.() ?? null
       noteView(pagePiece)
       noteSearch()
-      // Not while the cursor is resting on a tile — hers to follow, not to fight.
-      if (pagePiece && !pillOff && pillFrom !== 'hover') showPiece(pagePiece, 'page')
-      else if (!pagePiece && pillFrom === 'page') hidePiece()
+      // The page's piece is only ever recorded here — its card waits behind
+      // the badge now, for the click that asks for it.
+      if (!pagePiece && pillFrom === 'page') hidePiece()
 
       const grids = vinted ? M.vintedGrids() : shopify ? M.findGrids() : M.genericGrids()
       // It speaks this shop but found nothing to re-order — a layout it has not
@@ -785,10 +834,11 @@
       maybePicksBadge()
       // A job that finished while this page was still being read, or while she
       // was somewhere that is not a shop, belongs here: this is the first shop
-      // page since. (One she closed is already gone from the worker.)
+      // page since. (One she closed is already gone from the worker.) It no
+      // longer opens itself — it lights the badge's dot until she asks.
       if (!panel) {
         const waiting = await send({ type: 'styleJob' })
-        if (waiting?.job && waiting.job.status !== 'loading') openPanel(waiting.job)
+        if (waiting?.job && waiting.job.status !== 'loading') { jobWaiting = true; badgeMark() }
       }
       const top = res.products.filter((p) => p.score >= LIFT_MIN).sort((a, b) => b.score - a.score).slice(0, 6)
         .map((p) => ({ brand: p.brand, title: (details.get(p.key) || {}).title || p.key, confidence: p.confidence, why: WHY[p.why] || '', fit: FIT[p.fit] || '' }))
@@ -819,10 +869,14 @@
   }
   onMessage((msg) => {
     if (msg?.type === 'restore') { observer.disconnect(); closeMenu(); closePicks(); hidePiece(); restore() }
-    // A finished job pops the panel open where she asked for it — on a shop.
-    // On any other page the update waits: the job is held in the worker and
-    // the next shop page she lands on picks it up.
-    if (msg?.type === 'styleUpdate') { if (panel || pagePiece || productOf.size) renderPanel(msg.job) }
+    // A panel she already opened keeps being written into as the job builds.
+    // One she has not opened stays shut — a finished job lights the badge's
+    // dot instead, and on a page that is not a shop it simply waits in the
+    // worker for the next shop page.
+    if (msg?.type === 'styleUpdate') {
+      if (panel) renderPanel(msg.job)
+      else if ((pagePiece || productOf.size) && msg.job?.status !== 'loading') { jobWaiting = true; badgeMark() }
+    }
     if (msg?.type === 'rerun') { lastSig = ''; observer.observe(document.body, { childList: true, subtree: true }); schedule() }
   })
   const observer = new MutationObserver((muts) => {
@@ -833,10 +887,11 @@
   setInterval(onNavigated, 300)
 
   await run()
-  // A panel that was building when she left the last page carries on here —
-  // if here is a shop. Anywhere else it waits in the worker rather than
-  // interrupting, and the next shop page picks it up.
+  // A panel that was building when she left the last page still belongs to
+  // her — if here is a shop, the badge's dot says it is ready and she opens
+  // it. Anywhere else it waits in the worker rather than interrupting, and
+  // the next shop page picks it up.
   const inFlight = await send({ type: 'styleJob' })
-  if (inFlight?.job && (panel || pagePiece || productOf.size)) openPanel(inFlight.job)
+  if (inFlight?.job && (panel || pagePiece || productOf.size) && inFlight.job.status !== 'loading') { jobWaiting = true; badgeMark() }
   observer.observe(document.body, { childList: true, subtree: true })
 })()
