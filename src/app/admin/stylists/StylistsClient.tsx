@@ -355,7 +355,12 @@ function StyleLearningPanel({ personaId }: { personaId: string }) {
           </div>
           <div className={row}>
             <span className={k}>ITS RULES IN FORCE</span>
-            <span className={v}>{data.enforced.rules} rules · {data.enforced.families.join(', ') || '—'}</span>
+            <span className={v}>
+              {data.enforced.rules} rules · {data.enforced.families.join(', ') || '—'}
+              {data.enforced.briefBans || data.enforced.briefAvoids
+                ? <span className="text-[#6B6B6B]"> · bans block, avoids steer</span>
+                : null}
+            </span>
           </div>
           <div className="py-2.5 border-b border-[#F2F2F0]">
             <p className={k}>LESSONS PROMOTED TO THE STYLE</p>

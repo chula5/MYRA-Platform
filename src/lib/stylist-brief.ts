@@ -1,3 +1,5 @@
+import { CONSTRAINED_DIMS } from '@/lib/inspiration'
+
 // A STYLIST'S BRIEF — what she reaches for, and what she never does.
 //
 // The moodboard teaches a stylist's eye as numbers (an envelope over 34
@@ -180,11 +182,18 @@ export function overlapsFor(
   me: { slug: string; brief: StylistBrief; mean?: number[] | null },
   others: { slug: string; name: string; brief: StylistBrief; mean?: number[] | null }[],
 ): Overlap[] {
+  // Image vectors deliberately hold several dimensions at zero or a fixed
+  // value. Including those makes every pair look almost identical, regardless
+  // of their actual silhouettes, texture and colour-story differences.
+  const styleDims = (v?: number[] | null) =>
+    v?.length ? CONSTRAINED_DIMS.map((i) => v[i] ?? 0) : null
   const out: Overlap[] = []
   for (const o of others) {
     if (o.slug === me.slug) continue
     const sib = me.brief.siblings.find((s) => s.slug === o.slug)
-    const c = me.mean && o.mean ? cosine(me.mean, o.mean) : null
+    const mine = styleDims(me.mean)
+    const theirs = styleDims(o.mean)
+    const c = mine && theirs ? cosine(mine, theirs) : null
     if (!sib && (c == null || c < OVERLAP_COSINE)) continue
     out.push({ slug: o.slug, name: o.brief.public_name || o.name, cosine: c, difference: sib?.difference ?? null, named: !!sib })
   }

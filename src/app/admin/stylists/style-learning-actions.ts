@@ -8,6 +8,7 @@ import { createAdminClient, createServerClient } from '@/lib/supabase-server'
 import { rulesForMember, GLOBAL_RULE_CODES } from '@/lib/style-rules'
 import { CONSTITUTION_RULES } from '@/lib/house-style'
 import { assertAdmin } from '@/lib/admin-audit'
+import { parseBrief } from '@/lib/stylist-brief'
 
 export interface StyleLearning {
   name: string
@@ -16,7 +17,7 @@ export interface StyleLearning {
   envelope: { images: number; tightness: number | null; computedAt: string | null } | null
   brain: { decisions: number; approves: number; skips: number; updatedAt: string | null }
   rules: { label: string; occurrences: number }[]
-  enforced: { rules: number; families: string[] }
+  enforced: { rules: number; families: string[]; briefBans: number; briefAvoids: number }
   clients: { name: string; weight: number | null; referencePictures: number }[]
   error?: string
 }
@@ -29,7 +30,7 @@ export async function loadStyleLearning(personaId: string): Promise<StyleLearnin
   try {
     const admin = createAdminClient() as any
     const { data: s } = await admin.from('stylist')
-      .select('name, status, constitution, envelope, envelope_computed_at').eq('stylist_id', personaId).single()
+      .select('name, status, constitution, brief, envelope, envelope_computed_at').eq('stylist_id', personaId).single()
     if (!s) return { error: 'Style not found' }
 
     const [{ data: imgs }, { data: model }, { data: profile }, { data: assigned }] = await Promise.all([
@@ -56,7 +57,14 @@ export async function loadStyleLearning(personaId: string): Promise<StyleLearnin
 
     const rules = rulesForMember({ name: s.name, constitution: s.constitution }, false)
     const styleCodes = Array.from(rules.codes).filter((c) => !GLOBAL_RULE_CODES.has(c))
-    const families = Array.from(new Set(CONSTITUTION_RULES.filter((r) => styleCodes.includes(r.code)).map((r) => r.family)))
+    const brief = parseBrief(s.brief, s.name)
+    const briefBans = brief.nevers.filter((n) => n.kind === 'ban').length
+    const briefAvoids = brief.nevers.filter((n) => n.kind === 'preference').length
+    const families = [
+      ...Array.from(new Set(CONSTITUTION_RULES.filter((r) => styleCodes.includes(r.code)).map((r) => r.family))),
+      ...(briefBans ? [`brief ${briefBans} ban${briefBans === 1 ? '' : 's'}`] : []),
+      ...(briefAvoids ? [`brief ${briefAvoids} avoid${briefAvoids === 1 ? '' : 's'}`] : []),
+    ]
 
     return {
       name: s.name,
@@ -72,7 +80,10 @@ export async function loadStyleLearning(personaId: string): Promise<StyleLearnin
         updatedAt: model?.updated_at ?? null,
       },
       rules: ((ruleRows ?? []) as any[]).map((r) => ({ label: r.pattern_label, occurrences: r.occurrences })),
-      enforced: { rules: styleCodes.length, families },
+      // Brief bans block a look; brief avoids pull it down. Both are active
+      // composer constraints and must not disappear behind an unedited
+      // statistical constitution scaffold.
+      enforced: { rules: styleCodes.length + brief.nevers.length, families, briefBans, briefAvoids },
       clients: ((members ?? []) as any[]).map((m) => ({
         name: m.name,
         weight: ((assigned ?? []) as any[]).find((a) => a.user_id === m.member_id)?.weight ?? null,

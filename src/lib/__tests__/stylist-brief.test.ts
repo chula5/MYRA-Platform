@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { parseBrief, briefPull, briefBlocks, paletteFamily } from '../stylist-brief'
+import { CONSTRAINED_DIMS } from '../inspiration'
+import { parseBrief, briefPull, briefBlocks, overlapsFor, paletteFamily } from '../stylist-brief'
 
 const brief = parseBrief({
   brands: ['Vanessa Bruno', 'Toteme'],
@@ -39,5 +40,26 @@ describe('briefBlocks — a ban keeps the piece out of the shortlist', () => {
     expect(briefBlocks({ item_type: 'trousers' }, brief)).toBe(false)
     expect(briefBlocks({ product_name: 'Neon vest' }, brief)).toBe(false) // a preference is not a ban
     expect(briefBlocks({ item_type: 'jeans' }, null)).toBe(false)
+  })
+})
+
+describe('stylist overlap', () => {
+  it('does not call two different eyes the same because fixed vector dimensions dominate', () => {
+    // The 23 dimensions outside CONSTRAINED_DIMS are deliberately fixed by
+    // inspiration vectors. A full cosine reads these as a near-perfect match,
+    // even though the actual style dimensions move in opposite directions.
+    const a = new Array(34).fill(1)
+    const b = new Array(34).fill(1)
+    CONSTRAINED_DIMS.forEach((dim, i) => {
+      a[dim] = i % 2 ? 0.2 : 0.8
+      b[dim] = i % 2 ? 0.8 : 0.2
+    })
+
+    const overlaps = overlapsFor(
+      { slug: 'a', brief: parseBrief({}, 'A'), mean: a },
+      [{ slug: 'b', name: 'B', brief: parseBrief({}, 'B'), mean: b }],
+    )
+
+    expect(overlaps).toEqual([])
   })
 })
