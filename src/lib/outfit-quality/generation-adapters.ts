@@ -36,7 +36,8 @@ import {
   type GenerationContext,
   type SubjectiveOutcome,
 } from '@/lib/outfit-quality/candidate-generation'
-import type { SnapshotPayload } from '@/lib/outfit-quality/stylist-snapshot'
+import { SNAPSHOT_SYSTEM_VERSIONS, type SnapshotPayload, type SystemVersions } from '@/lib/outfit-quality/stylist-snapshot'
+import { buildSubjectiveCheckPrompt } from '@/lib/outfit-quality/subjective-prompt'
 
 type Admin = ReturnType<typeof createAdminClient>
 
@@ -55,6 +56,23 @@ function itemSnapshot(item: ItemWithBrand): Record<string, unknown> {
     retailer_url: item.retailer_url,
     status: item.status,
     stock_status: item.stock_status ?? null,
+  }
+}
+
+/**
+ * Freeze one live item row into a generated candidate item at a given slot and
+ * sort position. Used by the composer adapter and by the edit path, so both
+ * write identically-shaped frozen item facts.
+ */
+export function generatedItemFromRow(item: ItemWithBrand, slot: string, sortOrder: number): GeneratedItem {
+  return {
+    item_id: item.item_id,
+    slot,
+    sort_order: sortOrder,
+    item_snapshot: itemSnapshot(item),
+    source_image_url: item.image_url,
+    source_image_asset_version: null,
+    source_image_hash: item.image_url ? shortHash(item.image_url) : null,
   }
 }
 
@@ -233,23 +251,35 @@ export function createObjectiveEvidenceProvider(admin: Admin = createAdminClient
 }
 
 /**
- * Subjective checker. Wraps the existing look check against a plain-text
- * description built from the FROZEN snapshot (never a fresh stylist read). An
- * unavailable or errored checker is reported as such — it is never a pass — and
- * every outcome still routes to awaiting_human upstream.
+ * Subjective checker. Wraps the existing look check, with the stylist lens
+ * built from the FROZEN snapshot payload (constitution, brief, rules, learned
+ * model summary, inspiration summary) — never a fresh stylist read, so machine
+ * review sees exactly the lens generation used. The recorded model and prompt
+ * version are the ones frozen into that snapshot. An unavailable or errored
+ * checker is reported as such — it is never a pass — and every outcome still
+ * routes to awaiting_human upstream.
  */
 export function createSubjectiveChecker(): SubjectiveChecker {
   return {
-    async check({ snapshotId, payloadHash, manifest }): Promise<SubjectiveOutcome> {
+    async check({ snapshotId, payloadHash, snapshotPayload, manifest }): Promise<SubjectiveOutcome> {
+      const payload = snapshotPayload as SnapshotPayload | null
+      const frozen: SystemVersions = payload?.system_versions ?? SNAPSHOT_SYSTEM_VERSIONS
+      const model = frozen.subjective_check_model
+      const promptVersion = frozen.subjective_prompt_version
+      // Fail closed: an unusable frozen payload is an error, never a pass.
+      if (!payload || !payload.stylist || !payload.brief) {
+        return { status: 'error', model, prompt_version: promptVersion, reasons: { error: 'frozen snapshot payload missing or malformed' } }
+      }
+      const stylistLens = buildSubjectiveCheckPrompt(payload)
       const pieces: CheckPiece[] = manifest.items.map((it) => ({
         image_url: it.source_image_url,
         item_type: (it.item_snapshot?.item_type as string) ?? null,
         product_name: (it.item_snapshot?.brand as string) ?? null,
       }))
       try {
-        const result = await checkLook(pieces, 'Outfit Quality Lab subjective check against the frozen selected-stylist snapshot.')
+        const result = await checkLook(pieces, stylistLens)
         if (!result) {
-          return { status: 'unavailable', model: 'claude-opus-5', prompt_version: 'quality-lab-subjective-v1' }
+          return { status: 'unavailable', model, prompt_version: promptVersion }
         }
         const status: SubjectiveOutcome['status'] = result.verdict === 'clashes' ? 'failed' : 'passed'
         const raw = shortHash(`${snapshotId}:${payloadHash}:${JSON.stringify(result)}`)
@@ -258,12 +288,12 @@ export function createSubjectiveChecker(): SubjectiveChecker {
           verdict: result.verdict,
           score: typeof result.colourHarmony === 'number' ? result.colourHarmony : null,
           reasons: result,
-          model: 'claude-opus-5',
-          prompt_version: 'quality-lab-subjective-v1',
+          model,
+          prompt_version: promptVersion,
           raw_response_hash: raw,
         }
       } catch (err) {
-        return { status: 'error', model: 'claude-opus-5', prompt_version: 'quality-lab-subjective-v1', reasons: { error: String(err).slice(0, 200) } }
+        return { status: 'error', model, prompt_version: promptVersion, reasons: { error: String(err).slice(0, 200) } }
       }
     },
   }

@@ -43,7 +43,9 @@ export const SNAPSHOT_SYSTEM_VERSIONS: SystemVersions = {
   objective_rules_version: 'quality-lab-objective-v1',
   // The existing subjective look check runs on this model (see look-check.ts).
   subjective_check_model: 'claude-opus-5',
-  subjective_prompt_version: 'quality-lab-subjective-v1',
+  // v2: the checker prompt is built from the frozen snapshot payload
+  // (constitution, brief, rules, learned model, inspiration summary).
+  subjective_prompt_version: 'quality-lab-subjective-v2',
   composer_version: 'pilot-composer-v1',
   item_query_version: 'quality-lab-item-query-v1',
 }

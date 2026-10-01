@@ -2,10 +2,14 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   generateAndCheckChunk,
   prepareChildVersion,
+  editAndCheckCandidate,
+  CandidatePipelineError,
   type CompositionGenerator,
   type ObjectiveEvidenceProvider,
   type SubjectiveChecker,
   type CandidatePersistence,
+  type ChildVersionPersistence,
+  type PersistChildVersionInput,
   type FrozenSnapshot,
   type GenerationContext,
   type GeneratedCandidate,
@@ -13,6 +17,7 @@ import {
   type PersistedCandidate,
   type SubjectiveOutcome,
 } from '@/lib/outfit-quality/candidate-generation'
+import { compositionHash } from '@/lib/outfit-quality/candidate-hash'
 import type { RuleOutcome } from '@/lib/outfit-quality/objective-checks'
 
 const SNAPSHOT: FrozenSnapshot = {
@@ -119,6 +124,91 @@ describe('generateAndCheckChunk — ordering and persistence', () => {
     })
     expect(gen.generate).toHaveBeenCalledWith(expect.objectContaining({ snapshot: SNAPSHOT }))
     expect(subj.check).toHaveBeenCalledWith(expect.objectContaining({ snapshotId: 'snap-1', payloadHash: 'hash-1' }))
+  })
+
+  it('passes the frozen snapshot PAYLOAD to the subjective checker (the frozen lens, not a live read)', async () => {
+    const store = new RecordingStore()
+    const gen = makeGenerator([candidate('a')])
+    const subj = subjectiveReturning({ status: 'passed' })
+    await generateAndCheckChunk({
+      batchId: 'b1', runId: 'run1', claim: 1, startPosition: 0,
+      snapshot: SNAPSHOT, context: CONTEXT, generator: gen, evidence: goodEvidence(), subjectiveChecker: subj, store,
+    })
+    expect(subj.check).toHaveBeenCalledWith(expect.objectContaining({ snapshotPayload: SNAPSHOT.payload }))
+  })
+})
+
+describe('generateAndCheckChunk — a persistence error aborts the flow', () => {
+  const base = () => ({
+    batchId: 'b1' as const, runId: 'run1', claim: 1, startPosition: 0,
+    snapshot: SNAPSHOT, context: CONTEXT, evidence: goodEvidence(),
+  })
+
+  it('a failed objective-check insert aborts: no objective_failed advance, no subjective call', async () => {
+    const store = new RecordingStore()
+    store.recordObjectiveChecks = vi.fn(async () => { throw new Error('insert failed: unique violation') })
+    const subj = subjectiveReturning({ status: 'passed' })
+    const err = await generateAndCheckChunk({
+      ...base(), generator: makeGenerator([candidate('a')]), subjectiveChecker: subj, store,
+    }).catch((e) => e)
+    expect(err).toBeInstanceOf(CandidatePipelineError)
+    expect((err as CandidatePipelineError).persistedCount).toBe(1)
+    expect(err.message).toMatch(/objective/i)
+    // The candidate is NOT silently advanced.
+    expect(store.calls).not.toContain(expect.stringContaining('objective_failed'))
+    expect(Object.values(store.versions)).not.toContain('objective_failed')
+    expect(subj.check).not.toHaveBeenCalled()
+  })
+
+  it('a failed subjective-check insert aborts: the version never reaches awaiting_human', async () => {
+    const store = new RecordingStore()
+    store.recordSubjectiveCheck = vi.fn(async () => { throw new Error('insert failed: connection reset') })
+    const subj = subjectiveReturning({ status: 'passed' })
+    const err = await generateAndCheckChunk({
+      ...base(), generator: makeGenerator([candidate('a')]), subjectiveChecker: subj, store,
+    }).catch((e) => e)
+    expect(err).toBeInstanceOf(CandidatePipelineError)
+    expect((err as CandidatePipelineError).persistedCount).toBe(1)
+    expect(Object.values(store.versions)).not.toContain('awaiting_human')
+    expect(store.calls.some((c) => /case:.*:awaiting_human/.test(c))).toBe(false)
+  })
+
+  it('a failed state write aborts before any check is recorded', async () => {
+    const store = new RecordingStore()
+    store.setVersionState = vi.fn(async () => { throw new Error('update failed: row gone') })
+    const subj = subjectiveReturning({ status: 'passed' })
+    const err = await generateAndCheckChunk({
+      ...base(), generator: makeGenerator([candidate('a')]), subjectiveChecker: subj, store,
+    }).catch((e) => e)
+    expect(err).toBeInstanceOf(CandidatePipelineError)
+    expect((err as CandidatePipelineError).persistedCount).toBe(1)
+    expect(Object.keys(store.objectiveByVersion)).toHaveLength(0)
+    expect(subj.check).not.toHaveBeenCalled()
+  })
+
+  it('a failed case-status write aborts rather than silently advancing', async () => {
+    const store = new RecordingStore()
+    store.setCaseStatus = vi.fn(async () => { throw new Error('update failed') })
+    const subj = subjectiveReturning({ status: 'passed' })
+    const err = await generateAndCheckChunk({
+      ...base(), generator: makeGenerator([candidate('a')]), subjectiveChecker: subj, store,
+    }).catch((e) => e)
+    expect(err).toBeInstanceOf(CandidatePipelineError)
+    expect((err as CandidatePipelineError).persistedCount).toBe(1)
+  })
+
+  it('a failed candidate persist counts the position as consumed (never double-claimed) and stops the chunk', async () => {
+    const store = new RecordingStore()
+    store.persistCandidate = vi.fn(async () => { throw new Error('case insert failed: batch gone') })
+    const subj = subjectiveReturning({ status: 'passed' })
+    const err = await generateAndCheckChunk({
+      ...base(), claim: 3, generator: makeGenerator([candidate('a'), candidate('b'), candidate('c')]), subjectiveChecker: subj, store,
+    }).catch((e) => e)
+    expect(err).toBeInstanceOf(CandidatePipelineError)
+    // The failed position may hold a committed case — it is NOT released for a
+    // retry, and no later position in the chunk is attempted.
+    expect((err as CandidatePipelineError).persistedCount).toBe(1)
+    expect(store.persistCandidate).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -253,7 +343,7 @@ describe('prepareChildVersion — edit creates a fresh child', () => {
       snapshotHash: 'hash-1',
       context: { a: 1 },
       systemVersions: { v: 1 },
-      editedItems: [{ slot: 'top', item_id: 'new-top', source_image_version: 'v2' }],
+      editedItems: [{ slot: 'top', item_id: 'new-top', sort_order: 0, source_image_version: 'v2' }],
       editKey: 'k1',
     })
     expect(plan.versionNo).toBe(2)
@@ -262,5 +352,112 @@ describe('prepareChildVersion — edit creates a fresh child', () => {
     expect(plan.inheritsApproval).toBe(false)
     expect(plan.generationRequestKey).toContain('edit:cv-1')
     expect(plan.compositionHash).toMatch(/^[0-9a-f]{64}$/)
+  })
+})
+
+// ── Edit → persisted, freshly-checked child version ──────────────────────────
+
+class FakeChildStore extends RecordingStore implements ChildVersionPersistence {
+  childInputs: PersistChildVersionInput[] = []
+  persistChildVersion = vi.fn(async (input: PersistChildVersionInput): Promise<PersistedCandidate> => {
+    this.calls.push(`persistChild:${input.plan.versionNo}`)
+    this.childInputs.push(input)
+    return {
+      caseId: input.caseId,
+      candidateVersionId: 'cv-child-1',
+      items: input.candidate.items.map((it, i) => ({ candidate_item_id: `ci-child-${i}`, item_id: it.item_id, slot: it.slot })),
+    }
+  })
+}
+
+function editArgs(store: FakeChildStore, subj: SubjectiveChecker, cand: GeneratedCandidate) {
+  return {
+    caseId: 'case-1',
+    parentVersionId: 'cv-1',
+    parentVersionNo: 1,
+    parentContextSnapshot: CONTEXT.contextSnapshot,
+    editKey: 'k1',
+    snapshot: SNAPSHOT,
+    context: CONTEXT,
+    candidate: cand,
+    evidence: goodEvidence(),
+    subjectiveChecker: subj,
+    store,
+  }
+}
+
+describe('editAndCheckCandidate — persisted, freshly-checked child version', () => {
+  it('inserts a parent-linked child with an incremented version and a new hash, then runs fresh checks to awaiting_human', async () => {
+    const store = new FakeChildStore()
+    const subj = subjectiveReturning({ status: 'passed' })
+    const res = await editAndCheckCandidate(editArgs(store, subj, candidate('edited')))
+
+    // Child linkage + fresh identity.
+    expect(store.persistChildVersion).toHaveBeenCalledTimes(1)
+    const input = store.childInputs[0]
+    expect(input.caseId).toBe('case-1')
+    expect(input.plan.parentVersionId).toBe('cv-1')
+    expect(input.plan.versionNo).toBe(2)
+    expect(input.plan.generationRequestKey).toBe('edit:cv-1:k1')
+    expect(input.plan.inheritsChecks).toBe(false)
+    expect(input.plan.inheritsApproval).toBe(false)
+
+    // Fresh objective AND subjective checks ran against the frozen snapshot.
+    expect(store.objectiveByVersion['cv-child-1']).toBeDefined()
+    expect(subj.check).toHaveBeenCalledTimes(1)
+    expect(subj.check).toHaveBeenCalledWith(expect.objectContaining({ snapshotId: 'snap-1', payloadHash: 'hash-1', snapshotPayload: SNAPSHOT.payload }))
+    expect(res.state).toBe('awaiting_human')
+    expect(store.calls.some((c) => /case:case-1:awaiting_human/.test(c))).toBe(true)
+
+    // The parent is never mutated.
+    expect(store.versions['cv-1']).toBeUndefined()
+  })
+
+  it('a deliberate reorder of a multi-item slot yields a DIFFERENT composition hash (a real new version, no collision)', async () => {
+    const multiSlot = (aFirst: boolean): GeneratedCandidate => ({
+      requiredSlots: ['top', 'bottom', 'shoe'],
+      items: [
+        { item_id: 'top-1', slot: 'top', sort_order: 0, item_snapshot: { item_type: 'shirt', brand: 'Arket' }, source_image_url: 'https://cdn/t.jpg' },
+        { item_id: 'bot-1', slot: 'bottom', sort_order: 1, item_snapshot: { item_type: 'trousers', brand: 'Toteme' }, source_image_url: 'https://cdn/b.jpg' },
+        { item_id: 'shoe-1', slot: 'shoe', sort_order: 2, item_snapshot: { item_type: 'flat', brand: 'The Row' }, source_image_url: 'https://cdn/s.jpg' },
+        // Same two necklaces, deliberately re-sequenced.
+        { item_id: aFirst ? 'neck-a' : 'neck-b', slot: 'jewellery', sort_order: 3, item_snapshot: { item_type: 'necklace', brand: 'Monica Vinader' }, source_image_url: 'https://cdn/n1.jpg' },
+        { item_id: aFirst ? 'neck-b' : 'neck-a', slot: 'jewellery', sort_order: 4, item_snapshot: { item_type: 'necklace', brand: 'Monica Vinader' }, source_image_url: 'https://cdn/n2.jpg' },
+      ],
+    })
+    const storeA = new FakeChildStore()
+    const storeB = new FakeChildStore()
+    await editAndCheckCandidate(editArgs(storeA, subjectiveReturning({ status: 'passed' }), multiSlot(true)))
+    await editAndCheckCandidate(editArgs(storeB, subjectiveReturning({ status: 'passed' }), multiSlot(false)))
+    expect(storeA.childInputs[0].plan.compositionHash).not.toBe(storeB.childInputs[0].plan.compositionHash)
+
+    // And an unchanged edit collides with the parent's hash only if nothing
+    // changed — sanity: parent hash over the parent's own ordered items.
+    const parentHash = compositionHash({
+      snapshotHash: SNAPSHOT.payloadHash,
+      context: CONTEXT.contextSnapshot,
+      systemVersions: SNAPSHOT.systemVersions,
+      items: multiSlot(true).items.map((i) => ({ slot: i.slot, item_id: i.item_id, sort_order: i.sort_order, source_image_version: i.source_image_asset_version ?? null, source_image_hash: i.source_image_hash ?? null })),
+    })
+    expect(storeA.childInputs[0].plan.compositionHash).toBe(parentHash)
+  })
+
+  it('a child that fails objective checks fails closed: no subjective call, state objective_failed', async () => {
+    const store = new FakeChildStore()
+    const subj = subjectiveReturning({ status: 'passed' })
+    const res = await editAndCheckCandidate(editArgs(store, subj, candidate('edited', { badStructure: true })))
+    expect(subj.check).not.toHaveBeenCalled()
+    expect(res.state).toBe('objective_failed')
+    expect(res.subjectiveStatus).toBeNull()
+    expect(store.versions['cv-child-1']).toBe('objective_failed')
+  })
+
+  it('a failed child insert aborts before any check is recorded', async () => {
+    const store = new FakeChildStore()
+    store.persistChildVersion = vi.fn(async () => { throw new Error('candidate version insert failed: duplicate hash') })
+    const subj = subjectiveReturning({ status: 'passed' })
+    await expect(editAndCheckCandidate(editArgs(store, subj, candidate('edited')))).rejects.toThrow(/duplicate hash/)
+    expect(Object.keys(store.objectiveByVersion)).toHaveLength(0)
+    expect(subj.check).not.toHaveBeenCalled()
   })
 })

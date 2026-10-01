@@ -9,26 +9,25 @@ import 'server-only'
 import { randomUUID } from 'node:crypto'
 import { createAdminClient } from '@/lib/supabase-server'
 import { freezeSelectedStylistSnapshot } from '@/lib/outfit-quality/stylist-snapshot-store'
-import { SNAPSHOT_SYSTEM_VERSIONS, StylistSnapshotError, type SnapshotPayload, type SystemVersions } from '@/lib/outfit-quality/stylist-snapshot'
+import { StylistSnapshotError } from '@/lib/outfit-quality/stylist-snapshot'
 import { validateBatchAttribution } from '@/lib/outfit-quality/partitions'
-import { validateTargetCount, validateChunkRequest, planChunkClaim, canStart, canPause, canResume, type BatchStatus } from '@/lib/outfit-quality/batch-control'
+import { validateTargetCount, validateChunkRequest, canStart, canPause, canResume, type BatchStatus } from '@/lib/outfit-quality/batch-control'
 import {
   resolveContext,
   toContextSnapshot,
-  type ResolvedContext,
 } from '@/lib/outfit-quality/contexts'
 import { createSupabaseRealMemberRepository, createSupabaseEvaluationProfileRepository } from '@/lib/outfit-quality/contexts-store'
 import {
   generateAndCheckChunk,
-  type CandidatePersistence,
-  type PersistCandidateInput,
-  type PersistedCandidate,
-  type FrozenSnapshot,
+  CandidatePipelineError,
+  type GenerateChunkResult,
   type GenerationContext,
-  type CandidateState,
-  type SubjectiveOutcome,
 } from '@/lib/outfit-quality/candidate-generation'
-import type { RuleOutcome } from '@/lib/outfit-quality/objective-checks'
+import {
+  createCandidatePersistence,
+  frozenSnapshotFromRow,
+  systemVersionsFromSnapshotRow,
+} from '@/lib/outfit-quality/candidate-store'
 import {
   createComposerGenerator,
   createObjectiveEvidenceProvider,
@@ -185,125 +184,48 @@ export async function resumeBatch(batchId: string, admin: Admin = createAdminCli
   return { ok: true, batchId }
 }
 
-function systemVersionsFromSnapshotRow(row: any): SystemVersions {
-  return {
-    generation_model: row.generation_model ?? SNAPSHOT_SYSTEM_VERSIONS.generation_model,
-    prompt_version: row.prompt_version ?? SNAPSHOT_SYSTEM_VERSIONS.prompt_version,
-    objective_rules_version: row.objective_rules_version ?? SNAPSHOT_SYSTEM_VERSIONS.objective_rules_version,
-    subjective_check_model: row.subjective_check_model ?? SNAPSHOT_SYSTEM_VERSIONS.subjective_check_model,
-    subjective_prompt_version: row.subjective_prompt_version ?? SNAPSHOT_SYSTEM_VERSIONS.subjective_prompt_version,
-    composer_version: row.composer_version ?? SNAPSHOT_SYSTEM_VERSIONS.composer_version,
-    item_query_version: row.item_query_version ?? SNAPSHOT_SYSTEM_VERSIONS.item_query_version,
-  }
+// ── Atomic chunk claims (database row-lock reservation) ──────────────────────
+
+export interface ChunkClaim {
+  claim: number
+  startPosition: number
+  remainingAfter: number
 }
 
-/** The persistence boundary — commits case/version/items before any check. */
-function createPersistence(args: {
-  admin: Admin
-  batch: BatchRow
-  context: ResolvedContext
-  systemVersions: SystemVersions
-}): CandidatePersistence {
-  const db = args.admin as any
-  const { batch } = args
-  return {
-    async persistCandidate(input: PersistCandidateInput): Promise<PersistedCandidate> {
-      const { data: kase, error: caseErr } = await db
-        .from('outfit_quality_case')
-        .insert({
-          batch_id: batch.batch_id,
-          data_partition: batch.data_partition,
-          real_member_id: batch.real_member_id,
-          evaluation_profile_id: batch.evaluation_profile_id,
-          selected_stylist_id: batch.selected_stylist_id,
-          stylist_snapshot_id: batch.stylist_snapshot_id,
-          source: 'generated',
-          status: 'open',
-        })
-        .select('case_id')
-        .maybeSingle()
-      if (caseErr) throw new Error(`case insert failed: ${caseErr.message}`)
+export type ChunkClaimOutcome = ({ ok: true } & ChunkClaim) | { ok: false; code: string; message: string }
 
-      const { data: version, error: versionErr } = await db
-        .from('outfit_quality_candidate_version')
-        .insert({
-          case_id: kase.case_id,
-          version_no: 1,
-          context_snapshot: input.context.contextSnapshot,
-          composition_hash: input.compositionHash,
-          generation_request_key: input.generationRequestKey,
-          composer_version: args.systemVersions.composer_version,
-          generator_model: args.systemVersions.generation_model,
-          prompt_version: args.systemVersions.prompt_version,
-          state: 'generated',
-        })
-        .select('candidate_version_id')
-        .maybeSingle()
-      if (versionErr) throw new Error(`candidate version insert failed: ${versionErr.message}`)
+/** Map the claim RPC's raised message to a stable client-facing code. */
+export function claimErrorCode(message: string): string {
+  if (/between 1 and 25/.test(message)) return 'chunk_out_of_range'
+  if (/cannot claim new work/.test(message)) return 'not_generatable'
+  if (/no remaining positions/.test(message)) return 'batch_full'
+  if (/batch not found/.test(message)) return 'not_found'
+  return 'claim_failed'
+}
 
-      const itemRows = input.candidate.items.map((it) => ({
-        candidate_version_id: version.candidate_version_id,
-        item_id: it.item_id,
-        slot: it.slot,
-        sort_order: it.sort_order,
-        item_snapshot: it.item_snapshot,
-        source_image_url: it.source_image_url,
-        source_image_asset_version: it.source_image_asset_version ?? null,
-        source_image_hash: it.source_image_hash ?? null,
-      }))
-      const { data: items, error: itemErr } = await db
-        .from('outfit_quality_candidate_item')
-        .insert(itemRows)
-        .select('candidate_item_id, item_id, slot')
-      if (itemErr) throw new Error(`candidate items insert failed: ${itemErr.message}`)
-
-      await db.from('outfit_quality_case').update({ current_version_id: version.candidate_version_id }).eq('case_id', kase.case_id)
-
-      return {
-        caseId: kase.case_id,
-        candidateVersionId: version.candidate_version_id,
-        items: (items ?? []).map((r: any) => ({ candidate_item_id: r.candidate_item_id, item_id: r.item_id, slot: r.slot })),
-      }
-    },
-
-    async recordObjectiveChecks(candidateVersionId: string, outcomes: RuleOutcome[]): Promise<void> {
-      const rows = outcomes.map((o) => ({
-        candidate_version_id: candidateVersionId,
-        kind: 'objective',
-        check_name: o.check_name,
-        status: o.status,
-        issues: o.detail ?? null,
-        attempt: 1,
-        idempotency_key: `${candidateVersionId}:objective:${o.check_name}`,
-      }))
-      await db.from('outfit_quality_machine_check').insert(rows)
-    },
-
-    async recordSubjectiveCheck(candidateVersionId: string, outcome: SubjectiveOutcome): Promise<void> {
-      await db.from('outfit_quality_machine_check').insert({
-        candidate_version_id: candidateVersionId,
-        kind: 'subjective',
-        check_name: 'selected_stylist_fit',
-        status: outcome.status,
-        verdict: outcome.verdict ?? null,
-        score: outcome.score ?? null,
-        issues: outcome.reasons ?? null,
-        model: outcome.model ?? null,
-        prompt_version: outcome.prompt_version ?? null,
-        raw_response_hash: outcome.raw_response_hash ?? null,
-        attempt: 1,
-        idempotency_key: `${candidateVersionId}:subjective:1`,
-      })
-    },
-
-    async setVersionState(candidateVersionId: string, state: CandidateState): Promise<void> {
-      await db.from('outfit_quality_candidate_version').update({ state }).eq('candidate_version_id', candidateVersionId)
-    },
-
-    async setCaseStatus(caseId: string, status: string, currentVersionId: string): Promise<void> {
-      await db.from('outfit_quality_case').update({ status, current_version_id: currentVersionId }).eq('case_id', caseId)
-    },
+/**
+ * Reserve positions for one explicit processing action. The RPC locks the
+ * batch row FOR UPDATE, so two overlapping requests serialize: claimed ranges
+ * are disjoint and their sum never exceeds target_count. No case rows exist
+ * yet for a reservation — a failed generation releases the unproduced
+ * positions, so capacity is never consumed by work that never landed.
+ */
+export async function claimChunkPositions(admin: Admin, batchId: string, requested: number): Promise<ChunkClaimOutcome> {
+  const db = admin as any
+  const { data, error } = await db.rpc('oq_claim_positions', { p_batch_id: batchId, p_requested: requested })
+  if (error) return { ok: false, code: claimErrorCode(error.message ?? ''), message: error.message ?? 'claim failed' }
+  const row = Array.isArray(data) ? data[0] : data
+  if (!row || typeof row.claim !== 'number' || row.claim < 1) {
+    return { ok: false, code: 'claim_failed', message: 'the position claim returned no positions' }
   }
+  return { ok: true, claim: row.claim, startPosition: row.start_position, remainingAfter: row.remaining_after }
+}
+
+/** Give back reservations that produced no case. Only called after a failure. */
+export async function releaseChunkPositions(admin: Admin, batchId: string, count: number): Promise<void> {
+  if (!Number.isInteger(count) || count <= 0) return
+  const db = admin as any
+  await db.rpc('oq_release_positions', { p_batch_id: batchId, p_count: count })
 }
 
 export interface GenerateChunkResponse {
@@ -318,8 +240,11 @@ export interface GenerateChunkResponse {
 }
 
 /**
- * One explicit processing action: claim at most `min(requested, 25, remaining)`
- * positions, generate and check them, and return. Nothing is scheduled after.
+ * One explicit processing action: atomically reserve at most
+ * `min(requested, 25, remaining)` positions at the database boundary, generate
+ * and check them, and return. Nothing is scheduled after. A failure mid-chunk
+ * aborts, releases only the reservations that produced no case, and records
+ * the error on the batch — the candidate is never silently advanced.
  */
 export async function generateChunk(
   args: { batchId: string; requested: number },
@@ -329,29 +254,39 @@ export async function generateChunk(
   if (!batch) return { ok: false, code: 'not_found', message: 'batch not found' }
   if (!batch.stylist_snapshot_id) return { ok: false, code: 'not_started', message: 'start the batch to freeze its snapshot first' }
 
-  const produced = await producedCount(admin, args.batchId)
-  const remaining = batch.target_count - produced
-  const plan = planChunkClaim({ status: batch.status, requested: args.requested, remaining })
-  if (!plan.ok) return { ok: false, code: plan.code, message: plan.message, remaining }
+  const requestedCheck = validateChunkRequest(args.requested)
+  if (!requestedCheck.ok) return { ok: false, code: requestedCheck.code, message: requestedCheck.message }
+
+  const db = admin as any
+
+  // Reserve positions with the batch row locked FOR UPDATE inside the RPC.
+  // Two overlapping chunk requests therefore serialize at the database and
+  // can never claim the same position or exceed target_count.
+  const claimRes = await claimChunkPositions(admin, batch.batch_id, args.requested)
+  if (!claimRes.ok) {
+    const remaining = Math.max(0, batch.target_count - (await producedCount(admin, batch.batch_id)))
+    return { ok: false, code: claimRes.code, message: claimRes.message, remaining }
+  }
+  const { claim, startPosition, remainingAfter } = claimRes
 
   // Load the frozen snapshot — generation and subjective checking consume this
-  // same persisted id/hash, never a fresh stylist read.
-  const db = admin as any
-  const { data: snapRow } = await db
+  // same persisted id/hash/payload, never a fresh stylist read.
+  const { data: snapRow, error: snapErr } = await db
     .from('outfit_quality_stylist_snapshot')
     .select('*')
     .eq('snapshot_id', batch.stylist_snapshot_id)
     .maybeSingle()
-  if (!snapRow) return { ok: false, code: 'snapshot_missing', message: 'frozen snapshot not found' }
+  if (snapErr) {
+    await releaseChunkPositions(admin, batch.batch_id, claim)
+    return { ok: false, code: 'snapshot_read_failed', message: snapErr.message }
+  }
+  if (!snapRow) {
+    await releaseChunkPositions(admin, batch.batch_id, claim)
+    return { ok: false, code: 'snapshot_missing', message: 'frozen snapshot not found' }
+  }
 
   const systemVersions = systemVersionsFromSnapshotRow(snapRow)
-  const frozen: FrozenSnapshot = {
-    snapshotId: snapRow.snapshot_id,
-    payloadHash: snapRow.payload_hash,
-    rulesOnly: !!snapRow.rules_only,
-    payload: snapRow.payload as SnapshotPayload,
-    systemVersions,
-  }
+  const frozen = frozenSnapshotFromRow(snapRow)
 
   const repos = {
     members: createSupabaseRealMemberRepository(admin),
@@ -361,7 +296,10 @@ export async function generateChunk(
     { realMemberId: batch.real_member_id, evaluationProfileId: batch.evaluation_profile_id },
     repos,
   )
-  if (!ctxRes.ok) return { ok: false, code: ctxRes.code, message: ctxRes.message }
+  if (!ctxRes.ok) {
+    await releaseChunkPositions(admin, batch.batch_id, claim)
+    return { ok: false, code: ctxRes.code, message: ctxRes.message }
+  }
 
   const genContext: GenerationContext = {
     dataPartition: batch.data_partition,
@@ -371,23 +309,38 @@ export async function generateChunk(
     contextSnapshot: toContextSnapshot(ctxRes.context),
   }
 
-  const store = createPersistence({ admin, batch, context: ctxRes.context, systemVersions })
+  const store = createCandidatePersistence({ admin, batch, systemVersions })
 
-  const result = await generateAndCheckChunk({
-    batchId: batch.batch_id,
-    runId: batch.run_id,
-    claim: plan.claim,
-    startPosition: produced,
-    snapshot: frozen,
-    context: genContext,
-    generator: createComposerGenerator(admin),
-    evidence: createObjectiveEvidenceProvider(admin),
-    subjectiveChecker: createSubjectiveChecker(),
-    store,
-  })
+  let result: GenerateChunkResult
+  try {
+    result = await generateAndCheckChunk({
+      batchId: batch.batch_id,
+      runId: batch.run_id,
+      claim,
+      startPosition,
+      snapshot: frozen,
+      context: genContext,
+      generator: createComposerGenerator(admin),
+      evidence: createObjectiveEvidenceProvider(admin),
+      subjectiveChecker: createSubjectiveChecker(),
+      store,
+    })
+  } catch (err) {
+    // Abort: release only the reservations that definitely hold no case (a
+    // position whose case may have committed is never reissued), record the
+    // error on the batch, and surface it to the caller.
+    const persisted = err instanceof CandidatePipelineError ? err.persistedCount : 0
+    await releaseChunkPositions(admin, batch.batch_id, claim - persisted)
+    const message = err instanceof Error ? err.message : String(err)
+    await db
+      .from('outfit_quality_batch')
+      .update({ last_error: message, updated_at: new Date().toISOString() })
+      .eq('batch_id', batch.batch_id)
+    return { ok: false, code: 'generation_failed', message, remaining: batch.target_count - (startPosition + persisted) }
+  }
 
-  const newProduced = produced + result.produced
-  const completed = newProduced >= batch.target_count
+  const produced = await producedCount(admin, batch.batch_id)
+  const completed = produced >= batch.target_count
   if (completed) {
     // Mark terminal, but never start another chunk or batch.
     await db.from('outfit_quality_batch').update({ status: 'completed', updated_at: new Date().toISOString() }).eq('batch_id', batch.batch_id)
@@ -398,7 +351,7 @@ export async function generateChunk(
     produced: result.produced,
     awaitingHuman: result.awaitingHuman,
     objectiveFailed: result.objectiveFailed,
-    remaining: batch.target_count - newProduced,
+    remaining: remainingAfter,
     completed,
   }
 }

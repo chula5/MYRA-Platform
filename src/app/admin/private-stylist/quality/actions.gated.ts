@@ -26,6 +26,7 @@ import {
   type RealMemberOption,
   type EvaluationProfileOption,
 } from '@/lib/outfit-quality/batch-read'
+import { editCandidateVersion, type EditCandidateInput } from '@/lib/outfit-quality/candidate-store'
 import type { PreDecisionCandidate } from '@/lib/outfit-quality/queue-read-model'
 
 export interface QualityData {
@@ -91,4 +92,17 @@ export async function generateQualityChunk(batchId: string, requested: number) {
 export async function loadBatchCandidates(batchId: string): Promise<PreDecisionCandidate[]> {
   await assertAdmin()
   return listBatchCandidates(batchId)
+}
+
+/**
+ * Edit a candidate as a fresh, parent-linked child version: the child is
+ * persisted with its ordered items and re-checked end to end (objective, then
+ * subjective against the batch's frozen snapshot). The parent is never mutated
+ * and the child inherits no checks, approval, renders, or learning.
+ */
+export async function editQualityCandidate(input: EditCandidateInput) {
+  await assertAdmin()
+  const res = await editCandidateVersion(input)
+  if (!res.ok) return { error: res.message ?? res.code ?? 'edit failed' }
+  return res
 }

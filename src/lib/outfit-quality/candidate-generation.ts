@@ -80,10 +80,15 @@ export interface SubjectiveOutcome {
 }
 
 export interface SubjectiveChecker {
-  /** Receives the frozen snapshot id + hash — never a live stylist object. */
+  /**
+   * Receives the frozen snapshot id + hash + PAYLOAD — never a live stylist
+   * object. The checker builds its prompt from `snapshotPayload` so machine
+   * review uses the identical frozen lens generation used.
+   */
   check(args: {
     snapshotId: string
     payloadHash: string
+    snapshotPayload: unknown
     manifest: ObjectiveManifest
     context: GenerationContext
   }): Promise<SubjectiveOutcome>
@@ -119,6 +124,40 @@ export interface CandidatePersistence {
   setCaseStatus(caseId: string, status: string, currentVersionId: string): Promise<void>
 }
 
+export interface PersistChildVersionInput {
+  caseId: string
+  plan: ChildVersionPlan
+  /** The parent's frozen context snapshot, carried onto the child unchanged. */
+  contextSnapshot: unknown
+  systemVersions: unknown
+  candidate: GeneratedCandidate
+}
+
+/**
+ * The edit path's persistence boundary: everything in `CandidatePersistence`
+ * plus inserting a parent-linked child version with its ordered item manifest.
+ */
+export interface ChildVersionPersistence extends CandidatePersistence {
+  persistChildVersion(input: PersistChildVersionInput): Promise<PersistedCandidate>
+}
+
+/**
+ * A persistence or check failure that aborted the pipeline. `persistedCount`
+ * is the number of chunk positions that may already hold a committed case —
+ * callers must NEVER reissue those positions (no double-claim) and may release
+ * only the remaining `claim - persistedCount` reservations.
+ */
+export class CandidatePipelineError extends Error {
+  readonly stage: 'persist' | 'objective' | 'subjective' | 'state' | 'case'
+  readonly persistedCount: number
+  constructor(stage: CandidatePipelineError['stage'], cause: unknown, persistedCount: number) {
+    super(`${stage} failed: ${cause instanceof Error ? cause.message : String(cause)}`)
+    this.name = 'CandidatePipelineError'
+    this.stage = stage
+    this.persistedCount = persistedCount
+  }
+}
+
 export interface GenerateChunkArgs {
   batchId: string
   runId: string
@@ -152,6 +191,7 @@ function toCompositionRefs(items: GeneratedItem[]): CompositionItemRef[] {
   return items.map((i) => ({
     slot: i.slot,
     item_id: i.item_id,
+    sort_order: i.sort_order,
     source_image_version: i.source_image_asset_version ?? null,
     source_image_hash: i.source_image_hash ?? null,
   }))
@@ -172,10 +212,77 @@ function toObjectiveManifest(candidate: GeneratedCandidate): ObjectiveManifest {
 }
 
 /**
+ * The machine-check pipeline for one ALREADY-persisted candidate: objective
+ * checks first (fail closed), then — only on objective pass — the subjective
+ * check against the same frozen snapshot. Every persistence write is
+ * error-checked by the store; any failure aborts by throwing, wrapped in a
+ * `CandidatePipelineError` so the caller knows exactly how far the chunk got.
+ * The candidate is never silently advanced past a failed write.
+ */
+export async function checkPersistedCandidate(args: {
+  persisted: PersistedCandidate
+  candidate: GeneratedCandidate
+  snapshot: FrozenSnapshot
+  context: GenerationContext
+  evidence: ObjectiveEvidenceProvider
+  subjectiveChecker: SubjectiveChecker
+  store: CandidatePersistence
+  persistedCount: number
+}): Promise<GeneratedCandidateResult> {
+  const { persisted, candidate, snapshot, context, evidence, subjectiveChecker, store } = args
+  const at = (stage: CandidatePipelineError['stage']) => (err: unknown): never => {
+    throw new CandidatePipelineError(stage, err, args.persistedCount)
+  }
+
+  // 1. Objective checks first — fail closed.
+  await store.setVersionState(persisted.candidateVersionId, 'objective_checking').catch(at('state'))
+  const manifest = toObjectiveManifest(candidate)
+  const ev = await evidence.gather({ items: candidate.items, context })
+  const objective = runObjectiveChecks(manifest, ev)
+  await store.recordObjectiveChecks(persisted.candidateVersionId, objective.outcomes).catch(at('objective'))
+
+  if (!objective.passed) {
+    await store.setVersionState(persisted.candidateVersionId, 'objective_failed').catch(at('state'))
+    await store.setCaseStatus(persisted.caseId, 'objective_failed', persisted.candidateVersionId).catch(at('case'))
+    return {
+      candidateVersionId: persisted.candidateVersionId,
+      caseId: persisted.caseId,
+      state: 'objective_failed',
+      objectiveStatus: objective.status,
+      subjectiveStatus: null,
+    }
+  }
+
+  // 2. Subjective check against the SAME frozen snapshot — id, hash AND the
+  //    payload the prompt is built from. Every outcome → awaiting_human; none
+  //    decides or suppresses.
+  await store.setVersionState(persisted.candidateVersionId, 'subjective_checking').catch(at('state'))
+  const subjective = await subjectiveChecker.check({
+    snapshotId: snapshot.snapshotId,
+    payloadHash: snapshot.payloadHash,
+    snapshotPayload: snapshot.payload,
+    manifest,
+    context,
+  })
+  await store.recordSubjectiveCheck(persisted.candidateVersionId, subjective).catch(at('subjective'))
+  await store.setVersionState(persisted.candidateVersionId, 'awaiting_human').catch(at('state'))
+  await store.setCaseStatus(persisted.caseId, 'awaiting_human', persisted.candidateVersionId).catch(at('case'))
+  return {
+    candidateVersionId: persisted.candidateVersionId,
+    caseId: persisted.caseId,
+    state: 'awaiting_human',
+    objectiveStatus: objective.status,
+    subjectiveStatus: subjective.status,
+  }
+}
+
+/**
  * Generate and check one bounded chunk. The generator is asked for exactly
  * `claim` candidates; each is persisted before any check runs. Objective checks
  * fail closed; only objective-pass candidates are subjectively checked, and
- * every subjective outcome lands at `awaiting_human`.
+ * every subjective outcome lands at `awaiting_human`. A failed write aborts the
+ * chunk immediately (CandidatePipelineError) — remaining candidates in the
+ * chunk are not attempted.
  */
 export async function generateAndCheckChunk(args: GenerateChunkArgs): Promise<GenerateChunkResult> {
   const { snapshot, context, generator, evidence, subjectiveChecker, store } = args
@@ -184,6 +291,7 @@ export async function generateAndCheckChunk(args: GenerateChunkArgs): Promise<Ge
   const results: GeneratedCandidateResult[] = []
   let awaitingHuman = 0
   let objectiveFailed = 0
+  let persistedCount = 0
 
   for (let idx = 0; idx < candidates.length; idx++) {
     const candidate = candidates[idx]
@@ -197,59 +305,41 @@ export async function generateAndCheckChunk(args: GenerateChunkArgs): Promise<Ge
     })
 
     // 1. Commit the case, the immutable version, and the ordered item manifest
-    //    BEFORE any check. This is the auditable record even for a failure.
-    const persisted = await store.persistCandidate({
-      position,
-      generationRequestKey: `${args.runId}:${args.batchId}:${position}`,
-      compositionHash: hash,
-      rulesOnly: snapshot.rulesOnly,
-      snapshotId: snapshot.snapshotId,
-      context,
-      systemVersions: snapshot.systemVersions,
-      candidate,
-    })
-
-    // 2. Objective checks first — fail closed.
-    await store.setVersionState(persisted.candidateVersionId, 'objective_checking')
-    const manifest = toObjectiveManifest(candidate)
-    const ev = await evidence.gather({ items: candidate.items, context })
-    const objective = runObjectiveChecks(manifest, ev)
-    await store.recordObjectiveChecks(persisted.candidateVersionId, objective.outcomes)
-
-    if (!objective.passed) {
-      await store.setVersionState(persisted.candidateVersionId, 'objective_failed')
-      await store.setCaseStatus(persisted.caseId, 'objective_failed', persisted.candidateVersionId)
-      objectiveFailed++
-      results.push({
-        candidateVersionId: persisted.candidateVersionId,
-        caseId: persisted.caseId,
-        state: 'objective_failed',
-        objectiveStatus: objective.status,
-        subjectiveStatus: null,
+    //    BEFORE any check. This is the auditable record even for a failure. A
+    //    failed persist still counts the position as consumed: the case row may
+    //    exist, so the position is never reissued to another request.
+    let persisted: PersistedCandidate
+    try {
+      persisted = await store.persistCandidate({
+        position,
+        generationRequestKey: `${args.runId}:${args.batchId}:${position}`,
+        compositionHash: hash,
+        rulesOnly: snapshot.rulesOnly,
+        snapshotId: snapshot.snapshotId,
+        context,
+        systemVersions: snapshot.systemVersions,
+        candidate,
       })
-      continue
+    } catch (err) {
+      persistedCount++
+      throw new CandidatePipelineError('persist', err, persistedCount)
     }
+    persistedCount++
 
-    // 3. Subjective check against the SAME frozen snapshot. Every outcome →
-    //    awaiting_human; none decides or suppresses.
-    await store.setVersionState(persisted.candidateVersionId, 'subjective_checking')
-    const subjective = await subjectiveChecker.check({
-      snapshotId: snapshot.snapshotId,
-      payloadHash: snapshot.payloadHash,
-      manifest,
+    // 2 + 3. Objective then subjective, fail closed, abort on any write error.
+    const result = await checkPersistedCandidate({
+      persisted,
+      candidate,
+      snapshot,
       context,
+      evidence,
+      subjectiveChecker,
+      store,
+      persistedCount,
     })
-    await store.recordSubjectiveCheck(persisted.candidateVersionId, subjective)
-    await store.setVersionState(persisted.candidateVersionId, 'awaiting_human')
-    await store.setCaseStatus(persisted.caseId, 'awaiting_human', persisted.candidateVersionId)
-    awaitingHuman++
-    results.push({
-      candidateVersionId: persisted.candidateVersionId,
-      caseId: persisted.caseId,
-      state: 'awaiting_human',
-      objectiveStatus: objective.status,
-      subjectiveStatus: subjective.status,
-    })
+    if (result.state === 'objective_failed') objectiveFailed++
+    else awaitingHuman++
+    results.push(result)
   }
 
   return { produced: results.length, awaitingHuman, objectiveFailed, results }
@@ -295,4 +385,61 @@ export function prepareChildVersion(args: {
     inheritsChecks: false,
     inheritsApproval: false,
   }
+}
+
+export interface EditCandidateOrchestrationArgs {
+  caseId: string
+  parentVersionId: string
+  parentVersionNo: number
+  /** The parent's frozen context snapshot, carried onto the child unchanged. */
+  parentContextSnapshot: unknown
+  /** Caller-supplied idempotency key; the request key is `edit:<parent>:<key>`. */
+  editKey: string
+  snapshot: FrozenSnapshot
+  context: GenerationContext
+  /** The edited composition: ordered items + the slots a complete outfit needs. */
+  candidate: GeneratedCandidate
+  evidence: ObjectiveEvidenceProvider
+  subjectiveChecker: SubjectiveChecker
+  store: ChildVersionPersistence
+}
+
+/**
+ * Persist an edit as a fresh, parent-linked child version and run the FULL
+ * machine-check pipeline on it. The child carries a new composition hash (a
+ * deliberate reorder included) and a new generation request key; it inherits no
+ * checks, approval, renders, or learning. The parent is never mutated. Any
+ * failed write aborts before the child is advanced.
+ */
+export async function editAndCheckCandidate(args: EditCandidateOrchestrationArgs): Promise<GeneratedCandidateResult> {
+  const { snapshot, context, evidence, subjectiveChecker, store } = args
+  const plan = prepareChildVersion({
+    parentVersionId: args.parentVersionId,
+    parentVersionNo: args.parentVersionNo,
+    snapshotHash: snapshot.payloadHash,
+    context: args.parentContextSnapshot,
+    systemVersions: snapshot.systemVersions,
+    editedItems: toCompositionRefs(args.candidate.items),
+    editKey: args.editKey,
+  })
+
+  // Commit the child version and its ordered item manifest before any check.
+  const persisted = await store.persistChildVersion({
+    caseId: args.caseId,
+    plan,
+    contextSnapshot: args.parentContextSnapshot,
+    systemVersions: snapshot.systemVersions,
+    candidate: args.candidate,
+  })
+
+  return checkPersistedCandidate({
+    persisted,
+    candidate: args.candidate,
+    snapshot,
+    context,
+    evidence,
+    subjectiveChecker,
+    store,
+    persistedCount: 1,
+  })
 }
