@@ -6,27 +6,58 @@
 // version) into:
 //
 //   * a canonical SizeProfile used to gate the generation pool to the profile's
-//     declared clothing/shoe sizes, and to answer objective size possibility;
-//   * budget price-tier / max-price constraints read from the profile's budget
-//     and brand-group ranges;
-//   * a per-item affinity nudge folding budget, brand group, occasion, and style
-//     family into the composer's shortlist ranking.
+//     declared clothing/shoe sizes (a WEARABLE match required — sold out fails
+//     closed), and to answer objective size possibility;
+//   * budget price-tier / max-price constraints read from the profile's budget,
+//     with GBP prices resolved through the canonical priceOfItem contract;
+//   * a per-item affinity nudge folding budget, controlled brand-group
+//     membership, occasion, and style family into the composer's shortlist
+//     ranking AND the anchor iteration order.
 //
 // Everything here is pure: it never reads mutable stylist/member tables and
 // takes only plain item facts, so it unit-tests cleanly and both generation and
 // objective checking consume the same frozen context.
 
-import type { MatchQuality, SizeCategory, SizeProfile } from '@/lib/size-canonical'
+import { isWearable, type MatchQuality, type SizeCategory, type SizeProfile } from '@/lib/size-canonical'
+import { BRAND_GROUPS } from '@/app/onboarding/brand-groups'
 
-// ── Controlled value maps ────────────────────────────────────────────────────
+// ── Controlled brand groups ──────────────────────────────────────────────────
+//
+// The controlled brand-group taxonomy is the onboarding BRAND_GROUPS list
+// (aesthetic + price-point groups with explicit brand lists). Profile
+// brand_groups values are keys into THAT list, and scoring is by actual
+// brand-list membership — never by a parallel price-tier label map.
 
-/** Brand group label → the brand.price_tier(s) it spans (PRICE_BANDS). */
-export const BRAND_GROUP_TIERS: Record<string, number[]> = {
-  high_street: [1],
-  elevated_high_street: [2],
-  contemporary: [3],
-  premium: [4],
-  luxury: [5],
+/** The controlled brand-group keys a profile may declare. */
+export const CONTROLLED_BRAND_GROUP_KEYS: string[] = BRAND_GROUPS.map((g) => g.key)
+
+// Same canonical brand-name key rules as brand-affinity's brandKey, kept local
+// so this module stays pure (no server import chain).
+function normalizeBrandName(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}
+
+/** Normalised brand name → the controlled group keys whose list contains it. */
+const BRAND_GROUP_MEMBERSHIP = new Map<string, string[]>()
+for (const group of BRAND_GROUPS) {
+  for (const brand of group.brands) {
+    const key = normalizeBrandName(brand)
+    const list = BRAND_GROUP_MEMBERSHIP.get(key) ?? []
+    list.push(group.key)
+    BRAND_GROUP_MEMBERSHIP.set(key, list)
+  }
+}
+
+/** The controlled group keys a brand belongs to ([] when in no group list). */
+export function brandGroupsForBrand(brandName: string | null | undefined): string[] {
+  if (!brandName) return []
+  return BRAND_GROUP_MEMBERSHIP.get(normalizeBrandName(brandName)) ?? []
 }
 
 /**
@@ -107,25 +138,27 @@ export function hasAnySize(profile: SizeProfile): boolean {
 /**
  * Keep decision for the size-gated generation pool. Genuinely unsized pieces
  * (bags, jewellery, belts, scarves…) are never gated by size. A sized piece is
- * kept only when it is confirmed available in the profile's declared size
- * (exact or an adjacent size the profile lists). Unknown sizing is NOT kept for
- * generation — it would fail the objective size check downstream.
+ * kept only when a WEARABLE matching size exists — an exact or listed-adjacent
+ * match that is actually buyable. A sold-out matching size row (quality full/
+ * acceptable but wearable=false) is NOT kept: sold out fails closed. Unknown
+ * sizing is NOT kept either — it would fail the objective size check.
  */
-export function keepForProfileSize(sizeApplicable: boolean, quality: MatchQuality): boolean {
+export function keepForProfileSize(sizeApplicable: boolean, quality: MatchQuality, wearable: boolean): boolean {
   if (!sizeApplicable) return true
-  return quality === 'full' || quality === 'acceptable'
+  return wearable && isWearable(quality)
 }
 
 // ── Budget ───────────────────────────────────────────────────────────────────
 
-/** The brand price-tiers this profile accepts, from budget + brand groups. */
+/**
+ * The brand price-tiers this profile accepts. Tiers come from the budget
+ * profile only — brand_groups are an aesthetic membership signal scored by
+ * brand-list membership, never a price-tier map.
+ */
 export function budgetTiers(facts: EvaluationProfileFacts): number[] {
   const set = new Set<number>()
   for (const t of facts.budget_profile?.price_tiers ?? []) {
     if (Number.isFinite(Number(t))) set.add(Number(t))
-  }
-  for (const g of facts.brand_groups ?? []) {
-    for (const t of BRAND_GROUP_TIERS[g] ?? []) set.add(t)
   }
   return Array.from(set).sort((a, b) => a - b)
 }
@@ -135,20 +168,15 @@ export function budgetMaxGbp(facts: EvaluationProfileFacts): number | null {
   return v != null && Number.isFinite(Number(v)) ? Number(v) : null
 }
 
-/** Parse a retailer price string ("£295", "295.00", "1,250") into GBP. */
-export function parsePriceGbp(price: string | number | null | undefined): number | null {
-  if (price == null) return null
-  if (typeof price === 'number') return Number.isFinite(price) ? price : null
-  const n = parseFloat(String(price).replace(/[^0-9.]/g, ''))
-  return Number.isFinite(n) ? n : null
-}
-
 // ── Per-item affinity ─────────────────────────────────────────────────────────
 
 export interface AffinityItemFacts {
   item_type: string | null
+  /** GBP price resolved through the canonical priceOfItem contract. */
   price_gbp: number | null
   brand_price_tier: number | null
+  /** The item's brand display name, for controlled brand-group membership. */
+  brand_name: string | null
   colour_family: string | null
   /** 1 (casual) → 5 (formal). */
   material_formality: number | null
@@ -214,10 +242,24 @@ function styleNudge(facts: EvaluationProfileFacts, item: AffinityItemFacts): num
 }
 
 /**
- * A per-item ranking nudge (~[-0.9, 0.8]) folding the frozen profile's budget,
+ * Brand-group membership nudge, scored by the item brand's ACTUAL membership
+ * of the controlled onboarding brand lists. Only controlled keys count —
+ * unrecognised brand_groups values are ignored. A brand in no controlled list
+ * is neutral (we cannot judge it), not penalised.
+ */
+function brandGroupNudge(facts: EvaluationProfileFacts, item: AffinityItemFacts): number {
+  const wanted = facts.brand_groups.filter((g) => CONTROLLED_BRAND_GROUP_KEYS.includes(g))
+  if (!wanted.length || !item.brand_name) return 0
+  const membership = brandGroupsForBrand(item.brand_name)
+  if (!membership.length) return 0
+  return membership.some((m) => wanted.includes(m)) ? 0.2 : -0.1
+}
+
+/**
+ * A per-item ranking nudge (~[-1.0, 1.0]) folding the frozen profile's budget,
  * brand group, occasion, and style-family context into the composer shortlist.
  * Size is handled as a hard gate (`keepForProfileSize`), not here.
  */
 export function profileItemAffinity(facts: EvaluationProfileFacts, item: AffinityItemFacts): number {
-  return budgetNudge(facts, item) + occasionNudge(facts, item) + styleNudge(facts, item)
+  return budgetNudge(facts, item) + occasionNudge(facts, item) + styleNudge(facts, item) + brandGroupNudge(facts, item)
 }
