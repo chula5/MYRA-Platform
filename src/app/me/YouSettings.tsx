@@ -45,13 +45,17 @@ const pill = (on: boolean) =>
   `rounded-full px-5 py-2.5 text-[clamp(18px,1vw,24px)] transition-colors ${on ? 'bg-[#2B2B2B] text-white' : 'bg-white text-[#55534E] hover:text-[#2B2B2B] shadow-[0_8px_16px_-12px_rgba(120,120,120,0.7)]'}`
 
 function ServiceMark({ service }: { service: 'safari' | 'chrome' | 'claude' | 'chatgpt' | 'gmail' | 'calendar' | 'instagram' | 'email' }) {
-  const text: Record<typeof service, string> = { safari: 'S', chrome: 'C', claude: 'C', chatgpt: '◎', gmail: 'M', calendar: '31', instagram: '◎', email: '@' }
-  const tone: Record<typeof service, string> = {
-    safari: 'bg-[#1677D2]', chrome: 'bg-[conic-gradient(#E94135_0_33%,#F5C443_0_56%,#34A853_0_75%,#4285F4_0)]',
-    claude: 'bg-[#D97757]', chatgpt: 'bg-[#111111]', gmail: 'bg-white text-[#DB4437] border border-[#E6E6E6]',
-    calendar: 'bg-[#4285F4]', instagram: 'bg-[linear-gradient(135deg,#833AB4,#FD1D1D,#FCAF45)]', email: 'bg-[#6E6B65]',
+  const logos: Record<typeof service, string> = {
+    safari: 'https://cdn.simpleicons.org/safari/0F7DC2',
+    chrome: 'https://cdn.simpleicons.org/googlechrome',
+    claude: 'https://cdn.simpleicons.org/anthropic/D97757',
+    chatgpt: 'https://cdn.simpleicons.org/openai',
+    gmail: 'https://cdn.simpleicons.org/gmail/EA4335',
+    calendar: 'https://cdn.simpleicons.org/googlecalendar/4285F4',
+    instagram: 'https://cdn.simpleicons.org/instagram/E4405F',
+    email: 'https://cdn.simpleicons.org/maildotru/6E6B65',
   }
-  return <span aria-hidden className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl text-[17px] font-bold text-white ${tone[service]}`}>{text[service]}</span>
+  return <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white p-2 shadow-[0_2px_8px_rgba(43,43,43,0.12)]">{/* eslint-disable-next-line @next/next/no-img-element */}<img src={logos[service]} alt="" className="h-full w-full object-contain" /></span>
 }
 
 function when(iso: string | null) {
@@ -72,6 +76,7 @@ export default function YouSettings({ testMemberId, initial }: { testMemberId?: 
   const [typesAvoided, setTypesAvoided] = useState<string[]>(initial?.typesAvoided ?? [])
   const [neverWears, setNeverWears] = useState(initial?.neverWears ?? '')
   const [occasions, setOccasions] = useState<string[]>(initial?.occasions ?? [])
+  const [editingPreferences, setEditingPreferences] = useState<Record<'colours' | 'shapes' | 'pieces', boolean>>({ colours: false, shapes: false, pieces: false })
   const [saving, setSaving] = useState(false)
   const [note, setNote] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -167,25 +172,10 @@ export default function YouSettings({ testMemberId, initial }: { testMemberId?: 
   const setSize = (c: SizeCategory, key: keyof YouSizes, v: string) =>
     setSizes((cur) => ({ ...cur!, [c]: { ...cur![c], [key]: v === '' ? null : Number(v) } }))
 
-  // A colour is loved, avoided, or neither — tapping moves it along.
-  const colourState = (id: string) => (loved.includes(id) ? 'loved' : avoided.includes(id) ? 'avoided' : 'none')
-  const cycleColour = (id: string) => {
-    const s = colourState(id)
-    if (s === 'none') setLoved((l) => [...l, id])
-    else if (s === 'loved') { setLoved((l) => l.filter((x) => x !== id)); setAvoided((a) => [...a, id]) }
-    else setAvoided((a) => a.filter((x) => x !== id))
+  const toggleLove = (id: string, setLovedList: (fn: (items: string[]) => string[]) => void, setAvoidedList: (fn: (items: string[]) => string[]) => void) => {
+    setLovedList((items) => items.includes(id) ? items.filter((item) => item !== id) : [...items, id])
+    setAvoidedList((items) => items.filter((item) => item !== id))
   }
-  // Shapes and pieces move the same way: love → never → clear.
-  const tri = (lovedL: string[], setL: (f: (x: string[]) => string[]) => void, avoidedL: string[], setA: (f: (x: string[]) => string[]) => void) => ({
-    state: (id: string) => (lovedL.includes(id) ? 'loved' : avoidedL.includes(id) ? 'avoided' : 'none'),
-    cycle: (id: string) => {
-      if (lovedL.includes(id)) { setL((l) => l.filter((x) => x !== id)); setA((a) => [...a, id]) }
-      else if (avoidedL.includes(id)) setA((a) => a.filter((x) => x !== id))
-      else setL((l) => [...l, id])
-    },
-  })
-  const shape = tri(shapesLoved, setShapesLoved, shapesAvoided, setShapesAvoided)
-  const piece = tri(typesLoved, setTypesLoved, typesAvoided, setTypesAvoided)
   const titleCase = (t: string) => t.toLowerCase().replace(/(^|\s|\/|-)\S/g, (m) => m.toUpperCase())
   const chip = (st: string) => `rounded-full px-5 py-2.5 text-[clamp(18px,1vw,24px)] transition-colors ${
     st === 'loved' ? 'bg-[#2B2B2B] text-white' : st === 'avoided' ? 'bg-[#F3E3E3] text-[#9B3A3A] line-through' : 'bg-white text-[#55534E] shadow-[0_8px_16px_-12px_rgba(120,120,120,0.7)]'}`
@@ -276,28 +266,19 @@ export default function YouSettings({ testMemberId, initial }: { testMemberId?: 
         <section className={`${card} lg:col-span-2`}>
           <div className="flex items-baseline justify-between gap-4 flex-wrap">
             <h2 className={heading}>Colours</h2>
-            <p className={label}>Tap once to love, twice to never see, three times to clear.</p>
+            <button type="button" onClick={() => setEditingPreferences((p) => ({ ...p, colours: !p.colours }))} className="text-[18px] text-[#2B2B2B] underline underline-offset-4">{editingPreferences.colours ? 'Done' : 'Edit colours'}</button>
           </div>
           <div className="mt-6 flex flex-wrap gap-2.5">
-            {families.map((f) => {
-              const st = colourState(f)
+            {(editingPreferences.colours ? COLOUR_SHADES : COLOUR_SHADES.filter((s) => loved.includes(s.id))).map((s) => {
+              const on = loved.includes(s.id)
               return (
-                <button key={f} type="button" onClick={() => cycleColour(f)} aria-pressed={st !== 'none'} className={chip(st)}>
-                  {st === 'loved' ? '♥ ' : ''}Any {f}
-                </button>
-              )
-            })}
-            {COLOUR_SHADES.map((s) => {
-              const st = colourState(s.id)
-              return (
-                <button key={s.id} type="button" onClick={() => cycleColour(s.id)} aria-pressed={st !== 'none'}
-                  className={`rounded-full px-5 py-2.5 text-[clamp(18px,1vw,24px)] transition-colors ${
-                    st === 'loved' ? 'bg-[#2B2B2B] text-white' : st === 'avoided' ? 'bg-[#F3E3E3] text-[#9B3A3A] line-through' : 'bg-white text-[#55534E] shadow-[0_8px_16px_-12px_rgba(120,120,120,0.7)]'}`}>
-                  {st === 'loved' ? '♥ ' : ''}{s.label.toLowerCase().replace(/(^|\s|\/)\S/g, (m) => m.toUpperCase())}
+                <button key={s.id} type="button" onClick={() => toggleLove(s.id, setLoved, setAvoided)} aria-pressed={on} className={chip(on ? 'loved' : 'none')}>
+                  {s.label.toLowerCase().replace(/(^|\s|\/)\S/g, (m) => m.toUpperCase())}
                 </button>
               )
             })}
           </div>
+          {!editingPreferences.colours && !loved.length && <p className={`${label} mt-5`}>Choose the colours you love.</p>}
           <h3 className={`${label} mt-8`}>Anything you never wear</h3>
           <textarea className={`${field} !rounded-[28px] mt-3 min-h-[110px] resize-y myra-guide-text`} value={neverWears}
             onChange={(e) => setNeverWears(e.target.value)} placeholder="Crop tops, anything too tight on the arms…" />
@@ -307,14 +288,14 @@ export default function YouSettings({ testMemberId, initial }: { testMemberId?: 
         <section className={`${card} lg:col-span-2`}>
           <div className="flex items-baseline justify-between gap-4 flex-wrap">
             <h2 className={heading}>Shapes</h2>
-            <p className={label}>Tap once to love, twice to never see, three times to clear.</p>
+            <button type="button" onClick={() => setEditingPreferences((p) => ({ ...p, shapes: !p.shapes }))} className="text-[18px] text-[#2B2B2B] underline underline-offset-4">{editingPreferences.shapes ? 'Done' : 'Edit shapes'}</button>
           </div>
           <div className="mt-6 flex flex-wrap gap-2.5">
-            {SHAPE_PREFERENCES.map((s) => {
-              const st = shape.state(s.id)
+            {SHAPE_PREFERENCES.filter((s) => editingPreferences.shapes || shapesLoved.includes(s.id)).map((s) => {
+              const on = shapesLoved.includes(s.id)
               return (
-                <button key={s.id} type="button" onClick={() => shape.cycle(s.id)} aria-pressed={st !== 'none'} className={chip(st)}>
-                  {st === 'loved' ? '♥ ' : ''}{titleCase(s.label)}
+                <button key={s.id} type="button" onClick={() => toggleLove(s.id, setShapesLoved, setShapesAvoided)} aria-pressed={on} className={chip(on ? 'loved' : 'none')}>
+                  {titleCase(s.label)}
                 </button>
               )
             })}
@@ -325,14 +306,14 @@ export default function YouSettings({ testMemberId, initial }: { testMemberId?: 
         <section className={`${card} lg:col-span-2`}>
           <div className="flex items-baseline justify-between gap-4 flex-wrap">
             <h2 className={heading}>Pieces</h2>
-            <p className={label}>What you live in, and what you never wear.</p>
+            <button type="button" onClick={() => setEditingPreferences((p) => ({ ...p, pieces: !p.pieces }))} className="text-[18px] text-[#2B2B2B] underline underline-offset-4">{editingPreferences.pieces ? 'Done' : 'Edit pieces'}</button>
           </div>
           <div className="mt-6 flex flex-wrap gap-2.5">
-            {PIECE_PREFERENCES.map((p) => {
-              const st = piece.state(p.value)
+            {PIECE_PREFERENCES.filter((p) => editingPreferences.pieces || typesLoved.includes(p.value)).map((p) => {
+              const on = typesLoved.includes(p.value)
               return (
-                <button key={p.value} type="button" onClick={() => piece.cycle(p.value)} aria-pressed={st !== 'none'} className={chip(st)}>
-                  {st === 'loved' ? '♥ ' : ''}{titleCase(p.label)}
+                <button key={p.value} type="button" onClick={() => toggleLove(p.value, setTypesLoved, setTypesAvoided)} aria-pressed={on} className={chip(on ? 'loved' : 'none')}>
+                  {titleCase(p.label)}
                 </button>
               )
             })}

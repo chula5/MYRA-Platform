@@ -261,11 +261,10 @@ export default function ShopBrain({ testMemberId }: { testMemberId?: string }) {
   const doors = view.saved.length ? 3 : 2
 
   const labels = view.brands.slice(0, 2)
-  const brandLine = labels.length ? labels.join(' & ').toUpperCase() : 'THOSE LABELS'
   const current = anchor ? view.saved.find((s) => s.item_id === anchor) ?? view.saved[0] : view.saved[0]
   const shown = current ? looks[current.item_id] : undefined
-  const brandsTitle = view.fromBrandsKind === 'same' ? `MORE FROM ${brandLine}` : `LIKE ${brandLine}`
-  const brandsNote = view.fromBrandsKind === 'same' ? 'THE LABELS YOU WERE READING' : `MYRA DOESN'T STOCK ${brandLine} — THESE STAND BESIDE IT`
+  const brandsTitle = 'MORE FROM YOUR BRANDS'
+  const brandsNote = 'FROM THE BRANDS YOU LOVE'
   const firstLook = current ? looks[current.item_id]?.[0] : undefined
   const styledCover = firstLook?.image_url ?? current?.image_url ?? null
   const styledInside = view.saved.slice(0, 9).map((s) => s.image_url ?? null)

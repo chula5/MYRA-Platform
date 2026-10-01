@@ -37,7 +37,7 @@ export default function OutfitBuilder({ testMemberId }: { testMemberId?: string 
   const [occasion, setOccasion] = useState('')
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<string | null>(null)
-  const [shelf, setShelf] = useState<'wardrobe' | 'saved'>('wardrobe')
+  const [source, setSource] = useState<'wardrobe' | 'saved' | 'both'>('wardrobe')
 
   useEffect(() => {
     let alive = true
@@ -52,7 +52,7 @@ export default function OutfitBuilder({ testMemberId }: { testMemberId?: string 
   )
 
   const inOutfit = useMemo(() => new Set(chosen.map(keyOf)), [chosen])
-  const rail = shelf === 'wardrobe' ? shelves?.wardrobe ?? [] : shelves?.saved ?? []
+  const rail = source === 'wardrobe' ? shelves?.wardrobe ?? [] : source === 'saved' ? shelves?.saved ?? [] : [...(shelves?.wardrobe ?? []), ...(shelves?.saved ?? [])]
   const wouldHelp = useMemo(
     () => piecesThatWouldHelp(read, [...(shelves?.wardrobe ?? []), ...(shelves?.saved ?? [])], inOutfit),
     [read, shelves, inOutfit],
@@ -92,8 +92,7 @@ export default function OutfitBuilder({ testMemberId }: { testMemberId?: string 
   return (
     <section className={`${card} lg:col-span-2`} data-tour="builder">
       <div className="flex items-baseline justify-between gap-4 flex-wrap">
-        <h2 className={heading}>Build an outfit</h2>
-        <p className={label}>Your own pieces, and the ones you have saved.</p>
+        <h2 className={heading}>BUILD YOUR OWN OUTFIT</h2>
       </div>
 
       {nothingToBuildWith ? (
@@ -184,25 +183,13 @@ export default function OutfitBuilder({ testMemberId }: { testMemberId?: string 
           {note && <p className={`${label} myra-guide-text mt-4`}>{note}</p>}
 
           {/* ── The rails ──────────────────────────────────────────────────── */}
-          <div className="mt-8 flex gap-2.5">
-            <button
-              type="button"
-              onClick={() => setShelf('wardrobe')}
-              className={shelf === 'wardrobe'
-                ? 'rounded-full px-5 py-2.5 text-[clamp(18px,1vw,24px)] bg-[#2B2B2B] text-white'
-                : quietPill}
-            >
-              Your wardrobe · {shelves.wardrobe.length}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShelf('saved')}
-              className={shelf === 'saved'
-                ? 'rounded-full px-5 py-2.5 text-[clamp(18px,1vw,24px)] bg-[#2B2B2B] text-white'
-                : quietPill}
-            >
-              Saved pieces · {shelves.saved.length}
-            </button>
+          <div className="mt-8">
+            <label className="sr-only" htmlFor="outfit-source">Pieces to use</label>
+            <select id="outfit-source" value={source} onChange={(e) => setSource(e.target.value as typeof source)} className="rounded-full bg-white px-5 py-2.5 text-[clamp(18px,1vw,24px)] text-[#2B2B2B] shadow-[0_8px_16px_-12px_rgba(120,120,120,0.7)] outline-none">
+              <option value="wardrobe">Wardrobe · {shelves.wardrobe.length}</option>
+              <option value="saved">New pieces · {shelves.saved.length}</option>
+              <option value="both">Both · {shelves.wardrobe.length + shelves.saved.length}</option>
+            </select>
           </div>
 
           <div className="mt-5 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
@@ -227,7 +214,7 @@ export default function OutfitBuilder({ testMemberId }: { testMemberId?: string 
             })}
             {!rail.length && (
               <p className={`${label} myra-guide-text col-span-full`}>
-                {shelf === 'wardrobe'
+                {source === 'wardrobe'
                   ? 'No pieces in your wardrobe yet.'
                   : 'Nothing saved yet — tap the heart on a piece in one of your looks.'}
               </p>

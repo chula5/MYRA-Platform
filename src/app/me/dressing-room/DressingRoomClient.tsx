@@ -22,7 +22,7 @@ import OutfitBuilder from './OutfitBuilder'
 import { loadEmailPanel } from './email-actions'
 import { useScrollTo } from '@/lib/smooth-scroll'
 
-const TABS: { id: string; label: string; slots: string[] }[] = [
+const TYPES: { id: string; label: string; slots: string[] }[] = [
   { id: 'all', label: 'Everything', slots: [] },
   { id: 'top', label: 'Tops', slots: ['top'] },
   { id: 'bottom', label: 'Bottoms', slots: ['bottom'] },
@@ -43,7 +43,7 @@ export default function DressingRoomClient({
   /** HER VIEW opens the piece's own page in place rather than navigating. */
   onOpenPiece?: (itemId: string) => void
 }) {
-  const [tab, setTab] = useState('all')
+  const [typeFilter, setTypeFilter] = useState('all')
   // Is an inbox connected? Decides what the button in the room says.
   const [inboxes, setInboxes] = useState<number | null>(null)
   const scrollTo = useScrollTo()
@@ -73,11 +73,11 @@ export default function DressingRoomClient({
     return m
   }, [view.pieces])
 
-  const tabs = TABS.filter((t) => t.id === 'all' || t.slots.some((s) => (counts.get(s) ?? 0) > 0))
+  const types = TYPES.filter((t) => t.id === 'all' || t.slots.some((s) => (counts.get(s) ?? 0) > 0))
   const shown = useMemo(() => {
-    const t = TABS.find((x) => x.id === tab)
+    const t = TYPES.find((x) => x.id === typeFilter)
     return !t || !t.slots.length ? view.pieces : view.pieces.filter((p) => t.slots.includes(p.slot ?? ''))
-  }, [tab, view.pieces])
+  }, [typeFilter, view.pieces])
 
   /** Tapping a piece shows the looks she already has with it — free and instant. */
   async function pick(p: DressingRoomPiece) {
@@ -167,17 +167,9 @@ export default function DressingRoomClient({
             </div>
 
             {view.pieces.length > 0 && (
-              <div className="flex flex-wrap gap-2.5">
-                {tabs.map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() => setTab(t.id)}
-                    className={`text-[20px] xl:text-[23px] 2xl:text-[27px] px-5 py-2.5 rounded-full transition-colors ${tab === t.id ? 'bg-[#2B2B2B] text-white' : 'bg-[rgba(255,255,255,0.75)] text-[#4A4E57] hover:bg-white'}`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
+              <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} aria-label="Filter wardrobe by type" className="rounded-full bg-white/85 px-5 py-2.5 text-[18px] xl:text-[21px] text-[#2B2B2B] outline-none">
+                {types.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+              </select>
             )}
           </div>
 
@@ -188,7 +180,7 @@ export default function DressingRoomClient({
               <path d="M24 10l8 5 8-5 4 11-4 4 5 26H19l5-26-4-4z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
             </svg>
             <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#4A4E57] leading-snug">
-              {picked ? picked.product_name : 'Tap a piece and MYRA builds the outfit around it.'}
+              {picked ? picked.product_name : 'Choose a piece to style.'}
             </p>
             {picked && (
               onOpenPiece ? (
@@ -225,12 +217,6 @@ export default function DressingRoomClient({
                             <FallbackImage src={p.image_url} thumbWidth={600} alt={p.product_name} className="absolute inset-0 w-full h-full object-contain" />
                           )}
                         </div>
-                        <div className="px-4 py-3">
-                          <p className="text-[19px] xl:text-[22px] 2xl:text-[26px] text-[#2B2B2B] leading-tight line-clamp-2">{p.product_name}</p>
-                          <p className="text-[18px] xl:text-[21px] 2xl:text-[25px] text-[#6E6B65] mt-1">
-                            {p.styled_in ? `In ${p.styled_in} look${p.styled_in === 1 ? '' : 's'}` : 'Not styled yet'}
-                          </p>
-                        </div>
                       </button>
                     )
                   })}
@@ -241,7 +227,7 @@ export default function DressingRoomClient({
               <aside data-tour="styling-pane" className="xl:sticky xl:top-6 self-start space-y-4">
                 {!picked && (
                   <div className="rounded-[16px] bg-white/70 px-6 py-12 text-center">
-                    <p className="text-[21px] xl:text-[24px] 2xl:text-[28px] text-[#4A4E57]">Tap a piece and MYRA styles it here, from your own wardrobe.</p>
+                    <p className="text-[21px] xl:text-[24px] 2xl:text-[28px] text-[#4A4E57]">Ask MYRA about a piece.</p>
                   </div>
                 )}
                 {picked && (
@@ -257,12 +243,13 @@ export default function DressingRoomClient({
                         <p className="text-[19px] xl:text-[22px] 2xl:text-[26px] text-[#6E6B65] mt-1">
                           {[picked.item_type?.replace(/_/g, ' '), picked.colour_family].filter(Boolean).join(' · ')}
                         </p>
+                        <p className="text-[18px] xl:text-[21px] tracking-[0.12em] text-[#6E6B65] mt-3">ASK MYRA TO BUILD AN OUTFIT</p>
                         <button
                           onClick={() => styleNow(picked)}
                           disabled={styling}
                           className="mt-3 text-[19px] xl:text-[22px] 2xl:text-[26px] px-5 py-2.5 rounded-full bg-[#2B2B2B] text-white disabled:opacity-40"
                         >
-                          {styling ? 'Building…' : looks.length ? 'Build more outfits' : 'Build new outfits'}
+                          {styling ? 'Building…' : looks.length ? 'Build more' : 'Build outfit'}
                         </button>
                         {looks.length > 0 && (
                           <button
@@ -284,7 +271,7 @@ export default function DressingRoomClient({
                       <input
                         value={ask}
                         onChange={(e) => setAsk(e.target.value)}
-                        placeholder="Find a white shirt to go with this…"
+                        placeholder="Find a black top to go with these bottoms…"
                         className="myra-guide-text flex-1 min-w-[240px] rounded-full bg-white px-6 py-3 text-[19px] xl:text-[22px] 2xl:text-[26px] outline-none border-2 border-transparent focus:border-[#C9C9C9]"
                       />
                       <button type="submit" disabled={styling || !ask.trim()} className="text-[19px] xl:text-[22px] 2xl:text-[26px] px-5 py-2.5 rounded-full bg-[#2B2B2B] text-white disabled:opacity-40">

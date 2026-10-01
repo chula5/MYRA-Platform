@@ -148,12 +148,10 @@ export default function ArchivalLooks({ testMemberId }: { testMemberId?: string 
   const chosen = view.looks.filter((l) => l.photo_status !== 'uploaded')
 
   return (
-    <section id="archival-looks" className="w-full rounded-[18px] bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] px-5 md:px-8 py-7 space-y-6 scroll-mt-6">
-      <div className="space-y-2">
+    <section id="archival-looks" className="w-full rounded-[18px] bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] px-5 md:px-8 py-5 space-y-4 scroll-mt-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-[26px] xl:text-[29px] 2xl:text-[33px] tracking-[0.06em] text-[#2B2B2B]">ARCHIVAL LOOKS</h2>
-        <p className={`${T} text-[#4A4E57] max-w-4xl`}>
-          Photos of what you already wear. MYRA keeps them here to learn how you put things together — and picks out the pieces, so you can add the ones you still own to your wardrobe in the Dressing Room.
-        </p>
+        <p className={`${T_SMALL} text-[#6E6B65]`}>Looks you wear · pieces MYRA spotted</p>
       </div>
 
       {view.error && <p className={`${T} text-[#B83A3A]`}>{view.error}</p>}
@@ -171,24 +169,21 @@ export default function ArchivalLooks({ testMemberId }: { testMemberId?: string 
           exists for Creator and Business accounts, so it shows only when it can work. */}
       {(
         <>
-          <div className="flex flex-wrap gap-3">
-            <button onClick={() => setImporting(true)} className="text-[22px] xl:text-[25px] 2xl:text-[29px] px-7 py-3.5 bg-[#2B2B2B] text-white rounded-full">
-              Import from Instagram
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => setImporting(true)} className="inline-flex items-center gap-2 text-[18px] xl:text-[21px] 2xl:text-[25px] px-5 py-2.5 bg-[#2B2B2B] text-white rounded-full">
+              <img src="/instagram.svg" alt="" className="w-5 h-5 invert" /> Import
             </button>
-            <button disabled={working('upload')} onClick={() => fileRef.current?.click()} className="text-[22px] xl:text-[25px] 2xl:text-[29px] px-7 py-3.5 border border-[#2B2B2B] text-[#2B2B2B] rounded-full disabled:opacity-40">
+            <button disabled={working('upload')} onClick={() => fileRef.current?.click()} className="text-[18px] xl:text-[21px] 2xl:text-[25px] px-5 py-2.5 border border-[#2B2B2B] text-[#2B2B2B] rounded-full disabled:opacity-40">
               {working('upload') ? 'Adding…' : 'Add photos'}
             </button>
             {!connected.length && view.instagramReady && (
               <a href={igHref} className="text-[22px] xl:text-[25px] 2xl:text-[29px] px-7 py-3.5 border border-[#2B2B2B] text-[#2B2B2B] rounded-full">Connect a Creator or Business account</a>
             )}
-            <button onClick={() => setMatching({ kind: 'upload' })} className="text-[22px] xl:text-[25px] 2xl:text-[29px] px-7 py-3.5 border border-[#2B2B2B] text-[#2B2B2B] rounded-full">
-              Find pieces like a picture
+            <button onClick={() => setMatching({ kind: 'upload' })} className="text-[18px] xl:text-[21px] 2xl:text-[25px] px-5 py-2.5 border border-[#2B2B2B] text-[#2B2B2B] rounded-full">
+              Find similar
             </button>
             <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => upload(e.target.files)} />
           </div>
-          <p className={`${T_SMALL} text-[#6E6B65] max-w-4xl`}>
-            <b>Import from Instagram</b> works for every account: MYRA walks you through asking Instagram for your photos, step by step. <b>Add photos</b> takes pictures straight from your computer or phone.
-          </p>
         </>
       )}
 
@@ -226,15 +221,15 @@ export default function ArchivalLooks({ testMemberId }: { testMemberId?: string 
               </button>
             </div>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 min-[2200px]:grid-cols-5 gap-5">
+          <div className="grid grid-cols-3 md:grid-cols-4 xl:grid-cols-5 min-[2200px]:grid-cols-6 gap-3">
             {waiting.map((l) => {
               const on = picked.has(l.look_id)
               return (
                 <article key={l.look_id} className="flex flex-col gap-3">
                   <button type="button" onClick={() => togglePick(l.look_id)} aria-pressed={on}
-                    className={`relative aspect-[3/4] bg-[#F3F2F0] overflow-hidden rounded-[16px] transition-shadow ${on ? 'ring-4 ring-[#2B2B2B] ring-offset-2' : ''}`}>
+                    className={`relative aspect-[4/5] bg-[#F3F2F0] overflow-hidden rounded-[12px] transition-shadow ${on ? 'ring-3 ring-[#2B2B2B] ring-offset-2' : ''}`}>
                     {l.image_url && <FallbackImage src={l.image_url} thumbWidth={800} alt="" className="absolute inset-0 w-full h-full object-cover" />}
-                    {on && <span className="absolute top-3 left-3 w-10 h-10 rounded-full bg-[#2B2B2B] text-white grid place-content-center text-[22px]">✓</span>}
+                    {on && <span className="absolute top-2 left-2 w-7 h-7 rounded-full bg-[#2B2B2B] text-white grid place-content-center">✓</span>}
                   </button>
                   <div className="flex items-center justify-between gap-2">
                     <button type="button" onClick={() => togglePick(l.look_id)}
@@ -252,44 +247,27 @@ export default function ArchivalLooks({ testMemberId }: { testMemberId?: string 
       )}
 
       {chosen.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 min-[2200px]:grid-cols-5 gap-5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 min-[2200px]:grid-cols-6 gap-3">
           {chosen.map((l) => {
             const looking = l.photo_status === 'detecting' || l.pieces.some((p) => WORKING.has(p.status))
             const offered = l.pieces.filter((p) => p.status === 'review' || p.status === 'approved' || WORKING.has(p.status))
             return (
-              <article key={l.look_id} className="bg-white rounded-[16px] overflow-hidden shadow-[0_1px_8px_rgba(43,43,43,0.06)] flex flex-col">
-                <div className="relative aspect-[3/4] bg-[#F3F2F0] overflow-hidden">
+              <article key={l.look_id} className="relative bg-white rounded-[12px] overflow-hidden shadow-[0_1px_8px_rgba(43,43,43,0.06)]">
+                <div className="relative aspect-[4/5] bg-[#F3F2F0] overflow-hidden">
                   {l.image_url && <FallbackImage src={l.image_url} thumbWidth={800} alt="" className="absolute inset-0 w-full h-full object-cover" />}
-                  <button onClick={() => removeLook(l.look_id)} aria-label="Remove this photo" className="absolute top-3 right-3 w-10 h-10 rounded-full bg-[rgba(255,255,255,0.9)] text-[22px] leading-none text-[#2B2B2B]">×</button>
-                </div>
-                <div className="px-4 py-4 space-y-3">
-                  {l.summary && <p className={`${T_SMALL} text-[#4A4E57] leading-snug`}>{l.summary}</p>}
-                  <button type="button" onClick={() => setMatching({ kind: 'archival', id: l.look_id, imageUrl: l.image_url })}
-                    className={`${T_SMALL} px-5 py-2 rounded-full bg-white text-[#2B2B2B] shadow-[0_8px_18px_-12px_rgba(43,43,43,0.5)]`}>
-                    Find pieces like this
-                  </button>
-                  {looking && <p className={`${T_SMALL} text-[#6E6B65]`}>MYRA is looking at this one…</p>}
-                  {!looking && !offered.length && <p className={`${T_SMALL} text-[#6E6B65]`}>{l.photo_status === 'no_garments' ? 'No pieces MYRA could pick out here.' : l.photo_status === 'failed' ? 'MYRA could not read this photo.' : 'Kept as a look.'}</p>}
-                  {offered.map((p) => (
-                    <div key={p.extraction_id} className="flex items-center gap-3">
-                      <div className="relative w-14 h-[74px] xl:w-16 xl:h-[86px] bg-[#F3F2F0] rounded-[10px] overflow-hidden shrink-0">
-                        {p.image_url && <FallbackImage src={p.image_url} thumbWidth={200} alt={p.name} className="absolute inset-0 w-full h-full object-contain" />}
+                  <button onClick={() => removeLook(l.look_id)} aria-label="Remove this photo" className="absolute top-2 right-2 w-7 h-7 rounded-full bg-[rgba(255,255,255,0.9)] text-[18px] leading-none text-[#2B2B2B]">×</button>
+                  <button type="button" onClick={() => setMatching({ kind: 'archival', id: l.look_id, imageUrl: l.image_url })} className="absolute bottom-2 left-2 rounded-full bg-white/95 px-2.5 py-1 text-[13px] text-[#2B2B2B]">Find similar</button>
+                  <div className="absolute inset-x-2 bottom-2 flex flex-col gap-1.5 pointer-events-none">
+                    {looking && <span className="self-end rounded-full bg-white/95 px-2 py-1 text-[12px] text-[#6E6B65]">Finding pieces…</span>}
+                    {offered.slice(0, 3).map((p) => (
+                      <div key={p.extraction_id} className="pointer-events-auto flex items-center gap-1.5 rounded-lg bg-white/95 p-1.5">
+                        <div className="relative w-7 h-8 bg-[#F3F2F0] rounded overflow-hidden shrink-0">{p.image_url && <FallbackImage src={p.image_url} thumbWidth={100} alt="" className="absolute inset-0 w-full h-full object-contain" />}</div>
+                        <span className="min-w-0 flex-1 truncate text-[12px] text-[#2B2B2B]">{p.name}</span>
+                        {p.status === 'approved' ? <span className="text-[11px] text-[#6E6B65]">Added</span> : p.status === 'review' ? <button disabled={working(p.extraction_id)} onClick={() => run(p.extraction_id, async () => { const r = await addArchivalPiece(p.extraction_id, testMemberId); setMsg(r.error ?? `${p.name} is on your rail.`); await refresh(); if (!r.error) router.refresh() })} className="shrink-0 rounded-full bg-[#2B2B2B] px-2 py-1 text-[11px] text-white disabled:opacity-40">{working(p.extraction_id) ? '…' : 'Add'}</button> : <span className="text-[11px] text-[#6E6B65]">…</span>}
+                        {p.status === 'review' && <button disabled={working(p.extraction_id)} onClick={() => run(p.extraction_id, async () => { await dismissArchivalPiece(p.extraction_id, testMemberId); await refresh() })} aria-label={`Remove ${p.name}`} className="text-[14px] text-[#6E6B65]">×</button>}
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <p className={`${T_SMALL} text-[#2B2B2B] leading-tight line-clamp-2`}>{p.name}</p>
-                        {p.status === 'approved' ? (
-                          <p className={`${T_SMALL} text-[#6E6B65]`}>In your wardrobe</p>
-                        ) : p.status === 'review' ? (
-                          <div className="flex gap-4 mt-1">
-                            <button disabled={working(p.extraction_id)} onClick={() => run(p.extraction_id, async () => { const r = await addArchivalPiece(p.extraction_id, testMemberId); setMsg(r.error ?? `${p.name} is on your rail.`); await refresh(); if (!r.error) router.refresh() })} className={`${T_SMALL} underline underline-offset-4 text-[#2B2B2B] disabled:opacity-40`}>{working(p.extraction_id) ? 'Adding…' : 'Add to wardrobe'}</button>
-                            <button disabled={working(p.extraction_id)} onClick={() => run(p.extraction_id, async () => { await dismissArchivalPiece(p.extraction_id, testMemberId); await refresh() })} className={`${T_SMALL} underline underline-offset-4 text-[#6E6B65] disabled:opacity-40`}>Not mine now</button>
-                          </div>
-                        ) : (
-                          <p className={`${T_SMALL} text-[#6E6B65]`}>Cutting it out…</p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               </article>
             )
