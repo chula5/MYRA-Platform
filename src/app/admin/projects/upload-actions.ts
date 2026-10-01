@@ -4,10 +4,7 @@ import crypto from 'crypto'
 import { createServerClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import { assertAdmin } from '@/lib/admin-audit'
-
-const CLOUD_NAME = 'dugby2pow'
-const API_KEY = '333725823491761'
-const API_SECRET = 'xlmEKzOlLW9rLxNA6rqTQBn3dkk'
+import { getCloudinaryConfig } from '@/lib/cloudinary-config'
 
 function makePublicId(imageUrl: string): string {
   try {
@@ -30,6 +27,7 @@ export async function uploadOutfitToCloudinaryAndCreateProject(formData: FormDat
   if (!imageUrl) throw new Error('Image URL is required')
 
   // 1. Upload to Cloudinary
+  const { cloudName: CLOUD_NAME, apiKey: API_KEY, apiSecret: API_SECRET } = getCloudinaryConfig()
   const timestamp = String(Math.floor(Date.now() / 1000))
   const folder = 'outfit-saves'
   const publicId = makePublicId(imageUrl)

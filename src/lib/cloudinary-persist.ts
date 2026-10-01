@@ -1,9 +1,5 @@
 import crypto from 'crypto'
-
-// Cloudinary creds (same account used elsewhere in the app)
-const CLOUD_NAME = 'dugby2pow'
-const API_KEY = '333725823491761'
-const API_SECRET = 'xlmEKzOlLW9rLxNA6rqTQBn3dkk'
+import { getCloudinaryConfig, cloudinaryConfigured } from '@/lib/cloudinary-config'
 
 export function isCloudinaryUrl(url: string | null | undefined): boolean {
   return !!url && url.includes('res.cloudinary.com')
@@ -98,14 +94,19 @@ export async function uploadImageBytesToCloudinary(
 }
 
 async function signedUpload(file: string, opts: { folder?: string; publicId?: string }): Promise<string | null> {
+  if (!cloudinaryConfigured()) {
+    console.error('[persistImageToCloudinary] Cloudinary is not configured — skipping upload')
+    return null
+  }
+  const { cloudName, apiKey, apiSecret } = getCloudinaryConfig()
   const folder = opts.folder ?? 'outfit-saves'
   const publicId = (opts.publicId ?? `img-${Date.now()}`).toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 100)
   const timestamp = String(Math.floor(Date.now() / 1000))
   const paramsToSign = `folder=${folder}&public_id=${publicId}&timestamp=${timestamp}`
-  const signature = crypto.createHash('sha1').update(paramsToSign + API_SECRET).digest('hex')
+  const signature = crypto.createHash('sha1').update(paramsToSign + apiSecret).digest('hex')
 
   const form = new FormData()
-  form.append('api_key', API_KEY)
+  form.append('api_key', apiKey)
   form.append('timestamp', timestamp)
   form.append('signature', signature)
   form.append('folder', folder)
@@ -113,7 +114,7 @@ async function signedUpload(file: string, opts: { folder?: string; publicId?: st
   form.append('file', file)
 
   try {
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
       method: 'POST',
       body: form,
     })

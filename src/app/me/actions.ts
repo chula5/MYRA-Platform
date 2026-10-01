@@ -21,10 +21,7 @@ import {
 import { buildOutfitVector, cosine } from '@/lib/taste-vector'
 import { poolFor, personaWeight, shouldRecompute } from '@/lib/user-persona'
 import type { OutfitWithItems } from '@/types/database'
-
-const CLOUD_NAME = 'dugby2pow'
-const API_KEY = '333725823491761'
-const API_SECRET = 'xlmEKzOlLW9rLxNA6rqTQBn3dkk'
+import { getCloudinaryConfig, cloudinaryConfigured } from '@/lib/cloudinary-config'
 
 const UPLOAD_SIGNAL_WEIGHT = 5
 
@@ -38,6 +35,11 @@ async function requireClient() {
 /** Upload the raw file straight to Cloudinary — she picks from a camera roll,
  *  so there is no source URL to re-host. */
 async function uploadFileToCloudinary(file: File, folder: string): Promise<string | null> {
+  if (!cloudinaryConfigured()) {
+    console.error('[uploadFileToCloudinary] Cloudinary is not configured — skipping upload')
+    return null
+  }
+  const { cloudName: CLOUD_NAME, apiKey: API_KEY, apiSecret: API_SECRET } = getCloudinaryConfig()
   try {
     const timestamp = String(Math.floor(Date.now() / 1000))
     const publicId = `up-${crypto.randomBytes(6).toString('hex')}`

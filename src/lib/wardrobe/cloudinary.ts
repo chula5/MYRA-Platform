@@ -8,8 +8,9 @@
 // for the import itself.
 import crypto from 'crypto'
 import { uploadBase64ToCloudinary } from '@/app/admin/items/cloudinary-upload'
+import { cloudinaryCloudName } from '@/lib/cloudinary-config'
 
-const CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'dugby2pow'
+const CLOUD_NAME = cloudinaryCloudName()
 const API_KEY = process.env.CLOUDINARY_API_KEY || ''
 const API_SECRET = process.env.CLOUDINARY_API_SECRET || ''
 

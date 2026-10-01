@@ -4,10 +4,7 @@
 // wrappers in ./cloudinary-upload.gated.ts. Don't add 'use server' here.
 
 import crypto from 'crypto'
-
-const CLOUD_NAME = 'dugby2pow'
-const API_KEY = '333725823491761'
-const API_SECRET = 'xlmEKzOlLW9rLxNA6rqTQBn3dkk'
+import { getCloudinaryConfig, cloudinaryConfigured } from '@/lib/cloudinary-config'
 
 function makePublicId(productUrl: string): string {
   try {
@@ -269,6 +266,8 @@ export async function uploadBase64ToCloudinary(
   base64DataUri: string,
   sourceUrl: string
 ): Promise<{ cloudinaryUrl?: string; error?: string }> {
+  if (!cloudinaryConfigured()) return { error: 'Cloudinary is not configured' }
+  const { cloudName: CLOUD_NAME, apiKey: API_KEY, apiSecret: API_SECRET } = getCloudinaryConfig()
   const timestamp = String(Math.floor(Date.now() / 1000))
   const folder = 'outfit-saves'
   const publicId = makePublicId(sourceUrl)
@@ -306,6 +305,9 @@ export async function scrapeAndUploadToCloudinary(
   if (!imageUrl) {
     return { error: 'Could not find a product image on this page. Try right-clicking the image in your browser → Copy Image Address, then paste it into the Image URL field.' }
   }
+
+  if (!cloudinaryConfigured()) return { error: 'Cloudinary is not configured' }
+  const { cloudName: CLOUD_NAME, apiKey: API_KEY, apiSecret: API_SECRET } = getCloudinaryConfig()
 
   // 2. Sign the upload
   const timestamp = String(Math.floor(Date.now() / 1000))

@@ -20,8 +20,8 @@ import { createAdminClient } from '@/lib/supabase-server'
 import { persistImageToCloudinary, isCloudinaryUrl } from '@/lib/cloudinary-persist'
 import { slotForItemType, type Slot } from '@/lib/composer'
 import type { ItemWithBrand } from '@/lib/admin-queries'
+import { cloudinaryCloudName } from '@/lib/cloudinary-config'
 
-const CLOUD_NAME = 'dugby2pow'
 const CANVAS_W = 1000
 const CANVAS_H = 1333
 const CANVAS_BG = 'f7f7f5'
@@ -126,7 +126,7 @@ export async function buildComposedGroupUrl(inputs: ComposedGroupInput[]): Promi
   }
   components.push('f_auto,q_auto')
 
-  return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/${components.join('/')}/${first.publicId}`
+  return `https://res.cloudinary.com/${cloudinaryCloudName()}/image/upload/${components.join('/')}/${first.publicId}`
 }
 
 /**
