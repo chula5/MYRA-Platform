@@ -157,13 +157,18 @@ function Door({
         ) : (
           <p className="absolute inset-x-6 bottom-10 text-center text-[19px] text-[#55534E]">{empty}</p>
         )}
-        <div className="absolute inset-0 flex items-center justify-center px-6">
-          {/* One pill for all three doors: the same width and the same height
-              on every one of them, whether the words run to one line or two.
-              Set inline, so no utility class can leave one door out. */}
+        <div className="absolute inset-0 flex items-center justify-center px-2 sm:px-3">
+          {/* One pill for all three doors, and the same box on every one. The
+              width and the height are set inline, in the viewport's own units,
+              because a utility class for them did not survive into the built
+              CSS: the one-line label was rendering 16px tall beside a two-line
+              one at 31px, which is the squat rectangle this used to look like.
+              The height is FIXED rather than a floor, so a label that wraps to
+              two lines cannot grow taller than its neighbours, and it is set
+              above the tallest wrap (three lines) so nothing is clipped. */}
           <p
-            className="bg-[rgba(255,255,255,0.88)] backdrop-blur-[2px] rounded-full flex items-center justify-center px-5 text-center text-[11px] sm:text-[clamp(15px,1.25vw,26px)] tracking-[0.05em] leading-[1.05] text-[#2B2B2B]"
-            style={{ width: '100%', maxWidth: 320, minHeight: '3.4em' }}
+            className="bg-[rgba(255,255,255,0.9)] backdrop-blur-[2px] rounded-full flex items-center justify-center px-2 sm:px-4 text-center text-[10px] md:text-[15px] tracking-[0.05em] leading-[1.2] text-[#2B2B2B] shadow-[0_2px_16px_rgba(43,43,43,0.16)]"
+            style={{ width: 'min(240px, 100%)', height: 'clamp(56px, 3.4vw, 66px)' }}
           >
             {title}
           </p>
