@@ -158,17 +158,17 @@ function Door({
           <p className="absolute inset-x-6 bottom-10 text-center text-[19px] text-[#55534E]">{empty}</p>
         )}
         <div className="absolute inset-0 flex items-center justify-center px-2 sm:px-3">
-          {/* One pill for all three doors, and the same box on every one. The
+          {/* One pill for all three doors, and the same box on every one: the
               width and the height are set inline, in the viewport's own units,
               because a utility class for them did not survive into the built
-              CSS: the one-line label was rendering 16px tall beside a two-line
-              one at 31px, which is the squat rectangle this used to look like.
-              The height is FIXED rather than a floor, so a label that wraps to
-              two lines cannot grow taller than its neighbours, and it is set
-              above the tallest wrap (three lines) so nothing is clipped. */}
+              CSS. Kept small — it sits over the picture, so it is sized to the
+              words and no more. The height is FIXED rather than a floor, so a
+              label that wraps to two lines cannot grow taller than its
+              neighbours, and it is set above the tallest wrap so nothing is
+              clipped. */}
           <p
-            className="bg-[rgba(255,255,255,0.9)] backdrop-blur-[2px] rounded-full flex items-center justify-center px-2 sm:px-4 text-center text-[10px] md:text-[15px] tracking-[0.05em] leading-[1.2] text-[#2B2B2B] shadow-[0_2px_16px_rgba(43,43,43,0.16)]"
-            style={{ width: 'min(240px, 100%)', height: 'clamp(56px, 3.4vw, 66px)' }}
+            className="bg-[rgba(255,255,255,0.9)] backdrop-blur-[2px] rounded-full flex items-center justify-center px-2 sm:px-3 text-center text-[10px] md:text-[13px] tracking-[0.05em] leading-[1.15] text-[#2B2B2B] shadow-[0_2px_16px_rgba(43,43,43,0.16)]"
+            style={{ width: 'min(180px, 88%)', height: 'clamp(44px, 2.8vw, 54px)' }}
           >
             {title}
           </p>
@@ -302,7 +302,13 @@ export default function ShopBrain({ testMemberId }: { testMemberId?: string }) {
       </div>
 
       {/* The three doors. */}
-      <div className={`grid ${doors === 3 ? 'grid-cols-3' : 'grid-cols-2'} gap-3 sm:gap-8 lg:gap-12 2xl:gap-16 w-full px-2 sm:px-4 lg:px-8`}>
+      {/* The three doors. A phone stacks them down the page, one at a time,
+          so each picture is read at its own size; a desktop stands them in a
+          row, which is how the row of three was drawn. The row waits for a
+          desktop rather than a tablet: three doors across a narrow screen
+          leave each picture too small to read and the label too narrow to
+          sit in. */}
+      <div className={`grid ${doors === 3 ? 'grid-cols-1 lg:grid-cols-3' : 'grid-cols-1 lg:grid-cols-2'} gap-5 sm:gap-8 lg:gap-12 2xl:gap-16 w-full px-2 sm:px-4 lg:px-8`}>
         <Door
           title="MORE OF THE SAME"
           cover={view.similar[0]?.image_url ?? null}

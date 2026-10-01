@@ -322,6 +322,28 @@ html {
   .myra-pearl { background-attachment: scroll; }
 }
 
+/* ── The status bar's strip ───────────────────────────────────── */
+/* The web view runs under the clock (viewportFit: cover), so without this a
+   scrolling page slides behind the time. A strip the height of the safe area,
+   painted as the very top of the room, keeps that edge reading as the room and
+   hides whatever passes beneath it; the matching padding holds the page clear
+   of the clock when it is at its top. Both measure zero on a desktop, so
+   nothing changes there. */
+.myra-safe-top {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: env(safe-area-inset-top, 0px);
+  background-color: #F1F1F3;
+  background-image: radial-gradient(130% 90% at 50% 0%, #F7F7F9 0%, #E9E9EC 48%, #DEDEE2 100%);
+  z-index: 80;
+  pointer-events: none;
+}
+.myra-safe-top-pad {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
 .myra-texture {
   background-color: #C5C0B8;
   background-image: url('/grey-bg.webp');

@@ -21,7 +21,8 @@ export default async function MeLayout({ children }: { children: React.ReactNode
   if (!isAdmin && !(await resolveClientMember())) redirect('/')
 
   return (
-    <div className="min-h-screen myra-pearl">
+    <div className="min-h-screen myra-pearl myra-safe-top-pad">
+      <div className="myra-safe-top" aria-hidden />
       <MeChrome
         signOut={
           <form action={earlyAccessSignOut}>
