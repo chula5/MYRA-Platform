@@ -44,6 +44,16 @@ const field = 'w-full rounded-full bg-white px-6 py-4 text-[clamp(20px,1.1vw,28p
 const pill = (on: boolean) =>
   `rounded-full px-5 py-2.5 text-[clamp(18px,1vw,24px)] transition-colors ${on ? 'bg-[#2B2B2B] text-white' : 'bg-white text-[#55534E] hover:text-[#2B2B2B] shadow-[0_8px_16px_-12px_rgba(120,120,120,0.7)]'}`
 
+function ServiceMark({ service }: { service: 'safari' | 'chrome' | 'claude' | 'chatgpt' | 'gmail' | 'calendar' | 'instagram' | 'email' }) {
+  const text: Record<typeof service, string> = { safari: 'S', chrome: 'C', claude: 'C', chatgpt: '◎', gmail: 'M', calendar: '31', instagram: '◎', email: '@' }
+  const tone: Record<typeof service, string> = {
+    safari: 'bg-[#1677D2]', chrome: 'bg-[conic-gradient(#E94135_0_33%,#F5C443_0_56%,#34A853_0_75%,#4285F4_0)]',
+    claude: 'bg-[#D97757]', chatgpt: 'bg-[#111111]', gmail: 'bg-white text-[#DB4437] border border-[#E6E6E6]',
+    calendar: 'bg-[#4285F4]', instagram: 'bg-[linear-gradient(135deg,#833AB4,#FD1D1D,#FCAF45)]', email: 'bg-[#6E6B65]',
+  }
+  return <span aria-hidden className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl text-[17px] font-bold text-white ${tone[service]}`}>{text[service]}</span>
+}
+
 function when(iso: string | null) {
   if (!iso) return 'not yet'
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
@@ -183,9 +193,9 @@ export default function YouSettings({ testMemberId, initial }: { testMemberId?: 
   const families = COLOUR_FAMILY_IDS.filter((f) => loved.includes(f) || avoided.includes(f))
 
   const accounts = [
-    ...view.inboxes.map((c) => ({ id: c.connection_id, kind: 'inbox' as const, title: c.provider === 'gmail' ? 'Gmail' : 'Email', who: c.email, when: `read ${when(c.last_scanned_at)}` })),
-    ...view.calendars.map((c) => ({ id: c.connection_id, kind: 'calendar' as const, title: 'Calendar', who: c.email, when: `checked ${when(c.last_synced_at)}` })),
-    ...view.instagram.map((c) => ({ id: c.connection_id, kind: 'instagram' as const, title: 'Instagram', who: c.username ? `@${c.username}` : 'Instagram', when: `synced ${when(c.last_synced_at)}` })),
+    ...view.inboxes.map((c) => ({ id: c.connection_id, kind: 'inbox' as const, service: c.provider === 'gmail' ? 'gmail' as const : 'email' as const, title: c.provider === 'gmail' ? 'Gmail' : 'Email', who: c.email, when: `read ${when(c.last_scanned_at)}` })),
+    ...view.calendars.map((c) => ({ id: c.connection_id, kind: 'calendar' as const, service: 'calendar' as const, title: 'Google Calendar', who: c.email, when: `checked ${when(c.last_synced_at)}` })),
+    ...view.instagram.map((c) => ({ id: c.connection_id, kind: 'instagram' as const, service: 'instagram' as const, title: 'Instagram', who: c.username ? `@${c.username}` : 'Instagram', when: `synced ${when(c.last_synced_at)}` })),
   ]
 
   return (
@@ -333,36 +343,18 @@ export default function YouSettings({ testMemberId, initial }: { testMemberId?: 
         <section id="mirror" className={`${card} lg:col-span-2 scroll-mt-8`}>
           <div className="flex items-baseline justify-between gap-4 flex-wrap">
             <h2 className={heading}>MYRA in Safari and Chrome</h2>
-            <p className={label}>Every brand site, already in your order.</p>
+            <p className={label}>Shop in your own order.</p>
           </div>
-          <p className={`${label} myra-guide-text mt-3 max-w-4xl`}>
-            Add the MYRA Mirror extension to your browser, then connect it to you. After that, any brand site you open
-            shows the pieces you would actually wear first — the site itself stays the brand&rsquo;s own. It only reads
-            the shop pages you open, and it can never buy anything.
-          </p>
-          <div className="mt-5 flex flex-wrap items-center gap-4">
-            {MIRROR_SAFARI_URL
-              ? <a href={MIRROR_SAFARI_URL} target="_blank" rel="noopener noreferrer" className={pill(false)}>Add to Safari</a>
-              : <span className={`${pill(false)} opacity-60`}>Add to Safari · coming in the next app update</span>}
-            {MIRROR_CHROME_URL
-              ? <a href={MIRROR_CHROME_URL} target="_blank" rel="noopener noreferrer" className={pill(false)}>Add to Chrome</a>
-              : <span className={`${pill(false)} opacity-60`}>Add to Chrome · link coming soon</span>}
-            <button type="button" onClick={connectMirror} className={pill(true)}>
-              {view.mirror.connected ? 'Connect it again' : 'Connect it to me'}
-            </button>
+          <div className="mt-5 flex flex-wrap gap-4">
+            {MIRROR_SAFARI_URL ? <a href={MIRROR_SAFARI_URL} target="_blank" rel="noopener noreferrer" className="flex min-w-[180px] flex-1 items-center gap-4 rounded-2xl bg-white px-4 py-4 shadow-[0_8px_16px_-12px_rgba(120,120,120,0.7)]"><ServiceMark service="safari" /><span className={label}>Add in Safari</span></a>
+              : <button type="button" onClick={connectMirror} className="flex min-w-[180px] flex-1 items-center gap-4 rounded-2xl bg-white px-4 py-4 text-left shadow-[0_8px_16px_-12px_rgba(120,120,120,0.7)]"><ServiceMark service="safari" /><span className={label}>Open in Safari</span></button>}
+            {MIRROR_CHROME_URL ? <a href={MIRROR_CHROME_URL} target="_blank" rel="noopener noreferrer" className="flex min-w-[180px] flex-1 items-center gap-4 rounded-2xl bg-white px-4 py-4 shadow-[0_8px_16px_-12px_rgba(120,120,120,0.7)]"><ServiceMark service="chrome" /><span className={label}>Add in Chrome</span></a>
+              : <button type="button" onClick={connectMirror} className="flex min-w-[180px] flex-1 items-center gap-4 rounded-2xl bg-white px-4 py-4 text-left shadow-[0_8px_16px_-12px_rgba(120,120,120,0.7)]"><ServiceMark service="chrome" /><span className={label}>Connect Chrome</span></button>}
+            <button type="button" onClick={connectMirror} className="flex min-w-[180px] flex-1 items-center gap-4 rounded-2xl bg-[#2B2B2B] px-4 py-4 text-left text-white"><span className="grid h-11 w-11 place-items-center rounded-xl bg-white text-[#2B2B2B]">✓</span><span className={label + ' !text-white'}>{view.mirror.connected ? 'Connected' : 'Connect MYRA'}</span></button>
           </div>
-          <p className={`${label} mt-4`}>
-            {view.mirror.connected
-              ? <>Connected{view.mirror.browser ? ` in ${view.mirror.browser}` : ''}{when(view.mirror.connectedAt) ? ` since ${when(view.mirror.connectedAt)}` : ''}
-                  {when(view.mirror.lastSeenAt) ? ` · last open ${when(view.mirror.lastSeenAt)}` : ''}. To disconnect, open the extension and tap Disconnect.</>
-              : 'Not connected yet.'}
-          </p>
+          <p className={`${label} myra-guide-text mt-4`}>iPhone: Settings → Apps → Safari → Extensions → MYRA Mirror. Then return here and connect it.</p>
           {(iphone || native) && (
             <div className={`${label} myra-guide-text mt-4 max-w-4xl space-y-2`}>
-              <p>
-                On your iPhone: the extension lives inside the MYRA app. Once it is there, turn it on in
-                Settings &rarr; Apps &rarr; Safari &rarr; Extensions &rarr; MYRA Mirror, then come back and tap Connect.
-              </p>
               <p className="flex flex-wrap items-center gap-3">
                 <span className="[overflow-wrap:anywhere]">Connect opens Safari. If it doesn&rsquo;t, open Safari yourself and go to {SITE.replace(/^https?:\/\//, '')}{connectPath}.</span>
                 <button type="button" onClick={copyConnectLink} className="underline underline-offset-4 text-[#2B2B2B]">{copiedConnect ? 'Copied' : 'Copy the link'}</button>
@@ -375,30 +367,15 @@ export default function YouSettings({ testMemberId, initial }: { testMemberId?: 
         <section id="assistant" className={`${card} lg:col-span-2 scroll-mt-8`}>
           <div className="flex items-baseline justify-between gap-4 flex-wrap">
             <h2 className={heading}>MYRA in Claude or ChatGPT</h2>
-            <p className={label}>Ask for outfits where you already chat.</p>
+            <p className={label}>Add MYRA where you chat.</p>
           </div>
-          <p className={`${label} myra-guide-text mt-3 max-w-4xl`}>
-            Add this link as a connector and you can ask things like &ldquo;find me an outfit for dinner&rdquo; or
-            &ldquo;what can I wear with my navy blazer?&rdquo;. It answers from your wardrobe, your brands and your sizes.
-            It can never buy anything, and it never says you liked a look — only you do that.
-          </p>
-          <div className="mt-5 flex flex-wrap items-center gap-4">
-            <button type="button" onClick={makeLink} disabled={linkBusy} className={pill(true)}>
-              {linkBusy ? 'Making it…' : linkState?.connected ? 'Make a new link' : 'Make my link'}
-            </button>
-            {linkState?.connected && (
-              <button type="button" onClick={turnLinkOff} disabled={linkBusy} className={pill(false)}>Turn it off</button>
-            )}
-            {link
-              ? <span className={label}>Copied. It works for {link.days ?? 30} days.</span>
-              : linkState?.connected
-                ? <span className={label}>
-                    Connected{when(linkState.issuedAt) ? ` since ${when(linkState.issuedAt)}` : ''}
-                    {linkState.lastUsedAt ? ` · last asked ${when(linkState.lastUsedAt)}` : ' · nothing has asked yet'}.
-                    The link itself is only shown once; make a new one if you need it again.
-                  </span>
-                : <span className={label}>Not connected yet.</span>}
+          <div className="mt-5 flex flex-wrap gap-4">
+            <button type="button" onClick={makeLink} disabled={linkBusy} className="flex min-w-[180px] flex-1 items-center gap-4 rounded-2xl bg-white px-4 py-4 text-left shadow-[0_8px_16px_-12px_rgba(120,120,120,0.7)]"><ServiceMark service="claude" /><span className={label}>Open Claude</span></button>
+            <button type="button" onClick={makeLink} disabled={linkBusy} className="flex min-w-[180px] flex-1 items-center gap-4 rounded-2xl bg-white px-4 py-4 text-left shadow-[0_8px_16px_-12px_rgba(120,120,120,0.7)]"><ServiceMark service="chatgpt" /><span className={label}>Open ChatGPT</span></button>
+            {linkState?.connected && <button type="button" onClick={turnLinkOff} disabled={linkBusy} className={pill(false)}>Turn it off</button>}
           </div>
+          <p className={`${label} myra-guide-text mt-4`}>Open Claude or ChatGPT → add a connector → paste your MYRA link.</p>
+          {link ? <span className={`${label} mt-3 block`}>Copied. It works for {link.days ?? 30} days.</span> : null}
           {link && (
             <input
               readOnly
@@ -416,9 +393,12 @@ export default function YouSettings({ testMemberId, initial }: { testMemberId?: 
             <ul className="mt-5 divide-y divide-[#EDEDEA]">
               {accounts.map((a) => (
                 <li key={a.id} className="flex items-center justify-between gap-4 py-4 flex-wrap">
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex items-center gap-4">
+                    <ServiceMark service={a.service} />
+                    <div>
                     <p className="text-[clamp(22px,1.2vw,30px)] text-[#2B2B2B]">{a.title}</p>
                     <p className="myra-guide-text text-[clamp(20px,1.05vw,26px)] text-[#55534E] truncate">{a.who} · {a.when}</p>
+                    </div>
                   </div>
                   <button type="button" disabled={busy === a.id} onClick={() => letGo(a.kind, a.id, a.who)} className={pill(false)}>
                     {busy === a.id ? 'Disconnecting…' : 'Disconnect'}

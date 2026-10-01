@@ -15,7 +15,7 @@ export default async function InspirationPage() {
   if (!user) redirect('/signin')
 
   const board = await loadMyInspiration()
-  if (board.memberId) return <InspirationBoard view={board} />
+  if (board.memberId) redirect('/me/profile?tab=inspiration')
 
   const admin = createAdminClient() as any
   const { data } = await admin

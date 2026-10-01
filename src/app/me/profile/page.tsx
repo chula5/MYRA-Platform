@@ -6,6 +6,9 @@ import { OCCASION_OPTIONS, PRICE_BANDS, HEEL_OPTIONS, LENGTH_NO_GO_OPTIONS } fro
 import { resolveClientMember } from '@/lib/client-member'
 import YouSettings from '../YouSettings'
 import { buildYouSettings } from '@/lib/you-settings'
+import InspirationBoard from '../inspiration/InspirationBoard'
+import { loadMyInspiration } from '../inspiration/board-actions'
+import ThreadsClient from '../threads/ThreadsClient'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,14 +18,41 @@ const OCCASION_LABEL = new Map(OCCASION_OPTIONS.map((o) => [o.value, o.label]))
 const HEEL_LABEL = new Map(HEEL_OPTIONS.map((o) => [o.value, o.label]))
 const NO_GO_LABEL = new Map(LENGTH_NO_GO_OPTIONS.map((o) => [o.value, o.label]))
 
-export default async function ProfilePage() {
+export default async function ProfilePage({ searchParams }: { searchParams?: { tab?: string } }) {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/signin')
 
   // A private-stylist client gets her settings room; everyone else the profile below.
   const me = await resolveClientMember()
-  if (me) return <div className="-mx-6 sm:-mx-10 -my-10"><YouSettings initial={await buildYouSettings(me.memberId, false, me.name)} /></div>
+  if (me) {
+    const tab = searchParams?.tab === 'inspiration' || searchParams?.tab === 'threads' ? searchParams.tab : 'settings'
+    return (
+      <div className="-mx-6 sm:-mx-10 -my-10">
+        <nav aria-label="You sections" className="sticky top-0 z-20 myra-pearl border-b border-[rgba(43,43,43,0.14)] px-6 sm:px-10 pt-4">
+          <div className="flex gap-6 sm:gap-10 overflow-x-auto">
+            {[
+              ['settings', 'Settings'],
+              ['inspiration', 'Inspiration'],
+              ['threads', 'Threads'],
+            ].map(([id, label]) => (
+              <Link
+                key={id}
+                href={id === 'settings' ? '/me/profile' : `/me/profile?tab=${id}`}
+                aria-current={tab === id ? 'page' : undefined}
+                className={`shrink-0 border-b-2 px-1 pb-3 text-[15px] sm:text-[18px] tracking-[0.1em] transition-colors ${tab === id ? 'border-[#2B2B2B] text-[#2B2B2B]' : 'border-transparent text-[#8C8A85] hover:text-[#2B2B2B]'}`}
+              >
+                {label}
+              </Link>
+            ))}
+          </div>
+        </nav>
+        {tab === 'settings' && <YouSettings initial={await buildYouSettings(me.memberId, false, me.name)} />}
+        {tab === 'inspiration' && <InspirationBoard view={await loadMyInspiration()} />}
+        {tab === 'threads' && <ThreadsClient />}
+      </div>
+    )
+  }
 
   const admin = createAdminClient() as any
   const [{ data: clientRow }, { data: assignment }, profile] = await Promise.all([

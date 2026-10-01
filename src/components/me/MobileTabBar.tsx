@@ -25,7 +25,7 @@ export default function MobileTabBar({ active }: { active: RoomId }) {
       className="fixed bottom-0 inset-x-0 z-40 sm:hidden bg-[rgba(230,230,233,0.92)] backdrop-blur-md border-t border-[rgba(43,43,43,0.18)]"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
-      <div className="grid grid-cols-7">
+      <div className="grid grid-cols-6">
         {ROOMS.map((r) => {
           const on = r.id === selected
           return (

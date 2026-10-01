@@ -11,7 +11,7 @@
 import Link from 'next/link'
 import { useState } from 'react'
 
-export type RoomId = 'for_you' | 'all_looks' | 'dressing_room' | 'magazine' | 'inspiration' | 'threads' | 'profile'
+export type RoomId = 'for_you' | 'all_looks' | 'dressing_room' | 'events' | 'magazine' | 'profile'
 
 export interface Room {
   id: RoomId
@@ -25,9 +25,8 @@ export const ROOMS: Room[] = [
   { id: 'for_you', label: 'For You', short: 'For You', href: '/me' },
   { id: 'all_looks', label: 'Your Looks', short: 'Looks', href: '/me/looks' },
   { id: 'dressing_room', label: 'Dressing Room', short: 'Dressing', href: '/me/dressing-room' },
-  { id: 'inspiration', label: 'Inspiration', short: 'Inspiration', href: '/me/inspiration' },
+  { id: 'events', label: 'Events', short: 'Events', href: '/me/events' },
   { id: 'magazine', label: 'MYRA Magazine', short: 'Magazine', href: '/me/magazine' },
-  { id: 'threads', label: 'Threads', short: 'Threads', href: '/me/threads' },
   { id: 'profile', label: 'You', short: 'You', href: '/me/profile' },
 ]
 
@@ -82,12 +81,14 @@ export function RoomIcon({ id }: { id: RoomId }) {
           <path d="M28 41v3M36 41v3" {...S} />
         </svg>
       )
-    case 'inspiration': // sparkles
+    case 'events': // a calendar, for what she is dressing for next
       return (
         <svg {...common}>
-          <path d={sparkle(25, 30, 15)} {...S} />
-          <path d={sparkle(44, 18, 8)} {...S} />
-          <path d={sparkle(43, 42, 9)} {...S} />
+          <rect x="12" y="16" width="40" height="36" rx="3" {...S} />
+          <path d="M12 28h40M22 10v12M42 10v12" {...S} />
+          <rect x="20" y="34" width="7" height="7" rx="1" {...S} />
+          <rect x="37" y="34" width="7" height="7" rx="1" {...S} />
+          <path d={sparkle(32, 46, 6)} {...S} />
         </svg>
       )
     case 'magazine': // an open magazine: a dress on one page, pieces on the other
@@ -98,20 +99,6 @@ export function RoomIcon({ id }: { id: RoomId }) {
           <path d="M22 24l3 2 3-2 2 6-2 2 2 10h-10l2-10-2-2z" {...S} />
           <path d="M39 24l2 1.5 2-1.5 1.5 4-1.5 1.5 1.5 6h-7l1.5-6-1.5-1.5z" {...S} />
           <rect x="38" y="38" width="8" height="6" rx="1" {...S} />
-        </svg>
-      )
-    case 'threads': // a spool wound with thread, and the needle through it
-      return (
-        <svg {...common}>
-          <ellipse cx="30" cy="16" rx="15" ry="5" {...S} />
-          <path d="M15 16v32M45 16v32" {...S} />
-          <ellipse cx="30" cy="48" rx="15" ry="5" {...S} />
-          <path d="M16 23h28M16 29h28M16 35h28M16 41h28" {...S} opacity="0.55" />
-          <ellipse cx="30" cy="16" rx="4" ry="1.6" {...S} />
-          <path d="M48 10L22 52" {...S} />
-          <path d="M45 13c3 1 4 4 2 6" {...S} />
-          {/* the loose end, trailing away */}
-          <path d="M45 44c8 2 12 8 6 11s-14-2-9-6" {...S} />
         </svg>
       )
     case 'profile':

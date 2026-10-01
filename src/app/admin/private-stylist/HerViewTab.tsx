@@ -14,18 +14,16 @@ import MyLooksClient from '@/app/me/looks/MyLooksClient'
 import ForYouClient from '@/app/me/ForYouClient'
 import DressingRoomClient from '@/app/me/dressing-room/DressingRoomClient'
 import PieceClient from '@/app/me/dressing-room/PieceClient'
-import InspirationBoard from '@/app/me/inspiration/InspirationBoard'
 import MagazineClient from '@/app/me/magazine/MagazineClient'
 import RoomNav, { ROOMS, type RoomId } from '@/components/me/RoomNav'
 import YouButton from '@/components/me/YouButton'
 import MirrorCurtain from '@/components/me/MirrorCurtain'
 import YouSettings from '@/app/me/YouSettings'
-import ThreadsClient from '@/app/me/threads/ThreadsClient'
+import EventsClient from '@/app/me/events/EventsClient'
 import { MirrorLoading } from '@/components/ArchiveCard'
 import { loadLooksForMember, type ClientView } from '@/app/me/looks/actions'
 import { loadForYou, type ForYouView } from '@/app/me/for-you-actions'
 import { loadMyDressingRoom, loadMyPiece } from '@/app/me/dressing-room/actions'
-import { loadMyInspiration, type InspirationBoardView } from '@/app/me/inspiration/board-actions'
 import type { DressingRoomView, OwnedPieceView } from '@/app/admin/private-stylist/actions'
 import StylistChat from '@/app/me/StylistChat'
 
@@ -44,12 +42,11 @@ export default function HerViewTab({
   const [forYou, setForYou] = useState<ForYouView | null>(null)
   const [dressing, setDressing] = useState<DressingRoomView | null>(null)
   const [piece, setPiece] = useState<OwnedPieceView | null>(null)
-  const [inspiration, setInspiration] = useState<InspirationBoardView | null>(null)
   const [loading, setLoading] = useState(false)
 
   // A different member starts every room afresh.
   useEffect(() => {
-    setLooksView(null); setForYou(null); setDressing(null); setPiece(null); setInspiration(null)
+    setLooksView(null); setForYou(null); setDressing(null); setPiece(null)
   }, [memberId])
 
   useEffect(() => {
@@ -59,12 +56,11 @@ export default function HerViewTab({
       if (room === 'all_looks' && !looksView) setLooksView(await loadLooksForMember(memberId))
       if (room === 'for_you' && !forYou) setForYou(await loadForYou(memberId))
       if (room === 'dressing_room' && !dressing) setDressing(await loadMyDressingRoom(memberId))
-      if (room === 'inspiration' && !inspiration) setInspiration(await loadMyInspiration(memberId))
     }
     setLoading(true)
     load().finally(() => { if (live) setLoading(false) })
     return () => { live = false }
-  }, [memberId, room, looksView, forYou, dressing, inspiration])
+  }, [memberId, room, looksView, forYou, dressing])
 
   async function openPiece(itemId: string) {
     setLoading(true)
@@ -170,13 +166,6 @@ export default function HerViewTab({
         </div>
       )}
 
-      {/* Threads reads her own records, as it does on her screen. */}
-      {!loading && room === 'threads' && (
-        <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen">
-          <ThreadsClient key={memberId} testMemberId={memberId} />
-        </div>
-      )}
-
       {/* The magazine loads her newsletters itself, as it does on her screen. */}
       {!loading && room === 'magazine' && (
         <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen">
@@ -190,9 +179,9 @@ export default function HerViewTab({
         </div>
       )}
 
-      {!loading && room === 'inspiration' && inspiration && (
+      {!loading && room === 'events' && (
         <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen">
-          <InspirationBoard view={inspiration} testMemberId={memberId} />
+          <EventsClient key={memberId} testMemberId={memberId} />
         </div>
       )}
 
