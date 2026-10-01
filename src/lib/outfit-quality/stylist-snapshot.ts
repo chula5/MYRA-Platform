@@ -14,9 +14,13 @@
 
 import { createHash } from 'node:crypto'
 import { MIN_CONFIRMED_IMAGES } from '@/lib/inspiration'
+import { VECTOR_DIM } from '@/lib/taste-vector'
 import type { StylistBrief, StylistNever } from '@/lib/stylist-brief'
 
 export { MIN_CONFIRMED_IMAGES }
+
+/** Confirmed-image vectors and envelope mean/spread are exactly this long. */
+export const SNAPSHOT_VECTOR_DIM = VECTOR_DIM
 
 // ── System/prompt versions frozen into every snapshot ────────────────────────
 //
@@ -68,7 +72,14 @@ export interface ItemMaskDecision {
 }
 
 export interface LoadedLearnedModel {
-  payload: unknown
+  /**
+   * Whether the selected stylist has its OWN learned model row in
+   * `stylist_model`. There is no fallback: when a stylist has no model of its
+   * own, `present` is false and the snapshot records an explicit
+   * `status: 'absent'` — never Chloe's model and never a silent empty one.
+   */
+  present: boolean
+  payload: unknown | null
   version: number | null
   decisionCount: number
 }
@@ -135,21 +146,37 @@ export function computePayloadHash(payload: SnapshotPayload): string {
 
 // ── Rules-only detection ─────────────────────────────────────────────────────
 
-/** A confirmed inspiration image counts only when it carries a usable vector. */
-export function countValidConfirmedImages(images: readonly LoadedInspirationImage[]): number {
-  return images.filter((i) => i.status === 'confirmed' && Array.isArray(i.vector) && i.vector.length > 0).length
+/**
+ * The 34-dimension vector contract: a vector is valid only when it is exactly
+ * `VECTOR_DIM` finite numbers. Anything else — wrong length, NaN, Infinity, a
+ * stringified or sparse value — is not usable evidence.
+ */
+export function isValidVector(value: unknown): value is number[] {
+  return (
+    Array.isArray(value) &&
+    value.length === VECTOR_DIM &&
+    value.every((x) => typeof x === 'number' && Number.isFinite(x))
+  )
 }
 
-/** An envelope is usable when it has non-empty mean/spread arrays and n > 0. */
+/** A confirmed inspiration image counts only when it carries a valid 34-dimension vector. */
+export function countValidConfirmedImages(images: readonly LoadedInspirationImage[]): number {
+  return images.filter((i) => i.status === 'confirmed' && isValidVector(i.vector)).length
+}
+
+/**
+ * An envelope is usable when its mean and spread are both valid 34-dimension
+ * vectors (matching lengths by contract) and n is a finite positive count.
+ */
 export function isEnvelopeUsable(envelope: unknown): boolean {
   if (!envelope || typeof envelope !== 'object') return false
   const e = envelope as { mean?: unknown; spread?: unknown; n?: unknown }
   return (
-    Array.isArray(e.mean) &&
-    e.mean.length > 0 &&
-    Array.isArray(e.spread) &&
-    e.spread.length > 0 &&
+    isValidVector(e.mean) &&
+    isValidVector(e.spread) &&
+    e.mean.length === e.spread.length &&
     typeof e.n === 'number' &&
+    Number.isFinite(e.n) &&
     e.n > 0
   )
 }
@@ -184,7 +211,9 @@ export interface SnapshotPayload {
     decisions: { item_id: string; eligibility: string; source: string; updated_at: string | null }[]
   }
   learned_model: {
-    payload: unknown
+    /** 'loaded' = this stylist's own model row; 'absent' = it has none (never borrowed). */
+    status: 'loaded' | 'absent'
+    payload: unknown | null
     version: number | null
     decision_count: number
   }
@@ -278,11 +307,14 @@ export function buildSnapshotPayload(inputs: SelectedStylistInputs): SnapshotPay
       how_she_routes: brief.how_she_routes ?? null,
     },
     item_mask: { count: decisions.length, decisions },
-    learned_model: {
-      payload: learnedModel.payload ?? null,
-      version: learnedModel.version ?? null,
-      decision_count: learnedModel.decisionCount,
-    },
+    learned_model: learnedModel.present
+      ? {
+          status: 'loaded',
+          payload: learnedModel.payload ?? null,
+          version: learnedModel.version ?? null,
+          decision_count: learnedModel.decisionCount,
+        }
+      : { status: 'absent', payload: null, version: null, decision_count: 0 },
     inspiration: { confirmed_count: confirmedCount, images },
     // A rules-only snapshot carries no envelope at all — never a borrowed one.
     envelope: envelopeUsable
@@ -333,7 +365,7 @@ export function buildStylistSnapshot(inputs: SelectedStylistInputs): BuiltStylis
 
 // ── Orchestration (fail-closed, insert-only, idempotent) ─────────────────────
 
-export type StylistSnapshotErrorCode = 'missing_stylist' | 'stylist_not_loadable'
+export type StylistSnapshotErrorCode = 'missing_stylist' | 'stylist_not_loadable' | 'source_read_failed'
 
 export class StylistSnapshotError extends Error {
   readonly code: StylistSnapshotErrorCode
@@ -355,6 +387,12 @@ export class StylistSnapshotError extends Error {
 export interface StylistSnapshotLoader {
   loadStylist(stylistId: string): Promise<LoadedStylist | null>
   loadItemMask(stylistId: string): Promise<ItemMaskDecision[]>
+  /**
+   * Load the selected stylist's OWN learned model by exact stylist id. A
+   * stylist with no model row returns `{ present: false, ... }` — an explicit
+   * absence, never a fallback to another stylist's model. Implementations
+   * throw `StylistSnapshotError('source_read_failed')` on a read error.
+   */
   loadLearnedModel(stylistId: string): Promise<LoadedLearnedModel>
   loadConfirmedInspiration(stylistId: string): Promise<LoadedInspirationImage[]>
 }

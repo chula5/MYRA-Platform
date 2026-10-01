@@ -9,9 +9,9 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase-server'
 import { parseBrief } from '@/lib/stylist-brief'
-import { loadStyleModel } from '@/lib/style-brain-store'
 import {
   createStylistSnapshot,
+  StylistSnapshotError,
   type StylistSnapshotLoader,
   type StylistSnapshotStore,
   type LoadedStylist,
@@ -28,6 +28,33 @@ import {
 type Admin = ReturnType<typeof createAdminClient>
 
 /**
+ * Source reads are paged, never silently truncated. A short page ends the
+ * scan; any page error aborts the whole load (and therefore the batch Start).
+ */
+const SOURCE_READ_PAGE = 1000
+
+async function readAllPages<T>(
+  stylistId: string,
+  table: string,
+  page: (from: number, to: number) => Promise<{ data: T[] | null; error: { message?: string } | null }>,
+): Promise<T[]> {
+  const out: T[] = []
+  for (let from = 0; ; from += SOURCE_READ_PAGE) {
+    const { data, error } = await page(from, from + SOURCE_READ_PAGE - 1)
+    if (error) {
+      throw new StylistSnapshotError(
+        'source_read_failed',
+        `${table} read failed for stylist ${stylistId}: ${error.message ?? 'unknown error'}`,
+        stylistId,
+      )
+    }
+    const rows = data ?? []
+    out.push(...rows)
+    if (rows.length < SOURCE_READ_PAGE) return out
+  }
+}
+
+/**
  * The real selected-stylist loader. Every query is scoped to the exact stylist
  * id. `loadStylist` resolves by `stylist_id` only (never by slug or a default),
  * so an unknown id loads nothing and the snapshot run fails closed upstream.
@@ -36,7 +63,14 @@ export function createSupabaseStylistSnapshotLoader(admin: Admin = createAdminCl
   const db = admin as any
   return {
     async loadStylist(stylistId: string): Promise<LoadedStylist | null> {
-      const { data } = await db.from('stylist').select('*').eq('stylist_id', stylistId).maybeSingle()
+      const { data, error } = await db.from('stylist').select('*').eq('stylist_id', stylistId).maybeSingle()
+      if (error) {
+        throw new StylistSnapshotError(
+          'source_read_failed',
+          `stylist read failed for ${stylistId}: ${error.message ?? 'unknown error'}`,
+          stylistId,
+        )
+      }
       if (!data) return null
       return {
         stylist_id: data.stylist_id,
@@ -54,12 +88,17 @@ export function createSupabaseStylistSnapshotLoader(admin: Admin = createAdminCl
     },
 
     async loadItemMask(stylistId: string): Promise<ItemMaskDecision[]> {
-      const { data } = await db
-        .from('stylist_item_mask')
-        .select('item_id, eligibility, source, updated_at')
-        .eq('stylist_id', stylistId)
-        .limit(20000)
-      return ((data ?? []) as any[]).map((r) => ({
+      // Paged by stable key so a large mask is loaded completely; a page error
+      // aborts the run instead of freezing a silently truncated mask.
+      const rows = await readAllPages<any>(stylistId, 'stylist_item_mask', (from, to) =>
+        db
+          .from('stylist_item_mask')
+          .select('item_id, eligibility, source, updated_at')
+          .eq('stylist_id', stylistId)
+          .order('item_id')
+          .range(from, to),
+      )
+      return rows.map((r) => ({
         item_id: r.item_id,
         eligibility: r.eligibility,
         source: r.source ?? 'auto',
@@ -68,24 +107,52 @@ export function createSupabaseStylistSnapshotLoader(admin: Admin = createAdminCl
     },
 
     async loadLearnedModel(stylistId: string): Promise<LoadedLearnedModel> {
-      const model = await loadStyleModel(stylistId)
+      // The selected stylist's OWN learned model, by exact stylist id. No
+      // fallback: the legacy `style_model` singleton (Chloe's model) and the
+      // fallback-aware `loadStyleModel`/`getStylistBySlug` path are never
+      // consulted here. A stylist with no model row is explicitly absent.
+      const { data, error } = await db
+        .from('stylist_model')
+        .select('model, decisions')
+        .eq('stylist_id', stylistId)
+        .maybeSingle()
+      if (error) {
+        throw new StylistSnapshotError(
+          'source_read_failed',
+          `stylist_model read failed for stylist ${stylistId}: ${error.message ?? 'unknown error'}`,
+          stylistId,
+        )
+      }
+      if (!data) return { present: false, payload: null, version: null, decisionCount: 0 }
+      const model = data.model
       return {
-        payload: model,
-        version: typeof model.version === 'number' ? model.version : null,
-        decisionCount: typeof model.decisions === 'number' ? model.decisions : 0,
+        present: true,
+        payload: model ?? null,
+        version: typeof model?.version === 'number' ? model.version : null,
+        decisionCount:
+          typeof data.decisions === 'number'
+            ? data.decisions
+            : typeof model?.decisions === 'number'
+              ? model.decisions
+              : 0,
       }
     },
 
     async loadConfirmedInspiration(stylistId: string): Promise<LoadedInspirationImage[]> {
       // The stylist's own moodboard: persona_id = stylist, confirmed, and
       // user_id null (a member's own reference pictures are never the style's).
-      const { data } = await db
-        .from('inspiration_image')
-        .select('image_id, image_url, source_url, status, source, scores, scores_original, corrected_fields, corrected_at, score_confidence, vector, occasion_read, created_at')
-        .eq('persona_id', stylistId)
-        .eq('status', 'confirmed')
-        .is('user_id', null)
-      return ((data ?? []) as any[]).map((r) => ({
+      // Paged like the mask; a page error aborts the run.
+      const rows = await readAllPages<any>(stylistId, 'inspiration_image', (from, to) =>
+        db
+          .from('inspiration_image')
+          .select('image_id, image_url, source_url, status, source, scores, scores_original, corrected_fields, corrected_at, score_confidence, vector, occasion_read, created_at')
+          .eq('persona_id', stylistId)
+          .eq('status', 'confirmed')
+          .is('user_id', null)
+          .order('image_id')
+          .range(from, to),
+      )
+      return rows.map((r) => ({
         image_id: r.image_id,
         image_url: r.image_url,
         source_url: r.source_url ?? null,
@@ -113,11 +180,12 @@ export function createSupabaseStylistSnapshotStore(admin: Admin = createAdminCli
   const db = admin as any
   return {
     async findByIdempotencyKey(key: string): Promise<StoredSnapshot | null> {
-      const { data } = await db
+      const { data, error } = await db
         .from('outfit_quality_stylist_snapshot')
         .select('snapshot_id, payload_hash, rules_only, confirmed_inspiration_count, payload')
         .eq('idempotency_key', key)
         .maybeSingle()
+      if (error) throw new Error(`stylist snapshot lookup failed: ${(error as any).message ?? 'unknown error'}`)
       return data ? toStored(data) : null
     },
 
@@ -153,6 +221,9 @@ export function createSupabaseStylistSnapshotStore(admin: Admin = createAdminCli
             .select('snapshot_id, payload_hash, rules_only, confirmed_inspiration_count, payload')
             .eq('idempotency_key', row.idempotency_key)
             .maybeSingle()
+          if (existing.error) {
+            throw new Error(`stylist snapshot conflict re-read failed: ${(existing.error as any).message ?? 'unknown error'}`)
+          }
           if (existing.data) return { snapshot: toStored(existing.data), created: false }
         }
         throw new Error(`stylist snapshot insert failed: ${(error as any).message ?? 'unknown error'}`)

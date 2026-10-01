@@ -7,7 +7,7 @@
 
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase-server'
-import { MIN_CONFIRMED_IMAGES, isEnvelopeUsable } from '@/lib/outfit-quality/stylist-snapshot'
+import { MIN_CONFIRMED_IMAGES, isEnvelopeUsable, isValidVector } from '@/lib/outfit-quality/stylist-snapshot'
 import { buildPreDecisionCandidate, type PreDecisionCandidate, type PreDecisionItem, type RawSubjectiveCheck } from '@/lib/outfit-quality/queue-read-model'
 
 type Admin = ReturnType<typeof createAdminClient>
@@ -88,7 +88,9 @@ export async function previewStylistRulesOnly(
     .eq('persona_id', stylistId)
     .eq('status', 'confirmed')
     .is('user_id', null)
-  const confirmed = ((imgs ?? []) as any[]).filter((r) => Array.isArray(r.vector) && r.vector.length > 0).length
+  // Same 34-dimension contract as snapshot rules-only detection: a confirmed
+  // image counts only when its vector is exactly VECTOR_DIM finite numbers.
+  const confirmed = ((imgs ?? []) as any[]).filter((r) => isValidVector(r.vector)).length
   const { data: styl } = await db.from('stylist').select('envelope').eq('stylist_id', stylistId).maybeSingle()
   const usableEnvelope = isEnvelopeUsable(styl?.envelope ?? null)
   const rulesOnly = confirmed < MIN_CONFIRMED_IMAGES || !usableEnvelope

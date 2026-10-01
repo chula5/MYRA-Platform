@@ -5,6 +5,7 @@ import {
   computePayloadHash,
   countValidConfirmedImages,
   isEnvelopeUsable,
+  isValidVector,
   buildSnapshotPayload,
   buildStylistSnapshot,
   createStylistSnapshot,
@@ -93,7 +94,7 @@ function inputs(overrides: Partial<SelectedStylistInputs> = {}): SelectedStylist
       { item_id: 'item-a', eligibility: 'excluded', source: 'manual', updated_at: '2026-01-01T00:00:00.000Z' },
       { item_id: 'item-b', eligibility: 'eligible', source: 'auto', updated_at: '2026-01-01T00:00:00.000Z' },
     ],
-    learnedModel: { payload: { version: 2, decisions: 37, approves: 20, skips: 5 }, version: 2, decisionCount: 37 },
+    learnedModel: { present: true, payload: { version: 2, decisions: 37, approves: 20, skips: 5 }, version: 2, decisionCount: 37 },
     confirmedInspiration: Array.from({ length: 16 }, (_, i) => confirmedImage(`img-${String(i).padStart(2, '0')}`)),
     systemVersions: SNAPSHOT_SYSTEM_VERSIONS,
     ...overrides,
@@ -171,7 +172,7 @@ describe('computePayloadHash', () => {
   it('changes when the learned model changes', () => {
     const base = computePayloadHash(buildSnapshotPayload(inputs()))
     const changed = computePayloadHash(
-      buildSnapshotPayload(inputs({ learnedModel: { payload: { version: 3, decisions: 99 }, version: 3, decisionCount: 99 } })),
+      buildSnapshotPayload(inputs({ learnedModel: { present: true, payload: { version: 3, decisions: 99 }, version: 3, decisionCount: 99 } })),
     )
     expect(changed).not.toBe(base)
   })
@@ -194,6 +195,79 @@ describe('countValidConfirmedImages / isEnvelopeUsable', () => {
   })
 })
 
+describe('34-dimension vector contract', () => {
+  it('isValidVector accepts exactly 34 finite numerics and nothing else', () => {
+    expect(isValidVector(vec(0.5))).toBe(true)
+    expect(isValidVector(vec(0.5).slice(1))).toBe(false) // 33
+    expect(isValidVector([...vec(0.5), 0.5])).toBe(false) // 35
+    expect(isValidVector(null)).toBe(false)
+    expect(isValidVector('0.1,0.2')).toBe(false)
+    const withNaN = vec(0.5); withNaN[7] = Number.NaN
+    expect(isValidVector(withNaN)).toBe(false)
+    const withInf = vec(0.5); withInf[7] = Number.POSITIVE_INFINITY
+    expect(isValidVector(withInf)).toBe(false)
+    const withString = vec(0.5) as unknown[]; withString[7] = '0.5'
+    expect(isValidVector(withString)).toBe(false)
+  })
+
+  it('a confirmed image with a malformed vector does not count toward the minimum', () => {
+    const malformed = [
+      { ...confirmedImage('a'), vector: vec(0.4).slice(1) }, // 33 dims
+      { ...confirmedImage('b'), vector: [...vec(0.4), 0.4] }, // 35 dims
+      { ...confirmedImage('c'), vector: vec(0.4).map((_, i) => (i === 3 ? Number.NaN : 0.4)) },
+    ]
+    expect(countValidConfirmedImages(malformed as any)).toBe(0)
+  })
+
+  it('rules_only stays true when 15 confirmed images all carry malformed vectors', () => {
+    const bad = Array.from({ length: 15 }, (_, i) => ({ ...confirmedImage(`img-${i}`), vector: vec(0.4).slice(1) }))
+    const p = buildSnapshotPayload(inputs({ confirmedInspiration: bad as any })) as any
+    expect(p.rules_only).toBe(true)
+    expect(p.inspiration.confirmed_count).toBe(0)
+  })
+
+  it('envelope mean/spread must be finite 34-dimension numerics of matching length', () => {
+    const good = usableEnvelope().envelope as any
+    expect(isEnvelopeUsable({ ...good, mean: good.mean.slice(1) })).toBe(false) // 33
+    expect(isEnvelopeUsable({ ...good, spread: [...good.spread, 0.1] })).toBe(false) // 35
+    expect(isEnvelopeUsable({ ...good, mean: good.mean.map((_: number, i: number) => (i === 0 ? Number.NaN : 0.4)) })).toBe(false)
+    expect(isEnvelopeUsable({ ...good, spread: good.spread.map((_: number, i: number) => (i === 0 ? Number.POSITIVE_INFINITY : 0.1)) })).toBe(false)
+    expect(isEnvelopeUsable({ ...good, n: Number.NaN })).toBe(false)
+    expect(isEnvelopeUsable(good)).toBe(true)
+  })
+
+  it('a dimension-mismatched envelope keeps rules_only true and freezes no envelope', () => {
+    const env = usableEnvelope().envelope as any
+    const p = buildSnapshotPayload(
+      inputs({ stylist: { ...inputs().stylist, envelope: { ...env, spread: env.spread.slice(1) } } }),
+    ) as any
+    expect(p.rules_only).toBe(true)
+    expect(p.envelope).toBeNull()
+  })
+
+  it('valid 34-dimension evidence clears rules_only', () => {
+    const p = buildSnapshotPayload(inputs()) as any
+    expect(p.inspiration.confirmed_count).toBe(16)
+    expect(p.rules_only).toBe(false)
+    expect(p.envelope).not.toBeNull()
+  })
+})
+
+describe('learned model representation', () => {
+  it('represents an absent own model explicitly — never a borrowed or empty substitute', () => {
+    const p = buildSnapshotPayload(
+      inputs({ learnedModel: { present: false, payload: null, version: null, decisionCount: 0 } }),
+    ) as any
+    expect(p.learned_model).toEqual({ status: 'absent', payload: null, version: null, decision_count: 0 })
+  })
+
+  it('marks a loaded own model as loaded with its payload, version and decision count', () => {
+    const p = buildSnapshotPayload(inputs()) as any
+    expect(p.learned_model.status).toBe('loaded')
+    expect(p.learned_model.decision_count).toBe(37)
+  })
+})
+
 describe('buildSnapshotPayload', () => {
   it('freezes the full selected-stylist lens', () => {
     const p = buildSnapshotPayload(inputs()) as any
@@ -206,7 +280,7 @@ describe('buildSnapshotPayload', () => {
     expect(p.signature_pieces).toEqual(['wide-leg trouser', 'crisp shirt'])
     expect(p.exclusions.map((e: any) => e.text)).toEqual(['no logos', 'avoids neon'])
     expect(p.voice).toMatchObject({ voice_notes: 'Speaks plainly.', tagline: 'Quiet, structured, Scandinavian' })
-    expect(p.learned_model).toMatchObject({ version: 2, decision_count: 37 })
+    expect(p.learned_model).toMatchObject({ status: 'loaded', version: 2, decision_count: 37 })
     expect(p.learned_model.payload).toMatchObject({ decisions: 37 })
     expect(p.system_versions).toMatchObject(SNAPSHOT_SYSTEM_VERSIONS)
   })
@@ -338,6 +412,19 @@ describe('createStylistSnapshot', () => {
     expect(loader.loadItemMask).not.toHaveBeenCalled()
     expect(loader.loadLearnedModel).not.toHaveBeenCalled()
     expect(loader.loadConfirmedInspiration).not.toHaveBeenCalled()
+    expect(store.insert).not.toHaveBeenCalled()
+    expect(store.rows).toHaveLength(0)
+  })
+
+  it('a source read failure aborts before any snapshot insert', async () => {
+    const loader = new FakeLoader()
+    const store = new FakeStore()
+    loader.loadItemMask = vi.fn(async () => {
+      throw new StylistSnapshotError('source_read_failed', 'stylist_item_mask read failed', STYLIST_ID)
+    })
+    await expect(createStylistSnapshot({ stylistId: STYLIST_ID, loader, store, idempotencyKey: 'k1' })).rejects.toMatchObject({
+      code: 'source_read_failed',
+    })
     expect(store.insert).not.toHaveBeenCalled()
     expect(store.rows).toHaveLength(0)
   })

@@ -9,7 +9,7 @@ import 'server-only'
 import { randomUUID } from 'node:crypto'
 import { createAdminClient } from '@/lib/supabase-server'
 import { freezeSelectedStylistSnapshot } from '@/lib/outfit-quality/stylist-snapshot-store'
-import { SNAPSHOT_SYSTEM_VERSIONS, type SnapshotPayload, type SystemVersions } from '@/lib/outfit-quality/stylist-snapshot'
+import { SNAPSHOT_SYSTEM_VERSIONS, StylistSnapshotError, type SnapshotPayload, type SystemVersions } from '@/lib/outfit-quality/stylist-snapshot'
 import { validateBatchAttribution } from '@/lib/outfit-quality/partitions'
 import { validateTargetCount, validateChunkRequest, planChunkClaim, canStart, canPause, canResume, type BatchStatus } from '@/lib/outfit-quality/batch-control'
 import {
@@ -138,7 +138,24 @@ export async function startBatch(batchId: string, admin: Admin = createAdminClie
   if (batch.status === 'active') return { ok: true, batchId } // idempotent
   if (!canStart(batch.status)) return { ok: false, code: 'not_startable', message: `a ${batch.status} batch cannot be started` }
 
-  const snap = await freezeSelectedStylistSnapshot({ batchId, stylistId: batch.selected_stylist_id, admin })
+  // Fail closed: a missing/unloadable stylist or any source read failure
+  // aborts Start. No snapshot row is persisted (the snapshot insert happens
+  // only after every source load succeeds) and the batch is not activated;
+  // the failure is recorded on the batch for the admin to see.
+  let snap
+  try {
+    snap = await freezeSelectedStylistSnapshot({ batchId, stylistId: batch.selected_stylist_id, admin })
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    const code = err instanceof StylistSnapshotError ? err.code : 'snapshot_error'
+    const message = `${code}: ${detail}`
+    const db = admin as any
+    await db
+      .from('outfit_quality_batch')
+      .update({ last_error: message, updated_at: new Date().toISOString() })
+      .eq('batch_id', batchId)
+    return { ok: false, code: 'snapshot_failed', message }
+  }
 
   const db = admin as any
   const { error } = await db
