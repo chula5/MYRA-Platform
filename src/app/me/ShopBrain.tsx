@@ -158,7 +158,9 @@ function Door({
           <p className="absolute inset-x-6 bottom-10 text-center text-[19px] text-[#55534E]">{empty}</p>
         )}
         <div className="absolute inset-0 flex items-center justify-center px-6">
-          <p className="bg-[rgba(255,255,255,0.88)] backdrop-blur-[2px] rounded-full px-3 py-2 sm:px-6 sm:py-3 text-center text-[11px] sm:text-[clamp(15px,1.25vw,26px)] tracking-[0.05em] leading-[1.05] text-[#2B2B2B]">
+          {/* One pill for all three doors: same width, same height, so the row
+              reads as a set whether the words run to one line or two. */}
+          <p className="bg-[rgba(255,255,255,0.88)] backdrop-blur-[2px] rounded-full flex items-center justify-center w-full max-w-[300px] min-h-[3.5em] px-5 text-center text-[11px] sm:text-[clamp(15px,1.25vw,26px)] tracking-[0.05em] leading-[1.05] text-[#2B2B2B]">
             {title}
           </p>
         </div>

@@ -40,18 +40,21 @@ export default function MeChrome({ signOut }: { signOut: React.ReactNode }) {
             stand down the left, so they never take the room's width. */}
         {home ? (
           <>
-            {/* Desktop: the logo and the search, with her profile in the
-                corner. The rooms are down the left side, so the page starts
-                clear of them. */}
+            {/* Desktop: the MYRA mark sits on the same line as her profile,
+                with the search directly under it. The rooms are down the left
+                side, so the page starts clear of them. */}
             <div className="hidden sm:block pl-[152px] pr-10">
-              <div className="flex items-start justify-end gap-7 pt-4">
-                <YouButton />
-                {signOut}
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-6 pt-4 pb-3">
+                <span />
+                <Link href="/me" className="shrink-0">
+                  <img src="/myra-logo-black.png" alt="MYRA" className="h-12 w-auto" />
+                </Link>
+                <div className="flex items-center justify-end gap-7">
+                  <YouButton />
+                  {signOut}
+                </div>
               </div>
-              <Link href="/me" className="block mt-1">
-                <img src="/myra-logo-black.png" alt="MYRA" className="mx-auto h-16 w-auto" />
-              </Link>
-              <div className="pt-4 pb-5">
+              <div className="pb-5">
                 <RoomSearch placeholder="What are you wearing today?" />
               </div>
             </div>
