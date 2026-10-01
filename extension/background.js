@@ -53,6 +53,17 @@ async function saveJob() {
   } catch {}
 }
 
+// Safari only: hand the token to the native side, which writes it into the
+// app group the share sheet reads. Everywhere else this rejects and we move
+// on — the share sheet is an iOS affordance.
+function shareTokenWithApp(token, apiBase) {
+  try {
+    const rt = globalThis.browser?.runtime || ext.runtime
+    if (typeof rt?.sendNativeMessage !== 'function') return
+    Promise.resolve(rt.sendNativeMessage({ type: 'mirrorToken', token: token || null, apiBase: apiBase || null })).catch(() => {})
+  } catch {}
+}
+
 const handlers = {
   async state({ host }) {
     const c = await cfg()
@@ -94,6 +105,7 @@ const handlers = {
     if (status !== 200) return { ok: false, error: 'token rejected' }
     await ext.storage.local.set({ member: json.name })
     rankCache.clear()
+    shareTokenWithApp(token, apiBase)
     return { ok: true, member: json.name }
   },
 
@@ -117,6 +129,7 @@ const handlers = {
   async disconnect() {
     await ext.storage.local.set({ token: null, member: null })
     rankCache.clear()
+    shareTokenWithApp(null, null)
     return { ok: true }
   },
 

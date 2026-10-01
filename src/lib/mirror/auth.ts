@@ -96,3 +96,13 @@ export async function adminFromRequest(req: Request): Promise<MirrorMember | nul
   const m = await memberFromRequest(req)
   return m?.actingAdmin ? m : null
 }
+
+/**
+ * Whether the bearer token's member is Chloe herself. A share extension (like
+ * the browser extension) holds no Supabase session for assertAdmin to read,
+ * so an API route asks this instead: the member's linked auth user is the
+ * ADMIN_USER_ID. This is the only brand-watch gate the share sheet can pass.
+ */
+export function isAdminMember(m: MirrorMember | null): boolean {
+  return !!m?.auth_user_id && !!process.env.ADMIN_USER_ID && m.auth_user_id === process.env.ADMIN_USER_ID
+}
