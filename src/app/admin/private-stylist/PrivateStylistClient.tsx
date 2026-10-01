@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import HerViewTab from './HerViewTab'
 import JourneyTab from './JourneyTab'
 import BrandRequests from './BrandRequests'
+import OutfitQualityTab from './quality/OutfitQualityTab'
 import { listMemberReferencePictures, addMemberReferencePictures, removeMemberReferencePicture, type ReferencePicture } from './reference-actions'
 import { loadMemberConfidence, sendLookToClient, unsendLook, sendAllShotLooks, createClientLogin, type MemberConfidence } from './confidence-actions'
 import { loadClientAttribution, loadTransferSeries, tagLookScope, loadInheritanceReport, runPromotionPass, alignStylistLayers, type ClientAttribution, type InheritanceReport } from './attribution-actions'
@@ -53,7 +54,7 @@ const ROOM_COLOUR: Record<RoomKey, string> = {
   ease: '#A8A8A4',
 }
 
-const TABS = ['MEMBERS', 'DELIVERIES', 'HER VIEW', 'JOURNEY', 'DRY RUN', 'EXIT ARTEFACT'] as const
+const TABS = ['MEMBERS', 'DELIVERIES', 'HER VIEW', 'JOURNEY', 'OUTFIT QUALITY', 'DRY RUN', 'EXIT ARTEFACT'] as const
 type Tab = (typeof TABS)[number]
 
 const OCCASION_LABEL: Record<string, string> = Object.fromEntries(
@@ -321,6 +322,7 @@ export default function PrivateStylistClient({ data }: { data: PilotData }) {
         />
       )}
       {tab === 'DELIVERIES' && <DeliveriesTab data={data} run={run} busy={busy} />}
+      {tab === 'OUTFIT QUALITY' && <OutfitQualityTab />}
       {tab === 'DRY RUN' && <DryRunTab data={data} run={run} busy={busy} goDeliveries={() => setTab('DELIVERIES')} />}
       {tab === 'EXIT ARTEFACT' && <ArtefactTab data={data} />}
     </div>
