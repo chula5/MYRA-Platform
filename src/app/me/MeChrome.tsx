@@ -5,7 +5,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import RoomNav, { ROOMS, type RoomId } from '@/components/me/RoomNav'
+import { ROOMS, ROW_ROOMS, RoomIcon, RoomSearch, type RoomId } from '@/components/me/RoomNav'
 import YouButton from '@/components/me/YouButton'
 import MobileTabBar from '@/components/me/MobileTabBar'
 
@@ -20,20 +20,40 @@ export default function MeChrome({ signOut }: { signOut: React.ReactNode }) {
   // away with the page, and the tab bar at the foot carries the rooms instead.
   return (
     <>
+      {/* A desktop keeps the six rooms down the left, the way Instagram keeps
+          its own: icon over word, the room she is in drawn in ink. The phone
+          carries the same six in the tab bar at the foot instead. */}
+      <nav aria-label="Your rooms" data-tour="rooms" className="hidden sm:flex fixed inset-y-0 left-0 z-40 w-[112px] flex-col items-center justify-center gap-6 border-r border-[rgba(43,43,43,0.14)] bg-[rgba(230,230,233,0.9)] backdrop-blur-md">
+        {ROW_ROOMS.map((room) => {
+          const on = room.id === active
+          return (
+            <Link key={room.id} href={room.href} prefetch aria-label={room.label} aria-current={on ? 'page' : undefined} className={`flex w-full flex-col items-center gap-2 py-1.5 transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#8C8A85] hover:text-[#2B2B2B]'}`}>
+              <span className="block h-10 w-10"><RoomIcon id={room.id} /></span>
+              <span className="text-[12px] tracking-[0.08em] uppercase">{room.short}</span>
+            </Link>
+          )
+        })}
+      </nav>
       <header className="sm:sticky sm:top-0 z-30 myra-pearl border-b border-[rgba(43,43,43,0.18)]">
-        {/* Her front door shows the rooms full width, under the search. Inside a
-            room they step aside into the top right, so the room has the screen. */}
+        {/* Her front door keeps the search under the logo. Inside a room the
+            same pill sits in the bar beside MYRA — the rooms themselves now
+            stand down the left, so they never take the room's width. */}
         {home ? (
           <>
-            <div className="hidden sm:block">
-              <div className="flex items-start justify-end gap-7 px-6 sm:px-10 pt-4">
+            {/* Desktop: the logo and the search, with her profile in the
+                corner. The rooms are down the left side, so the page starts
+                clear of them. */}
+            <div className="hidden sm:block pl-[152px] pr-10">
+              <div className="flex items-start justify-end gap-7 pt-4">
                 <YouButton />
                 {signOut}
               </div>
-              <Link href="/me" className="block px-6 sm:px-10 -mt-12">
-                <img src="/myra-logo-black.png" alt="MYRA" className="mx-auto h-[110px] sm:h-[150px] w-auto" />
+              <Link href="/me" className="block mt-1">
+                <img src="/myra-logo-black.png" alt="MYRA" className="mx-auto h-16 w-auto" />
               </Link>
-              <RoomNav active={active} searchPlaceholder="What are you wearing today?" />
+              <div className="pt-4 pb-5">
+                <RoomSearch placeholder="What are you wearing today?" />
+              </div>
             </div>
             {/* Phone: the rooms live only in the tab bar, avoiding a duplicate
                 row above the content. Her profile is always in the corner. */}
@@ -48,12 +68,12 @@ export default function MeChrome({ signOut }: { signOut: React.ReactNode }) {
           </>
         ) : (
           <>
-            <div className="hidden sm:flex items-center gap-4 px-6 sm:px-10 py-3">
+            <div className="hidden sm:flex items-center gap-4 pl-[152px] pr-10 py-3">
               <Link href="/me" className="shrink-0">
-                <img src="/myra-logo-black.png" alt="MYRA" className="h-[46px] w-auto" />
+                <img src="/myra-logo-black.png" alt="MYRA" className="h-10 w-auto" />
               </Link>
-              <div className="flex-1 min-w-0">
-                <RoomNav active={active} compact />
+              <div className="flex-1 min-w-0 flex justify-end">
+                <RoomSearch variant="header" />
               </div>
               <YouButton active={active === 'profile'} />
               <div className="shrink-0">{signOut}</div>

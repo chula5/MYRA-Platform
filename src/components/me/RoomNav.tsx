@@ -112,6 +112,69 @@ export function RoomIcon({ id }: { id: RoomId }) {
 }
 
 /**
+ * The search pill (after uiverse.io/ahmedyasserdev/funny-treefrog-48): white,
+ * softly lifted, the glass on the left to search and a cross on the right to
+ * clear. The focus ring is MYRA's ink rather than the original's blue.
+ *
+ * On its own so it can stand anywhere the rooms do — under her front door's
+ * logo (`hero`), or beside MYRA in the header (`header`).
+ */
+export function RoomSearch({
+  onSearch, placeholder = 'Search your looks, your pieces, your inspiration', variant = 'hero',
+}: {
+  onSearch?: (query: string) => void
+  placeholder?: string
+  variant?: 'hero' | 'header'
+}) {
+  const [query, setQuery] = useState('')
+  const compact = variant === 'header'
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const q = query.trim()
+    if (!q) return
+    if (onSearch) onSearch(q)
+    else window.location.href = `/me/looks?q=${encodeURIComponent(q)}`
+  }
+
+  const iconSize = compact
+    ? 'w-[clamp(20px,1.2vw,40px)] h-[clamp(20px,1.2vw,40px)]'
+    : 'w-5 h-5 sm:w-[clamp(24px,1.4vw,48px)] sm:h-[clamp(24px,1.4vw,48px)]'
+
+  return (
+    <form
+      onSubmit={submit}
+      onReset={() => setQuery('')}
+      data-tour="search"
+      className={`relative ${compact ? 'w-full max-w-[clamp(200px,14vw,520px)]' : 'w-full md:w-1/2 mx-auto'}`}
+    >
+      <button type="submit" aria-label="Search" className={`absolute top-1/2 -translate-y-1/2 p-1 text-[#55534E] hover:text-[#2B2B2B] ${compact ? 'left-3' : 'left-4 sm:left-[clamp(20px,1.3vw,44px)]'}`}>
+        <svg viewBox="0 0 17 16" fill="none" className={iconSize} aria-hidden>
+          <path d="M7.667 12.667A5.333 5.333 0 107.667 2a5.333 5.333 0 000 10.667zM14.334 14l-2.9-2.9" stroke="currentColor" strokeWidth="1.333" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder={compact ? 'Search' : placeholder}
+        aria-label="Search"
+        type="text"
+        className={`w-full rounded-full bg-white border-2 border-transparent shadow-md transition-all duration-300 focus:outline-none focus:border-[#2B2B2B] text-[#2B2B2B] placeholder:text-[#8C8A85] ${compact
+          ? 'text-[clamp(19px,1.15vw,40px)] pl-[clamp(44px,2.8vw,88px)] pr-[clamp(40px,2.6vw,80px)] py-[clamp(8px,0.6vw,22px)]'
+          : 'text-[16px] sm:text-[clamp(21px,1.3vw,44px)] pl-12 sm:pl-[clamp(64px,4.2vw,140px)] pr-10 sm:pr-[clamp(60px,4vw,130px)] py-3 sm:py-[clamp(16px,1vw,36px)]'}`}
+      />
+      {query && (
+        <button type="reset" aria-label="Clear search" className={`absolute top-1/2 -translate-y-1/2 p-1 text-[#55534E] hover:text-[#2B2B2B] ${compact ? 'right-3' : 'right-3 sm:right-[clamp(20px,1.3vw,44px)]'}`}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className={iconSize} aria-hidden>
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      )}
+    </form>
+  )
+}
+
+/**
  * The bar. `onSelect` makes each room a button (HER VIEW); without it each
  * room is a link (her own pages).
  */
@@ -125,16 +188,6 @@ export default function RoomNav({
   compact?: boolean
   searchPlaceholder?: string
 }) {
-  const [query, setQuery] = useState('')
-
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault()
-    const q = query.trim()
-    if (!q) return
-    if (onSearch) onSearch(q)
-    else window.location.href = `/me/looks?q=${encodeURIComponent(q)}`
-  }
-
   const room = (r: Room) => {
     const on = r.id === active
     const inner = (
@@ -156,46 +209,10 @@ export default function RoomNav({
     )
   }
 
-  // The search pill (after uiverse.io/ahmedyasserdev/funny-treefrog-48): white,
-  // softly lifted, the glass on the left to search and a cross on the right to
-  // clear. The focus ring is MYRA's ink rather than the original's blue.
-  const iconSize = compact ? 'w-[clamp(20px,1.2vw,40px)] h-[clamp(20px,1.2vw,40px)]' : 'w-6 h-6'
-  const search = (
-    <form
-      onSubmit={submit}
-      onReset={() => setQuery('')}
-      data-tour="search"
-      className={`relative ${compact ? 'w-full max-w-[clamp(200px,14vw,520px)]' : 'w-full'}`}
-    >
-      <button type="submit" aria-label="Search" className={`absolute top-1/2 -translate-y-1/2 p-1 text-[#55534E] hover:text-[#2B2B2B] ${compact ? 'left-3' : 'left-5'}`}>
-        <svg viewBox="0 0 17 16" fill="none" className={iconSize} aria-hidden>
-          <path d="M7.667 12.667A5.333 5.333 0 107.667 2a5.333 5.333 0 000 10.667zM14.334 14l-2.9-2.9" stroke="currentColor" strokeWidth="1.333" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
-      <input
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder={compact ? 'Search' : searchPlaceholder}
-        aria-label="Search"
-        type="text"
-        className={`w-full rounded-full bg-white border-2 border-transparent shadow-md transition-all duration-300 focus:outline-none focus:border-[#2B2B2B] text-[#2B2B2B] placeholder:text-[#8C8A85] ${compact
-          ? 'text-[clamp(19px,1.15vw,40px)] pl-[clamp(44px,2.8vw,88px)] pr-[clamp(40px,2.6vw,80px)] py-[clamp(8px,0.6vw,22px)]'
-          : 'text-[21px] pl-16 pr-14 py-4'}`}
-      />
-      {query && (
-        <button type="reset" aria-label="Clear search" className={`absolute top-1/2 -translate-y-1/2 p-1 text-[#55534E] hover:text-[#2B2B2B] ${compact ? 'right-3' : 'right-5'}`}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className={iconSize} aria-hidden>
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      )}
-    </form>
-  )
-
   if (compact) {
     return (
       <div className="flex items-center justify-end gap-4 w-full">
-        {search}
+        <RoomSearch variant="header" onSearch={onSearch} placeholder="Search" />
         <nav data-lenis-prevent data-tour="rooms" className="flex items-start gap-1 overflow-x-auto">
           {ROW_ROOMS.map(room)}
         </nav>
@@ -207,28 +224,7 @@ export default function RoomNav({
     <div className="w-full">
       <div className="w-full px-5 sm:px-10 pt-4 sm:pt-7 pb-5 sm:pb-6">
         {/* Search — the same pill as the header's, at her front door's scale */}
-        <form onSubmit={submit} onReset={() => setQuery('')} data-tour="search" className="relative w-full md:w-1/2 mx-auto">
-          <button type="submit" aria-label="Search" className="absolute top-1/2 -translate-y-1/2 left-4 sm:left-[clamp(20px,1.3vw,44px)] p-1 text-[#55534E] hover:text-[#2B2B2B]">
-            <svg viewBox="0 0 17 16" fill="none" className="w-5 h-5 sm:w-[clamp(24px,1.4vw,48px)] sm:h-[clamp(24px,1.4vw,48px)]" aria-hidden>
-              <path d="M7.667 12.667A5.333 5.333 0 107.667 2a5.333 5.333 0 000 10.667zM14.334 14l-2.9-2.9" stroke="currentColor" strokeWidth="1.333" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={searchPlaceholder}
-            aria-label="Search"
-            type="text"
-            className="w-full rounded-full bg-white border-2 border-transparent shadow-md transition-all duration-300 focus:outline-none focus:border-[#2B2B2B] text-[16px] sm:text-[clamp(21px,1.3vw,44px)] text-[#2B2B2B] placeholder:text-[#8C8A85] pl-12 sm:pl-[clamp(64px,4.2vw,140px)] pr-10 sm:pr-[clamp(60px,4vw,130px)] py-3 sm:py-[clamp(16px,1vw,36px)]"
-          />
-          {query && (
-            <button type="reset" aria-label="Clear search" className="absolute top-1/2 -translate-y-1/2 right-3 sm:right-[clamp(20px,1.3vw,44px)] p-1 text-[#55534E] hover:text-[#2B2B2B]">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-5 h-5 sm:w-[clamp(24px,1.4vw,48px)] sm:h-[clamp(24px,1.4vw,48px)]" aria-hidden>
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          )}
-        </form>
+        <RoomSearch onSearch={onSearch} placeholder={searchPlaceholder} />
 
         {/* The rooms, spread across the screen. On a phone they are one row
             of icons with no words — the tab bar at the foot carries the same
