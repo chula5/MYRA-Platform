@@ -319,7 +319,11 @@ export default function ShopBrain({ testMemberId }: { testMemberId?: string }) {
         />
         {view.saved.length > 0 && <Door
           title="STYLED FOR YOU"
-          cover={styledCover} coverFit={firstLook?.image_url ? 'cover' : 'contain'}
+          // Filled to the tile like the other two, so it takes the same
+          // rounded edge and stands the same size. It used to be contained
+          // whenever the cover was a single piece rather than a composed
+          // look, which shrank it inside the tile and left square corners.
+          cover={styledCover} coverFit="cover"
           inside={styledInside}
           insideNode={styledBoxes}
           open={door === 'styled'} onOpen={() => toggle('styled')}
