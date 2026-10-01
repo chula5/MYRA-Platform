@@ -37,6 +37,11 @@ const SOURCES: { id: TaskSource; label: string }[] = [
 ]
 const SOURCE_LABEL: Record<string, string> = { wardrobe: 'From my wardrobe', new: 'New pieces', both: 'Wardrobe and new' }
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+const ICON = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' } as const
+function ClockIcon() { return <svg viewBox="0 0 24 24" className="w-6 h-6" aria-hidden><circle cx="12" cy="12" r="8.5" {...ICON} /><path d="M12 7v5l3.5 2.5" {...ICON} /></svg> }
+function PinIcon() { return <svg viewBox="0 0 24 24" className="w-5 h-5" aria-hidden><path d="M20 10c0 5.4-8 11-8 11S4 15.4 4 10a8 8 0 1116 0Z" {...ICON} /><circle cx="12" cy="10" r="2.5" {...ICON} /></svg> }
+function MealIcon() { return <svg viewBox="0 0 24 24" className="w-5 h-5" aria-hidden><path d="M6 3v7M3.5 3v4a2.5 2.5 0 005 0V3M6 10v11M16 3v18M16 3c3 1 4.5 4 4.5 7.5H16" {...ICON} /></svg> }
+function TaskIcon() { return <svg viewBox="0 0 24 24" className="w-6 h-6" aria-hidden><rect x="3" y="3" width="14" height="16" rx="2" {...ICON} /><path d="m11 16 8.5-8.5 2 2L13 18l-3 1 1-3Z" {...ICON} /></svg> }
 
 /** A day written as YYYY-MM-DD, read as plain text so it cannot drift a day. */
 function readDay(iso: string): { month: string; day: string; full: string } {
@@ -153,14 +158,11 @@ export default function EventsClient({ testMemberId }: { testMemberId?: string }
 
           {!connected.length && (
             <div className="space-y-4">
-              <p className={`${T} text-[#4A4E57]`}>
-                Connect your calendar and MYRA sees what is coming up worth dressing for. Set a task for any of it, and say whether to use
-                what you already own, find something new, or both.
-              </p>
+              <p className={`${T} text-[#4A4E57]`}>Your upcoming plans are below. Connect your Apple Calendar in the MYRA iPhone app to add more automatically.</p>
+              <button type="button" onClick={() => setMsg('Apple Calendar connection is being added to the iPhone app. Your setup events are already here.')} className="inline-flex items-center gap-3 rounded-full bg-[#2B2B2B] px-5 py-3 text-[20px] text-white"><span className="grid h-7 w-7 place-items-center rounded-md bg-white text-[#2B2B2B]"></span> Connect Apple Calendar</button>
               {calendar.ready
-                ? <a href={connectHref} className="inline-block text-[clamp(22px,1.25vw,38px)] px-[1.3em] py-[0.6em] bg-[#2B2B2B] text-white rounded-full">Connect Google Calendar</a>
-                : <span className={`${T} inline-block px-6 py-3 border border-[#C3BFB8] text-[#8C8A85] rounded-full`}>Connect Google Calendar (not set up yet)</span>}
-              <p className={`${SMALL} text-[#6E6B65]`}>Read only. MYRA keeps the title, time and place of events worth dressing for, nothing else.</p>
+                ? <a href={connectHref} className="inline-block text-[16px] text-[#6E6B65] underline underline-offset-4">Use Google Calendar instead</a>
+                : null}
             </div>
           )}
         </div>
@@ -169,7 +171,10 @@ export default function EventsClient({ testMemberId }: { testMemberId?: string }
       {/* The days worth dressing for, and the task set for each. */}
       {connected.length > 0 && (
         <section className={`${CARD} space-y-4`}>
-          <h2 className={HEADING}>COMING UP</h2>
+          <div className="flex items-center justify-between gap-4">
+            <h2 className={`${HEADING} flex items-center gap-3`}><ClockIcon />COMING UP</h2>
+            <button type="button" onClick={() => setAdding(true)} className={`${SMALL} rounded-full bg-[#2B2B2B] px-4 py-2 text-white`}>Add one</button>
+          </div>
           {!calendar.events.length && <p className={`${T} text-[#4A4E57]`}>Nothing to dress for in the next three months.</p>}
           <div className="space-y-3">
             {calendar.events.map((e) => {
@@ -185,9 +190,11 @@ export default function EventsClient({ testMemberId }: { testMemberId?: string }
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className={`${T} text-[#2B2B2B] leading-tight`}>{e.title}</p>
-                      <p className={`${SMALL} text-[#6E6B65]`}>
-                        {[OCCASION[e.occasion ?? ''] ?? null, e.all_day ? null : d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), e.location].filter(Boolean).join(' · ')}
-                      </p>
+                      <div className={`${SMALL} mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[#6E6B65]`}>
+                        {e.occasion === 'dinner_drinks' && <span className="inline-flex items-center gap-1"><MealIcon />Dinner or drinks</span>}
+                        {!e.all_day && <span className="inline-flex items-center gap-1"><ClockIcon />{d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>}
+                        {e.location && <span className="inline-flex items-center gap-1"><PinIcon />{e.location}</span>}
+                      </div>
                     </div>
                     {task ? (
                       <p className={`${SMALL} text-[#2B2B2B] md:max-w-[46%] md:text-right`}>
@@ -248,13 +255,28 @@ export default function EventsClient({ testMemberId }: { testMemberId?: string }
         </section>
       )}
 
+      {area.knownEvents.length > 0 && (
+        <section className={`${CARD} space-y-3`}>
+          <div className="flex items-center justify-between gap-4">
+            <h2 className={`${HEADING} flex items-center gap-3`}><ClockIcon />COMING UP</h2>
+            <button type="button" onClick={() => setAdding(true)} className={`${SMALL} rounded-full bg-[#2B2B2B] px-4 py-2 text-white`}>Add one</button>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {area.knownEvents.map((event) => (
+              <div key={event.event_id} className={`${ROW} flex items-center justify-between gap-4`}>
+                <div><p className={`${T} text-[#2B2B2B]`}>{event.label}</p><p className={`${SMALL} text-[#6E6B65]`}>{readDay(event.event_date).full}</p></div>
+                <button type="button" onClick={() => { setAdding(true); setMine((m) => ({ ...m, label: event.label, date: event.event_date })) }} className={`${SMALL} underline underline-offset-4`}>Style it</button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Everything she has set, calendar or not, and the way to add one by hand. */}
       <section className={`${CARD} space-y-4`}>
-        <h2 className={HEADING}>YOUR TASKS</h2>
+        <h2 className={`${HEADING} flex items-center gap-3`}><TaskIcon />YOUR TASKS</h2>
         {!area.tasks.length && (
-          <p className={`${T} text-[#4A4E57]`}>
-            Nothing set yet. Pick a day from your calendar, or add something yourself below.
-          </p>
+          <p className={`${T} text-[#4A4E57]`}>Set a task for MYRA.</p>
         )}
         <div className="space-y-3">
           {area.tasks.map((t) => {
@@ -333,8 +355,8 @@ export default function EventsClient({ testMemberId }: { testMemberId?: string }
               </div>
             </div>
           ) : (
-            <button onClick={() => setAdding(true)} className={`${T} underline underline-offset-4 text-[#2B2B2B]`}>
-              Dressing for something else? Add it yourself
+            <button onClick={() => setAdding(true)} className={`${T} inline-flex items-center gap-3 rounded-full bg-[#2B2B2B] px-5 py-3 text-white`}>
+              <TaskIcon /> Search for a specific item
             </button>
           )}
         </div>

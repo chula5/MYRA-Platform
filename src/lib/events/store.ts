@@ -30,6 +30,7 @@ export interface StylingTaskView {
   status: TaskStatus
   created_at: string
 }
+export interface KnownEventView { event_id: string; label: string; event_date: string }
 
 const COLUMNS = 'task_id, calendar_event_id, event_label, event_date, brief, source, status, created_at'
 
@@ -51,6 +52,18 @@ export async function listStylingTasks(memberId: string): Promise<StylingTaskVie
     .eq('member_id', memberId)
     .order('event_date')
     .order('created_at')
+  if (error) throw new Error(error.message)
+  return data ?? []
+}
+
+/** Events she gave MYRA during setup, before connecting any calendar. */
+export async function listKnownEvents(memberId: string): Promise<KnownEventView[]> {
+  const admin = createAdminClient() as any
+  const { data, error } = await admin.from('pilot_known_event')
+    .select('event_id, label, event_date')
+    .eq('member_id', memberId)
+    .gte('event_date', new Date().toISOString().slice(0, 10))
+    .order('event_date')
   if (error) throw new Error(error.message)
   return data ?? []
 }

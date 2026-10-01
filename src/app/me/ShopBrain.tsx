@@ -129,7 +129,7 @@ function StyledPiece({ piece, looks, working, note, active, onPick }: {
 // with the title in a white band; on hover the inside turns up from the
 // bottom edge, a small grid of what she will find behind it.
 function Door({
-  title, cover, coverFit = 'contain', inside, insideNode, open, onOpen, empty,
+  title, cover, coverFit = 'cover', inside, insideNode, open, onOpen, empty,
 }: {
   title: string
   cover: string | null
@@ -153,7 +153,7 @@ function Door({
       {/* Front: no card or frame, just the rounded cover image and its title. */}
       <div className="absolute inset-0">
         {cover ? (
-          <FallbackImage src={cover} thumbWidth={900} alt="" className={`absolute inset-0 w-full h-full ${coverFit === 'cover' ? 'object-cover' : 'object-contain p-10'}`} />
+          <FallbackImage src={cover} thumbWidth={900} alt="" className={`absolute inset-0 w-full h-full ${coverFit === 'cover' ? 'object-cover' : 'object-contain p-4'}`} />
         ) : (
           <p className="absolute inset-x-6 bottom-10 text-center text-[19px] text-[#55534E]">{empty}</p>
         )}

@@ -17,8 +17,6 @@ import BuiltOutfit from './BuiltOutfit'
 import SavedPieces from './SavedPieces'
 import DressingRoomScene from '@/components/me/DressingRoomScene'
 import EmailFinds from './EmailFinds'
-import CalendarPanel from './CalendarPanel'
-import OutfitBuilder from './OutfitBuilder'
 import { loadEmailPanel } from './email-actions'
 import { useScrollTo } from '@/lib/smooth-scroll'
 
@@ -363,13 +361,6 @@ export default function DressingRoomClient({
             </div>
           </section>
         )}
-
-        {/* Her turn: pieces she owns and pieces she saved, to try against each
-            other. It sits under the rail because the rail is what it draws on. */}
-        <OutfitBuilder testMemberId={testMemberId} />
-
-        {/* What is coming up, from her calendar — so MYRA can plan for it. */}
-        <CalendarPanel testMemberId={testMemberId} />
 
         {/* What she kept with the mirror while she was out shopping. */}
         <SavedPieces testMemberId={testMemberId} />

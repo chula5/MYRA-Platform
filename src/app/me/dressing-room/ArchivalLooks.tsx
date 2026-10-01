@@ -171,7 +171,7 @@ export default function ArchivalLooks({ testMemberId }: { testMemberId?: string 
         <>
           <div className="flex flex-wrap gap-2">
             <button onClick={() => setImporting(true)} className="inline-flex items-center gap-2 text-[18px] xl:text-[21px] 2xl:text-[25px] px-5 py-2.5 bg-[#2B2B2B] text-white rounded-full">
-              <img src="/instagram.svg" alt="" className="w-5 h-5 invert" /> Import
+              <img src="/instagram.svg" alt="Instagram" className="w-5 h-5 brightness-0 invert" /> Import
             </button>
             <button disabled={working('upload')} onClick={() => fileRef.current?.click()} className="text-[18px] xl:text-[21px] 2xl:text-[25px] px-5 py-2.5 border border-[#2B2B2B] text-[#2B2B2B] rounded-full disabled:opacity-40">
               {working('upload') ? 'Adding…' : 'Add photos'}

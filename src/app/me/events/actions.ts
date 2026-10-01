@@ -8,24 +8,26 @@
 
 import { resolveClientMember } from '@/lib/client-member'
 import {
-  EVENTS_MIGRATION_HINT, createStylingTask, listStylingTasks, removeStylingTask, setStylingTaskStatus,
-  type StylingTaskView, type TaskSource, type TaskStatus,
+  EVENTS_MIGRATION_HINT, createStylingTask, listKnownEvents, listStylingTasks, removeStylingTask, setStylingTaskStatus,
+  type KnownEventView, type StylingTaskView, type TaskSource, type TaskStatus,
 } from '@/lib/events/store'
 
 export interface EventsAreaView {
   memberId: string | null
   tasks: StylingTaskView[]
+  knownEvents: KnownEventView[]
   error?: string
 }
 
 export async function loadMyEvents(asMemberId?: string): Promise<EventsAreaView> {
   const me = await resolveClientMember(asMemberId)
-  if (!me) return { memberId: null, tasks: [] }
+  if (!me) return { memberId: null, tasks: [], knownEvents: [] }
   try {
-    return { memberId: me.memberId, tasks: await listStylingTasks(me.memberId) }
+    const [tasks, knownEvents] = await Promise.all([listStylingTasks(me.memberId), listKnownEvents(me.memberId)])
+    return { memberId: me.memberId, tasks, knownEvents }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    return { memberId: me.memberId, tasks: [], error: /member_styling_task/.test(msg) ? EVENTS_MIGRATION_HINT : msg }
+    return { memberId: me.memberId, tasks: [], knownEvents: [], error: /member_styling_task/.test(msg) ? EVENTS_MIGRATION_HINT : msg }
   }
 }
 

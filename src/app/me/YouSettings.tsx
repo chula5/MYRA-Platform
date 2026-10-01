@@ -55,7 +55,7 @@ function ServiceMark({ service }: { service: 'safari' | 'chrome' | 'claude' | 'c
     instagram: 'https://cdn.simpleicons.org/instagram/E4405F',
     email: 'https://cdn.simpleicons.org/maildotru/6E6B65',
   }
-  return <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white p-2 shadow-[0_2px_8px_rgba(43,43,43,0.12)]">{/* eslint-disable-next-line @next/next/no-img-element */}<img src={logos[service]} alt="" className="h-full w-full object-contain" /></span>
+  return <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white p-2 shadow-[0_2px_8px_rgba(43,43,43,0.12)]">{/* eslint-disable-next-line @next/next/no-img-element */}<img src={logos[service]} alt={`${service} logo`} className="h-full w-full object-contain" /></span>
 }
 
 function when(iso: string | null) {

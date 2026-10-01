@@ -34,7 +34,10 @@ export default function ForYouClient({ view, testMemberId }: { view: ForYouView;
       img.onerror = () => done()
       img.src = u
     })))
-    const atLeast = new Promise((r) => setTimeout(r, 1100))
+    // Keep the mirror up long enough for the first meaningful content to be
+    // ready. An empty feed must not flash its empty-state before Shop Brain
+    // has had a chance to arrive.
+    const atLeast = new Promise((r) => setTimeout(r, 2200))
     const atMost = new Promise((r) => setTimeout(r, 6000))
     void Promise.race([Promise.all([loaded, atLeast]), atMost]).then(() => {
       if (!live) return
@@ -59,29 +62,22 @@ export default function ForYouClient({ view, testMemberId }: { view: ForYouView;
               nothing until there is something to show. */}
           <ShopBrain testMemberId={testMemberId} />
 
-          <div className="text-center mb-10">
+          {view.looks.length > 0 && <div className="text-center mb-10">
             <p className="myra-section-note">YOUR NEWEST LOOKS</p>
-            <p className="myra-guide-text mt-3 text-[clamp(21px,1.25vw,32px)] text-[#55534E]">
-              Like and dislike the outfits — that is how MYRA learns what you would actually wear.
-            </p>
-          </div>
+          </div>}
           {view.error && <p className="text-[20px] text-[#B83A3A] text-center mb-6">{view.error}</p>}
-          {view.looks.length === 0 ? (
-            <p className="text-[22px] text-[#4A4E57] text-center py-10">
-              Your first looks are on their way.
-            </p>
-          ) : (
+          {view.looks.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6 md:gap-8 w-full">
               {view.looks.map((l) => <LookCard key={l.look_id} look={l} testMemberId={testMemberId} />)}
             </div>
           )}
-          <div className="text-center mt-12">
+          {view.looks.length > 0 && <div className="text-center mt-12">
             {testMemberId ? (
               <p className="text-[20px] text-[#55534E]">Her other looks are in ALL LOOKS.</p>
             ) : (
               <Link href="/me/looks" className="text-[22px] text-[#2B2B2B] underline underline-offset-4">See all your looks →</Link>
             )}
-          </div>
+          </div>}
         </div>
       </div>
     </div>
