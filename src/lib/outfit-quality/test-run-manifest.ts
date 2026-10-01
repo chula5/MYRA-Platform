@@ -9,9 +9,17 @@
 import { randomUUID } from 'node:crypto'
 
 /**
- * The Quality Lab evidence tables in dependency-safe delete order (children
- * before parents). Cleanup walks this order so foreign keys never block a
- * delete of recorded IDs.
+ * The tables a Quality Lab test run may clean, in dependency-safe delete order
+ * (children before parents). Cleanup walks this order so foreign keys never
+ * block a delete of recorded IDs.
+ *
+ * The two non-namespaced entries, `outfit_item` and `outfit`, are the canonical
+ * graph a render/promotion test creates when it promotes its own approved
+ * `test` candidate. They are included so a test can remove exactly the outfit
+ * and outfit_item rows IT inserted. They are deleted after the promotion row
+ * that references the outfit, and `outfit_item` is deleted before its `outfit`.
+ * This is still exact-ID-only: the pre-existing 444 legacy outfits are never
+ * recorded here, so they are never in a delete plan.
  */
 export const OUTFIT_QUALITY_DELETE_ORDER = [
   'outfit_quality_learning_projection',
@@ -19,6 +27,8 @@ export const OUTFIT_QUALITY_DELETE_ORDER = [
   'outfit_quality_render_attempt',
   'outfit_quality_render_job',
   'outfit_quality_promotion',
+  'outfit_item',
+  'outfit',
   'outfit_quality_review_event',
   'outfit_quality_queue_hold',
   'outfit_quality_machine_check',
@@ -58,7 +68,7 @@ export class TestRunManifest {
   /** Record one or more exact primary keys for a table. */
   record(table: OutfitQualityTable, idColumn: string, ...ids: string[]): this {
     if (!DELETE_ORDER_SET.has(table)) {
-      throw new Error(`Unknown Quality Lab table: ${table}`)
+      throw new Error(`Unknown Quality Lab cleanup table: ${table}`)
     }
     const set = this.recorded.get(table) ?? new Set<string>()
     for (const id of ids) set.add(id)

@@ -62,4 +62,41 @@ describe('TestRunManifest', () => {
   it('delete order covers every table exactly once', () => {
     expect(new Set(OUTFIT_QUALITY_DELETE_ORDER).size).toBe(OUTFIT_QUALITY_DELETE_ORDER.length)
   })
+
+  it('supports cleaning a test run\'s own promoted outfit and outfit_item rows', () => {
+    const m = new TestRunManifest()
+    // A promotion test creates one internal outfit linked to its items.
+    m.record('outfit', 'outfit_id', A)
+    m.record('outfit_item', 'outfit_item_id', B, C)
+    m.record('outfit_quality_promotion', 'promotion_id', A)
+    const sql = m.deleteSql()
+    const forOutfit = sql.find((s) => s.includes('public.outfit '))
+    const forOutfitItem = sql.find((s) => s.includes('public.outfit_item '))
+    expect(forOutfitItem).toBe(`delete from public.outfit_item where outfit_item_id in ('${B}', '${C}');`)
+    expect(forOutfit).toBe(`delete from public.outfit where outfit_id in ('${A}');`)
+  })
+
+  it('deletes outfit_item before outfit, and outfit after the promotion that references it', () => {
+    const m = new TestRunManifest()
+    m.record('outfit', 'outfit_id', A)
+    m.record('outfit_item', 'outfit_item_id', B)
+    m.record('outfit_quality_promotion', 'promotion_id', C)
+    const order = m.deletePlan().map((s) => s.table)
+    // outfit_item (child) before outfit (parent)
+    expect(order.indexOf('outfit_item')).toBeLessThan(order.indexOf('outfit'))
+    // promotion.outfit_id references outfit, so the promotion row must go first
+    expect(order.indexOf('outfit_quality_promotion')).toBeLessThan(order.indexOf('outfit'))
+  })
+
+  it('never emits a broad predicate for the shared outfit tables', () => {
+    const m = new TestRunManifest()
+    m.record('outfit', 'outfit_id', A)
+    m.record('outfit_item', 'outfit_item_id', B)
+    for (const s of m.deleteSql()) {
+      expect(s).not.toMatch(/data_partition/)
+      expect(s).not.toMatch(/truncate/i)
+      expect(s).not.toMatch(/\blike\b/i)
+      expect(s).toMatch(/ in \('/) // always an exact-id IN list
+    }
+  })
 })

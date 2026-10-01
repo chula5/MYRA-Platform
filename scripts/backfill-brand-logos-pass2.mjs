@@ -5,9 +5,12 @@
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'node:crypto'
 
-const CLOUD_NAME = 'dugby2pow'
-const API_KEY = '333725823491761'
+const CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME || process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
+const API_KEY = process.env.CLOUDINARY_API_KEY
 const API_SECRET = process.env.CLOUDINARY_API_SECRET
+if (!CLOUD_NAME || !API_KEY || !API_SECRET) {
+  throw new Error('Cloudinary env is incomplete: set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET in .env.local')
+}
 const supa = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
 const UA = { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36' }
 

@@ -9,6 +9,10 @@
 // Fail-closed: a caller that needs to sign an upload asks for the full config
 // and receives a redacted error naming the MISSING variable names — never any
 // value — when configuration is incomplete.
+//
+// This module is server-only. Importing it from a Client Component is a build
+// error, so the API key and secret can never be bundled for the browser.
+import 'server-only'
 
 export interface CloudinaryConfig {
   cloudName: string

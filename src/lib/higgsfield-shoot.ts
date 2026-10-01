@@ -17,8 +17,12 @@ export type HiggsfieldCombo = {
   hair: string  // pose-appropriate hair STYLING (not colour — colour varies per model)
 }
 
+// The cloud name is the public, build-inlined NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
+// (not a credential); only the hosted asset path is fixed. Keeping it out of a
+// source literal means no cloud-name literal lives in source.
+const POSE_B_REF_CLOUD = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || ''
 export const POSE_B_REF =
-  'https://res.cloudinary.com/dugby2pow/image/upload/f_jpg,q_90,w_1024/v1778533850/hf_20260423_181435_8fdd30ea-92d0-4d38-9d6c-aab5d6949afd_hu6dxf.png'
+  `https://res.cloudinary.com/${POSE_B_REF_CLOUD}/image/upload/f_jpg,q_90,w_1024/v1778533850/hf_20260423_181435_8fdd30ea-92d0-4d38-9d6c-aab5d6949afd_hu6dxf.png`
 
 export const HIGGSFIELD_COMBOS: Record<string, HiggsfieldCombo> = {
   A1: {
