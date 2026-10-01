@@ -146,19 +146,19 @@ function Door({
       type="button"
       onClick={onOpen}
       aria-expanded={open}
-      className={`group relative w-full aspect-[3/4] rounded-[24px] overflow-hidden bg-white text-left
-        [perspective:1000px] shadow-[0_2px_18px_rgba(43,43,43,0.07)]
+      className={`group relative w-full aspect-[3/4] rounded-[24px] overflow-hidden text-left
+        [perspective:1000px]
         hover:scale-[1.03] focus-visible:scale-[1.03] outline-none focus:outline-none ${FLIP}`}
     >
-      {/* Front: the cover and the title. */}
-      <div className="absolute inset-0 bg-white">
+      {/* Front: no card or frame, just the rounded cover image and its title. */}
+      <div className="absolute inset-0">
         {cover ? (
           <FallbackImage src={cover} thumbWidth={900} alt="" className={`absolute inset-0 w-full h-full ${coverFit === 'cover' ? 'object-cover' : 'object-contain p-10'}`} />
         ) : (
           <p className="absolute inset-x-6 bottom-10 text-center text-[19px] text-[#55534E]">{empty}</p>
         )}
         <div className="absolute inset-0 flex items-center justify-center px-6">
-          <p className="bg-[rgba(255,255,255,0.88)] backdrop-blur-[2px] rounded-full px-8 py-4 text-center text-[clamp(26px,2.6vw,52px)] tracking-[0.05em] leading-[1.05] text-[#2B2B2B]">
+          <p className="bg-[rgba(255,255,255,0.88)] backdrop-blur-[2px] rounded-full px-3 py-2 sm:px-8 sm:py-4 text-center text-[12px] sm:text-[clamp(26px,2.6vw,52px)] tracking-[0.05em] leading-[1.05] text-[#2B2B2B]">
             {title}
           </p>
         </div>
@@ -292,7 +292,7 @@ export default function ShopBrain({ testMemberId }: { testMemberId?: string }) {
       </div>
 
       {/* The three doors. */}
-      <div className={`grid grid-cols-1 ${doors === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-8 lg:gap-12 2xl:gap-16 w-full px-2 sm:px-4 lg:px-8`}>
+      <div className={`grid ${doors === 3 ? 'grid-cols-3' : 'grid-cols-2'} gap-3 sm:gap-8 lg:gap-12 2xl:gap-16 w-full px-2 sm:px-4 lg:px-8`}>
         <Door
           title="MORE OF THE SAME"
           cover={view.similar[0]?.image_url ?? null}

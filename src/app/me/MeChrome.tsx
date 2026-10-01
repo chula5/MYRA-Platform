@@ -35,17 +35,15 @@ export default function MeChrome({ signOut }: { signOut: React.ReactNode }) {
               </Link>
               <RoomNav active={active} searchPlaceholder="What are you wearing today?" />
             </div>
-            {/* Phone: logo small, OUT beside it, the search under it and the
-                rooms as one row of icons. The big centred logo used to be
-                pulled up over the YOU button, hiding it entirely. */}
+            {/* Phone: the rooms live only in the tab bar, avoiding a duplicate
+                row above the content. Her profile is always in the corner. */}
             <div className="sm:hidden">
               <div className="flex items-center justify-between px-5 pt-3">
                 <Link href="/me" aria-label="MYRA — For You">
                   <img src="/myra-logo-black.png" alt="MYRA" className="h-8 w-auto" />
                 </Link>
-                {signOut}
+                <YouButton active={active === 'profile'} showLabel={false} />
               </div>
-              <RoomNav active={active} searchPlaceholder="What are you wearing today?" />
             </div>
           </>
         ) : (
@@ -60,13 +58,13 @@ export default function MeChrome({ signOut }: { signOut: React.ReactNode }) {
               <YouButton active={active === 'profile'} />
               <div className="shrink-0">{signOut}</div>
             </div>
-            {/* Phone inside a room: just the way home and the way out — the
-                rooms themselves are on the tab bar. */}
+            {/* Phone inside a room: the way home and her profile. The rooms
+                themselves are always available in the tab bar. */}
             <div className="sm:hidden flex items-center justify-between px-5 py-3">
               <Link href="/me" aria-label="MYRA — For You">
                 <img src="/myra-logo-black.png" alt="MYRA" className="h-8 w-auto" />
               </Link>
-              {signOut}
+              <YouButton active={active === 'profile'} showLabel={false} />
             </div>
           </>
         )}

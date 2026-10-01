@@ -6,7 +6,7 @@ import Link from 'next/link'
 
 const S = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.3, strokeLinecap: 'round', strokeLinejoin: 'round' } as const
 
-export default function YouButton({ active, onClick }: { active?: boolean; onClick?: () => void }) {
+export default function YouButton({ active, onClick, showLabel = true }: { active?: boolean; onClick?: () => void; showLabel?: boolean }) {
   const inner = (
     <>
       <span className={`block w-9 h-9 sm:w-[clamp(54px,2.9vw,104px)] sm:h-[clamp(54px,2.9vw,104px)] mx-auto ${active ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>
@@ -15,7 +15,7 @@ export default function YouButton({ active, onClick }: { active?: boolean; onCli
           <path d="M14 52c2-10 9.5-15 18-15s16 5 18 15" {...S} />
         </svg>
       </span>
-      <span className={`block mt-0.5 sm:mt-1 text-[13px] sm:text-[clamp(21px,1.15vw,40px)] ${active ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>You</span>
+      {showLabel && <span className={`block mt-0.5 sm:mt-1 text-[13px] sm:text-[clamp(21px,1.15vw,40px)] ${active ? 'text-[#2B2B2B]' : 'text-[#55534E] group-hover:text-[#2B2B2B]'}`}>You</span>}
     </>
   )
   const cls = 'group text-center shrink-0'

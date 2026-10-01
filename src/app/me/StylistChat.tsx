@@ -174,8 +174,8 @@ export default function StylistChat({ asMemberId }: { asMemberId?: string }) {
 
   return (
     <>
-      {!open && <button onClick={() => setOpen(true)} aria-label="Talk to a stylist" className="fixed right-6 bottom-[calc(64px+env(safe-area-inset-bottom))] sm:right-8 sm:bottom-8 z-[56] flex items-center gap-4 bg-[#2B2B2B] text-white rounded-full pl-8 pr-10 py-6 sm:pl-10 sm:pr-12 sm:py-7 shadow-[0_8px_30px_rgba(43,43,43,0.3)] hover:bg-[#0A0A0A] hover:scale-[1.03] transition-[background-color,transform]">
-        <SpeechIcon className="w-9 h-9 sm:w-12 sm:h-12" /><span className="text-[24px] sm:text-[clamp(28px,1.8vw,40px)] tracking-[0.14em]">STYLIST</span>
+      {!open && <button onClick={() => setOpen(true)} aria-label="Talk to a stylist" className="fixed right-5 bottom-[calc(68px+env(safe-area-inset-bottom))] sm:right-8 sm:bottom-8 z-[56] flex items-center gap-2.5 bg-[#2B2B2B] text-white rounded-full pl-5 pr-6 py-3.5 sm:gap-4 sm:pl-10 sm:pr-12 sm:py-7 shadow-[0_8px_30px_rgba(43,43,43,0.3)] hover:bg-[#0A0A0A] hover:scale-[1.03] transition-[background-color,transform]">
+        <SpeechIcon className="w-6 h-6 sm:w-12 sm:h-12" /><span className="text-[15px] sm:text-[clamp(28px,1.8vw,40px)] tracking-[0.14em]">STYLIST</span>
       </button>}
 
       <aside className={`fixed right-0 top-0 h-full z-[57] w-[min(1100px,96vw)] myra-pearl shadow-[-8px_0_32px_rgba(43,43,43,0.16)] border-l border-[rgba(43,43,43,0.14)] flex flex-col transition-transform duration-300 ${open ? 'translate-x-0' : 'translate-x-full pointer-events-none'}`}>
