@@ -7,6 +7,9 @@
 //
 // It reads the inbox she has already connected for her orders — no second
 // sign-in, and the email itself is never stored.
+//
+// Only the pieces speak here: a photograph, a name, a price. The labels and
+// the reading she does not need are gone.
 
 import { useEffect, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
@@ -74,34 +77,31 @@ export default function MagazineClient({ testMemberId }: { testMemberId?: string
           {/* The masthead, and one piece chosen for her */}
           <aside className="rounded-[18px] overflow-hidden bg-[#8C8A85] text-white px-7 py-8 flex flex-col gap-7 min-h-[560px]">
             <div>
-              <p className="text-[19px] tracking-[0.2em] text-white/80">MYRA MAGAZINE</p>
-              <h1 className="text-[clamp(36px,4vw,62px)] leading-[0.95] tracking-[0.06em] mt-3">MYRA</h1>
-              <p className="text-[19px] tracking-[0.14em] text-white/80 mt-3">
+              <h1 className="text-[clamp(36px,4vw,62px)] leading-[0.95] tracking-[0.06em]">MYRA</h1>
+              <p className="text-[19px] tracking-[0.14em] text-white/80 mt-2">
                 {view.firstName ? `FOR ${view.firstName.toUpperCase()}` : 'FOR YOU'}
               </p>
             </div>
 
             <div className="border-t border-white/30 pt-6">
-              <p className="text-[19px] tracking-[0.16em] text-white/80">ITEM OF THE DAY</p>
               {ofTheDay ? (
                 <>
-                  <p className="text-[26px] leading-tight mt-3">{cleanName(ofTheDay.name)}</p>
-                  {ofTheDay.why && <p className="text-[20px] text-white/85 mt-2 leading-snug">{ofTheDay.why}</p>}
-                  <div className="relative aspect-[3/4] rounded-[14px] overflow-hidden bg-white/10 mt-5">
+                  <div className="relative aspect-[3/4] rounded-[14px] overflow-hidden bg-white/10">
                     {ofTheDay.image_url && (
                       <FallbackImage src={ofTheDay.image_url} thumbWidth={700} alt={ofTheDay.name} className="absolute inset-0 w-full h-full object-cover" />
                     )}
                   </div>
-                  <p className="text-[20px] tracking-[0.1em] mt-4">{(ofTheDay.brand ?? '').toUpperCase()}</p>
-                  <p className="text-[19px] text-white/80">{price(ofTheDay) ?? 'In your size, in your colours'}</p>
+                  <p className="text-[26px] leading-tight mt-4">{cleanName(ofTheDay.name)}</p>
+                  <p className="text-[20px] tracking-[0.1em] mt-3">{(ofTheDay.brand ?? '').toUpperCase()}</p>
+                  {price(ofTheDay) && <p className="text-[19px] text-white/80">{price(ofTheDay)}</p>}
                   {ofTheDay.url && (
                     <a href={ofTheDay.url} target="_blank" rel="noopener noreferrer" className="inline-block mt-4 text-[19px] rounded-full border border-white/70 px-5 py-2.5">
-                      See it
+                      SEE IT
                     </a>
                   )}
                 </>
               ) : (
-                <p className="text-[20px] text-white/85 mt-3">Nothing chosen yet. Read this week and MYRA picks one.</p>
+                <p className="text-[20px] text-white/85">Nothing picked yet.</p>
               )}
             </div>
 
@@ -113,25 +113,22 @@ export default function MagazineClient({ testMemberId }: { testMemberId?: string
               >
                 {busy ? 'READING…' : 'READ THIS WEEK'}
               </button>
-              <p className="text-[18px] text-white/75 mt-3 leading-snug">
-                {view.needsInbox
-                  ? 'Connect your email in your dressing room first.'
-                  : 'Read straight from the inbox you already connected.'}
-              </p>
+              {view.needsInbox && (
+                <p className="text-[18px] text-white/75 mt-3">Connect your email in your dressing room first.</p>
+              )}
             </div>
           </aside>
 
           {/* What came in: the newest issue */}
           <section className="rounded-[18px] overflow-hidden bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] min-h-[560px] flex flex-col">
             <div className="px-8 pt-8">
-              <p className="text-[19px] tracking-[0.16em] text-[#6E6B65]">HERO FROM YOUR INBOX</p>
-              <h2 className="text-[clamp(30px,3.4vw,52px)] leading-[1.05] text-[#2B2B2B] mt-3">
+              <h2 className="text-[clamp(30px,3.4vw,52px)] leading-[1.05] text-[#2B2B2B]">
                 {lead?.subject ?? (view.needsInbox ? 'Connect your email' : 'Nothing read yet')}
               </h2>
-              <p className="text-[21px] text-[#4A4E57] mt-4 max-w-xl leading-snug">
+              <p className="text-[19px] tracking-[0.1em] text-[#6E6B65] mt-4">
                 {lead
-                  ? `From ${lead.publication}${lead.received_at ? `, ${new Date(lead.received_at).toLocaleDateString('en-GB', DATE)}` : ''} — only the pieces that are yours.`
-                  : 'MYRA reads the fashion newsletters you already subscribe to and keeps what is yours.'}
+                  ? `${lead.publication.toUpperCase()}${lead.received_at ? ` · ${new Date(lead.received_at).toLocaleDateString('en-GB', DATE).toUpperCase()}` : ''}`
+                  : 'MYRA reads the newsletters you already get, and keeps what is yours.'}
               </p>
               {msg && <p className="text-[20px] text-[#2B2B2B] mt-4">{msg}</p>}
               {view.error && <p className="text-[20px] text-[#B83A3A] mt-4">{view.error}</p>}
@@ -151,7 +148,6 @@ export default function MagazineClient({ testMemberId }: { testMemberId?: string
                       </div>
                       <p className="text-[20px] text-[#2B2B2B] mt-3 leading-tight">{cleanName(p.name)}</p>
                       <p className="text-[19px] text-[#6E6B65] mt-1">{[p.brand, price(p)].filter(Boolean).join(' · ')}</p>
-                      {p.why && <p className="text-[19px] text-[#4A4E57] italic leading-snug mt-1">{p.why}</p>}
                     </>
                   )
                   return p.url
@@ -169,15 +165,13 @@ export default function MagazineClient({ testMemberId }: { testMemberId?: string
 
             {lead && (
               <div className="px-8 pb-8 pt-6 mt-auto flex flex-wrap items-center justify-between gap-4">
-                <p className="text-[19px] tracking-[0.14em] text-[#6E6B65]">
-                  {lead.picks.length} KEPT FROM {lead.publication.toUpperCase()}
-                </p>
+                <p className="text-[19px] tracking-[0.14em] text-[#6E6B65]">{lead.picks.length} KEPT</p>
                 <button
                   disabled={busy}
                   onClick={() => mute(lead.publication, true)}
                   className="text-[19px] rounded-full border border-[#2B2B2B] px-5 py-2.5 text-[#2B2B2B] disabled:opacity-40"
                 >
-                  Stop reading {lead.publication}
+                  MUTE
                 </button>
               </div>
             )}
@@ -185,14 +179,11 @@ export default function MagazineClient({ testMemberId }: { testMemberId?: string
 
           {/* Everything else that was hers */}
           <aside className="rounded-[18px] bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] px-6 py-7 min-h-[560px]">
-            <div className="flex items-baseline justify-between gap-4 border-b border-[rgba(43,43,43,0.15)] pb-3">
-              <p className="text-[19px] tracking-[0.16em] text-[#2B2B2B]">RECOMMENDED FOR YOU</p>
-              <p className="text-[18px] text-[#6E6B65]">From your subscriptions</p>
-            </div>
+            <p className="text-[19px] tracking-[0.16em] text-[#2B2B2B] border-b border-[rgba(43,43,43,0.15)] pb-3">RECOMMENDED</p>
 
             {rest.length === 0 ? (
               <p className="text-[20px] text-[#4A4E57] mt-5">
-                {view.needsInbox ? 'Nothing to read until an inbox is connected.' : 'Press READ THIS WEEK and MYRA goes through your newsletters.'}
+                {view.needsInbox ? 'No inbox connected yet.' : 'Press READ THIS WEEK.'}
               </p>
             ) : (
               <div className="divide-y divide-[rgba(43,43,43,0.12)]">
@@ -208,7 +199,6 @@ export default function MagazineClient({ testMemberId }: { testMemberId?: string
                         <p className="text-[19px] tracking-[0.08em] text-[#6E6B65]">{(p.brand ?? p.publication).toUpperCase()}</p>
                         <p className="text-[20px] text-[#2B2B2B] leading-tight mt-0.5">{cleanName(p.name)}</p>
                         {price(p) && <p className="text-[19px] text-[#55534E] mt-0.5">{price(p)}</p>}
-                        {p.why && <p className="text-[19px] text-[#4A4E57] italic leading-snug mt-1">{p.why}</p>}
                       </div>
                     </div>
                   )
@@ -221,14 +211,10 @@ export default function MagazineClient({ testMemberId }: { testMemberId?: string
               </div>
             )}
 
-            <p className="text-[19px] tracking-[0.1em] text-[#6E6B65] text-center mt-7 pt-5 border-t border-[rgba(43,43,43,0.15)]">
-              INSPIRED BY YOU. READ BY MYRA.
-            </p>
-
             {view.publications.length > 0 && (
-              <div className="mt-5">
-                <p className="text-[18px] tracking-[0.14em] text-[#6E6B65]">YOUR SUBSCRIPTIONS</p>
-                <div className="flex flex-wrap gap-2 mt-3">
+              <div className="mt-7">
+                <p className="text-[18px] tracking-[0.14em] text-[#6E6B65] mb-3">SUBSCRIPTIONS</p>
+                <div className="flex flex-wrap gap-2">
                   {view.publications.map((p) => (
                     <button
                       key={p.publication}
