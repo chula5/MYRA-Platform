@@ -21,22 +21,37 @@ import {
 } from './actions.gated'
 import type { BatchView } from '@/lib/outfit-quality/batch-read'
 import type { PreDecisionCandidate } from '@/lib/outfit-quality/queue-read-model'
+import RulesOnlyBadge from './RulesOnlyBadge'
+import ReviewWorkbench from './ReviewWorkbench'
 
 const PARTITIONS = ['test', 'training', 'validation', 'holdout', 'synthetic'] as const
 type ContextType = 'real_member' | 'evaluation_profile'
 
-function RulesOnlyBadge() {
+export default function OutfitQualityTab() {
+  const [view, setView] = useState<'review' | 'batches'>('review')
   return (
-    <span
-      className="inline-block border border-[#C4A882] text-[#9A7B45] text-[16px] tracking-[0.18em] px-2 py-[2px]"
-      aria-label="Rules only — this stylist has no frozen inspiration envelope"
-    >
-      RULES ONLY
-    </span>
+    <div>
+      <div className="flex gap-6 border-b border-[#E2E0DB] mb-8" role="tablist" aria-label="Outfit Quality views">
+        {(['review', 'batches'] as const).map((v) => (
+          <button
+            key={v}
+            role="tab"
+            aria-selected={view === v}
+            onClick={() => setView(v)}
+            className={`pb-3 text-[20px] tracking-[0.18em] transition-colors duration-300 ${
+              view === v ? 'text-[#0A0A0A] border-b border-[#0A0A0A] -mb-px' : 'text-[#A8A8A4] hover:text-[#0A0A0A]'
+            }`}
+          >
+            {v === 'review' ? 'REVIEW QUEUE' : 'BATCHES'}
+          </button>
+        ))}
+      </div>
+      {view === 'review' ? <ReviewWorkbench /> : <BatchesView />}
+    </div>
   )
 }
 
-export default function OutfitQualityTab() {
+function BatchesView() {
   const [data, setData] = useState<QualityData | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
