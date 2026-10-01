@@ -53,7 +53,7 @@ export default function ForYouClient({ view, testMemberId }: { view: ForYouView;
       <div className="w-full px-6 sm:px-10 pb-16 pt-10">
         <div className="w-full">
           <div className="text-center mb-10">
-            <h1 className="text-[clamp(32px,5vw,76px)] tracking-[0.045em] text-[#4A4E57] leading-[1.05]">
+            <h1 className="text-[clamp(20px,2.2vw,32px)] tracking-[0.045em] text-[#4A4E57] leading-[1.05]">
               {view.firstName ? `HELLO ${view.firstName.toUpperCase()}` : 'HELLO'}
             </h1>
           </div>

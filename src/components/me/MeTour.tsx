@@ -56,7 +56,7 @@ const STEPS: Step[] = [
   { path: '/me/inspiration', target: '#archival-looks', title: 'ARCHIVAL LOOKS', body: 'Photos of what you already wear. The pieces you still own go to your Dressing Room.' },
   { target: '[data-tour="room-magazine"]', title: 'MYRA MAGAZINE', body: 'Your brand emails, read for you in a minute.' },
   { target: '[data-tour="room-threads"]', title: 'THREADS', body: 'Everything MYRA knows about your style, and why.' },
-  { target: '[data-tour="search"]', title: 'SEARCH', body: 'Ask in your own words. Try \u201ca wedding in June\u201d.' },
+  { path: '/me/browse', target: '[data-tour="browse-search"]', fallback: '[data-tour="search"]', title: 'BROWSE', body: 'Look something up in your own words. Try \u201ca wedding in June\u201d, then style what you find with your wardrobe or with something new.' },
   { target: '[data-tour="you"]', title: 'YOU', body: 'Your sizes, preferences and account.' },
   { path: '/me/profile', target: '[data-tour="brands"]', title: 'YOUR BRANDS', body: 'The brands you love, and what MYRA found from them. Add one any time.' },
   {
@@ -84,6 +84,8 @@ export default function MeTour() {
   const [box, setBox] = useState<Box | null>(null)
   const [ready, setReady] = useState(false)
   const el = useRef<Element | null>(null)
+  /** The last step the tour moved her for, so a redirected route cannot loop. */
+  const moved = useRef<number | null>(null)
 
   // Pick the tour up: a fresh start, a reload mid-tour, or ?tour=1.
   useEffect(() => {
@@ -119,7 +121,14 @@ export default function MeTour() {
   useEffect(() => {
     if (step == null) return
     const s = STEPS[step]
-    if (s.path && pathname !== s.path) { router.push(s.path); return }
+    // A step whose route now redirects somewhere else (a room that moved)
+    // would send her round in a circle: move her once, then say the sentence
+    // where she is.
+    if (s.path && pathname !== s.path && moved.current !== step) {
+      moved.current = step
+      router.push(s.path)
+      return
+    }
     if (!s.target) { setReady(true); return }
     let live = true
     let tries = 0

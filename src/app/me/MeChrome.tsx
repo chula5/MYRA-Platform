@@ -40,11 +40,11 @@ export default function MeChrome({ signOut }: { signOut: React.ReactNode }) {
             stand down the left, so they never take the room's width. */}
         {home ? (
           <>
-            {/* Desktop: the MYRA mark sits on the same line as her profile,
-                with the search directly under it. The rooms are down the left
-                side, so the page starts clear of them. */}
+            {/* Desktop: the MYRA mark sits on the same line as her profile.
+                The rooms are down the left side and the search lives in the
+                BROWSE room, so the front door is just the mark and her. */}
             <div className="hidden sm:block pl-[152px] pr-10">
-              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-6 pt-4 pb-3">
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-6 pt-4 pb-4">
                 <span />
                 <Link href="/me" className="shrink-0">
                   <img src="/myra-logo-black.png" alt="MYRA" className="h-12 w-auto" />
@@ -53,9 +53,6 @@ export default function MeChrome({ signOut }: { signOut: React.ReactNode }) {
                   <YouButton />
                   {signOut}
                 </div>
-              </div>
-              <div className="pb-5">
-                <RoomSearch placeholder="What are you wearing today?" />
               </div>
             </div>
             {/* Phone: the rooms live only in the tab bar, avoiding a duplicate

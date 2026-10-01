@@ -11,7 +11,7 @@
 import Link from 'next/link'
 import { useState } from 'react'
 
-export type RoomId = 'for_you' | 'all_looks' | 'dressing_room' | 'events' | 'magazine' | 'profile'
+export type RoomId = 'for_you' | 'browse' | 'all_looks' | 'dressing_room' | 'events' | 'magazine' | 'profile'
 
 export interface Room {
   id: RoomId
@@ -23,6 +23,7 @@ export interface Room {
 
 export const ROOMS: Room[] = [
   { id: 'for_you', label: 'For You', short: 'For You', href: '/me' },
+  { id: 'browse', label: 'Browse', short: 'Browse', href: '/me/browse' },
   { id: 'all_looks', label: 'Your Looks', short: 'Looks', href: '/me/looks' },
   { id: 'dressing_room', label: 'Dressing Room', short: 'Dressing', href: '/me/dressing-room' },
   { id: 'events', label: 'Events', short: 'Events', href: '/me/events' },
@@ -58,6 +59,14 @@ export function RoomIcon({ id }: { id: RoomId }) {
           <path d="M26 14l-2 9M31 14l-2 9" {...S} opacity="0.55" />
           <path d="M43 46l6 8M21 46l-6 8" {...S} />
           <path d="M26 46v10M38 46v10" {...S} />
+        </svg>
+      )
+    case 'browse': // the glass, for looking something up
+      return (
+        <svg {...common}>
+          <circle cx="27" cy="27" r="15" {...S} />
+          <path d="M38 38l14 14" {...S} strokeWidth="3" />
+          <path d={sparkle(26, 27, 7)} {...S} opacity="0.85" />
         </svg>
       )
     case 'all_looks': // a rail of clothes, on its feet
