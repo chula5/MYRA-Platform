@@ -17,6 +17,8 @@
 // invoked, and it never enters the normal queue — but it stays fully auditable.
 // A score is never manufactured and an exception is never read as success.
 
+import { sizeCategoryFor } from '@/lib/size-canonical'
+
 export type CheckStatus = 'passed' | 'failed' | 'unavailable' | 'error'
 
 export interface RuleOutcome {
@@ -48,11 +50,28 @@ export interface ObjectiveManifest {
  * is keyed by item_id. A `null`/missing entry is treated as unavailable (fail
  * closed), never as a pass.
  */
+export type SizeVerdict = 'in_size' | 'not_in_size' | 'unconfirmed' | 'not_applicable'
+
 export interface ObjectiveEvidence {
-  /** 'in_size' passes; 'not_in_size' fails; 'unconfirmed'/missing is unavailable. */
-  size?: Record<string, 'in_size' | 'not_in_size' | 'unconfirmed'> | { error: true } | null
+  /**
+   * 'in_size' passes; 'not_in_size' fails; 'unconfirmed'/missing is unavailable
+   * (fail closed) for a SIZED piece; 'not_applicable' is ignored. Size
+   * applicability is decided from the item type (`sizeCategoryFor`), not from
+   * this map — genuinely unsized categories never gate regardless of evidence.
+   */
+  size?: Record<string, SizeVerdict> | { error: true } | null
   /** true sellable; false not sellable; 'unknown'/missing is unavailable. */
   stock?: Record<string, boolean | 'unknown'> | { error: true } | null
+}
+
+/**
+ * Whether a piece carries a meaningful size at all. Garments and shoes do;
+ * bags, jewellery, belts, scarves, hats and sunglasses do not. Decided from the
+ * frozen item type so it is independent of (and robust to) the evidence map.
+ */
+export function sizeApplicable(item: ObjectiveItem): boolean {
+  const itemType = (item.item_snapshot?.item_type as string | null | undefined) ?? null
+  return sizeCategoryFor(itemType) != null
 }
 
 /** The fields an item must carry to be usable at all. */
@@ -124,21 +143,34 @@ export function checkRequiredItemData(manifest: ObjectiveManifest): RuleOutcome 
 }
 
 export function checkSize(manifest: ObjectiveManifest, evidence: ObjectiveEvidence): RuleOutcome {
+  // Only sized categories require evidence. Genuinely unsized pieces (bags,
+  // jewellery, belts, scarves…) are not-applicable and never gate the outfit.
+  const sized = manifest.items.filter(sizeApplicable)
+  const notApplicable = manifest.items.filter((it) => !sizeApplicable(it)).map((it) => it.item_id)
+  if (sized.length === 0) {
+    // Nothing to size — e.g. an all-accessory look. Not a gate.
+    return { check_name: 'size_possibility', status: 'passed', detail: { not_applicable: notApplicable } }
+  }
+
   const size = evidence.size
   if (!size || (size as { error?: true }).error) {
-    return { check_name: 'size_possibility', status: size && (size as { error?: true }).error ? 'error' : 'unavailable', detail: { reason: 'no_size_evidence' } }
+    // Sized pieces exist but we have no size evidence at all — fail closed.
+    return { check_name: 'size_possibility', status: size && (size as { error?: true }).error ? 'error' : 'unavailable', detail: { reason: 'no_size_evidence', not_applicable: notApplicable } }
   }
-  const map = size as Record<string, 'in_size' | 'not_in_size' | 'unconfirmed'>
+  const map = size as Record<string, SizeVerdict>
   const notInSize: string[] = []
   const unconfirmed: string[] = []
-  for (const it of manifest.items) {
+  for (const it of sized) {
     const v = map[it.item_id]
     if (v === 'not_in_size') notInSize.push(it.item_id)
-    else if (v === undefined || v === 'unconfirmed') unconfirmed.push(it.item_id)
+    else if (v === 'in_size') continue
+    // A sized piece without a usable verdict ('unconfirmed', 'not_applicable',
+    // or missing) is unavailable — never silently passed.
+    else unconfirmed.push(it.item_id)
   }
-  if (notInSize.length > 0) return { check_name: 'size_possibility', status: 'failed', detail: { not_in_size: notInSize } }
-  if (unconfirmed.length > 0) return { check_name: 'size_possibility', status: 'unavailable', detail: { unconfirmed } }
-  return { check_name: 'size_possibility', status: 'passed' }
+  if (notInSize.length > 0) return { check_name: 'size_possibility', status: 'failed', detail: { not_in_size: notInSize, not_applicable: notApplicable } }
+  if (unconfirmed.length > 0) return { check_name: 'size_possibility', status: 'unavailable', detail: { unconfirmed, not_applicable: notApplicable } }
+  return { check_name: 'size_possibility', status: 'passed', detail: { not_applicable: notApplicable } }
 }
 
 export function checkStock(manifest: ObjectiveManifest, evidence: ObjectiveEvidence): RuleOutcome {

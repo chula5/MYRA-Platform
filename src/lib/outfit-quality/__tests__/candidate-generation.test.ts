@@ -173,6 +173,63 @@ describe('generateAndCheckChunk — every subjective outcome reaches awaiting_hu
   }
 })
 
+describe('generateAndCheckChunk — evaluation-profile candidate reaches awaiting_human', () => {
+  // A profile candidate: sized garments/shoes matched to the profile size, plus
+  // an unsized bag. Mimics the real evaluation-profile objective evidence.
+  function profileCandidate(): GeneratedCandidate {
+    return {
+      requiredSlots: ['top', 'bottom', 'shoe'],
+      items: [
+        { item_id: 'top-p', slot: 'top', sort_order: 0, item_snapshot: { item_type: 'shirt', brand: 'Arket' }, source_image_url: 'https://cdn/t.jpg' },
+        { item_id: 'bot-p', slot: 'bottom', sort_order: 1, item_snapshot: { item_type: 'trousers', brand: 'Arket' }, source_image_url: 'https://cdn/b.jpg' },
+        { item_id: 'shoe-p', slot: 'shoe', sort_order: 2, item_snapshot: { item_type: 'flat', brand: 'Arket' }, source_image_url: 'https://cdn/s.jpg' },
+        { item_id: 'bag-p', slot: 'bag', sort_order: 3, item_snapshot: { item_type: 'tote', brand: 'Polene' }, source_image_url: 'https://cdn/bag.jpg' },
+      ],
+    }
+  }
+  function profileEvidence(): ObjectiveEvidenceProvider {
+    return {
+      gather: vi.fn(async ({ items }: { items: { item_id: string; item_snapshot?: Record<string, unknown> }[] }) => ({
+        // Sized pieces matched; the unsized bag is not-applicable.
+        size: Object.fromEntries(items.map((i) => [i.item_id, i.item_snapshot?.item_type === 'tote' ? 'not_applicable' : 'in_size'])),
+        stock: Object.fromEntries(items.map((i) => [i.item_id, true])),
+      })) as any,
+    }
+  }
+
+  it('objective-passes (unsized bag not-applicable) and lands at awaiting_human with one subjective result', async () => {
+    const store = new RecordingStore()
+    const gen = makeGenerator([profileCandidate()])
+    const subj = subjectiveReturning({ status: 'passed', verdict: 'works', score: 0.8 })
+    const res = await generateAndCheckChunk({
+      batchId: 'b1', runId: 'run1', claim: 1, startPosition: 0,
+      snapshot: SNAPSHOT, context: CONTEXT, generator: gen, evidence: profileEvidence(), subjectiveChecker: subj, store,
+    })
+    expect(res.objectiveFailed).toBe(0)
+    expect(res.awaitingHuman).toBe(1)
+    expect(res.results[0].state).toBe('awaiting_human')
+    expect(subj.check).toHaveBeenCalledTimes(1)
+  })
+
+  it('still fails closed when a sized piece is unconfirmed, even with an unsized bag present', async () => {
+    const store = new RecordingStore()
+    const gen = makeGenerator([profileCandidate()])
+    const evidence: ObjectiveEvidenceProvider = {
+      gather: vi.fn(async () => ({
+        size: { 'top-p': 'in_size', 'bot-p': 'unconfirmed', 'shoe-p': 'in_size', 'bag-p': 'not_applicable' },
+        stock: { 'top-p': true, 'bot-p': true, 'shoe-p': true, 'bag-p': true },
+      })) as any,
+    }
+    const subj = subjectiveReturning({ status: 'passed' })
+    const res = await generateAndCheckChunk({
+      batchId: 'b1', runId: 'run1', claim: 1, startPosition: 0,
+      snapshot: SNAPSHOT, context: CONTEXT, generator: gen, evidence, subjectiveChecker: subj, store,
+    })
+    expect(subj.check).not.toHaveBeenCalled()
+    expect(res.results[0].state).toBe('objective_failed')
+  })
+})
+
 describe('generateAndCheckChunk — bounded chunk', () => {
   it('asks the generator for exactly the claimed count and produces that many', async () => {
     const store = new RecordingStore()

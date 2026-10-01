@@ -46,6 +46,7 @@ export type ContextResolveError =
   | 'both_contexts'
   | 'member_not_selectable'
   | 'profile_not_found'
+  | 'profile_not_active'
 
 export type ContextResolveResult =
   | { ok: true; context: ResolvedContext }
@@ -83,6 +84,7 @@ export interface EvaluationProfileRow {
   slug: string
   name: string
   active: boolean
+  retired_at?: string | null
   style_families: string[]
   brand_groups: string[]
   budget_profile: unknown
@@ -142,6 +144,12 @@ export async function resolveContext(
   const profile = await repos.profiles.getById(input.evaluationProfileId as string)
   if (!profile) {
     return { ok: false, code: 'profile_not_found', message: 'the evaluation profile was not found' }
+  }
+  // Server-side resolution refuses an inactive or retired profile even when a
+  // client forges a real, previously-valid profile id. Only a live coverage
+  // profile may be used as a batch context.
+  if (!profile.active || profile.retired_at != null) {
+    return { ok: false, code: 'profile_not_active', message: 'the evaluation profile is inactive or retired and cannot be used' }
   }
   return {
     ok: true,

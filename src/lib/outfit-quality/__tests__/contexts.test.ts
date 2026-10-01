@@ -106,6 +106,32 @@ describe('resolveContext — exactly one context from the right source', () => {
   })
 })
 
+describe('resolveContext — only active, non-retired profiles resolve', () => {
+  const INACTIVE = '22222222-2222-2222-2222-222222222222'
+  const RETIRED = '33333333-3333-3333-3333-333333333333'
+  const rows: EvaluationProfileRow[] = [
+    profileRow,
+    { ...profileRow, profile_id: INACTIVE, slug: 'inactive', active: false },
+    { ...profileRow, profile_id: RETIRED, slug: 'retired', active: true, retired_at: '2026-01-01T00:00:00Z' },
+  ]
+  // The repository can still find the row by a forged id — resolution must be
+  // what refuses it, so a client forging the id gains nothing.
+  const repos = { members: memberRepo(members), profiles: profileRepo(rows) }
+
+  it('refuses an inactive profile even when its id is forged', async () => {
+    const r = await resolveContext({ evaluationProfileId: INACTIVE }, repos)
+    expect(r).toMatchObject({ ok: false, code: 'profile_not_active' })
+  })
+  it('refuses a retired profile', async () => {
+    const r = await resolveContext({ evaluationProfileId: RETIRED }, repos)
+    expect(r).toMatchObject({ ok: false, code: 'profile_not_active' })
+  })
+  it('still resolves a live profile', async () => {
+    const r = await resolveContext({ evaluationProfileId: PROFILE }, repos)
+    expect(r.ok).toBe(true)
+  })
+})
+
 describe('toContextSnapshot', () => {
   it('carries real-member preferences as context only (member_id, no feedback)', async () => {
     const r = await resolveContext({ realMemberId: MEMBER }, { members: memberRepo(members), profiles: profileRepo([profileRow]) })

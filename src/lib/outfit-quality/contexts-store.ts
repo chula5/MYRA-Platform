@@ -52,12 +52,13 @@ export function createSupabaseRealMemberRepository(admin: Admin = createAdminCli
 
 export function createSupabaseEvaluationProfileRepository(admin: Admin = createAdminClient()): EvaluationProfileRepository {
   const db = admin as any
-  const cols = 'profile_id, slug, name, active, style_families, brand_groups, budget_profile, size_profile, occasions, preferences'
+  const cols = 'profile_id, slug, name, active, retired_at, style_families, brand_groups, budget_profile, size_profile, occasions, preferences'
   const toRow = (r: any): EvaluationProfileRow => ({
     profile_id: r.profile_id,
     slug: r.slug,
     name: r.name,
     active: !!r.active,
+    retired_at: r.retired_at ?? null,
     style_families: r.style_families ?? [],
     brand_groups: r.brand_groups ?? [],
     budget_profile: r.budget_profile ?? {},

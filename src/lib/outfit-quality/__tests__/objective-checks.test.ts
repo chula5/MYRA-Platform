@@ -104,6 +104,57 @@ describe('size possibility — fail closed', () => {
   })
 })
 
+describe('size applicability — unsized categories do not gate', () => {
+  // An outfit with sized garments/shoes plus a bag and jewellery.
+  function withAccessories(): ObjectiveManifest {
+    return manifest({
+      requiredSlots: ['top', 'bottom', 'shoe'],
+      items: [
+        ...manifest().items,
+        { item_id: 'i-bag', slot: 'bag', source_image_url: 'https://cdn/bag.jpg', item_snapshot: { item_type: 'tote', brand: 'Polene' } },
+        { item_id: 'i-jewel', slot: 'jewellery', source_image_url: 'https://cdn/j.jpg', item_snapshot: { item_type: 'necklace', brand: 'Missoma' } },
+      ],
+    })
+  }
+
+  it('passes when sized pieces are in size and unsized bag/jewellery have no size evidence', () => {
+    // Only the sized pieces carry a verdict; the bag and jewellery do not.
+    const ev: ObjectiveEvidence = {
+      size: { 'i-top': 'in_size', 'i-bot': 'in_size', 'i-shoe': 'in_size' },
+      stock: {},
+    }
+    expect(checkSize(withAccessories(), ev).status).toBe('passed')
+  })
+
+  it('bags and jewellery pass even when explicitly marked not_applicable', () => {
+    const ev: ObjectiveEvidence = {
+      size: { 'i-top': 'in_size', 'i-bot': 'in_size', 'i-shoe': 'in_size', 'i-bag': 'not_applicable', 'i-jewel': 'not_applicable' },
+      stock: {},
+    }
+    expect(checkSize(withAccessories(), ev).status).toBe('passed')
+  })
+
+  it('still fails closed when a sized garment lacks size evidence, despite unsized pieces', () => {
+    const ev: ObjectiveEvidence = {
+      size: { 'i-top': 'in_size', 'i-shoe': 'in_size', 'i-bag': 'not_applicable' },
+      stock: {},
+    }
+    // i-bot (trousers) is sized and missing — unavailable, not passed.
+    expect(checkSize(withAccessories(), ev).status).toBe('unavailable')
+  })
+
+  it('passes an all-accessory look (nothing to size) even with no size evidence', () => {
+    const m = manifest({
+      requiredSlots: ['bag'],
+      items: [
+        { item_id: 'i-bag', slot: 'bag', source_image_url: 'https://cdn/bag.jpg', item_snapshot: { item_type: 'tote', brand: 'Polene' } },
+        { item_id: 'i-jewel', slot: 'jewellery', source_image_url: 'https://cdn/j.jpg', item_snapshot: { item_type: 'necklace', brand: 'Missoma' } },
+      ],
+    })
+    expect(checkSize(m, { size: null, stock: {} }).status).toBe('passed')
+  })
+})
+
 describe('sellable stock — fail closed', () => {
   it('fails when an item is not sellable', () => {
     const ev = { ...goodEvidence(), stock: { 'i-top': true, 'i-bot': false, 'i-shoe': true } } as ObjectiveEvidence
