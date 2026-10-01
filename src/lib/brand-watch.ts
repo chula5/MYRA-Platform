@@ -18,6 +18,7 @@ import {
 } from '@/lib/brand-watch-browser'
 import { buildLearning, type DecidedRow, type LearnedVerdict } from '@/lib/brand-watch-learning'
 import { automationOn } from '@/lib/brand-watch-trust'
+import { WOMEN_RE, MEN_RE } from '@/lib/brand-watch-gender'
 
 // ---------------------------------------------------------------- types
 
@@ -182,8 +183,10 @@ const NON_FASHION_RE = new RegExp(
 // piece labelled for both stays. Season codes (MSS26, WAW25) are how some
 // brands mark it. Unknown gender is treated as womenswear: a brand that says
 // nothing is assumed in scope rather than silently dropped.
-const WOMEN_RE = /\b(women|womens|women's|woman|femme|femmes|ladies|damen|donna|mujer|w(?:ss|aw|fw)\d{2})\b/i
-const MEN_RE = /\b(men|mens|men's|man|menswear|homme|hommes|herren|uomo|hombre|m(?:ss|aw|fw)\d{2})\b/i
+// The feed's own gender words live in a plain module so scripts can read them
+// without pulling in the Supabase client. Re-exported here because callers of
+// this module have always got them from here.
+export { WOMEN_RE, MEN_RE }
 
 // ---------------------------------------------------------------- taxonomy mapping
 
