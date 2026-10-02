@@ -59,6 +59,15 @@ function uniqueViolation(table: string, tables: Record<string, any[]>, row: any)
       )
     case 'outfit_quality_learning_projection':
       return dup((r) => r.application_key === row.application_key, 'outfit_quality_learning_projection_application_key_key')
+    case 'outfit_quality_queue_hold':
+      // Partial unique index oq_queue_hold_active_uq: one ACTIVE hold
+      // (released_at IS NULL) per candidate version, enforced at the database
+      // boundary so a hold race cannot create two.
+      if (row.released_at !== null && row.released_at !== undefined) return null
+      return dup(
+        (r) => r.candidate_version_id === row.candidate_version_id && (r.released_at === null || r.released_at === undefined),
+        'oq_queue_hold_active_uq',
+      )
     default:
       return null
   }
@@ -71,8 +80,10 @@ export interface FakeAdmin {
   /** Every table passed to from(), in order — proves which tables were touched. */
   queried: string[]
   /** Test hooks: make the next insert into a table fail once (e.g. simulate a race).
-   *  `onFail` runs at the moment of failure — use it to commit the "winner" row. */
-  failNextInsert: (table: string, message?: string, onFail?: (tables: Record<string, any[]>) => void) => void
+   *  `onFail` runs at the moment of failure — use it to commit the "winner" row.
+   *  `code` overrides the error code (default 23505) so transient, non-unique
+   *  failures (e.g. 08006 connection failure) can be simulated. */
+  failNextInsert: (table: string, message?: string, onFail?: (tables: Record<string, any[]>) => void, code?: string) => void
 }
 
 export function createFakeAdmin(seed: Record<string, any[]> = {}): FakeAdmin {
@@ -80,7 +91,7 @@ export function createFakeAdmin(seed: Record<string, any[]> = {}): FakeAdmin {
   for (const [k, rows] of Object.entries(seed)) tables[k] = rows.map((r) => ({ ...r }))
   const inserts: { table: string; row: any }[] = []
   const queried: string[] = []
-  const failOnce = new Map<string, { message: string; onFail?: (tables: Record<string, any[]>) => void }>()
+  const failOnce = new Map<string, { message: string; code: string; onFail?: (tables: Record<string, any[]>) => void }>()
   let seq = 0
 
   function matches(row: any, filters: { col: string; op: string; val: unknown }[]): boolean {
@@ -118,7 +129,7 @@ export function createFakeAdmin(seed: Record<string, any[]> = {}): FakeAdmin {
         if (forced) {
           failOnce.delete(table)
           forced.onFail?.(tables)
-          return { data: null, error: { code: '23505', message: forced.message } }
+          return { data: null, error: { code: forced.code, message: forced.message } }
         }
         const rows = Array.isArray(state.insertRow) ? state.insertRow : [state.insertRow]
         const out: any[] = []
@@ -187,7 +198,7 @@ export function createFakeAdmin(seed: Record<string, any[]> = {}): FakeAdmin {
         return builder(table)
       },
     },
-    failNextInsert: (table: string, message = 'duplicate key value violates unique constraint "forced"', onFail?: (tables: Record<string, any[]>) => void) =>
-      failOnce.set(table, { message, onFail }),
+    failNextInsert: (table: string, message = 'duplicate key value violates unique constraint "forced"', onFail?: (tables: Record<string, any[]>) => void, code = '23505') =>
+      failOnce.set(table, { message, code, onFail }),
   }
 }

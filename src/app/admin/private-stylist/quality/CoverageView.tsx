@@ -121,7 +121,8 @@ export default function CoverageView() {
 
       {/* ── Real-user trust (member contexts only) ───────────────────────── */}
       <section className="border border-[#E2E0DB] p-6 mb-10" aria-label="Real-user trust">
-        <h2 className="text-[22px] tracking-[0.14em] text-[#0A0A0A] mb-3">{report.realUserTrust.label}</h2>
+        <h2 className="text-[22px] tracking-[0.14em] text-[#0A0A0A] mb-1">{report.realUserTrust.label}</h2>
+        <p className="text-[14px] tracking-[0.1em] text-[#A8A8A4] mb-3">PARTITIONS: {report.realUserTrust.partitionLabel} · CONTEXT: REAL MEMBERS ONLY</p>
         <p className="text-[16px] tracking-[0.08em] text-[#6B6B6B] mb-3">{report.realUserTrust.note}</p>
         <p className="text-[18px] tracking-[0.1em] text-[#0A0A0A]">
           n={report.realUserTrust.sampleSize} · REVIEWED {report.realUserTrust.reviewed} · ACCEPTED {report.realUserTrust.accepted} · ACCEPTANCE{' '}

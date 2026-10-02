@@ -207,6 +207,26 @@ describe('buildCoverageReport — measures, dimensions, and labels (VAL-METRIC-0
     expect(report.realUserTrust.note).toContain('Evaluation-profile')
   })
 
+  it('labels which partitions compose the real-user trust block alongside the context-type label', () => {
+    // Closed holdout: development (training) + validation real-member evidence.
+    expect(report.realUserTrust.label).toContain('REAL MEMBERS')
+    expect(report.realUserTrust.partitions).toEqual(['training', 'validation'])
+    expect(report.realUserTrust.partitionLabel).toBe('TRAINING + VALIDATION')
+
+    // A deliberately opened holdout joins the composition and stays labeled.
+    const opened = buildCoverageReport(
+      fixture([
+        { partition: 'validation', context: 'member', stylist: STYLIST_Y, decision: 'yes', machine: 'passed' },
+        { partition: 'holdout', context: 'member', stylist: STYLIST_Y, decision: 'no', reason: 'global_composition', machine: 'failed' },
+      ]),
+      { holdoutOpened: true },
+    )
+    expect(opened.realUserTrust.partitions).toEqual(['training', 'validation', 'holdout'])
+    expect(opened.realUserTrust.partitionLabel).toContain('TRAINING + VALIDATION + HOLDOUT')
+    expect(opened.realUserTrust.partitionLabel).toContain('OPENED')
+    expect(opened.realUserTrust).toMatchObject({ sampleSize: 2, reviewed: 2, accepted: 1 })
+  })
+
   it('carries no unlabeled blended platform-wide rate', () => {
     const json = JSON.stringify(report)
     expect(report).not.toHaveProperty('overallAcceptanceRate')

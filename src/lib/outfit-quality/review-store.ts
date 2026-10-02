@@ -113,6 +113,60 @@ function learningAttributionOf(kase: PlanContext['kase']): LearningAttribution {
   }
 }
 
+// ── Replay backfill ───────────────────────────────────────────────────────────
+//
+// The persisted event row is authoritative, but its derived learning writes
+// can fail transiently AFTER the event landed — the original caller only saw
+// a warning. A replay of the same idempotency key must therefore re-attempt
+// the missing projections instead of only returning the stored event;
+// otherwise net learning stays permanently wrong. Exactly-once is preserved
+// by the unique application_key: already-applied keys report `reused` and
+// only missing ones are appended. The ledger stays append-only — nothing is
+// ever updated or deleted here.
+
+/** Re-attempt any missing projections for a persisted, replayed decision. */
+async function backfillDecisionProjections(db: any, event: ReviewEventRow): Promise<string | null> {
+  const { data: version, error: vErr } = await db
+    .from('outfit_quality_candidate_version')
+    .select('case_id')
+    .eq('candidate_version_id', event.candidate_version_id)
+    .maybeSingle()
+  if (vErr) return `learning replay read failed: ${vErr.message}`
+  if (!version) return null
+  const { data: kase, error: cErr } = await db
+    .from('outfit_quality_case')
+    .select('data_partition, selected_stylist_id, real_member_id, evaluation_profile_id')
+    .eq('case_id', version.case_id)
+    .maybeSingle()
+  if (cErr) return `learning replay read failed: ${cErr.message}`
+  const learning = await applyLearningProjections(db, {
+    attribution: learningAttributionOf((kase ?? null) as PlanContext['kase']),
+    event: {
+      review_event_id: event.review_event_id,
+      candidate_version_id: event.candidate_version_id,
+      decision: event.decision as 'yes' | 'no',
+      reason_code: event.reason_code,
+      candidate_item_id: event.candidate_item_id,
+    },
+  })
+  return learning.ok ? null : `learning projection replay failed: ${learning.code}`
+}
+
+/** Re-attempt any missing compensations for a persisted, replayed reversal. */
+async function backfillReversalCompensations(db: any, event: ReviewEventRow): Promise<string | null> {
+  if (!event.reverses_event_id) return null
+  const compensation = await applyCompensatingProjections(db, {
+    reversalEventId: event.review_event_id,
+    reversedEventId: event.reverses_event_id,
+    candidateVersionId: event.candidate_version_id,
+  })
+  return compensation.ok ? null : `learning compensation replay failed: ${compensation.code}`
+}
+
+function withWarning<T extends object>(result: T, warning: string | null): T & { warnings?: string[] } {
+  return warning ? { ...result, warnings: [warning] } : result
+}
+
 // ── Machine-result disclosure ─────────────────────────────────────────────────
 
 export type MachineResult =
@@ -164,17 +218,23 @@ export async function decideCandidate(
 ): Promise<DecideResult> {
   const db = admin as any
 
-  // Idempotent replay: the same key returns the original persisted event.
+  // Idempotent replay: the same key returns the original persisted event —
+  // after backfilling any learning projections whose insert failed transiently
+  // when the event first landed (exactly-once via the unique application_key).
   if (input.idempotencyKey) {
     const existing = await eventByIdempotencyKey(db, input.idempotencyKey)
     if (existing) {
-      return {
-        ok: true,
-        reused: true,
-        event: existing,
-        nextState: existing.decision === 'yes' ? 'approved' : 'rejected',
-        machine: await loadMachineResult(candidateVersionId, admin),
-      }
+      const warning = await backfillDecisionProjections(db, existing)
+      return withWarning(
+        {
+          ok: true as const,
+          reused: true as const,
+          event: existing,
+          nextState: (existing.decision === 'yes' ? 'approved' : 'rejected') as 'approved' | 'rejected',
+          machine: await loadMachineResult(candidateVersionId, admin),
+        },
+        warning,
+      )
     }
   }
 
@@ -215,7 +275,17 @@ export async function decideCandidate(
     if (isUniqueViolation(evErr)) {
       const existing = await eventByIdempotencyKey(db, input.idempotencyKey)
       if (existing) {
-        return { ok: true, reused: true, event: existing, nextState: existing.decision === 'yes' ? 'approved' : 'rejected', machine: await loadMachineResult(candidateVersionId, admin) }
+        const warning = await backfillDecisionProjections(db, existing)
+        return withWarning(
+          {
+            ok: true as const,
+            reused: true as const,
+            event: existing,
+            nextState: (existing.decision === 'yes' ? 'approved' : 'rejected') as 'approved' | 'rejected',
+            machine: await loadMachineResult(candidateVersionId, admin),
+          },
+          warning,
+        )
       }
     }
     return failure('event_insert_failed', evErr?.message ?? 'no row returned')
@@ -302,7 +372,13 @@ async function applyReversal(
   const db = admin as any
 
   const existing = await eventByIdempotencyKey(db, idempotencyKey)
-  if (existing) return { ok: true, reused: true, event: existing, nextState }
+  if (existing) {
+    // Replay of a persisted reversal also re-attempts any compensating
+    // projections that failed transiently the first time (exactly-once via
+    // the unique application_key and the already-compensated skip).
+    const warning = await backfillReversalCompensations(db, existing)
+    return withWarning({ ok: true as const, reused: true as const, event: existing, nextState }, warning)
+  }
 
   const { data: event, error: evErr } = await db
     .from('outfit_quality_review_event')
@@ -322,7 +398,10 @@ async function applyReversal(
   if (evErr || !event) {
     if (isUniqueViolation(evErr)) {
       const replay = await eventByIdempotencyKey(db, idempotencyKey)
-      if (replay) return { ok: true, reused: true, event: replay, nextState }
+      if (replay) {
+        const warning = await backfillReversalCompensations(db, replay)
+        return withWarning({ ok: true as const, reused: true as const, event: replay, nextState }, warning)
+      }
     }
     return failure('event_insert_failed', evErr?.message ?? 'no row returned')
   }
@@ -389,7 +468,18 @@ export async function undoCandidateDecision(
     const existing = await eventByIdempotencyKey(db, input.idempotencyKey)
     if (existing) {
       const reversed = await reversedDecisionOf(db, existing)
-      return { ok: true, reused: true, event: existing, nextState: 'awaiting_human', reversedDecision: (reversed ?? 'no') as 'yes' | 'no', cancelledRenderJobIds: [] }
+      const warning = await backfillReversalCompensations(db, existing)
+      return withWarning(
+        {
+          ok: true as const,
+          reused: true as const,
+          event: existing,
+          nextState: 'awaiting_human',
+          reversedDecision: (reversed ?? 'no') as 'yes' | 'no',
+          cancelledRenderJobIds: [] as string[],
+        },
+        warning,
+      )
     }
   }
   const { ctx, error } = await loadContext(db, candidateVersionId)
@@ -429,7 +519,13 @@ export async function withdrawCandidateApproval(
   // against, so the same key must return the original event.
   if (input.idempotencyKey) {
     const existing = await eventByIdempotencyKey(db, input.idempotencyKey)
-    if (existing) return { ok: true, reused: true, event: existing, nextState: 'approval_withdrawn', cancelledRenderJobIds: [] }
+    if (existing) {
+      const warning = await backfillReversalCompensations(db, existing)
+      return withWarning(
+        { ok: true as const, reused: true as const, event: existing, nextState: 'approval_withdrawn', cancelledRenderJobIds: [] as string[] },
+        warning,
+      )
+    }
   }
   const { ctx, error } = await loadContext(db, candidateVersionId)
   if (error) return error
@@ -475,7 +571,21 @@ export async function holdCandidate(
     .insert({ candidate_version_id: candidateVersionId, held_by: actor.userId, reason: plan.hold.reason })
     .select('*')
     .maybeSingle()
-  if (holdErr || !hold) return failure('hold_insert_failed', holdErr?.message ?? 'no row returned')
+  if (holdErr || !hold) {
+    if (isUniqueViolation(holdErr)) {
+      // Lost a race with a concurrent hold: the partial unique index
+      // oq_queue_hold_active_uq permits one ACTIVE hold per version. Return
+      // the winning hold as a reuse rather than an error.
+      const { data: winner } = await db
+        .from('outfit_quality_queue_hold')
+        .select('*')
+        .eq('candidate_version_id', candidateVersionId)
+        .is('released_at', null)
+        .maybeSingle()
+      if (winner) return { ok: true, reused: true, hold: winner }
+    }
+    return failure('hold_insert_failed', holdErr?.message ?? 'no row returned')
+  }
   return { ok: true, reused: false, hold }
 }
 

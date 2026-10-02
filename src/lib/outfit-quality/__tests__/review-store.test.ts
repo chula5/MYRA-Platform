@@ -14,6 +14,7 @@ import {
   loadMachineResult,
   type ReviewActor,
 } from '@/lib/outfit-quality/review-store'
+import { netLearningEffect } from '@/lib/outfit-quality/learning-projection'
 import { createFakeAdmin } from './fake-admin'
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -321,6 +322,172 @@ describe('withdrawCandidateApproval', () => {
     const db = seedQueue()
     await decideCandidate('v1', { decision: 'no', reasonCode: 'operational_data', idempotencyKey: KEY1 }, ACTOR, db.admin)
     expect(await withdrawCandidateApproval('v1', { idempotencyKey: KEY2 }, ACTOR, db.admin)).toMatchObject({ ok: false, code: 'not_approved' })
+  })
+})
+
+// ── Learning replay backfill ──────────────────────────────────────────────────
+//
+// The event row is authoritative; its learning projections are derived writes
+// that can fail transiently AFTER the event persisted (the caller saw a
+// warning). Replaying the same idempotency key must re-attempt the missing
+// projections — exactly once, keyed by the unique application_key.
+
+describe('learning replay backfill', () => {
+  function seedTrainingQueue() {
+    const db = seedQueue()
+    db.tables.outfit_quality_case[0].data_partition = 'training'
+    db.tables.outfit_quality_case[0].real_member_id = null
+    db.tables.outfit_quality_case[0].evaluation_profile_id = 'profile-1'
+    return db
+  }
+
+  it('replaying a decision whose projection insert failed transiently applies the missing projections exactly once', async () => {
+    const db = seedTrainingQueue()
+    // Transient failure (not a unique violation): the event persists, no
+    // projection lands, and the caller is warned.
+    db.failNextInsert('outfit_quality_learning_projection', 'connection reset by peer', undefined, '08006')
+    const first = await decideCandidate('v1', { decision: 'yes', idempotencyKey: KEY1 }, ACTOR, db.admin)
+    expect(first.ok).toBe(true)
+    if (!first.ok) return
+    expect(first.warnings?.join(' ')).toContain('learning projection failed')
+    expect(db.tables.outfit_quality_learning_projection).toHaveLength(0)
+
+    // Replay backfills both missing projections instead of only returning the
+    // stored event.
+    const replay = await decideCandidate('v1', { decision: 'yes', idempotencyKey: KEY1 }, ACTOR, db.admin)
+    expect(replay).toMatchObject({ ok: true, reused: true })
+    if (replay.ok) expect(replay.event.review_event_id).toBe(first.event.review_event_id)
+    const ledger = db.tables.outfit_quality_learning_projection
+    expect(ledger).toHaveLength(2)
+    expect(ledger.map((p: any) => [p.scope, p.polarity])).toEqual(
+      expect.arrayContaining([
+        ['global_quality', 'positive'],
+        ['stylist', 'positive'],
+      ]),
+    )
+    expect(ledger.find((p: any) => p.scope === 'stylist').target_stylist_id).toBe('0d535772-8a4f-440f-9e46-f8d637bed0d3')
+
+    // A further replay cannot double-apply.
+    const again = await decideCandidate('v1', { decision: 'yes', idempotencyKey: KEY1 }, ACTOR, db.admin)
+    expect(again).toMatchObject({ ok: true, reused: true })
+    expect(db.tables.outfit_quality_learning_projection).toHaveLength(2)
+  })
+
+  it('backfills only the missing application_key when one projection landed and the other did not', async () => {
+    const db = seedTrainingQueue()
+    db.failNextInsert('outfit_quality_learning_projection', 'connection reset by peer', undefined, '08006')
+    const first = await decideCandidate('v1', { decision: 'yes', idempotencyKey: KEY1 }, ACTOR, db.admin)
+    if (!first.ok) throw new Error('setup decide failed')
+    const eventId = first.event.review_event_id
+
+    // Simulate "insert committed, response lost": the global projection is
+    // durable under its application_key while the stylist one never landed.
+    db.tables.outfit_quality_learning_projection.push({
+      projection_id: 'p-global-landed',
+      review_event_id: eventId,
+      candidate_version_id: 'v1',
+      scope: 'global_quality',
+      target_stylist_id: null,
+      polarity: 'positive',
+      payload: { source: 'quality_lab_review', data_partition: 'training', context_type: 'evaluation_profile' },
+      status: 'applied',
+      application_key: `${eventId}:global_quality:global`,
+      reverses_projection_id: null,
+    })
+
+    const replay = await decideCandidate('v1', { decision: 'yes', idempotencyKey: KEY1 }, ACTOR, db.admin)
+    expect(replay).toMatchObject({ ok: true, reused: true })
+    const ledger = db.tables.outfit_quality_learning_projection
+    expect(ledger).toHaveLength(2)
+    // The already-applied row is keyed off, not duplicated or rewritten.
+    const global = ledger.find((p: any) => p.scope === 'global_quality')
+    expect(global.projection_id).toBe('p-global-landed')
+    expect(ledger.filter((p: any) => p.scope === 'stylist')).toHaveLength(1)
+
+    const again = await decideCandidate('v1', { decision: 'yes', idempotencyKey: KEY1 }, ACTOR, db.admin)
+    expect(again).toMatchObject({ ok: true, reused: true })
+    expect(db.tables.outfit_quality_learning_projection).toHaveLength(2)
+  })
+
+  it('replaying an undo whose compensation failed appends the missing compensations exactly once', async () => {
+    const db = seedTrainingQueue()
+    const d = await decideCandidate('v1', { decision: 'yes', idempotencyKey: KEY1 }, ACTOR, db.admin)
+    if (!d.ok) throw new Error('setup decide failed')
+    expect(db.tables.outfit_quality_learning_projection).toHaveLength(2)
+
+    db.failNextInsert('outfit_quality_learning_projection', 'connection reset by peer', undefined, '08006')
+    const u = await undoCandidateDecision('v1', { idempotencyKey: KEY2 }, ACTOR, db.admin)
+    expect(u.ok).toBe(true)
+    if (!u.ok) return
+    expect(u.warnings?.join(' ')).toContain('learning compensation failed')
+    // The reversal event persisted; its compensations did not. Net learning is
+    // still +1/+1 until a replay backfills.
+    expect(db.tables.outfit_quality_learning_projection).toHaveLength(2)
+
+    const replay = await undoCandidateDecision('v1', { idempotencyKey: KEY2 }, ACTOR, db.admin)
+    expect(replay).toMatchObject({ ok: true, reused: true })
+    const ledger = db.tables.outfit_quality_learning_projection
+    expect(ledger).toHaveLength(4)
+    const compensations = ledger.filter((p: any) => p.reverses_projection_id !== null)
+    expect(compensations).toHaveLength(2)
+    // Append-only reversal semantics: originals keep their polarity, the
+    // appended compensations net every scope/target to zero.
+    netLearningEffect(ledger).forEach((net) => expect(net).toBe(0))
+
+    const again = await undoCandidateDecision('v1', { idempotencyKey: KEY2 }, ACTOR, db.admin)
+    expect(again).toMatchObject({ ok: true, reused: true })
+    expect(db.tables.outfit_quality_learning_projection).toHaveLength(4)
+  })
+
+  it('replaying a withdraw whose compensation failed backfills it the same way', async () => {
+    const db = seedTrainingQueue()
+    await decideCandidate('v1', { decision: 'yes', idempotencyKey: KEY1 }, ACTOR, db.admin)
+    db.tables.outfit_quality_render_job[0].status = 'running'
+    db.tables.outfit_quality_render_job[0].lease_token = 'lease-1'
+
+    db.failNextInsert('outfit_quality_learning_projection', 'connection reset by peer', undefined, '08006')
+    const w = await withdrawCandidateApproval('v1', { idempotencyKey: KEY2 }, ACTOR, db.admin)
+    expect(w.ok).toBe(true)
+    expect(db.tables.outfit_quality_learning_projection).toHaveLength(2)
+
+    const replay = await withdrawCandidateApproval('v1', { idempotencyKey: KEY2 }, ACTOR, db.admin)
+    expect(replay).toMatchObject({ ok: true, reused: true })
+    expect(db.tables.outfit_quality_learning_projection).toHaveLength(4)
+    netLearningEffect(db.tables.outfit_quality_learning_projection).forEach((net) => expect(net).toBe(0))
+  })
+})
+
+// ── Hold uniqueness at the database boundary ─────────────────────────────────
+
+describe('one active hold per candidate version', () => {
+  it('the fake mirrors the partial unique index: a second ACTIVE hold is rejected, a released hold frees the slot', async () => {
+    const db = seedQueue()
+    await db.admin.from('outfit_quality_queue_hold').insert({ candidate_version_id: 'v1', held_by: 'a' }).maybeSingle()
+    const dup = await db.admin.from('outfit_quality_queue_hold').insert({ candidate_version_id: 'v1', held_by: 'b' }).maybeSingle()
+    expect(dup.error?.message).toContain('oq_queue_hold_active_uq')
+    await releaseCandidate('v1', ACTOR, db.admin)
+    const after = await db.admin.from('outfit_quality_queue_hold').insert({ candidate_version_id: 'v1', held_by: 'b' }).maybeSingle()
+    expect(after.error).toBeNull()
+    expect(db.tables.outfit_quality_queue_hold).toHaveLength(2)
+  })
+
+  it('a lost hold race reuses the winning active hold instead of erroring', async () => {
+    const db = seedQueue()
+    db.failNextInsert('outfit_quality_queue_hold', 'duplicate key value violates unique constraint "oq_queue_hold_active_uq"', (tables) => {
+      tables.outfit_quality_queue_hold.push({
+        hold_id: 'h-winner',
+        candidate_version_id: 'v1',
+        held_by: 'admin-other',
+        reason: 'winner reason',
+        released_by: null,
+        created_at: '2026-01-01T00:00:00.000Z',
+        released_at: null,
+      })
+    })
+    const h = await holdCandidate('v1', { reason: 'loser reason' }, ACTOR, db.admin)
+    expect(h).toMatchObject({ ok: true, reused: true })
+    if (h.ok) expect(h.hold.hold_id).toBe('h-winner')
+    expect(db.tables.outfit_quality_queue_hold).toHaveLength(1)
   })
 })
 

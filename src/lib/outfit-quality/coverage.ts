@@ -169,6 +169,10 @@ export interface CoveragePartitionBlock {
 
 export interface RealUserTrust {
   label: string
+  /** The partitions whose real-member evidence composes this block — always labeled. */
+  partitions: string[]
+  /** Human-readable composition, e.g. "TRAINING + VALIDATION (+ HOLDOUT when deliberately opened)". */
+  partitionLabel: string
   note: string
   sampleSize: number
   reviewed: number
@@ -420,13 +424,17 @@ export function buildCoverageReport(input: CoverageInput, options: CoverageOptio
 
   // Real-user trust: REAL MEMBER contexts only, from development (training)
   // and validation evidence — plus a deliberately opened holdout, still
-  // labeled. Evaluation-profile reviews never enter these denominators.
+  // labeled. Evaluation-profile reviews never enter these denominators. The
+  // composing partitions are always displayed alongside the context-type
+  // label so the block can never be mistaken for a blended platform rate.
   const trustUnits = units.filter(
     (u) => u.contextType === 'real_member' && (u.partition === 'training' || u.partition === 'validation' || (u.partition === 'holdout' && holdoutOpened)),
   )
   const trustAccum = newAccum('real_user_trust', 'REAL-USER TRUST', 'training+validation')
   for (const u of trustUnits) addUnit(trustAccum, u)
   const trustFinal = finalizeSegment(trustAccum, threshold)
+  const trustPartitions = holdoutOpened ? ['training', 'validation', 'holdout'] : ['training', 'validation']
+  const trustPartitionLabel = holdoutOpened ? 'TRAINING + VALIDATION + HOLDOUT (DELIBERATELY OPENED — LABELLED)' : 'TRAINING + VALIDATION'
 
   const observedTrainingReviews = units.filter((u) => u.partition === 'training' && u.decision !== null).length
 
@@ -436,6 +444,8 @@ export function buildCoverageReport(input: CoverageInput, options: CoverageOptio
     blocks,
     realUserTrust: {
       label: 'REAL-USER TRUST — REAL MEMBERS ONLY',
+      partitions: trustPartitions,
+      partitionLabel: trustPartitionLabel,
       note: 'Evaluation-profile and machine-only evidence is excluded from these denominators; synthetic and test partitions never contribute.',
       sampleSize: trustFinal.sampleSize,
       reviewed: trustFinal.reviewed,

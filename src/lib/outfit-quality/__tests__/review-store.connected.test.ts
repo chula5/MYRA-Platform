@@ -221,6 +221,40 @@ describe.skipIf(!CONNECTED)('review store — connected proof (test partition)',
     expect(projections ?? []).toHaveLength(0)
   })
 
+  it('one ACTIVE hold per candidate version is enforced at the database boundary (partial unique index)', T, async () => {
+    const c = await makeCandidate()
+    const h1 = await holdCandidate(c.versionId, { reason: 'boundary proof hold' }, ACTOR, admin)
+    expect(h1.ok).toBe(true)
+    if (h1.ok) record('outfit_quality_queue_hold', h1.hold.hold_id)
+
+    // A racing second ACTIVE hold on the same version must be rejected by the
+    // partial unique index oq_queue_hold_active_uq — not just by the planner.
+    const dup = await admin
+      .from('outfit_quality_queue_hold')
+      .insert({ candidate_version_id: c.versionId, held_by: randomUUID(), reason: 'racing hold' })
+    // Record whatever exists so exact cleanup removes it in every outcome.
+    const { data: allHolds } = await admin.from('outfit_quality_queue_hold').select('hold_id').eq('candidate_version_id', c.versionId)
+    record('outfit_quality_queue_hold', ...(allHolds ?? []).map((h: any) => h.hold_id))
+    expect(dup.error?.code, 'a second active hold must violate the partial unique index').toBe('23505')
+    expect(dup.error?.message ?? '').toContain('oq_queue_hold_active_uq')
+    expect(allHolds).toHaveLength(1)
+
+    // Releasing frees the slot: exactly one new active hold may then be taken.
+    const rel = await releaseCandidate(c.versionId, ACTOR, admin)
+    expect(rel.ok).toBe(true)
+    const h2 = await admin
+      .from('outfit_quality_queue_hold')
+      .insert({ candidate_version_id: c.versionId, held_by: ACTOR.userId, reason: 'post-release hold' })
+      .select('hold_id')
+      .maybeSingle()
+    expect(h2.error).toBeNull()
+    record('outfit_quality_queue_hold', h2.data?.hold_id)
+    const { data: finalHolds } = await admin.from('outfit_quality_queue_hold').select('hold_id, released_at').eq('candidate_version_id', c.versionId)
+    record('outfit_quality_queue_hold', ...(finalHolds ?? []).map((h: any) => h.hold_id))
+    expect(finalHolds).toHaveLength(2)
+    expect(finalHolds.filter((h: any) => h.released_at === null)).toHaveLength(1)
+  })
+
   it('decide: structured No persists one attributable exact-version event; replay and invalid payloads add nothing', T, async () => {
     const c = await makeCandidate()
 
