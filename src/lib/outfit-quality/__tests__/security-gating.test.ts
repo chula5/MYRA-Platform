@@ -108,10 +108,14 @@ import * as reviewActions from '@/app/admin/private-stylist/quality/review-actio
 import * as galleryActions from '@/app/admin/private-stylist/quality/gallery-actions.gated'
 import * as coverageActions from '@/app/admin/private-stylist/quality/coverage-actions.gated'
 
+// gallery/render (gallery-actions.gated) is intentionally excluded from the
+// admin-gating matrix: in the composition-only release every render-family
+// export fails closed BEFORE the admin check, so it never reaches the gate (or
+// any implementation). That behaviour is proven separately below and in
+// render-disabled-boundary.test.ts.
 const GATED_MODULES = [
   ['batches (actions.gated)', batchActions],
   ['review (review-actions.gated)', reviewActions],
-  ['gallery/render (gallery-actions.gated)', galleryActions],
   ['coverage (coverage-actions.gated)', coverageActions],
 ] as const
 
@@ -168,12 +172,6 @@ describe('Quality Lab gated surfaces are admin-only (VAL-SEC-001)', () => {
 
     await reviewActions.undoCandidateDecisionAction('v1', { idempotencyKey: UUID })
     expect((impl.undoCandidateDecision.mock.calls[0] as unknown[])[2]).toEqual({ userId: VERIFIED })
-    await galleryActions.markNotGoodEnoughAction('ra1', { reason: 'image_quality', idempotencyKey: UUID })
-    expect((impl.markNotGoodEnough.mock.calls[0] as unknown[])[3]).toEqual({ userId: VERIFIED })
-    await galleryActions.regenerateRenderCycleAction('ra1', { idempotencyKey: UUID })
-    expect((impl.regenerateRenderCycle.mock.calls[0] as unknown[])[3]).toEqual({ userId: VERIFIED })
-    await galleryActions.withdrawUnderlyingOutfitAction('ra1', { idempotencyKey: UUID })
-    expect((impl.withdrawUnderlyingOutfit.mock.calls[0] as unknown[])[3]).toEqual({ userId: VERIFIED })
   })
 
   it('read-only Quality Lab surfaces (queue, history, machine result, gallery, coverage) are also gated', async () => {
@@ -183,10 +181,6 @@ describe('Quality Lab gated surfaces are admin-only (VAL-SEC-001)', () => {
     await expect(reviewActions.loadReviewQueueAction({})).rejects.toThrow(/not authorised/i)
     await expect(reviewActions.loadCaseHistoryAction('c1')).rejects.toThrow(/not authorised/i)
     await expect(reviewActions.loadMachineResultAction('v1')).rejects.toThrow(/not authorised/i)
-    await expect(galleryActions.loadAcceptedImagesAction()).rejects.toThrow(/not authorised/i)
-    await expect(galleryActions.loadRemovedImagesAction()).rejects.toThrow(/not authorised/i)
-    await expect(galleryActions.loadRenderAttentionAction()).rejects.toThrow(/not authorised/i)
-    await expect(galleryActions.loadRenderQueueCountsAction()).rejects.toThrow(/not authorised/i)
     await expect(coverageActions.loadCoverageAction()).rejects.toThrow(/not authorised/i)
     for (const spy of allSpies()) expect(spy).not.toHaveBeenCalled()
 
@@ -196,6 +190,31 @@ describe('Quality Lab gated surfaces are admin-only (VAL-SEC-001)', () => {
     expect(impl.loadCoverageReport).toHaveBeenCalledTimes(1)
     await reviewActions.loadReviewQueueAction({})
     expect(impl.loadReviewQueue).toHaveBeenCalledTimes(1)
+  })
+
+  it('gallery/render actions fail closed for every session and reach no implementation (composition-only)', async () => {
+    const { QUALITY_LAB_RENDERING_DISABLED_CODE } = await import('@/lib/outfit-quality/render-disabled')
+    for (const authorized of [false, true]) {
+      session.ok = authorized
+      session.userId = authorized ? VERIFIED : null
+      const results = await Promise.all([
+        galleryActions.loadAcceptedImagesAction(),
+        galleryActions.loadRemovedImagesAction(),
+        galleryActions.loadRenderAttentionAction(),
+        galleryActions.loadRenderQueueCountsAction(),
+        galleryActions.markNotGoodEnoughAction('ra1', { reason: 'image_quality', idempotencyKey: UUID }),
+        galleryActions.regenerateRenderCycleAction('ra1', { idempotencyKey: UUID }),
+        galleryActions.withdrawUnderlyingOutfitAction('ra1', { idempotencyKey: UUID }),
+        galleryActions.drainQualityRendersAction({ maxJobs: 1 }),
+        galleryActions.recheckRenderFidelityAction('ra1'),
+        galleryActions.reconcileAcceptedProviderJobAction('ra1'),
+      ])
+      for (const r of results) {
+        expect(r).toMatchObject({ ok: false, disabled: true, code: QUALITY_LAB_RENDERING_DISABLED_CODE })
+      }
+    }
+    // No render/gallery implementation was reached under either session.
+    for (const spy of allSpies()) expect(spy).not.toHaveBeenCalled()
   })
 
   it('the admin layout itself requires the verified admin user for every /admin page', async () => {

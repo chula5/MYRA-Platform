@@ -23,17 +23,17 @@ import type { BatchView } from '@/lib/outfit-quality/batch-read'
 import type { PreDecisionCandidate } from '@/lib/outfit-quality/queue-read-model'
 import RulesOnlyBadge from './RulesOnlyBadge'
 import ReviewWorkbench from './ReviewWorkbench'
-import AcceptedImages from './AcceptedImages'
 import CoverageView from './CoverageView'
 
 const PARTITIONS = ['test', 'training', 'validation', 'holdout', 'synthetic'] as const
 type ContextType = 'real_member' | 'evaluation_profile'
-type QualityView = 'review' | 'batches' | 'accepted' | 'coverage'
+// Composition-only release: there is no rendering view. The generated-image
+// gallery and its render-queue controls are removed from the Quality Lab.
+type QualityView = 'review' | 'batches' | 'coverage'
 
 const VIEW_LABELS: Record<QualityView, string> = {
   review: 'REVIEW QUEUE',
   batches: 'BATCHES',
-  accepted: 'ACCEPTED IMAGES',
   coverage: 'COVERAGE',
 }
 
@@ -42,7 +42,7 @@ export default function OutfitQualityTab() {
   return (
     <div>
       <div className="flex gap-6 border-b border-[#E2E0DB] mb-8" role="tablist" aria-label="Outfit Quality views">
-        {(['review', 'batches', 'accepted', 'coverage'] as const).map((v) => (
+        {(['review', 'batches', 'coverage'] as const).map((v) => (
           <button
             key={v}
             role="tab"
@@ -56,7 +56,7 @@ export default function OutfitQualityTab() {
           </button>
         ))}
       </div>
-      {view === 'review' ? <ReviewWorkbench /> : view === 'batches' ? <BatchesView /> : view === 'accepted' ? <AcceptedImages /> : <CoverageView />}
+      {view === 'review' ? <ReviewWorkbench /> : view === 'batches' ? <BatchesView /> : <CoverageView />}
     </div>
   )
 }

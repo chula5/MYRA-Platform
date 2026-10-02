@@ -13,8 +13,9 @@ const FEATURE_SOURCES = [
   'src/lib/outfit-quality/fidelity.ts',
   'src/lib/outfit-quality/promotion.ts',
   'src/lib/outfit-quality/gallery.ts',
+  // Composition-only release: the gallery-actions.gated boundary fails closed and
+  // the Accepted Images component has been removed from the tree.
   'src/app/admin/private-stylist/quality/gallery-actions.gated.ts',
-  'src/app/admin/private-stylist/quality/AcceptedImages.tsx',
 ]
 
 function loadEnvLocal(): Record<string, string> {

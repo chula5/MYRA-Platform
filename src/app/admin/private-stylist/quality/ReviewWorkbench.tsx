@@ -137,7 +137,7 @@ export default function ReviewWorkbench() {
 
   async function submitYes(card: ReviewCard) {
     const scope = `decide-${card.candidate_version_id}`
-    await run(scope, () => decideCandidateAction(card.candidate_version_id, { decision: 'yes', idempotencyKey: keyFor(scope) }), 'APPROVED — EXACT VERSION · RENDER CYCLE QUEUED · MACHINE RESULT BELOW')
+    await run(scope, () => decideCandidateAction(card.candidate_version_id, { decision: 'yes', idempotencyKey: keyFor(scope) }), 'APPROVED — EXACT VERSION · COMPOSITION PROMOTED · MACHINE RESULT BELOW')
   }
 
   function resetFilters() {
@@ -275,7 +275,7 @@ function ReviewCardView({
   const scope = `decide-${vid}`
 
   async function submitYes() {
-    await run(scope, () => decideCandidateAction(vid, { decision: 'yes', idempotencyKey: keyFor(scope) }), 'APPROVED — EXACT VERSION · RENDER CYCLE QUEUED · MACHINE RESULT BELOW')
+    await run(scope, () => decideCandidateAction(vid, { decision: 'yes', idempotencyKey: keyFor(scope) }), 'APPROVED — EXACT VERSION · COMPOSITION PROMOTED · MACHINE RESULT BELOW')
   }
 
   return (
@@ -345,9 +345,6 @@ function ReviewCardView({
             ))
           ) : (
             <p className="mt-1 text-[16px] tracking-[0.08em] text-[#6B6B6B]">MACHINE RESULT: NONE RECORDED FOR THIS VERSION</p>
-          )}
-          {card.render_status && (
-            <p className="mt-1 text-[16px] tracking-[0.1em] text-[#6B6B6B]">RENDER: {card.render_status.toUpperCase()}</p>
           )}
         </div>
       )}
@@ -603,8 +600,8 @@ function WithdrawConfirm({ busy, onCancel, onConfirm }: { busy: boolean; onCance
   return (
     <div className="mt-4 border border-[#B83A3A] p-4" role="alertdialog" aria-label="Confirm approval withdrawal" aria-describedby="withdraw-explain">
       <p id="withdraw-explain" className="text-[16px] tracking-[0.1em] text-[#B83A3A] mb-2">
-        WITHDRAWAL IS EXPLICIT AND APPEND-ONLY: THE APPROVAL IS REVERSED, ANY STILL-QUEUED RENDER IS CANCELLED, AND READY
-        OUTPUT LEAVES READY SURFACES. THE ORIGINAL DECISION, RENDER RECORDS, AND LINEAGE REMAIN IN HISTORY.
+        WITHDRAWAL IS EXPLICIT AND APPEND-ONLY: THE APPROVAL IS REVERSED AND THE PROMOTED COMPOSITION LEAVES READY
+        SURFACES. THE ORIGINAL DECISION, REASON, AND LINEAGE REMAIN IN HISTORY.
       </p>
       <label className="flex flex-col gap-1 text-[16px] tracking-[0.1em] text-[#6B6B6B] max-w-xl">
         NOTE (OPTIONAL)
