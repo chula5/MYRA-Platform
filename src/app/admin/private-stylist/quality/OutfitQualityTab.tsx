@@ -23,16 +23,24 @@ import type { BatchView } from '@/lib/outfit-quality/batch-read'
 import type { PreDecisionCandidate } from '@/lib/outfit-quality/queue-read-model'
 import RulesOnlyBadge from './RulesOnlyBadge'
 import ReviewWorkbench from './ReviewWorkbench'
+import AcceptedImages from './AcceptedImages'
 
 const PARTITIONS = ['test', 'training', 'validation', 'holdout', 'synthetic'] as const
 type ContextType = 'real_member' | 'evaluation_profile'
+type QualityView = 'review' | 'batches' | 'accepted'
+
+const VIEW_LABELS: Record<QualityView, string> = {
+  review: 'REVIEW QUEUE',
+  batches: 'BATCHES',
+  accepted: 'ACCEPTED IMAGES',
+}
 
 export default function OutfitQualityTab() {
-  const [view, setView] = useState<'review' | 'batches'>('review')
+  const [view, setView] = useState<QualityView>('review')
   return (
     <div>
       <div className="flex gap-6 border-b border-[#E2E0DB] mb-8" role="tablist" aria-label="Outfit Quality views">
-        {(['review', 'batches'] as const).map((v) => (
+        {(['review', 'batches', 'accepted'] as const).map((v) => (
           <button
             key={v}
             role="tab"
@@ -42,11 +50,11 @@ export default function OutfitQualityTab() {
               view === v ? 'text-[#0A0A0A] border-b border-[#0A0A0A] -mb-px' : 'text-[#A8A8A4] hover:text-[#0A0A0A]'
             }`}
           >
-            {v === 'review' ? 'REVIEW QUEUE' : 'BATCHES'}
+            {VIEW_LABELS[v]}
           </button>
         ))}
       </div>
-      {view === 'review' ? <ReviewWorkbench /> : <BatchesView />}
+      {view === 'review' ? <ReviewWorkbench /> : view === 'batches' ? <BatchesView /> : <AcceptedImages />}
     </div>
   )
 }

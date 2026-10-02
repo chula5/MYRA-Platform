@@ -14,114 +14,7 @@ import {
   loadMachineResult,
   type ReviewActor,
 } from '@/lib/outfit-quality/review-store'
-
-// ── Minimal in-memory fake of the supabase-js fluent API ─────────────────────
-
-const PK: Record<string, string> = {
-  outfit_quality_candidate_version: 'candidate_version_id',
-  outfit_quality_case: 'case_id',
-  outfit_quality_candidate_item: 'candidate_item_id',
-  outfit_quality_review_event: 'review_event_id',
-  outfit_quality_queue_hold: 'hold_id',
-  outfit_quality_render_job: 'render_job_id',
-  outfit_quality_machine_check: 'check_id',
-}
-
-const DEFAULTS: Record<string, Record<string, unknown>> = {
-  outfit_quality_candidate_version: { state: 'awaiting_human' },
-  outfit_quality_review_event: { decision: null, reason_code: null, candidate_item_id: null, note: null, reverses_event_id: null },
-  outfit_quality_queue_hold: { reason: null, released_by: null, released_at: null },
-  outfit_quality_render_job: { cycle_no: 1, status: 'queued', lease_token: null, generation_count: 0 },
-}
-
-interface FakeDb {
-  tables: Record<string, any[]>
-  admin: any
-  inserts: { table: string; row: any }[]
-}
-
-function createFakeAdmin(seed: Record<string, any[]>): FakeDb {
-  const tables: Record<string, any[]> = {}
-  for (const [k, rows] of Object.entries(seed)) tables[k] = rows.map((r) => ({ ...r }))
-  const inserts: { table: string; row: any }[] = []
-  let seq = 0
-
-  function matches(row: any, filters: { col: string; op: string; val: unknown }[]): boolean {
-    return filters.every((f) => {
-      if (f.op === 'eq') return row[f.col] === f.val
-      if (f.op === 'is') return f.val === null ? row[f.col] === null || row[f.col] === undefined : row[f.col] === f.val
-      if (f.op === 'in') return (f.val as unknown[]).includes(row[f.col])
-      return false
-    })
-  }
-
-  function checkUnique(table: string, row: any): string | null {
-    if (table === 'outfit_quality_review_event') {
-      const dup = tables[table].some((r) => r.idempotency_key === row.idempotency_key)
-      if (dup) return 'duplicate key value violates unique constraint "outfit_quality_review_event_idempotency_key_key"'
-    }
-    if (table === 'outfit_quality_render_job') {
-      const dup = tables[table].some(
-        (r) => r.candidate_version_id === row.candidate_version_id && r.approval_event_id === row.approval_event_id && r.cycle_no === row.cycle_no,
-      )
-      if (dup) return 'duplicate key value violates unique constraint "oq_render_job_cycle_uq"'
-    }
-    return null
-  }
-
-  function builder(table: string) {
-    const state: {
-      mode: 'select' | 'insert' | 'update'
-      filters: { col: string; op: string; val: unknown }[]
-      insertRow?: any
-      patch?: any
-      orderCol?: string
-      single: boolean
-    } = { mode: 'select', filters: [], single: false }
-
-    function execute(): { data: any; error: any } {
-      tables[table] = tables[table] ?? []
-      if (state.mode === 'insert') {
-        const dupErr = checkUnique(table, state.insertRow)
-        if (dupErr) return { data: null, error: { code: '23505', message: dupErr } }
-        seq += 1
-        const pk = PK[table]
-        const row = {
-          ...(DEFAULTS[table] ?? {}),
-          ...state.insertRow,
-          [pk]: state.insertRow[pk] ?? `${table}-${seq}`,
-          created_at: state.insertRow.created_at ?? new Date(2026, 0, 1, 0, 0, seq).toISOString(),
-        }
-        tables[table].push(row)
-        inserts.push({ table, row })
-        return { data: state.single ? row : [row], error: null }
-      }
-      let rows = tables[table].filter((r) => matches(r, state.filters))
-      if (state.mode === 'update') {
-        rows.forEach((r) => Object.assign(r, state.patch))
-      }
-      if (state.orderCol) rows = rows.slice().sort((a, b) => String(a[state.orderCol!]).localeCompare(String(b[state.orderCol!])))
-      if (state.single) return { data: rows[0] ?? null, error: null }
-      return { data: rows, error: null }
-    }
-
-    const b: any = {
-      select: () => b,
-      eq: (col: string, val: unknown) => (state.filters.push({ col, op: 'eq', val }), b),
-      is: (col: string, val: unknown) => (state.filters.push({ col, op: 'is', val }), b),
-      in: (col: string, val: unknown[]) => (state.filters.push({ col, op: 'in', val }), b),
-      order: (col: string) => ((state.orderCol = col), b),
-      limit: () => b,
-      insert: (row: any) => ((state.mode = 'insert'), (state.insertRow = row), b),
-      update: (patch: any) => ((state.mode = 'update'), (state.patch = patch), b),
-      maybeSingle: () => ((state.single = true), Promise.resolve(execute())),
-      then: (resolve: any, reject: any) => Promise.resolve(execute()).then(resolve, reject),
-    }
-    return b
-  }
-
-  return { tables, inserts, admin: { from: builder } }
-}
+import { createFakeAdmin } from './fake-admin'
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -137,11 +30,14 @@ function seedQueue(overrides: { versionState?: string; events?: any[]; holds?: a
     outfit_quality_candidate_version: [
       { candidate_version_id: 'v1', case_id: 'c1', version_no: 1, state: overrides.versionState ?? 'awaiting_human', created_at: '2026-01-01T00:00:00.000Z' },
     ],
-    outfit_quality_case: [{ case_id: 'c1', current_version_id: 'v1', status: 'awaiting_human' }],
+    outfit_quality_case: [{ case_id: 'c1', current_version_id: 'v1', status: 'awaiting_human', selected_stylist_id: '0d535772-8a4f-440f-9e46-f8d637bed0d3' }],
     outfit_quality_candidate_item: [
-      { candidate_item_id: 'ci-1', candidate_version_id: 'v1', item_id: 'i1', slot: 'top', sort_order: 0 },
-      { candidate_item_id: 'ci-2', candidate_version_id: 'v1', item_id: 'i2', slot: 'bottom', sort_order: 1 },
+      { candidate_item_id: 'ci-1', candidate_version_id: 'v1', item_id: 'i1', slot: 'top', sort_order: 0, source_image_url: 'https://res.cloudinary.com/x/top.jpg', item_snapshot: { item_type: 'shirt', brand: 'A Brand' } },
+      { candidate_item_id: 'ci-2', candidate_version_id: 'v1', item_id: 'i2', slot: 'bottom', sort_order: 1, source_image_url: 'https://res.cloudinary.com/x/bottom.jpg', item_snapshot: { item_type: 'trouser', brand: 'B Brand' } },
     ],
+    outfit_quality_promotion: [],
+    outfit: [],
+    outfit_item: [],
     outfit_quality_review_event: overrides.events ?? [],
     outfit_quality_queue_hold: overrides.holds ?? [],
     outfit_quality_render_job: overrides.jobs ?? [],
@@ -227,6 +123,82 @@ describe('decideCandidate', () => {
     }
     expect(db.tables.outfit_quality_review_event).toHaveLength(1)
     expect(db.tables.outfit_quality_render_job).toHaveLength(1)
+  })
+})
+
+// ── Promotion rides the approval ──────────────────────────────────────────────
+
+describe('approval promotion integration', () => {
+  it('a Yes promotes once: one internal/non-live outfit, one ordered membership per item, one promotion, job linked', async () => {
+    const db = seedQueue()
+    const r = await decideCandidate('v1', { decision: 'yes', idempotencyKey: KEY1 }, ACTOR, db.admin)
+    expect(r.ok).toBe(true)
+
+    expect(db.tables.outfit).toHaveLength(1)
+    const outfit = db.tables.outfit[0]
+    expect(outfit.status).toBe('draft')
+    expect(outfit.published_at).toBeNull()
+    expect(outfit.stylist_id).toBe('0d535772-8a4f-440f-9e46-f8d637bed0d3')
+
+    expect(db.tables.outfit_item).toHaveLength(2)
+    expect(db.tables.outfit_item.map((m: any) => [m.item_id, m.slot, m.sort_order])).toEqual([
+      ['i1', 'top', 0],
+      ['i2', 'bottom', 1],
+    ])
+
+    expect(db.tables.outfit_quality_promotion).toHaveLength(1)
+    const promo = db.tables.outfit_quality_promotion[0]
+    expect(promo).toMatchObject({ candidate_version_id: 'v1', outfit_id: outfit.outfit_id, status: 'active' })
+    expect(db.tables.outfit_quality_render_job[0].promotion_id).toBe(promo.promotion_id)
+  })
+
+  it('a replayed Yes does not duplicate the outfit, memberships, promotion, or job', async () => {
+    const db = seedQueue()
+    await decideCandidate('v1', { decision: 'yes', idempotencyKey: KEY1 }, ACTOR, db.admin)
+    await decideCandidate('v1', { decision: 'yes', idempotencyKey: KEY1 }, ACTOR, db.admin)
+    expect(db.tables.outfit).toHaveLength(1)
+    expect(db.tables.outfit_item).toHaveLength(2)
+    expect(db.tables.outfit_quality_promotion).toHaveLength(1)
+    expect(db.tables.outfit_quality_render_job).toHaveLength(1)
+  })
+
+  it('undo withdraws the promotion; re-approval reactivates the same outfit rather than duplicating', async () => {
+    const db = seedQueue()
+    await decideCandidate('v1', { decision: 'yes', idempotencyKey: KEY1 }, ACTOR, db.admin)
+    const promoId = db.tables.outfit_quality_promotion[0].promotion_id
+
+    await undoCandidateDecision('v1', { idempotencyKey: KEY2 }, ACTOR, db.admin)
+    expect(db.tables.outfit_quality_promotion[0].status).toBe('withdrawn')
+
+    const again = await decideCandidate('v1', { decision: 'yes', idempotencyKey: KEY3 }, ACTOR, db.admin)
+    expect(again.ok).toBe(true)
+    expect(db.tables.outfit_quality_promotion).toHaveLength(1)
+    expect(db.tables.outfit_quality_promotion[0]).toMatchObject({ promotion_id: promoId, status: 'active', withdrawn_at: null })
+    expect(db.tables.outfit).toHaveLength(1)
+    // A NEW cycle-1 job rides the NEW approval event, linked to the same promotion.
+    const jobs = db.tables.outfit_quality_render_job
+    expect(jobs).toHaveLength(2)
+    expect(jobs[0].status).toBe('cancelled')
+    expect(jobs[1]).toMatchObject({ status: 'queued', promotion_id: promoId })
+    expect(jobs[1].approval_event_id).not.toBe(jobs[0].approval_event_id)
+  })
+
+  it('withdrawal marks the promotion withdrawn without erasing the graph', async () => {
+    const db = seedQueue()
+    await decideCandidate('v1', { decision: 'yes', idempotencyKey: KEY1 }, ACTOR, db.admin)
+    await withdrawCandidateApproval('v1', { idempotencyKey: KEY2 }, ACTOR, db.admin)
+    expect(db.tables.outfit_quality_promotion[0].status).toBe('withdrawn')
+    expect(db.tables.outfit_quality_promotion[0].withdrawn_at).toBeTruthy()
+    expect(db.tables.outfit).toHaveLength(1)
+    expect(db.tables.outfit_item).toHaveLength(2)
+  })
+
+  it('a No never promotes', async () => {
+    const db = seedQueue()
+    await decideCandidate('v1', { decision: 'no', reasonCode: 'global_composition', idempotencyKey: KEY1 }, ACTOR, db.admin)
+    expect(db.tables.outfit).toHaveLength(0)
+    expect(db.tables.outfit_quality_promotion).toHaveLength(0)
+    expect(db.tables.outfit_quality_render_job).toHaveLength(0)
   })
 })
 

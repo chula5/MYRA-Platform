@@ -23,6 +23,7 @@ import {
   type PlanContext,
 } from '@/lib/outfit-quality/review-plan'
 import { latestActiveDecision, type ReviewEventRow } from '@/lib/outfit-quality/review-state'
+import { promoteApprovedVersion, markPromotionWithdrawn } from '@/lib/outfit-quality/promotion'
 
 type Admin = ReturnType<typeof createAdminClient>
 
@@ -205,13 +206,21 @@ export async function decideCandidate(
 
   let renderJobId: string | null = null
   if (plan.enqueueRender) {
-    // Exactly one queued cycle-1 job for this approval. The unique constraint
-    // (candidate_version_id, approval_event_id, cycle_no) makes this enqueue
-    // replay-safe. No Higgsfield call happens here — the local drainer and its
-    // approval gate belong to the render integration.
+    // Promotion and render enqueue ride the approval: exactly one internal/
+    // non-live outfit per approved version, then exactly one queued cycle-1
+    // job. Both are replay-safe on unique constraints. No Higgsfield call
+    // happens here — the local drainer and its approval gate own that.
+    const promotion = await promoteApprovedVersion(admin, candidateVersionId)
+    if (!promotion.ok) warnings.push(`promotion failed: ${promotion.code}`)
     const { data: job, error: jobErr } = await db
       .from('outfit_quality_render_job')
-      .insert({ candidate_version_id: candidateVersionId, approval_event_id: event.review_event_id, cycle_no: 1, status: 'queued' })
+      .insert({
+        candidate_version_id: candidateVersionId,
+        approval_event_id: event.review_event_id,
+        promotion_id: promotion.ok ? promotion.promotionId : null,
+        cycle_no: 1,
+        status: 'queued',
+      })
       .select('render_job_id')
       .maybeSingle()
     if (jobErr) {
@@ -302,6 +311,11 @@ async function applyReversal(
       .is('lease_token', null)
     if (cancelErr) return failure('job_cancel_failed', cancelErr.message)
   }
+
+  // The promoted outfit leaves the active set with the approval. The outfit
+  // row and its memberships remain for audit; a later re-approval reactivates
+  // the SAME promotion instead of duplicating the graph.
+  await markPromotionWithdrawn(admin, candidateVersionId)
 
   await db.from('outfit_quality_case').update({ status: nextState }).eq('case_id', caseId)
 

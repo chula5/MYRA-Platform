@@ -62,7 +62,14 @@ function recordedIds(table: string): string[] {
   return Array.from(insertedSets[table] ?? [])
 }
 const CLEANUP_ORDER = [
+  'outfit_quality_image_override',
+  'outfit_quality_render_attempt',
   'outfit_quality_render_job',
+  'outfit_quality_promotion',
+  // outfit_item/outfit are NOT oq_test_cleanup-whitelisted; they carry no oq
+  // triggers, so exact-ID direct deletes below are the documented path.
+  'outfit_item',
+  'outfit',
   'outfit_quality_review_event',
   'outfit_quality_queue_hold',
   'outfit_quality_machine_check',
@@ -71,6 +78,7 @@ const CLEANUP_ORDER = [
   'outfit_quality_case',
   'outfit_quality_batch',
 ]
+const DIRECT_DELETE_TABLES = new Set(['outfit_item', 'outfit'])
 
 describe.skipIf(!CONNECTED)('review store — connected proof (test partition)', () => {
   const admin: any = createAdminClient()
@@ -82,6 +90,12 @@ describe.skipIf(!CONNECTED)('review store — connected proof (test partition)',
     for (const table of CLEANUP_ORDER) {
       const ids = recordedIds(table)
       if (ids.length === 0) continue
+      if (DIRECT_DELETE_TABLES.has(table)) {
+        const pk = table === 'outfit_item' ? 'outfit_item_id' : 'outfit_id'
+        const { error } = await admin.from(table).delete().in(pk, ids)
+        if (error) throw new Error(`cleanup failed for ${table}: ${error.message}`)
+        continue
+      }
       const { data, error } = await admin.rpc('oq_test_cleanup', { p_table: table, p_ids: ids })
       if (error) throw new Error(`cleanup failed for ${table}: ${error.message}`)
       expect(data).toBe(ids.length)
@@ -98,6 +112,11 @@ describe.skipIf(!CONNECTED)('review store — connected proof (test partition)',
         : table === 'outfit_quality_review_event' ? 'review_event_id'
         : table === 'outfit_quality_queue_hold' ? 'hold_id'
         : table === 'outfit_quality_render_job' ? 'render_job_id'
+        : table === 'outfit_quality_render_attempt' ? 'render_attempt_id'
+        : table === 'outfit_quality_image_override' ? 'override_id'
+        : table === 'outfit_quality_promotion' ? 'promotion_id'
+        : table === 'outfit_item' ? 'outfit_item_id'
+        : table === 'outfit' ? 'outfit_id'
         : 'check_id'
       const { data } = await admin.from(table).select(pk).in(pk, ids)
       expect(data ?? []).toHaveLength(0)
@@ -260,7 +279,7 @@ describe.skipIf(!CONNECTED)('review store — connected proof (test partition)',
   it('undo of a queued approval cancels the render job; a running job forces explicit withdrawal', T, async () => {
     const c = await makeCandidate()
 
-    // Approve → one queued cycle-1 job.
+    // Approve → one queued cycle-1 job AND one internal/non-live promotion.
     const d = await decideCandidate(c.versionId, { decision: 'yes', idempotencyKey: randomUUID() }, ACTOR, admin)
     if (!d.ok) throw new Error('setup decide failed')
     record('outfit_quality_review_event', d.event.review_event_id)
@@ -268,6 +287,19 @@ describe.skipIf(!CONNECTED)('review store — connected proof (test partition)',
     expect(jobs).toHaveLength(1)
     expect(jobs[0]).toMatchObject({ status: 'queued', approval_event_id: d.event.review_event_id, cycle_no: 1 })
     record('outfit_quality_render_job', jobs[0].render_job_id)
+
+    // The approval promoted exactly one draft outfit linked once to the item.
+    const { data: promotions } = await admin.from('outfit_quality_promotion').select('*').eq('candidate_version_id', c.versionId)
+    expect(promotions).toHaveLength(1)
+    record('outfit_quality_promotion', promotions[0].promotion_id)
+    record('outfit', promotions[0].outfit_id)
+    expect(jobs[0].promotion_id).toBe(promotions[0].promotion_id)
+    const { data: promotedOutfit } = await admin.from('outfit').select('outfit_id, status, published_at, stylist_id').eq('outfit_id', promotions[0].outfit_id).maybeSingle()
+    expect(promotedOutfit).toMatchObject({ status: 'draft', published_at: null, stylist_id: CHLOE_STYLIST_ID })
+    const { data: memberships } = await admin.from('outfit_item').select('outfit_item_id, item_id, slot, sort_order').eq('outfit_id', promotions[0].outfit_id)
+    expect(memberships).toHaveLength(1)
+    expect(memberships[0]).toMatchObject({ item_id: realItem.item_id, slot: 'top', sort_order: 0 })
+    record('outfit_item', ...memberships.map((m: any) => m.outfit_item_id))
 
     // Undo while queued: job cancelled, zero attempts, back to review.
     const u = await undoCandidateDecision(c.versionId, { idempotencyKey: randomUUID() }, ACTOR, admin)
