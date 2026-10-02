@@ -106,6 +106,18 @@ export function deriveQueueDisposition(args: {
   return 'active'
 }
 
+/**
+ * Whether a card offers EDIT AS NEW VERSION. Editing is allowed from any
+ * reviewable or reviewed state — an active card awaiting a decision or a
+ * reviewed (approved/rejected/withdrawn) one — because an edit creates a
+ * fresh child version and never mutates the original. Held cards must be
+ * released back into the active queue first; hidden machine-stage versions
+ * are not editable.
+ */
+export function canEditAsNewVersion(disposition: QueueDisposition): boolean {
+  return disposition === 'active' || disposition === 'reviewed'
+}
+
 export interface QueueCounts {
   active: number
   held: number

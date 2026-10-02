@@ -261,14 +261,15 @@ export async function loadReviewQueue(filters: ReviewFilters = {}, admin: Admin 
     return true
   })
 
-  // Queue order: the active queue is oldest-first (FIFO review); held and
-  // reviewed surfaces show the most recently touched first.
+  // Queue order: the active queue is oldest-first (FIFO review) by candidate
+  // version created_at with a candidate_version_id tiebreak; held and
+  // reviewed surfaces show the most recently touched first. decided_at is
+  // always null on an active card, so it can never order this queue.
   const disposition = filters.disposition ?? 'active'
   filtered.sort((a, b) =>
     disposition === 'active'
-      ? String(a.decided_at ?? '') === String(b.decided_at ?? '')
-        ? a.candidate_version_id.localeCompare(b.candidate_version_id)
-        : versionCreated.get(a.candidate_version_id)!.localeCompare(versionCreated.get(b.candidate_version_id)!)
+      ? versionCreated.get(a.candidate_version_id)!.localeCompare(versionCreated.get(b.candidate_version_id)!) ||
+        a.candidate_version_id.localeCompare(b.candidate_version_id)
       : String(b.decided_at ?? '').localeCompare(String(a.decided_at ?? '')) || a.candidate_version_id.localeCompare(b.candidate_version_id),
   )
 

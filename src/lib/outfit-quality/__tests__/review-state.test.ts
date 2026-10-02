@@ -11,6 +11,7 @@ import {
   activeHoldFor,
   deriveQueueDisposition,
   deriveQueueCounts,
+  canEditAsNewVersion,
   type ReviewEventRow,
   type QueueHoldRow,
 } from '@/lib/outfit-quality/review-state'
@@ -154,5 +155,16 @@ describe('deriveQueueCounts', () => {
       { candidate_version_id: 'v6', state: 'objective_failed', events: [], holds: [] },
     ])
     expect(counts).toEqual({ active: 2, held: 1, reviewed: 2 })
+  })
+})
+
+describe('canEditAsNewVersion', () => {
+  it('offers editing from active and reviewed (approved/rejected/withdrawn) cards', () => {
+    expect(canEditAsNewVersion('active')).toBe(true)
+    expect(canEditAsNewVersion('reviewed')).toBe(true)
+  })
+  it('does not offer editing for held or hidden versions', () => {
+    expect(canEditAsNewVersion('held')).toBe(false)
+    expect(canEditAsNewVersion('hidden')).toBe(false)
   })
 })

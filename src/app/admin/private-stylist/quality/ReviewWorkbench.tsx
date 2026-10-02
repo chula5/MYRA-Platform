@@ -24,6 +24,7 @@ import {
 import { editQualityCandidate } from './actions.gated'
 import { REVIEW_REASONS, reasonRequiresItem, reviewReason } from '@/lib/outfit-quality/review-reasons'
 import { REVIEW_SHORTCUTS, reviewShortcutForKey } from '@/lib/outfit-quality/review-keyboard'
+import { canEditAsNewVersion } from '@/lib/outfit-quality/review-state'
 import type { ReviewCard, ReviewFilters, ReviewQueueResult, CaseHistory } from '@/lib/outfit-quality/review-read'
 
 const PARTITIONS = ['test', 'training', 'validation', 'holdout', 'synthetic'] as const
@@ -371,10 +372,14 @@ function ReviewCardView({
             <button className={btnLight} onClick={() => setForm({ kind: 'hold', versionId: vid })} aria-label={`Hold candidate version ${card.version_no}`} aria-expanded={form?.kind === 'hold' && form.versionId === vid}>
               HOLD (H)
             </button>
-            <button className={btnLight} onClick={() => setForm({ kind: 'edit', versionId: vid })} aria-label={`Edit candidate version ${card.version_no} as a new version`} aria-expanded={form?.kind === 'edit' && form.versionId === vid}>
-              EDIT AS NEW VERSION
-            </button>
           </>
+        )}
+        {/* Editing is offered from any reviewable or reviewed state: it always
+            creates a fresh child version and never mutates this card. */}
+        {canEditAsNewVersion(card.disposition) && (
+          <button className={btnLight} onClick={() => setForm({ kind: 'edit', versionId: vid })} aria-label={`Edit candidate version ${card.version_no} as a new version`} aria-expanded={form?.kind === 'edit' && form.versionId === vid}>
+            EDIT AS NEW VERSION
+          </button>
         )}
         {card.disposition === 'held' && (
           <button
