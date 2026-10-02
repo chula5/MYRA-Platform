@@ -13,6 +13,7 @@ export const FAKE_PK: Record<string, string> = {
   outfit_quality_machine_check: 'check_id',
   outfit_quality_image_override: 'override_id',
   outfit_quality_promotion: 'promotion_id',
+  outfit_quality_learning_projection: 'projection_id',
   outfit: 'outfit_id',
   outfit_item: 'outfit_item_id',
   stylist: 'stylist_id',
@@ -26,6 +27,7 @@ export const FAKE_DEFAULTS: Record<string, Record<string, unknown>> = {
   outfit_quality_render_attempt: { prompt: null, reference_manifest: null, renderer_model: null, renderer_version: null, image_url: null, cloudinary_asset: null, generation_status: null, generation_error: null, fidelity_check_id: null, ready_at: null },
   outfit_quality_image_override: { action: 'not_good_enough', note: null },
   outfit_quality_promotion: { status: 'active', withdrawn_at: null },
+  outfit_quality_learning_projection: { target_stylist_id: null, payload: {}, status: 'applied', reverses_projection_id: null },
   outfit: { status: 'draft', published_at: null, additional_images: [] },
   outfit_item: { size_override: false, size_override_note: null },
 }
@@ -55,6 +57,8 @@ function uniqueViolation(table: string, tables: Record<string, any[]>, row: any)
         dup((r) => r.candidate_version_id === row.candidate_version_id, 'outfit_quality_promotion_candidate_version_id_key') ??
         dup((r) => r.outfit_id === row.outfit_id, 'outfit_quality_promotion_outfit_id_key')
       )
+    case 'outfit_quality_learning_projection':
+      return dup((r) => r.application_key === row.application_key, 'outfit_quality_learning_projection_application_key_key')
     default:
       return null
   }

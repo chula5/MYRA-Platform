@@ -24,6 +24,11 @@ import {
 } from '@/lib/outfit-quality/review-plan'
 import { latestActiveDecision, type ReviewEventRow } from '@/lib/outfit-quality/review-state'
 import { promoteApprovedVersion, markPromotionWithdrawn } from '@/lib/outfit-quality/promotion'
+import {
+  applyLearningProjections,
+  applyCompensatingProjections,
+  type LearningAttribution,
+} from '@/lib/outfit-quality/learning-projection'
 
 type Admin = ReturnType<typeof createAdminClient>
 
@@ -59,7 +64,11 @@ async function loadContext(db: any, candidateVersionId: string): Promise<{ ctx?:
 
   const [{ data: kase, error: cErr }, { data: items, error: iErr }, { data: events, error: eErr }, { data: holds, error: hErr }, { data: jobs, error: jErr }] =
     await Promise.all([
-      db.from('outfit_quality_case').select('case_id, current_version_id, status').eq('case_id', version.case_id).maybeSingle(),
+      db
+        .from('outfit_quality_case')
+        .select('case_id, current_version_id, status, data_partition, selected_stylist_id, real_member_id, evaluation_profile_id')
+        .eq('case_id', version.case_id)
+        .maybeSingle(),
       db.from('outfit_quality_candidate_item').select('candidate_item_id').eq('candidate_version_id', candidateVersionId),
       db.from('outfit_quality_review_event').select('*').eq('candidate_version_id', candidateVersionId).order('created_at', { ascending: true }),
       db.from('outfit_quality_queue_hold').select('*').eq('candidate_version_id', candidateVersionId),
@@ -90,6 +99,18 @@ async function reversedDecisionOf(db: any, event: ReviewEventRow): Promise<'yes'
   if (!event.reverses_event_id) return null
   const { data } = await db.from('outfit_quality_review_event').select('decision').eq('review_event_id', event.reverses_event_id).maybeSingle()
   return (data?.decision as 'yes' | 'no' | undefined) ?? null
+}
+
+/**
+ * Learning routing attribution from the case's repeated immutable columns. A
+ * missing partition fails closed to inert — never guess a partition.
+ */
+function learningAttributionOf(kase: PlanContext['kase']): LearningAttribution {
+  return {
+    dataPartition: kase?.data_partition ?? null,
+    selectedStylistId: kase?.selected_stylist_id ?? null,
+    contextType: kase?.real_member_id ? 'real_member' : 'evaluation_profile',
+  }
 }
 
 // ── Machine-result disclosure ─────────────────────────────────────────────────
@@ -204,6 +225,22 @@ export async function decideCandidate(
   const { error: caseErr } = await db.from('outfit_quality_case').update({ status: plan.nextState }).eq('case_id', ctx!.version!.case_id)
   if (caseErr) warnings.push(`case status update failed: ${caseErr.message}`)
 
+  // Learning routing: only a persisted training decision projects, under the
+  // exact approved reason mapping; every other partition writes nothing. The
+  // event row is authoritative — a projection failure is surfaced as a
+  // warning, never silently dropped and never a reason to lose the review.
+  const learning = await applyLearningProjections(db, {
+    attribution: learningAttributionOf(ctx!.kase),
+    event: {
+      review_event_id: event.review_event_id,
+      candidate_version_id: candidateVersionId,
+      decision: event.decision as 'yes' | 'no',
+      reason_code: event.reason_code,
+      candidate_item_id: event.candidate_item_id,
+    },
+  })
+  if (!learning.ok) warnings.push(`learning projection failed: ${learning.code}`)
+
   let renderJobId: string | null = null
   if (plan.enqueueRender) {
     // Promotion and render enqueue ride the approval: exactly one internal/
@@ -261,7 +298,7 @@ async function applyReversal(
   nextState: 'awaiting_human' | 'approval_withdrawn',
   fromStates: string[],
   cancelJobIds: string[],
-): Promise<{ ok: true; reused: boolean; event: ReviewEventRow; nextState: string } | MutationFailure> {
+): Promise<{ ok: true; reused: boolean; event: ReviewEventRow; nextState: string; warnings?: string[] } | MutationFailure> {
   const db = admin as any
 
   const existing = await eventByIdempotencyKey(db, idempotencyKey)
@@ -319,13 +356,24 @@ async function applyReversal(
 
   await db.from('outfit_quality_case').update({ status: nextState }).eq('case_id', caseId)
 
-  return { ok: true, reused: false, event: event as ReviewEventRow, nextState }
+  // Learning compensation: append one linked, opposite-polarity projection
+  // for every uncompensated projection of the reversed decision. History is
+  // never erased; replay is a no-op. A failure is a warning, not a lost
+  // reversal — the reversal event above is already durable.
+  const compensation = await applyCompensatingProjections(db, {
+    reversalEventId: event.review_event_id,
+    reversedEventId: planEvent.reverses_event_id,
+    candidateVersionId,
+  })
+  const warnings = compensation.ok ? undefined : [`learning compensation failed: ${compensation.code}`]
+
+  return { ok: true, reused: false, event: event as ReviewEventRow, nextState, ...(warnings ? { warnings } : {}) }
 }
 
 // ── Undo ──────────────────────────────────────────────────────────────────────
 
 export type UndoResult =
-  | { ok: true; reused: boolean; event: ReviewEventRow; nextState: string; reversedDecision: 'yes' | 'no'; cancelledRenderJobIds: string[] }
+  | { ok: true; reused: boolean; event: ReviewEventRow; nextState: string; reversedDecision: 'yes' | 'no'; cancelledRenderJobIds: string[]; warnings?: string[] }
   | MutationFailure
 
 export async function undoCandidateDecision(
@@ -367,7 +415,7 @@ export async function undoCandidateDecision(
 // ── Withdraw ──────────────────────────────────────────────────────────────────
 
 export type WithdrawResult =
-  | { ok: true; reused: boolean; event: ReviewEventRow; nextState: string; cancelledRenderJobIds: string[] }
+  | { ok: true; reused: boolean; event: ReviewEventRow; nextState: string; cancelledRenderJobIds: string[]; warnings?: string[] }
   | MutationFailure
 
 export async function withdrawCandidateApproval(

@@ -22,6 +22,15 @@ export interface PlanCase {
   case_id: string
   current_version_id: string | null
   status: string
+  /**
+   * Repeated immutable attribution, used to route learning projections. The
+   * database enforces these equal the batch; the store only reads them. A
+   * missing partition fails closed to inert (no learning).
+   */
+  data_partition?: string
+  selected_stylist_id?: string
+  real_member_id?: string | null
+  evaluation_profile_id?: string | null
 }
 
 export interface PlanContext {
