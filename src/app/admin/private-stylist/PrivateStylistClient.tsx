@@ -292,7 +292,7 @@ export default function PrivateStylistClient({ data }: { data: PilotData }) {
             key={t}
             onClick={() => setTab(t)}
             className={`pb-3 text-[20px] tracking-[0.18em] transition-colors duration-300 ${
-              tab === t ? 'text-[#0A0A0A] border-b border-[#0A0A0A] -mb-px' : 'text-[#A8A8A4] hover:text-[#0A0A0A]'
+              tab === t ? 'text-[#0A0A0A] border-b border-[#0A0A0A] -mb-px' : 'text-[#6B6B6B] hover:text-[#0A0A0A]'
             }`}
           >
             {t}

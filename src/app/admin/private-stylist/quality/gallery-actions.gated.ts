@@ -23,6 +23,7 @@ import {
   withdrawUnderlyingOutfit,
 } from '@/lib/outfit-quality/gallery'
 import { drainQualityRenderQueue, realQualityRenderAdapters } from '@/lib/outfit-quality/render-worker'
+import { recheckPersistedAttemptFidelity } from '@/lib/outfit-quality/fidelity-recheck'
 
 export async function loadAcceptedImagesAction() {
   await assertAdmin()
@@ -79,4 +80,18 @@ export async function drainQualityRendersAction(input?: { maxJobs?: number }) {
     maxJobs,
     adapters: realQualityRenderAdapters(),
   })
+}
+
+/**
+ * Explicit fidelity-only re-check of ONE persisted attempt whose fidelity
+ * checker was unavailable/errored while its durable Cloudinary image exists.
+ * Never submits a render and never increments generation_count: the strict
+ * fidelity adapter runs against the existing image, a pass marks the existing
+ * attempt ready, and a conclusive failure follows the unchanged
+ * corrective-retry policy. Idempotent and fail-closed.
+ */
+export async function recheckRenderFidelityAction(renderAttemptId: string) {
+  const { ok, userId } = await requireAdminUser()
+  if (!ok || !userId) throw new Error('Not authorised')
+  return recheckPersistedAttemptFidelity(createAdminClient(), renderAttemptId)
 }

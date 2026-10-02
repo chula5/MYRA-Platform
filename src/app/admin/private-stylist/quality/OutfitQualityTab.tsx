@@ -49,7 +49,7 @@ export default function OutfitQualityTab() {
             aria-selected={view === v}
             onClick={() => setView(v)}
             className={`pb-3 text-[20px] tracking-[0.18em] transition-colors duration-300 ${
-              view === v ? 'text-[#0A0A0A] border-b border-[#0A0A0A] -mb-px' : 'text-[#A8A8A4] hover:text-[#0A0A0A]'
+              view === v ? 'text-[#0A0A0A] border-b border-[#0A0A0A] -mb-px' : 'text-[#6B6B6B] hover:text-[#0A0A0A]'
             }`}
           >
             {VIEW_LABELS[v]}

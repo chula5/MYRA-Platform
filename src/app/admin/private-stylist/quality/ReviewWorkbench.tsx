@@ -198,7 +198,7 @@ export default function ReviewWorkbench() {
           </label>
           <button className={btnLight} onClick={resetFilters}>RESET FILTERS</button>
         </div>
-        <p className="mt-4 text-[16px] tracking-[0.08em] text-[#6B6B6B]" aria-label="Keyboard shortcuts">
+        <p className="mt-4 text-[16px] tracking-[0.08em] text-[#6B6B6B]">
           KEYS:{' '}
           {REVIEW_SHORTCUTS.map((s) => `${s.key} ${s.action === 'yes' ? 'YES' : s.action === 'no' ? 'BEGIN NO' : s.action === 'hold' ? 'HOLD' : s.action === 'history' ? 'HISTORY' : s.action === 'next' ? 'NEXT' : 'PREV'}`).join(' · ')}
           {' '}— INERT WHILE TYPING
@@ -711,7 +711,7 @@ function HistoryPanel({ caseId }: { caseId: string }) {
   }, [caseId])
 
   return (
-    <div className="mt-4 border border-[#EDEBE6] bg-[#FCFCFA] p-4" aria-label="Case lineage and event history">
+    <div className="mt-4 border border-[#EDEBE6] bg-[#FCFCFA] p-4" role="region" aria-label="Case lineage and event history">
       {err && <p role="alert" className="text-[16px] text-[#B83A3A]">{err.toUpperCase()}</p>}
       {!history && !err && <p className="text-[16px] tracking-[0.1em] text-[#6B6B6B]">LOADING HISTORY…</p>}
       {history && (
