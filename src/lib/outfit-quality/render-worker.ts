@@ -47,8 +47,24 @@ type Db = ReturnType<typeof createAdminClient>
 // ── Adapters (deterministic in tests, real only in the local drain) ───────────
 
 export interface GenerateResult {
-  /** True only once a generation was actually submitted to the renderer. */
+  /** True once the provider ACCEPTED the create request — even if the later
+   *  wait/result retrieval then failed. A pre-submission failure is `false`. */
   submitted: boolean
+  /** The accepted provider job id, captured as soon as create returns and
+   *  before any wait/result retrieval, so an accepted job is never lost. */
+  providerJobId?: string
+  imageUrl?: string
+  error?: string
+  /** True when the provider accepted the submission but the subsequent
+   *  wait/result retrieval failed transiently (e.g. a 403). This is NOT a
+   *  generation failure: the accepted job is recoverable by read-only
+   *  reconciliation and must never trigger another create. */
+  retrievalFailed?: boolean
+}
+
+/** Read-only provider job state for reconciliation. Never submits anything. */
+export interface ProviderJobStatus {
+  state: 'completed' | 'pending' | 'failed' | 'not_found' | 'error'
   imageUrl?: string
   error?: string
 }
@@ -58,6 +74,8 @@ export interface RenderAdapters {
   generate(prompt: string, referenceUrls: string[], publicId: string): Promise<GenerateResult>
   persist(imageUrl: string, opts: { folder: string; publicId: string }): Promise<string | null>
   checkFidelity(renderUrl: string, items: { label: string; image_url: string }[]): Promise<StrictFidelityResult>
+  /** Read-only get of an accepted provider job for reconciliation. */
+  getProviderJob?(providerJobId: string): Promise<ProviderJobStatus>
 }
 
 /** Values that must never survive into a stored error. */
@@ -329,12 +347,41 @@ async function runAttempt(
       return { kind: 'attention', reason: boundError(`renderer not submitted: ${gen.error ?? 'unavailable'}`, redactionList()) }
     }
 
+    // The provider ACCEPTED this attempt. Persist the accepted provider job id
+    // immediately — before trusting any result — so a transient wait/result
+    // failure can never lose it or cause a duplicate create.
+    if (gen.providerJobId) {
+      await db
+        .from('outfit_quality_render_attempt')
+        .update({ provider_job_id: gen.providerJobId, provider_status: 'accepted' })
+        .eq('render_attempt_id', attempt.render_attempt_id)
+      attempt = { ...attempt, provider_job_id: gen.providerJobId }
+    }
+
     // A generation was actually submitted — count it exactly once.
     await db
       .from('outfit_quality_render_job')
       .update({ generation_count: attemptNo, updated_at: new Date().toISOString() })
       .eq('render_job_id', job.render_job_id)
       .eq('lease_token', job.lease_token)
+
+    if (gen.retrievalFailed) {
+      // Accepted but the wait/result retrieval transiently failed. Distinct
+      // from a generation failure: the accepted provider job is reconcilable by
+      // read-only get (see provider-job-reconcile), never by another create.
+      await db
+        .from('outfit_quality_render_attempt')
+        .update({
+          generation_status: 'accepted_retrieval_failed',
+          provider_status: 'retrieval_failed',
+          generation_error: boundError(gen.error ?? 'result retrieval failed after acceptance', redactionList()),
+        })
+        .eq('render_attempt_id', attempt.render_attempt_id)
+      return {
+        kind: 'attention',
+        reason: boundError(`accepted provider job awaiting reconciliation (retrieval failed): ${gen.error ?? 'retrieval failed'}`, redactionList()),
+      }
+    }
 
     if (!gen.imageUrl) {
       await db
@@ -566,14 +613,25 @@ export function realQualityRenderAdapters(): RenderAdapters {
     generate: async (prompt, referenceUrls, publicId) => {
       const { runHiggsfieldGeneration } = await import('@/app/admin/projects/higgsfield-actions')
       const r = await runHiggsfieldGeneration(prompt, referenceUrls, publicId)
-      if (r.imageUrl) return { submitted: true, imageUrl: r.imageUrl }
+      const providerJobId = r.providerJobIds?.[0]
+      if (r.imageUrl) return { submitted: true, imageUrl: r.imageUrl, providerJobId }
+      // Accepted but the result wasn't retrieved — recoverable, never re-created.
+      if (r.retrievalFailed) {
+        return { submitted: true, retrievalFailed: true, providerJobId, error: r.error ?? 'result retrieval failed after acceptance' }
+      }
       const error = r.error ?? 'unknown renderer error'
-      return { submitted: !PRE_SUBMISSION.test(error), error }
+      // `submitted` from the generator is authoritative when present; otherwise
+      // fall back to the pre-submission error heuristic.
+      return { submitted: r.submitted ?? !PRE_SUBMISSION.test(error), providerJobId, error }
     },
     persist: async (imageUrl, opts) => {
       const { persistImageToCloudinary } = await import('@/lib/cloudinary-persist')
       return persistImageToCloudinary(imageUrl, opts)
     },
     checkFidelity: (renderUrl, items) => checkQualityRenderFidelity(renderUrl, items),
+    getProviderJob: async (providerJobId) => {
+      const { getHiggsfieldJob } = await import('@/app/admin/projects/higgsfield-actions')
+      return getHiggsfieldJob(providerJobId)
+    },
   }
 }

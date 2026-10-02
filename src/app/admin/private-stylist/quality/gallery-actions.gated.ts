@@ -24,6 +24,7 @@ import {
 } from '@/lib/outfit-quality/gallery'
 import { drainQualityRenderQueue, realQualityRenderAdapters } from '@/lib/outfit-quality/render-worker'
 import { recheckPersistedAttemptFidelity } from '@/lib/outfit-quality/fidelity-recheck'
+import { reconcileAcceptedProviderJob } from '@/lib/outfit-quality/provider-job-reconcile'
 
 export async function loadAcceptedImagesAction() {
   await assertAdmin()
@@ -94,4 +95,18 @@ export async function recheckRenderFidelityAction(renderAttemptId: string) {
   const { ok, userId } = await requireAdminUser()
   if (!ok || !userId) throw new Error('Not authorised')
   return recheckPersistedAttemptFidelity(createAdminClient(), renderAttemptId)
+}
+
+/**
+ * Reconcile ONE accepted provider job whose result wasn't retrieved at
+ * submission time (e.g. a transient 403 after acceptance). Read-only recovery:
+ * reads the accepted provider job, persists its completed image durably exactly
+ * once, runs strict fidelity against the frozen sources, and marks the EXISTING
+ * attempt ready on a conclusive pass. Never submits a render and never
+ * increments generation_count. Idempotent and fail-closed.
+ */
+export async function reconcileAcceptedProviderJobAction(renderAttemptId: string) {
+  const { ok, userId } = await requireAdminUser()
+  if (!ok || !userId) throw new Error('Not authorised')
+  return reconcileAcceptedProviderJob(createAdminClient(), renderAttemptId)
 }

@@ -79,7 +79,15 @@ export async function runHiggsfieldGeneration(
   // imageUrl is the first frame — the default every existing caller uses.
   // imageUrls is the whole batch, because a generation returns several and
   // the second is often the better shot.
-): Promise<{ imageUrl?: string; imageUrls?: string[]; error?: string }> {
+  //
+  // SUBMISSION vs RETRIEVAL: `create` and the result wait are separate phases.
+  // `providerJobIds` carries the accepted provider job ids, captured the moment
+  // create returns and before any wait. `submitted` is true once the provider
+  // ACCEPTED the create (even if the later wait failed); `retrievalFailed` is
+  // true when it accepted but the wait/result retrieval then failed transiently
+  // (e.g. a 403). An accepted-but-unretrieved job is recoverable read-only via
+  // getHiggsfieldJob — never by another create.
+): Promise<{ imageUrl?: string; imageUrls?: string[]; error?: string; providerJobIds?: string[]; submitted?: boolean; retrievalFailed?: boolean }> {
   if (!prompt?.trim()) return { error: 'No prompt provided' }
   const refs = (referenceUrls ?? []).filter((u) => typeof u === 'string' && u.startsWith('http')).slice(0, 6)
   if (refs.length === 0) return { error: 'No reference images — add item photos first' }
@@ -127,25 +135,26 @@ export async function runHiggsfieldGeneration(
     }
     if (imageArgs.length === 0) return { error: 'Could not download any reference images' }
 
-    // 3. Run the generation, blocking until done.
-    const args = [
+    // 3a. CREATE (no --wait): submit and capture the accepted provider job ids
+    //     IMMEDIATELY, before any wait. Splitting create from the result wait is
+    //     what makes an accepted job durable: a later wait failure can no longer
+    //     erase the fact that the provider accepted (and may have charged for)
+    //     this generation.
+    const createArgs = [
       'generate', 'create', HF_MODEL,
       '--prompt', prompt,
       ...imageArgs,
       '--aspect_ratio', '3:4',
       '--quality', 'high',
-      '--wait', '--wait-timeout', '5m',
       '--json',
     ]
 
-    let stdout = ''
+    let createOut = ''
     try {
-      const res = await runCli(args, {
-        timeout: 6 * 60_000,
-        maxBuffer: 20 * 1024 * 1024,
-      })
-      stdout = res.stdout
+      const res = await runCli(createArgs, { timeout: 90_000, maxBuffer: 20 * 1024 * 1024 })
+      createOut = res.stdout
     } catch (err: any) {
+      // A create failure is a PRE-SUBMISSION failure — nothing was accepted.
       const msg = (err?.stderr || err?.stdout || err?.message || '').toString()
       if (/not authenticated/i.test(msg)) {
         return { error: 'Higgsfield CLI is not logged in. Run: ./node_modules/.bin/higgsfield auth login' }
@@ -153,22 +162,58 @@ export async function runHiggsfieldGeneration(
       return { error: `Higgsfield generation failed: ${msg.slice(0, 300)}` }
     }
 
-    const jsonStr = extractJson(stdout)
-    if (!jsonStr) return { error: 'Could not parse Higgsfield response' }
-    let jobs: any
-    try { jobs = JSON.parse(jsonStr) } catch { return { error: 'Higgsfield returned invalid JSON' } }
+    const createJson = extractJson(createOut)
+    if (!createJson) return { error: 'Could not parse Higgsfield response' }
+    let created: any
+    try { created = JSON.parse(createJson) } catch { return { error: 'Higgsfield returned invalid JSON' } }
     // Higgsfield returns a JOB PER IMAGE — a generation is a small batch, not
-    // one picture. Taking jobs[0] threw the rest away, so a shoot that came
-    // back with a usable second frame offered no way to reach it. Keep them
-    // all; the first is still the default so every existing caller is
-    // unchanged.
-    const jobList: any[] = Array.isArray(jobs) ? jobs : [jobs]
-    const resultUrls: string[] = jobList
-      .map((j) => j?.result_url)
+    // one picture. Keep them all; the first is still the default so every
+    // existing caller is unchanged.
+    const createdList: any[] = Array.isArray(created) ? created : [created]
+    const providerJobIds: string[] = createdList
+      .map((j) => j?.id ?? j?.job_id ?? j?.jobId)
       .filter((u: unknown): u is string => typeof u === 'string' && !!u)
+    if (!providerJobIds.length) {
+      return { error: 'Higgsfield create returned no provider job id' }
+    }
+
+    // From here the submission is ACCEPTED. Any failure below is a RETRIEVAL
+    // failure that MUST retain the provider job ids for read-only recovery — it
+    // is never a reason to create again.
+    // 3b. WAIT for each accepted job and collect its result URL. A job that
+    //     already carries a result_url from create needs no wait.
+    const resultUrls: string[] = []
+    let retrievalError: string | null = null
+    for (const job of createdList) {
+      const jobId = job?.id ?? job?.job_id ?? job?.jobId
+      if (typeof job?.result_url === 'string' && job.result_url) {
+        resultUrls.push(job.result_url)
+        continue
+      }
+      if (typeof jobId !== 'string' || !jobId) continue
+      try {
+        const res = await runCli(['generate', 'wait', jobId, '--timeout', '5m', '--json'], {
+          timeout: 6 * 60_000,
+          maxBuffer: 20 * 1024 * 1024,
+        })
+        const waited = extractJson(res.stdout)
+        const parsed = waited ? JSON.parse(waited) : null
+        const one = Array.isArray(parsed) ? parsed[0] : parsed
+        if (typeof one?.result_url === 'string' && one.result_url) resultUrls.push(one.result_url)
+      } catch (err: any) {
+        retrievalError = (err?.stderr || err?.stdout || err?.message || '').toString().slice(0, 300)
+      }
+    }
     if (!resultUrls.length) {
-      const status = jobList[0]?.status ?? 'unknown'
-      return { error: `No image returned (status: ${status})` }
+      // Accepted but no result retrieved (transient 403/timeout, or still
+      // processing). Retain the provider job ids so reconciliation can recover
+      // the completed result read-only.
+      return {
+        providerJobIds,
+        submitted: true,
+        retrievalFailed: true,
+        error: retrievalError ?? 'no result retrieved after acceptance — job accepted and recoverable',
+      }
     }
 
     // 4. Persist to Cloudinary so they live in MYRA's asset pipeline (not the
@@ -182,10 +227,57 @@ export async function runHiggsfieldGeneration(
       if (!cloudUrl) console.error('[runHiggsfieldGeneration] Cloudinary persist failed — storing ephemeral CDN URL for', publicId)
       return cloudUrl ?? raw
     }))
-    return { imageUrl: persisted[0], imageUrls: persisted }
+    return { imageUrl: persisted[0], imageUrls: persisted, providerJobIds, submitted: true }
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
+}
+
+/**
+ * READ-ONLY get of one accepted Higgsfield provider job (`generate get <id>`).
+ *
+ * This is the recovery primitive for an accepted job whose result wasn't
+ * retrieved at submission time (e.g. a transient 403 after acceptance). It
+ * NEVER creates or re-generates anything — it only inspects the existing job
+ * and returns its completed result URL so the caller can persist it durably.
+ */
+export async function getHiggsfieldJob(
+  providerJobId: string,
+): Promise<{ state: 'completed' | 'pending' | 'failed' | 'not_found' | 'error'; imageUrl?: string; error?: string }> {
+  if (!providerJobId?.trim()) return { state: 'error', error: 'no provider job id' }
+
+  const bin = path.join(process.cwd(), 'node_modules', '.bin', 'higgsfield')
+  const nodeBin = process.execPath
+  const cliEnv = { ...process.env, PATH: `${path.dirname(nodeBin)}:${process.env.PATH ?? ''}` }
+
+  let stdout = ''
+  try {
+    const res = await execFileP(nodeBin, [bin, 'generate', 'get', providerJobId, '--json'], {
+      env: cliEnv,
+      cwd: process.cwd(),
+      timeout: 30_000,
+      maxBuffer: 20 * 1024 * 1024,
+    })
+    stdout = res.stdout
+  } catch (err: any) {
+    const msg = (err?.stderr || err?.stdout || err?.message || '').toString()
+    if (/not found|404|no such/i.test(msg)) return { state: 'not_found', error: msg.slice(0, 200) }
+    return { state: 'error', error: msg.slice(0, 200) }
+  }
+
+  const jsonStr = extractJson(stdout)
+  if (!jsonStr) return { state: 'error', error: 'could not parse provider get response' }
+  let parsed: any
+  try { parsed = JSON.parse(jsonStr) } catch { return { state: 'error', error: 'provider get returned invalid JSON' } }
+  const job = Array.isArray(parsed) ? parsed[0] : parsed
+  const status = String(job?.status ?? '').toLowerCase()
+  const resultUrl = typeof job?.result_url === 'string' && job.result_url ? job.result_url : undefined
+
+  if (resultUrl && /^(completed|succeeded|success|done|ready)$/.test(status)) return { state: 'completed', imageUrl: resultUrl }
+  if (/^(failed|error|cancelled|canceled|rejected)$/.test(status)) return { state: 'failed', error: `provider job status: ${status}` }
+  if (resultUrl) return { state: 'completed', imageUrl: resultUrl }
+  if (!status || /^(queued|in_progress|processing|running|pending|created)$/.test(status)) return { state: 'pending' }
+  return { state: 'pending' }
 }
 
 /**

@@ -86,7 +86,7 @@ interface FakeAdapterCalls {
 }
 
 function fakeAdapters(behaviour: {
-  generate?: (call: { prompt: string; refs: string[]; publicId: string }, n: number) => Promise<{ submitted: boolean; imageUrl?: string; error?: string }>
+  generate?: (call: { prompt: string; refs: string[]; publicId: string }, n: number) => Promise<{ submitted: boolean; imageUrl?: string; error?: string; providerJobId?: string; retrievalFailed?: boolean }>
   persist?: (url: string, publicId: string) => Promise<string | null>
   fidelity?: (url: string, n: number) => Promise<StrictFidelityResult>
   available?: boolean
@@ -364,6 +364,62 @@ describe('fidelity retry policy', () => {
     expect(r.attention).toBe(1)
     expect(calls.generate).toHaveLength(1)
     expect(db.tables.outfit_quality_render_attempt).toHaveLength(1)
+  })
+})
+
+// ── Accepted provider-job capture and retrieval-failure (VAL-RENDER-004) ──────
+
+describe('accepted provider-job capture and retrieval failure', () => {
+  it('persists the accepted provider job id immediately after submission', async () => {
+    const db = seedWorld()
+    const { adapters, calls } = fakeAdapters({
+      generate: async () => ({ submitted: true, providerJobId: 'prov-abc-123', imageUrl: 'https://cdn.higgsfield.example/ephemeral.png' }),
+    })
+    const r = await drainQualityRenderQueue(db.admin, { ...WORKER, adapters })
+    expect(r.ready).toBe(1)
+    expect(calls.generate).toHaveLength(1)
+    const attempt = db.tables.outfit_quality_render_attempt[0]
+    expect(attempt.provider_job_id).toBe('prov-abc-123')
+    expect(db.tables.outfit_quality_render_job[0]).toMatchObject({ status: 'ready', generation_count: 1 })
+  })
+
+  it('a transient retrieval failure after acceptance keeps the accepted job reconcilable and never re-submits', async () => {
+    const db = seedWorld()
+    const { adapters, calls } = fakeAdapters({
+      generate: async () => ({ submitted: true, providerJobId: 'prov-xyz-789', retrievalFailed: true, error: 'HTTP 403 while waiting for result' }),
+    })
+    const r = await drainQualityRenderQueue(db.admin, { ...WORKER, adapters })
+    // Accepted but not retrieved: the job needs attention and is reconcilable.
+    expect(r.attention).toBe(1)
+    expect(calls.generate).toHaveLength(1) // exactly one create — never a duplicate
+    const job = db.tables.outfit_quality_render_job[0]
+    const attempt = db.tables.outfit_quality_render_attempt[0]
+    // The generation WAS submitted (and may have been charged), so it is counted
+    // once; the accepted provider job id is durably retained for recovery.
+    expect(job).toMatchObject({ status: 'attention_required', generation_count: 1 })
+    expect(attempt.provider_job_id).toBe('prov-xyz-789')
+    expect(attempt.generation_status).toBe('accepted_retrieval_failed')
+    expect(attempt.provider_status).toBe('retrieval_failed')
+    expect(attempt.image_url).toBeNull()
+    expect(attempt.ready_at).toBeNull()
+  })
+
+  it('a retrieval-failure error never carries credential values', async () => {
+    const sentinel = 'SENTINEL_ANTHROPIC_KEY_789'
+    const prev = process.env.ANTHROPIC_API_KEY
+    process.env.ANTHROPIC_API_KEY = sentinel
+    try {
+      const db = seedWorld()
+      const { adapters } = fakeAdapters({
+        generate: async () => ({ submitted: true, providerJobId: 'prov-1', retrievalFailed: true, error: `403 for token ${sentinel}` }),
+      })
+      await drainQualityRenderQueue(db.admin, { ...WORKER, adapters })
+      const rows = JSON.stringify([...db.tables.outfit_quality_render_job, ...db.tables.outfit_quality_render_attempt])
+      expect(rows).not.toContain(sentinel)
+    } finally {
+      if (prev === undefined) delete process.env.ANTHROPIC_API_KEY
+      else process.env.ANTHROPIC_API_KEY = prev
+    }
   })
 })
 

@@ -604,4 +604,99 @@ describe.skipIf(!CONNECTED)('render flow — connected proof (test partition, de
 
     await recordJobArtifacts(c.versionId)
   })
+
+  // VAL-RENDER-004: an accepted provider job whose result wasn't retrieved at
+  // submission time (transient 403) is recovered READ-ONLY against the deployed
+  // schema — provider_job_id round-trips, recovery persists the completed image
+  // durably once, fidelity passes, the EXISTING attempt is marked ready, and
+  // ZERO Higgsfield submissions occur during recovery.
+  it('accepted provider job recovery: a post-acceptance retrieval failure is reconciled read-only with no new submission', T, async () => {
+    await setup()
+    const { reconcileAcceptedProviderJob } = await import('@/lib/outfit-quality/provider-job-reconcile')
+
+    const c = await makeCandidate()
+    const approved = await approve(c.versionId)
+
+    // Phase 1 — SUBMISSION ACCEPTED, RETRIEVAL FAILED. The generate adapter
+    // reports the provider accepted (returning a provider job id) but the
+    // subsequent result retrieval failed transiently. The worker must persist
+    // the provider job id and leave the job reconcilable (attention_required),
+    // counting the one submission exactly once.
+    const PROVIDER_JOB = `c71b4f96-prov-${randomUUID().slice(0, 8)}`
+    let generateCalls = 0
+    const acceptThenFail: RenderAdapters = {
+      rendererAvailable: () => true,
+      generate: async () => {
+        generateCalls += 1
+        return { submitted: true, providerJobId: PROVIDER_JOB, retrievalFailed: true, error: 'HTTP 403 while waiting for result' }
+      },
+      persist: async () => null,
+      checkFidelity: async () => PASSED,
+    }
+    const r1 = await processMyJob(approved.job.render_job_id, acceptThenFail)
+    expect(r1?.status).toBe('attention_required')
+    expect(generateCalls).toBe(1)
+    await recordJobArtifacts(c.versionId)
+
+    const { data: jobAfter1 } = await admin.from('outfit_quality_render_job').select('status, generation_count').eq('render_job_id', approved.job.render_job_id).maybeSingle()
+    expect(jobAfter1).toMatchObject({ status: 'attention_required', generation_count: 1 })
+    const { data: attempt1 } = await admin.from('outfit_quality_render_attempt').select('*').eq('render_job_id', approved.job.render_job_id).eq('attempt_no', 1).maybeSingle()
+    expect(attempt1.provider_job_id).toBe(PROVIDER_JOB)
+    expect(attempt1.generation_status).toBe('accepted_retrieval_failed')
+    expect(attempt1.provider_status).toBe('retrieval_failed')
+    expect(attempt1.image_url).toBeNull()
+
+    // Phase 2 — READ-ONLY RECONCILIATION. getProviderJob reports the accepted
+    // job completed; recovery persists its image durably and passes fidelity.
+    // The deps expose NO submit/generate slot, so no new submission is possible.
+    let getCalls = 0
+    let persistCalls = 0
+    const durable = `https://res.cloudinary.com/testcloud/quality-lab-renders/recovered-${randomUUID().slice(0, 8)}.png`
+    const r2 = await reconcileAcceptedProviderJob(admin, attempt1.render_attempt_id, {
+      getProviderJob: async (id) => {
+        getCalls += 1
+        expect(id).toBe(PROVIDER_JOB)
+        return { state: 'completed', imageUrl: 'https://cdn.higgsfield.example/accepted-result.png' }
+      },
+      persist: async () => {
+        persistCalls += 1
+        return durable
+      },
+      checkFidelity: async () => PASSED,
+    })
+    expect(r2).toMatchObject({ ok: true, outcome: 'ready', replayed: false })
+    expect(getCalls).toBe(1)
+    expect(persistCalls).toBe(1)
+
+    const { data: attempt2 } = await admin.from('outfit_quality_render_attempt').select('*').eq('render_attempt_id', attempt1.render_attempt_id).maybeSingle()
+    expect(attempt2.image_url).toBe(durable)
+    expect(attempt2.provider_status).toBe('completed')
+    expect(attempt2.ready_at).toBeTruthy()
+    const { data: jobAfter2 } = await admin.from('outfit_quality_render_job').select('status, generation_count').eq('render_job_id', approved.job.render_job_id).maybeSingle()
+    // Ready, and the generation count is UNCHANGED — recovery issued no submission.
+    expect(jobAfter2).toMatchObject({ status: 'ready', generation_count: 1 })
+
+    // The recovered image enters Accepted Images for the still-approved version.
+    const cards = await galleryFor(c.versionId)
+    expect(cards).toHaveLength(1)
+    expect(cards[0].image_url).toBe(durable)
+
+    // Phase 3 — IDEMPOTENT REPLAY. A second reconcile returns the same ready
+    // result and contacts the provider zero more times.
+    let getCalls2 = 0
+    const r3 = await reconcileAcceptedProviderJob(admin, attempt1.render_attempt_id, {
+      getProviderJob: async () => {
+        getCalls2 += 1
+        return { state: 'completed', imageUrl: 'https://cdn.higgsfield.example/accepted-result.png' }
+      },
+      persist: async () => `https://res.cloudinary.com/testcloud/quality-lab-renders/should-not-be-used.png`,
+      checkFidelity: async () => PASSED,
+    })
+    expect(r3).toMatchObject({ ok: true, outcome: 'ready', replayed: true })
+    expect(getCalls2).toBe(0)
+    const { data: attempt3 } = await admin.from('outfit_quality_render_attempt').select('image_url').eq('render_attempt_id', attempt1.render_attempt_id).maybeSingle()
+    expect(attempt3.image_url).toBe(durable) // unchanged; no duplicate asset
+
+    await recordJobArtifacts(c.versionId)
+  })
 })
