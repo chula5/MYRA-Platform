@@ -9,17 +9,29 @@ import type { WatchedBrandRow } from '@/lib/brand-watch'
 import type { BrandTrust } from '@/lib/brand-watch-trust'
 import type { TwinTrust } from '@/lib/brand-watch-twins'
 import {
-  addWatchedBrandInBackground, checkAllBrandsNowInBackground, checkBrandNowInBackground, fullScanBrandInBackground, keepAllForBrand,
+  addWatchedBrandInBackground, checkAllBrandsNowInBackground, checkBrandNowInBackground, fullScanBrandInBackground,
+  keepAllForBrandInBackground, keepConfidentNowInBackground, keepShownInBackground, loadBrandJobs,
   keepItems, loadQueuePage, removeWatchedBrand, setWatchedBrandActive, setWatchedBrandAutoKeep,
   setWatchedBrandAutoKeepConfidence, setWatchedBrandConfidenceBar, loadAutoAdded, undoAutoKeep,
-  loadSiteRequests, decideSiteRequest, keepConfidentNowForBrand,
+  setWatchedBrandAutoKeepAll,
+  loadSiteRequests, decideSiteRequest,
   setWatchedBrandAutoKeepTwins, keepTwinsNowForBrand,
   setWatchedBrandMinScore, skipItems, undoSkip, setSkipReason, type QueueFilters, type QueueItemRow, type QueuePage, type QueueSort,
+  type BrandJobState,
 } from './actions'
+import { bulkLine, bulkLineVisible, type BulkJob } from '@/lib/brand-watch-jobs'
 
 const CHIP = 'px-3 py-1.5 rounded-full text-[9px] tracking-[0.12em] border transition-colors'
 const CHIP_ON = `${CHIP} bg-[#0A0A0A] text-white border-[#0A0A0A]`
 const CHIP_OFF = `${CHIP} bg-white text-[#6B6B6B] border-[#E2E0DB] hover:border-[#0A0A0A]`
+
+/**
+ * An automation switch. Never greyed: a brand may be switched on before the gate
+ * is earned, and the card says which levels are running unproven. Bold green
+ * when on, plain when off and unproven, underlined when the gate was earned.
+ */
+const toggle = (on: boolean | undefined | null, trusted: boolean): string =>
+  `transition-colors ${on ? 'text-[#3D6B45] font-bold' : trusted ? 'text-[#0A0A0A] underline underline-offset-2' : 'text-[#6B6B6B]'}`
 
 /**
  * Always lead in pounds — you shop in £, so a queue mixing $, € and kr is
@@ -75,9 +87,20 @@ function staleScan(state: { running?: boolean; started_at?: string } | null | un
 }
 
 export default function BrandWatchClient(props: Props) {
-  const { watched, trust, twinTrust } = props
+  const { trust, twinTrust } = props
   const router = useRouter()
   const confidenceTrust = props.confidenceTrust ?? {}
+
+  // A switch she flips shows here the moment the write lands. The per-brand
+  // actions no longer re-render the page server-side for a one-column write, so
+  // the card would otherwise keep showing the old state until the next load.
+  const [tweaks, setTweaks] = useState<Record<string, Partial<WatchedBrandRow>>>({})
+  const watched = useMemo(
+    () => props.watched.map((w) => (tweaks[w.watched_brand_id] ? { ...w, ...tweaks[w.watched_brand_id] } : w)),
+    [props.watched, tweaks],
+  )
+  const tweak = (id: string, over: Partial<WatchedBrandRow>) =>
+    setTweaks((t) => ({ ...t, [id]: { ...(t[id] ?? {}), ...over } }))
   // What MYRA added by itself — open it and every one can be sent back.
   const [autoAdded, setAutoAdded] = useState<any[] | null>(null)
   // Every scan runs on its own now; this says so, and the page follows it.
@@ -105,10 +128,19 @@ export default function BrandWatchClient(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scanning])
   const decided = props.decided ?? {}
-  const [pending, startTransition] = useTransition()
+  // Per-action busy keys, NOT one shared flag. A single `pending` disabled every
+  // control on the page at once, so choosing a brand or flipping one switch
+  // stopped her touching anything else — and setting up four brands meant four
+  // waits in a row. Each control now greys only itself, and the page is hers
+  // throughout.
+  const [busy, setBusy] = useState<Set<string>>(new Set())
+  const busyWith = (key: string) => busy.has(key)
+  // The grid render stays a transition: 200 cards arriving at once should be
+  // interruptible. Everything else is urgent and non-blocking.
+  const [, startTransition] = useTransition()
+  const [queueLoading, setQueueLoading] = useState(false)
   const [url, setUrl] = useState('')
   const [notice, setNotice] = useState<string | null>(null)
-  const [busyBrand, setBusyBrand] = useState<string | null>(null)
   const [gone, setGone] = useState<Set<string>>(new Set()) // optimistically hidden cards
   // After a skip: the loaded queue's near-twins of what was just skipped, so
   // they can go in one tap instead of one by one.
@@ -144,20 +176,45 @@ export default function BrandWatchClient(props: Props) {
   const colourChips = useMemo(() => chipsFor(PICKER_COLOURS, colourCounts, fColour), [colourCounts, fColour])
 
   const shown = useMemo(() => queue.filter((q) => !gone.has(q.item_id)), [queue, gone])
+  // The watchlist row behind the selected brand chip — the brand-scoped buttons
+  // need its id, because that is what a background job is keyed on.
+  const selectedBrand = fBrand ? watched.find((w) => w.name.toLowerCase() === fBrand.toLowerCase()) : undefined
 
-  const act = (fn: () => Promise<unknown>, done?: (r: any) => void) =>
-    startTransition(async () => {
+  // One control's work, marked under its own key so nothing else on the page
+  // waits for it. Deliberately not a transition: an await inside startTransition
+  // holds the transition open for the whole round trip.
+  const act = (key: string, fn: () => Promise<any>, done?: (r: any) => void) => {
+    setBusy((s) => new Set(s).add(key))
+    void (async () => {
       try { const r = await fn(); done?.(r) }
       catch (e) { setNotice(e instanceof Error ? e.message : String(e)) }
-      finally { setBusyBrand(null) }
-    })
+      finally { setBusy((s) => { const n = new Set(s); n.delete(key); return n }) }
+    })()
+  }
 
   const filtersNow = (over: Partial<QueueFilters> = {}): QueueFilters =>
     ({ itemType: fType, colour: fColour, minScore, showPredicted, sort: fSort, season: fSeason, ...over })
 
-  const load = (brand: string, filters: QueueFilters) =>
-    act(() => loadQueuePage(0, brand || undefined, filters), (r: QueuePage) => { setPage(r); setGone(new Set()) })
+  // A queue load never blocks the page and never overwrites a newer one: rapid
+  // brand clicks are the normal case, and the last one she tapped must win.
+  const loadSeq = useRef(0)
+  const load = (brand: string, filters: QueueFilters) => {
+    const seq = ++loadSeq.current
+    setQueueLoading(true)
+    void (async () => {
+      try {
+        const r = await loadQueuePage(0, brand || undefined, filters)
+        if (seq !== loadSeq.current) return
+        startTransition(() => { setPage(r); setGone(new Set()) })
+      } catch (e) {
+        if (seq === loadSeq.current) setNotice(e instanceof Error ? e.message : String(e))
+      } finally {
+        if (seq === loadSeq.current) setQueueLoading(false)
+      }
+    })()
+  }
 
+  // The brand highlights on the tap, not on the response.
   const selectBrand = (name: string) => {
     const next = fBrand === name ? '' : name
     setFBrand(next)
@@ -180,6 +237,52 @@ export default function BrandWatchClient(props: Props) {
       .then((r) => { if (brandRef.current === brand) { setPage(r); setGone(new Set()) } })
       .catch(() => undefined)
   }
+
+  // ---- background jobs -----------------------------------------------------
+  // A keep or a backlog clear runs server-side and reports on its own brand's
+  // card. Poll only while something is running, and pull the queue again when
+  // one finishes — a keep changes what is in it.
+  const [jobs, setJobs] = useState<Record<string, BrandJobState>>({})
+  const prevJobs = useRef<Record<string, BrandJobState>>({})
+  const anyJob = useMemo(
+    () => Object.values(jobs).some((j) => (j.bulk && !j.bulk.ended_at) || j.scan),
+    [jobs],
+  )
+  // A job she just started shows at once, and gets the poll going before the
+  // server has written anything.
+  const expectJob = (id: string, job: BulkJob) =>
+    setJobs((j) => ({ ...j, [id]: { ...(j[id] ?? {}), bulk: job } }))
+  const clearJob = (id: string) =>
+    setJobs((j) => {
+      const n = { ...j }
+      delete n[id]
+      return n
+    })
+  // One read on mount, so a job started before she reloaded still shows and the
+  // poll below knows to keep going.
+  useEffect(() => { void loadBrandJobs().then(setJobs).catch(() => undefined) }, [])
+  useEffect(() => {
+    if (!anyJob) return
+    let cancelled = false
+    const tick = async () => {
+      try {
+        const next = await loadBrandJobs()
+        if (cancelled) return
+        // Reload the queue the once, when a keep finishes.
+        const justEnded = Object.entries(next).some(([id, j]) => {
+          const ended = j.bulk?.ended_at
+          return !!ended && ended !== prevJobs.current[id]?.bulk?.ended_at && Date.now() - Date.parse(ended) < 120_000
+        })
+        prevJobs.current = next
+        setJobs(next)
+        if (justEnded) quietReload.current()
+      } catch { /* progress is a nicety; the page works without it */ }
+    }
+    const t = setInterval(tick, 4_000)
+    void tick()
+    return () => { cancelled = true; clearInterval(t) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anyJob])
 
   const decide = (ids: string[], keep: boolean) => {
     // A single-card skip looks for its near-twins still on screen — same brand
@@ -224,7 +327,7 @@ export default function BrandWatchClient(props: Props) {
     setLastSkip([])
     setReasonFor([])
     setSimilarPrompt(null)
-    act(() => undoSkip(ids), (r) => {
+    act('undolast', () => undoSkip(ids), (r) => {
       // bring the cards straight back into view
       setGone((g) => new Set(Array.from(g).filter((id) => !ids.includes(id))))
       setNotice(`${r.restored} SKIP${r.restored === 1 ? '' : 'S'} UNDONE — BACK IN THE QUEUE`)
@@ -254,22 +357,22 @@ export default function BrandWatchClient(props: Props) {
           <input
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && url.trim()) act(() => addWatchedBrandInBackground(url, 'watch'), started) }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && url.trim()) act('add', () => addWatchedBrandInBackground(url, 'watch'), started) }}
             placeholder="HTTPS://BRAND.COM"
             className="w-full border border-[#E2E0DB] rounded-[8px] px-3 py-2 text-[10px] tracking-[0.08em] outline-none focus:border-[#0A0A0A] uppercase placeholder:text-[#A8A8A4]"
           />
           <div className="mt-2 flex gap-2">
             <button
-              disabled={pending || !url.trim()}
-              onClick={() => act(() => addWatchedBrandInBackground(url, 'watch'), started)}
+              disabled={busyWith('add') || !url.trim()}
+              onClick={() => act('add', () => addWatchedBrandInBackground(url, 'watch'), started)}
               className="flex-1 bg-[#0A0A0A] text-white rounded-full px-4 py-2 text-[9px] tracking-[0.12em] hover:opacity-85 transition-opacity disabled:opacity-40"
               title="Queue only the last 60 days of on-taste pieces, then watch weekly"
             >
               WATCH
             </button>
             <button
-              disabled={pending || !url.trim()}
-              onClick={() => act(() => addWatchedBrandInBackground(url, 'full'), started)}
+              disabled={busyWith('add') || !url.trim()}
+              onClick={() => act('add', () => addWatchedBrandInBackground(url, 'full'), started)}
               className="flex-1 border border-[#0A0A0A] text-[#0A0A0A] rounded-full px-4 py-2 text-[9px] tracking-[0.12em] hover:bg-[#0A0A0A] hover:text-white transition-colors disabled:opacity-40"
               title="Onboard: queue every on-taste piece in the whole catalogue, then watch weekly"
             >
@@ -283,10 +386,21 @@ export default function BrandWatchClient(props: Props) {
             <p className="px-3 py-4 text-[9px] tracking-[0.1em] text-[#A8A8A4]">NOTHING WATCHED YET — PASTE A SHOPIFY BRAND URL ABOVE.</p>
           )}
           {watched.map((w) => {
+            const id = w.watched_brand_id
             const inQueue = page.brandCounts[w.name] ?? 0
             const selected = fBrand === w.name
+            // A job reports on its own brand's card, so a brand she is not
+            // looking at still says what it is doing.
+            const job = jobs[id]
+            const line = bulkLineVisible(job?.bulk) ? bulkLine(job?.bulk) : null
+            // A switch that is on without the proof the gate wanted. Shown as one
+            // short line rather than three paragraphs per brand.
+            const unproven: string[] = []
+            if (w.auto_keep && !trust[id]?.trusted) unproven.push(`AUTOMATE ${trust[id]?.summary ?? ''}`.trim())
+            if (w.auto_keep_twins && !twinTrust[id]?.trusted) unproven.push(`TWINS ${twinTrust[id]?.summary ?? ''}`.trim())
+            if (w.auto_keep_confidence && !confidenceTrust[id]?.trusted) unproven.push(`AUTO-ADD ${confidenceTrust[id]?.summary ?? ''}`.trim())
             return (
-              <div key={w.watched_brand_id} className={`px-3 py-2.5 border-b border-[#EFEDE9] last:border-b-0 ${selected ? 'bg-[#FAFAF8]' : ''}`}>
+              <div key={id} className={`px-3 py-2.5 border-b border-[#EFEDE9] last:border-b-0 ${selected ? 'bg-[#FAFAF8]' : ''}`}>
                 <div className="flex items-center justify-between gap-2">
                   <button onClick={() => selectBrand(w.name)} className="min-w-0 text-left group" title="Show this brand's queue">
                     <span className={`block text-[10px] tracking-[0.06em] truncate group-hover:underline ${selected ? 'text-[#0A0A0A] font-bold' : w.active ? 'text-[#4A4E57]' : 'text-[#A8A8A4] line-through'}`}>
@@ -298,21 +412,29 @@ export default function BrandWatchClient(props: Props) {
                       {w.platform === 'mirror' && ' · MIRROR'}
                       {w.scan_state?.running && (staleScan(w.scan_state)
                         ? <span className="text-[#B4593A]"> · SCAN STOPPED PART-WAY — RUN FULL SCAN AGAIN</span>
-                        : <span className="text-[#C4A882]"> · SCANNING {w.scan_state.done ?? 0}/{w.scan_state.total ?? '?'}</span>)}
+                        : <span className="text-[#C4A882]"> · SCANNING {job?.scan?.done ?? w.scan_state.done ?? 0}/{job?.scan?.total ?? w.scan_state.total ?? '?'}</span>)}
                       {!w.scan_state?.running && (w.scan_state?.remaining ?? 0) > 0 && <span className="text-[#C4A882]"> · {w.scan_state!.remaining} PAGES LEFT — FULL SCAN TO CONTINUE</span>}
                     </span>
+                    {line && (
+                      <span
+                        className={`block text-[8px] tracking-[0.08em] ${line.tone === 'working' ? 'text-[#C4A882]' : line.tone === 'done' ? 'text-[#3D6B45]' : 'text-[#B4593A]'}`}
+                        title="This runs in the background — carry on with other brands"
+                      >
+                        {line.text}
+                      </span>
+                    )}
                   </button>
                   <span className="flex gap-1.5 flex-shrink-0">
                     <button
-                      disabled={pending}
-                      onClick={() => act(() => checkBrandNowInBackground(w.watched_brand_id), started)}
+                      disabled={busyWith(`scan:${id}`)}
+                      onClick={() => act(`scan:${id}`, () => checkBrandNowInBackground(id), started)}
                       className="text-[8px] tracking-[0.1em] text-[#4A4E57] border border-[#E2E0DB] rounded-full px-2.5 py-1 hover:border-[#0A0A0A] transition-colors disabled:opacity-40"
                     >
-                      {busyBrand === w.watched_brand_id ? <span className="text-[#C4A882]">WORKING…</span> : 'CHECK NOW'}
+                      {busyWith(`scan:${id}`) ? <span className="text-[#C4A882]">WORKING…</span> : 'CHECK NOW'}
                     </button>
                     <button
-                      disabled={pending}
-                      onClick={() => act(() => fullScanBrandInBackground(w.watched_brand_id), started)}
+                      disabled={busyWith(`scan:${id}`)}
+                      onClick={() => act(`scan:${id}`, () => fullScanBrandInBackground(id), started)}
                       className="text-[8px] tracking-[0.1em] text-[#4A4E57] border border-[#E2E0DB] rounded-full px-2.5 py-1 hover:border-[#0A0A0A] transition-colors disabled:opacity-40"
                       title="Queue every on-taste piece in the whole catalogue at this brand's min score — lower the min score and run again to go deeper"
                     >
@@ -325,90 +447,118 @@ export default function BrandWatchClient(props: Props) {
                     MIN SCORE
                     <input
                       type="number" min={-9} max={9} defaultValue={w.min_score}
-                      onBlur={(e) => { const v = parseInt(e.target.value, 10); if (!isNaN(v) && v !== w.min_score) act(() => setWatchedBrandMinScore(w.watched_brand_id, v), (r) => { if (r?.rescanning) setNotice(`${w.name.toUpperCase()}: MIN SCORE LOWERED TO ${v} — FULL SCAN RUNNING IN THE BACKGROUND, THE PAGE FOLLOWS IT`); router.refresh() }) }}
+                      onBlur={(e) => { const v = parseInt(e.target.value, 10); if (!isNaN(v) && v !== w.min_score) act(`minscore:${id}`, () => setWatchedBrandMinScore(id, v), (r) => { tweak(id, { min_score: v }); if (r?.rescanning) setNotice(`${w.name.toUpperCase()}: MIN SCORE LOWERED TO ${v} — FULL SCAN RUNNING IN THE BACKGROUND, THE PAGE FOLLOWS IT`) }) }}
                       className="w-10 border border-[#E2E0DB] rounded px-1 py-0.5 text-[9px] text-[#4A4E57] outline-none focus:border-[#0A0A0A]"
                     />
                   </label>
-                  <button disabled={pending} onClick={() => act(() => setWatchedBrandActive(w.watched_brand_id, !w.active))} className="hover:text-[#4A4E57] transition-colors">
+                  <button
+                    disabled={busyWith(`active:${id}`)}
+                    onClick={() => act(`active:${id}`, () => setWatchedBrandActive(id, !w.active), (r) => { if (!r?.error) tweak(id, { active: !w.active }) })}
+                    className="hover:text-[#4A4E57] transition-colors disabled:opacity-40"
+                  >
                     {w.active ? 'PAUSE' : 'RESUME'}
                   </button>
-                  {/* AUTO-KEEP TWINS — the first, narrower level: only new pieces
-                      from a design line you kept yourself. Unlocks on twin trust. */}
                   <button
-                    disabled={pending || (!w.auto_keep_twins && !twinTrust[w.watched_brand_id]?.trusted)}
-                    onClick={() => act(() => setWatchedBrandAutoKeepTwins(w.watched_brand_id, !w.auto_keep_twins), (r) =>
-                      setNotice(r.error ?? (w.auto_keep_twins
-                        ? `${w.name.toUpperCase()}: AUTO-KEEP TWINS OFF`
-                        : `${w.name.toUpperCase()}: AUTO-KEEP TWINS ON — FROM THE NEXT SCAN, NEW PIECES FROM DESIGNS YOU KEPT GO STRAIGHT TO THE LIBRARY`)))}
-                    className={`transition-colors disabled:cursor-not-allowed ${w.auto_keep_twins ? 'text-[#3D6B45] font-bold' : twinTrust[w.watched_brand_id]?.trusted ? 'text-[#0A0A0A] underline underline-offset-2' : 'text-[#C9C7C2]'}`}
-                    title={w.auto_keep_twins ? 'Switch off — twins wait for you again' : twinTrust[w.watched_brand_id]?.trusted ? 'New pieces from a design line you kept go straight to the library' : 'Unlocks when twins of your keeps have proven to be pieces you keep'}
-                  >
-                    {w.auto_keep_twins ? 'AUTO-KEEP TWINS ✓' : 'AUTO-KEEP TWINS'}
-                  </button>
-                  {/* AUTOMATE unlocks only once this brand's learning has proven
-                      it keeps what you keep; it can always be switched off. */}
-                  <button
-                    disabled={pending || (!w.auto_keep && !trust[w.watched_brand_id]?.trusted)}
-                    onClick={() => act(() => setWatchedBrandAutoKeep(w.watched_brand_id, !w.auto_keep), (r) =>
-                      setNotice(r.error ?? (w.auto_keep
-                        ? `${w.name.toUpperCase()}: AUTOMATE OFF — NEW PIECES WAIT IN THE QUEUE FOR YOU`
-                        : `${w.name.toUpperCase()}: AUTOMATED — FROM THE NEXT SCAN, NEW PIECES IT WOULD KEEP GO STRAIGHT TO THE LIBRARY`)))}
-                    className={`transition-colors disabled:cursor-not-allowed ${w.auto_keep ? 'text-[#3D6B45] font-bold' : trust[w.watched_brand_id]?.trusted ? 'text-[#0A0A0A] underline underline-offset-2' : 'text-[#C9C7C2]'}`}
-                    title={w.auto_keep ? 'Switch off — new pieces wait for you again' : trust[w.watched_brand_id]?.trusted ? 'Let new pieces this brand’s learning would keep go straight to the library' : 'Unlocks when this brand’s learning has proven itself on your one-by-one decisions'}
-                  >
-                    {w.auto_keep ? 'AUTOMATED ✓' : 'AUTOMATE'}
-                  </button>
-                  <button
-                    disabled={pending}
-                    onClick={() => { if (confirm(`Stop watching ${w.name}? Seen history is deleted too.`)) act(() => removeWatchedBrand(w.watched_brand_id)) }}
-                    className="hover:text-[#B3202A] transition-colors"
+                    disabled={busyWith(`remove:${id}`)}
+                    onClick={() => { if (confirm(`Stop watching ${w.name}? Seen history is deleted too.`)) act(`remove:${id}`, () => removeWatchedBrand(id), () => router.refresh()) }}
+                    className="hover:text-[#B3202A] transition-colors disabled:opacity-40"
                   >
                     REMOVE
                   </button>
                 </div>
-                <div className={`mt-1 text-[8px] tracking-[0.1em] ${w.auto_keep_twins && !twinTrust[w.watched_brand_id]?.trusted ? 'text-[#B4593A]' : twinTrust[w.watched_brand_id]?.trusted ? 'text-[#3D6B45]' : 'text-[#A8A8A4]'}`}>
-                  {w.auto_keep_twins && !twinTrust[w.watched_brand_id]?.trusted ? 'AUTO-KEEP TWINS PAUSED — ' : ''}{twinTrust[w.watched_brand_id]?.summary ?? 'TWINS: NO TWINS OF YOUR KEEPS YET'}
-                </div>
-                <div className={`mt-0.5 text-[8px] tracking-[0.1em] ${w.auto_keep && !trust[w.watched_brand_id]?.trusted ? 'text-[#B4593A]' : trust[w.watched_brand_id]?.trusted ? 'text-[#3D6B45]' : 'text-[#A8A8A4]'}`}>
-                  {w.auto_keep && !trust[w.watched_brand_id]?.trusted ? 'AUTOMATE PAUSED — ' : 'AUTOMATE: '}{trust[w.watched_brand_id]?.summary ?? 'NO ONE-BY-ONE DECISIONS YET'}
-                </div>
 
-                {/* BY CONFIDENCE — the bar she sets, and what it measured. */}
-                <div className="mt-1 flex items-center gap-2 text-[8px] tracking-[0.12em]">
+                {/* The four levels of automation, as plain switches. They are
+                    never greyed out: a brand can be switched on before the gate
+                    has been earned, and the line underneath says so. The
+                    measurement itself is on each button's tooltip. */}
+                <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[8px] tracking-[0.1em]">
                   <button
-                    disabled={pending || (!w.auto_keep_confidence && !confidenceTrust[w.watched_brand_id]?.trusted)}
-                    onClick={() => act(() => setWatchedBrandAutoKeepConfidence(w.watched_brand_id, !w.auto_keep_confidence), () =>
-                      setNotice(`${w.name.toUpperCase()}: AUTO-ADD ${w.auto_keep_confidence ? 'OFF' : `ON ABOVE ${Math.round(Number(w.confidence_bar ?? DEFAULT_CONFIDENCE) * 100)}%`}`))}
-                    className={`transition-colors disabled:cursor-not-allowed ${w.auto_keep_confidence ? 'text-[#3D6B45] font-bold' : confidenceTrust[w.watched_brand_id]?.trusted ? 'text-[#0A0A0A] underline underline-offset-2' : 'text-[#C9C7C2]'}`}
-                    title={confidenceTrust[w.watched_brand_id]?.trusted ? 'Pieces above the bar go straight to the library' : 'Unlocks when the model has proven itself at this bar on your one-by-one decisions'}
+                    disabled={busyWith(`twins:${id}`)}
+                    onClick={() => act(`twins:${id}`, () => setWatchedBrandAutoKeepTwins(id, !w.auto_keep_twins, !twinTrust[id]?.trusted), (r) => {
+                      if (r?.error) { setNotice(r.error); return }
+                      tweak(id, { auto_keep_twins: !w.auto_keep_twins })
+                    })}
+                    className={toggle(w.auto_keep_twins, !!twinTrust[id]?.trusted)}
+                    title={`Twins of designs you kept${twinTrust[id]?.summary ? ` — ${twinTrust[id]!.summary}` : ''}`}
+                  >
+                    {w.auto_keep_twins ? 'TWINS ✓' : 'TWINS'}
+                  </button>
+                  <button
+                    disabled={busyWith(`auto:${id}`)}
+                    onClick={() => act(`auto:${id}`, () => setWatchedBrandAutoKeep(id, !w.auto_keep, !trust[id]?.trusted), (r) => {
+                      if (r?.error) { setNotice(r.error); return }
+                      tweak(id, { auto_keep: !w.auto_keep })
+                    })}
+                    className={toggle(w.auto_keep, !!trust[id]?.trusted)}
+                    title={`What this brand's learning would keep${trust[id]?.summary ? ` — ${trust[id]!.summary}` : ''}`}
+                  >
+                    {w.auto_keep ? 'AUTOMATE ✓' : 'AUTOMATE'}
+                  </button>
+                  <button
+                    disabled={busyWith(`conf:${id}`)}
+                    onClick={() => act(`conf:${id}`, () => setWatchedBrandAutoKeepConfidence(id, !w.auto_keep_confidence, !confidenceTrust[id]?.trusted), (r) => {
+                      if (r?.error) { setNotice(r.error); return }
+                      tweak(id, { auto_keep_confidence: !w.auto_keep_confidence })
+                    })}
+                    className={toggle(w.auto_keep_confidence, !!confidenceTrust[id]?.trusted)}
+                    title={`Pieces above your bar${confidenceTrust[id]?.summary ? ` — ${confidenceTrust[id]!.summary}` : ''}`}
                   >
                     {w.auto_keep_confidence ? 'AUTO-ADD ✓' : 'AUTO-ADD'}
                   </button>
+                  {/* KEEP EVERYTHING — no model, no bar: every new piece this
+                      brand queues, in season. For a brand whose taste needs no
+                      predicting. Outgoing summer stock is still left alone. */}
+                  <button
+                    disabled={busyWith(`all:${id}`)}
+                    onClick={() => act(`all:${id}`, () => setWatchedBrandAutoKeepAll(id, !w.auto_keep_all), (r) => {
+                      if (r?.error) { setNotice(r.error); return }
+                      tweak(id, { auto_keep_all: !w.auto_keep_all })
+                    })}
+                    className={toggle(!!w.auto_keep_all, true)}
+                    title="Add every new piece this brand queues, in season. No bar, no model — outgoing summer stock is still left in the queue."
+                  >
+                    {w.auto_keep_all ? 'EVERYTHING ✓' : 'EVERYTHING'}
+                  </button>
                   <select
-                    disabled={pending}
+                    disabled={busyWith(`bar:${id}`)}
                     value={String(Number(w.confidence_bar ?? DEFAULT_CONFIDENCE))}
-                    onChange={(e) => act(() => setWatchedBrandConfidenceBar(w.watched_brand_id, Number(e.target.value)))}
-                    className="bg-transparent text-[8px] tracking-[0.12em] text-[#6B6B6B] border border-[#E2E0DB] rounded-full px-2 py-0.5"
-                    title="Only keep a piece by itself above this chance you would keep it"
+                    onChange={(e) => act(`bar:${id}`, () => setWatchedBrandConfidenceBar(id, Number(e.target.value)), (r) => { if (!r?.error) tweak(id, { confidence_bar: Number(e.target.value) }) })}
+                    className="bg-transparent text-[8px] tracking-[0.12em] text-[#6B6B6B] border border-[#E2E0DB] rounded-full px-2 py-0.5 disabled:opacity-40"
+                    title="AUTO-ADD only takes a piece by itself above this chance you would keep it"
                   >
                     {[0.75, 0.8, 0.85, 0.9, 0.95].map((b) => <option key={b} value={b}>{Math.round(b * 100)}%</option>)}
                   </select>
-                  {decided[w.watched_brand_id] && (
-                    <span className="text-[#A8A8A4]">{decided[w.watched_brand_id].kept} KEPT · {decided[w.watched_brand_id].skipped} SKIPPED</span>
+                </div>
+
+                {/* One short line, and only when a switch is running without the
+                    proof the gate wanted. The old card carried three paragraphs
+                    of measurement under every brand; it is on the tooltips now. */}
+                {(unproven.length > 0 || w.auto_keep_all) && (
+                  <div className="mt-1 text-[8px] tracking-[0.1em] text-[#B4593A] leading-relaxed">
+                    {w.auto_keep_all && <div>EVERYTHING: EVERY NEW PIECE IN SEASON IS ADDED, NO BAR</div>}
+                    {unproven.length > 0 && <div>ON WITHOUT PROOF: {unproven.join(' · ')}</div>}
+                  </div>
+                )}
+
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-[8px] tracking-[0.12em]">
+                  {decided[id] && (
+                    <span className="text-[#A8A8A4]">{decided[id].kept} KEPT · {decided[id].skipped} SKIPPED</span>
                   )}
-                  {confidenceTrust[w.watched_brand_id]?.trusted && inQueue > 0 && (
+                  {inQueue > 0 && (confidenceTrust[id]?.trusted || w.auto_keep_all || w.auto_keep_manual) && (
                     <button
-                      disabled={pending}
-                      onClick={() => { if (confirm(`Add every queued ${w.name} piece already above ${Math.round(Number(w.confidence_bar ?? DEFAULT_CONFIDENCE) * 100)}%? You can undo any of them.`)) act(() => keepConfidentNowForBrand(w.watched_brand_id), (r) => { setNotice(r.error ?? `${w.name.toUpperCase()}: ${r.kept} ADDED FROM THE QUEUE — UNDO ANY IN 'WHAT MYRA ADDED BY ITSELF'`); if (!r.error) reloadQueue() }) }}
-                      className="text-[#0A0A0A] underline underline-offset-2"
+                      disabled={busyWith(`backlog:${id}`)}
+                      onClick={() => { if (confirm(`Add every queued ${w.name} piece already above ${Math.round(Number(w.confidence_bar ?? DEFAULT_CONFIDENCE) * 100)}%? You can undo any of them.`)) act(`backlog:${id}`, () => keepConfidentNowInBackground(id), (r) => {
+                        if (r?.error) { setNotice(r.error); return }
+                        // Show it on this brand's card straight away, then poll.
+                        expectJob(id, { kind: 'keep-confident', label: r.label ?? 'ADDING THE BACKLOG', done: 0, total: 0, started_at: new Date().toISOString() })
+                        setNotice(`${w.name.toUpperCase()}: ${r.label ?? 'ADDING THE BACKLOG'} — IN THE BACKGROUND, CARRY ON WITH ANOTHER BRAND`)
+                      }) }}
+                      className="text-[#0A0A0A] underline underline-offset-2 disabled:opacity-40"
                       title="Automation only takes pieces found after it was switched on; this clears what is already waiting"
                     >
                       ADD THE BACKLOG
                     </button>
                   )}
-                </div>
-                <div className={`mt-0.5 text-[8px] tracking-[0.1em] ${w.auto_keep_confidence && !confidenceTrust[w.watched_brand_id]?.trusted ? 'text-[#B4593A]' : confidenceTrust[w.watched_brand_id]?.trusted ? 'text-[#3D6B45]' : 'text-[#A8A8A4]'}`}>
-                  {w.auto_keep_confidence && !confidenceTrust[w.watched_brand_id]?.trusted ? 'AUTO-ADD PAUSED — ' : 'AUTO-ADD: '}{confidenceTrust[w.watched_brand_id]?.summary ?? 'NO ONE-BY-ONE DECISIONS YET'}
                 </div>
               </div>
             )
@@ -442,8 +592,8 @@ export default function BrandWatchClient(props: Props) {
                   <div className="flex gap-3 mt-1 text-[8px] tracking-[0.12em]">
                     {!settled && (
                       <button
-                        disabled={pending || r.status === 'assessing'}
-                        onClick={() => act(() => decideSiteRequest(r.request_id, 'watching'), (x) => {
+                        disabled={busyWith(`req:${r.request_id}`) || r.status === 'assessing'}
+                        onClick={() => act(`req:${r.request_id}`, () => decideSiteRequest(r.request_id, 'watching'), (x) => {
                           setNotice(x.error ?? `${r.host.toUpperCase()}: ON THE WATCHLIST — FULL SCAN RUNNING IN THE BACKGROUND`)
                           if (!x.error) { setRequests((cur) => (cur ?? []).filter((y) => y.request_id !== r.request_id)); router.refresh() }
                         })}
@@ -455,8 +605,8 @@ export default function BrandWatchClient(props: Props) {
                     <a href={r.url ?? `https://${r.host}`} target="_blank" rel="noreferrer" className="text-[#6B6B6B] hover:text-[#0A0A0A]">OPEN</a>
                     {!settled && r.status !== 'declined' && (
                       <button
-                        disabled={pending || r.status === 'assessing'}
-                        onClick={() => act(() => decideSiteRequest(r.request_id, 'declined'), (x) => {
+                        disabled={busyWith(`req:${r.request_id}`) || r.status === 'assessing'}
+                        onClick={() => act(`req:${r.request_id}`, () => decideSiteRequest(r.request_id, 'declined'), (x) => {
                           setNotice(x.error ?? `${r.host.toUpperCase()}: SET ASIDE`)
                           if (!x.error) setRequests((cur) => (cur ?? []).filter((y) => y.request_id !== r.request_id))
                         })}
@@ -475,8 +625,8 @@ export default function BrandWatchClient(props: Props) {
 
         {watched.length > 0 && (
           <button
-            disabled={pending}
-            onClick={() => act(async () => { const r = await loadAutoAdded(); setAutoAdded(r.rows); return r }, (r) =>
+            disabled={busyWith('autoadded')}
+            onClick={() => act('autoadded', async () => { const r = await loadAutoAdded(); setAutoAdded(r.rows); return r }, (r) =>
               setNotice(r.error ?? (r.rows.length ? `${r.rows.length} PIECES MYRA ADDED BY ITSELF — UNDO ANY BELOW` : 'MYRA HAS NOT ADDED ANYTHING BY ITSELF YET')))}
             className="mt-3 w-full border border-[#E2E0DB] rounded-full px-4 py-2 text-[9px] tracking-[0.14em] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors disabled:opacity-40"
           >
@@ -494,9 +644,9 @@ export default function BrandWatchClient(props: Props) {
                   <p className="text-[9px] tracking-[0.04em] text-[#4A4E57] truncate">{r.product_name.toUpperCase()}</p>
                 </div>
                 <button
-                  disabled={pending}
-                  onClick={() => act(() => undoAutoKeep(r.queue_id), (x) => { if (!x.error) setAutoAdded((cur) => (cur ?? []).filter((y) => y.queue_id !== r.queue_id)); setNotice(x.error ?? 'SENT BACK — MYRA LEARNS IT WAS WRONG TO ADD IT') })}
-                  className="text-[8px] tracking-[0.12em] text-[#B3202A] hover:underline"
+                  disabled={busyWith(`undo:${r.queue_id}`)}
+                  onClick={() => act(`undo:${r.queue_id}`, () => undoAutoKeep(r.queue_id), (x) => { if (!x.error) setAutoAdded((cur) => (cur ?? []).filter((y) => y.queue_id !== r.queue_id)); setNotice(x.error ?? 'SENT BACK — MYRA LEARNS IT WAS WRONG TO ADD IT') })}
+                  className="text-[8px] tracking-[0.12em] text-[#B3202A] hover:underline disabled:opacity-40"
                 >
                   UNDO
                 </button>
@@ -507,11 +657,11 @@ export default function BrandWatchClient(props: Props) {
 
         {watched.length > 0 && (
           <button
-            disabled={pending}
-            onClick={() => act(() => checkAllBrandsNowInBackground(), () => setNotice('SCANNING EVERY BRAND IN THE BACKGROUND — THE PAGE KEEPS ITSELF UP TO DATE'))}
+            disabled={busyWith('checkall')}
+            onClick={() => act('checkall', () => checkAllBrandsNowInBackground(), () => setNotice('SCANNING EVERY BRAND IN THE BACKGROUND — THE PAGE KEEPS ITSELF UP TO DATE'))}
             className="mt-3 w-full border border-[#0A0A0A] rounded-full px-4 py-2 text-[9px] tracking-[0.14em] text-[#0A0A0A] hover:bg-[#0A0A0A] hover:text-white transition-colors disabled:opacity-40"
           >
-            {pending ? 'WORKING…' : 'RUN CHECK NOW'}
+            {busyWith('checkall') ? 'WORKING…' : 'RUN CHECK NOW'}
           </button>
         )}
         <p className="mt-2 text-[8px] tracking-[0.1em] text-[#A8A8A4] leading-relaxed">
@@ -575,6 +725,9 @@ export default function BrandWatchClient(props: Props) {
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
           <p className="text-[10px] tracking-[0.12em] text-[#6B6B6B]">
             {shown.length} SHOWN{page.queueTotal > queue.length ? ` · ${page.queueTotal - gone.size} IN ${fBrand ? fBrand.toUpperCase() + "'S" : 'THE'} QUEUE` : ''}
+            {/* The load says it is working without disabling anything — she can
+                tap another brand or a switch while it is in flight. */}
+            {queueLoading && <span className="text-[#C4A882]"> · LOADING…</span>}
           </p>
           <div className="flex items-center gap-2 flex-wrap">
             {/* Scan notices explain WHY nothing queued, so they must be readable
@@ -584,7 +737,7 @@ export default function BrandWatchClient(props: Props) {
                 point is not skipping six monogram bags one by one. */}
             {similarPrompt && (
               <button
-                disabled={pending}
+                disabled={busyWith('skipsim')}
                 onClick={() => { const ids = similarPrompt.ids; setSimilarPrompt(null); decide(ids, false) }}
                 className="bg-[#C4A882] text-white rounded-full px-4 py-2 text-[9px] tracking-[0.12em] hover:opacity-85 transition-opacity disabled:opacity-40"
                 title={`Skip everything on screen that closely matches ${similarPrompt.name}`}
@@ -622,7 +775,7 @@ export default function BrandWatchClient(props: Props) {
             )}
             {lastSkip.length > 0 && (
               <button
-                disabled={pending}
+                disabled={busyWith('undolast')}
                 onClick={undoLastSkip}
                 className="border border-[#C4A882] text-[#C4A882] rounded-full px-4 py-2 text-[9px] tracking-[0.12em] hover:bg-[#C4A882] hover:text-white transition-colors disabled:opacity-40"
               >
@@ -632,14 +785,12 @@ export default function BrandWatchClient(props: Props) {
             {selected.size > 0 && (
               <>
                 <button
-                  disabled={pending}
                   onClick={() => decide(Array.from(selected), true)}
                   className="bg-[#0A0A0A] text-white rounded-full px-4 py-2 text-[9px] tracking-[0.12em] hover:opacity-85 transition-opacity disabled:opacity-40"
                 >
                   KEEP SELECTED · {selected.size}
                 </button>
                 <button
-                  disabled={pending}
                   onClick={() => decide(Array.from(selected), false)}
                   className="border border-[#0A0A0A] text-[#0A0A0A] rounded-full px-4 py-2 text-[9px] tracking-[0.12em] hover:bg-[#0A0A0A] hover:text-white transition-colors disabled:opacity-40"
                 >
@@ -655,24 +806,35 @@ export default function BrandWatchClient(props: Props) {
               </>
             )}
             <button
-              disabled={pending || shown.length === 0}
-              onClick={() => decide(shown.map((q) => q.item_id), true)}
+              disabled={busyWith('keepshown') || shown.length === 0}
+              onClick={() => {
+                const ids = shown.map((q) => q.item_id)
+                if (!confirm(`Keep all ${ids.length} shown? They run in the background, so you can carry on with another brand.`)) return
+                act('keepshown', () => keepShownInBackground(ids), (r) => {
+                  if (r?.error) { setNotice(String(r.error).toUpperCase()); return }
+                  // Hide them now; the job reports on each brand's card, and the
+                  // queue reloads itself when the last one finishes.
+                  setGone((g) => new Set(Array.from(g).concat(ids)))
+                  setSelected(new Set())
+                  setNotice(`${ids.length} PIECES KEEPING IN THE BACKGROUND ACROSS ${r.brands} BRAND${r.brands === 1 ? '' : 'S'} — CARRY ON, THE QUEUE UPDATES ITSELF`)
+                })
+              }}
               className="bg-[#0A0A0A] text-white rounded-full px-4 py-2 text-[9px] tracking-[0.12em] hover:opacity-85 transition-opacity disabled:opacity-40"
             >
-              KEEP ALL SHOWN
+              {busyWith('keepshown') ? 'STARTING…' : 'KEEP ALL SHOWN'}
             </button>
             {(() => {
               // KEEP TWINS NOW: this brand's queued pieces from designs you kept —
               // offered only once twins of your keeps have proven reliable here.
-              const sel = fBrand ? watched.find((w) => w.name.toLowerCase() === fBrand.toLowerCase()) : undefined
+              const sel = selectedBrand
               const n = fBrand ? page.twinCounts?.[fBrand] ?? 0 : 0
               if (!sel || !n || !twinTrust[sel.watched_brand_id]?.trusted) return null
               return (
                 <button
-                  disabled={pending}
+                  disabled={busyWith(`twinsnow:${sel.watched_brand_id}`)}
                   onClick={() => {
                     if (confirm(`Keep the ${n} ${fBrand} pieces that are twins of designs you kept? They go straight to the library as ready.`))
-                      act(() => keepTwinsNowForBrand(sel.watched_brand_id), (r) => { setNotice(r.error?.toUpperCase() ?? `${r.kept} TWINS OF YOUR ${fBrand.toUpperCase()} KEEPS KEPT → READY`); reloadQueue() })
+                      act(`twinsnow:${sel.watched_brand_id}`, () => keepTwinsNowForBrand(sel.watched_brand_id), (r) => { setNotice(r.error?.toUpperCase() ?? `${r.kept} TWINS OF YOUR ${fBrand.toUpperCase()} KEEPS KEPT → READY`); reloadQueue() })
                   }}
                   className="bg-[#3D6B45] text-white rounded-full px-4 py-2 text-[9px] tracking-[0.12em] hover:opacity-85 transition-opacity disabled:opacity-40"
                   title="Every queued piece from a design line you kept yourself, and not a twin of anything you skipped"
@@ -681,22 +843,28 @@ export default function BrandWatchClient(props: Props) {
                 </button>
               )
             })()}
-            {fBrand && (page.brandCounts[fBrand] ?? 0) > 0 && (
+            {selectedBrand && (page.brandCounts[fBrand] ?? 0) > 0 && (
               <button
-                disabled={pending}
+                disabled={busyWith(`keepall:${selectedBrand.watched_brand_id}`)}
                 onClick={() => {
+                  const sel = selectedBrand
                   const n = page.brandCounts[fBrand] ?? 0
-                  if (confirm(`Keep ALL ${n} ${fBrand} pieces in the queue — including ones not loaded on this page?`))
-                    act(() => keepAllForBrand(fBrand, { includeOutOfSeason: fSeason !== 'in' }), (r) => { setNotice(r.error?.toUpperCase() ?? `${r.updated} ${fBrand.toUpperCase()} PIECES KEPT → READY${r.leftOutOfSeason ? ` · ${r.leftOutOfSeason} OUT-OF-SEASON PIECES LEFT IN THE QUEUE` : ''}`); reloadQueue() })
+                  if (!confirm(`Keep ALL ${n} ${fBrand} pieces in the queue — including ones not loaded on this page? It runs in the background.`)) return
+                  act(`keepall:${sel.watched_brand_id}`, () => keepAllForBrandInBackground(sel.watched_brand_id, { includeOutOfSeason: fSeason !== 'in' }), (r) => {
+                    if (r?.error) { setNotice(String(r.error).toUpperCase()); return }
+                    // Show it on the card at once, then let the poll take over.
+                    expectJob(sel.watched_brand_id, { kind: 'keep-all', label: r.label ?? `KEEPING ALL ${fBrand.toUpperCase()} PIECES`, done: 0, total: n, started_at: new Date().toISOString() })
+                    setNotice(`${r.label ?? fBrand.toUpperCase()} — RUNNING IN THE BACKGROUND, CARRY ON WITH ANOTHER BRAND`)
+                  })
                 }}
                 className="bg-[#C4A882] text-white rounded-full px-4 py-2 text-[9px] tracking-[0.12em] hover:opacity-85 transition-opacity disabled:opacity-40"
-                title="Keep every queued draft for this brand — the whole queue, not just the loaded page"
+                title="Keep every queued draft for this brand — the whole queue, not just the loaded page. Runs in the background."
               >
-                KEEP ALL {fBrand.toUpperCase()} · {page.brandCounts[fBrand] ?? 0}
+                {busyWith(`keepall:${selectedBrand.watched_brand_id}`) ? 'STARTING…' : `KEEP ALL ${fBrand.toUpperCase()} · ${page.brandCounts[fBrand] ?? 0}`}
               </button>
             )}
             <button
-              disabled={pending || shown.length === 0}
+              disabled={busyWith('skipall') || shown.length === 0}
               onClick={() => { if (confirm(`Skip all ${shown.length} shown? They archive and never resurface.`)) decide(shown.map((q) => q.item_id), false) }}
               className="border border-[#E2E0DB] text-[#6B6B6B] rounded-full px-4 py-2 text-[9px] tracking-[0.12em] hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors disabled:opacity-40"
             >
@@ -714,7 +882,7 @@ export default function BrandWatchClient(props: Props) {
             </p>
             {page.queueTotal - gone.size > 0 && (
               <button
-                disabled={pending}
+                disabled={queueLoading}
                 onClick={reloadQueue}
                 className="mt-4 border border-[#0A0A0A] rounded-full px-6 py-2 text-[9px] tracking-[0.14em] text-[#0A0A0A] hover:bg-[#0A0A0A] hover:text-white transition-colors disabled:opacity-40"
               >
@@ -815,11 +983,11 @@ export default function BrandWatchClient(props: Props) {
           {queue.length < page.queueTotal && (
             <div className="mt-6 text-center">
               <button
-                disabled={pending}
-                onClick={() => act(() => loadQueuePage(queue.length, fBrand || undefined, filtersNow()), (r: QueuePage) => setPage((p) => ({ ...r, queue: p.queue.concat(r.queue.filter((n) => !p.queue.some((e) => e.item_id === n.item_id))) })))}
+                disabled={busyWith('more')}
+                onClick={() => act('more', () => loadQueuePage(queue.length, fBrand || undefined, filtersNow()), (r: QueuePage) => setPage((p) => ({ ...r, queue: p.queue.concat(r.queue.filter((n) => !p.queue.some((e) => e.item_id === n.item_id))) })))}
                 className="border border-[#0A0A0A] rounded-full px-6 py-2 text-[9px] tracking-[0.14em] text-[#0A0A0A] hover:bg-[#0A0A0A] hover:text-white transition-colors disabled:opacity-40"
               >
-                LOAD MORE ({page.queueTotal - queue.length} REMAINING)
+                {busyWith('more') ? 'LOADING…' : `LOAD MORE (${page.queueTotal - queue.length} REMAINING)`}
               </button>
             </div>
           )}

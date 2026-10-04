@@ -70,6 +70,11 @@ export interface WatchedBrandRow {
   auto_keep_confidence?: boolean
   confidence_bar?: number | null
   auto_keep_confidence_since?: string | null
+  /** Switched on before the gate was earned, on her explicit say-so (migration 0088). */
+  auto_keep_manual?: boolean | null
+  /** KEEP EVERYTHING in season, without predicting: for a brand whose taste needs no model (migration 0088). */
+  auto_keep_all?: boolean | null
+  auto_keep_all_since?: string | null
 }
 
 export interface BrandCheckResult {

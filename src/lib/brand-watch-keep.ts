@@ -44,10 +44,23 @@ async function typeFromImage(imageUrl: string | null | undefined): Promise<strin
 }
 
 export async function keepQueueRows(
-  admin: any, queueIds: string[], opts: { auto?: boolean; liveStock?: boolean; report?: KeepReport } = {},
+  admin: any, queueIds: string[],
+  opts: {
+    auto?: boolean
+    liveStock?: boolean
+    report?: KeepReport
+    /**
+     * How far it has got, for a keep running in the background. Called after
+     * every piece, refusals included — a run that refuses a third of a brand
+     * must not look like it is stuck on the same number.
+     */
+    onProgress?: (done: number, total: number) => void
+  } = {},
 ): Promise<number> {
   let created = 0
+  let processed = 0
   const skippedUntyped: string[] = []
+  const progress = () => { processed++; opts.onProgress?.(processed, queueIds.length) }
   for (let i = 0; i < queueIds.length; i += 100) {
     const chunk = queueIds.slice(i, i + 100)
     const { data: rows, error } = await admin
@@ -65,6 +78,7 @@ export async function keepQueueRows(
           .update({ status: 'skipped', decided_at: new Date().toISOString() })
           .eq('queue_id', q.queue_id)
         console.warn(`[keepQueueRows] ${q.product_name}: not kept — ${ban}`)
+        progress()
         continue
       }
       // The scan writes the type it read on scan day. A shop that states no
@@ -79,6 +93,7 @@ export async function keepQueueRows(
       if (!itemType) {
         skippedUntyped.push(q.product_name)
         opts.report?.untyped.push(q.product_name)
+        progress()
         continue
       }
       // What the shop says today, not what it said on scan day.
@@ -151,6 +166,7 @@ export async function keepQueueRows(
         .update(opts.auto ? { ...decided, auto_kept: true } : decided).eq('queue_id', q.queue_id)
       if (uerr) await admin.from('brand_watch_queue').update(decided).eq('queue_id', q.queue_id)
       created++
+      progress()
       // What goes on the site teaches Chloe's Style Brain too — a single piece,
       // so at half the weight of a whole outfit decision. Her own keeps only:
       // the machine's keeps must not teach the machine.

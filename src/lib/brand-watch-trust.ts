@@ -86,7 +86,22 @@ export const automationOn = (w: {
   auto_keep?: boolean | null
   auto_keep_twins?: boolean | null
   auto_keep_confidence?: boolean | null
-}): boolean => Boolean(w.auto_keep || w.auto_keep_twins || w.auto_keep_confidence)
+  auto_keep_all?: boolean | null
+}): boolean => Boolean(w.auto_keep || w.auto_keep_twins || w.auto_keep_confidence || w.auto_keep_all)
+
+/**
+ * She switched a level on before it had earned the gate, and said so.
+ *
+ * The gate counts PREDICTIONS at her bar, not accuracy, so a brand can be
+ * perfectly right and still locked: LIFNER measured 16 of 16 and AFLALO 22 of
+ * 22, and neither had enough. Léméls and Liberowe are locked the other way —
+ * the model is never sure enough about their pieces at any bar from 60% to 95%.
+ *
+ * This is an override, not a lowering of the bar: the measurement is unchanged
+ * and still shown, every brand without it is judged exactly as before, and the
+ * card says which levels are running unearned.
+ */
+export const manualOverride = (w: { auto_keep_manual?: boolean | null }): boolean => Boolean(w.auto_keep_manual)
 
 export function summariseTrust(careful: number, predictions: number, right: number): BrandTrust {
   const precision = predictions ? right / predictions : null

@@ -21,7 +21,7 @@
 
 import { buildLearning, type DecidedRow } from './brand-watch-learning'
 import { typeFromStoredRow } from './brand-watch'
-import { automationOn, measureBrandTrust, summariseTrust, trustForAutomation, wouldAutoKeep, type BrandTrust, type TrustDecision } from './brand-watch-trust'
+import { automationOn, manualOverride, measureBrandTrust, summariseTrust, trustForAutomation, wouldAutoKeep, type BrandTrust, type TrustDecision } from './brand-watch-trust'
 import { carefulFlags, keptTwinOf, measureTwinTrust, summariseTwinTrust, type TwinDecision, type TwinTrust } from './brand-watch-twins'
 import {
   confidenceModels, confidenceFromModels, confidenceSource, measureBoth, summariseConfidence,
@@ -29,6 +29,7 @@ import {
   type ConfidenceDecision, type ConfidenceModels, type ConfidenceTrust,
 } from './brand-watch-confidence'
 import { houseBanOf } from './brand-watch-bans'
+import { seasonOf, inCurrentSeason, type Season } from './season'
 import { keepQueueRows } from './brand-watch-keep'
 import type { WatchedBrandRow } from './brand-watch'
 
@@ -241,7 +242,7 @@ export interface AutoKeepResult {
   note: string | null
 }
 
-const QUEUED_COLS = 'queue_id, brand_id, product_name, item_type, colour_family, material_category, material_primary, price, price_gbp, discovery_score, retailer_url, currency, image_url, stock_status'
+const QUEUED_COLS = 'queue_id, brand_id, product_name, item_type, colour_family, material_category, material_primary, price, price_gbp, discovery_score, retailer_url, currency, image_url, stock_status, season, season_code'
 /**
  * The row with the type it is actually going to be kept as: what the scan read,
  * or what the piece's own name gives when the shop stated nothing — AFLALO
@@ -265,11 +266,28 @@ export async function autoKeepForBrand(admin: any, watched: WatchedBrandRow, tru
   const data = trustData ?? (await loadBrandTrust(admin))
   const notes: string[] = []
   const picks = new Map<string, number>() // queue_id → rank
+  // She switched a level on before it earned the gate. The measurement is
+  // unchanged and still reported; it simply no longer blocks what she asked for.
+  const overridden = manualOverride(watched)
 
   try {
+    // KEEP EVERYTHING — the point of this level is that the brand's taste does
+    // not need predicting at all. The season rule still applies, so outgoing
+    // summer stock is left in the queue rather than added.
+    if (watched.auto_keep_all) {
+      const since = watched.auto_keep_all_since ?? new Date().toISOString()
+      for (const q of await queuedFor(admin, watched.brand_id, since)) {
+        const row = typedRow(q)
+        if (!keepable(row)) continue
+        const season = (q.season as Season | null | undefined)
+          ?? seasonOf({ title: row.product_name, itemType: row.item_type, materialCategory: q.material_category, materialPrimary: q.material_primary }).season
+        if (!inCurrentSeason(season, q.season_code)) continue
+        picks.set(q.queue_id, 300)
+      }
+    }
     if (watched.auto_keep_twins) {
       const trust = twinTrustFor(data, watched)
-      if (!trust.trusted) notes.push(`AUTO-KEEP TWINS PAUSED — ${trust.summary}`)
+      if (!trust.trusted && !overridden) notes.push(`AUTO-KEEP TWINS PAUSED — ${trust.summary}`)
       else {
         const since = watched.auto_keep_twins_since ?? new Date().toISOString()
         for (const q of await queuedFor(admin, watched.brand_id, since)) {
@@ -283,7 +301,7 @@ export async function autoKeepForBrand(admin: any, watched: WatchedBrandRow, tru
     if (watched.auto_keep_confidence) {
       const bar = Number(watched.confidence_bar ?? DEFAULT_CONFIDENCE)
       const trust = confidenceTrustFor(data, watched)
-      if (!trust.trusted) notes.push(`AUTO-KEEP BY CONFIDENCE PAUSED — ${trust.summary}`)
+      if (!trust.trusted && !overridden) notes.push(`AUTO-KEEP BY CONFIDENCE PAUSED — ${trust.summary}`)
       else {
         const since = watched.auto_keep_confidence_since ?? new Date().toISOString()
         for (const q of await queuedFor(admin, watched.brand_id, since)) {
@@ -299,7 +317,7 @@ export async function autoKeepForBrand(admin: any, watched: WatchedBrandRow, tru
 
     if (watched.auto_keep) {
       const trust = trustFor(data, watched)
-      if (!trust.trusted) notes.push(`AUTOMATE PAUSED — ${trust.summary}`)
+      if (!trust.trusted && !overridden) notes.push(`AUTOMATE PAUSED — ${trust.summary}`)
       else {
         const since = watched.auto_keep_since ?? new Date().toISOString()
         for (const q of await queuedFor(admin, watched.brand_id, since)) {

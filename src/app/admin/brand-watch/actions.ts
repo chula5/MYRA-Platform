@@ -12,6 +12,9 @@ import type { TwinTrust } from '@/lib/brand-watch-twins'
 
 import { createAdminClient } from '@/lib/supabase-server'
 import {
+  bulkJobOf, bulkRunning, scanProgressOf, throttledProgress, withBulkJob, type BulkJob,
+} from '@/lib/brand-watch-jobs'
+import {
   baselineBrand, checkWatchedBrand, onboardBrand, provisionalNameFromUrl, runBrandWatch, normaliseBaseUrl,
   foldBrandName,
   type BrandCheckResult, type WatchedBrandRow,
@@ -429,22 +432,21 @@ export async function loadBrandWatch(): Promise<BrandWatchData> {
 
 /**
  * AUTO-KEEP TWINS for one brand — the narrower first level of automation.
- * Switching on requires the brand's twin trust, checked here.
+ *
+ * `overridden` comes from the card: she is switching this on before the gate was
+ * earned. It is recorded, not judged — the scan re-measures either way, and the
+ * card says which levels are running unearned. The trust pass is deliberately
+ * NOT loaded here: it is a walk-forward over every decision, and paying seconds
+ * of CPU to grey out a button was part of why these felt frozen.
  */
-export async function setWatchedBrandAutoKeepTwins(watchedBrandId: string, on: boolean): Promise<{ error?: string }> {
+export async function setWatchedBrandAutoKeepTwins(watchedBrandId: string, on: boolean, overridden = false): Promise<{ error?: string }> {
   await assertAdmin()
   const admin = createAdminClient() as any
-  const { data: w } = await admin.from('watched_brand').select('*').eq('watched_brand_id', watchedBrandId).single()
-  if (!w) return { error: 'Watchlist row not found' }
-  if (on) {
-    const trust = twinTrustFor(await loadBrandTrust(admin), w)
-    if (!trust.trusted) return { error: `NOT YET TRUSTED — ${trust.summary}` }
-  }
-  const { error } = await admin.from('watched_brand')
-    .update({ auto_keep_twins: on, auto_keep_twins_since: on ? new Date().toISOString() : null })
-    .eq('watched_brand_id', watchedBrandId)
+  const patch: any = { auto_keep_twins: on, auto_keep_twins_since: on ? new Date().toISOString() : null }
+  if (on && overridden) patch.auto_keep_manual = true
+  const { error } = await admin.from('watched_brand').update(patch).eq('watched_brand_id', watchedBrandId)
   if (error) return { error: /auto_keep_twins/.test(error.message) ? 'RUN MIGRATION 0057_brand_watch_auto_twins.sql IN SUPABASE FIRST' : error.message }
-  revalidatePath('/admin/brand-watch')
+  // No revalidatePath — see the note on setWatchedBrandActive.
   return {}
 }
 
@@ -464,48 +466,50 @@ export async function keepTwinsNowForBrand(watchedBrandId: string): Promise<{ ke
 }
 
 /**
- * AUTOMATE for one brand. Switching on requires the brand's trust to be earned
- * — checked here, not just greyed out in the page. From now on, only pieces
- * discovered after this moment can be kept automatically.
+ * AUTOMATE for one brand. From now on, only pieces discovered after this moment
+ * can be kept automatically. See setWatchedBrandAutoKeepTwins for `overridden`.
  */
-export async function setWatchedBrandAutoKeep(watchedBrandId: string, on: boolean): Promise<{ error?: string }> {
+export async function setWatchedBrandAutoKeep(watchedBrandId: string, on: boolean, overridden = false): Promise<{ error?: string }> {
   await assertAdmin()
   const admin = createAdminClient() as any
-  const { data: w } = await admin.from('watched_brand').select('*').eq('watched_brand_id', watchedBrandId).single()
-  if (!w) return { error: 'Watchlist row not found' }
-  if (on) {
-    const trust = trustFor(await loadBrandTrust(admin), w)
-    if (!trust.trusted) return { error: `NOT YET TRUSTED — ${trust.summary}` }
-  }
-  const { error } = await admin.from('watched_brand')
-    .update({ auto_keep: on, auto_keep_since: on ? new Date().toISOString() : null })
-    .eq('watched_brand_id', watchedBrandId)
+  const patch: any = { auto_keep: on, auto_keep_since: on ? new Date().toISOString() : null }
+  if (on && overridden) patch.auto_keep_manual = true
+  const { error } = await admin.from('watched_brand').update(patch).eq('watched_brand_id', watchedBrandId)
   if (error) return { error: /auto_keep/.test(error.message) ? 'RUN MIGRATION 0056_brand_watch_automate.sql IN SUPABASE FIRST' : error.message }
-  revalidatePath('/admin/brand-watch')
+  // No revalidatePath — see the note on setWatchedBrandActive.
   return {}
 }
 
 
 
 /**
- * AUTO-KEEP BY CONFIDENCE — the bar she sets, in plain odds. Switching on needs
- * the model to have measured at that bar on this brand's own one-by-one
- * decisions; the check is here, not only in the page.
+ * AUTO-KEEP BY CONFIDENCE — the bar she sets, in plain odds. See
+ * setWatchedBrandAutoKeepTwins for `overridden`.
  */
-export async function setWatchedBrandAutoKeepConfidence(watchedBrandId: string, on: boolean): Promise<{ error?: string }> {
+export async function setWatchedBrandAutoKeepConfidence(watchedBrandId: string, on: boolean, overridden = false): Promise<{ error?: string }> {
   await assertAdmin()
   const admin = createAdminClient() as any
-  const { data: w } = await admin.from('watched_brand').select('*').eq('watched_brand_id', watchedBrandId).single()
-  if (!w) return { error: 'Watchlist row not found' }
-  if (on) {
-    const trust = confidenceTrustFor(await loadBrandTrust(admin), w)
-    if (!trust.trusted) return { error: `NOT YET — ${trust.summary}` }
-  }
-  const { error } = await admin.from('watched_brand')
-    .update({ auto_keep_confidence: on, auto_keep_confidence_since: on ? new Date().toISOString() : null })
-    .eq('watched_brand_id', watchedBrandId)
+  const patch: any = { auto_keep_confidence: on, auto_keep_confidence_since: on ? new Date().toISOString() : null }
+  if (on && overridden) patch.auto_keep_manual = true
+  const { error } = await admin.from('watched_brand').update(patch).eq('watched_brand_id', watchedBrandId)
   if (error) return { error: /auto_keep_confidence/.test(error.message) ? 'RUN MIGRATION 0066_brand_watch_confidence.sql IN SUPABASE FIRST' : error.message }
-  revalidatePath('/admin/brand-watch')
+  // No revalidatePath — see the note on setWatchedBrandActive.
+  return {}
+}
+
+/**
+ * KEEP EVERYTHING for one brand: every new piece it queues, in season, without
+ * predicting anything. For a brand whose taste does not need a model — Chloe
+ * asked for Liberowe to work this way. The season rule still applies, so
+ * outgoing summer stock is left in the queue.
+ */
+export async function setWatchedBrandAutoKeepAll(watchedBrandId: string, on: boolean): Promise<{ error?: string }> {
+  await assertAdmin()
+  const admin = createAdminClient() as any
+  const { error } = await admin.from('watched_brand')
+    .update({ auto_keep_all: on, auto_keep_all_since: on ? new Date().toISOString() : null })
+    .eq('watched_brand_id', watchedBrandId)
+  if (error) return { error: /auto_keep_all/.test(error.message) ? 'RUN MIGRATION 0088_brand_watch_manual_override.sql IN SUPABASE FIRST' : error.message }
   return {}
 }
 
@@ -583,21 +587,6 @@ export async function decideSiteRequest(requestId: string, decision: 'watching' 
   return { name }
 }
 
-/** ADD THE BACKLOG: keep every queued piece for this brand already above her bar. */
-export async function keepConfidentNowForBrand(watchedBrandId: string): Promise<{ kept?: number; error?: string }> {
-  await assertAdmin()
-  const admin = createAdminClient() as any
-  const { data: w } = await admin.from('watched_brand').select('*').eq('watched_brand_id', watchedBrandId).single()
-  if (!w) return { error: 'Watchlist row not found' }
-  try {
-    const r = await keepConfidentNow(admin, w as WatchedBrandRow)
-    revalidatePath('/admin/brand-watch')
-    return r.error ? { error: r.error } : { kept: r.kept }
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : String(e) }
-  }
-}
-
 /** What MYRA added by itself lately — so nothing lands unseen. */
 export async function loadAutoAdded(limit = 60): Promise<{ rows: { queue_id: string; product_name: string; brand_name: string | null; image_url: string; retailer_url: string; decided_at: string | null; item_id: string | null }[]; error?: string }> {
   await assertAdmin()
@@ -638,7 +627,7 @@ export async function setWatchedBrandConfidenceBar(watchedBrandId: string, bar: 
   const clamped = Math.max(0.5, Math.min(0.99, Number(bar) || DEFAULT_CONFIDENCE))
   const { error } = await admin.from('watched_brand').update({ confidence_bar: clamped }).eq('watched_brand_id', watchedBrandId)
   if (error) return { error: /confidence_bar/.test(error.message) ? 'RUN MIGRATION 0066_brand_watch_confidence.sql IN SUPABASE FIRST' : error.message }
-  revalidatePath('/admin/brand-watch')
+  // No revalidatePath — see the note on setWatchedBrandActive.
   return {}
 }
 
@@ -756,6 +745,199 @@ async function startInBackground(watchedBrandId: string, run: (w: WatchedBrandRo
   return { started: true, name: watched.name }
 }
 
+/**
+ * Start a bulk keep on its own brand's card and return at once.
+ *
+ * The work runs after the response (waitUntil) and writes its progress to that
+ * row's scan_state, so the page stays hers: four brands can be started in a row
+ * instead of four waits, and a 300-piece keep no longer greys every control.
+ *
+ * Progress is a read-modify-write, because the scan keeps its own counters in
+ * the same column and a blind overwrite would wipe a running scan's progress.
+ */
+async function startBulkJob(
+  watchedBrandId: string,
+  job: { kind: string; label: string; total: number },
+  work: (onProgress: (done: number, total: number) => void) => Promise<{ kept: number; note?: string }>,
+): Promise<{ started?: true; label?: string; error?: string }> {
+  const admin = createAdminClient() as any
+  const { data } = await admin.from('watched_brand')
+    .select('watched_brand_id, name, scan_state').eq('watched_brand_id', watchedBrandId).maybeSingle()
+  if (!data) return { error: 'Watchlist row not found' }
+
+  const existing = bulkJobOf(data.scan_state)
+  if (bulkRunning(existing)) return { error: `${data.name} is already working on ${existing!.label}` }
+
+  const started: BulkJob = { ...job, done: 0, started_at: new Date().toISOString() }
+  const write = async (bulk: BulkJob) => {
+    const { data: cur } = await admin.from('watched_brand')
+      .select('scan_state').eq('watched_brand_id', watchedBrandId).maybeSingle()
+    await admin.from('watched_brand')
+      .update({ scan_state: withBulkJob(cur?.scan_state, bulk) })
+      .eq('watched_brand_id', watchedBrandId)
+  }
+  await write(started)
+
+  // The page polls this, so a write every couple of seconds is plenty and a
+  // 400-piece keep does not spend 400 round trips saying where it is.
+  const onProgress = throttledProgress(2_000, (done) => { void write({ ...started, done }) })
+  const run = (async () => {
+    try {
+      const r = await work(onProgress)
+      await write({ ...started, done: started.total || r.kept, kept: r.kept, note: r.note, ended_at: new Date().toISOString() })
+    } catch (e) {
+      await write({ ...started, error: e instanceof Error ? e.message : String(e), ended_at: new Date().toISOString() })
+    }
+    revalidatePath('/admin/brand-watch')
+  })()
+  try { waitUntil(run) } catch { /* local dev: the promise simply runs */ }
+  return { started: true, label: started.label }
+}
+
+/**
+ * Every queued piece for a brand name, and how many the season rule left behind.
+ * Shared by the foreground keep and the background one so the two cannot drift
+ * on which pieces a "keep all" means.
+ */
+async function queuedIdsForBrand(
+  admin: any, brandName: string, includeOutOfSeason: boolean,
+): Promise<{ ids: string[]; leftOut: number; error?: string }> {
+  const { data: brands, error: berr } = await admin.from('brand').select('brand_id').ilike('name', brandName)
+  if (berr) return { ids: [], leftOut: 0, error: berr.message }
+  const brandIds = ((brands ?? []) as any[]).map((b) => b.brand_id)
+  if (!brandIds.length) return { ids: [], leftOut: 0, error: `No brand named ${brandName}` }
+  const ids: string[] = []
+  let leftOut = 0
+  for (let from = 0; ; from += 1000) {
+    let { data, error } = await admin
+      .from('brand_watch_queue')
+      .select('queue_id, season, season_code, product_name, item_type, material_category, material_primary')
+      .eq('status', 'queued')
+      .in('brand_id', brandIds)
+      .order('queue_id')
+      .range(from, from + 999)
+    if (error && /season_code/.test(error.message)) {
+      ;({ data, error } = await admin.from('brand_watch_queue').select('queue_id, season, product_name, item_type, material_category, material_primary').eq('status', 'queued').in('brand_id', brandIds).order('queue_id').range(from, from + 999))
+    }
+    if (error && /season/.test(error.message)) {
+      ;({ data, error } = await admin.from('brand_watch_queue').select('queue_id, product_name, item_type, material_category, material_primary').eq('status', 'queued').in('brand_id', brandIds).order('queue_id').range(from, from + 999))
+    }
+    if (error) return { ids: [], leftOut: 0, error: error.message }
+    for (const r of (data ?? []) as any[]) {
+      const season = (r.season as Season | null | undefined) ?? seasonOf({ title: r.product_name, itemType: r.item_type, materialCategory: r.material_category, materialPrimary: r.material_primary }).season
+      // A piece from a season already gone by is left in the queue too, unless
+      // she is looking at it — same rule the queue filter uses.
+      if (!includeOutOfSeason && !inCurrentSeason(season, r.season_code)) { leftOut++; continue }
+      ids.push(r.queue_id)
+    }
+    if (!data || data.length < 1000) break
+  }
+  return { ids, leftOut }
+}
+
+/** What every brand's background work is doing. The page polls this. */
+export interface BrandJobState {
+  bulk?: BulkJob
+  scan?: { done: number; total: number | null }
+}
+
+export async function loadBrandJobs(): Promise<Record<string, BrandJobState>> {
+  await assertAdmin()
+  const admin = createAdminClient() as any
+  const { data } = await admin.from('watched_brand').select('watched_brand_id, scan_state')
+  const out: Record<string, BrandJobState> = {}
+  for (const r of (data ?? []) as any[]) {
+    const bulk = bulkJobOf(r.scan_state)
+    const scan = scanProgressOf(r.scan_state)
+    if (!bulk && !scan) continue
+    out[r.watched_brand_id] = { bulk, scan: scan ? { done: scan.done, total: scan.total } : undefined }
+  }
+  return out
+}
+
+/** ADD THE BACKLOG, in the background — clearing a queue runs to hundreds. */
+export async function keepConfidentNowInBackground(watchedBrandId: string): Promise<{ started?: true; label?: string; error?: string }> {
+  await assertAdmin()
+  const admin = createAdminClient() as any
+  const { data: w } = await admin.from('watched_brand').select('*').eq('watched_brand_id', watchedBrandId).maybeSingle()
+  if (!w) return { error: 'Watchlist row not found' }
+  const watched = w as unknown as WatchedBrandRow
+  const bar = Math.round(Number(watched.confidence_bar ?? DEFAULT_CONFIDENCE) * 100)
+  return startBulkJob(watchedBrandId, { kind: 'keep-confident', label: `ADDING THE BACKLOG ABOVE ${bar}%`, total: 0 }, async () => {
+    const r = await keepConfidentNow(admin, watched)
+    if (r.error) throw new Error(r.error)
+    return { kept: r.kept ?? 0 }
+  })
+}
+
+/** KEEP ALL {BRAND}, in the background — the whole queue, not the loaded page. */
+export async function keepAllForBrandInBackground(
+  watchedBrandId: string, opts: { includeOutOfSeason?: boolean } = {},
+): Promise<{ started?: true; label?: string; error?: string }> {
+  await assertAdmin()
+  const admin = createAdminClient() as any
+  const { data: w } = await admin.from('watched_brand').select('*').eq('watched_brand_id', watchedBrandId).maybeSingle()
+  if (!w) return { error: 'Watchlist row not found' }
+  const watched = w as unknown as WatchedBrandRow
+  const { ids, leftOut, error } = await queuedIdsForBrand(admin, watched.name, !!opts.includeOutOfSeason)
+  if (error) return { error }
+  if (!ids.length) return { error: `Nothing queued for ${watched.name}${leftOut ? ` — ${leftOut} left out of season` : ''}` }
+  return startBulkJob(watchedBrandId, {
+    kind: 'keep-all', label: `KEEPING ALL ${ids.length} ${watched.name.toUpperCase()} PIECES`, total: ids.length,
+  }, async (onProgress) => {
+    const kept = await keepQueueRows(admin, ids, { onProgress })
+    return { kept, note: leftOut ? `${leftOut} OUT-OF-SEASON LEFT IN THE QUEUE` : undefined }
+  })
+}
+
+/**
+ * KEEP ALL SHOWN, in the background.
+ *
+ * Split by brand, one job per brand, so each reports on its own card and she
+ * can start another brand while these run. A page spanning several brands
+ * therefore starts several jobs — which is why one shared job slot would have
+ * been the wrong shape for this button.
+ */
+export async function keepShownInBackground(queueIds: string[]): Promise<{ started?: true; brands?: number; error?: string }> {
+  await assertAdmin()
+  if (!queueIds.length) return { error: 'Nothing to keep' }
+  const admin = createAdminClient() as any
+
+  // Chunked: the ids go into the query string, and a 200-piece page is a long one.
+  const byBrand = new Map<string, string[]>()
+  for (let i = 0; i < queueIds.length; i += 100) {
+    const { data, error } = await admin.from('brand_watch_queue')
+      .select('queue_id, brand_id').in('queue_id', queueIds.slice(i, i + 100)).eq('status', 'queued')
+    if (error) return { error: error.message }
+    for (const r of (data ?? []) as any[]) {
+      if (!r.brand_id) continue
+      byBrand.set(r.brand_id, [...(byBrand.get(r.brand_id) ?? []), r.queue_id])
+    }
+  }
+  if (!byBrand.size) return { error: 'Nothing left to keep — those pieces are already decided' }
+
+  const { data: watched } = await admin.from('watched_brand')
+    .select('watched_brand_id, brand_id').in('brand_id', Array.from(byBrand.keys()))
+  const watchedByBrand = new Map<string, string>(((watched ?? []) as any[]).map((w) => [w.brand_id, w.watched_brand_id]))
+
+  let started = 0
+  let lastError: string | undefined
+  for (const [brandId, ids] of Array.from(byBrand)) {
+    const watchedBrandId = watchedByBrand.get(brandId)
+    if (!watchedBrandId) continue
+    const r = await startBulkJob(watchedBrandId, {
+      kind: 'keep-shown', label: `KEEPING ${ids.length} SHOWN PIECE${ids.length === 1 ? '' : 'S'}`, total: ids.length,
+    }, async (onProgress) => {
+      const kept = await keepQueueRows(admin, ids, { onProgress })
+      return { kept }
+    })
+    if (r.error) lastError = r.error
+    else started++
+  }
+  if (!started) return { error: lastError ?? 'Nothing to keep' }
+  return { started: true, brands: started }
+}
+
 /** CHECK NOW, in the background. */
 export async function checkBrandNowInBackground(watchedBrandId: string) {
   await assertAdmin()
@@ -780,11 +962,20 @@ export async function checkAllBrandsNowInBackground(): Promise<{ started: true }
   return { started: true }
 }
 
+/**
+ * Pause or resume a brand.
+ *
+ * No revalidatePath. Every one of these little switches used to re-render the
+ * whole Brand Watch page — the queue read, the learning, the trust pass — which
+ * is what made a click feel like a freeze. The client reflects the switch the
+ * moment the write lands, and the next queue load reads the truth anyway. Same
+ * reasoning as keepItems, which had already dropped its revalidate for exactly
+ * this reason.
+ */
 export async function setWatchedBrandActive(watchedBrandId: string, active: boolean): Promise<void> {
   await assertAdmin()
   const admin = createAdminClient()
   await (admin as any).from('watched_brand').update({ active } as any).eq('watched_brand_id', watchedBrandId)
-  revalidatePath('/admin/brand-watch')
 }
 
 /**
@@ -855,52 +1046,6 @@ export async function keepItems(itemIds: string[]): Promise<{ updated: number; o
   // re-rendered the whole heavy admin page on every single click, which froze
   // rapid keep/skip.
   return { updated, outOfStock: report.outOfStock, lowStock: report.lowStock, untyped: report.untyped }
-}
-
-// Keep EVERY queued draft for one brand in a single stroke — the whole queue,
-// not just the page loaded in the browser. Matches items via the brand table
-// (same name shown on the queue's brand chips).
-export async function keepAllForBrand(brandName: string, opts: { includeOutOfSeason?: boolean } = {}): Promise<{ updated: number; error?: string; leftOutOfSeason?: number }> {
-  await assertAdmin()
-  const admin = createAdminClient() as any
-  const { data: brands, error: berr } = await admin.from('brand').select('brand_id').ilike('name', brandName)
-  if (berr) return { updated: 0, error: berr.message }
-  const ids = (brands ?? []).map((b: any) => b.brand_id)
-  if (!ids.length) return { updated: 0, error: `No brand named ${brandName}` }
-  const queueIds: string[] = []
-  // The season on its way out stays in the queue unless she is looking at it.
-  let leftOut = 0
-  for (let from = 0; ; from += 1000) {
-    let { data, error } = await admin
-      .from('brand_watch_queue')
-      .select('queue_id, season, season_code, product_name, item_type, material_category, material_primary')
-      .eq('status', 'queued')
-      .in('brand_id', ids)
-      .order('queue_id')
-      .range(from, from + 999)
-    if (error && /season_code/.test(error.message)) {
-      ;({ data, error } = await admin.from('brand_watch_queue').select('queue_id, season, product_name, item_type, material_category, material_primary').eq('status', 'queued').in('brand_id', ids).order('queue_id').range(from, from + 999))
-    }
-    if (error && /season/.test(error.message)) {
-      ;({ data, error } = await admin.from('brand_watch_queue').select('queue_id, product_name, item_type, material_category, material_primary').eq('status', 'queued').in('brand_id', ids).order('queue_id').range(from, from + 999))
-    }
-    if (error) return { updated: 0, error: error.message }
-    for (const r of (data ?? []) as any[]) {
-      const season = (r.season as Season | null | undefined) ?? seasonOf({ title: r.product_name, itemType: r.item_type, materialCategory: r.material_category, materialPrimary: r.material_primary }).season
-      // A piece from a season already gone by is left in the queue too, unless
-      // she is looking at it — same rule the queue filter uses.
-      if (!opts.includeOutOfSeason && !inCurrentSeason(season, r.season_code)) { leftOut++; continue }
-      queueIds.push(r.queue_id)
-    }
-    if (!data || data.length < 1000) break
-  }
-  try {
-    const updated = await keepQueueRows(admin, queueIds)
-    revalidatePath('/admin/brand-watch')
-    return { updated, leftOutOfSeason: leftOut }
-  } catch (e) {
-    return { updated: 0, error: e instanceof Error ? e.message : String(e) }
-  }
 }
 
 // Undo a skip: skipped → queued again. Skips only — a kept piece has already
