@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation'
 import { createServerClient } from '@/lib/supabase-server'
-import { earlyAccessSignOut } from '@/app/earlyaccess/actions'
 import MeChrome from './MeChrome'
 import MeTour from '@/components/me/MeTour'
 import ClientJourneyTracker from '@/components/analytics/ClientJourneyTracker'
@@ -23,15 +22,9 @@ export default async function MeLayout({ children }: { children: React.ReactNode
   return (
     <div className="min-h-screen myra-pearl myra-safe-top-pad">
       <div className="myra-safe-top" aria-hidden />
-      <MeChrome
-        signOut={
-          <form action={earlyAccessSignOut}>
-            <button type="submit" className="text-[14px] sm:text-[20px] tracking-[0.1em] text-[#A8A8A4] hover:text-[#4A4E57] transition-colors">OUT</button>
-          </form>
-        }
-      />
+      <MeChrome />
       {/* pb-28 on a phone keeps the last of the page clear of the tab bar. */}
-      <main className="w-full px-6 sm:pl-[152px] sm:pr-10 pt-10 pb-28 sm:pb-10">{children}</main>
+      <main className="w-full px-6 sm:pl-[200px] sm:pr-10 pt-10 pb-28 sm:pb-10">{children}</main>
       <MeTour />
       {/* The house of stylists, one button away on every page. */}
       <StylistChat />

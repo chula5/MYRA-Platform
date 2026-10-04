@@ -9,7 +9,7 @@ import { ROOMS, ROW_ROOMS, RoomIcon, RoomSearch, type RoomId } from '@/component
 import YouButton from '@/components/me/YouButton'
 import MobileTabBar from '@/components/me/MobileTabBar'
 
-export default function MeChrome({ signOut }: { signOut: React.ReactNode }) {
+export default function MeChrome() {
   const path = usePathname() ?? '/me'
   // The longest matching room wins, so /me/dressing-room/123 stays lit.
   const active: RoomId = ([...ROOMS].sort((a, b) => b.href.length - a.href.length)
@@ -23,13 +23,13 @@ export default function MeChrome({ signOut }: { signOut: React.ReactNode }) {
       {/* A desktop keeps the six rooms down the left, the way Instagram keeps
           its own: icon over word, the room she is in drawn in ink. The phone
           carries the same six in the tab bar at the foot instead. */}
-      <nav aria-label="Your rooms" data-tour="rooms" className="hidden sm:flex fixed inset-y-0 left-0 z-40 w-[112px] flex-col items-center justify-center gap-6 border-r border-[rgba(43,43,43,0.14)] bg-[rgba(230,230,233,0.9)] backdrop-blur-md">
+      <nav aria-label="Your rooms" data-tour="rooms" className="hidden sm:flex fixed inset-y-0 left-0 z-40 w-[160px] flex-col items-center justify-center gap-5 border-r border-[rgba(43,43,43,0.14)] bg-[rgba(230,230,233,0.9)] backdrop-blur-md">
         {ROW_ROOMS.map((room) => {
           const on = room.id === active
           return (
-            <Link key={room.id} href={room.href} prefetch aria-label={room.label} aria-current={on ? 'page' : undefined} className={`flex w-full flex-col items-center gap-2 py-1.5 transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#8C8A85] hover:text-[#2B2B2B]'}`}>
-              <span className="block h-10 w-10"><RoomIcon id={room.id} /></span>
-              <span className="text-[12px] tracking-[0.08em] uppercase">{room.short}</span>
+            <Link key={room.id} href={room.href} prefetch aria-label={room.label} aria-current={on ? 'page' : undefined} className={`flex w-full flex-col items-center gap-2 py-1 transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#8C8A85] hover:text-[#2B2B2B]'}`}>
+              <span className="block h-16 w-16"><RoomIcon id={room.id} /></span>
+              <span className="text-[13px] tracking-[0.08em] uppercase">{room.short}</span>
             </Link>
           )
         })}
@@ -43,15 +43,14 @@ export default function MeChrome({ signOut }: { signOut: React.ReactNode }) {
             {/* Desktop: the MYRA mark sits on the same line as her profile.
                 The rooms are down the left side and the search lives in the
                 BROWSE room, so the front door is just the mark and her. */}
-            <div className="hidden sm:block pl-[152px] pr-10">
+            <div className="hidden sm:block pl-[200px] pr-10">
               <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-6 pt-4 pb-4">
                 <span />
                 <Link href="/me" className="shrink-0">
                   <img src="/myra-logo-black.png" alt="MYRA" className="h-12 w-auto" />
                 </Link>
-                <div className="flex items-center justify-end gap-7">
+                <div className="flex items-center justify-end">
                   <YouButton />
-                  {signOut}
                 </div>
               </div>
             </div>
@@ -68,7 +67,7 @@ export default function MeChrome({ signOut }: { signOut: React.ReactNode }) {
           </>
         ) : (
           <>
-            <div className="hidden sm:flex items-center gap-4 pl-[152px] pr-10 py-3">
+            <div className="hidden sm:flex items-center gap-4 pl-[200px] pr-10 py-3">
               <Link href="/me" className="shrink-0">
                 <img src="/myra-logo-black.png" alt="MYRA" className="h-10 w-auto" />
               </Link>
@@ -76,7 +75,6 @@ export default function MeChrome({ signOut }: { signOut: React.ReactNode }) {
                 <RoomSearch variant="header" />
               </div>
               <YouButton active={active === 'profile'} />
-              <div className="shrink-0">{signOut}</div>
             </div>
             {/* Phone inside a room: the way home and her profile. The rooms
                 themselves are always available in the tab bar. */}
