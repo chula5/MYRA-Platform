@@ -20,6 +20,9 @@ import YouButton from '@/components/me/YouButton'
 import MirrorCurtain from '@/components/me/MirrorCurtain'
 import YouSettings from '@/app/me/YouSettings'
 import EventsClient from '@/app/me/events/EventsClient'
+import InspirationBoard from '@/app/me/inspiration/InspirationBoard'
+import { loadMyInspiration, type InspirationBoardView } from '@/app/me/inspiration/board-actions'
+import ThreadsClient from '@/app/me/threads/ThreadsClient'
 import { MirrorLoading } from '@/components/ArchiveCard'
 import { loadLooksForMember, type ClientView } from '@/app/me/looks/actions'
 import { loadForYou, type ForYouView } from '@/app/me/for-you-actions'
@@ -28,6 +31,7 @@ import type { DressingRoomView, OwnedPieceView } from '@/app/admin/private-styli
 import StylistChat from '@/app/me/StylistChat'
 
 type Room = RoomId
+type ProfileTab = 'settings' | 'inspiration' | 'threads'
 
 export default function HerViewTab({
   members, memberId, setMemberId,
@@ -43,10 +47,14 @@ export default function HerViewTab({
   const [dressing, setDressing] = useState<DressingRoomView | null>(null)
   const [piece, setPiece] = useState<OwnedPieceView | null>(null)
   const [loading, setLoading] = useState(false)
+  // YOU has three sub-pages, as it does on her own screen.
+  const [profileTab, setProfileTab] = useState<ProfileTab>('settings')
+  const [insp, setInsp] = useState<InspirationBoardView | null>(null)
 
   // A different member starts every room afresh.
   useEffect(() => {
     setLooksView(null); setForYou(null); setDressing(null); setPiece(null)
+    setInsp(null); setProfileTab('settings')
   }, [memberId])
 
   useEffect(() => {
@@ -61,6 +69,15 @@ export default function HerViewTab({
     load().finally(() => { if (live) setLoading(false) })
     return () => { live = false }
   }, [memberId, room, looksView, forYou, dressing])
+
+  // Her inspiration loads as her, the way her other rooms do — kept off the
+  // room spinner so the YOU sub-nav stays put while the pictures arrive.
+  useEffect(() => {
+    if (!memberId || room !== 'profile' || profileTab !== 'inspiration' || insp) return
+    let live = true
+    void loadMyInspiration(memberId).then((v) => { if (live) setInsp(v) })
+    return () => { live = false }
+  }, [memberId, room, profileTab, insp])
 
   async function openPiece(itemId: string) {
     setLoading(true)
@@ -159,11 +176,37 @@ export default function HerViewTab({
         )
       )}
 
-      {/* YOU: her settings, loaded as her. */}
+      {/* YOU: her three sub-pages, loaded as her — Settings, Inspiration and
+          Threads, the same tabs her own profile shows. */}
       {!loading && room === 'profile' && (
-        <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen">
-          <YouSettings key={memberId} testMemberId={memberId} />
-        </div>
+        <>
+          <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen myra-pearl border-b border-[rgba(43,43,43,0.14)]">
+            <nav aria-label="You sections" className="px-6 sm:px-10 pt-4">
+              <div className="flex gap-6 sm:gap-10 overflow-x-auto">
+                {([['settings', 'Settings'], ['inspiration', 'Inspiration'], ['threads', 'Threads']] as const).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setProfileTab(id)}
+                    aria-current={profileTab === id ? 'page' : undefined}
+                    className={`shrink-0 border-b-2 px-1 pb-3 text-[15px] sm:text-[18px] tracking-[0.1em] transition-colors ${profileTab === id ? 'border-[#2B2B2B] text-[#2B2B2B]' : 'border-transparent text-[#8C8A85] hover:text-[#2B2B2B]'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </nav>
+          </div>
+          {profileTab === 'settings' && (
+            <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen">
+              <YouSettings key={memberId} testMemberId={memberId} />
+            </div>
+          )}
+          {profileTab === 'inspiration' && (insp
+            ? <InspirationBoard key={memberId} view={insp} testMemberId={memberId} />
+            : <MirrorLoading label={`LOADING ${name.toUpperCase()}'S INSPIRATION`} />)}
+          {profileTab === 'threads' && <ThreadsClient key={memberId} testMemberId={memberId} />}
+        </>
       )}
 
       {/* The magazine loads her newsletters itself, as it does on her screen. */}
