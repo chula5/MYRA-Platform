@@ -138,7 +138,11 @@ export async function queueMirrorProducts(
           image_url: raw.image,
           price: raw.price != null ? String(raw.price) : null,
           currency,
-          price_gbp: toGbpAmount(raw.price ?? null, currency),
+          // Only a confirmed currency converts (see currencyFor): a tile off a
+          // US storefront carries USD, and toGbpAmount treats a null currency
+          // as GBP — without this guard a $248 piece would sit in the queue as
+          // £248, exactly the wrongness "unpriced rather than wrong" promises.
+          price_gbp: currency ? toGbpAmount(raw.price ?? null, currency) : null,
           item_type: product.itemType,
           colour_family: product.colourFamily,
           material_category: product.materialCategory,

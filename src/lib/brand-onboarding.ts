@@ -14,8 +14,8 @@ import { waitUntil } from '@vercel/functions'
 import { createAdminClient } from '@/lib/supabase-server'
 import { toGbpAmount } from '@/lib/currency'
 import {
-  baselineBrand, classifyExternalProduct, detectStoreCurrency, fetchCatalogue, foldBrandName, houseBanFor, normaliseBaseUrl,
-  onboardBrand, provisionalNameFromUrl, vendorMode,
+  baselineBrand, classifyExternalProduct, detectStoreCurrency, fetchCatalogue, foldBrandName, houseBanFor, mirrorFedResult,
+  normaliseBaseUrl, onboardBrand, provisionalNameFromUrl, vendorMode,
   type BrandCheckResult, type ScannedProduct, type WatchedBrandRow,
 } from '@/lib/brand-watch'
 import { discoverProductUrls, fetchNewProductPages } from '@/lib/brand-watch-browser'
@@ -47,10 +47,22 @@ export async function scanNewBrand(admin: any, watched: WatchedBrandRow, mode: '
       const result = mode === 'full' ? await onboardBrand(browserWatched) : await baselineBrand(browserWatched)
       return await finish({ ...result, note: `not Shopify — switched to the browser route (sitemap + JSON-LD). ${result.note ?? ''}`.trim() })
     }
-    // Neither route works — take the row back off the watchlist.
-    await admin.from('watched_brand').delete().eq('watched_brand_id', watched.watched_brand_id)
+    // Neither server route can read the shop — a bot wall. Reformation answers
+    // Cloudflare's "Just a moment…" challenge on every path (/products.json,
+    // robots.txt, the sitemap, its own API host); Massimo Dutti answers an
+    // Akamai one. Deleting the row here is why a brand she asked for kept
+    // vanishing: no server can EVER read this shop, but her own browser is
+    // already past the wall. Keep the row on the third route — nothing is
+    // fetched, and the Mirror queues the pieces she walks past on the site
+    // with the same gates as a scan (see mirror/watchlist.ts).
+    await admin.from('watched_brand')
+      .update({ platform: 'mirror', scan_state: { running: false } })
+      .eq('watched_brand_id', watched.watched_brand_id)
     revalidatePath('/admin/brand-watch')
-    throw shopifyError
+    return {
+      ...mirrorFedResult(watched),
+      note: `no server can read this shop — a bot wall on every route — so it is kept as mirror-fed: browse it with the Mirror and the pieces you see are queued here. ${mirrorFedResult(watched).note}`,
+    }
   }
 }
 

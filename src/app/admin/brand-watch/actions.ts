@@ -15,11 +15,10 @@ import {
   bulkJobOf, bulkRunning, scanProgressOf, throttledProgress, withBulkJob, type BulkJob,
 } from '@/lib/brand-watch-jobs'
 import {
-  baselineBrand, checkWatchedBrand, onboardBrand, provisionalNameFromUrl, runBrandWatch, normaliseBaseUrl,
+  checkWatchedBrand, onboardBrand, runBrandWatch,
   foldBrandName,
   type BrandCheckResult, type WatchedBrandRow,
 } from '@/lib/brand-watch'
-import { discoverProductUrls } from '@/lib/brand-watch-browser'
 import { waitUntil } from '@vercel/functions'
 import { revalidatePath } from 'next/cache'
 import { assertAdmin } from '@/lib/admin-audit'
@@ -644,58 +643,6 @@ export async function addWatchedBrandInBackground(url: string, mode: 'watch' | '
   await assertAdmin()
   const r = await createWatchedBrandAndScan(createAdminClient() as any, url, mode)
   return r.error ? { error: r.error } : r
-}
-
-export async function addWatchedBrand(url: string, mode: 'watch' | 'full' = 'watch'): Promise<{ result?: BrandCheckResult; error?: string }> {
-  await assertAdmin()
-  const base = normaliseBaseUrl(url)
-  if (!base) return { error: 'That doesn’t look like a URL' }
-  const admin = createAdminClient()
-
-  const { data: exists } = await (admin as any)
-    .from('watched_brand').select('watched_brand_id').eq('base_url', base).limit(1)
-  if ((exists ?? []).length) return { error: 'Already on the watchlist' }
-
-  // Placeholder only — the first scan adopts the site's own name (Shopify
-  // vendor / JSON-LD brand). Locale subdomains are skipped so en.munthe.com
-  // starts as "Munthe", never "En".
-  const provisional = provisionalNameFromUrl(base)
-
-  const { data: created, error } = await (admin as any)
-    .from('watched_brand')
-    .insert([{ name: provisional, base_url: base }] as any)
-    .select('*')
-    .single()
-  if (error || !created) return { error: error?.message ?? 'Could not create watchlist row' }
-  const watched = created as unknown as WatchedBrandRow
-
-  try {
-    const result = mode === 'full' ? await onboardBrand(watched) : await baselineBrand(watched)
-    revalidatePath('/admin/brand-watch')
-    return { result }
-  } catch (shopifyError) {
-    // Not Shopify (no /products.json)? Try the browser route: sitemap
-    // discovery + JSON-LD product pages. Works for Sessun and most custom
-    // platforms; only sites that hard-block server fetching stay out.
-    try {
-      const urls = await discoverProductUrls(base)
-      if (urls.length >= 10) {
-        // Browser-route pages carry little scoring vocabulary (style-name
-        // titles, prose descriptions) — a GOOD item routinely scores 0 here,
-        // so the floor is 0: only genuinely negative signals (leopard, sequin,
-        // neon…) drop a piece. Tune per brand if a site scores richer.
-        await (admin as any).from('watched_brand')
-          .update({ platform: 'browser', min_score: 0 }).eq('watched_brand_id', watched.watched_brand_id)
-        const browserWatched = { ...watched, platform: 'browser' as const, min_score: 0 }
-        const result = mode === 'full' ? await onboardBrand(browserWatched) : await baselineBrand(browserWatched)
-        revalidatePath('/admin/brand-watch')
-        return { result: { ...result, note: `not Shopify — switched to the browser route (sitemap + JSON-LD). ${result.note ?? ''}`.trim() } }
-      }
-    } catch { /* fall through to the original error */ }
-    // Neither route works — remove the row again.
-    await (admin as any).from('watched_brand').delete().eq('watched_brand_id', watched.watched_brand_id)
-    return { error: shopifyError instanceof Error ? shopifyError.message : String(shopifyError) }
-  }
 }
 
 // Full-catalogue scan for a brand already on the watchlist. Queues every
