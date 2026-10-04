@@ -24,7 +24,7 @@ import { typeFromStoredRow } from './brand-watch'
 import { automationOn, manualOverride, measureBrandTrust, summariseTrust, trustForAutomation, wouldAutoKeep, type BrandTrust, type TrustDecision } from './brand-watch-trust'
 import { carefulFlags, keptTwinOf, measureTwinTrust, summariseTwinTrust, type TwinDecision, type TwinTrust } from './brand-watch-twins'
 import {
-  confidenceModels, confidenceFromModels, confidenceSource, measureBoth, summariseConfidence,
+  carefulTraining, confidenceModels, confidenceFromModels, confidenceSource, measureBoth, summariseConfidence,
   wouldAutoKeepByConfidence, BRAND_EVIDENCE_K, DEFAULT_CONFIDENCE,
   type ConfidenceDecision, type ConfidenceModels, type ConfidenceTrust,
 } from './brand-watch-confidence'
@@ -49,8 +49,10 @@ export interface QueueTrustData {
   evidence: Map<string, { decisions: TwinDecision[]; careful: boolean[] }>
   /** The learning over EVERY decision — what ranks the queue. */
   learn: ReturnType<typeof buildLearning>
-  /** The learning over the decisions Chloe made herself — automation and the confidence models must not learn from their own auto-keeps. */
+  /** The learning over the decisions Chloe made herself — automation must not learn from its own auto-keeps. */
   learnOwn: ReturnType<typeof buildLearning>
+  /** The learning the confidence models are fitted on — everything except a bulk skip (see carefulTraining). */
+  learnCareful: ReturnType<typeof buildLearning>
   /** The chance-she-keeps model per brand_id. */
   confidence: ConfidenceModels
   /** Number of kept/skipped decisions used to train the models. */
@@ -160,15 +162,20 @@ function buildQueueTrust(rows: any[], wbs: any[]): QueueTrustInternals {
   const evidence = new Map<string, { decisions: TwinDecision[]; careful: boolean[] }>()
   grouped.forEach((list, brand) => evidence.set(brand, { decisions: list, careful: carefulFlags(list) }))
 
-  // The queue ranks on every decision; the confidence models and automation
-  // train only on the decisions Chloe made herself — a model that learns from
-  // its own auto-keeps is grading its own homework.
+  // The queue ranks on every decision; automation trains only on the decisions
+  // Chloe made herself — a model that learns from its own auto-keeps is
+  // grading its own homework. The confidence models are fitted on everything
+  // except a BULK SKIP (carefulTraining): a season retirement is a button
+  // press about a season, never a verdict on a piece, while a bulk KEEP is
+  // still her saying yes.
   const learn = buildLearning(decisions)
   const learnOwn = buildLearning(decisions.filter((d) => !d.autoKept))
   const confDecisions: ConfidenceDecision[] = decisions.map((d) => ({ ...d, at: d.at, score: d.score, autoKept: d.autoKept }))
-  const confidence = confidenceModels(confDecisions, learnOwn)
+  const fitted = carefulTraining(confDecisions)
+  const learnCareful = buildLearning(fitted)
+  const confidence = confidenceModels(fitted, learnCareful)
   const barBy = new Map<string, number>((wbs as any[]).map((w) => [w.brand_id, Number(w.confidence_bar ?? DEFAULT_CONFIDENCE)]))
-  return { decisions, twinDecisions, barBy, evidence, learn, learnOwn, confidence, decidedCount: decisions.length }
+  return { decisions, twinDecisions, barBy, evidence, learn, learnOwn, learnCareful, confidence, decidedCount: decisions.length }
 }
 
 /**
@@ -227,7 +234,7 @@ export function twinOfQueueRow(data: QueueTrustData, row: any): TwinDecision | n
 export { confidenceModels, BRAND_EVIDENCE_K, type ConfidenceModels }
 
 export const confidenceOf = (data: QueueTrustData, row: any): number | null =>
-  confidenceFromModels(data.confidence, data.learnOwn, toDecided(row), Number(row.discovery_score ?? 0))
+  confidenceFromModels(data.confidence, data.learnCareful, toDecided(row), Number(row.discovery_score ?? 0))
 
 /** Where a piece's number came from — for the label under it. */
 export const confidenceSourceOf = (data: BrandTrustData, brandId: string | null | undefined): 'brand' | 'house' | 'blend' | null =>
@@ -297,7 +304,9 @@ export async function autoKeepForBrand(admin: any, watched: WatchedBrandRow, tru
       }
     }
     // BY CONFIDENCE — only above her bar, and only while the model measures at
-    // that bar on this brand's own one-by-one decisions.
+    // that bar on this brand's own decisions: her one-by-ones, or — where those
+    // are too few — every decision she made herself, KEEP ALLs counted at a
+    // higher proof bar (measureBoth).
     if (watched.auto_keep_confidence) {
       const bar = Number(watched.confidence_bar ?? DEFAULT_CONFIDENCE)
       const trust = confidenceTrustFor(data, watched)
@@ -310,7 +319,7 @@ export async function autoKeepForBrand(admin: any, watched: WatchedBrandRow, tru
           const p = confidenceOf(data, row)
           // The same gate the trust measure was taken through — a kind she has
           // never kept is shown a number but is never taken unsupervised.
-          if (wouldAutoKeepByConfidence(p, data.learnOwn(toDecided(row)), bar)) picks.set(q.queue_id, 200 + p!)
+          if (wouldAutoKeepByConfidence(p, data.learnCareful(toDecided(row)), bar)) picks.set(q.queue_id, 200 + p!)
         }
       }
     }
@@ -352,7 +361,7 @@ export async function keepConfidentNow(admin: any, watched: WatchedBrandRow, cap
     .filter((q) => {
       if (!keepable(q)) return false
       const row = { ...typedRow(q), brand_id: watched.brand_id }
-      return wouldAutoKeepByConfidence(confidenceOf(data, row), data.learnOwn(toDecided(row)), bar)
+      return wouldAutoKeepByConfidence(confidenceOf(data, row), data.learnCareful(toDecided(row)), bar)
     })
     .slice(0, cap)
     .map((q) => q.queue_id)

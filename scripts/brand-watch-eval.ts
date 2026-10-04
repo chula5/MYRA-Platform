@@ -19,7 +19,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createClient } from '@supabase/supabase-js'
 import { buildLearning, type DecidedRow } from '../src/lib/brand-watch-learning'
-import { confidenceModels, confidenceFromModels } from '../src/lib/brand-watch-confidence'
+import { confidenceModels, confidenceFromModels, carefulTraining } from '../src/lib/brand-watch-confidence'
 
 // ---------------------------------------------------------------- setup
 
@@ -198,6 +198,44 @@ interface Snapshot {
   test: number
   baseRate: number
   scorers: ScorerReport[]
+  /** The same scorers, judged only on decisions she made one at a time. */
+  scorersCareful?: ScorerReport[]
+  /** Decision-weighted mean of the per-brand AUC, on careful decisions. */
+  brandAuc?: number | null
+  carefulTest?: number
+}
+
+/**
+ * More decisions than this inside one second is a bulk action — KEEP ALL, or a
+ * season retirement — not a judgement about any one piece. A model cannot be
+ * judged on predicting a button press, so the careful readings below are
+ * scored only on these. What the models are FITTED on is carefulTraining,
+ * imported rather than copied, so the evaluator trains exactly as the queue
+ * does: bulk skips dropped, bulk keeps kept.
+ */
+const BULK_PER_SECOND = 3
+function carefulOnly<T extends { decided_at: string | null; discovered_at: string | null }>(rows: T[]): T[] {
+  const at = (r: T) => String(r.decided_at ?? r.discovered_at ?? '').slice(0, 19)
+  const perSecond = new Map<string, number>()
+  for (const r of rows) perSecond.set(at(r), (perSecond.get(at(r)) ?? 0) + 1)
+  return rows.filter((r) => (perSecond.get(at(r)) ?? 0) <= BULK_PER_SECOND)
+}
+
+/**
+ * Mean per-brand AUC, weighted by how many decisions each brand contributed.
+ * The headline AUC pools every brand together, which judges a per-brand
+ * calibrated model on a question it never answers: it is asked "would she keep
+ * THIS, at THIS brand", never "is this Róhe piece better than that RIXO one".
+ */
+function brandWeightedAuc(byBrand: Map<string, Array<[number, boolean]>>, minN = 20): { auc: number | null; brands: number; n: number } {
+  let weighted = 0, n = 0, brands = 0
+  byBrand.forEach((list) => {
+    if (list.length < minN) return
+    const a = auc(list)
+    if (a == null) return // one-sided: nothing to separate
+    weighted += a * list.length; n += list.length; brands++
+  })
+  return { auc: n ? weighted / n : null, brands, n }
 }
 
 function evaluate(name: string, scored: Array<[number, boolean]>): ScorerReport {
@@ -235,10 +273,19 @@ async function main() {
 
   const baseRate = test.filter((r) => r.status === 'kept').length / test.length
 
-  // Fitted on the past only.
-  const learn = buildLearning(train.map(toDecided))
+  // Fitted on the past only, and exactly as loadQueueTrust fits the live
+  // models — carefulTraining, imported rather than copied, so this measures
+  // the models the queue actually shows. A bulk skip is dropped; a bulk KEEP
+  // stays, because it is still her saying yes.
+  const trainFitted = carefulTraining(train.map((r) => ({
+    ...r,
+    at: String(r.decided_at ?? r.discovered_at ?? ''),
+    autoKept: !!r.auto_kept,
+    kept: r.status === 'kept',
+  })))
+  const learn = buildLearning(trainFitted.map(toDecided))
   const models = confidenceModels(
-    train.map((r) => ({ ...toDecided(r), score: Number(r.discovery_score ?? 0) })),
+    trainFitted.map((r) => ({ ...toDecided(r), score: Number(r.discovery_score ?? 0) })),
     learn,
   )
 
@@ -246,35 +293,51 @@ async function main() {
   // no variance and contributes nothing. This is how we tell whether the
   // 7-point keyword score is earning its place or just adding noise, without
   // guessing at it.
-  const blindModels = confidenceModels(train.map((r) => ({ ...toDecided(r), score: 0 })), learn)
+  const blindModels = confidenceModels(trainFitted.map((r) => ({ ...toDecided(r), score: 0 })), learn)
 
   const kept = (r: Row) => r.status === 'kept'
-  const byScore: Array<[number, boolean]> = test.map((r) => [Number(r.discovery_score ?? 0), kept(r)])
-  const byDelta: Array<[number, boolean]> = test.map((r) => [learn(toDecided(r)).delta, kept(r)])
-  const byConfidence: Array<[number, boolean]> = test.map((r) => [
-    confidenceFromModels(models, learn, toDecided(r), Number(r.discovery_score ?? 0)) ?? 0,
-    kept(r),
-  ])
-  const byConfidenceNoScore: Array<[number, boolean]> = test.map((r) => [
-    confidenceFromModels(blindModels, learn, toDecided(r), 0) ?? 0,
-    kept(r),
-  ])
+  const score = (r: Row) => Number(r.discovery_score ?? 0)
+  /** Every scorer's reading of one set of decisions. */
+  const readingsOf = (list: Row[]) => ({
+    byScore: list.map((r) => [score(r), kept(r)] as [number, boolean]),
+    byDelta: list.map((r) => [learn(toDecided(r)).delta, kept(r)] as [number, boolean]),
+    byConfidence: list.map((r) => [confidenceFromModels(models, learn, toDecided(r), score(r)) ?? 0, kept(r)] as [number, boolean]),
+    byConfidenceNoScore: list.map((r) => [confidenceFromModels(blindModels, learn, toDecided(r), 0) ?? 0, kept(r)] as [number, boolean]),
+  })
+  const all = readingsOf(test)
+  const { byScore, byDelta, byConfidence, byConfidenceNoScore } = all
+
+  const testCareful = carefulOnly(test)
+  const careful = readingsOf(testCareful)
+  const scorersOf = (r: ReturnType<typeof readingsOf>) => [
+    evaluate('house-style score', r.byScore),
+    evaluate('learned delta', r.byDelta),
+    evaluate('confidence (shown on the card)', r.byConfidence),
+    evaluate('confidence, no house score', r.byConfidenceNoScore),
+  ]
+
+  // Per brand, on her one-at-a-time decisions — the question the model is
+  // actually asked, and the one the pooled AUC cannot see.
+  const perBrandCareful = new Map<string, Array<[number, boolean]>>()
+  testCareful.forEach((r, i) => {
+    if (!r.brand_id) return
+    perBrandCareful.set(r.brand_id, [...(perBrandCareful.get(r.brand_id) ?? []), careful.byConfidence[i]])
+  })
+  const brandAuc = brandWeightedAuc(perBrandCareful)
 
   const snapshot: Snapshot = {
     at: new Date().toISOString(),
     train: train.length,
     test: test.length,
     baseRate,
-    scorers: [
-      evaluate('house-style score', byScore),
-      evaluate('learned delta', byDelta),
-      evaluate('confidence (shown on the card)', byConfidence),
-      evaluate('confidence, no house score', byConfidenceNoScore),
-    ],
+    scorers: scorersOf(all),
+    scorersCareful: scorersOf(careful),
+    brandAuc: brandAuc.auc,
+    carefulTest: testCareful.length,
   }
 
   // ---- print
-  console.log(`\nBRAND WATCH SCORING — trained on ${train.length} decisions, tested on the ${test.length} that came after`)
+  console.log(`\nBRAND WATCH SCORING — trained on ${trainFitted.length} of ${train.length} decisions (bulk skips dropped), tested on the ${test.length} that came after`)
   console.log(`accepting at random would be right ${pct(baseRate)} of the time\n`)
   console.log('  scorer                            AUC    top10%   top25%   top40%   distinct  biggest tie')
   console.log('  ' + '-'.repeat(92))
@@ -288,6 +351,23 @@ async function main() {
   }
   console.log('\n  AUC 0.5 = coin flip. top10% = precision if auto-accept took the best tenth.')
   console.log(`  Anything at or below ${pct(baseRate)} is no better than accepting blindly.`)
+
+  const carefulRate = testCareful.filter(kept).length / (testCareful.length || 1)
+  console.log(`\nHER ONE-AT-A-TIME DECISIONS ONLY — ${testCareful.length} of ${test.length}, kept ${pct(carefulRate)}`)
+  console.log('  (KEEP ALL and season retirements removed: a model cannot be judged on predicting a button press)\n')
+  console.log('  scorer                            AUC    top10%   top25%   top40%   distinct  biggest tie')
+  console.log('  ' + '-'.repeat(92))
+  for (const s of snapshot.scorersCareful ?? []) {
+    console.log(
+      '  ' + s.name.padEnd(32) +
+      (s.auc == null ? '  n/a' : s.auc.toFixed(3)).padStart(5) + '   ' +
+      pct(s.top10).padStart(6) + '   ' + pct(s.top25).padStart(6) + '   ' + pct(s.top40).padStart(6) + '   ' +
+      String(s.distinct).padStart(8) + '   ' + String(s.tieSize).padStart(11),
+    )
+  }
+  console.log(`\n  WITHIN A BRAND, confidence AUC ${brandAuc.auc == null ? 'n/a' : brandAuc.auc.toFixed(3)}` +
+    ` — ${brandAuc.brands} brands, ${brandAuc.n} careful decisions, weighted by size.`)
+  console.log('  This is the question the queue actually asks, so judge a change on this line first.')
 
   console.log('\nWHERE AUTO-ACCEPT COULD SAFELY SIT')
   console.log('  scorer                          target    bar     precision   would take')
@@ -370,6 +450,21 @@ async function main() {
           shift(now.auc, was.auc, false) + '  ' +
           shift(now.top10, was.top10, true) + '  ' +
           shift(now.top25, was.top25, true))
+      }
+      if (before.scorersCareful && snapshot.scorersCareful) {
+        console.log('\n  ON HER ONE-AT-A-TIME DECISIONS')
+        console.log('  ' + '-'.repeat(92))
+        for (const now of snapshot.scorersCareful) {
+          const was = before.scorersCareful.find((s) => s.name === now.name)
+          if (!was) continue
+          console.log('  ' + now.name.padEnd(32) +
+            shift(now.auc, was.auc, false) + '  ' +
+            shift(now.top10, was.top10, true) + '  ' +
+            shift(now.top25, was.top25, true))
+        }
+      }
+      if (before.brandAuc != null || snapshot.brandAuc != null) {
+        console.log('\n  ' + 'WITHIN A BRAND (the line that matters)'.padEnd(32) + shift(snapshot.brandAuc ?? null, before.brandAuc ?? null, false))
       }
     }
   }

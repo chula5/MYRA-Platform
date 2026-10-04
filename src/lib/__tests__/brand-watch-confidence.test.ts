@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   baseModel, confidenceFor, fitBrandModel, measureConfidence, summariseConfidence,
   dampByKind, kindIsUnproven, wouldAutoKeepByConfidence, KIND_PROVEN_AT,
-  CONFIDENCE_MIN_PREDICTIONS, type ConfidenceDecision,
+  carefulTraining, CONFIDENCE_MIN_PREDICTIONS, type ConfidenceDecision,
 } from '@/lib/brand-watch-confidence'
 
 const sample = (kept: boolean, delta: number, score: number) => ({ kept, delta, score })
@@ -143,5 +143,38 @@ describe('measureConfidence', () => {
     // Whatever it predicts, precision and coverage stay inside their bounds.
     expect(t.predictions).toBeLessThanOrEqual(t.careful)
     expect(t.precision === null || (t.precision >= 0 && t.precision <= 1)).toBe(true)
+  })
+})
+
+describe('carefulTraining — what the models may be fitted on', () => {
+  const row = (kept: boolean, at: string, extra: { autoKept?: boolean } = {}) => ({ kept, at, autoKept: false, ...extra })
+
+  it('drops a bulk skip — a season retirement is not a verdict on a piece', () => {
+    const bulkSkip = Array.from({ length: 12 }, () => row(false, '2026-01-01T10:00:00.000Z'))
+    const oneByOne = row(false, '2026-01-01T11:00:00.000Z')
+    expect(carefulTraining([...bulkSkip, oneByOne])).toHaveLength(1)
+  })
+
+  it('keeps a bulk KEEP — KEEP ALL is still her saying yes to those pieces', () => {
+    const bulkKeep = Array.from({ length: 40 }, () => row(true, '2026-01-01T10:00:00.000Z'))
+    expect(carefulTraining(bulkKeep)).toHaveLength(40)
+  })
+
+  it('keeps a keep that lands inside a bulk skip', () => {
+    const second = '2026-01-01T10:00:00.000Z'
+    const rows = [row(true, second), ...Array.from({ length: 10 }, () => row(false, second))]
+    expect(carefulTraining(rows)).toHaveLength(1)
+  })
+
+  it('keeps every one-at-a-time decision, keep or skip', () => {
+    // Three in one second is her moving fast, not a button press.
+    const quick = Array.from({ length: 3 }, (_, i) => row(i % 2 === 0, '2026-01-01T10:00:00.000Z', { autoKept: false }))
+      .map((r, i) => ({ ...r, productName: `piece ${i}` }))
+    expect(carefulTraining(quick)).toHaveLength(3)
+  })
+
+  it('never learns from its own auto-keeps', () => {
+    const autos = Array.from({ length: 5 }, (_, i) => row(true, `2026-01-0${i + 1}T10:00:00.000Z`, { autoKept: true }))
+    expect(carefulTraining(autos)).toHaveLength(0)
   })
 })

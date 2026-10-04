@@ -256,6 +256,44 @@ export interface ConfidenceTrust {
 
 /** More decisions than this in one second is a bulk action, not a judgement. */
 const BULK_PER_SECOND = 3
+
+/**
+ * The decisions a model may be FITTED on: everything except a BULK SKIP.
+ *
+ * Why (measured 2026-10-04). The models trained on every decision she had ever
+ * made, and more than half of those were skips pressed in one go — the season
+ * retirements that clear a brand's whole out-of-season queue. A season
+ * retirement says "this is last summer"; it never says "I would not keep
+ * this". Training on them dragged her base rate from the 84% she keeps when a
+ * piece is actually in front of her down to 41%, and every number in the queue
+ * came down with it. Sea, New York read 7–37% sure on pieces she then kept one
+ * after another, which is the complaint that found this.
+ *
+ * A bulk KEEP is different and stays: it is still her saying yes to those
+ * pieces, which is why the broad trust reading has always counted it.
+ *
+ * Measured on her one-at-a-time decisions, against fitting on everything:
+ *
+ *   within-brand AUC   0.641 → 0.697     Sea, New York AUC   0.626 → 0.732
+ *   it says on average 51.7% → 86.9%     against the 84.3% she actually kept
+ *
+ * Dropping bulk keeps too ranks a shade better (0.720) but then reads 11
+ * points UNDER what she does, and it costs five brands their automation —
+ * their proof was bulk keeps. This rule costs one, Isabel Marant, which
+ * deserved it: measured honestly it is right 82% of the time, under the 90%
+ * bar, and its old proof was the model being credited for predicting her own
+ * KEEP ALL.
+ */
+export function carefulTraining<T extends { at: string; autoKept?: boolean; kept?: boolean }>(decisions: T[]): T[] {
+  const perSecond = new Map<string, number>()
+  for (const d of decisions) {
+    const k = (d.at ?? '').slice(0, 19)
+    perSecond.set(k, (perSecond.get(k) ?? 0) + 1)
+  }
+  return decisions.filter((d) => !d.autoKept
+    && ((perSecond.get((d.at ?? '').slice(0, 19)) ?? 0) <= BULK_PER_SECOND || d.kept === true))
+}
+
 export const CONFIDENCE_MIN_PREDICTIONS = 12
 /** The broad reading counts bulk keeps, so it needs more before it is trusted. */
 export const BROAD_MIN_PREDICTIONS = 40
@@ -286,9 +324,10 @@ export function summariseConfidence(careful: number, predictions: number, right:
 
 /**
  * Walk forward over one brand's decisions: fit on everything decided before a
- * chunk, then ask what the model would have done with that chunk. Only her own
- * one-by-one decisions count as evidence — never a bulk keep, never an
- * auto-keep, because a machine proving itself right proves nothing.
+ * chunk, then ask what the model would have done with that chunk. Fitted
+ * exactly as the live models are (carefulTraining, above), and PROOF is
+ * counted in the mode's own terms — never an auto-keep, because a machine
+ * proving itself right proves nothing.
  */
 export function measureConfidence(
   decisions: ConfidenceDecision[],
@@ -315,7 +354,10 @@ export function measureConfidence(
 
   let carefulSeen = 0, predictions = 0, right = 0
   for (let i = chunk; i < ordered.length; i += chunk) {
-    const past = ordered.slice(0, i).filter((d) => !d.autoKept)
+    // Fitted exactly as the live models are, whichever reading is being
+    // measured: the trust number has to describe the model she is looking at,
+    // not a stricter or looser one.
+    const past = carefulTraining(ordered.slice(0, i))
     if (past.length < 12) continue
     const learn = buildLearning(past)
     const model = fitBrandModel(past.map((d) => ({ kept: d.kept, delta: learn(d).delta, score: d.score })))
