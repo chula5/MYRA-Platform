@@ -29,9 +29,9 @@ import type { ReviewCard, ReviewFilters, ReviewQueueResult, CaseHistory } from '
 
 const PARTITIONS = ['test', 'training', 'validation', 'holdout', 'synthetic'] as const
 const selectCls = 'border border-[#D8D5CF] px-3 py-2 text-[18px] text-[#0A0A0A] bg-white'
-const btnDark = 'border border-[#0A0A0A] bg-[#0A0A0A] text-white px-5 py-2 text-[16px] tracking-[0.14em] hover:opacity-85 disabled:opacity-40'
-const btnLight = 'border border-[#0A0A0A] px-5 py-2 text-[16px] tracking-[0.14em] text-[#0A0A0A] hover:bg-[#F2F2F2] disabled:opacity-40'
-const btnWarn = 'border border-[#B83A3A] px-5 py-2 text-[16px] tracking-[0.14em] text-[#B83A3A] hover:bg-[#FBF3F3] disabled:opacity-40'
+const btnDark = 'border border-[#0A0A0A] bg-[#0A0A0A] text-white px-5 py-2.5 text-[17px] tracking-[0.12em] hover:opacity-85 disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2'
+const btnLight = 'border border-[#0A0A0A] px-5 py-2.5 text-[17px] tracking-[0.12em] text-[#0A0A0A] hover:bg-[#F2F2F2] disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2'
+const btnWarn = 'border border-[#B83A3A] px-5 py-2.5 text-[17px] tracking-[0.12em] text-[#B83A3A] hover:bg-[#FBF3F3] disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2'
 
 type FormState =
   | { kind: 'no'; versionId: string }
@@ -152,7 +152,7 @@ export default function ReviewWorkbench() {
     <div>
       {/* aria-live status for every mutation outcome and validation error */}
       <div aria-live="polite" role="status" className="min-h-[28px]">
-        {msg && <p className="text-[20px] tracking-[0.12em] text-[#9A7B45] mb-4">{msg}</p>}
+        {msg && <p className="text-[20px] tracking-[0.12em] text-[#765D32] mb-4">{msg}</p>}
       </div>
 
       {/* ── Counts + composable filters ─────────────────────────────────── */}
@@ -161,7 +161,7 @@ export default function ReviewWorkbench() {
           QUEUE — {queue.counts.active} ACTIVE · {queue.counts.held} HELD · {queue.counts.reviewed} REVIEWED
         </p>
         <div className="flex flex-wrap items-end gap-4">
-          <label className="flex flex-col gap-1 text-[16px] tracking-[0.1em] text-[#6B6B6B]">
+          <label className="flex flex-col gap-1 text-[18px] tracking-[0.08em] text-[#6B6B6B]">
             PARTITION
             <select className={selectCls} value={filters.partition} onChange={(e) => setFilters({ ...filters, partition: e.target.value })} aria-label="Filter by dataset partition">
               <option value="">ALL PARTITIONS</option>
@@ -170,7 +170,7 @@ export default function ReviewWorkbench() {
               ))}
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-[16px] tracking-[0.1em] text-[#6B6B6B]">
+          <label className="flex flex-col gap-1 text-[18px] tracking-[0.08em] text-[#6B6B6B]">
             STYLIST
             <select className={selectCls} value={filters.stylistId} onChange={(e) => setFilters({ ...filters, stylistId: e.target.value })} aria-label="Filter by selected stylist">
               <option value="">ALL STYLISTS</option>
@@ -179,7 +179,7 @@ export default function ReviewWorkbench() {
               ))}
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-[16px] tracking-[0.1em] text-[#6B6B6B]">
+          <label className="flex flex-col gap-1 text-[18px] tracking-[0.08em] text-[#6B6B6B]">
             CONTEXT
             <select className={selectCls} value={filters.contextType} onChange={(e) => setFilters({ ...filters, contextType: e.target.value })} aria-label="Filter by context type">
               <option value="">ALL CONTEXTS</option>
@@ -187,7 +187,7 @@ export default function ReviewWorkbench() {
               <option value="evaluation_profile">EVALUATION PROFILE</option>
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-[16px] tracking-[0.1em] text-[#6B6B6B]">
+          <label className="flex flex-col gap-1 text-[18px] tracking-[0.08em] text-[#6B6B6B]">
             QUEUE
             <select className={selectCls} value={filters.disposition} onChange={(e) => setFilters({ ...filters, disposition: e.target.value })} aria-label="Filter by queue disposition">
               <option value="active">ACTIVE</option>
@@ -198,7 +198,7 @@ export default function ReviewWorkbench() {
           </label>
           <button className={btnLight} onClick={resetFilters}>RESET FILTERS</button>
         </div>
-        <p className="mt-4 text-[16px] tracking-[0.08em] text-[#6B6B6B]">
+        <p className="mt-4 text-[18px] tracking-[0.06em] text-[#6B6B6B]">
           KEYS:{' '}
           {REVIEW_SHORTCUTS.map((s) => `${s.key} ${s.action === 'yes' ? 'YES' : s.action === 'no' ? 'BEGIN NO' : s.action === 'hold' ? 'HOLD' : s.action === 'history' ? 'HISTORY' : s.action === 'next' ? 'NEXT' : 'PREV'}`).join(' · ')}
           {' '}— INERT WHILE TYPING
@@ -209,7 +209,7 @@ export default function ReviewWorkbench() {
         <p className="text-[18px] tracking-[0.1em] text-[#6B6B6B]">NOTHING IN THIS VIEW — ADJUST OR RESET THE FILTERS.</p>
       )}
 
-      <div className="flex flex-col gap-6">
+      <div data-quality-review-grid className="grid grid-cols-1 gap-6 lg:grid-cols-2 2xl:grid-cols-3 items-start">
         {cards.map((card, idx) => (
           <ReviewCardView
             key={card.candidate_version_id}
@@ -284,15 +284,15 @@ function ReviewCardView({
       aria-label={`Candidate version ${card.version_no}, ${stateLabel.toLowerCase()}, ${card.items.length} items`}
       aria-current={focused ? 'true' : undefined}
       onClick={onFocus}
-      className={`border p-5 ${focused ? 'border-[#0A0A0A]' : 'border-[#E2E0DB]'}`}
+      className={`min-w-0 border p-5 ${focused ? 'border-[#0A0A0A]' : 'border-[#E2E0DB]'}`}
     >
       <div className="flex items-center gap-4 flex-wrap">
         <span className="text-[18px] tracking-[0.14em] text-[#0A0A0A]">
           CANDIDATE V{card.version_no} · {shortId}
           {!card.is_current && <span className="text-[#B83A3A]"> · SUPERSEDED BY A NEWER VERSION</span>}
         </span>
-        <span className="text-[18px] tracking-[0.14em] text-[#9A7B45]">{stateLabel}</span>
-        {focused && <span className="text-[16px] tracking-[0.14em] text-[#6B6B6B]">◂ KEYBOARD FOCUS</span>}
+        <span className="text-[18px] tracking-[0.14em] text-[#765D32]">{stateLabel}</span>
+        {focused && <span className="text-[17px] tracking-[0.12em] text-[#6B6B6B]">◂ KEYBOARD FOCUS</span>}
         {card.rules_only && <RulesOnlyBadge />}
       </div>
 
@@ -303,24 +303,31 @@ function ReviewCardView({
       </p>
 
       {card.has_subjective_check && !card.decision && (
-        <p className="mt-1 text-[16px] tracking-[0.1em] text-[#6B6B6B]">MACHINE CHECK ON FILE — REVEALED ONLY AFTER YOUR DECISION IS SAVED</p>
+        <p className="mt-1 text-[17px] tracking-[0.08em] text-[#6B6B6B]">MACHINE CHECK ON FILE — REVEALED ONLY AFTER YOUR DECISION IS SAVED</p>
       )}
 
       {/* Frozen source items, side by side, in manifest order. No generated
           image exists or is requested anywhere in this view. */}
-      <div className="mt-3 flex gap-3 flex-wrap" role="group" aria-label={`Frozen source items for candidate version ${card.version_no}`}>
+      <div
+        data-quality-source-grid
+        className="mt-4 grid gap-3"
+        style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(11rem, 100%), 1fr))' }}
+        role="group"
+        aria-label={`Frozen source items for candidate version ${card.version_no}`}
+      >
         {card.items.map((it, i) => (
-          <figure key={it.candidate_item_id} className="w-28">
+          <figure key={it.candidate_item_id} className="min-w-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
+              data-quality-source-image
               src={it.source_image_url}
               alt={`Item ${i + 1} of ${card.items.length}, ${it.slot}: ${String(it.item_snapshot?.brand ?? '')} ${String(it.item_snapshot?.item_type ?? 'item')}`.trim()}
-              className="w-28 h-36 object-cover border border-[#EDEBE6]"
+              className="aspect-[4/5] w-full bg-[#F7F6F3] object-contain border border-[#E2E0DB]"
             />
-            <figcaption className="text-[13px] text-[#6B6B6B] mt-1 leading-snug">
+            <figcaption className="text-[16px] text-[#6B6B6B] mt-2 leading-snug">
               {it.slot.toUpperCase()} · {String(it.item_snapshot?.brand ?? '—').toUpperCase()}
               <br />
-              <span className="text-[#A8A8A4]">ITEM {it.candidate_item_id.slice(0, 8)}</span>
+              <span className="text-[#6B6B6B]">ITEM {it.candidate_item_id.slice(0, 8)}</span>
             </figcaption>
           </figure>
         ))}
@@ -329,7 +336,7 @@ function ReviewCardView({
       {/* Decided: the machine result is now revealed for this exact version. */}
       {card.decision && (
         <div className="mt-3 border border-[#EDEBE6] bg-[#FCFCFA] p-3" aria-label="Revealed machine result">
-          <p className="text-[16px] tracking-[0.12em] text-[#6B6B6B]">
+          <p className="text-[17px] tracking-[0.1em] text-[#6B6B6B]">
             YOUR DECISION: {card.decision.toUpperCase()}
             {card.reason_code ? ` — ${reviewReason(card.reason_code)?.label ?? card.reason_code}` : ''}
             {card.decided_item_id ? ` · ITEM ${card.decided_item_id.slice(0, 8)}` : ''}
@@ -337,20 +344,20 @@ function ReviewCardView({
           </p>
           {card.machine && card.machine.length > 0 ? (
             card.machine.map((m, i) => (
-              <p key={i} className="mt-1 text-[16px] tracking-[0.08em] text-[#0A0A0A]">
+              <p key={i} className="mt-1 text-[17px] tracking-[0.07em] text-[#0A0A0A]">
                 MACHINE RESULT (REVEALED AFTER YOUR DECISION): {(m.verdict ?? m.status).toUpperCase()}
                 {typeof m.score === 'number' ? ` · SCORE ${m.score}` : ''}
                 {m.issues ? ` · ${JSON.stringify(m.issues)}` : ''}
               </p>
             ))
           ) : (
-            <p className="mt-1 text-[16px] tracking-[0.08em] text-[#6B6B6B]">MACHINE RESULT: NONE RECORDED FOR THIS VERSION</p>
+            <p className="mt-1 text-[17px] tracking-[0.07em] text-[#6B6B6B]">MACHINE RESULT: NONE RECORDED FOR THIS VERSION</p>
           )}
         </div>
       )}
 
       {card.hold && (
-        <p className="mt-2 text-[16px] tracking-[0.1em] text-[#9A7B45]">
+        <p className="mt-2 text-[17px] tracking-[0.08em] text-[#765D32]">
           ON HOLD BY {card.hold.held_by.slice(0, 8)} · {new Date(card.hold.created_at).toLocaleString()}
           {card.hold.reason ? ` — ${card.hold.reason}` : ''}
         </p>
@@ -723,18 +730,18 @@ function HistoryPanel({ caseId }: { caseId: string }) {
           <ol className="flex flex-col gap-1">
             {history.events.map(({ event, effective, label }) => (
               <li key={event.review_event_id} className="text-[16px] tracking-[0.06em] text-[#0A0A0A]">
-                <span className="text-[#A8A8A4]">{new Date(event.created_at).toLocaleString()} · </span>
+                <span className="text-[#6B6B6B]">{new Date(event.created_at).toLocaleString()} · </span>
                 V{history.versions.find((v) => v.candidate_version_id === event.candidate_version_id)?.version_no ?? '?'} · {label}
                 {event.candidate_item_id ? ` · ITEM ${event.candidate_item_id.slice(0, 8)}` : ''}
                 {event.note ? ` — “${event.note}”` : ''}
                 <span className="text-[#6B6B6B]"> · BY {event.reviewer_user_id.slice(0, 8)}</span>
                 {!effective && <span className="text-[#B83A3A]"> · SUPERSEDED</span>}
-                <span className="text-[#A8A8A4]"> · EVENT {event.review_event_id.slice(0, 8)}</span>
+                <span className="text-[#6B6B6B]"> · EVENT {event.review_event_id.slice(0, 8)}</span>
               </li>
             ))}
             {history.holds.map((h) => (
               <li key={h.hold_id} className="text-[16px] tracking-[0.06em] text-[#6B6B6B]">
-                <span className="text-[#A8A8A4]">{new Date(h.created_at).toLocaleString()} · </span>
+                <span className="text-[#6B6B6B]">{new Date(h.created_at).toLocaleString()} · </span>
                 HELD BY {h.held_by.slice(0, 8)}{h.reason ? ` — ${h.reason}` : ''}
                 {h.released_at ? ` · RELEASED BY ${(h.released_by ?? '').slice(0, 8)} AT ${new Date(h.released_at).toLocaleString()}` : ' · STILL HELD'}
               </li>
