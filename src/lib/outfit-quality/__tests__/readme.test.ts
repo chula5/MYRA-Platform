@@ -67,14 +67,25 @@ describe('README documents setup, operation, and testing (VAL-OPS-002)', () => {
     expect(readme).toMatch(/starts nothing automatically|never create or start work/i)
   })
 
-  it('documents explicit local sequential render draining, approval gating, durable persistence, one retry, and fail-closed attention', () => {
-    expect(readme).toMatch(/exact-version human `?Yes`?/)
-    expect(readme).toMatch(/explicitly and locally/i)
-    expect(readme).toContain('Cloudinary')
-    expect(readme).toMatch(/one corrective retry/i)
-    expect(readme).toMatch(/fails? closed/i)
-    expect(readme).toContain('attention_required')
-    expect(readme).toMatch(/Vercel never drains/i)
+  it('documents the disabled Quality Lab render boundary and composition-only endpoint', () => {
+    expect(readme).toMatch(/composition-only/i)
+    expect(readme).toMatch(/no render, reconcile, fidelity, regeneration, Accepted Images, or image-promotion operation is available in the Quality Lab/i)
+    expect(readme).toMatch(/fail closed/i)
+    expect(readme).toMatch(/review.*canonical composition promotion.*end of the Quality Lab flow/is)
+    expect(readme).toMatch(/internal \(non-live\) `outfit`\/`outfit_item` graph/i)
+
+    // Superseded rendering instructions must not be presented as current steps.
+    expect(readme).not.toMatch(/render draining/i)
+    expect(readme).not.toMatch(/drain action/i)
+    expect(readme).not.toMatch(/one corrective retry/i)
+    expect(readme).not.toContain('attention_required')
+    expect(readme).not.toMatch(/Vercel never drains/i)
+  })
+
+  it('scopes render disablement to Quality Lab and preserves other admin Higgsfield tools', () => {
+    expect(readme).toMatch(/Quality Lab only/i)
+    expect(readme).toMatch(/other admin Higgsfield tools and routes.*remain available and unchanged/i)
+    expect(readme).toContain('/admin/projects')
   })
 
   it('documents partition semantics, unique run IDs, exact ID manifests, and exact cleanup', () => {

@@ -1,24 +1,24 @@
 # MYRA
 
-Internal platform for the MYRA private-stylist service. Next.js 14, Supabase, Anthropic, Cloudinary, and a locally authenticated Higgsfield CLI. See `SETUP.md` for the original environment walkthrough; this README is the operator guide for the **Outfit Quality Lab** added under the Private Stylist admin.
+Internal platform for the MYRA private-stylist service. Next.js 14, Supabase, Anthropic, Cloudinary, and Higgsfield support the wider admin platform. See `SETUP.md` for the original environment walkthrough; this README is the operator guide for the **Outfit Quality Lab** added under the Private Stylist admin.
 
 ## Prerequisites
 
 - Node.js 24 and npm.
 - Access to the connected MYRA Platform Supabase project.
-- The `@higgsfield/cli` installed and authenticated locally (`higgsfield auth token`) for render draining. Rendering is local-only: Vercel never drains the Quality Lab queue.
-- Cloudinary credentials for durable image persistence.
+- An authenticated MYRA admin account.
+- No Higgsfield CLI access is needed to operate or validate the composition-only Quality Lab. Higgsfield and Cloudinary remain in use by unrelated admin tools.
 
 ## Environment variables
 
-Copy `.env.local.example` to `.env.local` and fill in values. The Quality Lab requires these variables to be **named** (values are never committed, logged, or documented):
+Copy `.env.local.example` to `.env.local` and fill in values. Configuration uses the following variable **names**; values are never committed, logged, or documented:
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY` (server only — never exposed to the browser)
 - `ADMIN_USER_ID` (the single admin auth user ID)
 - `ANTHROPIC_API_KEY` (machine checks)
-- `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` (server only; the render pipeline fails closed when they are missing)
+- `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` (server only; used by unrelated media workflows, not by Quality Lab operations)
 - `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME` (existing non-secret public image configuration)
 
 ## Install and run
@@ -42,8 +42,13 @@ Everything is **manual and bounded**. There is no scheduler, no always-on worker
 3. **Generate next chunk** processes at most **25 candidates** per explicit action. Objective checks run first and fail closed; every objective-pass candidate — pass, rejection, or machine-check error — enters human review with the machine verdict hidden until after the human decision.
 4. **Pause / resume** at any time. Pausing blocks new claims while claimed work finishes. Completing a chunk or a batch starts nothing automatically.
 5. **Review** (Review Queue): one `Yes` or a structured `No` with a reason (item-specific reasons retain the affected item). Hold, history, filters, keyboard operation, safe undo, and explicit withdrawal are supported. An edit creates a new candidate version; it never rewrites the old one.
-6. **Render**: only an exact-version human `Yes` can enqueue a render — enforced by the database transaction, not just the UI. Drain the queue **explicitly and locally** (Accepted Images view → drain action, at most 5 jobs sequentially) on the machine with the authenticated Higgsfield CLI. Each render uses the frozen source manifest, persists durably to Cloudinary, then runs the fidelity check against the frozen source items. One conclusive fidelity failure receives exactly one corrective retry; a second failure or any unavailable/errored check fails closed into `attention_required` and stays hidden.
-7. **Accepted Images**: fidelity-passed images are ready without a second review. `Not good enough` removes one with a required reason (image fidelity, image quality, or underlying outfit) and offers explicit regeneration or outfit withdrawal. Approved outfits are promoted once into the internal (non-live) `outfit`/`outfit_item` graph; nothing is published to customer surfaces.
+6. **Promote the approved composition**: an exact-version human `Yes` can promote the source-item composition once into the internal (non-live) `outfit`/`outfit_item` graph. The ordered frozen item membership is preserved, and nothing is rendered or published to customer surfaces. Review and canonical composition promotion are the end of the Quality Lab flow.
+
+### Composition-only render boundary
+
+The current Quality Lab is composition-only. No render, reconcile, fidelity, regeneration, Accepted Images, or image-promotion operation is available in the Quality Lab. Its render-family controls are unavailable, and direct Quality-Lab-specific render-family actions fail closed before provider, storage, queue, or database side effects. Approval authorizes only the canonical source-item composition promotion described above.
+
+This disablement applies to the **Quality Lab only**. Other admin Higgsfield tools and routes remain available and unchanged; for example, the unrelated Higgsfield tools under `/admin/projects` still work. Do not disable or alter shared Higgsfield infrastructure when operating the Quality Lab.
 
 ### Learning scopes
 
@@ -61,7 +66,7 @@ Undo and withdrawal append compensating ledger entries; history is never erased.
 
 ## Dataset partitions and test-data safety
 
-Every batch, case, candidate, check, review, render, projection, and promotion carries an immutable partition: `training`, `validation`, `holdout`, `synthetic`, or `test`.
+Every Quality Lab batch, case, candidate, check, review, projection, and canonical composition promotion carries an immutable partition: `training`, `validation`, `holdout`, `synthetic`, or `test`.
 
 - Automated tests may write **only** `data_partition='test'` rows under a unique `run_id`, recording every inserted ID in an exact manifest.
 - Cleanup deletes **only** those exact IDs, children before parents, via the service-role-only `oq_test_cleanup(table, ids)` RPC. Broad cleanup (delete-all-test, date ranges, prefixes) is forbidden.
