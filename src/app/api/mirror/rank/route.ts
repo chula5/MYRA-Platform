@@ -53,13 +53,17 @@ export async function POST(req: NextRequest) {
   // A shop on the watchlist that no server can read: queue what she is
   // looking at, as she looks at it. The feed never throws and never lets the
   // queue break the ranking she is waiting on.
+  // The count comes back with the ranking so a SCAN IN CHROME can say what
+  // it has queued as it goes.
+  let queued = 0
+  let fedName: string | null = null
   if (host && seen.length) {
     try {
       const admin = createAdminClient() as any
       const fed = await mirrorFedBrandFor(admin, host)
-      if (fed) await queueMirrorProducts(admin, fed, seen)
+      if (fed) { fedName = fed.name; queued = await queueMirrorProducts(admin, fed, seen) }
     } catch { /* the queue is a passenger, never the driver */ }
   }
 
-  return mirrorJson({ member: { name: member.name }, ...ranked, ms: Date.now() - t0 })
+  return mirrorJson({ member: { name: member.name }, ...ranked, queued, fed: fedName, ms: Date.now() - t0 })
 }

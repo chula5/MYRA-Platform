@@ -919,6 +919,39 @@ export async function checkAllBrandsNowInBackground(): Promise<{ started: true }
  * reasoning as keepItems, which had already dropped its revalidate for exactly
  * this reason.
  */
+/** The new-in page SCAN IN CHROME opens for a mirror-fed brand. Empty clears it. */
+export async function setWatchedBrandScanUrl(watchedBrandId: string, url: string): Promise<{ error?: string; scan_url?: string | null }> {
+  await assertAdmin()
+  const admin = createAdminClient() as any
+  const trimmed = url.trim()
+  const scan_url = trimmed ? (/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`).slice(0, 500) : null
+  const { error } = await admin.from('watched_brand').update({ scan_url }).eq('watched_brand_id', watchedBrandId)
+  if (error) return { error: /scan_url/.test(error.message) ? 'Run migration 0089 first' : error.message }
+  return { scan_url }
+}
+
+/**
+ * SCAN IN CHROME: a brand no server can read is read by her Chrome instead.
+ * Marks the card as scanning and hands back the page to open — the brand's
+ * new-in URL with a marker in the fragment that only the extension sees (a
+ * fragment is never sent to the retailer). The extension scrolls and pages
+ * from there and reports through /api/mirror/scan-progress.
+ */
+export async function startMirrorScan(watchedBrandId: string): Promise<{ url?: string; error?: string }> {
+  await assertAdmin()
+  const admin = createAdminClient() as any
+  const { data: w } = await admin.from('watched_brand')
+    .select('watched_brand_id, name, platform, scan_url, scan_state').eq('watched_brand_id', watchedBrandId).maybeSingle()
+  if (!w) return { error: 'Not on the watchlist' }
+  if (w.platform !== 'mirror') return { error: `${w.name} is scanned by a server — use CHECK NOW` }
+  if (!w.scan_url) return { error: `Set ${w.name}'s new-in page first` }
+  await admin.from('watched_brand')
+    .update({ scan_state: { mode: 'mirror', running: true, started_at: new Date().toISOString(), done: 1, total: null, seen: 0, queued: 0 } })
+    .eq('watched_brand_id', watchedBrandId)
+  revalidatePath('/admin/brand-watch')
+  return { url: `${w.scan_url}#myra-scan=${w.watched_brand_id}` }
+}
+
 export async function setWatchedBrandActive(watchedBrandId: string, active: boolean): Promise<void> {
   await assertAdmin()
   const admin = createAdminClient()

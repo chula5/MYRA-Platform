@@ -59,7 +59,13 @@ export interface WatchedBrandRow {
   last_new_count: number
   /** 'mirror' is fed by the extension as she browses — nothing is fetched from a server. */
   platform?: 'shopify' | 'browser' | 'mirror'
-  scan_state?: { running?: boolean; done?: number; total?: number; remaining?: number; started_at?: string } | null
+  scan_state?: {
+    running?: boolean; done?: number; total?: number | null; remaining?: number; started_at?: string
+    /** A SCAN IN CHROME: the extension reports these as it reads the brand's pages. */
+    mode?: 'mirror'; seen?: number; queued?: number; finished_at?: string; error?: string
+  } | null
+  /** The brand's new-in page, which SCAN IN CHROME opens for a mirror-fed brand (migration 0089). */
+  scan_url?: string | null
   /** AUTOMATE: new pieces the learning would keep go straight to the library (migration 0056). */
   auto_keep?: boolean
   auto_keep_since?: string | null

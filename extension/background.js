@@ -269,6 +269,12 @@ const handlers = {
     return json
   },
 
+  /** A SCAN IN CHROME reporting what it has read — the Brand Watch card follows it. */
+  async scanProgress({ watchedBrandId, seen, queued, pages, done, error }) {
+    const { status, json } = await api('/api/mirror/scan-progress', { method: 'POST', body: JSON.stringify({ watchedBrandId, seen, queued, pages, done, error }) })
+    return status === 200 ? json : { error: json?.error || `progress failed (${status})` }
+  },
+
   async pageStats(msg, sender) {
     const tabId = sender?.tab?.id
     if (tabId == null) return { ok: false }

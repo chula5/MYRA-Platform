@@ -11,7 +11,7 @@ import type { TwinTrust } from '@/lib/brand-watch-twins'
 import {
   addWatchedBrandInBackground, checkAllBrandsNowInBackground, checkBrandNowInBackground, fullScanBrandInBackground,
   keepAllForBrandInBackground, keepConfidentNowInBackground, keepShownInBackground, loadBrandJobs,
-  keepItems, loadQueuePage, removeWatchedBrand, setWatchedBrandActive, setWatchedBrandAutoKeep,
+  keepItems, loadQueuePage, removeWatchedBrand, setWatchedBrandActive, setWatchedBrandAutoKeep, setWatchedBrandScanUrl, startMirrorScan,
   setWatchedBrandAutoKeepConfidence, setWatchedBrandConfidenceBar, loadAutoAdded, undoAutoKeep,
   setWatchedBrandAutoKeepAll,
   loadSiteRequests, decideSiteRequest,
@@ -410,7 +410,12 @@ export default function BrandWatchClient(props: Props) {
                       {inQueue} IN QUEUE{w.last_checked_at ? ` · CHECKED ${w.last_checked_at.slice(0, 10)}` : ' · NEVER CHECKED'}
                       {w.platform === 'browser' && ' · BROWSER'}
                       {w.platform === 'mirror' && ' · MIRROR'}
-                      {w.scan_state?.running && (staleScan(w.scan_state)
+                      {w.scan_state?.running && w.scan_state.mode === 'mirror' && (staleScan(w.scan_state)
+                        ? <span className="text-[#B4593A]"> · CHROME SCAN STOPPED — IS THE MIRROR ON FOR THIS SITE?</span>
+                        : <span className="text-[#C4A882]"> · SCANNING IN CHROME · PAGE {w.scan_state.done ?? 1} · {w.scan_state.seen ?? 0} SEEN · {w.scan_state.queued ?? 0} QUEUED</span>)}
+                      {!w.scan_state?.running && w.scan_state?.mode === 'mirror' && w.scan_state.finished_at && (
+                        <span className="text-[#3D6B45]"> · LAST CHROME SCAN {w.scan_state.seen ?? 0} SEEN · {w.scan_state.queued ?? 0} QUEUED</span>)}
+                      {w.scan_state?.running && w.scan_state.mode !== 'mirror' && (staleScan(w.scan_state)
                         ? <span className="text-[#B4593A]"> · SCAN STOPPED PART-WAY — RUN FULL SCAN AGAIN</span>
                         : <span className="text-[#C4A882]"> · SCANNING {job?.scan?.done ?? w.scan_state.done ?? 0}/{job?.scan?.total ?? w.scan_state.total ?? '?'}</span>)}
                       {!w.scan_state?.running && (w.scan_state?.remaining ?? 0) > 0 && <span className="text-[#C4A882]"> · {w.scan_state!.remaining} PAGES LEFT — FULL SCAN TO CONTINUE</span>}
@@ -425,6 +430,20 @@ export default function BrandWatchClient(props: Props) {
                     )}
                   </button>
                   <span className="flex gap-1.5 flex-shrink-0">
+                    {w.platform === 'mirror' ? (
+                      <button
+                        disabled={busyWith(`scan:${id}`) || !w.scan_url}
+                        title={w.scan_url ? 'Opens the new-in page in a new tab; the Mirror scrolls and pages through it and queues what it reads' : 'Set the new-in page below first'}
+                        onClick={() => act(`scan:${id}`, () => startMirrorScan(id), (r) => {
+                          if (r?.error) { setNotice(r.error.toUpperCase()); return }
+                          if (r?.url) window.open(r.url, '_blank', 'noopener')
+                          setNotice(`${w.name.toUpperCase()}: SCANNING IN CHROME — KEEP THAT TAB OPEN; THE CARD FOLLOWS IT`)
+                        })}
+                        className="text-[8px] tracking-[0.1em] text-[#F7F6F3] bg-[#141414] rounded-full px-2.5 py-1 disabled:opacity-40"
+                      >
+                        {busyWith(`scan:${id}`) ? 'OPENING…' : 'SCAN IN CHROME'}
+                      </button>
+                    ) : (<>
                     <button
                       disabled={busyWith(`scan:${id}`)}
                       onClick={() => act(`scan:${id}`, () => checkBrandNowInBackground(id), started)}
@@ -440,6 +459,7 @@ export default function BrandWatchClient(props: Props) {
                     >
                       FULL SCAN
                     </button>
+                    </>)}
                   </span>
                 </div>
                 <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[8px] tracking-[0.1em] text-[#A8A8A4]">
@@ -451,6 +471,16 @@ export default function BrandWatchClient(props: Props) {
                       className="w-10 border border-[#E2E0DB] rounded px-1 py-0.5 text-[9px] text-[#4A4E57] outline-none focus:border-[#0A0A0A]"
                     />
                   </label>
+                  {w.platform === 'mirror' && (
+                    <label className="flex items-center gap-1 min-w-0">
+                      NEW-IN PAGE
+                      <input
+                        type="url" defaultValue={w.scan_url ?? ''} placeholder="https://brand.com/new-in"
+                        onBlur={(e) => { const v = e.target.value.trim(); if (v !== (w.scan_url ?? '')) act(`scanurl:${id}`, () => setWatchedBrandScanUrl(id, v), (r) => { if (r?.error) setNotice(r.error.toUpperCase()); else tweak(id, { scan_url: r?.scan_url ?? null }) }) }}
+                        className="w-56 border border-[#E2E0DB] rounded px-1 py-0.5 text-[9px] text-[#4A4E57] outline-none focus:border-[#0A0A0A]"
+                      />
+                    </label>
+                  )}
                   <button
                     disabled={busyWith(`active:${id}`)}
                     onClick={() => act(`active:${id}`, () => setWatchedBrandActive(id, !w.active), (r) => { if (!r?.error) tweak(id, { active: !w.active }) })}
