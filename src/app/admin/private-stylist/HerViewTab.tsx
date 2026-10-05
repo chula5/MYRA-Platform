@@ -125,6 +125,7 @@ export default function HerViewTab({
               <img src="/myra-logo-black.png" alt="MYRA" className="mx-auto h-[110px] sm:h-[150px] w-auto -mt-12" />
               <RoomNav
                 active={room}
+                showHidden
                 searchPlaceholder="What are you wearing today?"
                 onSelect={(id) => { setRoom(id); setPiece(null) }}
                 onSearch={(q) => { setRoom('all_looks'); setSearch(q) }}
@@ -137,6 +138,7 @@ export default function HerViewTab({
                 <RoomNav
                   active={room}
                   compact
+                  showHidden
                   onSelect={(id) => { setRoom(id); setPiece(null) }}
                   onSearch={(q) => { setRoom('all_looks'); setSearch(q) }}
                 />

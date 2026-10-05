@@ -11,7 +11,12 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { ROOMS, RoomIcon, type RoomId } from './RoomNav'
+import { VISIBLE_ROOMS, RoomIcon, type RoomId } from './RoomNav'
+
+/** Spelled out so Tailwind keeps them: hiding a room changes the count. */
+const TAB_COLUMNS: Record<number, string> = {
+  4: 'grid grid-cols-4', 5: 'grid grid-cols-5', 6: 'grid grid-cols-6', 7: 'grid grid-cols-7',
+}
 
 export default function MobileTabBar({ active }: { active: RoomId }) {
   // Route data can take a moment to arrive on a phone. Keep the tab feedback
@@ -25,8 +30,8 @@ export default function MobileTabBar({ active }: { active: RoomId }) {
       className="fixed bottom-0 inset-x-0 z-40 sm:hidden bg-[rgba(230,230,233,0.92)] backdrop-blur-md border-t border-[rgba(43,43,43,0.18)]"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
-      <div className="grid grid-cols-7">
-        {ROOMS.map((r) => {
+      <div className={TAB_COLUMNS[VISIBLE_ROOMS.length] ?? 'grid grid-cols-7'}>
+        {VISIBLE_ROOMS.map((r) => {
           const on = r.id === selected
           return (
             <Link

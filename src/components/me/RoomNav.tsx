@@ -31,8 +31,28 @@ export const ROOMS: Room[] = [
   { id: 'profile', label: 'You', short: 'You', href: '/me/profile' },
 ]
 
+/**
+ * Rooms that exist but are not shown to her yet — still being built. They keep
+ * their definition, their icon and their page (reachable by typing the address,
+ * and in HER VIEW, so the work can go on); they are only taken out of her
+ * navigation. Empty this list to put one back.
+ */
+export const HIDDEN_ROOMS: RoomId[] = ['magazine']
+
+/** What she is actually offered. */
+export const VISIBLE_ROOMS = ROOMS.filter((r) => !HIDDEN_ROOMS.includes(r.id))
+
 /** The rooms that sit in the row. YOU stands on its own, in the corner. */
-export const ROW_ROOMS = ROOMS.filter((r) => r.id !== 'profile')
+export const ROW_ROOMS = VISIBLE_ROOMS.filter((r) => r.id !== 'profile')
+
+/** Written out in full so Tailwind keeps them — a room hidden changes the count. */
+const ROOM_COLUMNS: Record<number, string> = {
+  3: 'grid-cols-3 sm:grid-cols-3 lg:grid-cols-3',
+  4: 'grid-cols-4 sm:grid-cols-2 lg:grid-cols-4',
+  5: 'grid-cols-5 sm:grid-cols-3 lg:grid-cols-5',
+  6: 'grid-cols-6 sm:grid-cols-3 lg:grid-cols-6',
+  7: 'grid-cols-7 sm:grid-cols-4 lg:grid-cols-7',
+}
 
 const S = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.3, strokeLinecap: 'round', strokeLinejoin: 'round' } as const
 
@@ -189,6 +209,7 @@ export function RoomSearch({
  */
 export default function RoomNav({
   active, onSelect, onSearch, compact = false, searchPlaceholder = 'Search your looks, your pieces, your inspiration',
+  showHidden = false,
 }: {
   active: RoomId
   onSelect?: (id: RoomId) => void
@@ -196,7 +217,10 @@ export default function RoomNav({
   /** Sits in the header beside MYRA, rooms and search on one line to the right. */
   compact?: boolean
   searchPlaceholder?: string
+  /** HER VIEW shows the rooms she cannot see yet, so they can be worked on. */
+  showHidden?: boolean
 }) {
+  const rooms = showHidden ? ROOMS.filter((r) => r.id !== 'profile') : ROW_ROOMS
   const room = (r: Room) => {
     const on = r.id === active
     const inner = (
@@ -223,7 +247,7 @@ export default function RoomNav({
       <div className="flex items-center justify-end gap-4 w-full">
         <RoomSearch variant="header" onSearch={onSearch} placeholder="Search" />
         <nav data-lenis-prevent data-tour="rooms" className="flex items-start gap-1 overflow-x-auto">
-          {ROW_ROOMS.map(room)}
+          {rooms.map(room)}
         </nav>
       </div>
     )
@@ -238,8 +262,8 @@ export default function RoomNav({
         {/* The rooms, spread across the screen. On a phone they are one row
             of icons with no words — the tab bar at the foot carries the same
             six, always a thumb away. */}
-        <nav data-lenis-prevent data-tour="rooms" className="mt-5 sm:mt-9 w-full grid grid-cols-6 sm:grid-cols-3 lg:grid-cols-6 gap-x-1 sm:gap-x-2 gap-y-8 items-start">
-          {ROW_ROOMS.map((r) => {
+        <nav data-lenis-prevent data-tour="rooms" className={`mt-5 sm:mt-9 w-full grid ${ROOM_COLUMNS[rooms.length] ?? ROOM_COLUMNS[6]} gap-x-1 sm:gap-x-2 gap-y-8 items-start`}>
+          {rooms.map((r) => {
             const on = r.id === active
             const inner = (
               <>
