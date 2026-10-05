@@ -27,6 +27,8 @@
 		A1000000000000000000000A /* content.js in Resources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001A /* content.js */; };
 		A1000000000000000000000B /* popup in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000013 /* popup */; };
 		A10000000000000000000050 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000061 /* ShareViewController.swift */; };
+		A10000000000000000000090 /* MirrorBridgePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000092 /* MirrorBridgePlugin.swift */; };
+		A10000000000000000000091 /* MyraViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000093 /* MyraViewController.swift */; };
 		A10000000000000000000051 /* MYRA Share.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A10000000000000000000060 /* MYRA Share.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -90,6 +92,8 @@
 		A10000000000000000000062 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A10000000000000000000063 /* Share Extension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Share Extension.entitlements"; sourceTree = "<group>"; };
 		A10000000000000000000064 /* App Extension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "App Extension.entitlements"; sourceTree = "<group>"; };
+		A10000000000000000000092 /* MirrorBridgePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MirrorBridgePlugin.swift; sourceTree = "<group>"; };
+		A10000000000000000000093 /* MyraViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyraViewController.swift; sourceTree = "<group>"; };
 		A10000000000000000000065 /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -131,6 +135,8 @@
 			children = (
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
+				A10000000000000000000093 /* MyraViewController.swift */,
+				A10000000000000000000092 /* MirrorBridgePlugin.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -326,6 +332,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
+				A10000000000000000000091 /* MyraViewController.swift in Sources */,
+				A10000000000000000000090 /* MirrorBridgePlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

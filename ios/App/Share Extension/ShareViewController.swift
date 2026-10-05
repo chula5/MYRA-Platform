@@ -6,10 +6,10 @@
 //  Instagram and let MYRA find the shop behind it. The sheet asks the server
 //  one question, "what is this?", and shows the answer in a sentence.
 //
-//  The token is the one the Safari extension already holds. It is written to
-//  the shared container when she connects, so this sheet never asks her to
-//  sign in again. Without it, the sheet says so plainly rather than failing
-//  silently.
+//  The token is written to the shared container by the app itself when she
+//  is signed in (App/MirrorBridgePlugin.swift), or by the Safari extension
+//  when she connects there. Either way this sheet never asks her to sign in.
+//  Without it, the sheet says so plainly rather than failing silently.
 //
 
 import UIKit
@@ -143,7 +143,7 @@ final class ShareViewController: UIViewController {
         }
         let group = UserDefaults(suiteName: appGroupId)
         guard let token = group?.string(forKey: "mirrorToken"), !token.isEmpty else {
-            await show("Not connected yet", "Open MYRA, go to your Mirror page and connect, then share again.")
+            await show("Not connected yet", "Open the MYRA app and sign in, then share again.")
             return
         }
         let base = group?.string(forKey: "mirrorApiBase") ?? defaultApiBase
