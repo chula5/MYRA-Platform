@@ -14,6 +14,26 @@ const picksCache = new Map() // same key → { at, data } — the panel reopens 
 // The styling job runs HERE, not in the page: she can walk on to the next
 // product, or the next site, and the panel keeps building on the right.
 let styleJob = null // { id, product, mode, status, looks, hero, error, startedAt }
+// Everything she has had styled, newest first, so the panel is a place to
+// come back to rather than one answer that sits there until it is closed.
+const HISTORY_MAX = 20
+let styleHistory = null // [{ id, product, mode, looks, hero, at }]
+
+async function loadHistory() {
+  if (styleHistory) return styleHistory
+  const stored = await ext.storage.local.get('styleHistory')
+  styleHistory = Array.isArray(stored?.styleHistory) ? stored.styleHistory : []
+  return styleHistory
+}
+
+/** A finished styling joins the history (replacing itself if it is already there). */
+async function remember(job) {
+  if (!job || !(job.looks || []).length) return
+  const list = await loadHistory()
+  const entry = { id: job.id, product: job.product, mode: job.mode, looks: job.looks, hero: job.hero || null, at: job.startedAt || Date.now() }
+  styleHistory = [entry, ...list.filter((h) => h.id !== job.id)].slice(0, HISTORY_MAX)
+  try { await ext.storage.local.set({ styleHistory }) } catch {}
+}
 const tabStats = new Map() // tabId → { host, lifted, total, member, ms }
 
 async function cfg() {
@@ -197,10 +217,11 @@ const handlers = {
     api('/api/mirror/style', { method: 'POST', body }).then(async ({ status, json }) => {
       if (!styleJob || styleJob.id !== id) return // she asked for something else since
       if (status !== 200 || !json || json.error) {
-        styleJob = { ...styleJob, status: 'error', error: json?.error || `MYRA could not style this (${status})` }
+        styleJob = { ...styleJob, status: 'error', dismissed: false, error: json?.error || `MYRA could not style this (${status})` }
       } else {
-        styleJob = { ...styleJob, status: 'done', looks: json.looks || [], hero: json.hero || null, hidden: json.hidden || 0 }
+        styleJob = { ...styleJob, status: 'done', dismissed: false, looks: json.looks || [], hero: json.hero || null, hidden: json.hidden || 0 }
       }
+      await remember(styleJob)
       await saveJob()
     }).catch(async (e) => {
       if (!styleJob || styleJob.id !== id) return
@@ -224,9 +245,47 @@ const handlers = {
   },
 
   async styleClose() {
+    // Closed while still building: the work carries on and lands in her
+    // history; the dot lights once when it is done, not before.
+    if (styleJob && styleJob.status === 'loading') {
+      styleJob = { ...styleJob, dismissed: true }
+      await saveJob()
+      return { ok: true, pending: true }
+    }
     styleJob = null
     await saveJob()
     return { ok: true }
+  },
+
+  /** Everything she has had styled, newest first — the panel's home. */
+  async styleHistory() {
+    const list = await loadHistory()
+    return { items: list.map((h) => ({ id: h.id, product: h.product, mode: h.mode, at: h.at, looks: (h.looks || []).length })) }
+  },
+
+  /** Open one from the history: it becomes the job the panel shows. */
+  async styleOpen({ id }) {
+    const list = await loadHistory()
+    const h = list.find((x) => x.id === id)
+    if (!h) return { error: 'That one is gone from your history' }
+    styleJob = { id: h.id, product: h.product, mode: h.mode, status: 'done', looks: h.looks, hero: h.hero, startedAt: h.at }
+    await saveJob()
+    return { job: styleJob }
+  },
+
+  async styleForget({ id }) {
+    const list = await loadHistory()
+    styleHistory = list.filter((x) => x.id !== id)
+    try { await ext.storage.local.set({ styleHistory }) } catch {}
+    if (styleJob?.id === id) { styleJob = null; await saveJob() }
+    return { ok: true }
+  },
+
+  /** SAVE THIS LOOK TO MYRA — the piece and the look around it, into the app. */
+  async keepLook({ product, look }) {
+    const { status, json } = await api('/api/mirror/keep-look', { method: 'POST', body: JSON.stringify({ product, look }) })
+    if (status !== 200 || !json || (json.error && !json.saved)) return { error: json?.error || `Could not keep this look (${status})` }
+    return { ok: true, ...json }
   },
 
   /** ADD TO MIRROR FAVOURITES — her saved pieces, the same list as /me. */

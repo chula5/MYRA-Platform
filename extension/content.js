@@ -46,7 +46,7 @@
   let menu = null
 
   function closeMenu() { menu?.remove(); menu = null }
-  const onKey = (e) => { if (e.key === 'Escape') { closeMenu(); closePanel(); closePicks() } }
+  const onKey = (e) => { if (e.key === 'Escape') { closeMenu(); closePanel(); closePicks(); stopPicking() } }
   document.addEventListener('keydown', onKey)
   document.addEventListener('click', (e) => { if (menu && !menu.contains(e.target)) closeMenu() }, true)
 
@@ -63,7 +63,7 @@
       b.innerHTML = `<span style="display:block;font-weight:600">${label}</span><span style="display:block;opacity:.62;font-size:12.5px">${hint}</span>`
       b.addEventListener('mouseenter', () => { b.style.background = '#E9E9E6' })
       b.addEventListener('mouseleave', () => { b.style.background = '#F4F4F2' })
-      b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); closeMenu(); startStyling(product, mode) })
+      b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); closeMenu(); stopPicking(); startStyling(product, mode) })
       return b
     }
     menu.append(
@@ -151,47 +151,206 @@
   }
 
   // ── The panel on the right ────────────────────────────────────────────────
+  // One panel, two views. HOME is where the badge opens to: everything MYRA
+  // has styled for her, newest first, and a way to style something on this
+  // page. LOOKS is one styling — the answer to "what do I wear with this?".
   let panel = null
+  let panelView = null // 'home' | 'looks'
+  function hidePanel() { panel?.remove(); panel = null; panelView = null }
   function closePanel() {
-    panel?.remove(); panel = null
+    hidePanel()
+    // The job the panel showed is done with (it stays in her history); one
+    // still building carries on in the worker and lights the dot when done.
     void send({ type: 'styleClose' })
     maybePicksBadge()
   }
-  function openPanel(job) {
+  function ensurePanelEl() {
     closePicks()
+    if (panel) return
+    panel = document.createElement('div')
+    panel.className = 'myra-mirror-panel'
+    panel.style.cssText = `position:fixed;z-index:2147483646;top:12px;right:12px;bottom:12px;width:min(420px,calc(100vw - 24px));background:linear-gradient(160deg,#F7F7F9 0%,#E9E9EC 55%,#DEDEE2 100%);border-radius:24px;box-shadow:0 24px 60px rgba(0,0,0,.26);overflow:hidden auto;font:400 14px/1.4 ${FONT};color:#2B2B2B;transform:translateX(24px);opacity:0;transition:transform .28s ease,opacity .28s ease;`
+    document.body.appendChild(panel)
+    // Slides in from the edge, like her dressing room panel.
+    requestAnimationFrame(() => { if (panel) { panel.style.transform = 'translateX(0)'; panel.style.opacity = '1' } })
+  }
+  function openPanel(job) {
     // Opening the panel answers the dot: whatever was waiting is now in view.
     jobWaiting = false
     badgeMark()
-    if (!panel) {
-      panel = document.createElement('div')
-      panel.className = 'myra-mirror-panel'
-      panel.style.cssText = `position:fixed;z-index:2147483646;top:12px;right:12px;bottom:12px;width:min(420px,calc(100vw - 24px));background:linear-gradient(160deg,#F7F7F9 0%,#E9E9EC 55%,#DEDEE2 100%);border-radius:24px;box-shadow:0 24px 60px rgba(0,0,0,.26);overflow:hidden auto;font:400 14px/1.4 ${FONT};color:#2B2B2B;transform:translateX(24px);opacity:0;transition:transform .28s ease,opacity .28s ease;`
-      document.body.appendChild(panel)
-      // Slides in from the edge, like her dressing room panel.
-      requestAnimationFrame(() => { panel.style.transform = 'translateX(0)'; panel.style.opacity = '1' })
-    }
+    ensurePanelEl()
     renderPanel(job)
   }
+
+  const panelHead = (title, sub, extra = '') => `
+      <div style="position:sticky;top:0;z-index:2;background:rgba(247,247,249,.92);backdrop-filter:blur(8px);padding:18px 18px 12px">
+        <div style="display:flex;gap:12px;align-items:flex-start">
+          <img src="${esc(ext.runtime.getURL('icons/mirror.png'))}" alt="" style="width:26px;height:auto;flex:0 0 auto;margin-top:2px">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;opacity:.5">MYRA <span style="opacity:.55">${esc(loadedVersion ?? '?')}</span></div>
+            <div style="font-size:19px;font-weight:600;line-height:1.2;margin-top:3px;letter-spacing:.01em">${title}</div>
+            <div style="font-size:13px;opacity:.6;margin-top:3px">${sub}</div>
+          </div>
+          <button type="button" data-myra="close" aria-label="Close" style="flex:0 0 auto;width:34px;height:34px;border-radius:50%;border:0;background:#EFEFED;font-size:18px;cursor:pointer;color:#2B2B2B">×</button>
+        </div>
+        ${extra}
+      </div>`
+  const BTN_DARK = `border:0;border-radius:999px;background:#141414;color:#F7F6F3;padding:10px 15px;font:500 12px/1 ${FONT};letter-spacing:.08em;text-transform:uppercase;cursor:pointer;white-space:nowrap`
+  const BTN_LIGHT = `border:0;border-radius:999px;background:#fff;color:#2B2B2B;padding:10px 15px;font:500 12px/1 ${FONT};letter-spacing:.08em;text-transform:uppercase;cursor:pointer;white-space:nowrap;box-shadow:0 2px 10px rgba(43,43,43,.08)`
+
+  const ago = (t) => {
+    const m = Math.max(0, Math.round((Date.now() - Number(t || 0)) / 60000))
+    if (m < 1) return 'just now'
+    if (m < 60) return `${m} min ago`
+    const h = Math.round(m / 60)
+    if (h < 24) return `${h} hr${h === 1 ? '' : 's'} ago`
+    const d = Math.round(h / 24)
+    return `${d} day${d === 1 ? '' : 's'} ago`
+  }
+  const modeLabelOf = (mode) => (mode === 'wardrobe' ? 'with your wardrobe' : 'with new pieces')
+
+  /** HOME — her history, and the way to style something new. */
+  async function openHome() {
+    jobWaiting = false
+    badgeMark()
+    ensurePanelEl()
+    panelView = 'home'
+    renderHome({ loading: true })
+    const [hist, cur] = await Promise.all([send({ type: 'styleHistory' }), send({ type: 'styleJob' })])
+    if (panelView !== 'home' || !panel) return
+    renderHome({ items: hist?.items || [], error: hist?.error || (hist == null ? 'unknown message' : null), job: cur?.job || null })
+  }
+
+  function renderHome(h) {
+    if (!panel || panelView !== 'home') return
+    const head = panelHead('Styled for you', 'Everything MYRA has put together for you — and a way to start again')
+    const piece = pagePiece
+    const actions = `<div style="padding:4px 18px 14px;display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" data-myra="pick" style="${BTN_DARK}">Style something on this page</button>
+        ${pageHasPicks ? `<button type="button" data-myra="picks" style="${BTN_LIGHT}">Your top picks here</button>` : ''}
+      </div>`
+    const here = piece ? `<div style="margin:0 14px 14px;background:rgba(255,255,255,.85);border-radius:18px;padding:12px 14px;box-shadow:0 2px 14px rgba(43,43,43,.08);display:flex;gap:11px;align-items:center">
+        ${piece.image ? `<img src="${esc(piece.image)}" alt="" style="width:46px;height:61px;object-fit:contain;background:#fff;border-radius:6px;flex:0 0 auto">` : ''}
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;opacity:.5">On this page</div>
+          <div style="font-size:14px;font-weight:600;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(piece.title)}</div>
+          <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+            <button type="button" data-myra="style-here" style="${BTN_DARK};padding:8px 12px">What do I wear with this?</button>
+            <button type="button" data-myra="save-here" style="${BTN_LIGHT};padding:8px 12px">♥ Save</button>
+          </div>
+          <div data-myra="said" style="font-size:12px;margin-top:6px;display:none;opacity:.75"></div>
+        </div>
+      </div>` : ''
+    let list = ''
+    if (h.loading) {
+      list = `<div style="padding:6px 18px 20px;font-size:13px;opacity:.6">Looking back…</div>`
+    } else {
+      const building = h.job && (h.job.status === 'loading' || h.job.status === 'partial')
+        ? `<button type="button" data-myra="open-job" style="display:flex;width:calc(100% - 28px);margin:0 14px 10px;gap:11px;align-items:center;text-align:left;border:0;background:rgba(255,255,255,.85);border-radius:18px;padding:12px 14px;cursor:pointer;font:inherit;color:inherit;box-shadow:0 2px 14px rgba(43,43,43,.08)">
+            <span style="width:10px;height:10px;border-radius:50%;background:#141414;flex:0 0 auto;animation:myraPulse 1.2s infinite"></span>
+            <span style="flex:1;min-width:0"><span style="display:block;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(h.job.product?.title || 'A piece')}</span><span style="display:block;font-size:12px;opacity:.6">Building now ${esc(modeLabelOf(h.job.mode))} — tap to watch</span></span>
+          </button><style>@keyframes myraPulse{0%,100%{opacity:1}50%{opacity:.3}}</style>`
+        : ''
+      const items = (h.items || []).filter((it) => !(h.job && building && it.id === h.job.id))
+      const rows = items.map((it) => `
+        <div style="display:flex;gap:11px;align-items:center;margin:0 14px 8px;background:rgba(255,255,255,.85);border-radius:18px;padding:10px 12px;box-shadow:0 2px 14px rgba(43,43,43,.08)">
+          <button type="button" data-myra-open="${esc(it.id)}" style="display:flex;flex:1;min-width:0;gap:11px;align-items:center;text-align:left;border:0;background:transparent;padding:0;cursor:pointer;font:inherit;color:inherit">
+            ${it.product?.image ? `<img src="${esc(it.product.image)}" alt="" style="width:46px;height:61px;object-fit:contain;background:#fff;border-radius:6px;flex:0 0 auto">` : `<span style="width:46px;height:61px;border-radius:6px;background:#E4E2DD;flex:0 0 auto"></span>`}
+            <span style="flex:1;min-width:0">
+              <span style="display:block;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.product?.title || 'A piece')}</span>
+              <span style="display:block;font-size:12px;opacity:.6;margin-top:2px">${esc(it.product?.brand || '')}${it.product?.brand ? ' · ' : ''}${esc(modeLabelOf(it.mode))}</span>
+              <span style="display:block;font-size:11.5px;opacity:.5;margin-top:2px">${it.looks} look${it.looks === 1 ? '' : 's'} · ${esc(ago(it.at))}</span>
+            </span>
+          </button>
+          <button type="button" data-myra-forget="${esc(it.id)}" aria-label="Remove from history" title="Remove from history" style="flex:0 0 auto;width:28px;height:28px;border:0;border-radius:50%;background:#EFEFED;color:#55534E;font-size:14px;cursor:pointer">×</button>
+        </div>`).join('')
+      const empty = !building && !items.length
+        ? `<div style="padding:6px 18px 20px;font-size:14px;opacity:.7">${h.error ? esc(friendly(h.error)) : 'Nothing styled yet. Pick a piece on this page and ask what to wear with it.'}</div>`
+        : ''
+      list = `${building || items.length ? `<div style="font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;opacity:.5;padding:4px 18px 10px">Styled</div>` : ''}${building}${rows}${empty}<div style="height:12px"></div>`
+    }
+    panel.innerHTML = head + actions + here + list
+    panel.querySelector('[data-myra="close"]')?.addEventListener('click', closePanel)
+    panel.querySelector('[data-myra="pick"]')?.addEventListener('click', startPicking)
+    panel.querySelector('[data-myra="picks"]')?.addEventListener('click', () => { hidePanel(); openPicks() })
+    panel.querySelector('[data-myra="open-job"]')?.addEventListener('click', async () => {
+      const cur = await send({ type: 'styleJob' })
+      if (cur?.job) openPanel(cur.job)
+    })
+    panel.querySelector('[data-myra="style-here"]')?.addEventListener('click', (e) => { if (piece) openMenu(e.currentTarget, piece) })
+    panel.querySelector('[data-myra="save-here"]')?.addEventListener('click', async (e) => {
+      const b = e.currentTarget
+      const said = panel?.querySelector('[data-myra="said"]')
+      const say = (t) => { if (said) { said.style.display = 'block'; said.textContent = t } }
+      b.disabled = true
+      say('Saving…')
+      const r = await savePiece(piece)
+      if (r?.error) { say(friendly(r.error)); b.disabled = false; return }
+      b.textContent = '♥ Saved'
+      say('In your saved pieces — MYRA watches its stock.')
+    })
+    panel.querySelectorAll('[data-myra-open]').forEach((b) => b.addEventListener('click', async () => {
+      const r = await send({ type: 'styleOpen', id: b.dataset.myraOpen })
+      if (r?.job) { panelView = 'looks'; openPanel(r.job) }
+      else if (r?.error) { b.title = friendly(r.error) }
+    }))
+    panel.querySelectorAll('[data-myra-forget]').forEach((b) => b.addEventListener('click', async () => {
+      await send({ type: 'styleForget', id: b.dataset.myraForget })
+      openHome()
+    }))
+  }
+
+  // ── STYLE SOMETHING ON THIS PAGE ──────────────────────────────────────────
+  // The panel steps aside and the page becomes the menu: tap any piece and
+  // the two ways to style it appear. A guide at the bottom says so, and goes
+  // the moment she has chosen (or closed it).
+  let picking = false, guide = null
+  function stopPicking() { picking = false; guide?.remove(); guide = null }
+  function startPicking() {
+    hidePanel()
+    picking = true
+    guide?.remove()
+    guide = document.createElement('div')
+    guide.className = 'myra-mirror-guide'
+    guide.style.cssText = `position:fixed;z-index:2147483646;left:50%;bottom:16px;transform:translateX(-50%);max-width:calc(100vw - 32px);background:#141414;color:#F7F6F3;border-radius:999px;padding:11px 14px 11px 16px;box-shadow:0 14px 40px rgba(0,0,0,.3);font:500 13px/1.3 ${FONT};display:flex;gap:12px;align-items:center;`
+    const text = pagePiece
+      ? 'Tap a piece to style it — or this page’s own piece, below.'
+      : productOf.size
+        ? 'Tap a piece to style it.'
+        : 'Open a piece, or a page of pieces, then tap one to style it.'
+    guide.innerHTML = `<span>${esc(text)}</span><button type="button" aria-label="Stop" style="border:0;background:rgba(255,255,255,.14);color:#F7F6F3;width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:15px;line-height:26px;padding:0">×</button>`
+    guide.querySelector('button').addEventListener('click', stopPicking)
+    document.body.appendChild(guide)
+    // A product page has one piece: its card, with the question on it.
+    if (pagePiece) showPiece(pagePiece, 'badge')
+  }
+  document.addEventListener('click', (e) => {
+    if (!picking) return
+    if (guide?.contains(e.target) || pill?.contains(e.target) || menu?.contains(e.target) || badge?.contains(e.target)) return
+    for (const [el, product] of productOf) {
+      if (!el.isConnected || !el.contains(e.target)) continue
+      e.preventDefault(); e.stopPropagation()
+      stopPicking()
+      openMenu(el, { ...product, image: product.image || tileImage(el) })
+      return
+    }
+  }, true)
 
   const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
 
   let panelJob = null
   function renderPanel(job) {
-    if (!job) { panel?.remove(); panel = null; panelJob = null; return }
+    if (!job) { if (panelView === 'looks') hidePanel(); panelJob = null; return }
     panelJob = job
+    panelView = 'looks'
     if (!panel) openPanel(job)
     if (!panel) return
-    const modeLabel = job.mode === 'wardrobe' ? 'with your wardrobe' : 'with new pieces'
-    const head = `
-      <div style="position:sticky;top:0;background:rgba(247,247,249,.92);backdrop-filter:blur(8px);padding:18px 18px 12px;display:flex;gap:12px;align-items:flex-start;">
-        <img src="${esc(ext.runtime.getURL('icons/mirror.png'))}" alt="" style="width:26px;height:auto;flex:0 0 auto;margin-top:2px">
-        <div style="flex:1;min-width:0">
-          <div style="font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;opacity:.5">MYRA <span style="opacity:.55">${esc(loadedVersion ?? '?')}</span></div>
-          <div style="font-size:19px;font-weight:600;line-height:1.2;margin-top:3px;letter-spacing:.01em">What to wear with this</div>
-          <div style="font-size:13px;opacity:.6;margin-top:3px">${esc(job.product?.title || '')} — ${esc(modeLabel)}</div>
-        </div>
-        <button type="button" data-myra="close" aria-label="Close" style="flex:0 0 auto;width:34px;height:34px;border-radius:50%;border:0;background:#EFEFED;font-size:18px;cursor:pointer;color:#2B2B2B">×</button>
+    const modeLabel = modeLabelOf(job.mode)
+    const nav = `<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button type="button" data-myra="home" style="${BTN_LIGHT}">← All styled</button>
+        <button type="button" data-myra="pick" style="${BTN_DARK}">Style something new</button>
       </div>`
+    const head = panelHead('What to wear with this', `${esc(job.product?.title || '')} — ${esc(modeLabel)}`, nav)
 
     let body = ''
     if (job.status === 'partial') {
@@ -216,7 +375,52 @@
     }
     panel.innerHTML = head + body
     panel.querySelector('[data-myra="close"]')?.addEventListener('click', closePanel)
+    panel.querySelector('[data-myra="home"]')?.addEventListener('click', openHome)
+    panel.querySelector('[data-myra="pick"]')?.addEventListener('click', startPicking)
     panel.querySelectorAll('[data-myra-keep]').forEach((b) => b.addEventListener('click', keepFromPanel))
+    panel.querySelectorAll('[data-myra-keep-look]').forEach((b) => b.addEventListener('click', keepLookFromPanel))
+  }
+
+  /** SAVE THIS LOOK TO MYRA. Through the worker when it knows how, else straight to MYRA. */
+  async function keepLook(product, look) {
+    const body = { product, look: (look.items || []).map((p) => ({ item_id: p.item_id || null, product_name: p.product_name || null, brand: p.brand || null, image_url: p.image_url || null, url: p.url || null, owned: !!p.owned })) }
+    const r = await send({ type: 'keepLook', ...body })
+    if (r && !r.error) return r
+    if (r && !/unknown message/i.test(String(r.error))) return r
+    const t = await creds()
+    if (!t?.token) return { error: `Connect MYRA first · ${RELOAD_NOTE}` }
+    try {
+      const res = await fetch(`${(t.apiBase || API).replace(/\/+$/, '')}/api/mirror/keep-look`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t.token}` },
+        body: JSON.stringify(body),
+      })
+      return await res.json()
+    } catch (err) { return { error: String(err?.message || err) } }
+  }
+
+  async function keptLookButton(btn, product, look) {
+    if (!product?.url || !look) return
+    btn.disabled = true
+    btn.textContent = 'Saving to MYRA…'
+    const r = await keepLook(product, look)
+    if (r?.error && !r?.outfit_id) {
+      btn.disabled = false
+      btn.textContent = 'Save this look to MYRA'
+      btn.title = friendly(r.error)
+      btn.style.color = '#9B3A3A'
+      return
+    }
+    btn.textContent = r?.saved > 1 ? `Saved to MYRA · ${r.saved} pieces kept` : 'Saved to MYRA'
+    btn.style.background = '#141414'
+    btn.style.color = '#F7F6F3'
+    btn.title = 'In your outfits in the Dressing Room, and each piece in your saved pieces'
+  }
+
+  async function keepLookFromPanel(e) {
+    e.preventDefault(); e.stopPropagation()
+    const i = Number(e.currentTarget.dataset.myraKeepLook)
+    await keptLookButton(e.currentTarget, panelJob?.product, panelJob?.looks?.[i])
   }
 
   /** ♥ on a piece inside a look — the same save as a heart on a tile. */
@@ -272,6 +476,7 @@
       <div style="padding:11px 14px 12px">
         <div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;opacity:.5">${esc(look.occasion_label || `Look ${i + 1}`)}${own ? ` · ${own} of your own` : ''}</div>
         ${look.why ? `<div style="font-size:13.5px;opacity:.72;margin-top:5px;line-height:1.35">${esc(look.why)}</div>` : ''}
+        <button type="button" data-myra-keep-look="${i}" style="${BTN_LIGHT};margin-top:10px;background:#F4F4F2;box-shadow:none">Save this look to MYRA</button>
       </div>
     </div>`
   }
@@ -376,6 +581,12 @@
     picksPanel.innerHTML = head + body
     picksPanel.querySelector('[data-myra="close"]')?.addEventListener('click', () => { closePicks(); maybePicksBadge() })
     picksPanel.querySelectorAll('[data-myra-keep]').forEach((b) => b.addEventListener('click', keepFromPicks))
+    picksPanel.querySelectorAll('[data-myra-keep-look]').forEach((b) => b.addEventListener('click', async (e) => {
+      e.preventDefault(); e.stopPropagation()
+      const pick = picksJob?.picks?.[Number(e.currentTarget.dataset.myraKeepLook)]
+      if (!pick) return
+      await keptLookButton(e.currentTarget, { url: pick.url, title: pick.title, brand: pick.brand || null, price: typeof pick.price === 'number' ? pick.price : null, image: pick.image || null }, pick.look)
+    }))
   }
 
   /** One pick: why it is here, the piece itself, and one look around it. */
@@ -454,21 +665,24 @@
   }
 
   /**
-   * The one door in. What a click opens depends on what there is to open, in
-   * the order she would want it: the styling she asked for first, then this
-   * page's own piece, then MYRA's picks from this page, then simply the
-   * first piece the page has. Clicking while what it opened is showing
-   * closes it again — nothing is ever stuck on screen.
+   * The one door in. A styling that has just finished opens first; otherwise
+   * the panel opens on everything she has had styled, with this page's own
+   * piece, its picks and "style something on this page" one tap away.
+   * Clicking while something is showing closes it again — nothing is ever
+   * stuck on screen, and nothing old opens itself twice.
    */
   async function badgeClick() {
     if (panel) { closePanel(); return }
     if (picksPanel) { closePicks(); return }
     if (pill) { hidePiece(); return }
-    const waiting = await send({ type: 'styleJob' })
-    if (waiting?.job) { openPanel(waiting.job); return }
-    if (pagePiece) { showPiece(pagePiece, 'badge'); return }
-    if (pageHasPicks) { openPicks(); return }
-    if (pageProducts.length) { showPiece(pageProducts[0], 'badge'); return }
+    if (picking) { stopPicking(); return }
+    // A styling that just landed opens straight away; otherwise the panel
+    // opens on her history, with this page's piece and picks a tap away.
+    if (jobWaiting) {
+      const waiting = await send({ type: 'styleJob' })
+      if (waiting?.job && waiting.job.status !== 'loading') { openPanel(waiting.job); return }
+    }
+    openHome()
   }
 
   if (document.body) makeBadge()
@@ -770,6 +984,7 @@
     clearInterval(navSettle)
     hidePiece()
     hidePicksBadge()
+    stopPicking()
     // The picks the dot stood for belonged to the page she just left.
     maybePicksBadge()
     // The shop writes the new piece a beat after the address changes. Watch
@@ -838,7 +1053,7 @@
       // longer opens itself — it lights the badge's dot until she asks.
       if (!panel) {
         const waiting = await send({ type: 'styleJob' })
-        if (waiting?.job && waiting.job.status !== 'loading') { jobWaiting = true; badgeMark() }
+        if (waiting?.job && waiting.job.status !== 'loading' && !waiting.job.dismissed) { jobWaiting = true; badgeMark() }
       }
       const top = res.products.filter((p) => p.score >= LIFT_MIN).sort((a, b) => b.score - a.score).slice(0, 6)
         .map((p) => ({ brand: p.brand, title: (details.get(p.key) || {}).title || p.key, confidence: p.confidence, why: WHY[p.why] || '', fit: FIT[p.fit] || '' }))
@@ -868,14 +1083,15 @@
     timer = setTimeout(run, Date.now() - lastRunAt > MAX_WAIT ? 0 : 500)
   }
   onMessage((msg) => {
-    if (msg?.type === 'restore') { observer.disconnect(); closeMenu(); closePicks(); hidePiece(); restore() }
+    if (msg?.type === 'restore') { observer.disconnect(); closeMenu(); closePicks(); hidePiece(); stopPicking(); hidePanel(); restore() }
     // A panel she already opened keeps being written into as the job builds.
     // One she has not opened stays shut — a finished job lights the badge's
     // dot instead, and on a page that is not a shop it simply waits in the
     // worker for the next shop page.
     if (msg?.type === 'styleUpdate') {
-      if (panel) renderPanel(msg.job)
-      else if ((pagePiece || productOf.size) && msg.job?.status !== 'loading') { jobWaiting = true; badgeMark() }
+      if (panel && panelView === 'home') { if (msg.job?.status !== 'loading') openHome() }
+      else if (panel) renderPanel(msg.job)
+      else if ((pagePiece || productOf.size) && msg.job && msg.job.status !== 'loading' && !msg.job.dismissed) { jobWaiting = true; badgeMark() }
     }
     if (msg?.type === 'rerun') { lastSig = ''; observer.observe(document.body, { childList: true, subtree: true }); schedule() }
   })
@@ -892,6 +1108,6 @@
   // it. Anywhere else it waits in the worker rather than interrupting, and
   // the next shop page picks it up.
   const inFlight = await send({ type: 'styleJob' })
-  if (inFlight?.job && (panel || pagePiece || productOf.size) && inFlight.job.status !== 'loading') { jobWaiting = true; badgeMark() }
+  if (inFlight?.job && (panel || pagePiece || productOf.size) && inFlight.job.status !== 'loading' && !inFlight.job.dismissed) { jobWaiting = true; badgeMark() }
   observer.observe(document.body, { childList: true, subtree: true })
 })()
