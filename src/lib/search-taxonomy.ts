@@ -254,6 +254,9 @@ export interface ParsedQuery {
   // Each group is one CONCEPT's synonyms (e.g. italy → [mediterranean,italy,amalfi]).
   // A group "hits" if ANY of its words match — so synonyms don't dilute the score.
   occasionGroups: string[][]
+  /** Seasons she named or implied ("winter", "beach wedding" → summer), as
+   *  their own facet so a single PIECE can be held to them, not only a look's tags. */
+  seasons: string[]
   formalityRange: [number, number] | null
   timeOfDay: number | null
   intentTerms: string[]
@@ -265,7 +268,7 @@ export function parseQuery(raw: string, knownBrands: string[] = []): ParsedQuery
   let text = normalise(raw)
   const p: ParsedQuery = {
     colourFamilies: [], itemTypes: [], materials: [], brand: null,
-    occasionGroups: [], formalityRange: null, timeOfDay: null, intentTerms: [], raw,
+    occasionGroups: [], seasons: [], formalityRange: null, timeOfDay: null, intentTerms: [], raw,
   }
 
   const consume = (phrase: string) => { text = text.replace(new RegExp(`\\b${phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g'), ' ').replace(/\s+/g, ' ').trim() }
@@ -308,7 +311,7 @@ export function parseQuery(raw: string, knownBrands: string[] = []): ParsedQuery
     const rule = fuzzyGet(OCCASION_RULES, tok); if (rule) { applyRule(p, addGroup, rule); continue }
     const o = fuzzyGet(OCCASION, tok); if (o) { addGroup(o); continue }
     const s = fuzzyGet(SETTING, tok); if (s) { addGroup(s); continue }
-    if (SEASON.includes(tok)) { addGroup([tok === 'fall' ? 'autumn' : tok]); continue }
+    if (SEASON.includes(tok)) { const season = tok === 'fall' ? 'autumn' : tok; addGroup([season]); add(p.seasons, [season]); continue }
     const f = fuzzyGet(FORMALITY, tok); if (f) { p.formalityRange = mergeRange(p.formalityRange, f); continue }
     const td = fuzzyGet(TIME, tok); if (td != null) { p.timeOfDay = td; continue }
     if (tok.length > 2) p.intentTerms.push(tok) // leftover adjective → soft signal
@@ -333,7 +336,7 @@ function applyHit(p: ParsedQuery, add: (a: string[], v: string[]) => void, addGr
 // formality range + time-of-day.
 function applyRule(p: ParsedQuery, addGroup: (v: string[]) => void, rule: OccasionRule) {
   if (rule.groups) for (const g of rule.groups) addGroup(g)
-  if (rule.seasons) for (const s of rule.seasons) addGroup([s])
+  if (rule.seasons) for (const s of rule.seasons) { addGroup([s]); if (!p.seasons.includes(s)) p.seasons.push(s) }
   if (rule.formality) p.formalityRange = mergeRange(p.formalityRange, rule.formality)
   if (rule.time != null) p.timeOfDay = rule.time
 }

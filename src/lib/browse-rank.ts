@@ -19,6 +19,12 @@ export interface RankablePiece {
   colour_family?: string | null
   material_primary?: string | null
   material_formality?: number | null
+  /** 1 sheer … 5 structural. */
+  material_weight?: number | null
+  /** 1 sleeveless … 5 full long sleeve. */
+  sleeve?: number | null
+  /** 1 none … 5 statement pattern. */
+  pattern?: number | null
   status?: string | null
   brand_id?: string | null
   brand?: { name?: string | null } | null
@@ -48,7 +54,62 @@ export function hasWord(hay: string | null | undefined, needle: string): boolean
 /** The facets her words carried — what a piece will be held to. */
 export function facetCount(p: ParsedQuery): number {
   return (p.brand ? 1 : 0) + (p.itemTypes.length ? 1 : 0) + (p.colourFamilies.length ? 1 : 0)
-    + (p.materials.length ? 1 : 0) + (p.formalityRange ? 1 : 0)
+    + (p.materials.length ? 1 : 0) + (p.formalityRange ? 1 : 0) + (p.seasons.length ? 1 : 0)
+}
+
+// ── Seasons ───────────────────────────────────────────────────────────────────
+//
+// A piece has no season tag, so the season is read off the piece itself: its
+// colour, how heavy its cloth is, how long its sleeve, and the words on its
+// label. Winter is dark colours and weight — velvet, wool, knit, leather,
+// long sleeves; it is never linen, a sundress, a sheer or a summer print.
+// Summer is the mirror. Autumn and spring sit between, and are only held to
+// what plainly belongs to the other end of the year.
+
+const WINTER_COLOURS = new Set(['black', 'navy', 'burgundy', 'brown', 'grey', 'green', 'purple', 'red', 'camel'])
+const SUMMER_COLOURS = new Set(['white', 'cream', 'yellow', 'pink', 'orange', 'blue', 'multicolour'])
+const HEAVY_WORDS = ['velvet', 'velour', 'wool', 'merino', 'cashmere', 'knit', 'knitted', 'rib', 'ribbed', 'mohair', 'alpaca', 'tweed', 'bouclé', 'boucle', 'leather', 'suede', 'shearling', 'fur', 'brocade', 'jacquard', 'corduroy', 'flannel', 'felt', 'quilted', 'padded', 'turtleneck', 'roll neck', 'rollneck', 'polo neck', 'funnel neck', 'long sleeve', 'long-sleeve', 'long sleeved', 'winter', 'thermal', 'fleece', 'tartan', 'plaid', 'check']
+const LIGHT_WORDS = ['linen', 'chiffon', 'organza', 'voile', 'seersucker', 'broderie', 'eyelet', 'crochet', 'poplin', 'gauze', 'cheesecloth', 'muslin', 'sundress', 'sun dress', 'beach', 'swim', 'bikini', 'resort', 'holiday', 'summer', 'floral', 'print', 'printed', 'tropical', 'gingham', 'sheer', 'raffia', 'straw', 'espadrille', 'sandal', 'short sleeve', 'short-sleeve', 'cap sleeve', 'sleeveless', 'strappy', 'halter']
+
+/** The pieces a season reads off a label: ≥1 means it belongs, ≤ -1 means it plainly does not. */
+export function seasonSignal(it: RankablePiece, season: string): number {
+  const name = String(it.product_name ?? '').toLowerCase()
+  const cloth = String(it.material_primary ?? '').toLowerCase()
+  const text = `${name} ${cloth}`
+  const heavyWord = HEAVY_WORDS.some((w) => hasWord(text, w))
+  const lightWord = LIGHT_WORDS.some((w) => hasWord(text, w))
+  const weight = typeof it.material_weight === 'number' ? it.material_weight : null
+  const sleeve = typeof it.sleeve === 'number' ? it.sleeve : null
+  const pattern = typeof it.pattern === 'number' ? it.pattern : null
+  const colour = String(it.colour_family ?? '')
+  const heavy = heavyWord || (weight != null && weight >= 4)
+  const light = lightWord || (weight != null && weight <= 1)
+
+  // How wintry the piece reads, as a sum of what can be seen on it.
+  let cold = 0
+  if (heavy) cold += 2
+  else if (weight != null && weight >= 3) cold += 1
+  if (light) cold -= 2
+  else if (weight != null && weight <= 2 && !heavy) cold -= 1
+  if (WINTER_COLOURS.has(colour)) cold += 1
+  if (SUMMER_COLOURS.has(colour)) cold -= 1
+  if (sleeve != null && sleeve >= 4) cold += 1
+  if (sleeve != null && sleeve <= 2 && !heavy) cold -= 1
+  if (pattern != null && pattern >= 4 && !heavy) cold -= 1
+
+  switch (season) {
+    case 'winter': return cold
+    case 'autumn': return cold + 1
+    case 'summer': return -cold
+    case 'spring': return -cold + 1
+    default: return 0
+  }
+}
+
+/** Does the piece belong to the season she named? A dark, heavy, long-sleeved
+ *  piece is winter; a striped linen dress, a white mini, a floral print are not. */
+export function seasonFits(it: RankablePiece, season: string): boolean {
+  return seasonSignal(it, season) >= 1
 }
 
 /**
@@ -84,8 +145,12 @@ export function scorePiece(it: RankablePiece, p: ParsedQuery, ctx: RankContext):
   }
   if (p.materials.length) part(p.materials.some((m) => hasMaterial(it, m)))
   if (p.formalityRange) part(formalityFits(it, p.formalityRange))
+  if (p.seasons.length) part(p.seasons.some((season) => seasonFits(it, season)))
 
   let bonus = 0
+  // Within the season, the most seasonal first: a velvet long sleeve over a
+  // dark short sleeve for winter.
+  if (p.seasons.length) bonus += 0.04 * Math.max(0, Math.min(5, Math.max(...p.seasons.map((season) => seasonSignal(it, season)))))
   if (p.intentTerms.length) {
     const hit = p.intentTerms.filter((t) => hasWord(name, t) || hasWord(it.material_primary, t)).length
     bonus += 0.3 * (hit / p.intentTerms.length)

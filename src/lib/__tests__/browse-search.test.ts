@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { parseQuery, hasMaterial, estimateItemFormality } from '@/lib/search-taxonomy'
-import { rankPieces, facetCount } from '@/lib/browse-rank'
+import { rankPieces, facetCount, seasonFits } from '@/lib/browse-rank'
 
 const ctx = (brandIds: string[] = [], words: string[] = [], needle = '') => ({ brandIds: new Set(brandIds), words, needle })
 
@@ -112,5 +112,29 @@ describe('rankPieces holds every facet as a requirement', () => {
     const r = rankPieces([a, b, c], p, ctx([], ['brera'], 'brera'))
     expect(r.exact.map((s) => s.it.item_id).sort()).toEqual(['a', 'b'])
     expect(r.similar).toEqual([])
+  })
+
+  it('winter dress: dark and heavy pieces are winter; linen, a white mini and a summer print are not', () => {
+    const linen = { item_id: 'l', product_name: 'DB x Wyse linen dress', item_type: 'midi_dress', colour_family: 'blue', material_primary: 'linen' }
+    const whiteMini = { item_id: 'w', product_name: 'Alfie dress', item_type: 'mini_dress', colour_family: 'white', material_weight: 2, sleeve: 2 }
+    const print = { item_id: 'p', product_name: 'Embroidered printed dress', item_type: 'midi_dress', colour_family: 'cream', pattern: 4, sleeve: 1 }
+    const velvet = { item_id: 'v', product_name: 'Manon jacquard dress', item_type: 'maxi_dress', colour_family: 'brown', material_primary: 'velvet', sleeve: 5 }
+    const blackLong = { item_id: 'b', product_name: 'Gallardo midi dress', item_type: 'midi_dress', colour_family: 'brown', material_weight: 3, sleeve: 4 }
+    const blackShort = { item_id: 'k', product_name: 'Carla dress', item_type: 'midi_dress', colour_family: 'black', material_weight: 3, sleeve: 2 }
+    const unknown = { item_id: 'u', product_name: 'Dress', item_type: 'midi_dress' }
+    const p = parseQuery('winter dress')
+    expect(p.seasons).toEqual(['winter'])
+    expect(facetCount(p)).toBe(2)
+    const r = rankPieces([linen, whiteMini, print, velvet, blackLong, blackShort, unknown], p, ctx([], ['winter', 'dress'], 'winter dress'))
+    expect(r.exact.map((s) => s.it.item_id)).toEqual(['v', 'b', 'k'])
+    expect(r.similar.map((s) => s.it.item_id).sort()).toEqual(['l', 'p', 'u', 'w'])
+    expect(seasonFits(linen, 'summer')).toBe(true)
+    expect(seasonFits(velvet, 'summer')).toBe(false)
+  })
+
+  it('a beach wedding guest is a summer, dressed-up piece', () => {
+    const p = parseQuery('beach wedding guest')
+    expect(p.seasons).toEqual(['summer'])
+    expect(p.formalityRange).toEqual([3, 4])
   })
 })

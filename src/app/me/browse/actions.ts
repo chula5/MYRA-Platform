@@ -86,7 +86,7 @@ export interface BrowseView {
   error?: string
 }
 
-const CARD = 'item_id, product_name, image_url, price_gbp, retailer_url, colour_family, item_type, material_primary, material_formality, status, stock_status, available, ownership, owner_kind, brand_id, brand:brand_id(name)'
+const CARD = 'item_id, product_name, image_url, price_gbp, retailer_url, colour_family, item_type, material_primary, material_formality, material_weight, sleeve, pattern, status, stock_status, available, ownership, owner_kind, brand_id, brand:brand_id(name)'
 /** Anything a member may be shown: published, or ingested and shoppable. */
 const SHOWABLE = ['ready', 'live', 'draft']
 const MOST = 24
@@ -265,6 +265,16 @@ export async function browseSearch(
   }
   if (parsed.formalityRange && !parsed.itemTypes.length) {
     pools.push(withFacets(base()).gte('material_formality', Math.max(1, parsed.formalityRange[0] - 1)).limit(POOL))
+  }
+  // A season is read off the piece, not filtered in the database, so the pool
+  // for "winter dress" leans towards the pieces most likely to be winter:
+  // the dark colours and the heavier cloths. The scorer still decides.
+  if (parsed.seasons.length && !parsed.colourFamilies.length) {
+    const cold = parsed.seasons.some((x) => x === 'winter' || x === 'autumn')
+    const colours = cold ? ['black', 'navy', 'burgundy', 'brown', 'grey', 'green', 'purple', 'red', 'camel'] : ['white', 'cream', 'yellow', 'pink', 'orange', 'blue', 'multicolour']
+    pools.push(withFacets(base()).in('colour_family', colours).limit(STRICT_POOL))
+    if (cold) pools.push(withFacets(base()).gte('material_weight', 3).limit(POOL))
+    else pools.push(withFacets(base()).lte('material_weight', 2).limit(POOL))
   }
   // Labels that stand next to the one she named: the SEE SIMILAR for a brand
   // search is other brands like it, still held to every other facet.
