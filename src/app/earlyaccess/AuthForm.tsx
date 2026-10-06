@@ -8,9 +8,37 @@ import { createClient } from '@/lib/supabase'
 const INPUT =
   'w-full border border-[#E2E0DB] bg-white rounded-[14px] px-4 py-3 text-[12px] tracking-[0.054em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors'
 
+// ENTER, and then the mirror: from the press until her page arrives the
+// mirror wiggles here, the way it does everywhere else in the house, so the
+// door is never a button that seems to do nothing.
+function EnterButton({ pending }: { pending: boolean }) {
+  return (
+    <>
+      <button
+        type="submit"
+        disabled={pending}
+        aria-busy={pending}
+        className="mt-2 bg-[#0A0A0A] text-white rounded-[14px] py-3 text-[11px] tracking-[0.099em] hover:bg-[#333] transition-colors duration-300 disabled:opacity-80"
+      >
+        {pending ? 'OPENING YOUR WARDROBE…' : 'ENTER'}
+      </button>
+      {pending && (
+        <div className="text-center mt-3" aria-live="polite">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/myra-mirror-transparent.png" alt="" className="myra-mirror-wiggle h-14 w-auto mx-auto" />
+        </div>
+      )}
+    </>
+  )
+}
+
 export default function AuthForm({ initialMode = 'signin', error, next }: { initialMode?: 'signin' | 'signup'; error?: string; next?: string }) {
   const [mode, setMode] = useState<'signin' | 'signup' | 'reset'>(initialMode)
   const isSignup = mode === 'signup'
+  // From ENTER until her page arrives: the server action runs and redirects,
+  // so this is only ever reset by the page that comes back (an error returns
+  // a fresh form).
+  const [entering, setEntering] = useState(false)
   // Carry the referral code into the sign-up so it can be attributed to a source.
   const [refCode, setRefCode] = useState('')
   useEffect(() => { setRefCode(getStoredRef() ?? '') }, [])
@@ -121,14 +149,12 @@ export default function AuthForm({ initialMode = 'signin', error, next }: { init
               </button>
             </form>
           ) : (
-            <form action={earlyAccessSignIn} className="flex flex-col gap-3">
+            <form action={earlyAccessSignIn} onSubmit={() => setEntering(true)} className="flex flex-col gap-3">
               <input type="hidden" name="next" value={next ?? ''} readOnly />
               <input type="email" name="email" required autoComplete="email" placeholder="EMAIL" className={INPUT} />
               <input type="password" name="password" required autoComplete="current-password" placeholder="PASSWORD" className={INPUT} />
               {error && <p className="text-[10px] tracking-[0.068em] text-[#B83A3A]">{error.toUpperCase()}</p>}
-              <button type="submit" className="mt-2 bg-[#0A0A0A] text-white rounded-[14px] py-3 text-[11px] tracking-[0.099em] hover:bg-[#333] transition-colors duration-300">
-                ENTER
-              </button>
+              <EnterButton pending={entering} />
               <button
                 type="button"
                 onClick={() => { setMode('reset'); setResetErr(null) }}

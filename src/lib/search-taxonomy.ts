@@ -34,7 +34,7 @@ const _BAGS = ['tote', 'shoulder_bag', 'clutch', 'crossbody', 'structured_bag']
 const _JEWEL = ['necklace', 'earrings', 'bracelet', 'ring', 'brooch']
 
 // Item word → item_type enum values.
-const TYPE: Record<string, string[]> = {
+export const TYPE: Record<string, string[]> = {
   dress: _DRESS, dresses: _DRESS, gown: ['maxi_dress'], gowns: ['maxi_dress'],
   maxi: ['maxi_dress'], midi: ['midi_dress'], mini: ['mini_dress'], slip: ['slip_dress'],
   skirt: ['skirt'], skirts: ['skirt'], trouser: ['trousers'], trousers: ['trousers'], pant: ['trousers'], pants: ['trousers'],
@@ -49,12 +49,76 @@ const TYPE: Record<string, string[]> = {
 }
 
 // Material word → canonical material tag (matched against material_primary text).
-const MATERIAL: Record<string, string> = {
+export const MATERIAL: Record<string, string> = {
   lace: 'lace', lacey: 'lace', feather: 'feather', feathered: 'feather', feathers: 'feather',
   sequin: 'sequin', sequinned: 'sequin', sequined: 'sequin', sparkly: 'sequin', sparkle: 'sequin',
   satin: 'satin', silk: 'silk', velvet: 'velvet', leather: 'leather', suede: 'suede', denim: 'denim',
   linen: 'linen', cotton: 'cotton', wool: 'wool', tweed: 'tweed', crochet: 'crochet', knitted: 'knit',
-  mesh: 'mesh', organza: 'organza', chiffon: 'chiffon',
+  mesh: 'mesh', organza: 'organza', chiffon: 'chiffon', cashmere: 'cashmere', jersey: 'jersey',
+}
+
+// Canonical material tag → every word on a label that COUNTS as that cloth.
+// "silk" has to find a skirt whose label says "silk charmeuse" or "crêpe de
+// chine", and must never be satisfied by a cotton one. Matched whole-word
+// against material_primary and the product name.
+export const MATERIAL_TERMS: Record<string, string[]> = {
+  silk: ['silk', 'charmeuse', 'crepe de chine', 'crêpe de chine', 'habotai', 'mulberry silk', 'silk satin', 'silk twill', 'georgette', 'dupion', 'dupioni'],
+  satin: ['satin', 'duchesse', 'duchess satin'],
+  leather: ['leather', 'nappa', 'calfskin', 'lambskin', 'calf leather', 'lamb leather', 'patent'],
+  suede: ['suede', 'nubuck'],
+  wool: ['wool', 'merino', 'lambswool', 'virgin wool', 'wool blend', 'boiled wool', 'flannel', 'alpaca', 'mohair'],
+  cashmere: ['cashmere'],
+  cotton: ['cotton', 'poplin', 'organic cotton', 'cotton blend', 'chambray', 'broderie anglaise', 'pique', 'piqué'],
+  linen: ['linen', 'linen blend'],
+  denim: ['denim', 'jean', 'jeans'],
+  velvet: ['velvet', 'velour'],
+  lace: ['lace', 'guipure', 'broderie'],
+  sequin: ['sequin', 'sequins', 'sequinned', 'sequined', 'paillette', 'paillettes'],
+  feather: ['feather', 'feathers', 'feathered', 'marabou', 'ostrich'],
+  tweed: ['tweed', 'bouclé', 'boucle'],
+  crochet: ['crochet', 'crocheted'],
+  knit: ['knit', 'knitted', 'rib knit', 'ribbed'],
+  mesh: ['mesh', 'tulle'],
+  organza: ['organza'],
+  chiffon: ['chiffon'],
+  jersey: ['jersey'],
+}
+
+/** Does this piece count as the cloth she named? Label first, then the name. */
+export function hasMaterial(item: { material_primary?: string | null; product_name?: string | null }, material: string): boolean {
+  const terms = MATERIAL_TERMS[material] ?? [material]
+  return terms.some((t) => hasWord(item.material_primary, t) || hasWord(item.product_name, t))
+}
+
+// Two-word pieces, read before the single words so "slip skirt" is a SKIRT
+// (and "slip" stays a descriptor she wants in the name), never a slip dress
+// standing next to a skirt. A plain "slip" on its own is still a slip dress.
+interface TypePhrase { types: string[]; descriptor?: string }
+const TYPE_PHRASES: Record<string, TypePhrase> = {
+  'slip skirt': { types: ['skirt'], descriptor: 'slip' },
+  'slip dress': { types: ['slip_dress'] },
+  'slip top': { types: _TOPS, descriptor: 'slip' },
+  'shirt dress': { types: ['shirt_dress'] },
+  'midi dress': { types: ['midi_dress'] },
+  'maxi dress': { types: ['maxi_dress'] },
+  'mini dress': { types: ['mini_dress'] },
+  'midi skirt': { types: ['skirt'], descriptor: 'midi' },
+  'maxi skirt': { types: ['skirt'], descriptor: 'maxi' },
+  'mini skirt': { types: ['skirt'], descriptor: 'mini' },
+  'pencil skirt': { types: ['skirt'], descriptor: 'pencil' },
+  'wrap skirt': { types: ['skirt'], descriptor: 'wrap' },
+  'wrap dress': { types: _DRESS, descriptor: 'wrap' },
+  'wide leg trousers': { types: ['trousers'], descriptor: 'wide leg' },
+  'wide leg trouser': { types: ['trousers'], descriptor: 'wide leg' },
+  'wide leg pants': { types: ['trousers'], descriptor: 'wide leg' },
+  'wide leg jeans': { types: ['jeans'], descriptor: 'wide leg' },
+  'tank top': { types: _TOPS, descriptor: 'tank' },
+  'ankle boots': { types: ['boot'], descriptor: 'ankle' },
+  'ankle boot': { types: ['boot'], descriptor: 'ankle' },
+  'knee high boots': { types: ['boot'], descriptor: 'knee' },
+  'ballet flats': { types: ['flat'], descriptor: 'ballet' },
+  'kitten heels': { types: ['heel'], descriptor: 'kitten' },
+  'kitten heel': { types: ['heel'], descriptor: 'kitten' },
 }
 
 // Occasion/setting/season phrase → keywords to match against the outfit's
@@ -137,7 +201,13 @@ const TIME: Record<string, number> = {
   evening: 4, dinner: 4, cocktail: 4, rooftop: 4, night: 5, 'date night': 4,
 }
 
-export const STOPWORDS = new Set(['a', 'an', 'the', 'my', 'for', 'to', 'in', 'on', 'at', 'of', 'and', 'with', 'i', 'need', 'want', 'looking', 'some', 'something', 'outfit', 'outfits', 'look', 'wear', 'during', 'this', 'that', 'me'])
+export const STOPWORDS = new Set([
+  'a', 'an', 'the', 'my', 'for', 'to', 'in', 'on', 'at', 'of', 'and', 'with', 'i', 'need', 'want', 'looking', 'some', 'something',
+  'outfit', 'outfits', 'look', 'wear', 'during', 'this', 'that', 'me',
+  // How she asks: "what should I wear to a wedding", "find me a silk skirt please".
+  'what', 'should', 'could', 'would', 'can', 'do', 'does', 'go', 'going', 'have', 'has', 'is', 'it', 'be', 'am', 'are', 'im',
+  'please', 'find', 'show', 'get', 'like', 'piece', 'pieces', 'clothes', 'ideas', 'idea', 'options', 'from', 'by', 'or', 'as',
+])
 
 // ── Normalisation + fuzzy matching ───────────────────────────────────────────
 
@@ -164,6 +234,10 @@ function fuzzyGet<T>(dict: Record<string, T>, token: string): T | undefined {
     if (!key.includes(' ') && Math.abs(key.length - token.length) <= 1 && levenshtein(key, token) <= 1) return dict[key]
   }
   return undefined
+}
+
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\function normalise(raw: string): string {')
 }
 
 function normalise(raw: string): string {
@@ -201,8 +275,8 @@ export function parseQuery(raw: string, knownBrands: string[] = []): ParsedQuery
   // 1. Multi-word phrases first (longest first), across all phrase dictionaries.
   // OCCASION_RULES go first so a full occasion ("beach wedding guest") is matched
   // and consumed before its sub-phrases ("wedding guest", "beach").
-  const phraseDicts: Array<[Record<string, any>, 'colour' | 'occasion' | 'setting' | 'formality' | 'time' | 'rule']> = [
-    [OCCASION_RULES, 'rule'], [COLOUR, 'colour'], [OCCASION, 'occasion'], [SETTING, 'setting'], [FORMALITY, 'formality'], [TIME, 'time'],
+  const phraseDicts: Array<[Record<string, any>, 'colour' | 'occasion' | 'setting' | 'formality' | 'time' | 'rule' | 'type']> = [
+    [OCCASION_RULES, 'rule'], [TYPE_PHRASES, 'type'], [COLOUR, 'colour'], [OCCASION, 'occasion'], [SETTING, 'setting'], [FORMALITY, 'formality'], [TIME, 'time'],
   ]
   const phrases: Array<{ phrase: string; dict: Record<string, any>; kind: string }> = []
   for (const [dict, kind] of phraseDicts) for (const key of Object.keys(dict)) if (key.includes(' ')) phrases.push({ phrase: key, dict, kind })
@@ -214,9 +288,15 @@ export function parseQuery(raw: string, knownBrands: string[] = []): ParsedQuery
     }
   }
 
-  // 2. Known brands (multi-word aware).
+  // 2. Known brands (multi-word aware). A label is matched the way the text
+  // was normalised — lower-case, punctuation as spaces — so "J.Crew" is found
+  // in "j.crew", "j crew" and "jcrew" alike, and "Isabel Marant" in either case.
   for (const b of knownBrands.slice().sort((a, c) => c.length - a.length)) {
-    if (b.length >= 3 && new RegExp(`\\b${b.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(text)) { p.brand = b; consume(b); break }
+    const key = normalise(b)
+    if (key.length < 3) continue
+    const compact = key.replace(/[\s-]+/g, '')
+    if (new RegExp(`\\b${escapeRe(key)}\\b`).test(text)) { p.brand = b; consume(key); break }
+    if (compact !== key && compact.length >= 4 && new RegExp(`\\b${escapeRe(compact)}\\b`).test(text)) { p.brand = b; consume(compact); break }
   }
 
   // 3. Single tokens (with fuzzy typo tolerance).
@@ -238,6 +318,11 @@ export function parseQuery(raw: string, knownBrands: string[] = []): ParsedQuery
 
 function applyHit(p: ParsedQuery, add: (a: string[], v: string[]) => void, addGroup: (v: string[]) => void, kind: string, val: any) {
   if (kind === 'colour') add(p.colourFamilies, [val])
+  else if (kind === 'type') {
+    const tp = val as TypePhrase
+    add(p.itemTypes, tp.types)
+    if (tp.descriptor && !p.intentTerms.includes(tp.descriptor)) p.intentTerms.push(tp.descriptor)
+  }
   else if (kind === 'occasion' || kind === 'setting') addGroup(val)
   else if (kind === 'formality') p.formalityRange = mergeRange(p.formalityRange, val)
   else if (kind === 'time') p.timeOfDay = val
@@ -270,7 +355,7 @@ function hasWord(hay: string | null | undefined, needle: string): boolean {
 // type is the base signal; material_formality and product-name cues refine it.
 // The result leans toward the dressiest piece — a gown makes a look formal even
 // with flat sandals — while very casual staples pull it back down.
-const TYPE_FORMALITY: Record<string, number> = {
+export const TYPE_FORMALITY: Record<string, number> = {
   't-shirt': 1, shorts: 1, sneaker: 1, jeans: 2, sandal: 2, gilet: 2, knitwear: 2, flat: 2,
   shirt: 3, blouse: 3, bodysuit: 3, skirt: 3, trousers: 3, mini_dress: 3, shirt_dress: 3,
   jacket: 3, trench: 3, coat: 3, tote: 3, crossbody: 3, shoulder_bag: 3, mule: 3, boot: 3,
@@ -280,6 +365,19 @@ const TYPE_FORMALITY: Record<string, number> = {
 }
 const FORMAL_WORDS = ['gown', 'tuxedo', 'sequin', 'sequined', 'satin', 'silk', 'velvet', 'tulle', 'beaded', 'embellished', 'evening', 'cocktail', 'floor-length', 'floor length', 'ball', 'chiffon', 'lace', 'crystal']
 const CASUAL_WORDS = ['denim', 'jersey', 'sweat', 'hoodie', 'beach', 'cargo', 'athletic', 'sport', 'flip-flop', 'fleece', 'terry']
+
+/**
+ * One piece's formality, 1 casual … 5 black tie, from what it is, what it is
+ * made of and what its name says. null for a piece we cannot place.
+ */
+export function estimateItemFormality(it: any): number | null {
+  return estimateFormality([it])
+}
+
+/** Which pieces a formality range leads with when no piece was named: a
+ *  wedding or black tie search answers with dresses first, then heels and
+ *  clutches, before blazers and trousers. */
+export const OCCASION_LEAD_TYPES = ['maxi_dress', 'midi_dress', 'slip_dress', 'mini_dress', 'heel', 'clutch']
 
 function estimateFormality(items: any[]): number | null {
   const vals: number[] = []
@@ -309,7 +407,7 @@ export function scoreOutfit(outfit: OutfitWithItems, p: ParsedQuery): number {
 
   if (p.colourFamilies.length) part(0.24, items.some((it: any) => p.colourFamilies.includes(it.colour_family) || p.colourFamilies.some((c) => hasWord(it.product_name, c))) ? 1 : 0)
   if (p.itemTypes.length) part(0.24, items.some((it: any) => p.itemTypes.includes(String(it.item_type))) ? 1 : 0)
-  if (p.materials.length) part(0.18, items.some((it: any) => p.materials.some((m) => hasWord(it.material_primary, m) || hasWord(it.product_name, m))) ? 1 : 0)
+  if (p.materials.length) part(0.18, items.some((it: any) => p.materials.some((m) => hasMaterial(it, m))) ? 1 : 0)
   if (p.brand) part(0.18, items.some((it: any) => hasWord(it.brand?.name, p.brand!)) ? 1 : 0)
 
   if (p.occasionGroups.length) {
