@@ -10,7 +10,9 @@
 // can actually light up.
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { usePathname } from 'next/navigation'
+import { useEffect, useRef, useState } from 'react'
+import { useScrollTo } from '@/lib/smooth-scroll'
 import { VISIBLE_ROOMS, RoomIcon, type RoomId } from './RoomNav'
 
 /** Spelled out so Tailwind keeps them: hiding a room changes the count. */
@@ -19,10 +21,18 @@ const TAB_COLUMNS: Record<number, string> = {
 }
 
 export default function MobileTabBar({ active }: { active: RoomId }) {
+  const pathname = usePathname()
+  const scrollTo = useScrollTo()
   // Route data can take a moment to arrive on a phone. Keep the tab feedback
   // local so the indicator moves at touch-down, rather than after navigation.
   const [selected, setSelected] = useState(active)
   useEffect(() => setSelected(active), [active])
+
+  // The room she is on her way to. A second tap on the same icon while the
+  // page is still coming used to start the navigation over — so tapping
+  // harder made it slower. Now it is simply ignored until the room arrives.
+  const pending = useRef<string | null>(null)
+  useEffect(() => { pending.current = null }, [pathname])
 
   return (
     <nav
@@ -38,10 +48,20 @@ export default function MobileTabBar({ active }: { active: RoomId }) {
               key={r.id}
               href={r.href}
               prefetch
-              onClick={() => setSelected(r.id)}
+              onClick={(e) => {
+                if (pathname === r.href) {
+                  // Already here: back to the top of the room, as Instagram does.
+                  e.preventDefault()
+                  scrollTo(0)
+                  return
+                }
+                if (pending.current === r.href) { e.preventDefault(); return }
+                pending.current = r.href
+                setSelected(r.id)
+              }}
               aria-label={r.label}
               aria-current={on ? 'page' : undefined}
-              className="flex flex-col items-center pt-2 pb-1.5"
+              className="flex flex-col items-center pt-2 pb-1.5 touch-manipulation select-none"
             >
               <span className={`block w-10 h-10 transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#8C8A85]'}`}>
                 <RoomIcon id={r.id} />

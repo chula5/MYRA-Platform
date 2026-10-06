@@ -9,7 +9,11 @@ import FallbackImage from '@/components/FallbackImage'
 import ShopTheLookOverlay from '@/components/source-panel/ShopTheLookOverlay'
 import MirrorCurtain from '@/components/me/MirrorCurtain'
 import ShopBrain from './ShopBrain'
+import { thumbUrl } from '@/lib/image-utils'
 import { answerLook, explainAnswer, type ForYouLook, type ForYouView } from './for-you-actions'
+
+/** The width the look cards ask for — the curtain warms this same picture. */
+const LOOK_THUMB_WIDTH = 900
 
 const REASONS: { id: string; label: string }[] = [
   { id: 'not_my_style', label: 'Not my style' },
@@ -36,12 +40,16 @@ export default function ForYouClient({ view, testMemberId }: { view: ForYouView;
 
   useEffect(() => {
     let live = true
+    // The exact URLs the cards below draw (the optimised thumbnail at the
+    // card's width), so the fetch happens behind the mirror and the cards are
+    // already in the browser's cache when it lifts. Warming the raw source
+    // instead warmed nothing: the cards never ask for it.
     const urls = view.looks.slice(0, 4).map((l) => l.image_url).filter((u): u is string => !!u)
     void Promise.all(urls.map((u) => new Promise<void>((done) => {
       const img = new window.Image()
       img.onload = () => done()
       img.onerror = () => done()
-      img.src = u
+      img.src = thumbUrl(u, LOOK_THUMB_WIDTH)
     }))).then(() => { if (live) setPicturesReady(true) })
     const beat = setTimeout(() => { if (live) setBeatPassed(true) }, 700)
     const most = setTimeout(() => { if (live) setWaitedEnough(true) }, 6000)
@@ -149,7 +157,7 @@ function LookCard({ look, testMemberId }: { look: ForYouLook; testMemberId?: str
     <article className="flex flex-col gap-3">
       <div className="relative aspect-[3/4] bg-[#E4E2DD] overflow-hidden rounded-[18px] shadow-[0_2px_14px_rgba(43,43,43,0.08)]">
         {look.image_url && (
-          <FallbackImage src={look.image_url} thumbWidth={900} alt="" className="absolute inset-0 w-full h-full object-cover" />
+          <FallbackImage src={look.image_url} thumbWidth={LOOK_THUMB_WIDTH} alt="" className="absolute inset-0 w-full h-full object-cover" />
         )}
         <span className="absolute top-4 left-4 bg-[rgba(255,255,255,0.92)] rounded-full px-5 py-2 text-[clamp(21px,1.25vw,32px)] tracking-[0.08em] text-[#2B2B2B]">
           {look.occasion_label.toUpperCase()}

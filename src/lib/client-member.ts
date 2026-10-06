@@ -7,6 +7,12 @@
 // id from anyone else resolves to nobody.
 
 import 'server-only'
+import { cache } from 'react'
+
+// React's per-request cache exists in the React that Next ships; a plain
+// `react` (vitest, scripts) has none, and there a call is simply uncached.
+const perRequest: <F extends (...args: never[]) => unknown>(fn: F) => F =
+  typeof cache === 'function' ? cache : (fn) => fn
 import { createAdminClient, createServerClient } from '@/lib/supabase-server'
 
 export interface ClientMember {
@@ -17,7 +23,9 @@ export interface ClientMember {
   test: boolean
 }
 
-export async function resolveClientMember(asMemberId?: string | null): Promise<ClientMember | null> {
+// Cached per request: the layout, the page and its loader all ask, and the
+// answer cannot change between them.
+export const resolveClientMember = perRequest(async (asMemberId?: string | null): Promise<ClientMember | null> => {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
@@ -31,7 +39,7 @@ export async function resolveClientMember(asMemberId?: string | null): Promise<C
   const { data } = await admin.from('pilot_member')
     .select('member_id, name, auth_user_id').eq('auth_user_id', user.id).maybeSingle()
   return data ? { memberId: data.member_id, name: data.name, authUserId: data.auth_user_id ?? null, test: false } : null
-}
+})
 
 /** Her first name, for headings. */
 export const firstNameOf = (name: string): string => (name ?? '').trim().split(/\s+/)[0] ?? ''
