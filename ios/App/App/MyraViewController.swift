@@ -12,5 +12,6 @@ import Capacitor
 class MyraViewController: CAPBridgeViewController {
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(MirrorBridgePlugin())
+        bridge?.registerPluginInstance(AppleCalendarPlugin())
     }
 }

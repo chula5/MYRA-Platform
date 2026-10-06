@@ -76,12 +76,12 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
   const [asking, setAsking] = useState(false)
   // What she has asked for that has not come back yet — kept under the ask
   // button, so a sent request never feels like it vanished into a spinner.
-  const [pendingAsks, setPendingAsks] = useState<{ body: string; when: string }[]>([])
+  const [pendingAsks, setPendingAsks] = useState<{ when: string; occasion_label: string }[]>([])
   useEffect(() => {
     if (readOnly) return
     let live = true
     myRequests()
-      .then((r) => { if (live) setPendingAsks(r.filter((a) => !a.answered).map(({ body, when }) => ({ body, when }))) })
+      .then((r) => { if (live) setPendingAsks(r.filter((a) => !a.answered).map(({ when, occasion_label }) => ({ when, occasion_label }))) })
       .catch(() => {})
     return () => { live = false }
   }, [readOnly, asking])
@@ -305,12 +305,19 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
                   {readOnly ? `ASK MYRA — TEST AS ${(view.name.split(' ')[0] || 'HER').toUpperCase()}` : 'ASK MYRA FOR SOMETHING NEW'}
                 </button>
               )}
+              {/* What she has asked for and not yet received: one small card each,
+                  the occasion and nothing else. The looks arrive when they are checked. */}
               {!asking && pendingAsks.length > 0 && (
-                <div className="mt-5 space-y-2">
+                <div className="mt-5 flex flex-wrap justify-center gap-[6px]">
                   {pendingAsks.map((a, i) => (
-                    <p key={i} className="text-[19px] text-[#55534E] text-center leading-[1.4]">
-                      MYRA is working on “{a.body}”. Your stylist checks the looks before they land here.
-                    </p>
+                    <div key={i} className="flex items-center gap-3 rounded-[14px] bg-[rgba(255,255,255,0.6)] px-4 py-3">
+                      <span className="relative flex h-2.5 w-2.5" aria-hidden>
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#2B2B2B] opacity-30" />
+                        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#2B2B2B]" />
+                      </span>
+                      <span className="text-[13px] tracking-[0.18em] text-[#7C838B]">IN REVIEW</span>
+                      <span className="rounded-full border border-[#2B2B2B] px-3 py-1 text-[13px] tracking-[0.12em] text-[#2B2B2B]">{a.occasion_label.toUpperCase()}</span>
+                    </div>
                   ))}
                 </div>
               )}
@@ -851,8 +858,8 @@ function StyleItemPrompt({ item, look }: { item: ClientLookItem; look: ClientLoo
 
   if (sent) {
     return (
-      <p className="text-center text-[20px] text-[#2B2B2B] py-10 max-w-[560px] mx-auto">
-        MYRA is working on it. Your stylist checks the looks before they land here.
+      <p className="text-center text-[16px] tracking-[0.18em] text-[#7C838B] py-10">
+        IN REVIEW
       </p>
     )
   }
