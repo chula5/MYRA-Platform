@@ -485,7 +485,7 @@ export async function setWatchedBrandAutoKeep(watchedBrandId: string, on: boolea
  * AUTO-KEEP BY CONFIDENCE — the bar she sets, in plain odds. See
  * setWatchedBrandAutoKeepTwins for `overridden`.
  */
-export async function setWatchedBrandAutoKeepConfidence(watchedBrandId: string, on: boolean, overridden = false): Promise<{ error?: string }> {
+export async function setWatchedBrandAutoKeepConfidence(watchedBrandId: string, on: boolean, overridden = false): Promise<SweepResult> {
   await assertAdmin()
   const admin = createAdminClient() as any
   const patch: any = { auto_keep_confidence: on, auto_keep_confidence_since: on ? new Date().toISOString() : null }
@@ -493,7 +493,7 @@ export async function setWatchedBrandAutoKeepConfidence(watchedBrandId: string, 
   const { error } = await admin.from('watched_brand').update(patch).eq('watched_brand_id', watchedBrandId)
   if (error) return { error: /auto_keep_confidence/.test(error.message) ? 'RUN MIGRATION 0066_brand_watch_confidence.sql IN SUPABASE FIRST' : error.message }
   // No revalidatePath — see the note on setWatchedBrandActive.
-  return {}
+  return on ? sweepTheBacklog(admin, watchedBrandId) : {}
 }
 
 /**
@@ -620,14 +620,33 @@ export async function undoAutoKeep(queueId: string): Promise<{ error?: string }>
 }
 
 /** The bar itself: auto-keep only above this chance she would keep it. */
-export async function setWatchedBrandConfidenceBar(watchedBrandId: string, bar: number): Promise<{ error?: string }> {
+export async function setWatchedBrandConfidenceBar(watchedBrandId: string, bar: number): Promise<SweepResult> {
   await assertAdmin()
   const admin = createAdminClient() as any
   const clamped = Math.max(0.5, Math.min(0.99, Number(bar) || DEFAULT_CONFIDENCE))
   const { error } = await admin.from('watched_brand').update({ confidence_bar: clamped }).eq('watched_brand_id', watchedBrandId)
   if (error) return { error: /confidence_bar/.test(error.message) ? 'RUN MIGRATION 0066_brand_watch_confidence.sql IN SUPABASE FIRST' : error.message }
   // No revalidatePath — see the note on setWatchedBrandActive.
-  return {}
+  return sweepTheBacklog(admin, watchedBrandId)
+}
+
+interface SweepResult { error?: string; sweeping?: true; label?: string; note?: string }
+
+/**
+ * A bar she has just set is a decision about the whole queue, not only about
+ * what arrives next week. Automation itself only ever looks forward — each
+ * level reads from the moment it was switched on — so setting the bar, or
+ * switching AUTO-ADD on, sends everything already waiting above it through
+ * too. Capped and undoable, like any other backlog pass.
+ */
+async function sweepTheBacklog(admin: any, watchedBrandId: string): Promise<SweepResult> {
+  const { data: w } = await admin.from('watched_brand')
+    .select('auto_keep_confidence').eq('watched_brand_id', watchedBrandId).maybeSingle()
+  if (!w?.auto_keep_confidence) return {}
+  const r = await keepConfidentNowInBackground(watchedBrandId)
+  // The bar is saved either way; a backlog that cannot run yet is a note, not
+  // a failure to set it.
+  return r.error ? { note: r.error } : { sweeping: true, label: r.label }
 }
 
 // Add a brand to the watchlist. mode 'watch' queues only the last 60 days of
