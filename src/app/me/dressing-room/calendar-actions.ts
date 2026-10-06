@@ -9,8 +9,8 @@ import { resolveClientMember } from '@/lib/client-member'
 import { emailSecretsConfigured } from '@/lib/email/secrets'
 import { calendarConfigured } from '@/lib/calendar/google'
 import {
-  CALENDAR_MIGRATION_HINT, disconnectCalendar, listCalendarConnections, listUpcoming, planEvent, setEventStatus, syncCalendar,
-  type CalendarConnectionView, type CalendarEventView,
+  CALENDAR_MIGRATION_HINT, disconnectCalendar, importDeviceEvents, listCalendarConnections, listUpcoming, planEvent, setEventStatus, syncCalendar,
+  type CalendarConnectionView, type CalendarEventView, type IncomingCalendarEvent,
 } from '@/lib/calendar/store'
 
 export interface CalendarPanelView { memberId: string | null; ready: boolean; connections: CalendarConnectionView[]; events: CalendarEventView[]; error?: string }
@@ -50,4 +50,24 @@ export async function disconnectMyCalendar(connectionId: string, asMemberId?: st
   const me = await resolveClientMember(asMemberId)
   if (!me) return { error: 'Not signed in' }
   return disconnectCalendar(me.memberId, connectionId)
+}
+
+/**
+ * The iPhone's calendar, read by the MYRA app and handed over as plain events.
+ * Only what is worth dressing for is kept, by the same rule as Google.
+ */
+export async function importAppleCalendar(events: unknown, asMemberId?: string): Promise<{ found?: number; error?: string }> {
+  const me = await resolveClientMember(asMemberId)
+  if (!me) return { error: 'Not signed in' }
+  const clean: IncomingCalendarEvent[] = (Array.isArray(events) ? events : []).slice(0, 400)
+    .filter((e: any) => e && typeof e.id === 'string' && typeof e.title === 'string' && typeof e.startsAt === 'string' && !Number.isNaN(Date.parse(e.startsAt)))
+    .map((e: any) => ({
+      id: `apple:${e.id}`.slice(0, 200),
+      title: e.title.trim().slice(0, 200) || 'Untitled',
+      startsAt: new Date(e.startsAt).toISOString(),
+      endsAt: typeof e.endsAt === 'string' && !Number.isNaN(Date.parse(e.endsAt)) ? new Date(e.endsAt).toISOString() : null,
+      allDay: !!e.allDay,
+      location: typeof e.location === 'string' && e.location.trim() ? e.location.trim().slice(0, 200) : null,
+    }))
+  return importDeviceEvents(me.memberId, clean)
 }

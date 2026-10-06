@@ -6,14 +6,17 @@
 // she does it travels up out of the way, and MYRA looks: the mirror wiggles
 // while it does, the way it does everywhere else in the house.
 //
-// What comes back is only pieces she could actually buy. She can narrow by
+// What comes back is only pieces she could actually buy, and only pieces that
+// answer EVERYTHING she said — the label, the piece, the colour, the cloth,
+// the occasion. What comes close waits behind SEE SIMILAR. She can narrow by
 // brand, colour, piece and size (her own sizes come pre-filled), keep one she
-// likes, open it on the shop's site, or ask MYRA to style it.
+// likes, or ask MYRA to style it. Tapping a piece opens it on the shop's own
+// site (in Safari from the app) and keeps it chosen here for styling.
 
 import { useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import ComposedLookCard from '@/components/me/ComposedLookCard'
-import ShopLink from '@/components/ShopLink'
+import ShopLink, { type ShopLinkItem } from '@/components/ShopLink'
 import type { StyledLook } from '@/app/admin/private-stylist/actions'
 import {
   browseSearch, styleBrowsedPiece, saveBrowsedPiece,
@@ -34,6 +37,10 @@ export default function BrowseClient() {
   const [asked, setAsked] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [pieces, setPieces] = useState<BrowsePiece[] | null>(null)
+  const [similar, setSimilar] = useState<BrowsePiece[]>([])
+  const [similarKind, setSimilarKind] = useState<'brands' | 'close' | null>(null)
+  const [brandName, setBrandName] = useState<string | null>(null)
+  const [showSimilar, setShowSimilar] = useState(false)
   const [read, setRead] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
 
@@ -57,7 +64,7 @@ export default function BrowseClient() {
   const [savingId, setSavingId] = useState<string | null>(null)
 
   const started = asked != null
-  const chosen = pieces?.find((p) => p.item_id === picked) ?? null
+  const chosen = pieces?.find((p) => p.item_id === picked) ?? similar.find((p) => p.item_id === picked) ?? null
   const activeCount = fBrands.length + fColours.length + fTypes.length + fClothing.length + fShoes.length
 
   async function run(query: string, filters: BrowseFilters = currentFilters()) {
@@ -69,6 +76,9 @@ export default function BrowseClient() {
     const r = await browseSearch(q, filters)
     setBusy(false)
     setPieces(r.pieces); setRead(r.read); setError(r.error ?? null)
+    setSimilar(r.similar); setSimilarKind(r.similarKind); setBrandName(r.brand)
+    // Nothing exact: what comes close is the answer, so it is shown at once.
+    setShowSimilar(r.pieces.length === 0 && r.similar.length > 0)
     setFacets(r.facets); setSizes(r.sizes)
     if (!sizeTouched.current) { setFClothing(r.sizes.mineClothing); setFShoes(r.sizes.mineShoes) }
   }
@@ -112,6 +122,29 @@ export default function BrowseClient() {
     product_name: p.product_name,
     brand: p.brand ? { name: p.brand } : null,
   })
+
+  const pick = (p: BrowsePiece) => { setPicked(p.item_id); setLooks([]); setNote(null) }
+
+  const similarTitle = similarKind === 'brands'
+    ? `MORE LIKE ${(brandName ?? asked ?? '').toUpperCase()}`
+    : 'SIMILAR TO WHAT YOU ASKED'
+
+  const grid = (list: BrowsePiece[]) => (
+    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4">
+      {list.map((p) => (
+        <PieceCard
+          key={p.item_id}
+          piece={p}
+          shopItem={shopItem(p)}
+          picked={picked === p.item_id}
+          saved={saved.has(p.item_id)}
+          saving={savingId === p.item_id}
+          onPick={() => pick(p)}
+          onSave={() => void save(p)}
+        />
+      ))}
+    </div>
+  )
 
   return (
     <div className="w-full">
@@ -190,6 +223,9 @@ export default function BrowseClient() {
 
           {filtersOpen && (
             <div className="rounded-[18px] bg-white/90 shadow-[0_2px_14px_rgba(43,43,43,0.08)] px-5 sm:px-7 py-6 mb-7">
+              {facets.brands.length === 0 && facets.colours.length === 0 && facets.types.length === 0 && (
+                <p className="myra-guide-text normal-case text-[16px] text-[#6E6B65] pb-2">Nothing to narrow by for this search yet — sizes are below.</p>
+              )}
               {facets.brands.length > 0 && (
                 <FilterRow label="BRAND">
                   {facets.brands.map((b) => (
@@ -248,42 +284,32 @@ export default function BrowseClient() {
             </div>
           )}
 
-          {pieces.length === 0 ? (
+          {pieces.length === 0 && similar.length === 0 && (
             <p className="myra-guide-text normal-case text-[19px] text-[#4A4E57]">Nothing for that yet. Try it another way.</p>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4">
-              {pieces.map((p) => (
-                <div
-                  key={p.item_id}
-                  className={`relative text-left bg-white rounded-[16px] overflow-hidden shadow-[0_1px_8px_rgba(43,43,43,0.06)] transition-shadow ${picked === p.item_id ? 'ring-2 ring-[#2B2B2B]' : ''}`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => { setPicked(p.item_id); setLooks([]); setNote(null) }}
-                    className="block w-full text-left"
-                  >
-                    <div className="relative aspect-[3/4] bg-[#F3F2F0] overflow-hidden">
-                      {p.image_url && <FallbackImage src={p.image_url} thumbWidth={600} alt={p.product_name} className="absolute inset-0 w-full h-full object-cover" />}
-                    </div>
-                    <div className="px-3 py-2.5">
-                      {p.brand && <p className="text-[12px] tracking-[0.12em] text-[#6E6B65] truncate">{p.brand.toUpperCase()}</p>}
-                      <p className="text-[15px] text-[#2B2B2B] leading-tight truncate">{p.product_name}</p>
-                      {p.price_gbp != null && <p className="text-[13px] text-[#6E6B65] mt-0.5">£{Math.round(p.price_gbp)}</p>}
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void save(p)}
-                    disabled={savingId === p.item_id}
-                    aria-label={saved.has(p.item_id) ? 'Saved' : 'Save'}
-                    className="absolute top-2.5 right-2.5 w-9 h-9 rounded-full bg-white/90 shadow-[0_1px_6px_rgba(43,43,43,0.14)] grid place-items-center text-[#2B2B2B] disabled:opacity-50"
-                  >
-                    <svg viewBox="0 0 24 24" className="w-5 h-5" fill={saved.has(p.item_id) ? 'currentColor' : 'none'} stroke="currentColor" aria-hidden>
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" d="M12 21s-7.5-4.9-10-9.3C.6 8.9 2 5.5 5.2 5.5c2 0 3.3 1.2 3.8 2.3h6c.5-1.1 1.8-2.3 3.8-2.3 3.2 0 4.6 3.4 3.2 6.2C19.5 16.1 12 21 12 21z" />
-                    </svg>
-                  </button>
-                </div>
-              ))}
+          )}
+          {pieces.length === 0 && similar.length > 0 && (
+            <p className="myra-guide-text normal-case text-[19px] text-[#4A4E57] mb-5">
+              Nothing exact for that yet. Here is what comes close.
+            </p>
+          )}
+          {pieces.length > 0 && grid(pieces)}
+
+          {/* What answers most of her words, never in front of the real answers. */}
+          {similar.length > 0 && pieces.length > 0 && !showSimilar && (
+            <div className="text-center mt-10">
+              <button
+                type="button"
+                onClick={() => setShowSimilar(true)}
+                className="text-[14px] tracking-[0.1em] rounded-full border border-[rgba(43,43,43,0.3)] text-[#2B2B2B] px-6 py-3 hover:bg-white"
+              >
+                {similarKind === 'brands' ? `SEE BRANDS LIKE ${(brandName ?? asked ?? '').toUpperCase()}` : 'SEE SIMILAR'} · {similar.length}
+              </button>
+            </div>
+          )}
+          {similar.length > 0 && showSimilar && (
+            <div className={pieces.length > 0 ? 'mt-12' : ''}>
+              {pieces.length > 0 && <p className="text-[14px] tracking-[0.16em] text-[#6E6B65] mb-5">{similarTitle}</p>}
+              {grid(similar)}
             </div>
           )}
         </div>
@@ -349,6 +375,63 @@ export default function BrowseClient() {
           )}
         </section>
       )}
+    </div>
+  )
+}
+
+// ONE PIECE. The picture and the name are a real link to the shop's own page,
+// through the tracked click-out, opened in a new tab — from the iOS app that
+// is Safari. Tapping also chooses the piece here, so the two ways to style it
+// are waiting when she comes back. STYLE chooses without leaving the page.
+function PieceCard({ piece, shopItem, picked, saved, saving, onPick, onSave }: {
+  piece: BrowsePiece
+  shopItem: ShopLinkItem
+  picked: boolean
+  saved: boolean
+  saving: boolean
+  onPick: () => void
+  onSave: () => void
+}) {
+  const body = (
+    <>
+      <div className="relative aspect-[3/4] bg-[#F3F2F0] overflow-hidden">
+        {piece.image_url && <FallbackImage src={piece.image_url} thumbWidth={600} alt={piece.product_name} className="absolute inset-0 w-full h-full object-cover" />}
+      </div>
+      <div className="px-3 py-2.5">
+        {piece.brand && <p className="text-[12px] tracking-[0.12em] text-[#6E6B65] truncate">{piece.brand.toUpperCase()}</p>}
+        <p className="text-[15px] text-[#2B2B2B] leading-tight truncate">{piece.product_name}</p>
+        {piece.price_gbp != null && <p className="text-[13px] text-[#6E6B65] mt-0.5">£{Math.round(piece.price_gbp)}</p>}
+      </div>
+    </>
+  )
+  return (
+    <div className={`relative text-left bg-white rounded-[16px] overflow-hidden shadow-[0_1px_8px_rgba(43,43,43,0.06)] transition-shadow ${picked ? 'ring-2 ring-[#2B2B2B]' : ''}`}>
+      {piece.url ? (
+        <ShopLink item={shopItem} onNavigate={onPick} className="block w-full text-left">
+          {body}
+        </ShopLink>
+      ) : (
+        <button type="button" onClick={onPick} className="block w-full text-left">{body}</button>
+      )}
+      <button
+        type="button"
+        onClick={onSave}
+        disabled={saving}
+        aria-label={saved ? 'Saved' : 'Save'}
+        className="absolute top-2.5 right-2.5 w-9 h-9 rounded-full bg-white/90 shadow-[0_1px_6px_rgba(43,43,43,0.14)] grid place-items-center text-[#2B2B2B] disabled:opacity-50"
+      >
+        <svg viewBox="0 0 24 24" className="w-5 h-5" fill={saved ? 'currentColor' : 'none'} stroke="currentColor" aria-hidden>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" d="M12 21s-7.5-4.9-10-9.3C.6 8.9 2 5.5 5.2 5.5c2 0 3.3 1.2 3.8 2.3h6c.5-1.1 1.8-2.3 3.8-2.3 3.2 0 4.6 3.4 3.2 6.2C19.5 16.1 12 21 12 21z" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        onClick={onPick}
+        aria-label={`Style ${piece.product_name}`}
+        className={`absolute top-2.5 left-2.5 text-[11px] tracking-[0.12em] rounded-full px-3 py-1.5 shadow-[0_1px_6px_rgba(43,43,43,0.14)] ${picked ? 'bg-[#2B2B2B] text-white' : 'bg-white/90 text-[#2B2B2B]'}`}
+      >
+        {picked ? 'CHOSEN' : 'STYLE'}
+      </button>
     </div>
   )
 }

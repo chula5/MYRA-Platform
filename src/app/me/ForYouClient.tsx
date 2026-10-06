@@ -25,10 +25,19 @@ const REASONS: { id: string; label: string }[] = [
 ]
 
 export default function ForYouClient({ view, testMemberId }: { view: ForYouView; testMemberId?: string }) {
-  // Until her looks are ready the screen is only the mirror. It waits for the
-  // first pictures to load (a little wiggle at least, never more than a few
-  // seconds), then rises to the logo and the page appears whole.
+  // Until the page is ready the screen is only the mirror. The page is drawn
+  // underneath it the whole time: the curtain waits for the first pictures of
+  // her looks AND for what MYRA did while she shopped to arrive, then rises
+  // to the logo and the page appears whole — never the mirror over a page
+  // that has not loaded, never a page that fills in after the mirror has gone.
+  // One short beat at least, so the wiggle reads as the house; a few seconds
+  // at most, so a slow network never holds her at the door.
   const [curtain, setCurtain] = useState<'waiting' | 'leaving' | 'gone'>('waiting')
+  const [picturesReady, setPicturesReady] = useState(false)
+  const [brain, setBrain] = useState<'loading' | 'empty' | 'content'>('loading')
+  const [beatPassed, setBeatPassed] = useState(false)
+  const [waitedEnough, setWaitedEnough] = useState(false)
+
   useEffect(() => {
     let live = true
     // The exact URLs the cards below draw (the optimised thumbnail at the
@@ -36,23 +45,28 @@ export default function ForYouClient({ view, testMemberId }: { view: ForYouView;
     // already in the browser's cache when it lifts. Warming the raw source
     // instead warmed nothing: the cards never ask for it.
     const urls = view.looks.slice(0, 4).map((l) => l.image_url).filter((u): u is string => !!u)
-    const loaded = Promise.all(urls.map((u) => new Promise<void>((done) => {
+    void Promise.all(urls.map((u) => new Promise<void>((done) => {
       const img = new window.Image()
       img.onload = () => done()
       img.onerror = () => done()
       img.src = thumbUrl(u, LOOK_THUMB_WIDTH)
-    })))
-    // A short wiggle at least, so an empty feed never flashes its empty state
-    // before Shop Brain has had a chance to arrive; never a long wait.
-    const atLeast = new Promise((r) => setTimeout(r, 900))
-    const atMost = new Promise((r) => setTimeout(r, 4000))
-    void Promise.race([Promise.all([loaded, atLeast]), atMost]).then(() => {
-      if (!live) return
-      setCurtain('leaving')
-      setTimeout(() => { if (live) setCurtain('gone') }, 760)
-    })
-    return () => { live = false }
+    }))).then(() => { if (live) setPicturesReady(true) })
+    const beat = setTimeout(() => { if (live) setBeatPassed(true) }, 700)
+    const most = setTimeout(() => { if (live) setWaitedEnough(true) }, 6000)
+    return () => { live = false; clearTimeout(beat); clearTimeout(most) }
   }, [view.looks])
+
+  const ready = waitedEnough || (picturesReady && brain !== 'loading' && beatPassed)
+  useEffect(() => {
+    if (curtain !== 'waiting' || !ready) return
+    setCurtain('leaving')
+    const t = setTimeout(() => setCurtain('gone'), 760)
+    return () => clearTimeout(t)
+  }, [ready, curtain])
+
+  // Nothing at all to show — no looks yet, nothing kept out in the shops —
+  // is said plainly, with the way onward, never left as a blank page.
+  const nothingYet = view.looks.length === 0 && brain === 'empty' && !view.error
 
   return (
     <div className={`myra-pearl relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen min-h-screen ${testMemberId ? '' : '-my-10'}`}>
@@ -67,7 +81,19 @@ export default function ForYouClient({ view, testMemberId }: { view: ForYouView;
 
           {/* What she kept on other people's sites, already worked on. Draws
               nothing until there is something to show. */}
-          <ShopBrain testMemberId={testMemberId} />
+          <ShopBrain testMemberId={testMemberId} onReady={(has) => setBrain(has ? 'content' : 'empty')} />
+
+          {nothingYet && (
+            <div className="text-center max-w-[560px] mx-auto mt-6 mb-16">
+              <p className="myra-section-note">NOTHING HERE YET</p>
+              <p className="myra-guide-text normal-case text-[19px] text-[#4A4E57] mt-5">
+                Your stylist&rsquo;s first looks will land here. Until then, look something up — MYRA reads the colour, the piece and the occasion, and finds it.
+              </p>
+              <Link href="/me/browse" className="inline-block mt-7 text-[15px] tracking-[0.06em] rounded-full bg-[#2B2B2B] text-white px-7 py-3">
+                BROWSE THE SHOPS
+              </Link>
+            </div>
+          )}
 
           {view.looks.length > 0 && <div className="text-center mb-10">
             <p className="myra-section-note">YOUR NEWEST LOOKS</p>
