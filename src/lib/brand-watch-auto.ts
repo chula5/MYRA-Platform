@@ -355,7 +355,10 @@ export async function keepConfidentNow(admin: any, watched: WatchedBrandRow, cap
   if (!watched.brand_id) return { kept: 0, error: 'This brand has no pieces yet' }
   const data = await loadBrandTrust(admin)
   const trust = confidenceTrustFor(data, watched as any)
-  if (!trust.trusted) return { kept: 0, error: `NOT YET — ${trust.summary}` }
+  // She can switch the level on before the gate is earned; the backlog it is
+  // switched on FOR must obey the same decision, or the switch means nothing
+  // for everything already waiting.
+  if (!trust.trusted && !manualOverride(watched)) return { kept: 0, error: `NOT YET — ${trust.summary}` }
   const bar = Number(watched.confidence_bar ?? DEFAULT_CONFIDENCE)
   const ids = (await queuedFor(admin, watched.brand_id, null))
     .filter((q) => {

@@ -25,6 +25,132 @@
   // Everything else is read from the page itself (adapters.genericGrids).
   const generic = !vinted && !shopify
 
+  // ── SCAN IN CHROME ────────────────────────────────────────────────────────
+  // Brand Watch opened this page with a marker in the fragment (never sent to
+  // the retailer): a brand no server can read is being read by her Chrome
+  // instead. The page is ranked as any shop page is — and for a mirror-fed
+  // brand that already queues what it sees — so a scan is only this: keep
+  // scrolling, click LOAD MORE, follow NEXT, and say how far it has got. The
+  // scan survives a page change through sessionStorage; it is gentle on
+  // purpose, one screen every few seconds, so her own address is never the
+  // one that trips the wall.
+  const SCAN_KEY = 'myra-mirror-scan'
+  const SCAN_MAX_PAGES = 25, SCAN_MAX_MS = 8 * 60_000, SCAN_STEP_MS = 2500, SCAN_STILL_ROUNDS = 3
+  const scanFromHash = (location.hash.match(/myra-scan=([0-9a-f-]{36})/i) || [])[1] || null
+  let scan = null
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(SCAN_KEY) || 'null')
+    if (scanFromHash) scan = stored && stored.id === scanFromHash ? stored : { id: scanFromHash, pages: 1, keys: [], queued: 0, startedAt: Date.now() }
+    else if (stored && Date.now() - stored.startedAt < 15 * 60_000) scan = stored
+    if (scan) scan.keySet = new Set(scan.keys || [])
+  } catch { scan = null }
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+  const persistScan = () => { try { if (scan) sessionStorage.setItem(SCAN_KEY, JSON.stringify({ id: scan.id, pages: scan.pages, queued: scan.queued, startedAt: scan.startedAt, keys: Array.from(scan.keySet) })) } catch {} }
+  if (scan) persistScan()
+  let scanReportedAt = 0
+  async function reportScan(done, error) {
+    if (!scan) return
+    if (!done && Date.now() - scanReportedAt < 3000) return
+    scanReportedAt = Date.now()
+    await send({ type: 'scanProgress', watchedBrandId: scan.id, seen: scan.keySet.size, queued: scan.queued, pages: scan.pages, done, error: error || null })
+  }
+  let scanBadgeEl = null
+  function scanBadge(text) {
+    if (!scanBadgeEl) {
+      scanBadgeEl = document.createElement('div')
+      scanBadgeEl.className = 'myra-mirror-scan'
+      scanBadgeEl.style.cssText = 'position:fixed;z-index:2147483646;top:12px;left:12px;background:#141414;color:#F7F6F3;border-radius:999px;padding:10px 16px;font:500 12px/1 -apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;letter-spacing:.08em;text-transform:uppercase;box-shadow:0 10px 24px rgba(0,0,0,.25);'
+      document.body.appendChild(scanBadgeEl)
+    }
+    scanBadgeEl.textContent = text
+  }
+  const scanStatus = () => `MYRA scanning · page ${scan.pages} · ${scan.keySet.size} seen · ${scan.queued} queued`
+  function noteScanned(products, res) {
+    if (!scan) return
+    for (const p of products) scan.keySet.add(p.key)
+    if (!res.cached && typeof res.queued === 'number') scan.queued += res.queued
+    persistScan()
+    scanBadge(scanStatus())
+    void reportScan(false)
+  }
+  const visible = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden' }
+  function findLoadMore() {
+    return [...document.querySelectorAll('button, a, [role="button"]')]
+      .find((el) => /^(load|show|view|see)\s+more\b|^more\s+(items|products|results)\b/i.test((el.textContent || '').trim()) && visible(el) && !el.closest('.myra-mirror-panel'))
+  }
+  // The page after this one. Three ways a shop writes it, tried in order:
+  // rel=next; a link that SAYS next (whole text, or "Go to next page" inside
+  // a bigger control — J.Crew); and numbered pagination, where the only tell
+  // is a page parameter one higher than this page's (Npge=2, page=3, p=2).
+  const PAGE_PARAMS = ['Npge', 'page', 'p', 'pg', 'pageNumber', 'pagenumber', 'start', 'offset']
+  function pageNumberOf(url) {
+    try {
+      const u = new URL(url, location.href)
+      for (const k of PAGE_PARAMS) { const v = u.searchParams.get(k); if (v && /^\d+$/.test(v)) return { key: k, n: Number(v), u } }
+      const m = u.pathname.match(/\/page\/(\d+)\b/)
+      if (m) return { key: 'path', n: Number(m[1]), u }
+      return { key: null, n: 1, u }
+    } catch { return null }
+  }
+  function findNextLink() {
+    const same = (a) => { try { return new URL(a.href, location.href).host === location.host } catch { return false } }
+    const links = [...document.querySelectorAll('a[href]')].filter((a) => same(a) && !a.closest('.myra-mirror-panel'))
+    const rel = links.find((a) => /\bnext\b/i.test(a.getAttribute('rel') || ''))
+    if (rel) return rel.href
+    const says = (a) => `${a.getAttribute('aria-label') || ''} ${a.getAttribute('title') || ''} ${(a.textContent || '').trim()}`.replace(/\s+/g, ' ')
+    const byWord = links.find((a) => /(^|\s)(next page|next|›|»|>)(\s|$)/i.test(says(a)) && !/previous|prev\b/i.test(says(a)) && visible(a))
+    if (byWord) return byWord.href
+    const here = pageNumberOf(location.href)
+    if (!here) return null
+    const numbered = links.map((a) => ({ a, p: pageNumberOf(a.href) }))
+      .filter(({ p }) => p && p.key && p.u.pathname === here.u.pathname && p.n === here.n + 1)
+    return numbered[0]?.a.href ?? null
+  }
+  /** Pagination drawn as buttons, not links (J.Crew's numbered pages): the next one, if it can be seen. */
+  function findNextButton() {
+    return [...document.querySelectorAll('button, [role="button"]')].find((b) => {
+      const t = `${b.getAttribute('aria-label') || ''} ${(b.textContent || '').trim()}`.replace(/\s+/g, ' ')
+      return /next page|(^|\s)next(\s|$)/i.test(t) && !/slide|carousel|previous|prev\b/i.test(t) && !b.disabled && b.getAttribute('aria-disabled') !== 'true' && visible(b) && !b.closest('.myra-mirror-panel')
+    })
+  }
+  async function finishScan(reason) {
+    if (!scan) return
+    scanBadge(`MYRA done · ${scan.keySet.size} seen · ${scan.queued} queued — in Brand Watch`)
+    await reportScan(true, reason === 'time' ? 'stopped after 8 minutes' : null)
+    try { sessionStorage.removeItem(SCAN_KEY) } catch {}
+    scan = null
+  }
+  async function scanLoop() {
+    let still = 0, lastCount = -1
+    while (scan) {
+      if (Date.now() - scan.startedAt > SCAN_MAX_MS) return finishScan('time')
+      // A plain scroll, not a smooth one: some shops (Reformation) swallow
+      // smooth scrolling entirely and the page would never move.
+      window.scrollBy(0, Math.round(innerHeight * 0.9))
+      await sleep(SCAN_STEP_MS)
+      if (!scan) return
+      // Growth is measured in pieces seen, not tiles on the page: a grid that
+      // recycles its tiles as it scrolls (Reformation) never has more than a
+      // screenful in the DOM, however far it has gone.
+      const count = scan.keySet.size
+      if (count !== lastCount) { lastCount = count; still = 0; continue }
+      const atBottom = innerHeight + scrollY >= document.documentElement.scrollHeight - 240
+      if (!atBottom) continue
+      if (++still < SCAN_STILL_ROUNDS) continue
+      // Three looks at the bottom with nothing new: the rest is behind a
+      // button, on the next page, or there is no more.
+      const more = findLoadMore()
+      if (more) { more.click(); still = 0; await sleep(SCAN_STEP_MS); continue }
+      const next = findNextLink()
+      if (next && scan.pages < SCAN_MAX_PAGES) { scan.pages += 1; persistScan(); await reportScan(false); location.href = next; return }
+      // No link, but a NEXT button: a shop that pages in place. Click it,
+      // count the page, and keep reading from the top of the new one.
+      const nextButton = scan.pages < SCAN_MAX_PAGES ? findNextButton() : null
+      if (nextButton) { scan.pages += 1; persistScan(); await reportScan(false); nextButton.click(); still = 0; lastCount = -1; lastSig = ''; await sleep(SCAN_STEP_MS * 2); window.scrollTo(0, 0); continue }
+      return finishScan('end')
+    }
+  }
+
   const LIFT_MIN = 0.6 // named / core-family and above earn the mark
   const WHY = {
     named: 'one of your brands', wardrobe: 'in your wardrobe', shopped: 'you shop them', liked: 'you liked them',
@@ -824,6 +950,7 @@
       const t0 = performance.now()
       const res = await send({ type: 'rank', host: location.host, products })
       if (!res || res.error || !Array.isArray(res.products)) return
+      noteScanned(products, res)
       const scores = new Map(res.products.map((p) => [p.key, p]))
       lastLifted = grids.reduce((n, g) => n + apply(g, scores), 0)
       lastTotal = tiles.length
@@ -887,6 +1014,7 @@
   setInterval(onNavigated, 300)
 
   await run()
+  if (scan) { scanBadge(scanStatus()); void reportScan(false); void scanLoop() }
   // A panel that was building when she left the last page still belongs to
   // her — if here is a shop, the badge's dot says it is ready and she opens
   // it. Anywhere else it waits in the worker rather than interrupting, and

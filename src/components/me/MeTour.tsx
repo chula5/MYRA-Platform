@@ -54,7 +54,6 @@ const STEPS: Step[] = [
   { path: DRESSING, target: '#email-finds', title: 'FIND WHAT YOU\u2019VE BOUGHT', body: 'Pieces from your order emails. Add the ones you kept.' },
   { target: '[data-tour="room-inspiration"]', title: 'INSPIRATION', body: 'Save outfits you love. MYRA learns your taste from them.' },
   { path: '/me/inspiration', target: '#archival-looks', title: 'ARCHIVAL LOOKS', body: 'Photos of what you already wear. The pieces you still own go to your Dressing Room.' },
-  { target: '[data-tour="room-magazine"]', title: 'MYRA MAGAZINE', body: 'Your brand emails, read for you in a minute.' },
   { target: '[data-tour="room-threads"]', title: 'THREADS', body: 'Everything MYRA knows about your style, and why.' },
   { path: '/me/browse', target: '[data-tour="browse-search"]', fallback: '[data-tour="search"]', title: 'BROWSE', body: 'Look something up in your own words. Try \u201ca wedding in June\u201d, then style what you find with your wardrobe or with something new.' },
   { target: '[data-tour="you"]', title: 'YOU', body: 'Your sizes, preferences and account.' },

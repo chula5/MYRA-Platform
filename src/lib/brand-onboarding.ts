@@ -56,7 +56,10 @@ export async function scanNewBrand(admin: any, watched: WatchedBrandRow, mode: '
     // fetched, and the Mirror queues the pieces she walks past on the site
     // with the same gates as a scan (see mirror/watchlist.ts).
     await admin.from('watched_brand')
-      .update({ platform: 'mirror', scan_state: { running: false } })
+      // Fed by the Mirror: a title, a price and a picture per piece, so the
+      // text score is thin — the bar is 0 as on the browser route, and the
+      // queue (or AUTOMATE) decides.
+      .update({ platform: 'mirror', min_score: 0, scan_state: { running: false } })
       .eq('watched_brand_id', watched.watched_brand_id)
     revalidatePath('/admin/brand-watch')
     return {
