@@ -12,6 +12,7 @@
 // one feedback trail and the scorecard cannot disagree with what she said.
 
 import { createServerClient, createAdminClient } from '@/lib/supabase-server'
+import { resolveClientMember } from '@/lib/client-member'
 import { waitUntil } from '@vercel/functions'
 import { revalidatePath } from 'next/cache'
 import { recordMemberLookFeedback } from '@/app/admin/private-stylist/actions'
@@ -58,13 +59,9 @@ export interface ClientView {
 
 /** The member record behind the signed-in client, or null if she has none. */
 export async function memberForCurrentUser(): Promise<{ memberId: string; name: string } | null> {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-  const admin = createAdminClient() as any
-  const { data } = await admin
-    .from('pilot_member').select('member_id, name').eq('auth_user_id', user.id).maybeSingle()
-  return data ? { memberId: data.member_id, name: data.name } : null
+  // The same per-request answer the layout already fetched.
+  const me = await resolveClientMember()
+  return me && !me.test ? { memberId: me.memberId, name: me.name } : null
 }
 
 export async function loadMyLooks(): Promise<ClientView> {
