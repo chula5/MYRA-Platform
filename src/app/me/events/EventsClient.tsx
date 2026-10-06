@@ -13,8 +13,9 @@
 
 import { useEffect, useState } from 'react'
 import {
-  disconnectMyCalendar, loadCalendarPanel, setMyEventStatus, syncMyCalendar, type CalendarPanelView,
+  disconnectMyCalendar, importAppleCalendar, loadCalendarPanel, setMyEventStatus, syncMyCalendar, type CalendarPanelView,
 } from '../dressing-room/calendar-actions'
+import { appleCalendarAvailable, readAppleCalendar } from '@/lib/native/apple-calendar'
 import {
   loadMyEvents, removeMyStylingTask, scheduleMyStylingTask, setMyStylingTaskStatus, type EventsAreaView,
 } from './actions'
@@ -41,6 +42,7 @@ const ICON = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLin
 function ClockIcon() { return <svg viewBox="0 0 24 24" className="w-6 h-6" aria-hidden><circle cx="12" cy="12" r="8.5" {...ICON} /><path d="M12 7v5l3.5 2.5" {...ICON} /></svg> }
 function PinIcon() { return <svg viewBox="0 0 24 24" className="w-5 h-5" aria-hidden><path d="M20 10c0 5.4-8 11-8 11S4 15.4 4 10a8 8 0 1116 0Z" {...ICON} /><circle cx="12" cy="10" r="2.5" {...ICON} /></svg> }
 function MealIcon() { return <svg viewBox="0 0 24 24" className="w-5 h-5" aria-hidden><path d="M6 3v7M3.5 3v4a2.5 2.5 0 005 0V3M6 10v11M16 3v18M16 3c3 1 4.5 4 4.5 7.5H16" {...ICON} /></svg> }
+function AppleIcon() { return <svg viewBox="0 0 24 24" className="w-5 h-5" aria-hidden><path fill="currentColor" d="M16.4 12.7c0-2.5 2-3.6 2.1-3.7-1.2-1.7-3-1.9-3.6-2-1.5-.2-3 .9-3.7.9-.8 0-2-.9-3.2-.9-1.7 0-3.2 1-4.1 2.5-1.7 3-.4 7.5 1.3 10 .8 1.2 1.8 2.5 3.1 2.5 1.2 0 1.7-.8 3.2-.8s1.9.8 3.2.8c1.3 0 2.2-1.2 3-2.4.9-1.4 1.3-2.7 1.3-2.8-.1 0-2.6-1-2.6-4.1zM14 5.4c.7-.8 1.1-1.9 1-3-1 0-2.1.7-2.8 1.5-.6.7-1.2 1.8-1 2.9 1.1.1 2.2-.6 2.8-1.4z" /></svg> }
 function TaskIcon() { return <svg viewBox="0 0 24 24" className="w-6 h-6" aria-hidden><rect x="3" y="3" width="14" height="16" rx="2" {...ICON} /><path d="m11 16 8.5-8.5 2 2L13 18l-3 1 1-3Z" {...ICON} /></svg> }
 
 /** A day written as YYYY-MM-DD, read as plain text so it cannot drift a day. */
@@ -97,10 +99,32 @@ export default function EventsClient({ testMemberId }: { testMemberId?: string }
     if (a.error) setMsg(a.error)
   }
 
+  /** The iPhone's calendar: ask the phone, hand the events to MYRA, say what it found. */
+  const readPhone = async (): Promise<{ found?: number; error?: string }> => {
+    const r = await readAppleCalendar(90)
+    if (r.denied) return { error: 'Calendar access is off for MYRA. Settings → MYRA → Calendars turns it on.' }
+    if (r.error || !r.events) return { error: r.error ?? 'Could not read the calendar' }
+    return importAppleCalendar(r.events, testMemberId)
+  }
+
   const sync = () => run('sync', async () => {
     setMsg('Reading your calendar…')
-    const r = await syncMyCalendar(testMemberId)
-    setMsg(r.error ?? (r.found ? `${r.found} thing${r.found === 1 ? '' : 's'} coming up worth dressing for.` : 'Nothing to dress for in the next three months.'))
+    const hasPhone = calendar?.connections.some((c) => c.provider === 'apple' && c.status !== 'disconnected')
+    const [phone, google] = await Promise.all([
+      hasPhone && appleCalendarAvailable() ? readPhone() : Promise.resolve<{ found?: number; error?: string }>({}),
+      syncMyCalendar(testMemberId),
+    ])
+    const err = phone.error ?? google.error
+    const found = (phone.found ?? 0) + (google.found ?? 0)
+    setMsg(err ?? (found ? `${found} thing${found === 1 ? '' : 's'} coming up worth dressing for.` : 'Nothing to dress for in the next three months.'))
+    await refresh()
+  })
+
+  const connectApple = () => run('apple', async () => {
+    if (!appleCalendarAvailable()) { setMsg('Open the MYRA iPhone app to connect Apple Calendar.'); return }
+    setMsg('Reading your calendar…')
+    const r = await readPhone()
+    setMsg(r.error ?? (r.found ? `Connected. ${r.found} thing${r.found === 1 ? '' : 's'} coming up worth dressing for.` : 'Connected. Nothing to dress for in the next three months.'))
     await refresh()
   })
 
@@ -113,9 +137,11 @@ export default function EventsClient({ testMemberId }: { testMemberId?: string }
       const q = new URLSearchParams(window.location.search)
       const err = q.get('calendar_error')
       if (err) setMsg(err)
-      // Just connected, or not looked at today: read it.
-      const stale = c.connections.some((x) => !x.last_synced_at || Date.now() - new Date(x.last_synced_at).getTime() > 12 * 3_600_000)
-      if (q.get('calendar_connected') || (c.connections.length && stale)) void sync()
+      // Just connected, or not looked at today: read it. The phone's own
+      // calendar can only be read from the app, so a browser leaves it be.
+      const live = c.connections.filter((x) => x.status !== 'disconnected' && (x.provider !== 'apple' || appleCalendarAvailable()))
+      const stale = live.some((x) => !x.last_synced_at || Date.now() - new Date(x.last_synced_at).getTime() > 12 * 3_600_000)
+      if (q.get('calendar_connected') || (live.length && stale)) void sync()
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [testMemberId])
@@ -158,11 +184,17 @@ export default function EventsClient({ testMemberId }: { testMemberId?: string }
 
           {!connected.length && (
             <div className="space-y-4">
-              <p className={`${T} text-[#4A4E57]`}>Your upcoming plans are below. Connect your Apple Calendar in the MYRA iPhone app to add more automatically.</p>
-              <button type="button" onClick={() => setMsg('Apple Calendar connection is being added to the iPhone app. Your setup events are already here.')} className="inline-flex items-center gap-3 rounded-full bg-[#2B2B2B] px-5 py-3 text-[20px] text-white"><span className="grid h-7 w-7 place-items-center rounded-md bg-white text-[#2B2B2B]"></span> Connect Apple Calendar</button>
-              {calendar.ready
-                ? <a href={connectHref} className="inline-block text-[16px] text-[#6E6B65] underline underline-offset-4">Use Google Calendar instead</a>
-                : null}
+              <p className={`${T} text-[#4A4E57]`}>Connect your calendar and the days worth dressing for appear here.</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <button type="button" disabled={working('apple')} onClick={connectApple} className="inline-flex items-center gap-3 rounded-full bg-[#2B2B2B] px-5 py-3 text-[20px] text-white disabled:opacity-40">
+                  <span className="grid h-7 w-7 place-items-center rounded-md bg-white text-[#2B2B2B]"><AppleIcon /></span>
+                  {working('apple') ? 'Reading…' : 'Connect Apple Calendar'}
+                </button>
+                {calendar.ready
+                  ? <a href={connectHref} className="inline-flex items-center rounded-full border border-[#2B2B2B] px-5 py-3 text-[20px] text-[#2B2B2B]">Google Calendar</a>
+                  : null}
+              </div>
+              {!appleCalendarAvailable() && <p className={`${SMALL} text-[#6E6B65]`}>Apple Calendar connects from the MYRA iPhone app.</p>}
             </div>
           )}
         </div>

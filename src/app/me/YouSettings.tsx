@@ -13,6 +13,7 @@ import { disconnectInbox } from './dressing-room/email-actions'
 import { disconnectMyCalendar } from './dressing-room/calendar-actions'
 import { disconnectArchivalInstagram } from './dressing-room/archival-actions'
 import { earlyAccessSignOut } from '@/app/earlyaccess/actions'
+import { clearNativeShareToken } from '@/components/me/NativeShareBridge'
 import { COLOUR_SHADES, COLOUR_FAMILY_IDS, OCCASION_TYPES, SHAPE_PREFERENCES, PIECE_PREFERENCES } from '@/lib/pilot-stylist'
 import { SIZE_CATEGORIES, ladderFor, type SizeCategory } from '@/lib/size-canonical'
 import { MirrorLoading } from '@/components/ArchiveCard'
@@ -393,8 +394,9 @@ export default function YouSettings({ testMemberId, initial }: { testMemberId?: 
         </section>
       </div>
 
+      {/* In the app, signing out also forgets the share sheet's sign-in. */}
       {!view.test && (
-        <form action={earlyAccessSignOut} className="mt-10 flex justify-end">
+        <form action={earlyAccessSignOut} onSubmit={() => { void clearNativeShareToken() }} className="mt-10 flex justify-end">
           <button type="submit" className={pill(false)}>Sign out</button>
         </form>
       )}

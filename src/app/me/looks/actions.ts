@@ -257,13 +257,13 @@ export async function requestLooks(
 }
 
 /** What she has asked for, and whether anything from it has reached her yet. */
-export async function myRequests(): Promise<{ body: string; when: string; answered: boolean }[]> {
+export async function myRequests(): Promise<{ body: string; when: string; answered: boolean; occasion: string | null; occasion_label: string }[]> {
   const me = await memberForCurrentUser()
   if (!me) return []
   const admin = createAdminClient() as any
   const { data: dels } = await admin
     .from('pilot_delivery')
-    .select('delivery_id, request_text, created_at')
+    .select('delivery_id, request_text, occasion, created_at')
     .eq('member_id', me.memberId)
     .eq('trigger', 'request')
     .order('created_at', { ascending: false })
@@ -277,6 +277,8 @@ export async function myRequests(): Promise<{ body: string; when: string; answer
     body: String(d.request_text ?? '').trim() || 'Something new',
     when: d.created_at,
     answered: sentIds.has(d.delivery_id),
+    occasion: d.occasion ?? null,
+    occasion_label: d.occasion ? (OCCASION_LABEL[d.occasion] ?? d.occasion) : 'For you',
   }))
 }
 
