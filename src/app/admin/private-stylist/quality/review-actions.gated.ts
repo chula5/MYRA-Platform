@@ -14,6 +14,8 @@ import {
   holdCandidate,
   releaseCandidate,
   loadMachineResult,
+  dismissCandidate,
+  restoreCandidate,
 } from '@/lib/outfit-quality/review-store'
 import type { DecideInput } from '@/lib/outfit-quality/review-plan'
 import { loadReviewQueue, loadCaseHistory, type ReviewFilters } from '@/lib/outfit-quality/review-read'
@@ -65,4 +67,18 @@ export async function loadCaseHistoryAction(caseId: string) {
 export async function loadMachineResultAction(candidateVersionId: string) {
   await assertAdmin()
   return loadMachineResult(candidateVersionId)
+}
+
+/** DISMISS: out of the queue with no verdict and no learning; reversible. */
+export async function dismissCandidateAction(candidateVersionId: string, input: { idempotencyKey: string; note?: string | null }) {
+  const { ok, userId } = await requireAdminUser()
+  if (!ok || !userId) throw new Error('Not authorised')
+  return dismissCandidate(candidateVersionId, input, { userId })
+}
+
+/** RESTORE a dismissed candidate to the active queue. */
+export async function restoreCandidateAction(candidateVersionId: string, input: { idempotencyKey: string }) {
+  const { ok, userId } = await requireAdminUser()
+  if (!ok || !userId) throw new Error('Not authorised')
+  return restoreCandidate(candidateVersionId, input, { userId })
 }

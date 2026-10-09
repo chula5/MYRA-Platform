@@ -281,6 +281,18 @@
       .map(([container, tiles]) => ({ container, tiles }))
   }
 
+  const TILE_IMG_JUNK = /placeholder|swatch|logo|sprite|\bicon|spinner|loading|pixel|blank\.|1x1/i
+  // The picture a tile's <img> will show: what it shows now, else what it is
+  // about to lazy-load. Made absolute, because a data-src is often not.
+  const TILE_IMG_SRC = (i) => {
+    const raw = i.currentSrc || i.src || i.getAttribute('data-src') || (i.getAttribute('srcset') || i.getAttribute('data-srcset') || '').split(/[ ,]/)[0] || ''
+    if (!raw) return ''
+    try { return new URL(raw, location.href).href } catch { return raw }
+  }
+  const cleanTileTitle = (s) => String(s || '').split('\n')
+    .map((x) => x.replace(/[£$€]\s?\d[\d,]*(?:\.\d{1,2})?/g, ' ').replace(/\s+/g, ' ').trim())
+    .find(Boolean)?.slice(0, 200) || 'Piece'
+
   M.genericDetails = (keys) => {
     const facts = M.listFacts()
     const shopName = M.siteBrand()
@@ -289,14 +301,21 @@
       for (const t of g.tiles) {
         const el = t.el
         const f = facts.get(pathKey(t.key)) || {}
-        // A skeleton tile's <img> is a 1×1 placeholder: it is not her picture.
-        const img = [...el.querySelectorAll('img')]
-          .filter((i) => !/^data:/i.test(i.currentSrc || i.src || ''))
-          .map((i) => ({ i, area: (i.naturalWidth || i.width || 0) * (i.naturalHeight || i.height || 0) }))
-          .sort((x, y) => y.area - x.area)[0]?.i
+        // A skeleton tile's <img> is a 1×1 placeholder, and a colour swatch,
+        // a logo or a spinner is not her picture either. Reformation's tiles
+        // carry a swatch placeholder PNG that is on the page long before the
+        // lazy product shot, and by area it won — 55 pieces queued blank.
+        const imgs = [...el.querySelectorAll('img')]
+          .map((i) => ({ i, src: TILE_IMG_SRC(i) }))
+          .filter(({ src }) => src && !/^data:/i.test(src) && !TILE_IMG_JUNK.test(src))
+        const img = imgs
+          .map(({ i }) => ({ i, area: (i.naturalWidth || i.width || 0) * (i.naturalHeight || i.height || 0) }))
+          .sort((x, y) => y.area - x.area)[0]?.i || imgs[0]?.i
         const heading = el.querySelector('h1, h2, h3, h4, [class*="title"], [class*="name"]')
         const lines = (el.innerText || '').split('\n').map((x) => x.trim()).filter(Boolean)
-        const title = (heading?.textContent || img?.getAttribute('alt') || lines.find((l) => !CURRENCY.test(l)) || 'Piece').trim().slice(0, 200)
+        // A heading that wraps the price too — "Calista High Pump ⏎ £ 298.00",
+        // or the sale and full price both — is the name on its first line.
+        const title = cleanTileTitle(heading?.textContent || img?.getAttribute('alt') || lines.find((l) => !CURRENCY.test(l)) || 'Piece')
         found.set(t.key, {
           // The label in the piece, not the shop's sign over the door: on a
           // multi-brand shop the shop's own name is the last resort.
@@ -307,7 +326,7 @@
           url: t.key,
           available: f.available ?? !/sold out|out of stock/i.test(el.innerText || ''),
           sizes: [],
-          image: f.image || (img ? (img.currentSrc || img.src || null) : null),
+          image: f.image || (img ? TILE_IMG_SRC(img) : null),
         })
       }
     }

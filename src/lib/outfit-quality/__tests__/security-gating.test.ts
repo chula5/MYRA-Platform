@@ -41,6 +41,8 @@ const impl = vi.hoisted(() => ({
   withdrawCandidateApproval: vi.fn(async () => ({ ok: true })),
   holdCandidate: vi.fn(async () => ({ ok: true })),
   releaseCandidate: vi.fn(async () => ({ ok: true })),
+  dismissCandidate: vi.fn(async () => ({ ok: true })),
+  restoreCandidate: vi.fn(async () => ({ ok: true })),
   loadMachineResult: vi.fn(async () => ({ revealed: false })),
   loadReviewQueue: vi.fn(async () => []),
   loadCaseHistory: vi.fn(async () => []),
@@ -78,6 +80,8 @@ vi.mock('@/lib/outfit-quality/review-store', () => ({
   withdrawCandidateApproval: impl.withdrawCandidateApproval,
   holdCandidate: impl.holdCandidate,
   releaseCandidate: impl.releaseCandidate,
+  dismissCandidate: impl.dismissCandidate,
+  restoreCandidate: impl.restoreCandidate,
   loadMachineResult: impl.loadMachineResult,
 }))
 vi.mock('@/lib/outfit-quality/review-read', () => ({

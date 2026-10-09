@@ -41,6 +41,7 @@ import {
 import { upsertSizeAvailability, loadBrandOffsets } from '@/lib/size-availability'
 import { raiseSizeAlerts } from '@/lib/stock-alerts'
 import { markUniqueSold } from '@/lib/rescue'
+import { markStyledWaysStale } from '@/lib/styled-ways'
 import { actImmediately, classifySignal } from '@/lib/second-hand'
 import { unknownStrike } from '@/lib/stock-sellable'
 
@@ -156,6 +157,7 @@ export async function runStockSentinel(
             ...(unsellable ? { stock_status: 'unknown' } : {}),
           })
           .eq('item_id', item.item_id)
+        if (unsellable) await retireStyledWays(item.item_id, 'unknown')
         continue
       }
       if (report.outfitsPaused >= MAX_PAUSES_PER_RUN) {
@@ -194,6 +196,7 @@ export async function runStockSentinel(
     // A one-of-one with an EXPLICIT sold signal is acted on immediately: no
     // second confirmation, no strike accounting, no restock watch.
     if (actImmediately(item.stock_class, signalKind)) {
+      await retireStyledWays(item.item_id, 'sold')
       const sold = await markUniqueSold(item.item_id, 'poll')
       report.uniqueSold.push({
         id: item.item_id, name: item.product_name,
@@ -213,6 +216,7 @@ export async function runStockSentinel(
     // Confirmed down on a second reading. A unique piece confirmed twice is
     // sold — the second reading is what an ambiguous signal needed.
     if (item.stock_class === 'unique') {
+      await retireStyledWays(item.item_id, 'sold')
       const sold = await markUniqueSold(item.item_id, 'poll')
       report.uniqueSold.push({
         id: item.item_id, name: item.product_name,
@@ -314,6 +318,12 @@ async function handleBackUp(
   })
 }
 
+// Her private "ways to wear it" (lib/styled-ways) die with the piece too: the
+// read also drops them on sight, this just makes it immediate.
+async function retireStyledWays(itemId: string, reason: string): Promise<void> {
+  try { await markStyledWaysStale(createAdminClient() as any, itemId, reason) } catch (err) { console.error('[sentinel] styled ways', err) }
+}
+
 // A REPLENISHABLE item is confirmed down: pause its live outfits, then route
 // each one — auto-swap when the top candidate is like-for-like, otherwise leave
 // paused for the review queue's restock card. Unique items never reach here;
@@ -326,6 +336,7 @@ async function handleItemDown(
   report: SentinelReport,
 ): Promise<void> {
   const admin = createAdminClient()
+  await retireStyledWays(itemId, 'out_of_stock')
 
   const { data: links } = await admin
     .from('outfit_item' as any)

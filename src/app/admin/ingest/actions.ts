@@ -108,11 +108,11 @@ Return ONLY a JSON object with this shape, no markdown, no prose:
   try {
     const client = new Anthropic({ apiKey })
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-sonnet-5-5',
       max_tokens: 2048,
       tools: [
         {
-          type: 'web_search_20250305',
+          type: 'web_search_20260209',
           name: 'web_search',
           max_uses: 6,
         } as unknown as Anthropic.Messages.Tool,

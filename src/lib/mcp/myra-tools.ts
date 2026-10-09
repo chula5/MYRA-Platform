@@ -131,6 +131,13 @@ export async function outfitsAroundPiece(memberId: string, query: string, opts: 
   const hit = candidates[0]?.s ? candidates[0].i : null
   if (!hit) return { looks: [], error: `Nothing in her wardrobe or saved pieces matches “${query}”` }
 
+  // Judged once, answered every time (lib/styled-ways).
+  const { getStyledWays, saveStyledWays } = await import('@/lib/styled-ways')
+  const kept = await getStyledWays(admin, memberId, hit.item_id, 'blend').catch(() => [])
+  if (kept.length >= LOOKS) {
+    return { piece: hit.product_name, looks: kept.slice(0, LOOKS).map((l) => answerFor(l.items, l.why)) }
+  }
+
   const [taste, library, lens, history] = await Promise.all([
     loadMemberTaste(admin, member, { personaId: opts.stylistId }),
     loadComposableLibrary(member),
@@ -144,12 +151,17 @@ export async function outfitsAroundPiece(memberId: string, query: string, opts: 
   const passing = composed.map((_, i) => i).filter((i) => judged[i].check?.verdict !== 'clashes' && !hasPieceOutOfSize(judged[i]))
   const dims = new Map<string, any>((pool as any[]).map((i) => [i.item_id, i]))
   const prefs = readStylePrefs(member)
+  const whyOf = (i: number) => whyThisSuitsHer(composed[i].items.map((it) => ({ ...(dims.get(it.item_id ?? '') ?? {}), product_name: it.product_name, owned: !!it.owned })), prefs)
+  // Only what passed is kept — the unchecked fallback below is spoken, never remembered.
+  saveStyledWays(admin, memberId, hit.item_id, 'blend', passing.slice(0, LOOKS).map((i) => ({
+    items: composed[i].items.map((it: any) => ({ ...it, image_url: it.image_url ?? dims.get(it.item_id ?? '')?.image_url ?? null })),
+    why: whyOf(i),
+    verdict: judged[i].check?.verdict === 'works' ? 'works' : 'borderline',
+    confidence: judged[i].check?.confidence ?? null,
+  })), 'mcp').catch((err) => console.error('[styled-ways] mcp keep', err))
   return {
     piece: hit.product_name,
-    looks: (passing.length ? passing : composed.map((_, i) => i)).slice(0, LOOKS).map((i) => answerFor(
-      composed[i].items,
-      whyThisSuitsHer(composed[i].items.map((it) => ({ ...(dims.get(it.item_id ?? '') ?? {}), product_name: it.product_name, owned: !!it.owned })), prefs),
-    )),
+    looks: (passing.length ? passing : composed.map((_, i) => i)).slice(0, LOOKS).map((i) => answerFor(composed[i].items, whyOf(i))),
   }
 }
 

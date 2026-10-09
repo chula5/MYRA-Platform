@@ -8,7 +8,7 @@
 export interface ReviewEventRow {
   review_event_id: string
   candidate_version_id: string
-  action: 'decide' | 'undo' | 'withdraw'
+  action: 'decide' | 'undo' | 'withdraw' | 'dismiss'
   decision: 'yes' | 'no' | null
   reason_code: string | null
   candidate_item_id: string | null
@@ -55,6 +55,20 @@ export function latestActiveDecision(events: ReviewEventRow[]): ReviewEventRow |
   return active.length ? active[active.length - 1] : null
 }
 
+/**
+ * The unreversed DISMISS for a version, if any. A dismissal takes a version out
+ * of the queue with no verdict and no learning; an `undo` pointing at it
+ * restores the version to review.
+ */
+export function latestActiveDismissal(events: ReviewEventRow[]): ReviewEventRow | null {
+  const ordered = orderEvents(events)
+  const reversed = new Set(
+    ordered.filter((e) => e.action === 'undo' && e.reverses_event_id).map((e) => e.reverses_event_id as string),
+  )
+  const active = ordered.filter((e) => e.action === 'dismiss' && !reversed.has(e.review_event_id))
+  return active.length ? active[active.length - 1] : null
+}
+
 export interface AnnotatedEvent {
   event: ReviewEventRow
   /** Effective events still describe current state; superseded ones were reversed. */
@@ -69,15 +83,17 @@ export function annotateEvents(events: ReviewEventRow[]): AnnotatedEvent[] {
     ordered.filter((e) => (e.action === 'undo' || e.action === 'withdraw') && e.reverses_event_id).map((e) => e.reverses_event_id as string),
   )
   return ordered.map((event) => {
-    const effective = event.action === 'decide' ? !reversed.has(event.review_event_id) : true
+    const effective = event.action === 'decide' || event.action === 'dismiss' ? !reversed.has(event.review_event_id) : true
     const base =
       event.action === 'decide'
         ? event.decision === 'yes'
           ? 'DECIDED YES'
           : `DECIDED NO — ${(event.reason_code ?? '').replace(/_/g, ' ').toUpperCase()}`
-        : event.action === 'undo'
-          ? 'UNDO'
-          : 'APPROVAL WITHDRAWN'
+        : event.action === 'dismiss'
+          ? 'DISMISSED — NO VERDICT, NOTHING LEARNED'
+          : event.action === 'undo'
+            ? 'UNDO'
+            : 'APPROVAL WITHDRAWN'
     return { event, effective, label: effective ? base : `${base} — SUPERSEDED` }
   })
 }
@@ -100,6 +116,8 @@ export function deriveQueueDisposition(args: {
   holds: QueueHoldRow[]
 }): QueueDisposition {
   if (args.state === 'approved' || args.state === 'rejected' || args.state === 'approval_withdrawn') return 'reviewed'
+  // `dismissed` (no verdict, out of the queue) lands here too: hidden, but
+  // inspectable and restorable under ALL.
   if (args.state !== 'awaiting_human') return 'hidden'
   if (latestActiveDecision(args.events)) return 'reviewed'
   if (activeHoldFor(args.holds)) return 'held'

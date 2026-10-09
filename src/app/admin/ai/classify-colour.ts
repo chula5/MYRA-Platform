@@ -25,14 +25,20 @@ const FAMILIES = [
   'burgundy', 'red', 'pink', 'purple', 'orange', 'yellow', 'multicolour',
 ] as const
 
-const PROMPT = `What colour is the GARMENT in this product photo?
+/**
+ * The piece named, when the scan knows what it is. A product photo of
+ * trousers is a model in trousers AND a top: asked for "the garment", the
+ * reader answered with the top — MKDT's fig trousers came back cream, the
+ * colour of the knit above them. Naming the piece tells it what to look at.
+ */
+const promptFor = (garment?: string | null) => `What colour is the ${garment ? garment.toUpperCase() : 'GARMENT'} in this product photo?
 
 Answer with exactly one word from this list:
 ${FAMILIES.join(', ')}
 
 How to decide:
-- Judge the garment being sold. Ignore the background, the model's skin and
-  hair, and any other piece styled with it.
+- Judge ${garment ? `only the ${garment} being sold` : 'the garment being sold'}. Ignore the background, the model's skin and
+  hair, and any other piece styled with it${garment ? ` — a top, trousers or shoes worn with the ${garment} do not count` : ''}.
 - If it carries a print, check, floral, dot or stripe in more than one colour,
   answer multicolour — even when the colours are close in tone, and even when
   one of them is white or cream.
@@ -44,13 +50,15 @@ How to decide:
 
 export async function classifyProductColour(
   imageUrl: string,
+  /** What the piece is — "trousers", "bag", "earrings" — so the read looks at it and not at what the model wears with it. */
+  garment?: string | null,
 ): Promise<{ colour: string | null; error?: string }> {
   try {
     // The cheap reader (lib/openai-vision). Anthropic was doing this for a
     // measured 10x the cost and is out of credit, which left every unreadable
     // piece with no colour at all — and colour is 3 of the 7 house-style
     // points, so those pieces could never clear a min score of 5.
-    const { word, error } = await readWordFromImage(imageUrl, PROMPT)
+    const { word, error } = await readWordFromImage(imageUrl, promptFor(garment))
     if (error) return { colour: null, error }
     const read = word.trim().toLowerCase().replace(/[^a-z]/g, '')
     const hit = FAMILIES.find((f) => f === read)

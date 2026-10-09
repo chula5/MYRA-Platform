@@ -1632,6 +1632,7 @@ export async function loadMemberTaste(
     families: new Map(),
     excludedPairs: new Set(),
     inputOnlyBrands: new Set((member.brands_input_only ?? []).map((b) => b.toLowerCase())),
+    hiddenBrandIds: new Set(),
     itemSwapOut: new Map(),
     brandSwapOut: new Map(),
     pairNet: new Map(),
@@ -1676,7 +1677,8 @@ export async function loadMemberTaste(
   ])
 
   for (const r of affRes.data ?? []) {
-    if (!r.hidden) t.affinity.set(r.brand_id, Number(r.affinity))
+    if (r.hidden) t.hiddenBrandIds!.add(r.brand_id)
+    else t.affinity.set(r.brand_id, Number(r.affinity))
   }
   for (const r of famRes.data ?? []) {
     const set = t.families.get(r.brand_id) ?? new Set<string>()
@@ -1735,18 +1737,36 @@ export async function loadMemberTaste(
 // a look she can't buy. Pre-loved pieces appear only if she asked for them.
 //
 // Her own wardrobe is exempt: she already owns those, and they already fit.
+//
+// The retail part (every ready + live piece, read in her size) is the same for
+// every tap she makes in a few minutes and was re-read from scratch on each —
+// three thousand rows and their size rows, before a single look was composed.
+// It is kept for a short while per member; her own pieces are always read
+// fresh, so a piece she has just added is in her next outfit.
+const LIBRARY_CACHE_MS = 5 * 60 * 1000
+const libraryCache = new Map<string, { at: number; value: ItemWithBrand[] }>()
+
+async function retailLibraryFor(member?: { member_id: string } | null): Promise<ItemWithBrand[]> {
+  const key = member?.member_id ?? '*'
+  const hit = libraryCache.get(key)
+  if (hit && Date.now() - hit.at < LIBRARY_CACHE_MS) return hit.value
+  const [ready, live] = await Promise.all([getAllItems('ready'), getAllItems('live')])
+  const retail = [...ready, ...live]
+  let value = retail
+  if (member) {
+    const ctx = await loadMemberSizeProfile(member.member_id)
+    value = (await filterItemsForShopper(retail as any[], ctx, { strict: true })) as ItemWithBrand[]
+  }
+  libraryCache.set(key, { at: Date.now(), value })
+  return value
+}
+
 export async function loadComposableLibrary(member?: { member_id: string; auth_user_id?: string | null } | null): Promise<ItemWithBrand[]> {
-  const [ready, live, owned] = await Promise.all([
-    getAllItems('ready'),
-    getAllItems('live'),
+  const [retail, owned] = await Promise.all([
+    retailLibraryFor(member),
     member ? listOwnedItems(ownerRefsForMember(member)) : Promise.resolve([] as ItemWithBrand[]),
   ])
-  const retail = [...ready, ...live]
-  if (!member) return [...retail, ...owned]
-
-  const ctx = await loadMemberSizeProfile(member.member_id)
-  const inHerSize = await filterItemsForShopper(retail as any[], ctx, { strict: true })
-  return [...(inHerSize as ItemWithBrand[]), ...owned]
+  return [...retail, ...owned]
 }
 
 
@@ -3509,6 +3529,14 @@ export async function styleSavedPiece(
   const { data: hero } = await admin.from('item').select('*, brand(*)').eq('item_id', itemId).maybeSingle()
   if (!hero) return { looks: [], error: 'MYRA cannot find that piece any more' }
 
+  // What MYRA already keeps around this piece answers a plain ask at once;
+  // a reshuffle or a worded ask composes fresh (lib/styled-ways).
+  if (!(opts.shuffle ?? 0) && !opts.query?.trim()) {
+    const { getStyledWays } = await import('@/lib/styled-ways')
+    const kept = await getStyledWays(admin, me.memberId, itemId, 'blend').catch(() => [])
+    if (kept.length >= STYLE_THIS_LOOKS) return { looks: kept }
+  }
+
   const library = await loadComposableLibrary(member)
   const pool = library.some((i) => i.item_id === itemId) ? library : [...library, hero]
   const [taste, lens, history] = await Promise.all([
@@ -3525,16 +3553,34 @@ export async function styleSavedPiece(
     .sort((a, b) => rank(a) - rank(b) || a - b)
   const dims = new Map<string, any>((pool as any[]).map((i) => [i.item_id, i]))
   const prefs = readStylePrefs(member)
+  const looks = passing.slice(0, STYLE_THIS_LOOKS).map((i) => ({
+    look_id: null,
+    image_url: null,
+    items: composed[i].items.map((it: any) => ({ ...it, image_url: dims.get(it.item_id ?? '')?.image_url ?? null })),
+    why: whyThisSuitsHer(composed[i].items.map((it) => ({ ...(dims.get(it.item_id ?? '') ?? {}), product_name: it.product_name, owned: !!it.owned })), prefs),
+    _verdict: (judged[i].check?.verdict === 'works' ? 'works' : 'borderline') as 'works' | 'borderline',
+    _confidence: judged[i].check?.confidence ?? null,
+  }))
+  void keepStyledWays(admin, me.memberId, itemId, looks, 'tap')
   return {
     hidden: composed.length - passing.length,
-    looks: passing.slice(0, STYLE_THIS_LOOKS).map((i) => ({
-      look_id: null,
-      image_url: null,
-      items: composed[i].items.map((it: any) => ({ ...it, image_url: dims.get(it.item_id ?? '')?.image_url ?? null })),
-      why: whyThisSuitsHer(composed[i].items.map((it) => ({ ...(dims.get(it.item_id ?? '') ?? {}), product_name: it.product_name, owned: !!it.owned })), prefs),
-    })),
+    looks: looks.map(({ _verdict, _confidence, ...l }) => l),
     ...(passing.length ? {} : { error: 'Nothing passed the check for this piece right now' }),
   }
+}
+
+/** Keep judged looks so the next tap is instant — never in the way of this answer. */
+function keepStyledWays(
+  admin: any, memberId: string, heroId: string,
+  looks: { items: LookItem[]; why: string; _verdict: 'works' | 'borderline'; _confidence: number | null; occasion_id?: string | null; occasion_label?: string | null }[],
+  source: 'tap' | 'mcp',
+): void {
+  if (!looks.length) return
+  import('@/lib/styled-ways')
+    .then(({ saveStyledWays }) => saveStyledWays(admin, memberId, heroId, 'blend', looks.map((l) => ({
+      items: l.items, why: l.why, verdict: l._verdict, confidence: l._confidence, occasion_id: l.occasion_id ?? null, occasion_label: l.occasion_label ?? null,
+    })), source))
+    .catch((err) => console.error('[styled-ways] keep', err))
 }
 
 export async function styleOwnedPiece(
@@ -3550,6 +3596,12 @@ export async function styleOwnedPiece(
     const library = await loadComposableLibrary(member)
     const hero = library.find((i) => i.item_id === itemId && isOwnedItem(i as any))
     if (!hero) return { looks: [], error: 'That piece is not in your wardrobe' }
+
+    if (!opts.occasion && !opts.withType && !(opts.shuffle ?? 0) && !opts.query?.trim()) {
+      const { getStyledWays } = await import('@/lib/styled-ways')
+      const kept = await getStyledWays(admin, me.memberId, itemId, 'blend').catch(() => [])
+      if (kept.length >= STYLE_THIS_LOOKS) return { looks: kept, read: null }
+    }
 
     let pool = library
     // "Find a white shirt to go with this skirt" — her words, read onto the
@@ -3609,15 +3661,22 @@ export async function styleOwnedPiece(
       .sort((a, b) => rank(a) - rank(b) || a - b)
     const dims = new Map<string, any>(library.map((i) => [i.item_id, i]))
     const prefs = readStylePrefs(member)
+    const occLabel = opts.occasion ? (CLIENT_OCCASIONS.find((o) => o.id === opts.occasion)?.label ?? null) : null
+    const looks = passing.slice(0, STYLE_THIS_LOOKS).map((i) => ({
+      look_id: null,
+      image_url: null,
+      items: composed[i].items.map((it: any) => ({ ...it, image_url: it.image_url ?? dims.get(it.item_id ?? '')?.image_url ?? null })),
+      why: whyThisSuitsHer(composed[i].items.map((it) => ({ ...(dims.get(it.item_id ?? '') ?? {}), product_name: it.product_name, owned: !!it.owned })), prefs),
+      occasion_id: opts.occasion ?? null,
+      occasion_label: occLabel,
+      _verdict: (judged[i].check?.verdict === 'works' ? 'works' : 'borderline') as 'works' | 'borderline',
+      _confidence: judged[i].check?.confidence ?? null,
+    }))
+    void keepStyledWays(admin, me.memberId, itemId, looks, 'tap')
     return {
       hidden: composed.length - passing.length,
       read,
-      looks: passing.slice(0, STYLE_THIS_LOOKS).map((i) => ({
-        look_id: null,
-        image_url: null,
-        items: composed[i].items,
-        why: whyThisSuitsHer(composed[i].items.map((it) => ({ ...(dims.get(it.item_id ?? '') ?? {}), product_name: it.product_name, owned: !!it.owned })), prefs),
-      })),
+      looks: looks.map(({ _verdict, _confidence, ...l }) => l),
       ...(passing.length ? {} : { error: 'Nothing passed the check for this piece right now — try another occasion' }),
     }
   } catch (err) {

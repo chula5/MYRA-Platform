@@ -22,6 +22,7 @@ import {
 import type { BatchView } from '@/lib/outfit-quality/batch-read'
 import type { PreDecisionCandidate } from '@/lib/outfit-quality/queue-read-model'
 import RulesOnlyBadge from './RulesOnlyBadge'
+import { thumbUrl } from '@/lib/image-utils'
 import ReviewWorkbench from './ReviewWorkbench'
 import CoverageView from './CoverageView'
 
@@ -65,23 +66,31 @@ function BatchesView() {
   const [data, setData] = useState<QualityData | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
-  // Create-form state.
-  const [partition, setPartition] = useState<string>('test')
+  // Create-form state. TRAINING is the default on purpose: only training
+  // reviews teach the stylist anything (see README "Learning scopes").
+  const [partition, setPartition] = useState<string>('training')
   const [contextType, setContextType] = useState<ContextType>('evaluation_profile')
   const [memberId, setMemberId] = useState<string>('')
   const [profileId, setProfileId] = useState<string>('')
   const [stylistId, setStylistId] = useState<string>('')
   const [targetCount, setTargetCount] = useState<number>(10)
+  const [fromWays, setFromWays] = useState(false)
   const [preview, setPreview] = useState<{ rules_only: boolean; confirmed_count: number } | null>(null)
 
   const refresh = useCallback(async () => {
-    const d = await loadQualityData()
-    setData(d)
+    setLoadError(null)
+    try {
+      const d = await loadQualityData()
+      setData(d)
+    } catch (e) {
+      setLoadError(`COULD NOT LOAD OUTFIT QUALITY: ${e instanceof Error ? e.message : String(e)}`.toUpperCase())
+    }
   }, [])
 
   useEffect(() => {
-    refresh().catch((e) => setMsg(String(e)))
+    void refresh()
   }, [refresh])
 
   async function run(key: string, fn: () => Promise<any>, ok: string) {
@@ -119,12 +128,23 @@ function BatchesView() {
           evaluationProfileId: contextType === 'evaluation_profile' ? profileId : null,
           selectedStylistId: stylistId,
           targetCount,
+          source: fromWays && contextType === 'real_member' ? 'styled_ways' : 'composer',
         }),
       'DRAFT BATCH CREATED (ZERO CANDIDATES)',
     )
   }
 
   if (!data) {
+    if (loadError) {
+      return (
+        <div>
+          <p className="text-[20px] tracking-[0.12em] text-[#B83A3A] mb-4">{loadError}</p>
+          <button type="button" onClick={() => void refresh()} className="border border-[#0A0A0A] px-5 py-3 text-[18px] tracking-[0.14em] text-[#0A0A0A] hover:bg-[#0A0A0A] hover:text-white">
+            RETRY
+          </button>
+        </div>
+      )
+    }
     return <p className="text-[20px] tracking-[0.12em] text-[#6B6B6B]">LOADING OUTFIT QUALITY…</p>
   }
 
@@ -201,6 +221,10 @@ function BatchesView() {
                   <option key={m.member_id} value={m.member_id}>{m.name}</option>
                 ))}
               </select>
+              <span className="flex items-center gap-2 text-[18px] text-[#0A0A0A] normal-case tracking-normal mt-2">
+                <input type="checkbox" checked={fromWays} onChange={(e) => setFromWays(e.target.checked)} />
+                FROM HER WAYS TO WEAR — review exactly what MYRA showed her, instead of composing new looks
+              </span>
             </label>
           ) : (
             <label className="flex flex-col gap-2 text-[18px] tracking-[0.1em] text-[#6B6B6B]">
@@ -317,6 +341,11 @@ function BatchCard({
             START (FREEZE SNAPSHOT)
           </button>
         )}
+        {batch.status === 'draft' && (
+          <span className="text-[17px] tracking-[0.06em] text-[#6B6B6B]">
+            START FREEZES THE STYLIST AS SHE IS NOW — INCLUDING WHAT HER LATEST TRAINING REVIEWS TAUGHT HER.
+          </span>
+        )}
 
         {batch.status === 'active' && (
           <>
@@ -381,11 +410,18 @@ function BatchCard({
                   <span className="text-[17px] tracking-[0.08em] text-[#6B6B6B]">MACHINE CHECK PENDING REVIEW</span>
                 )}
               </div>
+              {c.objective_failures?.length > 0 && (
+                <ul className="mb-3 space-y-1">
+                  {c.objective_failures.map((line) => (
+                    <li key={line} className="text-[16px] tracking-[0.06em] text-[#6B6B6B]">{line}</li>
+                  ))}
+                </ul>
+              )}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
                 {c.items.map((it) => (
                   <figure key={it.candidate_item_id} className="min-w-0">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={it.source_image_url} alt={`${it.slot}: ${String(it.item_snapshot?.brand ?? 'item')}`} className="aspect-[4/5] w-full bg-[#F7F6F3] object-contain border border-[#EDEBE6]" />
+                    <img src={thumbUrl(it.source_image_url, 384)} loading="lazy" decoding="async" alt={`${it.slot}: ${String(it.item_snapshot?.brand ?? 'item')}`} className="aspect-[4/5] w-full bg-[#F7F6F3] object-contain border border-[#EDEBE6]" />
                     <figcaption className="text-[16px] text-[#6B6B6B] mt-2">{it.slot}</figcaption>
                   </figure>
                 ))}

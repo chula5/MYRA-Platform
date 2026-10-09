@@ -234,7 +234,12 @@ const TYPE_RULES: Array<[RegExp, string]> = [
   [/\bsandal|\bslide\b|flip.?flop/, 'sandal'],
   [/\bpump|stiletto|\bheel|slingback/, 'heel'],
   // "Raffia Texture Flat Bag" is a bag: a flat followed by a bag word is not a shoe.
-  [/ballerina|ballet|mary.?jane|loafer|espadrille|\bflat\b(?!\s*(?:bag|pouch|clutch|purse|wallet|tote|cross.?body|cap)\b)|\bflats\b/, 'flat'],
+  // And a top called Ballerina is not a shoe either. Shoes are read before
+  // tops, so St. Agni's "Organic Cotton Ballerina Top", Lemaire's "BALLERINA
+  // LONG SLEEVE TOP", Sessùn's CHEBBI sweatshirt in the colour Ballerina, a
+  // "flat front" trouser and WYSE's "loafer jean" were all filed as flats. A
+  // garment word within reach on either side keeps this rule off.
+  [/(?<!\b(?:top|tops|knit|knitted|sweatshirts?|sweater|jumper|cardigan|trousers?|pants?|sweatpants?|dress|dresses|jeans?|shirts?|blouse|bodies|bodysuit|skirts?|sleeve|belt)\b[\s\w-]{0,40})(?:ballerina|ballet|mary.?jane|loafer|espadrille|\bflat\b(?!\s*(?:front|bag|pouch|clutch|purse|wallet|tote|cross.?body|cap|calfskin|leather belt)\b)|\bflats\b)(?![\s\w-]{0,40}\b(?:top|tops|knit|knitted|sweatshirts?|sweater|jumper|cardigan|trousers?|pants?|sweatpants?|dress|dresses|jeans?|shirts?|blouse|bodies|bodysuit|skirts?|sleeve|belt)\b)/, 'flat'],
   [/\btote/, 'tote'], [/\bclutch|\bpouch/, 'clutch'], [/cross.?body/, 'crossbody'],
   [/shoulder bag/, 'shoulder_bag'], [/\bhandbag|\bbag\b|\bbags\b/, 'structured_bag'],
   [/shirt.?dress/, 'shirt_dress'], [/slip.?dress/, 'slip_dress'],
@@ -252,7 +257,8 @@ const TYPE_RULES: Array<[RegExp, string]> = [
   [/knit|sweater|jumper|cardigan|pullover|turtleneck|roll.?neck|polo.?neck/, 'knitwear'],
   // Everything else called a vest: a sleeveless top.
   [/\bblouse|camisole|\bcami\b|\btop\b|\btops\b|\btank\b|\bvest\b|\bwaistcoat/, 'blouse'], [/\bovershirt|\bshirt/, 'shirt'],
-  [/\bjeans|\bdenim\b/, 'jeans'],
+  // Singular too: WYSE names a piece "Signature Jean". Not a jean jacket or skirt.
+  [/\bjeans|\bjean\b(?![\s-]*(?:jacket|shirt|skirt|dress|short))|\bdenim\b/, 'jeans'],
   // Singular, too. American shops name a piece "Bradum Pant in Wool", and a
   // feed with no product_type leaves the title as the only signal — AFLALO
   // sends product_type as the literal string "undefined". `\bpants` matched
@@ -267,7 +273,7 @@ const TYPE_RULES: Array<[RegExp, string]> = [
   // skirt, "Short black double breasted wool bomber" is a jacket, "Short
   // Glove" is a glove. Every one of those rules is tested below this one, so
   // an unguarded "pant"/"short" wins by being read first.
-  [/trouser|\bpants|\bpant\b(?=[\s-]*(?:$|\d|[-–|,]|in\b))|chino|legging/, 'trousers'],
+  [/trouser|\bpants|\bpant\b(?=[\s-]*(?:$|\d|[-–|,]|in\b))|sweatpants?|chino|legging/, 'trousers'],
   [/bermuda|\bshorts|\bshort\b(?=[\s-]*(?:$|\d|[-–|,]|in\b))(?<!\bskirt\b[\s\w-]{0,40})/, 'shorts'],
   [/\bskirt/, 'skirt'],
   [/\bjacket|bomber|anorak|windbreaker/, 'jacket'],
@@ -308,6 +314,10 @@ const COLOUR_LEXICON: Array<[RegExp, string]> = [
   [/grape leaf|four leaf clover|watercress|kelp|scarab|turf green|amazon|\bsag\b|sage|moss|fern|eucalyptus|seaweed|artichoke|basil|juniper|cypress|loden|bottle green|bottiglia|sea turtle|seafoam|sea foam|foxtrot/, 'green'],
   // reds, wines
   [/port royale|cabernet|merlot|claret|sangria|rhubarb|garnet|brick red|tawny port|syrah/, 'burgundy'],
+  // Dark fruits — fig, damson, mulberry — are a wine-brown, not a cream. An
+  // unlisted name sends the piece to the photo reader, which on MKDT's fig
+  // trousers answered with the cream knit the model wore above them.
+  [/\bfig\b|damson|mulberry|blackberry|\bprune\b|raisin|black cherry|black currant|blackcurrant/, 'burgundy'],
   [/cranberry|poppy red|lipstick/, 'red'],
   // pinks, purples
   [/ballet slipper|peachy|blush|powder pink|dusty rose|sweet grape|orchid|mauve|heather/, 'pink'],
@@ -564,6 +574,9 @@ export function typeFromStoredRow(row: {
     }).itemType
   } catch { return null }
 }
+
+/** The Shopify-feed classifier, for tests only — the scan reaches it through scanShopifyBrand. */
+export const classifyShopifyProductForTests = classifyAndScore
 
 export function classifyExternalProduct(p: ParsedProduct): ScannedProduct {
   const path = (() => { try { return new URL(p.url).pathname } catch { return '' } })()
@@ -1411,7 +1424,12 @@ async function applyVisionColour(products: ScannedProduct[], minScore: number): 
   const capped = candidates.slice(0, VISION_COLOUR_CAP)
 
   const admin = createAdminClient() as any
-  const cache = await loadColourReads(admin, capped.map((p) => p.images[0]))
+  // The read is of a NAMED piece now, so a cached answer is only good for the
+  // same piece in the same photo: the key carries the garment as a fragment
+  // (a fragment never reaches the CDN). Reads made before the garment was
+  // named stay under the bare URL and are not reused for a typed piece.
+  const keyOf = (p: ScannedProduct) => (p.itemType ? `${p.images[0]}#garment=${p.itemType}` : p.images[0])
+  const cache = await loadColourReads(admin, capped.map(keyOf))
   const fresh: Array<{ image_url: string; colour_family: string | null }> = []
 
   const CONC = 6
@@ -1419,13 +1437,14 @@ async function applyVisionColour(products: ScannedProduct[], minScore: number): 
     const chunk = capped.slice(i, i + CONC)
     const reads = await Promise.all(chunk.map(async (p) => {
       const url = p.images[0]
-      if (cache.has(url)) return cache.get(url) ?? null
-      const { colour, error } = await classifyProductColour(url)
+      const key = keyOf(p)
+      if (cache.has(key)) return cache.get(key) ?? null
+      const { colour, error } = await classifyProductColour(url, garmentWord(p.itemType))
       // Cache a genuine "cannot tell" so a broken image is not paid for twice,
       // but NEVER cache an outage: an API with no credit left would otherwise
       // poison every image it touched during the outage, permanently.
       const transient = error && /credit|rate.?limit|overloaded|timeout|429|5\d\d/i.test(error)
-      if (!transient) fresh.push({ image_url: url, colour_family: colour })
+      if (!transient) fresh.push({ image_url: key, colour_family: colour })
       return colour
     }))
     reads.forEach((colour, j) => {
@@ -1444,6 +1463,18 @@ async function applyVisionColour(products: ScannedProduct[], minScore: number): 
 }
 
 /** Colours already read from these images on an earlier scan. */
+/** The piece in plain words for the photo reader: "trousers", "flat shoes", "bag". */
+export function garmentWord(itemType: string | null | undefined): string | null {
+  if (!itemType) return null
+  const words: Record<string, string> = {
+    heel: 'heeled shoes', flat: 'flat shoes', mule: 'mules', boot: 'boots', sandal: 'sandals', sneaker: 'trainers',
+    structured_bag: 'bag', shoulder_bag: 'bag', crossbody: 'bag', tote: 'tote bag', clutch: 'clutch bag',
+    hair_accessory: 'hair accessory', 't-shirt': 't-shirt', knitwear: 'knitted piece', blouse: 'top',
+    midi_dress: 'dress', maxi_dress: 'dress', mini_dress: 'dress', slip_dress: 'dress', shirt_dress: 'dress',
+  }
+  return words[itemType] ?? itemType.replace(/_/g, ' ')
+}
+
 async function loadColourReads(admin: any, urls: string[]): Promise<Map<string, string | null>> {
   const out = new Map<string, string | null>()
   const unique = Array.from(new Set(urls.filter(Boolean)))

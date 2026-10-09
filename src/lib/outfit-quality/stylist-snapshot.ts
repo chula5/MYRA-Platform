@@ -41,8 +41,10 @@ export const SNAPSHOT_SYSTEM_VERSIONS: SystemVersions = {
   generation_model: 'pilot-composer',
   prompt_version: 'quality-lab-generation-v1',
   objective_rules_version: 'quality-lab-objective-v1',
-  // The existing subjective look check runs on this model (see look-check.ts).
-  subjective_check_model: 'claude-opus-5',
+  // The subjective look check (look-check.ts) runs on this model for every
+  // snapshot frozen from now on. Sonnet 5.5 is several times faster than Opus
+  // on the contact-sheet verdict and is what lets a chunk arrive in seconds.
+  subjective_check_model: 'claude-sonnet-5-5',
   // v2: the checker prompt is built from the frozen snapshot payload
   // (constitution, brief, rules, learned model, inspiration summary).
   subjective_prompt_version: 'quality-lab-subjective-v2',

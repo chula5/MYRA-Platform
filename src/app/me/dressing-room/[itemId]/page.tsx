@@ -4,6 +4,8 @@ import { loadMyPiece } from '../actions'
 import PieceClient from '../PieceClient'
 
 export const dynamic = 'force-dynamic'
+// A tap on a piece may wait on MYRA's eye; the route needs the minute, not the seconds a page normally gets.
+export const maxDuration = 60
 
 // One of her pieces: how it has been styled, STYLE THIS and the finders.
 export default async function PiecePage({ params }: { params: Promise<{ itemId: string }> }) {

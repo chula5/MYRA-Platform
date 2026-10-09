@@ -3,6 +3,8 @@ import { getOutfit } from '@/lib/admin-queries'
 import OutfitDetailClient from './OutfitDetailClient'
 
 export const dynamic = 'force-dynamic'
+// A tap on a piece may wait on MYRA's eye; the route needs the minute, not the seconds a page normally gets.
+export const maxDuration = 60
 
 interface PageProps {
   params: Promise<{ id: string }>

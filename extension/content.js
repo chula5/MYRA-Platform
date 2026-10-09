@@ -35,7 +35,7 @@
   // purpose, one screen every few seconds, so her own address is never the
   // one that trips the wall.
   const SCAN_KEY = 'myra-mirror-scan'
-  const SCAN_MAX_PAGES = 25, SCAN_MAX_MS = 8 * 60_000, SCAN_STEP_MS = 2500, SCAN_STILL_ROUNDS = 3
+  const SCAN_MAX_PAGES = 40, SCAN_MAX_MS = 10 * 60_000, SCAN_STEP_MS = 2500, SCAN_STILL_ROUNDS = 3
   const scanFromHash = (location.hash.match(/myra-scan=([0-9a-f-]{36})/i) || [])[1] || null
   let scan = null
   try {
@@ -113,6 +113,225 @@
       return /next page|(^|\s)next(\s|$)/i.test(t) && !/slide|carousel|previous|prev\b/i.test(t) && !b.disabled && b.getAttribute('aria-disabled') !== 'true' && visible(b) && !b.closest('.myra-mirror-panel')
     })
   }
+  // ── READING THE PAGES ─────────────────────────────────────────────────────
+  // Her Chrome is past the wall, so the grid's pages can simply be fetched
+  // and read — no scrolling, no tiles recycled out from under us, a few
+  // hundred pieces in seconds. Two readers: the tiles in the HTML (most
+  // shops), and the product list a Next.js shop embeds as JSON (J.Crew, where
+  // the tiles are drawn on the client and the HTML holds only a handful).
+  const PRODUCT_HREF = /\/(products?|p|item|items|shop\/product|dp)\/[^?#]+/i
+  const JUNK_IMG = /logo|sprite|icon|placeholder|spinner|loading|\/assets\/ref_|pixel|blank\.|1x1/i
+  const SCAN_FEED_CHUNK = 150
+  const toPrice = (s) => { const n = Number(String(s ?? '').replace(/[^\d.,]/g, '').replace(/,(\d{2})$/, '.$1').replace(/,/g, '')); return Number.isFinite(n) && n > 0 ? n : null }
+  function parseHtmlTiles(doc, base) {
+    const out = new Map()
+    const origin = (() => { try { return new URL(base).origin } catch { return location.origin } })()
+    const abs = (h) => { try { return new URL(h, base).href.split(/[?#]/)[0] } catch { return null } }
+    for (const a of doc.querySelectorAll('a[href]')) {
+      const raw = a.getAttribute('href') || ''
+      if (!PRODUCT_HREF.test(raw)) continue
+      const key = abs(raw)
+      if (!key || !key.startsWith(origin) || out.has(key)) continue
+      // The tile: the highest ancestor still about this one piece.
+      let el = a
+      for (let i = 0; i < 6 && el.parentElement && el.parentElement !== doc.body; i++) {
+        const parent = el.parentElement
+        const n = new Set([...parent.querySelectorAll('a[href]')].map((x) => x.getAttribute('href') || '').filter((h) => PRODUCT_HREF.test(h)).map(abs)).size
+        if (n > 1) break
+        el = parent
+      }
+      const image = [...el.querySelectorAll('img')]
+        .map((i) => i.getAttribute('src') || i.getAttribute('data-src') || (i.getAttribute('srcset') || i.getAttribute('data-srcset') || '').split(/[ ,]/)[0] || '')
+        .map((src) => (src && !/^data:/i.test(src) && !JUNK_IMG.test(src) ? abs(src) : null))
+        .find(Boolean) || null
+      const heading = el.querySelector('h1,h2,h3,h4,[class*="name" i],[class*="title" i]')
+      const title = (heading?.textContent || el.querySelector('img')?.getAttribute('alt') || a.getAttribute('aria-label') || a.getAttribute('title') || a.textContent || '')
+        .replace(/\s+/g, ' ').trim().slice(0, 200)
+      if (!title || !image) continue
+      const text = el.textContent || ''
+      out.set(key, { url: key, title, price: toPrice((text.match(/[£$€]\s?\d[\d,]*(?:\.\d{1,2})?/) || [])[0]), image, available: !/sold out|out of stock/i.test(text) })
+    }
+    return out
+  }
+  function findProductArrays(o, out = [], depth = 0) {
+    if (!o || typeof o !== 'object' || depth > 9) return out
+    if (Array.isArray(o)) {
+      const looksLikeProducts = o.length >= 5 && o.every((x) => x && typeof x === 'object')
+        && o.slice(0, 3).every((x) => (x.name || x.productDescription || x.title || x.productName) && (x.url || x.slug || x.productCode || x.handle))
+      if (looksLikeProducts) out.push(o)
+      else for (const x of o) findProductArrays(x, out, depth + 1)
+      return out
+    }
+    for (const k of Object.keys(o)) findProductArrays(o[k], out, depth + 1)
+    return out
+  }
+  function parseNextData(html, base) {
+    const out = new Map()
+    const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)
+    if (!m) return out
+    let j
+    try { j = JSON.parse(m[1]) } catch { return out }
+    let host = ''
+    try { host = new URL(base).host } catch {}
+    for (const arr of findProductArrays(j.props)) {
+      for (const p of arr) {
+        const title = String(p.productDescription || p.name || p.productName || p.title || '').trim()
+        const href = p.url || p.slug || (p.handle ? `/products/${p.handle}` : null)
+        if (!title || !href) continue
+        let url
+        try { url = new URL(href, base).href.split(/[?#]/)[0] } catch { continue }
+        const imgField = Object.entries(p).find(([k, v]) => /image|img|thumbnail/i.test(k) && typeof v === 'string' && /^https?:/.test(v))
+        let image = imgField ? imgField[1] : null
+        // J.Crew keeps no picture on the product: the image is its code and colour.
+        if (!image && /(^|\.)jcrew\.com$/i.test(host) && p.productCode) image = `https://www.jcrew.com/s7-img-facade/${p.productCode}_${p.defaultColorCode || p.colors?.[0]?.colorCode || ''}?wid=600`
+        if (!image) continue
+        out.set(url, { url, title: title.slice(0, 200), price: toPrice(p.listPrice?.amount ?? p.price?.amount ?? p.price ?? p.searchPrice), image, available: true })
+      }
+    }
+    return out
+  }
+  async function fetchPage(url, attempt = 0) {
+    try {
+      const r = await fetch(url, { credentials: 'include', headers: { accept: 'text/html' } })
+      // One bad answer is not the end of the grid — a wall or a hiccup mid-scan
+      // (J.Crew stopped at page 2 while another scan ran beside it). Once more, after a pause.
+      if (!r.ok) { if (attempt < 2) { await sleep(2500 * (attempt + 1)); return fetchPage(url, attempt + 1) } return null }
+      const html = await r.text()
+      const found = parseHtmlTiles(new DOMParser().parseFromString(html, 'text/html'), url)
+      for (const [k, v] of parseNextData(html, url)) if (!found.has(k)) found.set(k, v)
+      return found
+    } catch { if (attempt < 2) { await sleep(2500 * (attempt + 1)); return fetchPage(url, attempt + 1) } return null }
+  }
+  const pageUrlWith = (key, n) => { const u = new URL(location.href.split('#')[0]); u.searchParams.set(key, String(n)); return u.toString() }
+  /** Send what this page added, in batches; returns how many were new. */
+  async function feedScan(found) {
+    if (!scan) return 0
+    const fresh = [...found.values()].filter((p) => !scan.keySet.has(p.url))
+    for (const p of fresh) scan.keySet.add(p.url)
+    for (let i = 0; i < fresh.length; i += SCAN_FEED_CHUNK) {
+      const res = await send({ type: 'scanFeed', host: location.host, products: fresh.slice(i, i + SCAN_FEED_CHUNK).map((p) => ({ url: p.url, title: p.title, brand: null, type: null, price: p.price, image: p.image, available: p.available })) })
+      if (res && typeof res.queued === 'number') scan.queued += res.queued
+    }
+    persistScan()
+    scanBadge(scanStatus())
+    void reportScan(false)
+    return fresh.length
+  }
+  /**
+   * Which parameter turns the page: the one in this URL if it has one, else
+   * page, Npge, p… tried in turn — the first that yields pieces the first
+   * page did not have. Cumulative when page 2 still carries page 1's pieces
+   * (Reformation): then a high page number holds everything up to it.
+   */
+  async function findPaginator(firstKeys) {
+    const here = pageNumberOf(location.href)
+    const keys = here?.key && here.key !== 'path' ? [here.key] : []
+    for (const k of PAGE_PARAMS) if (!keys.includes(k)) keys.push(k)
+    for (const key of keys) {
+      const page2 = await fetchPage(pageUrlWith(key, 2))
+      if (!page2 || !page2.size) continue
+      const fresh = [...page2.keys()].filter((k) => !firstKeys.has(k)).length
+      if (!fresh) { await sleep(500); continue }
+      const carried = [...firstKeys].filter((k) => page2.has(k)).length
+      return { key, page2, cumulative: carried >= Math.min(firstKeys.size, 4) && page2.size > firstKeys.size }
+    }
+    return null
+  }
+  // ── INDITEX ──────────────────────────────────────────────────────────────
+  // Massimo Dutti's grid is an Angular page with nothing in its HTML; the
+  // pieces come from the shop's own JSON API, which her Chrome may call as
+  // the page does. The inline config names the store and the category, the
+  // grid call lists every piece in it, and the product call (25 at a time)
+  // carries name, pictures, price and sizes. A "bundle" is a look of several
+  // pieces — the pieces inside it are what Brand Watch wants.
+  const INDITEX_HOST = /(^|\.)massimodutti\.com$/i
+  async function scanInditex() {
+    if (!INDITEX_HOST.test(location.host)) return false
+    const html = document.documentElement.innerHTML
+    const num = (k) => (html.match(new RegExp(`"${k}"\\s*:\\s*"?(\\d+)`)) || [])[1] || null
+    const store = num('iStoreId'), category = num('iCategoryId'), catalog = num('iCatalogId') || store
+    if (!store || !category) return false
+    scanBadge('MYRA scanning · reading the catalogue…')
+    const api = async (path) => {
+      try { const r = await fetch(`/itxrest/3/catalog/store/${store}/${catalog}/${path}`, { credentials: 'include' }); return r.ok ? await r.json() : null } catch { return null }
+    }
+    const grid = await api(`category/${category}/product?languageId=-1&showProducts=false&appId=1`)
+    const ids = [...new Set((grid?.productIds || []).filter((x) => typeof x === 'number'))]
+    if (!ids.length) return false
+    const country = location.pathname.split('/')[1] || ''
+    for (let i = 0; i < ids.length && scan; i += 25) {
+      const page = await api(`productsArray?languageId=-1&productIds=${ids.slice(i, i + 25).join(',')}&appId=1`)
+      const found = new Map()
+      for (const p of page?.products || []) {
+        for (const b of p.type === 'BundleBean' ? p.bundleProductSummaries || [] : [p]) {
+          const title = String(b.name || b.nameEn || '').trim()
+          if (!title || !b.productUrl || !b.productUrlParam) continue
+          const url = `${location.origin}/${country}/${b.productUrl}?pelement=${b.productUrlParam}`
+          const medias = (b.detail?.xmedia?.[0]?.xmediaItems || []).flatMap((x) => x.medias || [])
+          // "-w" is the piece worn, "-o" the packshot: the page leads with worn.
+          const image = (medias.find((m) => /-w\d\./.test(m.url || '')) || medias[0])?.url || null
+          if (!image) continue
+          const sizes = (b.detail?.colors || []).flatMap((c) => c.sizes || [])
+          const pence = Number(sizes.find((s) => s.price)?.price)
+          found.set(url, { url, title: title.slice(0, 200), price: Number.isFinite(pence) && pence > 0 ? pence / 100 : null, image, available: b.isBuyable !== false && (!sizes.length || sizes.some((s) => s.visibilityValue === 'SHOW')) })
+        }
+      }
+      scan.pages = Math.floor(i / 25) + 1
+      await feedScan(found)
+      await sleep(400)
+    }
+    return true
+  }
+  /** Read the grid by its pages. False when the shop has no page URLs — then the scroll loop takes over. */
+  async function scanByFetch() {
+    scanBadge('MYRA scanning · reading the pages…')
+    const first = (await fetchPage(location.href.split('#')[0])) || new Map()
+    for (const p of productOf.values()) if (p.url && p.image && !first.has(p.url)) first.set(p.url, { url: p.url, title: p.title, price: p.price, image: p.image, available: p.available })
+    await feedScan(first)
+    const firstKeys = new Set(first.keys())
+    const pag = await findPaginator(firstKeys)
+    if (!pag) return false
+    scan.pages = 2
+    await feedScan(pag.page2)
+    const deadline = scan.startedAt + SCAN_MAX_MS
+    if (!pag.cumulative) {
+      // A shop's pages can overlap and drift between requests (J.Crew's
+      // "best of" sort reshuffles as it goes), so one page that adds nothing
+      // is not the end — three in a row, or an empty page, is.
+      let quiet = 0
+      for (let n = 3; n <= SCAN_MAX_PAGES && Date.now() < deadline; n++) {
+        const found = await fetchPage(pageUrlWith(pag.key, n))
+        if (!found || !found.size) break
+        scan.pages = n
+        quiet = (await feedScan(found)) === 0 ? quiet + 1 : 0
+        if (quiet >= 3) break
+        await sleep(1000)
+      }
+      return true
+    }
+    // Cumulative: stride up until a page falls back to the start (past the
+    // end) or adds nothing, then feel for the true end in smaller steps.
+    let prev = pag.page2.size, lastGood = 2
+    for (let n = 8; n <= SCAN_MAX_PAGES * 2 && Date.now() < deadline; n += 8) {
+      const found = await fetchPage(pageUrlWith(pag.key, n))
+      if (!found) break
+      const fresh = await feedScan(found)
+      if (found.size < prev) break
+      prev = found.size; lastGood = n; scan.pages = n
+      if (fresh === 0) break
+      await sleep(800)
+    }
+    for (const step of [4, 2, 1]) {
+      const n = lastGood + step
+      const found = await fetchPage(pageUrlWith(pag.key, n))
+      if (!found) continue
+      await feedScan(found)
+      if (found.size >= prev) { prev = found.size; lastGood = n; scan.pages = n }
+      await sleep(600)
+    }
+    return true
+  }
+
   async function finishScan(reason) {
     if (!scan) return
     scanBadge(`MYRA done · ${scan.keySet.size} seen · ${scan.queued} queued — in Brand Watch`)
@@ -124,9 +343,10 @@
     let still = 0, lastCount = -1
     while (scan) {
       if (Date.now() - scan.startedAt > SCAN_MAX_MS) return finishScan('time')
-      // A plain scroll, not a smooth one: some shops (Reformation) swallow
-      // smooth scrolling entirely and the page would never move.
-      window.scrollBy(0, Math.round(innerHeight * 0.9))
+      // An instant scroll, never a smooth one: a shop that sets
+      // scroll-behavior: smooth (Sézane, Reformation) animates scrollBy, and
+      // in a tab behind her nothing animates — the page would never move.
+      window.scrollTo({ top: scrollY + Math.round(innerHeight * 0.9), behavior: 'instant' })
       await sleep(SCAN_STEP_MS)
       if (!scan) return
       // Growth is measured in pieces seen, not tiles on the page: a grid that
@@ -146,7 +366,7 @@
       // No link, but a NEXT button: a shop that pages in place. Click it,
       // count the page, and keep reading from the top of the new one.
       const nextButton = scan.pages < SCAN_MAX_PAGES ? findNextButton() : null
-      if (nextButton) { scan.pages += 1; persistScan(); await reportScan(false); nextButton.click(); still = 0; lastCount = -1; lastSig = ''; await sleep(SCAN_STEP_MS * 2); window.scrollTo(0, 0); continue }
+      if (nextButton) { scan.pages += 1; persistScan(); await reportScan(false); nextButton.click(); still = 0; lastCount = -1; lastSig = ''; await sleep(SCAN_STEP_MS * 2); window.scrollTo({ top: 0, behavior: 'instant' }); continue }
       return finishScan('end')
     }
   }
@@ -948,7 +1168,7 @@
         styleButton(t.el, product)
       }
       const t0 = performance.now()
-      const res = await send({ type: 'rank', host: location.host, products })
+      const res = await send({ type: 'rank', host: location.host, products, scan: !!scan })
       if (!res || res.error || !Array.isArray(res.products)) return
       noteScanned(products, res)
       const scores = new Map(res.products.map((p) => [p.key, p]))
@@ -1014,7 +1234,15 @@
   setInterval(onNavigated, 300)
 
   await run()
-  if (scan) { scanBadge(scanStatus()); void reportScan(false); void scanLoop() }
+  if (scan) {
+    scanBadge(scanStatus()); void reportScan(false)
+    void (async () => {
+      const read = (await scanInditex()) || (await scanByFetch())
+      if (!scan) return
+      if (read) await finishScan('end')
+      else { scanBadge(scanStatus()); await scanLoop() }
+    })()
+  }
   // A panel that was building when she left the last page still belongs to
   // her — if here is a shop, the badge's dot says it is ready and she opens
   // it. Anywhere else it waits in the worker rather than interrupting, and

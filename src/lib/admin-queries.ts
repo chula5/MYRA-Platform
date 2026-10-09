@@ -406,18 +406,48 @@ export async function getItem(id: string): Promise<ItemWithBrand | null> {
 // live. Archived items are excluded. The composer treats drafts as composable
 // so newly-ingested pieces can be assembled into outfits immediately, without
 // the user having to mark each one ready first.
+//
+// Read in pages. PostgREST caps any single read at 1,000 rows, and the
+// library passed that long ago (7,429 composable pieces on 2026-10-08) — so
+// until this paginated, every composer saw only the newest thousand pieces
+// and silently never offered the rest. The pages are fetched together after
+// one count, so a full read is one round trip longer than a capped one.
+const POOL_PAGE = 1000
+
 export async function getReadyAndLiveItems(): Promise<ItemWithBrand[]> {
   const supabase = createAdminClient()
   try {
-    const { data, error } = await supabase
+    const statuses = ['draft', 'ready', 'live']
+    const { count, error: countErr } = await supabase
       .from('item')
-      .select('*, brand(*)')
-      .in('status', ['draft', 'ready', 'live'])
-      .order('created_at', { ascending: false })
-    if (error) throw error
+      .select('item_id', { count: 'exact', head: true })
+      .in('status', statuses)
+    if (countErr) throw countErr
+    const pages = Math.max(1, Math.ceil((count ?? 0) / POOL_PAGE))
+    const results = await Promise.all(
+      Array.from({ length: pages }, (_, i) =>
+        supabase
+          .from('item')
+          .select('*, brand(*)')
+          .in('status', statuses)
+          .order('created_at', { ascending: false })
+          .order('item_id', { ascending: true })
+          .range(i * POOL_PAGE, i * POOL_PAGE + POOL_PAGE - 1),
+      ),
+    )
+    const rows: ItemWithBrand[] = []
+    const seen = new Set<string>()
+    for (const r of results) {
+      if (r.error) throw r.error
+      for (const it of (r.data ?? []) as unknown as ItemWithBrand[]) {
+        if (seen.has(it.item_id)) continue // a page boundary moved under us
+        seen.add(it.item_id)
+        rows.push(it)
+      }
+    }
     // Shared pool = retail only. A client's owned pieces (migration 0046) are
     // composed for HER alone via the private-stylist path.
-    return retailOnly((data ?? []) as unknown as ItemWithBrand[])
+    return retailOnly(rows)
   } catch (err) {
     console.error('[getReadyAndLiveItems]', err)
     return []

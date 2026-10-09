@@ -25,6 +25,7 @@ import {
   loadComposableLibrary, loadMemberTaste, loadPersonaLens, loadComposeHistory, type StyledLook,
 } from '@/app/admin/private-stylist/actions'
 import type { MirrorMember } from './auth'
+import { getStyledWays, saveStyledWays } from '@/lib/styled-ways'
 
 /**
  * wardrobe    — only what she owns goes around the piece.
@@ -135,6 +136,13 @@ export async function styleExternalPiece(
   const { data: row } = await admin.from('pilot_member').select('*').eq('member_id', member.member_id).single()
   if (!row) return { looks: [], error: 'Member not found' }
   const heroView = { item_id: hero.item_id, product_name: hero.product_name, image_url: hero.image_url ?? null }
+
+  // What MYRA already keeps around this piece, in this pool, is the answer
+  // when it is complete — judged once, shown every time (lib/styled-ways).
+  if (opts.check !== false) {
+    const kept = await getStyledWays(admin, member.member_id, hero.item_id, mode).catch(() => [])
+    if (kept.length >= LOOKS) return { hero: heroView, checked: true, looks: kept }
+  }
 
   const library = await loadComposableLibrary(row)
   let pool: any[]
@@ -263,20 +271,30 @@ export async function styleExternalPiece(
   const passing = oneEach(survived)
   const dims = new Map<string, any>(pool.map((i) => [i.item_id, i]))
   const prefs = readStylePrefs(row)
+  const looks: StyledLook[] = passing.slice(0, LOOKS).map((i) => ({
+    look_id: null,
+    image_url: null,
+    occasion_id: perOccasion[i].id,
+    occasion_label: perOccasion[i].label,
+    // Each piece carries its picture: the pop-out and the extension's panel
+    // both show the look, and a composed LookItem has no image of its own.
+    items: composed[i].items.map((it: any) => ({ ...it, image_url: dims.get(it.item_id ?? '')?.image_url ?? null })),
+    why: whyThisSuitsHer(composed[i].items.map((it: any) => ({ ...(dims.get(it.item_id ?? '') ?? {}), product_name: it.product_name, owned: !!it.owned })), prefs),
+  }))
+  // Kept for next time — never in the way of this answer.
+  saveStyledWays(admin, member.member_id, hero.item_id, mode, passing.slice(0, LOOKS).map((i, k) => ({
+    items: looks[k].items,
+    why: looks[k].why,
+    verdict: judged[i].check?.verdict === 'works' ? 'works' : 'borderline',
+    confidence: judged[i].check?.confidence ?? null,
+    occasion_id: perOccasion[i].id,
+    occasion_label: perOccasion[i].label || null,
+  })), 'mirror').catch((err) => console.error('[styled-ways] mirror keep', err))
   return {
     hero: heroView,
     checked: true,
     hidden: composed.length - survived.length,
-    looks: passing.slice(0, LOOKS).map((i) => ({
-      look_id: null,
-      image_url: null,
-      occasion_id: perOccasion[i].id,
-      occasion_label: perOccasion[i].label,
-      // Each piece carries its picture: the pop-out and the extension's panel
-      // both show the look, and a composed LookItem has no image of its own.
-      items: composed[i].items.map((it) => ({ ...it, image_url: dims.get(it.item_id ?? '')?.image_url ?? null })),
-      why: whyThisSuitsHer(composed[i].items.map((it) => ({ ...(dims.get(it.item_id ?? '') ?? {}), product_name: it.product_name, owned: !!it.owned })), prefs),
-    })),
+    looks,
     ...(passing.length ? {} : { error: 'Nothing passed the check for this piece right now' }),
   }
 }

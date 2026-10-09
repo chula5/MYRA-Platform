@@ -4,6 +4,8 @@ import { loadMyDressingRoom } from './actions'
 import DressingRoomClient from './DressingRoomClient'
 
 export const dynamic = 'force-dynamic'
+// A tap on a piece may wait on MYRA's eye; the route needs the minute, not the seconds a page normally gets.
+export const maxDuration = 60
 
 // DRESSING ROOM — her own pieces.
 export default async function DressingRoomPage() {

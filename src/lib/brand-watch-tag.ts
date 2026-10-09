@@ -82,7 +82,7 @@ export const TAG_MODEL = 'claude-haiku-4-5-20251001'
  * guessing? Run both over the same sample and compare against the library's own
  * tags — a cheap model that is merely cheap is not cheap.
  */
-export const TAG_MODEL_STRONG = 'claude-sonnet-4-5-20250929'
+export const TAG_MODEL_STRONG = 'claude-sonnet-5-5'
 /** Claude charges by image area; a cut and a drape read fine this small. */
 const TAG_IMAGE_WIDTH = 512
 
@@ -92,7 +92,7 @@ const PRICES: Record<string, [number, number]> = {
   'gpt-5.6-luna': [0.2, 1.2],
   'gpt-5.4-nano': [0.05, 0.4],
   'claude-haiku-4-5-20251001': [1, 5],
-  'claude-sonnet-4-5-20250929': [3, 15],
+  'claude-sonnet-5-5': [2, 10],
 }
 
 // ---------------------------------------------------------------- tier 1: rules

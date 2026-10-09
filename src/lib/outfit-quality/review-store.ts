@@ -21,6 +21,8 @@ import {
   planRelease,
   type DecideInput,
   type PlanContext,
+  planDismiss,
+  planRestore,
 } from '@/lib/outfit-quality/review-plan'
 import { latestActiveDecision, type ReviewEventRow } from '@/lib/outfit-quality/review-state'
 import { promoteApprovedVersion, markPromotionWithdrawn } from '@/lib/outfit-quality/promotion'
@@ -29,6 +31,9 @@ import {
   applyCompensatingProjections,
   type LearningAttribution,
 } from '@/lib/outfit-quality/learning-projection'
+import { isLearningEligible } from '@/lib/outfit-quality/learning-projection'
+import { createStyleBrainSink, type QualityLearningSink } from '@/lib/outfit-quality/style-brain-bridge'
+import { anchorOf } from '@/lib/outfit-quality/scope-signature'
 
 type Admin = ReturnType<typeof createAdminClient>
 
@@ -53,14 +58,23 @@ function isUniqueViolation(err: { code?: string; message?: string } | null): boo
 
 // ── Loading the planner context ───────────────────────────────────────────────
 
-async function loadContext(db: any, candidateVersionId: string): Promise<{ ctx?: PlanContext; error?: MutationFailure }> {
+/** One frozen manifest row — enough to teach the Style Brain which pieces were judged. */
+interface ContextItem {
+  candidate_item_id: string
+  item_id: string
+  slot: string
+  sort_order: number
+}
+type LoadedContext = PlanContext & { items: ContextItem[] }
+
+async function loadContext(db: any, candidateVersionId: string): Promise<{ ctx?: LoadedContext; error?: MutationFailure }> {
   const { data: version, error: vErr } = await db
     .from('outfit_quality_candidate_version')
     .select('candidate_version_id, case_id, version_no, state')
     .eq('candidate_version_id', candidateVersionId)
     .maybeSingle()
   if (vErr) return { error: failure('read_failed', vErr.message) }
-  if (!version) return { ctx: { version: null, kase: null, itemIds: [], events: [], holds: [], renderJobs: [] } }
+  if (!version) return { ctx: { version: null, kase: null, itemIds: [], items: [], events: [], holds: [], renderJobs: [] } }
 
   const [{ data: kase, error: cErr }, { data: items, error: iErr }, { data: events, error: eErr }, { data: holds, error: hErr }, { data: jobs, error: jErr }] =
     await Promise.all([
@@ -69,7 +83,7 @@ async function loadContext(db: any, candidateVersionId: string): Promise<{ ctx?:
         .select('case_id, current_version_id, status, data_partition, selected_stylist_id, real_member_id, evaluation_profile_id')
         .eq('case_id', version.case_id)
         .maybeSingle(),
-      db.from('outfit_quality_candidate_item').select('candidate_item_id').eq('candidate_version_id', candidateVersionId),
+      db.from('outfit_quality_candidate_item').select('candidate_item_id, item_id, slot, sort_order').eq('candidate_version_id', candidateVersionId),
       db.from('outfit_quality_review_event').select('*').eq('candidate_version_id', candidateVersionId).order('created_at', { ascending: true }),
       db.from('outfit_quality_queue_hold').select('*').eq('candidate_version_id', candidateVersionId),
       db.from('outfit_quality_render_job').select('render_job_id, candidate_version_id, approval_event_id, cycle_no, status, lease_token').eq('candidate_version_id', candidateVersionId),
@@ -82,6 +96,7 @@ async function loadContext(db: any, candidateVersionId: string): Promise<{ ctx?:
       version,
       kase: kase ?? null,
       itemIds: ((items ?? []) as any[]).map((i) => i.candidate_item_id),
+      items: ((items ?? []) as any[]).map((i) => ({ candidate_item_id: i.candidate_item_id, item_id: i.item_id, slot: i.slot, sort_order: i.sort_order ?? 0 })),
       events: (events ?? []) as ReviewEventRow[],
       holds: (holds ?? []) as any[],
       renderJobs: (jobs ?? []) as any[],
@@ -210,11 +225,17 @@ export type DecideResult =
     }
   | MutationFailure
 
+export interface DecideDeps {
+  /** Where a training decision teaches the house; defaults to the Style Brain bridge. */
+  learningSink?: QualityLearningSink
+}
+
 export async function decideCandidate(
   candidateVersionId: string,
   input: DecideInput,
   actor: ReviewActor,
   admin: Admin = createAdminClient(),
+  deps: DecideDeps = {},
 ): Promise<DecideResult> {
   const db = admin as any
 
@@ -310,6 +331,28 @@ export async function decideCandidate(
     },
   })
   if (!learning.ok) warnings.push(`learning projection failed: ${learning.code}`)
+
+  // The decision also teaches the house itself — the SAME Style Brain, item
+  // ejections and material pairings Outfit Review and the Composer feed — so
+  // the stylist's next Start composes with what this review taught. Training
+  // partition only: test batches (and automated tests) must never move her
+  // real model.
+  if (isLearningEligible(ctx!.kase?.data_partition) && ctx!.kase?.selected_stylist_id) {
+    const sink = deps.learningSink ?? createStyleBrainSink(admin)
+    const look = {
+      stylistId: ctx!.kase.selected_stylist_id as string,
+      itemIds: ctx!.items.map((i) => i.item_id),
+      anchorItemId: anchorOf(ctx!.items),
+    }
+    const offending = event.candidate_item_id ? ctx!.items.find((i) => i.candidate_item_id === event.candidate_item_id)?.item_id ?? null : null
+    const taught =
+      event.decision === 'yes'
+        ? await sink.approve(look)
+        : offending
+          ? await sink.rejectItem(look, offending, event.reason_code ?? null)
+          : await sink.rejectLook(look, event.reason_code ?? null)
+    if (!taught.ok) warnings.push(taught.warning)
+  }
 
   let renderJobId: string | null = null
   if (plan.enqueueRender) {
@@ -618,4 +661,128 @@ export async function releaseCandidate(
     return { ok: true, reused: true, hold }
   }
   return { ok: true, reused: false, hold: released[0] }
+}
+
+// ── Dismiss / restore (no verdict, no learning, reversible) ────────────────────
+
+export type DismissResult =
+  | { ok: true; reused: boolean; event: ReviewEventRow; nextState: 'dismissed'; warnings?: string[] }
+  | MutationFailure
+
+/**
+ * Take a candidate out of the queue WITHOUT judging it. Nothing is learned,
+ * nothing is promoted, nothing is deleted: the version is kept (state
+ * `dismissed`, hidden from the active queue, visible under ALL) and the
+ * dismissal is one more append-only event, reversible with restoreCandidate.
+ */
+export async function dismissCandidate(
+  candidateVersionId: string,
+  input: { idempotencyKey: string; note?: string | null },
+  actor: ReviewActor,
+  admin: Admin = createAdminClient(),
+): Promise<DismissResult> {
+  const db = admin as any
+  const existing = input.idempotencyKey ? await eventByIdempotencyKey(db, input.idempotencyKey) : null
+  if (existing) return { ok: true, reused: true, event: existing, nextState: 'dismissed' }
+
+  const { ctx, error } = await loadContext(db, candidateVersionId)
+  if (error) return error
+  const plan = planDismiss(ctx!, input)
+  if (!plan.ok) return plan
+
+  // Claim the version out of awaiting_human exactly as decide does, so a
+  // racing decision and dismissal cannot both land.
+  const { data: claimed, error: claimErr } = await db
+    .from('outfit_quality_candidate_version')
+    .update({ state: 'dismissed' })
+    .eq('candidate_version_id', candidateVersionId)
+    .eq('state', 'awaiting_human')
+    .select('candidate_version_id')
+  if (claimErr) return failure('state_update_failed', claimErr.message)
+  if (!claimed || claimed.length === 0) return failure('conflict', 'the version changed while you dismissed it — reload the queue')
+
+  const { data: event, error: evErr } = await db
+    .from('outfit_quality_review_event')
+    .insert({
+      candidate_version_id: candidateVersionId,
+      action: 'dismiss',
+      decision: null,
+      reason_code: null,
+      candidate_item_id: null,
+      note: plan.event.note,
+      reverses_event_id: null,
+      reviewer_user_id: actor.userId,
+      idempotency_key: input.idempotencyKey,
+    })
+    .select('*')
+    .maybeSingle()
+  if (evErr || !event) {
+    await db.from('outfit_quality_candidate_version').update({ state: 'awaiting_human' }).eq('candidate_version_id', candidateVersionId).eq('state', 'dismissed')
+    if (isUniqueViolation(evErr)) {
+      const replay = await eventByIdempotencyKey(db, input.idempotencyKey)
+      if (replay) return { ok: true, reused: true, event: replay, nextState: 'dismissed' }
+    }
+    return failure('event_insert_failed', evErr?.message ?? 'no row returned')
+  }
+
+  const warnings: string[] = []
+  const { error: caseErr } = await db.from('outfit_quality_case').update({ status: 'dismissed' }).eq('case_id', ctx!.version!.case_id)
+  if (caseErr) warnings.push(`case status update failed: ${caseErr.message}`)
+  return { ok: true, reused: false, event: event as ReviewEventRow, nextState: 'dismissed', ...(warnings.length ? { warnings } : {}) }
+}
+
+export type RestoreResult =
+  | { ok: true; reused: boolean; event: ReviewEventRow; nextState: 'awaiting_human'; warnings?: string[] }
+  | MutationFailure
+
+/** Reverse a dismissal: the version returns to the active queue. */
+export async function restoreCandidate(
+  candidateVersionId: string,
+  input: { idempotencyKey: string },
+  actor: ReviewActor,
+  admin: Admin = createAdminClient(),
+): Promise<RestoreResult> {
+  const db = admin as any
+  const existing = input.idempotencyKey ? await eventByIdempotencyKey(db, input.idempotencyKey) : null
+  if (existing) return { ok: true, reused: true, event: existing, nextState: 'awaiting_human' }
+
+  const { ctx, error } = await loadContext(db, candidateVersionId)
+  if (error) return error
+  const plan = planRestore(ctx!, input)
+  if (!plan.ok) return plan
+
+  const { data: event, error: evErr } = await db
+    .from('outfit_quality_review_event')
+    .insert({
+      candidate_version_id: candidateVersionId,
+      action: 'undo',
+      decision: null,
+      reason_code: null,
+      candidate_item_id: null,
+      note: null,
+      reverses_event_id: plan.event.reverses_event_id,
+      reviewer_user_id: actor.userId,
+      idempotency_key: input.idempotencyKey,
+    })
+    .select('*')
+    .maybeSingle()
+  if (evErr || !event) {
+    if (isUniqueViolation(evErr)) {
+      const replay = await eventByIdempotencyKey(db, input.idempotencyKey)
+      if (replay) return { ok: true, reused: true, event: replay, nextState: 'awaiting_human' }
+    }
+    return failure('event_insert_failed', evErr?.message ?? 'no row returned')
+  }
+
+  const { error: stateErr } = await db
+    .from('outfit_quality_candidate_version')
+    .update({ state: 'awaiting_human' })
+    .eq('candidate_version_id', candidateVersionId)
+    .eq('state', 'dismissed')
+  if (stateErr) return failure('state_update_failed', stateErr.message)
+
+  const warnings: string[] = []
+  const { error: caseErr } = await db.from('outfit_quality_case').update({ status: 'awaiting_human' }).eq('case_id', ctx!.version!.case_id)
+  if (caseErr) warnings.push(`case status update failed: ${caseErr.message}`)
+  return { ok: true, reused: false, event: event as ReviewEventRow, nextState: 'awaiting_human', ...(warnings.length ? { warnings } : {}) }
 }

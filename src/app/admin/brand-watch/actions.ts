@@ -633,6 +633,40 @@ export async function setWatchedBrandConfidenceBar(watchedBrandId: string, bar: 
 interface SweepResult { error?: string; sweeping?: true; label?: string; note?: string }
 
 /**
+ * AUTO-ADD for several brands at once, at one bar. The READY TO AUTOMATE
+ * section lists the brands whose gate is earned; ticking a handful and choosing
+ * a bar used to mean the same two taps on every card. Each brand's backlog
+ * above the bar is swept exactly as the single switch does it, so the result
+ * is the same as flipping them one by one. `overriddenIds` are the ones being
+ * switched on before their gate was earned — the card records that.
+ */
+export async function enableAutoAddForBrands(
+  ids: string[], bar: number, overriddenIds: string[] = [],
+): Promise<{ error?: string; done: number; sweeping: number; notes: string[] }> {
+  await assertAdmin()
+  const admin = createAdminClient() as any
+  const clamped = Math.max(0.5, Math.min(0.99, Number(bar) || DEFAULT_CONFIDENCE))
+  const overridden = new Set(overriddenIds)
+  const now = new Date().toISOString()
+  let done = 0
+  let sweeping = 0
+  const notes: string[] = []
+  for (const id of Array.from(new Set(ids))) {
+    const patch: any = { auto_keep_confidence: true, auto_keep_confidence_since: now, confidence_bar: clamped }
+    if (overridden.has(id)) patch.auto_keep_manual = true
+    const { error } = await admin.from('watched_brand').update(patch).eq('watched_brand_id', id)
+    if (error) {
+      return { error: /auto_keep_confidence|confidence_bar/.test(error.message) ? 'RUN MIGRATION 0066_brand_watch_confidence.sql IN SUPABASE FIRST' : error.message, done, sweeping, notes }
+    }
+    done += 1
+    const r = await sweepTheBacklog(admin, id)
+    if (r.sweeping) sweeping += 1
+    else if (r.note) notes.push(r.note)
+  }
+  return { done, sweeping, notes }
+}
+
+/**
  * A bar she has just set is a decision about the whole queue, not only about
  * what arrives next week. Automation itself only ever looks forward — each
  * level reads from the moment it was switched on — so setting the bar, or

@@ -13,7 +13,7 @@ import {
   keepAllForBrandInBackground, keepConfidentNowInBackground, keepShownInBackground, loadBrandJobs,
   keepItems, loadQueuePage, removeWatchedBrand, setWatchedBrandActive, setWatchedBrandAutoKeep, setWatchedBrandScanUrl, startMirrorScan,
   setWatchedBrandAutoKeepConfidence, setWatchedBrandConfidenceBar, loadAutoAdded, undoAutoKeep,
-  setWatchedBrandAutoKeepAll,
+  setWatchedBrandAutoKeepAll, enableAutoAddForBrands,
   loadSiteRequests, decideSiteRequest,
   setWatchedBrandAutoKeepTwins, keepTwinsNowForBrand,
   setWatchedBrandMinScore, skipItems, undoSkip, setSkipReason, type QueueFilters, type QueueItemRow, type QueuePage, type QueueSort,
@@ -24,6 +24,39 @@ import { bulkLine, bulkLineVisible, type BulkJob } from '@/lib/brand-watch-jobs'
 const CHIP = 'px-3 py-1.5 rounded-full text-[9px] tracking-[0.12em] border transition-colors'
 const CHIP_ON = `${CHIP} bg-[#0A0A0A] text-white border-[#0A0A0A]`
 const CHIP_OFF = `${CHIP} bg-white text-[#6B6B6B] border-[#E2E0DB] hover:border-[#0A0A0A]`
+
+/**
+ * A filter as a dropdown, dressed as a chip: dark when something is chosen,
+ * plain when it reads ALL. The counts sit in the options, so nothing the chips
+ * said is lost — only the space they took.
+ */
+function Dropdown({ label, value, options, onChange, swatch }: {
+  label: string
+  value: string
+  options: { value: string; label: string; count?: number }[]
+  onChange: (value: string) => void
+  swatch?: string
+}) {
+  const on = value !== ''
+  const current = options.find((o) => o.value === value)
+  return (
+    <span className={`relative inline-flex items-center rounded-full border transition-colors ${on ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'bg-white text-[#6B6B6B] border-[#E2E0DB] hover:border-[#0A0A0A]'}`}>
+      {on && swatch && <span className="absolute left-3 w-2.5 h-2.5 rounded-full border border-[#E2E0DB] pointer-events-none" style={{ background: swatch }} />}
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`appearance-none bg-transparent ${on && swatch ? 'pl-7' : 'pl-3'} pr-7 py-1.5 text-[9px] tracking-[0.12em] outline-none cursor-pointer text-inherit`}
+        title={current ? `${current.label}${current.count != null ? ` · ${current.count}` : ''}` : label}
+      >
+        <option value="" className="text-[#0A0A0A]">{label}</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value} className="text-[#0A0A0A]">{o.label}{o.count != null ? ` · ${o.count}` : ''}</option>
+        ))}
+      </select>
+      <span className="pointer-events-none absolute right-3 text-[8px]">▾</span>
+    </span>
+  )
+}
 
 /**
  * An automation switch. Never greyed: a brand may be switched on before the gate
@@ -174,6 +207,13 @@ export default function BrandWatchClient(props: Props) {
   const colourCounts = page.colourCounts ?? {}
   const typeChips = useMemo(() => chipsFor(PICKER_TYPES, typeCounts, fType), [typeCounts, fType])
   const colourChips = useMemo(() => chipsFor(PICKER_COLOURS, colourCounts, fColour), [colourCounts, fColour])
+  // The selected brand stays listed even when nothing of its is queued — it was
+  // chosen from the sidebar, and the dropdown must still say so.
+  const brandOptions = useMemo(() => {
+    const names = Object.keys(page.brandCounts).sort()
+    if (fBrand && !names.includes(fBrand)) names.push(fBrand)
+    return names.map((b) => ({ value: b, label: b.toUpperCase(), count: page.brandCounts[b] ?? 0 }))
+  }, [page.brandCounts, fBrand])
 
   const shown = useMemo(() => queue.filter((q) => !gone.has(q.item_id)), [queue, gone])
   // The watchlist row behind the selected brand chip — the brand-scoped buttons
@@ -250,6 +290,14 @@ export default function BrandWatchClient(props: Props) {
   )
   // A job she just started shows at once, and gets the poll going before the
   // server has written anything.
+  /** Setting the bar, or switching AUTO-ADD on, also clears what is waiting. */
+  const sawSweep = (id: string, name: string, r: { sweeping?: true; label?: string; note?: string } | null | undefined) => {
+    if (r?.note) { setNotice(`${name.toUpperCase()}: ${r.note.toUpperCase()}`); return }
+    if (!r?.sweeping) return
+    expectJob(id, { kind: 'keep-confident', label: r.label ?? 'ADDING THE BACKLOG', done: 0, total: 0, started_at: new Date().toISOString() })
+    setNotice(`${name.toUpperCase()}: ${(r.label ?? 'ADDING THE BACKLOG').toUpperCase()} — IN THE BACKGROUND, CARRY ON WITH ANOTHER BRAND`)
+  }
+
   const expectJob = (id: string, job: BulkJob) =>
     setJobs((j) => ({ ...j, [id]: { ...(j[id] ?? {}), bulk: job } }))
   const clearJob = (id: string) =>
@@ -347,6 +395,335 @@ export default function BrandWatchClient(props: Props) {
     if (!r.error) reloadQueue()
   }
 
+  // ---- the watchlist in rooms -----------------------------------------------
+  // Ticked brands for the bulk AUTO-ADD control, and which rooms are folded.
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [bulkBar, setBulkBar] = useState<number>(DEFAULT_CONFIDENCE)
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
+  const togglePick = (id: string) =>
+    setPicked((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  const sections = useMemo(() => {
+    const automated = (w: WatchedBrandRow) => !!(w.auto_keep_confidence || w.auto_keep_all || w.auto_keep || w.auto_keep_twins)
+    const proven = (w: WatchedBrandRow) => !!(confidenceTrust[w.watched_brand_id]?.trusted || trust[w.watched_brand_id]?.trusted)
+    const keptCount = (w: WatchedBrandRow) => decided[w.watched_brand_id]?.kept ?? 0
+    const auto = watched.filter(automated).sort((a, b) => Number(b.confidence_bar ?? DEFAULT_CONFIDENCE) - Number(a.confidence_bar ?? DEFAULT_CONFIDENCE) || a.name.localeCompare(b.name))
+    const ready = watched.filter((w) => !automated(w) && proven(w))
+    const fresh = watched.filter((w) => !automated(w) && !proven(w) && keptCount(w) === 0)
+    const rest = watched.filter((w) => !automated(w) && !proven(w) && keptCount(w) > 0)
+    // The AUTO-ADDING header counts the brands at each bar — 8 AT 85% · 4 AT 90%
+    // — plus the ones running on EVERYTHING or AUTOMATE with no bar at all.
+    const tally = new Map<string, number>()
+    for (const w of auto) {
+      const k = w.auto_keep_confidence ? `${Math.round(Number(w.confidence_bar ?? DEFAULT_CONFIDENCE) * 100)}%` : w.auto_keep_all ? 'EVERYTHING' : 'AUTOMATE / TWINS'
+      tally.set(k, (tally.get(k) ?? 0) + 1)
+    }
+    const byBar = Array.from(tally.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([k, n]) => `${n} AT ${k}`).join(' · ')
+    return [
+      { key: 'ready', label: 'READY TO AUTO-ADD', hint: 'GATE EARNED, NOT SWITCHED ON — TICK, CHOOSE A BAR, AUTO-ADD', rows: ready, openByDefault: true },
+      { key: 'auto', label: 'AUTO-ADDING', hint: auto.length ? byBar : 'NOTHING RUNS BY ITSELF YET', rows: auto, openByDefault: true },
+      { key: 'new', label: 'NEW · NOTHING KEPT YET', hint: 'REVIEW A FEW PIECES SO MYRA CAN LEARN THE BRAND', rows: fresh, openByDefault: false },
+      { key: 'rest', label: 'REVIEWING BY HAND', hint: 'KEPT SOME, GATE NOT EARNED YET', rows: rest, openByDefault: false },
+    ]
+  }, [watched, confidenceTrust, trust, decided])
+
+  // ---- one brand, folded ---------------------------------------------------
+  // A room shows one line per brand — name, queue, what runs and at what bar —
+  // so READY and AUTO-ADDING are both on screen at once. Ten full cards pushed
+  // the second room out of sight. MORE opens the full card in place.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const toggleExpand = (id: string) =>
+    setExpanded((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  const brandRow = (w: WatchedBrandRow) => {
+    const id = w.watched_brand_id
+    const inQueue = page.brandCounts[w.name] ?? 0
+    const selected = fBrand === w.name
+    const barPct = Math.round(Number(w.confidence_bar ?? DEFAULT_CONFIDENCE) * 100)
+    const job = jobs[id]
+    const line = bulkLineVisible(job?.bulk) ? bulkLine(job?.bulk) : null
+    const running = !!w.scan_state?.running && !staleScan(w.scan_state)
+    const on: string[] = []
+    if (w.auto_keep_all) on.push('EVERYTHING')
+    if (w.auto_keep) on.push('AUTOMATE')
+    if (w.auto_keep_twins) on.push('TWINS')
+    const d = decided[id]
+    return (
+      <div className={`px-3 py-2 border-b border-[#EFEDE9] last:border-b-0 flex items-center gap-2 ${selected ? 'bg-[#FAFAF8]' : ''}`}>
+        <input
+          type="checkbox" checked={picked.has(id)} onChange={() => togglePick(id)}
+          className="flex-shrink-0 w-3 h-3 accent-[#0A0A0A] cursor-pointer" title="Tick brands, then AUTO-ADD them at one bar above the list"
+        />
+        <button onClick={() => selectBrand(w.name)} className="min-w-0 flex-1 text-left group" title="Show this brand's queue">
+          <span className={`block text-[10px] tracking-[0.06em] truncate group-hover:underline ${selected ? 'text-[#0A0A0A] font-bold' : w.active ? 'text-[#4A4E57]' : 'text-[#A8A8A4] line-through'}`}>
+            {w.name.toUpperCase()}
+          </span>
+          <span className="block text-[8px] tracking-[0.08em] text-[#A8A8A4] truncate">
+            {inQueue} IN QUEUE{d ? ` · ${d.kept} KEPT · ${d.skipped} SKIPPED` : ''}
+            {on.length > 0 && <span className="text-[#3D6B45]"> · {on.join(' · ')}</span>}
+            {running && <span className="text-[#C4A882]"> · SCANNING</span>}
+            {line && <span className={line.tone === 'working' ? 'text-[#C4A882]' : line.tone === 'done' ? 'text-[#3D6B45]' : 'text-[#B4593A]'}> · {line.text}</span>}
+          </span>
+        </button>
+        {w.auto_keep_confidence ? (
+          <select
+            disabled={busyWith(`bar:${id}`)}
+            value={String(Number(w.confidence_bar ?? DEFAULT_CONFIDENCE))}
+            onChange={(e) => { const next = Number(e.target.value); act(`bar:${id}`, () => setWatchedBrandConfidenceBar(id, next), (r) => {
+              if (r?.error) { setNotice(r.error); return }
+              tweak(id, { confidence_bar: next })
+              sawSweep(id, w.name, r)
+            }) }}
+            className="flex-shrink-0 bg-[#0A0A0A] text-white text-[8px] tracking-[0.12em] rounded-full px-2 py-0.5 disabled:opacity-40"
+            title="AUTO-ADD is on: pieces above this chance you would keep it go straight to the library. Change it here — anything queued above the new bar is added too."
+          >
+            {/* A bar set elsewhere (0.92, say) is still her bar — it stays listed so the select never shows blank. */}
+            {Array.from(new Set([0.75, 0.8, 0.85, 0.9, 0.95, Number(w.confidence_bar ?? DEFAULT_CONFIDENCE)])).sort().map((b) => <option key={b} value={b} className="text-[#0A0A0A]">AUTO-ADD {Math.round(b * 100)}%</option>)}
+          </select>
+        ) : (
+          <span
+            className="flex-shrink-0 text-[8px] tracking-[0.12em] text-[#A8A8A4]"
+            title={confidenceTrust[id]?.summary ?? `Bar ${barPct}% — AUTO-ADD is off`}
+          >
+            {confidenceTrust[id]?.trusted ? `PROVEN AT ${barPct}%` : `${barPct}%`}
+          </span>
+        )}
+        <button
+          onClick={() => toggleExpand(id)}
+          className="flex-shrink-0 text-[8px] tracking-[0.12em] text-[#6B6B6B] hover:text-[#0A0A0A]"
+          title="Open the full card: scans, min score, every switch"
+        >
+          {expanded.has(id) ? 'LESS' : 'MORE'}
+        </button>
+      </div>
+    )
+  }
+
+  // ---- one brand's card -------------------------------------------------
+  // The same card in every room. A tick-box on the left feeds the bulk
+  // AUTO-ADD control above the list.
+  const brandCard = (w: WatchedBrandRow) => {
+        const id = w.watched_brand_id
+        const inQueue = page.brandCounts[w.name] ?? 0
+        const selected = fBrand === w.name
+        // A job reports on its own brand's card, so a brand she is not
+        // looking at still says what it is doing.
+        const job = jobs[id]
+        const line = bulkLineVisible(job?.bulk) ? bulkLine(job?.bulk) : null
+        // A switch that is on without the proof the gate wanted. Shown as one
+        // short line rather than three paragraphs per brand.
+        const unproven: string[] = []
+        if (w.auto_keep && !trust[id]?.trusted) unproven.push(`AUTOMATE ${trust[id]?.summary ?? ''}`.trim())
+        if (w.auto_keep_twins && !twinTrust[id]?.trusted) unproven.push(`TWINS ${twinTrust[id]?.summary ?? ''}`.trim())
+        if (w.auto_keep_confidence && !confidenceTrust[id]?.trusted) unproven.push(`AUTO-ADD ${confidenceTrust[id]?.summary ?? ''}`.trim())
+        return (
+          <div key={id} className={`px-3 py-2.5 border-b border-[#EFEDE9] last:border-b-0 ${selected ? 'bg-[#FAFAF8]' : ''}`}>
+            <div className="flex items-center justify-between gap-2">
+              <input
+                type="checkbox" checked={picked.has(id)} onChange={() => togglePick(id)}
+                className="flex-shrink-0 w-3 h-3 accent-[#0A0A0A] cursor-pointer" title="Tick brands, then AUTO-ADD them at one bar above the list"
+              />
+              <button onClick={() => selectBrand(w.name)} className="min-w-0 text-left group" title="Show this brand's queue">
+                <span className={`block text-[10px] tracking-[0.06em] truncate group-hover:underline ${selected ? 'text-[#0A0A0A] font-bold' : w.active ? 'text-[#4A4E57]' : 'text-[#A8A8A4] line-through'}`}>
+                  {w.name.toUpperCase()}
+                </span>
+                <span className="block text-[8px] tracking-[0.08em] text-[#A8A8A4]">
+                  {inQueue} IN QUEUE{w.last_checked_at ? ` · CHECKED ${w.last_checked_at.slice(0, 10)}` : ' · NEVER CHECKED'}
+                  {w.platform === 'browser' && ' · BROWSER'}
+                  {w.platform === 'mirror' && ' · MIRROR'}
+                  {w.scan_state?.running && w.scan_state.mode === 'mirror' && (staleScan(w.scan_state)
+                    ? <span className="text-[#B4593A]"> · CHROME SCAN STOPPED — IS THE MIRROR ON FOR THIS SITE?</span>
+                    : <span className="text-[#C4A882]"> · SCANNING IN CHROME · PAGE {w.scan_state.done ?? 1} · {w.scan_state.seen ?? 0} SEEN · {w.scan_state.queued ?? 0} QUEUED</span>)}
+                  {!w.scan_state?.running && w.scan_state?.mode === 'mirror' && w.scan_state.finished_at && (
+                    <span className="text-[#3D6B45]"> · LAST CHROME SCAN {w.scan_state.seen ?? 0} SEEN · {w.scan_state.queued ?? 0} QUEUED</span>)}
+                  {w.scan_state?.running && w.scan_state.mode !== 'mirror' && (staleScan(w.scan_state)
+                    ? <span className="text-[#B4593A]"> · SCAN STOPPED PART-WAY — RUN FULL SCAN AGAIN</span>
+                    : <span className="text-[#C4A882]"> · SCANNING {job?.scan?.done ?? w.scan_state.done ?? 0}/{job?.scan?.total ?? w.scan_state.total ?? '?'}</span>)}
+                  {!w.scan_state?.running && (w.scan_state?.remaining ?? 0) > 0 && <span className="text-[#C4A882]"> · {w.scan_state!.remaining} PAGES LEFT — FULL SCAN TO CONTINUE</span>}
+                </span>
+                {line && (
+                  <span
+                    className={`block text-[8px] tracking-[0.08em] ${line.tone === 'working' ? 'text-[#C4A882]' : line.tone === 'done' ? 'text-[#3D6B45]' : 'text-[#B4593A]'}`}
+                    title="This runs in the background — carry on with other brands"
+                  >
+                    {line.text}
+                  </span>
+                )}
+              </button>
+              <span className="flex gap-1.5 flex-shrink-0">
+                {w.platform === 'mirror' ? (
+                  <button
+                    disabled={busyWith(`scan:${id}`) || !w.scan_url}
+                    title={w.scan_url ? 'Opens the new-in page in a new tab; the Mirror scrolls and pages through it and queues what it reads' : 'Set the new-in page below first'}
+                    onClick={() => act(`scan:${id}`, () => startMirrorScan(id), (r) => {
+                      if (r?.error) { setNotice(r.error.toUpperCase()); return }
+                      if (r?.url) {
+                        // The Mirror, if it is installed, opens the page BEHIND this tab so she
+                        // stays on Brand Watch; a plain window.open can only open it in front.
+                        const root = document.documentElement
+                        if (root.dataset.myraMirror) { root.dataset.myraOpen = r.url; document.dispatchEvent(new Event('myra-mirror-open')) }
+                        else window.open(r.url, '_blank', 'noopener')
+                      }
+                      setNotice(`${w.name.toUpperCase()}: SCANNING IN CHROME IN A TAB BEHIND THIS ONE — THE CARD FOLLOWS IT`)
+                    })}
+                    className="text-[8px] tracking-[0.1em] text-[#F7F6F3] bg-[#141414] rounded-full px-2.5 py-1 disabled:opacity-40"
+                  >
+                    {busyWith(`scan:${id}`) ? 'OPENING…' : 'SCAN IN CHROME'}
+                  </button>
+                ) : (<>
+                <button
+                  disabled={busyWith(`scan:${id}`)}
+                  onClick={() => act(`scan:${id}`, () => checkBrandNowInBackground(id), started)}
+                  className="text-[8px] tracking-[0.1em] text-[#4A4E57] border border-[#E2E0DB] rounded-full px-2.5 py-1 hover:border-[#0A0A0A] transition-colors disabled:opacity-40"
+                >
+                  {busyWith(`scan:${id}`) ? <span className="text-[#C4A882]">WORKING…</span> : 'CHECK NOW'}
+                </button>
+                <button
+                  disabled={busyWith(`scan:${id}`)}
+                  onClick={() => act(`scan:${id}`, () => fullScanBrandInBackground(id), started)}
+                  className="text-[8px] tracking-[0.1em] text-[#4A4E57] border border-[#E2E0DB] rounded-full px-2.5 py-1 hover:border-[#0A0A0A] transition-colors disabled:opacity-40"
+                  title="Queue every on-taste piece in the whole catalogue at this brand's min score — lower the min score and run again to go deeper"
+                >
+                  FULL SCAN
+                </button>
+                </>)}
+              </span>
+            </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[8px] tracking-[0.1em] text-[#A8A8A4]">
+              <label className="flex items-center gap-1">
+                MIN SCORE
+                <input
+                  type="number" min={-9} max={9} defaultValue={w.min_score}
+                  onBlur={(e) => { const v = parseInt(e.target.value, 10); if (!isNaN(v) && v !== w.min_score) act(`minscore:${id}`, () => setWatchedBrandMinScore(id, v), (r) => { tweak(id, { min_score: v }); if (r?.rescanning) setNotice(`${w.name.toUpperCase()}: MIN SCORE LOWERED TO ${v} — FULL SCAN RUNNING IN THE BACKGROUND, THE PAGE FOLLOWS IT`) }) }}
+                  className="w-10 border border-[#E2E0DB] rounded px-1 py-0.5 text-[9px] text-[#4A4E57] outline-none focus:border-[#0A0A0A]"
+                />
+              </label>
+              {w.platform === 'mirror' && (
+                <label className="flex items-center gap-1 min-w-0">
+                  NEW-IN PAGE
+                  <input
+                    type="url" defaultValue={w.scan_url ?? ''} placeholder="https://brand.com/new-in"
+                    onBlur={(e) => { const v = e.target.value.trim(); if (v !== (w.scan_url ?? '')) act(`scanurl:${id}`, () => setWatchedBrandScanUrl(id, v), (r) => { if (r?.error) setNotice(r.error.toUpperCase()); else tweak(id, { scan_url: r?.scan_url ?? null }) }) }}
+                    className="w-56 border border-[#E2E0DB] rounded px-1 py-0.5 text-[9px] text-[#4A4E57] outline-none focus:border-[#0A0A0A]"
+                  />
+                </label>
+              )}
+              <button
+                disabled={busyWith(`active:${id}`)}
+                onClick={() => act(`active:${id}`, () => setWatchedBrandActive(id, !w.active), (r) => { if (!r?.error) tweak(id, { active: !w.active }) })}
+                className="hover:text-[#4A4E57] transition-colors disabled:opacity-40"
+              >
+                {w.active ? 'PAUSE' : 'RESUME'}
+              </button>
+              <button
+                disabled={busyWith(`remove:${id}`)}
+                onClick={() => { if (confirm(`Stop watching ${w.name}? Seen history is deleted too.`)) act(`remove:${id}`, () => removeWatchedBrand(id), () => router.refresh()) }}
+                className="hover:text-[#B3202A] transition-colors disabled:opacity-40"
+              >
+                REMOVE
+              </button>
+            </div>
+
+            {/* The four levels of automation, as plain switches. They are
+                never greyed out: a brand can be switched on before the gate
+                has been earned, and the line underneath says so. The
+                measurement itself is on each button's tooltip. */}
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[8px] tracking-[0.1em]">
+              <button
+                disabled={busyWith(`twins:${id}`)}
+                onClick={() => act(`twins:${id}`, () => setWatchedBrandAutoKeepTwins(id, !w.auto_keep_twins, !twinTrust[id]?.trusted), (r) => {
+                  if (r?.error) { setNotice(r.error); return }
+                  tweak(id, { auto_keep_twins: !w.auto_keep_twins })
+                })}
+                className={toggle(w.auto_keep_twins, !!twinTrust[id]?.trusted)}
+                title={`Twins of designs you kept${twinTrust[id]?.summary ? ` — ${twinTrust[id]!.summary}` : ''}`}
+              >
+                {w.auto_keep_twins ? 'TWINS ✓' : 'TWINS'}
+              </button>
+              <button
+                disabled={busyWith(`auto:${id}`)}
+                onClick={() => act(`auto:${id}`, () => setWatchedBrandAutoKeep(id, !w.auto_keep, !trust[id]?.trusted), (r) => {
+                  if (r?.error) { setNotice(r.error); return }
+                  tweak(id, { auto_keep: !w.auto_keep })
+                })}
+                className={toggle(w.auto_keep, !!trust[id]?.trusted)}
+                title={`What this brand's learning would keep${trust[id]?.summary ? ` — ${trust[id]!.summary}` : ''}`}
+              >
+                {w.auto_keep ? 'AUTOMATE ✓' : 'AUTOMATE'}
+              </button>
+              <button
+                disabled={busyWith(`conf:${id}`)}
+                onClick={() => act(`conf:${id}`, () => setWatchedBrandAutoKeepConfidence(id, !w.auto_keep_confidence, !confidenceTrust[id]?.trusted), (r) => {
+                  if (r?.error) { setNotice(r.error); return }
+                  tweak(id, { auto_keep_confidence: !w.auto_keep_confidence })
+                  sawSweep(id, w.name, r)
+                })}
+                className={toggle(w.auto_keep_confidence, !!confidenceTrust[id]?.trusted)}
+                title={`Pieces above your bar${confidenceTrust[id]?.summary ? ` — ${confidenceTrust[id]!.summary}` : ''}`}
+              >
+                {w.auto_keep_confidence ? 'AUTO-ADD ✓' : 'AUTO-ADD'}
+              </button>
+              {/* KEEP EVERYTHING — no model, no bar: every new piece this
+                  brand queues, in season. For a brand whose taste needs no
+                  predicting. Outgoing summer stock is still left alone. */}
+              <button
+                disabled={busyWith(`all:${id}`)}
+                onClick={() => act(`all:${id}`, () => setWatchedBrandAutoKeepAll(id, !w.auto_keep_all), (r) => {
+                  if (r?.error) { setNotice(r.error); return }
+                  tweak(id, { auto_keep_all: !w.auto_keep_all })
+                })}
+                className={toggle(!!w.auto_keep_all, true)}
+                title="Add every new piece this brand queues, in season. No bar, no model — outgoing summer stock is still left in the queue."
+              >
+                {w.auto_keep_all ? 'EVERYTHING ✓' : 'EVERYTHING'}
+              </button>
+              <select
+                disabled={busyWith(`bar:${id}`)}
+                value={String(Number(w.confidence_bar ?? DEFAULT_CONFIDENCE))}
+                onChange={(e) => { const next = Number(e.target.value); act(`bar:${id}`, () => setWatchedBrandConfidenceBar(id, next), (r) => {
+                  if (r?.error) { setNotice(r.error); return }
+                  tweak(id, { confidence_bar: next })
+                  sawSweep(id, w.name, r)
+                }) }}
+                className="bg-transparent text-[8px] tracking-[0.12em] text-[#6B6B6B] border border-[#E2E0DB] rounded-full px-2 py-0.5 disabled:opacity-40"
+                title="AUTO-ADD only takes a piece by itself above this chance you would keep it — setting it also sends everything already queued above it through"
+              >
+                {[0.75, 0.8, 0.85, 0.9, 0.95].map((b) => <option key={b} value={b}>{Math.round(b * 100)}%</option>)}
+              </select>
+            </div>
+
+            {/* One short line, and only when a switch is running without the
+                proof the gate wanted. The old card carried three paragraphs
+                of measurement under every brand; it is on the tooltips now. */}
+            {(unproven.length > 0 || w.auto_keep_all) && (
+              <div className="mt-1 text-[8px] tracking-[0.1em] text-[#B4593A] leading-relaxed">
+                {w.auto_keep_all && <div>EVERYTHING: EVERY NEW PIECE IN SEASON IS ADDED, NO BAR</div>}
+                {unproven.length > 0 && <div>ON WITHOUT PROOF: {unproven.join(' · ')}</div>}
+              </div>
+            )}
+
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-[8px] tracking-[0.12em]">
+              {decided[id] && (
+                <span className="text-[#A8A8A4]">{decided[id].kept} KEPT · {decided[id].skipped} SKIPPED</span>
+              )}
+              {inQueue > 0 && (confidenceTrust[id]?.trusted || w.auto_keep_all || w.auto_keep_manual) && (
+                <button
+                  disabled={busyWith(`backlog:${id}`)}
+                  onClick={() => { if (confirm(`Add every queued ${w.name} piece already above ${Math.round(Number(w.confidence_bar ?? DEFAULT_CONFIDENCE) * 100)}%? You can undo any of them.`)) act(`backlog:${id}`, () => keepConfidentNowInBackground(id), (r) => {
+                    if (r?.error) { setNotice(r.error); return }
+                    // Show it on this brand's card straight away, then poll.
+                    expectJob(id, { kind: 'keep-confident', label: r.label ?? 'ADDING THE BACKLOG', done: 0, total: 0, started_at: new Date().toISOString() })
+                    setNotice(`${w.name.toUpperCase()}: ${r.label ?? 'ADDING THE BACKLOG'} — IN THE BACKGROUND, CARRY ON WITH ANOTHER BRAND`)
+                  }) }}
+                  className="text-[#0A0A0A] underline underline-offset-2 disabled:opacity-40"
+                  title="Automation only takes pieces found after it was switched on; this clears what is already waiting"
+                >
+                  ADD THE BACKLOG
+                </button>
+              )}
+            </div>
+          </div>
+        )
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-8">
       {/* ------------------------------------------------ watchlist */}
@@ -381,215 +758,75 @@ export default function BrandWatchClient(props: Props) {
           </div>
         </div>
 
+        {/* The watchlist in four rooms, by what MYRA is doing with each brand:
+            gate earned and ready to switch on · auto-adding already · new,
+            nothing kept yet · the rest, still reviewed by hand. Each room folds
+            away, and ticked brands switch on together at one bar. */}
+        {picked.size > 0 && (
+          <div className="mb-2 border border-[#0A0A0A] rounded-[10px] p-2.5 flex flex-wrap items-center gap-2">
+            <span className="text-[9px] tracking-[0.12em] text-[#0A0A0A]">{picked.size} BRAND{picked.size === 1 ? '' : 'S'} TICKED</span>
+            <select
+              value={String(bulkBar)} onChange={(e) => setBulkBar(Number(e.target.value))}
+              className="bg-transparent text-[9px] tracking-[0.12em] text-[#0A0A0A] border border-[#E2E0DB] rounded-full px-2 py-0.5"
+              title="AUTO-ADD only takes a piece by itself above this chance you would keep it"
+            >
+              {[0.75, 0.8, 0.85, 0.9, 0.95].map((b) => <option key={b} value={b}>{Math.round(b * 100)}%</option>)}
+            </select>
+            <button
+              disabled={busyWith('bulkauto')}
+              onClick={() => {
+                const ids = Array.from(picked)
+                const overridden = ids.filter((id) => !confidenceTrust[id]?.trusted)
+                const names = ids.map((id) => watched.find((w) => w.watched_brand_id === id)?.name ?? '').filter(Boolean)
+                if (!confirm(`Switch AUTO-ADD on at ${Math.round(bulkBar * 100)}% for ${names.join(', ')}?${overridden.length ? ` ${overridden.length} of them have not earned the gate yet.` : ''} Anything already queued above the bar is added too — every piece can be undone.`)) return
+                act('bulkauto', () => enableAutoAddForBrands(ids, bulkBar, overridden), (r) => {
+                  if (r?.error) { setNotice(String(r.error).toUpperCase()); return }
+                  for (const id of ids) tweak(id, { auto_keep_confidence: true, confidence_bar: bulkBar, ...(overridden.includes(id) ? { auto_keep_manual: true } : {}) })
+                  setPicked(new Set())
+                  void loadBrandJobs().then(setJobs).catch(() => undefined)
+                  setNotice(`AUTO-ADD ON AT ${Math.round(bulkBar * 100)}% FOR ${r.done} BRAND${r.done === 1 ? '' : 'S'}${r.sweeping ? ` — ${r.sweeping} BACKLOG${r.sweeping === 1 ? '' : 'S'} ADDING IN THE BACKGROUND` : ''}${r.notes?.length ? ` · ${r.notes.join(' · ').toUpperCase()}` : ''}`)
+                })
+              }}
+              className="bg-[#0A0A0A] text-white rounded-full px-3 py-1.5 text-[9px] tracking-[0.12em] hover:opacity-85 transition-opacity disabled:opacity-40"
+            >
+              {busyWith('bulkauto') ? 'SWITCHING ON…' : `AUTO-ADD AT ${Math.round(bulkBar * 100)}%`}
+            </button>
+            <button onClick={() => setPicked(new Set())} className="text-[8px] tracking-[0.12em] text-[#6B6B6B] hover:text-[#0A0A0A]">CLEAR</button>
+          </div>
+        )}
+
         <div data-lenis-prevent className="border border-[#E2E0DB] rounded-[10px] overflow-hidden max-h-[60vh] overflow-y-auto">
           {watched.length === 0 && (
             <p className="px-3 py-4 text-[9px] tracking-[0.1em] text-[#A8A8A4]">NOTHING WATCHED YET — PASTE A SHOPIFY BRAND URL ABOVE.</p>
           )}
-          {watched.map((w) => {
-            const id = w.watched_brand_id
-            const inQueue = page.brandCounts[w.name] ?? 0
-            const selected = fBrand === w.name
-            // A job reports on its own brand's card, so a brand she is not
-            // looking at still says what it is doing.
-            const job = jobs[id]
-            const line = bulkLineVisible(job?.bulk) ? bulkLine(job?.bulk) : null
-            // A switch that is on without the proof the gate wanted. Shown as one
-            // short line rather than three paragraphs per brand.
-            const unproven: string[] = []
-            if (w.auto_keep && !trust[id]?.trusted) unproven.push(`AUTOMATE ${trust[id]?.summary ?? ''}`.trim())
-            if (w.auto_keep_twins && !twinTrust[id]?.trusted) unproven.push(`TWINS ${twinTrust[id]?.summary ?? ''}`.trim())
-            if (w.auto_keep_confidence && !confidenceTrust[id]?.trusted) unproven.push(`AUTO-ADD ${confidenceTrust[id]?.summary ?? ''}`.trim())
+          {sections.map((s) => {
+            const open = openSections[s.key] ?? s.openByDefault
+            const allPicked = s.rows.length > 0 && s.rows.every((w) => picked.has(w.watched_brand_id))
             return (
-              <div key={id} className={`px-3 py-2.5 border-b border-[#EFEDE9] last:border-b-0 ${selected ? 'bg-[#FAFAF8]' : ''}`}>
-                <div className="flex items-center justify-between gap-2">
-                  <button onClick={() => selectBrand(w.name)} className="min-w-0 text-left group" title="Show this brand's queue">
-                    <span className={`block text-[10px] tracking-[0.06em] truncate group-hover:underline ${selected ? 'text-[#0A0A0A] font-bold' : w.active ? 'text-[#4A4E57]' : 'text-[#A8A8A4] line-through'}`}>
-                      {w.name.toUpperCase()}
-                    </span>
-                    <span className="block text-[8px] tracking-[0.08em] text-[#A8A8A4]">
-                      {inQueue} IN QUEUE{w.last_checked_at ? ` · CHECKED ${w.last_checked_at.slice(0, 10)}` : ' · NEVER CHECKED'}
-                      {w.platform === 'browser' && ' · BROWSER'}
-                      {w.platform === 'mirror' && ' · MIRROR'}
-                      {w.scan_state?.running && w.scan_state.mode === 'mirror' && (staleScan(w.scan_state)
-                        ? <span className="text-[#B4593A]"> · CHROME SCAN STOPPED — IS THE MIRROR ON FOR THIS SITE?</span>
-                        : <span className="text-[#C4A882]"> · SCANNING IN CHROME · PAGE {w.scan_state.done ?? 1} · {w.scan_state.seen ?? 0} SEEN · {w.scan_state.queued ?? 0} QUEUED</span>)}
-                      {!w.scan_state?.running && w.scan_state?.mode === 'mirror' && w.scan_state.finished_at && (
-                        <span className="text-[#3D6B45]"> · LAST CHROME SCAN {w.scan_state.seen ?? 0} SEEN · {w.scan_state.queued ?? 0} QUEUED</span>)}
-                      {w.scan_state?.running && w.scan_state.mode !== 'mirror' && (staleScan(w.scan_state)
-                        ? <span className="text-[#B4593A]"> · SCAN STOPPED PART-WAY — RUN FULL SCAN AGAIN</span>
-                        : <span className="text-[#C4A882]"> · SCANNING {job?.scan?.done ?? w.scan_state.done ?? 0}/{job?.scan?.total ?? w.scan_state.total ?? '?'}</span>)}
-                      {!w.scan_state?.running && (w.scan_state?.remaining ?? 0) > 0 && <span className="text-[#C4A882]"> · {w.scan_state!.remaining} PAGES LEFT — FULL SCAN TO CONTINUE</span>}
-                    </span>
-                    {line && (
-                      <span
-                        className={`block text-[8px] tracking-[0.08em] ${line.tone === 'working' ? 'text-[#C4A882]' : line.tone === 'done' ? 'text-[#3D6B45]' : 'text-[#B4593A]'}`}
-                        title="This runs in the background — carry on with other brands"
-                      >
-                        {line.text}
-                      </span>
-                    )}
+              <div key={s.key} className="border-b border-[#E2E0DB] last:border-b-0">
+                <div className="sticky top-0 z-10 bg-[#F7F6F3] px-3 py-2 flex items-center justify-between gap-2">
+                  <button onClick={() => setOpenSections((o) => ({ ...o, [s.key]: !open }))} className="min-w-0 text-left" title={open ? 'Fold this room away' : 'Open this room'}>
+                    <span className="block text-[9px] tracking-[0.14em] text-[#0A0A0A]">{open ? '▾' : '▸'} {s.label} · {s.rows.length}</span>
+                    <span className="block text-[8px] tracking-[0.08em] text-[#A8A8A4] leading-relaxed">{s.hint}</span>
                   </button>
-                  <span className="flex gap-1.5 flex-shrink-0">
-                    {w.platform === 'mirror' ? (
-                      <button
-                        disabled={busyWith(`scan:${id}`) || !w.scan_url}
-                        title={w.scan_url ? 'Opens the new-in page in a new tab; the Mirror scrolls and pages through it and queues what it reads' : 'Set the new-in page below first'}
-                        onClick={() => act(`scan:${id}`, () => startMirrorScan(id), (r) => {
-                          if (r?.error) { setNotice(r.error.toUpperCase()); return }
-                          if (r?.url) window.open(r.url, '_blank', 'noopener')
-                          setNotice(`${w.name.toUpperCase()}: SCANNING IN CHROME — KEEP THAT TAB OPEN; THE CARD FOLLOWS IT`)
-                        })}
-                        className="text-[8px] tracking-[0.1em] text-[#F7F6F3] bg-[#141414] rounded-full px-2.5 py-1 disabled:opacity-40"
-                      >
-                        {busyWith(`scan:${id}`) ? 'OPENING…' : 'SCAN IN CHROME'}
-                      </button>
-                    ) : (<>
+                  {s.rows.length > 0 && (
                     <button
-                      disabled={busyWith(`scan:${id}`)}
-                      onClick={() => act(`scan:${id}`, () => checkBrandNowInBackground(id), started)}
-                      className="text-[8px] tracking-[0.1em] text-[#4A4E57] border border-[#E2E0DB] rounded-full px-2.5 py-1 hover:border-[#0A0A0A] transition-colors disabled:opacity-40"
+                      onClick={() => setPicked((p) => { const n = new Set(p); for (const w of s.rows) { if (allPicked) n.delete(w.watched_brand_id); else n.add(w.watched_brand_id) } return n })}
+                      className="flex-shrink-0 text-[8px] tracking-[0.12em] text-[#6B6B6B] hover:text-[#0A0A0A] underline underline-offset-2"
                     >
-                      {busyWith(`scan:${id}`) ? <span className="text-[#C4A882]">WORKING…</span> : 'CHECK NOW'}
+                      {allPicked ? 'UNTICK ALL' : 'TICK ALL'}
                     </button>
-                    <button
-                      disabled={busyWith(`scan:${id}`)}
-                      onClick={() => act(`scan:${id}`, () => fullScanBrandInBackground(id), started)}
-                      className="text-[8px] tracking-[0.1em] text-[#4A4E57] border border-[#E2E0DB] rounded-full px-2.5 py-1 hover:border-[#0A0A0A] transition-colors disabled:opacity-40"
-                      title="Queue every on-taste piece in the whole catalogue at this brand's min score — lower the min score and run again to go deeper"
-                    >
-                      FULL SCAN
-                    </button>
-                    </>)}
-                  </span>
-                </div>
-                <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[8px] tracking-[0.1em] text-[#A8A8A4]">
-                  <label className="flex items-center gap-1">
-                    MIN SCORE
-                    <input
-                      type="number" min={-9} max={9} defaultValue={w.min_score}
-                      onBlur={(e) => { const v = parseInt(e.target.value, 10); if (!isNaN(v) && v !== w.min_score) act(`minscore:${id}`, () => setWatchedBrandMinScore(id, v), (r) => { tweak(id, { min_score: v }); if (r?.rescanning) setNotice(`${w.name.toUpperCase()}: MIN SCORE LOWERED TO ${v} — FULL SCAN RUNNING IN THE BACKGROUND, THE PAGE FOLLOWS IT`) }) }}
-                      className="w-10 border border-[#E2E0DB] rounded px-1 py-0.5 text-[9px] text-[#4A4E57] outline-none focus:border-[#0A0A0A]"
-                    />
-                  </label>
-                  {w.platform === 'mirror' && (
-                    <label className="flex items-center gap-1 min-w-0">
-                      NEW-IN PAGE
-                      <input
-                        type="url" defaultValue={w.scan_url ?? ''} placeholder="https://brand.com/new-in"
-                        onBlur={(e) => { const v = e.target.value.trim(); if (v !== (w.scan_url ?? '')) act(`scanurl:${id}`, () => setWatchedBrandScanUrl(id, v), (r) => { if (r?.error) setNotice(r.error.toUpperCase()); else tweak(id, { scan_url: r?.scan_url ?? null }) }) }}
-                        className="w-56 border border-[#E2E0DB] rounded px-1 py-0.5 text-[9px] text-[#4A4E57] outline-none focus:border-[#0A0A0A]"
-                      />
-                    </label>
                   )}
-                  <button
-                    disabled={busyWith(`active:${id}`)}
-                    onClick={() => act(`active:${id}`, () => setWatchedBrandActive(id, !w.active), (r) => { if (!r?.error) tweak(id, { active: !w.active }) })}
-                    className="hover:text-[#4A4E57] transition-colors disabled:opacity-40"
-                  >
-                    {w.active ? 'PAUSE' : 'RESUME'}
-                  </button>
-                  <button
-                    disabled={busyWith(`remove:${id}`)}
-                    onClick={() => { if (confirm(`Stop watching ${w.name}? Seen history is deleted too.`)) act(`remove:${id}`, () => removeWatchedBrand(id), () => router.refresh()) }}
-                    className="hover:text-[#B3202A] transition-colors disabled:opacity-40"
-                  >
-                    REMOVE
-                  </button>
                 </div>
-
-                {/* The four levels of automation, as plain switches. They are
-                    never greyed out: a brand can be switched on before the gate
-                    has been earned, and the line underneath says so. The
-                    measurement itself is on each button's tooltip. */}
-                <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[8px] tracking-[0.1em]">
-                  <button
-                    disabled={busyWith(`twins:${id}`)}
-                    onClick={() => act(`twins:${id}`, () => setWatchedBrandAutoKeepTwins(id, !w.auto_keep_twins, !twinTrust[id]?.trusted), (r) => {
-                      if (r?.error) { setNotice(r.error); return }
-                      tweak(id, { auto_keep_twins: !w.auto_keep_twins })
-                    })}
-                    className={toggle(w.auto_keep_twins, !!twinTrust[id]?.trusted)}
-                    title={`Twins of designs you kept${twinTrust[id]?.summary ? ` — ${twinTrust[id]!.summary}` : ''}`}
-                  >
-                    {w.auto_keep_twins ? 'TWINS ✓' : 'TWINS'}
-                  </button>
-                  <button
-                    disabled={busyWith(`auto:${id}`)}
-                    onClick={() => act(`auto:${id}`, () => setWatchedBrandAutoKeep(id, !w.auto_keep, !trust[id]?.trusted), (r) => {
-                      if (r?.error) { setNotice(r.error); return }
-                      tweak(id, { auto_keep: !w.auto_keep })
-                    })}
-                    className={toggle(w.auto_keep, !!trust[id]?.trusted)}
-                    title={`What this brand's learning would keep${trust[id]?.summary ? ` — ${trust[id]!.summary}` : ''}`}
-                  >
-                    {w.auto_keep ? 'AUTOMATE ✓' : 'AUTOMATE'}
-                  </button>
-                  <button
-                    disabled={busyWith(`conf:${id}`)}
-                    onClick={() => act(`conf:${id}`, () => setWatchedBrandAutoKeepConfidence(id, !w.auto_keep_confidence, !confidenceTrust[id]?.trusted), (r) => {
-                      if (r?.error) { setNotice(r.error); return }
-                      tweak(id, { auto_keep_confidence: !w.auto_keep_confidence })
-                    })}
-                    className={toggle(w.auto_keep_confidence, !!confidenceTrust[id]?.trusted)}
-                    title={`Pieces above your bar${confidenceTrust[id]?.summary ? ` — ${confidenceTrust[id]!.summary}` : ''}`}
-                  >
-                    {w.auto_keep_confidence ? 'AUTO-ADD ✓' : 'AUTO-ADD'}
-                  </button>
-                  {/* KEEP EVERYTHING — no model, no bar: every new piece this
-                      brand queues, in season. For a brand whose taste needs no
-                      predicting. Outgoing summer stock is still left alone. */}
-                  <button
-                    disabled={busyWith(`all:${id}`)}
-                    onClick={() => act(`all:${id}`, () => setWatchedBrandAutoKeepAll(id, !w.auto_keep_all), (r) => {
-                      if (r?.error) { setNotice(r.error); return }
-                      tweak(id, { auto_keep_all: !w.auto_keep_all })
-                    })}
-                    className={toggle(!!w.auto_keep_all, true)}
-                    title="Add every new piece this brand queues, in season. No bar, no model — outgoing summer stock is still left in the queue."
-                  >
-                    {w.auto_keep_all ? 'EVERYTHING ✓' : 'EVERYTHING'}
-                  </button>
-                  <select
-                    disabled={busyWith(`bar:${id}`)}
-                    value={String(Number(w.confidence_bar ?? DEFAULT_CONFIDENCE))}
-                    onChange={(e) => act(`bar:${id}`, () => setWatchedBrandConfidenceBar(id, Number(e.target.value)), (r) => { if (!r?.error) tweak(id, { confidence_bar: Number(e.target.value) }) })}
-                    className="bg-transparent text-[8px] tracking-[0.12em] text-[#6B6B6B] border border-[#E2E0DB] rounded-full px-2 py-0.5 disabled:opacity-40"
-                    title="AUTO-ADD only takes a piece by itself above this chance you would keep it"
-                  >
-                    {[0.75, 0.8, 0.85, 0.9, 0.95].map((b) => <option key={b} value={b}>{Math.round(b * 100)}%</option>)}
-                  </select>
-                </div>
-
-                {/* One short line, and only when a switch is running without the
-                    proof the gate wanted. The old card carried three paragraphs
-                    of measurement under every brand; it is on the tooltips now. */}
-                {(unproven.length > 0 || w.auto_keep_all) && (
-                  <div className="mt-1 text-[8px] tracking-[0.1em] text-[#B4593A] leading-relaxed">
-                    {w.auto_keep_all && <div>EVERYTHING: EVERY NEW PIECE IN SEASON IS ADDED, NO BAR</div>}
-                    {unproven.length > 0 && <div>ON WITHOUT PROOF: {unproven.join(' · ')}</div>}
-                  </div>
+                {open && s.rows.length === 0 && (
+                  <p className="px-3 py-2 text-[8px] tracking-[0.1em] text-[#A8A8A4]">NONE HERE.</p>
                 )}
-
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-[8px] tracking-[0.12em]">
-                  {decided[id] && (
-                    <span className="text-[#A8A8A4]">{decided[id].kept} KEPT · {decided[id].skipped} SKIPPED</span>
-                  )}
-                  {inQueue > 0 && (confidenceTrust[id]?.trusted || w.auto_keep_all || w.auto_keep_manual) && (
-                    <button
-                      disabled={busyWith(`backlog:${id}`)}
-                      onClick={() => { if (confirm(`Add every queued ${w.name} piece already above ${Math.round(Number(w.confidence_bar ?? DEFAULT_CONFIDENCE) * 100)}%? You can undo any of them.`)) act(`backlog:${id}`, () => keepConfidentNowInBackground(id), (r) => {
-                        if (r?.error) { setNotice(r.error); return }
-                        // Show it on this brand's card straight away, then poll.
-                        expectJob(id, { kind: 'keep-confident', label: r.label ?? 'ADDING THE BACKLOG', done: 0, total: 0, started_at: new Date().toISOString() })
-                        setNotice(`${w.name.toUpperCase()}: ${r.label ?? 'ADDING THE BACKLOG'} — IN THE BACKGROUND, CARRY ON WITH ANOTHER BRAND`)
-                      }) }}
-                      className="text-[#0A0A0A] underline underline-offset-2 disabled:opacity-40"
-                      title="Automation only takes pieces found after it was switched on; this clears what is already waiting"
-                    >
-                      ADD THE BACKLOG
-                    </button>
-                  )}
-                </div>
+                {open && s.rows.map((w) => (
+                  <div key={w.watched_brand_id}>
+                    {brandRow(w)}
+                    {expanded.has(w.watched_brand_id) && <div className="bg-[#FCFBF9] border-b border-[#EFEDE9]">{brandCard(w)}</div>}
+                  </div>
+                ))}
               </div>
             )
           })}
@@ -702,28 +939,23 @@ export default function BrandWatchClient(props: Props) {
 
       {/* ------------------------------------------------ queue */}
       <section>
+        {/* Brand, type and colour as dropdowns: 160 brand chips and 50 type and
+            colour chips laid out flat took the top third of the screen before
+            a single piece showed. The counts live in the options. */}
         <div className="flex flex-wrap items-center gap-2 mb-2">
-          <button onClick={() => selectBrand(fBrand)} disabled={!fBrand} className={fBrand === '' ? CHIP_ON : CHIP_OFF}>ALL BRANDS</button>
-          {Object.keys(page.brandCounts).sort().map((b) => (
-            <button key={b} onClick={() => selectBrand(b)} className={fBrand === b ? CHIP_ON : CHIP_OFF}>
-              {b.toUpperCase()} · {page.brandCounts[b]}
-            </button>
-          ))}
-        </div>
-        <div className="flex flex-wrap items-center gap-2 mb-2">
-          <button onClick={() => setFilter({ itemType: '' })} className={fType === '' ? CHIP_ON : CHIP_OFF}>ALL TYPES</button>
-          {typeChips.map((t) => (
-            <button key={t.value} onClick={() => setFilter({ itemType: fType === t.value ? '' : t.value })} className={fType === t.value ? CHIP_ON : CHIP_OFF}>{t.label} · {t.count}</button>
-          ))}
-        </div>
-        <div className="flex flex-wrap items-center gap-2 mb-4">
-          <button onClick={() => setFilter({ colour: '' })} className={fColour === '' ? CHIP_ON : CHIP_OFF}>ALL COLOURS</button>
-          {colourChips.map((c) => (
-            <button key={c.value} onClick={() => setFilter({ colour: fColour === c.value ? '' : c.value })} className={`${fColour === c.value ? CHIP_ON : CHIP_OFF} flex items-center gap-1.5`}>
-              <span className="w-2.5 h-2.5 rounded-full border border-[#E2E0DB]" style={{ background: (c.known as any)?.swatch ?? 'transparent' }} />
-              {c.label} · {c.count}
-            </button>
-          ))}
+          <Dropdown
+            label="ALL BRANDS" value={fBrand} onChange={(v) => { if (v !== fBrand) selectBrand(v || fBrand) }}
+            options={brandOptions}
+          />
+          <Dropdown
+            label="ALL TYPES" value={fType} onChange={(v) => setFilter({ itemType: v })}
+            options={typeChips.map((t) => ({ value: t.value, label: t.label, count: t.count }))}
+          />
+          <Dropdown
+            label="ALL COLOURS" value={fColour} onChange={(v) => setFilter({ colour: v })}
+            options={colourChips.map((c) => ({ value: c.value, label: c.label, count: c.count }))}
+            swatch={fColour ? (colourChips.find((c) => c.value === fColour)?.known as any)?.swatch : undefined}
+          />
           <span className="mx-2 h-4 w-px bg-[#E2E0DB]" />
           {[null, 5, 7].map((s) => (
             <button key={String(s)} onClick={() => setFilter({ minScore: s })} className={minScore === s ? CHIP_ON : CHIP_OFF}>
@@ -739,18 +971,17 @@ export default function BrandWatchClient(props: Props) {
             </>
           )}
         </div>
-          <div className="flex flex-wrap gap-2 mb-3 items-center">
-            <span className="text-[8px] tracking-[0.14em] text-[#A8A8A4] mr-1">SEASON</span>
-            <button className={CHIP_ON} title="Current autumn/winter stock, plus future dated collections and pre-orders">
-              AUTUMN / WINTER
-            </button>
-          </div>
-          <div className="flex flex-wrap gap-2 mb-4 items-center">
-            <span className="text-[8px] tracking-[0.14em] text-[#A8A8A4] mr-1">SORT</span>
-            {([['rank', "MYRA'S ORDER"], ['sure_desc', 'MOST SURE FIRST'], ['sure_asc', 'LEAST SURE FIRST']] as [QueueSort, string][]).map(([v, label]) => (
-              <button key={v} onClick={() => setFilter({ sort: v })} className={fSort === v ? CHIP_ON : CHIP_OFF}>{label}</button>
-            ))}
-          </div>
+        <div className="flex flex-wrap gap-2 mb-4 items-center">
+          <span className="text-[8px] tracking-[0.14em] text-[#A8A8A4] mr-1">SEASON</span>
+          <button className={CHIP_ON} title="Current autumn/winter stock, plus future dated collections and pre-orders">
+            AUTUMN / WINTER
+          </button>
+          <span className="mx-2 h-4 w-px bg-[#E2E0DB]" />
+          <span className="text-[8px] tracking-[0.14em] text-[#A8A8A4] mr-1">SORT</span>
+          {([['rank', "MYRA'S ORDER"], ['sure_desc', 'MOST SURE FIRST'], ['sure_asc', 'LEAST SURE FIRST']] as [QueueSort, string][]).map(([v, label]) => (
+            <button key={v} onClick={() => setFilter({ sort: v })} className={fSort === v ? CHIP_ON : CHIP_OFF}>{label}</button>
+          ))}
+        </div>
 
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
           <p className="text-[10px] tracking-[0.12em] text-[#6B6B6B]">

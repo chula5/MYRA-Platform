@@ -85,12 +85,12 @@ export async function discoverSimilarForItem(
     const client = new Anthropic({ apiKey })
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-sonnet-5-5',
       max_tokens: 4096,
       system: SYSTEM_PROMPT,
       tools: [
         {
-          type: 'web_search_20250305',
+          type: 'web_search_20260209',
           name: 'web_search',
           max_uses: 5,
         } as unknown as Anthropic.Messages.Tool,
@@ -356,12 +356,12 @@ export async function discoverFromTasteProfile(): Promise<{ discovered?: number;
     const client = new Anthropic({ apiKey })
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-sonnet-5-5',
       max_tokens: 4096,
       system: SYSTEM_PROMPT,
       tools: [
         {
-          type: 'web_search_20250305',
+          type: 'web_search_20260209',
           name: 'web_search',
           max_uses: 6,
         } as unknown as Anthropic.Messages.Tool,

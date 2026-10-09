@@ -10,8 +10,7 @@ import 'server-only'
 import { createHash } from 'node:crypto'
 import { createAdminClient } from '@/lib/supabase-server'
 import { getReadyAndLiveItems, type ItemWithBrand } from '@/lib/admin-queries'
-import { generateCandidates } from '@/lib/composer'
-import { slotForItemType, slotPlanForAnchor, type Slot } from '@/lib/composer'
+import { slotForItemType, type Slot } from '@/lib/composer'
 import { sellable } from '@/lib/stock-sellable'
 import { checkSizesForMember } from '@/lib/look-size-check'
 import { checkLook, type CheckPiece } from '@/lib/look-check'
@@ -34,10 +33,22 @@ import {
   type GeneratedCandidate,
   type GeneratedItem,
   type GenerationContext,
+  type GenerationExclusions,
   type SubjectiveOutcome,
 } from '@/lib/outfit-quality/candidate-generation'
+import { personaFitScore, briefPiece, PERSONA_SHORTLIST_SCALE, BRIEF_SHORTLIST_SCALE } from '@/lib/pilot-composer'
+import { briefBlocks, briefPull } from '@/lib/stylist-brief'
+import { personaLensFromSnapshot, styleModelFromSnapshot } from '@/lib/outfit-quality/snapshot-lens'
+import { itemsSignature } from '@/lib/outfit-quality/scope-signature'
+import { itemUsesFromSignatures } from '@/lib/outfit-quality/scope-exclusions'
 import { SNAPSHOT_SYSTEM_VERSIONS, type SnapshotPayload, type SystemVersions } from '@/lib/outfit-quality/stylist-snapshot'
 import { buildSubjectiveCheckPrompt } from '@/lib/outfit-quality/subjective-prompt'
+import { composeReviewLooks, reviewLibrary, reviewAnchorCategory, reviewSlotsFor, type ReviewPick } from '@/lib/review-compose'
+import { loadLearnedMaterialPairs } from '@/lib/house-style-store'
+import { loadEjectionConstraints } from '@/lib/pipeline-store'
+import type { EjectionConstraints } from '@/lib/pipeline'
+import { loadRealMemberContext, type RealMemberContext } from '@/lib/outfit-quality/member-context'
+import { gateToMemberTaste, memberShortlistPull, memberLookGate } from '@/lib/outfit-quality/member-gates'
 
 type Admin = ReturnType<typeof createAdminClient>
 
@@ -133,71 +144,215 @@ async function gateToProfileSizes(
 }
 
 /**
- * The composition generator. Loads the shared retail pool, applies the frozen
- * snapshot's item-mask exclusions, and composes outfits with the existing
- * composer. For an evaluation-profile context it additionally applies the
- * FROZEN profile context: a hard size gate to the profile's declared sizes, and
- * a budget/brand/occasion/style ranking nudge on the composer shortlist. Each
- * distinct anchor yields one candidate until `count` is reached.
+ * Variety across looks. The review recipe picks the most compatible piece per
+ * slot, and a neutral heel or clutch is compatible with nearly every dress —
+ * so without a cap the same shoe carried every look in a batch (one boot was
+ * in 32 of 70 looks). Each prior appearance in this scope costs a piece a
+ * little at the shortlist; once it has supported SUPPORT_USAGE_CAP looks it is
+ * left out for the remaining anchors, unless nothing else composes.
  */
-export function createComposerGenerator(admin: Admin = createAdminClient()): CompositionGenerator {
+export const SUPPORT_USAGE_CAP = 2
+export const USAGE_PENALTY_PER_LOOK = 0.08
+
+export interface HouseKnowledge {
+  learnedPairs: { approved: Set<string>; rejected: Set<string> }
+  constraints: EjectionConstraints
+}
+
+/** Injection points for tests; production reads the real loaders. */
+export interface GeneratorDeps {
+  loadMemberContext?: (memberId: string) => Promise<RealMemberContext>
+  loadHouseKnowledge?: () => Promise<HouseKnowledge>
+}
+
+async function loadHouseKnowledgeLive(): Promise<HouseKnowledge> {
+  const [learnedPairs, constraints] = await Promise.all([loadLearnedMaterialPairs(), loadEjectionConstraints()])
+  return { learnedPairs, constraints }
+}
+
+/**
+ * The composition generator — THE OUTFIT REVIEW RECIPE (lib/review-compose),
+ * composed for whoever the batch is for.
+ *
+ * Loads the shared retail pool, applies the frozen snapshot's item-mask
+ * exclusions and the stylist brief's bans, then narrows the pool to the
+ * context before a single look is built:
+ *
+ *   * evaluation profile — the FROZEN profile facts: a hard size gate to the
+ *     profile's declared sizes and a budget/brand/occasion/style pull;
+ *   * real member — her declared sizes (stored size rows, fail closed), her
+ *     avoided colours / shapes / types, hidden and input-only brands, price
+ *     ceiling and brief bans, her loved shoe types owning the shoe slot, her
+ *     rule layer as a whole-look gate, and her taste as a shortlist pull.
+ *
+ * Per anchor the review recipe then does what it does on /admin/outfit-review:
+ * brand-tier-coherent slot pools (other garment + shoes + bag), the House
+ * Style Constitution gate, the stylist's FROZEN Style Brain blend, and a
+ * diversity cap. Outerwear and jewellery are never composed — they are styled
+ * on by hand, as in Review. Each distinct anchor yields one candidate until
+ * `count` is reached.
+ *
+ * The stylist's eye (envelope, looks, learned model, brief) is read from the
+ * frozen snapshot only. The house's shared knowledge — learned material
+ * pairings and ejection constraints, what Chloe's rejections have taught every
+ * surface — is read live, as Review reads it.
+ */
+export function createComposerGenerator(admin: Admin = createAdminClient(), deps: GeneratorDeps = {}): CompositionGenerator {
+  const loadMember = deps.loadMemberContext ?? loadRealMemberContext
+  const loadHouse = deps.loadHouseKnowledge ?? loadHouseKnowledgeLive
   return {
-    async generate({ count, snapshot, context }): Promise<GeneratedCandidate[]> {
+    async generate({ count, snapshot, context, exclusions }): Promise<GeneratedCandidate[]> {
       const payload = snapshot.payload as SnapshotPayload
       const excluded = new Set(
         (payload?.item_mask?.decisions ?? [])
           .filter((d) => d.eligibility === 'excluded')
           .map((d) => d.item_id),
       )
+      // The stylist's EYE, all read from the frozen snapshot: her reference
+      // image envelope + looks, her learned Style Brain model, and her brief.
+      // Nothing here is a live read, so the whole batch composes through one
+      // lens — and the next Start picks up what this round's reviews taught.
+      const lens = personaLensFromSnapshot(payload)
+      const model = styleModelFromSnapshot(payload)
+      const brief = payload?.brief ?? null
+
       let pool = (await getReadyAndLiveItems())
         .filter((it) => !!it.image_url && sellable(it) && !excluded.has(it.item_id))
         // Required-item-data gate at the pool: a piece without a type or brand
         // can never pass the objective checks, so it is never composed.
         .filter((it) => !!it.item_type && !!it.brand?.name)
-
-      // Apply the frozen evaluation-profile context to selection and ranking.
-      const facts = profileFactsFromContext(context.contextSnapshot)
-      let shortlistAdjust: ((item: ItemWithBrand) => number) | undefined
-      if (facts) {
-        const sizeProfile = buildSizeProfile(facts.size_profile)
-        if (hasAnySize(sizeProfile)) {
-          pool = await gateToProfileSizes(admin, pool, sizeProfile)
-        }
-        shortlistAdjust = (item) => profileItemAffinity(facts, affinityFacts(item))
+      // A piece the stylist's brief BANS is never shortlisted: a ban is a rule,
+      // not a preference. (The pilot composer applies the same cut.)
+      if (brief?.nevers?.some((n) => n.kind === 'ban')) {
+        pool = pool.filter((it) => !briefBlocks(briefPiece(it), brief))
       }
 
-      // Anchors are the "lead" garment of a look: a dress, top, or bottom.
-      const anchors = pool.filter((it) => {
-        const s = slotForItemType(it.item_type)
-        return s === 'dress' || s === 'top' || s === 'bottom'
-      })
+      // Whose looks these are. A profile is frozen into the context snapshot;
+      // a real member is read through the private-stylist loaders.
+      const facts = profileFactsFromContext(context.contextSnapshot)
+      const member = context.realMemberId ? await loadMember(context.realMemberId) : null
+      const taste = member?.taste ?? null
 
-      // The frozen profile context governs the ANCHOR iteration order too, not
-      // only the additions: the lead garment of the first candidates is the
-      // best budget / brand-group / occasion / style fit, so a bounded batch
-      // spends its positions on the most on-profile compositions. Ties fall
-      // back to a stable id order so generation stays deterministic.
-      const orderedAnchors = facts
+      // Size gate — fail closed, exactly what the objective size check will
+      // demand: only a piece with a WEARABLE matching size row survives.
+      const sizeProfile = facts ? buildSizeProfile(facts.size_profile) : (member?.sizeProfile ?? {})
+      if (hasAnySize(sizeProfile)) {
+        pool = await gateToProfileSizes(admin, pool, sizeProfile)
+      }
+      // Her gates, then her shoes: trainers lead when she loves them.
+      if (taste) pool = gateToMemberTaste(taste, pool)
+
+      const house = await loadHouse()
+
+      // One ranking pull for both the anchor order and each slot's shortlist:
+      // profile affinity (when there is a profile), her taste (when there is a
+      // member), the stylist's envelope / nearest-look fit and her brief's
+      // pull, at the same scales the pilot composer uses, minus a variety
+      // penalty for pieces this scope has already used. With none of these it
+      // collapses to compat alone, so plain batches rank exactly as Review.
+      const uses = new Map<string, number>(
+        exclusions?.itemUses ?? (exclusions?.signatures ? itemUsesFromSignatures(exclusions.signatures) : []),
+      )
+      const usesOf = (id: string) => uses.get(id) ?? 0
+      const memberPull = taste ? memberShortlistPull(taste) : null
+
+      const pull = (item: ItemWithBrand): number =>
+        (facts ? profileItemAffinity(facts, affinityFacts(item)) : 0) +
+        (memberPull ? memberPull(item) : 0) +
+        PERSONA_SHORTLIST_SCALE * personaFitScore(lens, item) +
+        BRIEF_SHORTLIST_SCALE * briefPull(briefPiece(item), brief) -
+        USAGE_PENALTY_PER_LOOK * usesOf(item.item_id)
+      const briefHasPull = !!brief && ((brief.brands?.length ?? 0) > 0 || (brief.signature_pieces?.length ?? 0) > 0 || (brief.fabrics?.length ?? 0) > 0 || (brief.nevers?.length ?? 0) > 0)
+      const hasPull = !!facts || !!taste || !!lens || briefHasPull || uses.size > 0
+      const shortlistAdjust = hasPull ? pull : undefined
+      const lookGate = taste ? memberLookGate(taste) : undefined
+
+      // Anchors are the "lead" garment of a look: a dress, top, or bottom —
+      // the same garments Review queues.
+      const anchors = pool.filter((it) => reviewAnchorCategory(it.item_type) != null)
+
+      // The pull governs the ANCHOR iteration order too, not only the
+      // additions: the lead garment of the first candidates is the best fit,
+      // so a bounded batch spends its positions on the most on-taste
+      // compositions. Ties fall back to a stable id order so generation stays
+      // deterministic for a given pool.
+      const orderedAnchors = hasPull
         ? [...anchors].sort((a, b) => {
-            const d = profileItemAffinity(facts, affinityFacts(b)) - profileItemAffinity(facts, affinityFacts(a))
+            const d = pull(b) - pull(a)
             return d !== 0 ? d : a.item_id.localeCompare(b.item_id)
           })
         : anchors
 
       const out: GeneratedCandidate[] = []
-      const usedSignatures = new Set<string>()
+      // Scope-level dedupe: nothing already composed for this stylist +
+      // context (any batch, decided or not) is produced again, and no anchor
+      // that already led a look leads another in pass 1.
+      const usedSignatures = new Set<string>(exclusions?.signatures ?? [])
+      const usedAnchors = new Set<string>(exclusions?.anchorItemIds ?? [])
+
+      // The review recipe for one anchor. Supporting pieces at the cap are
+      // left out; if that leaves nothing composable the cap is relaxed rather
+      // than failing.
+      const compose = (anchor: ItemWithBrand, maxCandidates: number): ReviewPick[] => {
+        const library = reviewLibrary(pool, anchor, house.constraints)
+        const run = (lib: ItemWithBrand[]) =>
+          composeReviewLooks({
+            anchor,
+            library: lib,
+            styleModel: model,
+            learnedPairs: house.learnedPairs,
+            count: maxCandidates,
+            shortlistAdjust,
+            lookGate,
+          }).picks
+        const capped = new Set(library.filter((it) => usesOf(it.item_id) >= SUPPORT_USAGE_CAP).map((it) => it.item_id))
+        if (capped.size === 0) return run(library)
+        const strict = run(library.filter((it) => !capped.has(it.item_id)))
+        return strict.length > 0 ? strict : run(library)
+      }
+
+      const take = (anchor: ItemWithBrand, best: ReviewPick): boolean => {
+        const items = toGeneratedItems(anchor, best.items as { item: ItemWithBrand; slot: Slot }[])
+        const signature = itemsSignature(items.map((i) => i.item_id))
+        if (usedSignatures.has(signature)) return false
+        usedSignatures.add(signature)
+        usedAnchors.add(anchor.item_id)
+        for (const it of items) uses.set(it.item_id, usesOf(it.item_id) + 1)
+        const anchorSlot = slotForItemType(anchor.item_type)
+        // A complete review look: the anchor, the other garment for a
+        // separates anchor, and shoes. The bag is best-effort, as in Review.
+        const { garment } = reviewSlotsFor(reviewAnchorCategory(anchor.item_type)!)
+        out.push({
+          requiredSlots: Array.from(new Set([anchorSlot, ...(garment ? [garment] : []), 'shoe'])),
+          items,
+          anchorItemId: anchor.item_id,
+          itemsSignature: signature,
+        })
+        return true
+      }
+
+      // Pass 1: fresh anchors only, one look each. Anchors that already led a
+      // look (scope exclusion) or whose best look is already cased are kept
+      // aside for pass 2.
+      const revisit: ItemWithBrand[] = []
       for (const anchor of orderedAnchors) {
         if (out.length >= count) break
-        const cands = generateCandidates({ anchor, library: pool, maxCandidates: 1, minScore: 0.5, shortlistAdjust })
-        const best = cands[0]
+        if (usedAnchors.has(anchor.item_id)) {
+          revisit.push(anchor)
+          continue
+        }
+        const best = compose(anchor, 1)[0]
         if (!best) continue
-        const items = toGeneratedItems(anchor, best.items)
-        const signature = items.map((i) => i.item_id).sort().join('|')
-        if (usedSignatures.has(signature)) continue
-        usedSignatures.add(signature)
-        const anchorSlot = slotForItemType(anchor.item_type)
-        const plan = slotPlanForAnchor(anchorSlot)
-        out.push({ requiredSlots: Array.from(new Set([anchorSlot, ...plan.required])), items })
+        if (!take(anchor, best)) revisit.push(anchor)
+      }
+
+      // Pass 2: the fresh anchors are spent, so revisit the ones already led
+      // and take their best UNSEEN combination — a new look, not a repeat.
+      for (const anchor of revisit) {
+        if (out.length >= count) break
+        for (const c of compose(anchor, 3)) {
+          if (take(anchor, c)) break
+        }
       }
       return out
     },
@@ -231,7 +386,11 @@ export function createObjectiveEvidenceProvider(admin: Admin = createAdminClient
       if (context.realMemberId) {
         try {
           const pieces = items.map((it) => ({ item_id: it.item_id, item_type: it.item_snapshot?.item_type as string, owned: false }))
-          const verdicts = await checkSizesForMember(admin as any, context.realMemberId, pieces as any, 'unknown')
+          // Stored size rows only ('none'): the pool was gated on the same
+          // rows before composing, and a retailer re-read per candidate is
+          // what made a ten-look batch crawl. Rows are kept fresh by the stock
+          // sweep and the stock sentinel, not by the Lab.
+          const verdicts = await checkSizesForMember(admin as any, context.realMemberId, pieces as any, 'none')
           size = {}
           for (const it of items) {
             const applicable = sizeCategoryFor(it.item_snapshot?.item_type as string) != null
@@ -302,7 +461,9 @@ export function createSubjectiveChecker(): SubjectiveChecker {
         product_name: (it.item_snapshot?.brand as string) ?? null,
       }))
       try {
-        const result = await checkLook(pieces, stylistLens)
+        // The model is the one FROZEN on the snapshot, so old batches keep
+        // reporting (and using) the model they were started with.
+        const result = await checkLook(pieces, stylistLens, { model })
         if (!result) {
           return { status: 'unavailable', model, prompt_version: promptVersion }
         }

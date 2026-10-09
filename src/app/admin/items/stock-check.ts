@@ -8,6 +8,7 @@ import { revalidatePath } from 'next/cache'
 import {
   myshopifyDomainIn, normaliseSizeLabel, sizeLabelFromVariant, sizesFromPage,
 } from '@/lib/retailer-sizes'
+import { loadBrandOffsets, upsertSizeAvailability } from '@/lib/size-availability'
 
 type StockStatus = 'in_stock' | 'low_stock' | 'out_of_stock' | 'unknown'
 
@@ -20,12 +21,22 @@ interface StockResult {
 const UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
 
+// A retailer that never answers must not hold a member's outfits hostage: the
+// look check reads sizes live before showing a look, and one hung page used
+// to hang the whole answer. Past the timeout the page reads as unreadable.
+const FETCH_TIMEOUT_MS = 8_000
+
 async function fetchPage(url: string): Promise<{ ok: boolean; status: number; html: string; finalUrl: string }> {
-  const res = await fetch(url, {
-    headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9' },
-    redirect: 'follow',
-  })
-  return { ok: res.ok, status: res.status, html: res.ok ? await res.text() : '', finalUrl: res.url || url }
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9' },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    })
+    return { ok: res.ok, status: res.status, html: res.ok ? await res.text() : '', finalUrl: res.url || url }
+  } catch {
+    return { ok: false, status: 0, html: '', finalUrl: url }
+  }
 }
 
 // Fetch the product page and infer stock status.
@@ -205,21 +216,45 @@ export async function checkItemStock(
   try {
     const { data: item, error: fetchErr } = await supabase
       .from('item')
-      .select('retailer_url')
+      .select('retailer_url, item_type, brand_id')
       .eq('item_id', itemId)
       .single()
     if (fetchErr) throw fetchErr
-    const retailerUrl = (item as { retailer_url: string } | null)?.retailer_url
+    const row = item as { retailer_url: string; item_type: string | null; brand_id: string | null } | null
+    const retailerUrl = row?.retailer_url
     if (!retailerUrl) return { error: 'Item has no retailer URL' }
 
-    // Shopify variant data is authoritative; fall back to the HTML heuristic.
-    const shop = await shopifyStock(retailerUrl)
+    // Per-size availability first (Shopify variants, headless Shopify, SFCC /
+    // ME+EM / Kleep markup, JSON-LD). When the page gives sizes, they are
+    // STORED as size rows — the member size gates and the Quality Lab read
+    // those rows, and a piece with none can never be confirmed in her size.
+    // Measured 2026-10-08: Antik Batik, DISSH and Sessùn pieces were sweeping
+    // clean for stock while 40–80% of them had no size rows at all.
     let status: StockStatus, sizes: string[], signal: string, notes: string | null
-    if (shop) {
-      status = shop.status; sizes = shop.sizes; signal = `shopify:${shop.status}`; notes = null
+    const detailed = await checkStockDetailed(retailerUrl)
+    if (detailed.sizes.length > 0) {
+      status = detailed.status
+      sizes = detailed.sizes.filter((sz) => sz.inStock).map((sz) => sz.label)
+      signal = detailed.signal
+      notes = null
+      try {
+        const offsets = row?.brand_id ? await loadBrandOffsets([row.brand_id]) : new Map()
+        await upsertSizeAvailability(itemId, detailed.sizes, {
+          itemType: row?.item_type ?? null,
+          brandOffsets: row?.brand_id ? offsets.get(row.brand_id) ?? null : null,
+        })
+      } catch (err) {
+        console.error('[checkItemStock] size rows', err)
+      }
     } else {
-      const r = await detectStock(retailerUrl)
-      status = r.status; sizes = []; signal = r.signal; notes = r.notes
+      // No per-size reading: the coarse path, as before.
+      const shop = await shopifyStock(retailerUrl)
+      if (shop) {
+        status = shop.status; sizes = shop.sizes; signal = `shopify:${shop.status}`; notes = null
+      } else {
+        const r = await detectStock(retailerUrl)
+        status = r.status; sizes = []; signal = r.signal; notes = r.notes
+      }
     }
 
     const { error: updateErr } = await (supabase.from('item') as any)

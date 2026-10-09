@@ -86,7 +86,7 @@ export async function analyseInspirationImage(
 
     const client = new Anthropic({ apiKey })
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-sonnet-5-5',
       max_tokens: 700,
       messages: [{
         role: 'user',

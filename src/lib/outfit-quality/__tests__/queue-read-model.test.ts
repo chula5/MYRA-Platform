@@ -3,8 +3,7 @@ import {
   buildPreDecisionCandidate,
   findProtectedLeaks,
   PROTECTED_SUBJECTIVE_FIELDS,
-  type BuildPreDecisionInput,
-} from '@/lib/outfit-quality/queue-read-model'
+  type BuildPreDecisionInput, objectiveFailureLines } from '@/lib/outfit-quality/queue-read-model'
 
 function input(overrides: Partial<BuildPreDecisionInput> = {}): BuildPreDecisionInput {
   return {
@@ -80,5 +79,45 @@ describe('findProtectedLeaks', () => {
     expect(PROTECTED_SUBJECTIVE_FIELDS).toContain('verdict')
     expect(PROTECTED_SUBJECTIVE_FIELDS).toContain('raw_response_hash')
     expect(PROTECTED_SUBJECTIVE_FIELDS).toContain('agreement')
+  })
+})
+
+describe('objectiveFailureLines', () => {
+  const items = [
+    { candidate_item_id: 'ci-1', item_id: 'i-1', slot: 'top', sort_order: 0, source_image_url: 'x', item_snapshot: { brand: 'Sézane' } },
+    { candidate_item_id: 'ci-2', item_id: 'i-2', slot: 'bottom', sort_order: 1, source_image_url: 'x', item_snapshot: { brand: 'Antik Batik' } },
+    { candidate_item_id: 'ci-3', item_id: 'i-3', slot: 'bag', sort_order: 2, source_image_url: 'x', item_snapshot: { brand: 'DeMellier' } },
+  ]
+
+  it('says which pieces could not be confirmed in her size', () => {
+    const lines = objectiveFailureLines(
+      [{ check_name: 'size_possibility', status: 'unavailable', detail: { unconfirmed: ['i-1', 'i-2'], not_applicable: ['i-3'] } }],
+      items,
+    )
+    expect(lines).toEqual(['SIZE UNCONFIRMED · Sézane, Antik Batik'])
+  })
+
+  it('names a sold-out size and an unsellable piece, and skips passed checks', () => {
+    const lines = objectiveFailureLines(
+      [
+        { check_name: 'valid_structure', status: 'passed' },
+        { check_name: 'size_possibility', status: 'failed', detail: { not_in_size: ['i-2'] } },
+        { check_name: 'sellable_stock', status: 'failed', detail: { not_sellable: ['i-3'] } },
+      ],
+      items,
+    )
+    expect(lines).toEqual(['NOT IN HER SIZE · Antik Batik', 'NOT SELLABLE · DeMellier'])
+  })
+
+  it('carries no protected field onto the candidate', () => {
+    const payload = buildPreDecisionCandidate({
+      candidate_version_id: 'v', case_id: 'c', version_no: 1, state: 'objective_failed', rules_only: false,
+      real_member_id: 'm', evaluation_profile_id: null, selected_stylist_id: 's',
+      subjectiveChecks: [],
+      objectiveChecks: [{ check_name: 'size_possibility', status: 'unavailable', detail: { unconfirmed: ['i-1'] } }],
+      items,
+    })
+    expect(payload.objective_failures).toEqual(['SIZE UNCONFIRMED · Sézane'])
+    expect(findProtectedLeaks(payload)).toEqual([])
   })
 })

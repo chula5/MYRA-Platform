@@ -61,10 +61,22 @@ const hostOf = (url: string): string => {
 export function normaliseSizeLabel(raw: string, url: string): string | null {
   let s = String(raw ?? '').trim().replace(/\s+/g, ' ')
   if (!s || /^default title$/i.test(s)) return null
-  // "black / 34", "Black/Scarlet Red / 41" — the size is the last segment.
-  if (s.includes(' / ')) s = s.split(' / ').pop()!.trim()
+  // "black / 34", "Black/Scarlet Red / 41", DISSH's "36 / BLACK" and "XS /
+  // IVORY", Antik Batik's "36/XS": when the whole label is not a size, the
+  // size is whichever slash segment reads as one, last first. A label that IS
+  // a size ("XS/S") is left whole.
+  if (!SIZE_RE.test(s) && s.includes('/')) {
+    const segs = s.split('/').map((x) => x.trim()).filter(Boolean)
+    s = [...segs].reverse().find((seg) => SIZE_RE.test(seg)) ?? segs[segs.length - 1] ?? s
+  }
   const host = hostOf(url)
   let m: RegExpMatchArray | null
+
+  // Antik Batik: "36XS", "38S", "40M", "42L" — a French numeric with its alpha
+  // hint. The number is the size; the letters only confuse the size filter.
+  if (host.endsWith('antikbatik.com') && (m = s.match(/^(\d{2})(?:XXS|XS|S|M|L|XL|XXL)$/i))) {
+    return `FR ${m[1]}`
+  }
 
   if (host.endsWith('wyselondon.com') && (m = s.match(/^(\d)([RL])?$/i))) {
     // Coats and knits run 0–6 with no length letter; same scale.

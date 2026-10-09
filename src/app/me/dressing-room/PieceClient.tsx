@@ -10,6 +10,8 @@ import FallbackImage from '@/components/FallbackImage'
 import OutfitCard from '@/components/me/ComposedLookCard'
 import type { OwnedPieceView, StyledLook } from '@/app/admin/private-stylist/actions'
 import { styleMyPiece } from './actions'
+import WaysToWear from '@/components/me/WaysToWear'
+import { useWaysReady } from '@/components/me/ways-watch'
 
 export default function PieceClient({
   view, testMemberId, onBack,
@@ -24,6 +26,8 @@ export default function PieceClient({
   const [hidden, setHidden] = useState(0)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [ways, setWays] = useState(false)
+  const waysReady = useWaysReady(piece?.item_id)
 
   async function run(label: string, opts: { occasion?: string; withType?: string }) {
     if (!piece) return
@@ -60,8 +64,23 @@ export default function PieceClient({
                 <p className="text-[22px] text-[#55534E]">
                   {piece.styled_in ? `Styled in ${piece.styled_in} look${piece.styled_in === 1 ? '' : 's'} so far.` : 'Not styled yet — try it below.'}
                 </p>
+                <button
+                  type="button"
+                  onClick={() => setWays(true)}
+                  className="text-[22px] px-6 py-3.5 rounded-full bg-[#2B2B2B] text-white"
+                >
+                  Ways to wear it{waysReady ? ' · ready' : ''}
+                </button>
               </div>
             </section>
+            {ways && (
+              <WaysToWear
+                itemId={piece.item_id}
+                piece={{ item_id: piece.item_id, product_name: piece.product_name, image_url: piece.image_url, brand: null }}
+                testMemberId={testMemberId}
+                onClose={() => setWays(false)}
+              />
+            )}
 
             {/* STYLE THIS */}
             <section className="space-y-5">

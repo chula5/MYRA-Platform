@@ -16,9 +16,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import ClientWardrobe from './ClientWardrobe'
-import { myRequests, reactToLook, requestLooks, savedWhileBrowsing, styleSavedPiece, type ClientView, type ClientLook, type ClientLookItem, type BrowsedPiece } from './actions'
-import ComposedLookCard from '@/components/me/ComposedLookCard'
-import type { StyledLook } from '@/app/admin/private-stylist/actions'
+import { myRequests, reactToLook, requestLooks, savedWhileBrowsing, type ClientView, type ClientLook, type ClientLookItem, type BrowsedPiece } from './actions'
 import { CLIENT_OCCASIONS, askKindForEvent, whereFor, ASK_KINDS, ASK_WHEN, ASK_FEEL, ASK_WEATHER, ASK_LIMITS, ASK_BUDGET } from '@/lib/client-occasions'
 import { lookSimilarity, relatedLooks, looksWearing } from '@/lib/look-similarity'
 import FallbackImage from '@/components/FallbackImage'
@@ -28,6 +26,8 @@ import { getSavedItemIds, toggleSaveItem } from '@/app/edit/save-actions'
 import type { Item, Brand, ItemType } from '@/types/database'
 import { ArchiveCard } from '@/components/ArchiveCard'
 import OutfitDetailClient from '@/app/outfit/[id]/OutfitDetailClient'
+import WaysToWear from '@/components/me/WaysToWear'
+import StyleOutfit from '@/components/me/StyleOutfit'
 import type { OutfitWithItems } from '@/types/database'
 import { previewAskForMember, rescoreAskLook, type AskPreviewResult } from '@/app/admin/private-stylist/confidence-actions'
 import { keepAskPreview, askPreviewAlternates } from '@/app/admin/private-stylist/actions.gated'
@@ -87,6 +87,8 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
   }, [readOnly, asking])
   // Tapping a look opens it — the feed's own detail view, hosted over this page.
   const [openLook, setOpenLook] = useState<ClientLook | null>(null)
+  // STYLE IT on an open look: her editor over the look view.
+  const [styling, setStyling] = useState<ClientLook | null>(null)
   const [openMode, setOpenMode] = useState<'similar' | 'explore' | null>(null)
   // Looks she stepped through inside the open view — Back walks this before it closes.
   const [trail, setTrail] = useState<ClientLook[]>([])
@@ -239,6 +241,7 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
                   related: (mode) => relatedLooks(openLook, browsable, mode, 6).map(lookAsOutfit),
                   wearing: (itemId) => looksWearing(itemId, browsable, openLook.look_id).map(lookAsOutfit),
                   onOpenLook: goTo,
+                  onStyle: readOnly && !view.memberId ? undefined : () => setStyling(openLook),
                   onSibling: (dir) => { const next = browsable[idx + dir]; if (next) { noteViewed(next.look_id); setOpenMode(null); setOpenLook(next) } },
                   hasPrev: idx > 0,
                   hasNext: idx >= 0 && idx < browsable.length - 1,
@@ -250,6 +253,19 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
           </div>
         )
       })()}
+      {styling && (
+        <StyleOutfit
+          items={styling.items.map((it) => ({
+            brand: it.brand, product_name: it.product_name, item_id: it.item_id, image_url: it.image_url, owned: it.owned,
+            url: it.url ?? undefined, price_gbp: it.price_gbp, item_type: it.item_type, slot: it.slot,
+          }))}
+          why={styling.request_text ?? undefined}
+          occasion={styling.occasion_id}
+          title={`${styling.occasion_label} — change any piece, then save it as a new outfit.`}
+          testMemberId={readOnly ? view.memberId ?? undefined : undefined}
+          onClose={() => setStyling(null)}
+        />
+      )}
       <ClientWardrobe readOnly={readOnly} loved={loved} onOpenLook={(l) => { setRelated(null); setQuery(''); setOccasion(l.occasion_label) }} />
 
       <div className="w-full px-6 sm:px-10 pb-16 flex flex-col">
@@ -768,9 +784,6 @@ function SavedWhileBrowsing({
 }) {
   const [pieces, setPieces] = useState<BrowsedPiece[] | null>(null)
   const [open, setOpen] = useState<string | null>(null)
-  const [composed, setComposed] = useState<Record<string, StyledLook[]>>({})
-  const [busy, setBusy] = useState<string | null>(null)
-  const [failed, setFailed] = useState<Record<string, string>>({})
   const dwell = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => { savedWhileBrowsing().then(setPieces) }, [])
@@ -781,20 +794,18 @@ function SavedWhileBrowsing({
   const piece = pieces.find((p) => p.item_id === open) ?? null
   const wearing = piece ? looksWearing(piece.item_id, looks) : []
 
-  async function compose(itemId: string) {
-    if (composed[itemId] || busy || failed[itemId]) return
-    setBusy(itemId)
-    const r = await styleSavedPiece(itemId)
-    setBusy(null)
-    if (r.error || !r.looks.length) { setFailed((f) => ({ ...f, [itemId]: r.error ?? 'Nothing MYRA would put with it yet.' })); return }
-    setComposed((c) => ({ ...c, [itemId]: r.looks }))
-  }
-
+  // Resting on a piece shows what MYRA keeps for it (nothing is spent); a
+  // click asks for its ways. The sheet does the waiting (lib/styled-ways),
+  // and nothing unchecked is shown.
+  const [asked, setAsked] = useState<string | null>(null)
   function rest(p: BrowsedPiece) {
-    setOpen(p.item_id)
     if (dwell.current) clearTimeout(dwell.current)
-    if (looksWearing(p.item_id, looks).length) return
-    dwell.current = setTimeout(() => compose(p.item_id), 600)
+    dwell.current = setTimeout(() => setOpen(p.item_id), 400)
+  }
+  function ask(p: BrowsedPiece) {
+    if (dwell.current) clearTimeout(dwell.current)
+    setOpen(p.item_id)
+    setAsked(p.item_id)
   }
 
   return (
@@ -806,7 +817,7 @@ function SavedWhileBrowsing({
             key={p.item_id}
             onMouseEnter={() => rest(p)}
             onFocus={() => rest(p)}
-            onClick={() => { rest(p); compose(p.item_id) }}
+            onClick={() => ask(p)}
             className={`relative flex-none w-[clamp(150px,13vw,230px)] text-left transition-opacity ${open && open !== p.item_id ? 'opacity-60' : ''}`}
           >
             <div className={`relative aspect-[3/4] bg-white overflow-hidden ${open === p.item_id ? 'ring-2 ring-[#2B2B2B]' : ''}`}>
@@ -830,14 +841,14 @@ function SavedWhileBrowsing({
             <div className={LOOK_GRID}>
               {wearing.slice(0, 3).map((l) => <LookCard key={l.look_id} {...cardProps(l)} />)}
             </div>
-          ) : busy === piece.item_id ? (
-            <p className="text-[20px] text-[#55534E]">MYRA is putting outfits together around it…</p>
-          ) : composed[piece.item_id] ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {composed[piece.item_id].map((l, i) => <ComposedLookCard key={i} look={l} heroId={piece.item_id} />)}
-            </div>
           ) : (
-            <p className="text-[20px] text-[#55534E]">{failed[piece.item_id] ?? 'Resting on it will style it.'}</p>
+            <WaysToWear
+              inline
+              itemId={piece.item_id}
+              piece={{ item_id: piece.item_id, product_name: piece.product_name, brand: piece.brand, image_url: piece.image_url }}
+              heading="WHAT TO WEAR WITH IT"
+              autoStart={asked === piece.item_id}
+            />
           )}
         </div>
       )}
@@ -845,23 +856,29 @@ function SavedWhileBrowsing({
   )
 }
 
+// The one case that composes something new: she has no other look wearing the
+// piece, so MYRA builds its ways here and now (judged first, kept after). Her
+// stylist can still be asked for a delivery around it underneath.
 function StyleItemPrompt({ item, look }: { item: ClientLookItem; look: ClientLook }) {
   const [sent, setSent] = useState(false)
   const [busy, setBusy] = useState(false)
 
-  if (sent) {
-    return (
-      <p className="text-center text-[20px] text-[#2B2B2B] py-10 max-w-[560px] mx-auto">
-        MYRA is working on it. Your stylist checks the looks before they land here.
-      </p>
-    )
-  }
-
   return (
-    <div className="text-center py-10">
-      <p className="text-[20px] text-[#55534E] mb-5">
-        This is the only look you have wearing it.
-      </p>
+    <div className="py-6 space-y-8">
+      {item.item_id && (
+        <WaysToWear
+          inline
+          itemId={item.item_id}
+          piece={{ item_id: item.item_id, product_name: item.product_name, brand: item.brand, image_url: item.image_url }}
+          heading="OTHER WAYS TO WEAR IT"
+        />
+      )}
+      {sent ? (
+        <p className="text-center text-[20px] text-[#2B2B2B] max-w-[560px] mx-auto">
+          MYRA is working on it. Your stylist checks the looks before they land here.
+        </p>
+      ) : (
+      <div className="text-center">
       <button
         disabled={busy}
         onClick={async () => {
@@ -876,8 +893,10 @@ function StyleItemPrompt({ item, look }: { item: ClientLookItem; look: ClientLoo
         }}
         className="text-[20px] px-6 py-3.5 bg-[#2B2B2B] text-white disabled:opacity-40 rounded-full"
       >
-        {busy ? 'Asking…' : 'Ask MYRA to style it another way'}
+        {busy ? 'Asking…' : 'Ask your stylist for a look around it'}
       </button>
+      </div>
+      )}
     </div>
   )
 }

@@ -34,6 +34,10 @@ import {
   type SubjectiveChecker,
 } from '@/lib/outfit-quality/candidate-generation'
 import { MULTI_ITEM_SLOTS, type RuleOutcome } from '@/lib/outfit-quality/objective-checks'
+import { anchorOf, itemsSignature } from '@/lib/outfit-quality/scope-signature'
+import { slotPlanForAnchor, type Slot } from '@/lib/composer'
+import { isLearningEligible } from '@/lib/outfit-quality/learning-projection'
+import { createStyleBrainSink, type QualityLearningSink } from '@/lib/outfit-quality/style-brain-bridge'
 import {
   createObjectiveEvidenceProvider,
   createSubjectiveChecker,
@@ -94,6 +98,18 @@ function itemInsertRows(versionId: string, candidate: GeneratedCandidate) {
  * checks/records/state writes throw on any Supabase error — a failed write
  * aborts the flow rather than silently advancing the candidate.
  */
+/**
+ * The scope-level dedupe columns (migration 0091): sorted item ids and the
+ * lead garment. Taken from the generator when it supplied them, otherwise
+ * derived from the manifest (the edit path).
+ */
+function scopeColumns(candidate: GeneratedCandidate): { items_signature: string; anchor_item_id: string | null } {
+  return {
+    items_signature: candidate.itemsSignature ?? itemsSignature(candidate.items.map((i) => i.item_id)),
+    anchor_item_id: candidate.anchorItemId ?? anchorOf(candidate.items),
+  }
+}
+
 export function createCandidatePersistence(args: {
   admin: Admin
   batch: BatchAttribution
@@ -150,6 +166,7 @@ export function createCandidatePersistence(args: {
           generator_model: args.systemVersions.generation_model,
           prompt_version: args.systemVersions.prompt_version,
           state: 'generated',
+          ...scopeColumns(input.candidate),
         })
         .select('candidate_version_id')
         .maybeSingle()
@@ -176,6 +193,7 @@ export function createCandidatePersistence(args: {
           generator_model: args.systemVersions.generation_model,
           prompt_version: args.systemVersions.prompt_version,
           state: 'generated',
+          ...scopeColumns(input.candidate),
         })
         .select('candidate_version_id')
         .maybeSingle()
@@ -246,6 +264,12 @@ export interface EditCandidateInput {
   items: { item_id: string; slot: string }[]
   /** Idempotency key: replaying the same edit returns the same child version. */
   editKey?: string
+  /**
+   * What the reviewer swapped out (to_item_id = the replacement) or removed
+   * (to_item_id = null) to arrive at this edit. Each one teaches the house as
+   * a swap, exactly like a swap in Outfit Review — training partition only.
+   */
+  swaps?: { from_item_id: string; to_item_id: string | null }[]
 }
 
 export interface EditCandidateResult {
@@ -269,7 +293,7 @@ const MAX_EDIT_ITEMS = 12
 export async function editCandidateVersion(
   input: EditCandidateInput,
   admin: Admin = createAdminClient(),
-  deps: { evidence?: ObjectiveEvidenceProvider; subjectiveChecker?: SubjectiveChecker } = {},
+  deps: { evidence?: ObjectiveEvidenceProvider; subjectiveChecker?: SubjectiveChecker; learningSink?: QualityLearningSink } = {},
 ): Promise<EditCandidateResult> {
   const db = admin as any
   if (!input.candidateVersionId) return { ok: false, code: 'missing_version', message: 'a candidate version id is required' }
@@ -332,16 +356,21 @@ export async function editCandidateVersion(
   if (snapErr) return { ok: false, code: 'read_failed', message: snapErr.message }
   if (!snapRow) return { ok: false, code: 'snapshot_missing', message: 'frozen snapshot not found' }
 
-  // The structure the child must satisfy: the parent version's single-item
-  // slots. Dropping one in the edit fails the objective structure check.
+  // The structure the child must satisfy: the parent's anchor slot plus the
+  // slots the composer requires for that anchor (the same rule generation
+  // uses). Dropping one of THOSE fails the objective structure check; an
+  // optional layer — outerwear, a bag, jewellery — may be removed freely.
   const { data: parentItems, error: parentItemsErr } = await db
     .from('outfit_quality_candidate_item')
-    .select('slot')
+    .select('item_id, slot, sort_order')
     .eq('candidate_version_id', parent.candidate_version_id)
   if (parentItemsErr) return { ok: false, code: 'read_failed', message: parentItemsErr.message }
-  const requiredSlots = Array.from(
-    new Set(((parentItems ?? []) as any[]).map((r) => r.slot as string).filter((s) => !MULTI_ITEM_SLOTS.has(s))),
-  )
+  const parentManifest = ((parentItems ?? []) as any[]).map((r) => ({ item_id: r.item_id as string, slot: r.slot as string, sort_order: (r.sort_order ?? 0) as number }))
+  const parentAnchorId = anchorOf(parentManifest)
+  const parentAnchorSlot = (parentManifest.find((r) => r.item_id === parentAnchorId)?.slot ?? null) as Slot | null
+  const requiredSlots = parentAnchorSlot
+    ? Array.from(new Set([parentAnchorSlot, ...slotPlanForAnchor(parentAnchorSlot).required]))
+    : Array.from(new Set(parentManifest.map((r) => r.slot).filter((s) => !MULTI_ITEM_SLOTS.has(s))))
 
   // Freeze the edited items' facts from the live item rows.
   const { data: itemRows, error: itemsErr } = await db.from('item').select('*, brand(*)').in('item_id', ids)
@@ -383,6 +412,17 @@ export async function editCandidateVersion(
       subjectiveChecker: deps.subjectiveChecker ?? createSubjectiveChecker(),
       store,
     })
+    // Each swap/remove teaches the house like a swap in Outfit Review —
+    // training partition only, and never a reason to fail the edit.
+    const swaps = (input.swaps ?? []).filter((sw) => sw && typeof sw.from_item_id === 'string' && sw.from_item_id)
+    if (swaps.length > 0 && isLearningEligible(batch.data_partition)) {
+      const sink = deps.learningSink ?? createStyleBrainSink(admin)
+      const look = { stylistId: batch.selected_stylist_id as string, itemIds: parentManifest.map((r) => r.item_id), anchorItemId: parentAnchorId }
+      for (const sw of swaps.slice(0, MAX_EDIT_ITEMS)) {
+        const taught = await sink.swap(look, sw.from_item_id, sw.to_item_id ?? null)
+        if (!taught.ok) console.warn(`[outfit-quality] ${taught.warning}`)
+      }
+    }
     return { ok: true, candidateVersionId: result.candidateVersionId, state: result.state }
   } catch (err) {
     return { ok: false, code: 'edit_failed', message: err instanceof Error ? err.message : String(err) }

@@ -7,16 +7,13 @@ import { createAdminClient } from '@/lib/supabase-server'
 import { getItem, getReadyAndLiveItems } from '@/lib/admin-queries'
 import { pairCompat, slotForItemType, slotPlanForAnchor, deriveSlotScores, deriveOutfitLevelScores } from '@/lib/composer'
 import { loadStyleModel, recordStyleOffers } from '@/lib/style-brain-store'
-import { blendedScore } from '@/lib/style-brain'
 import {
   formalityBand,
   deriveOccasionScores,
-  hardSkipPairs,
-  isExcluded,
   confidenceGate,
 } from '@/lib/pipeline'
-import { evaluateHouseStyle } from '@/lib/house-style'
-import { toHouseItem, loadLearnedMaterialPairs, recordHouseRejections } from '@/lib/house-style-store'
+import { loadLearnedMaterialPairs, recordHouseRejections } from '@/lib/house-style-store'
+import { composeReviewLooks, reviewLibrary, reviewFeature, tierBandViolation, REVIEW_ANCHOR_TYPES } from '@/lib/review-compose'
 import {
   loadEjectionConstraints,
   loadApprovedVectors,
@@ -24,12 +21,8 @@ import {
   vectorForCandidate,
 } from '@/lib/pipeline-store'
 
-// Anchor garments we generate review outfits for.
-const DRESS = new Set(['mini_dress', 'midi_dress', 'maxi_dress', 'shirt_dress', 'slip_dress'])
-const TOP = new Set(['shirt', 'blouse', 't-shirt', 'knitwear', 'corset', 'bodysuit'])
-const BOTTOM = new Set(['skirt', 'trousers', 'jeans'])
-const ANCHOR_TYPES = new Set<string>([...DRESS, ...TOP, ...BOTTOM])
-const OUTERWEAR = new Set(['coat', 'trench', 'jacket', 'blazer', 'gilet', 'cape'])
+// Anchor garments we generate review outfits for (the shared review recipe).
+const ANCHOR_TYPES = REVIEW_ANCHOR_TYPES
 
 const TARGET = 3
 
@@ -39,30 +32,6 @@ function fmtPrice(price: string | null | undefined, currency: string | null | un
   const s = sym[currency ?? 'GBP'] ?? ''
   const clean = String(price).replace(/\.00$/, '')
   return s ? `${s}${clean}` : clean
-}
-
-// price_tier 1 HIGH STREET · 2 CONTEMPORARY · 3 PREMIUM · 4 LUXURY · 5 ULTRA.
-// Don't pair ≤2 with ≥4; premium (3) bridges.
-function tierBandViolation(tiers: (number | null | undefined)[]): boolean {
-  const t = tiers.filter((x): x is number => typeof x === 'number')
-  return t.some((x) => x <= 2) && t.some((x) => x >= 4)
-}
-
-function anchorCategory(itemType: string): 'dress' | 'top' | 'bottom' {
-  if (DRESS.has(itemType)) return 'dress'
-  if (TOP.has(itemType)) return 'top'
-  return 'bottom'
-}
-
-// Coherence of a combo: average pairwise compat, anchor pairs weighted 2×.
-function comboScore(anchor: any, additions: any[]): number {
-  let sum = 0
-  let w = 0
-  for (const it of additions) { sum += 2 * pairCompat(anchor, it).total; w += 2 }
-  for (let i = 0; i < additions.length; i++) {
-    for (let j = i + 1; j < additions.length; j++) { sum += pairCompat(additions[i], additions[j]).total; w += 1 }
-  }
-  return w ? sum / w : 0
 }
 
 export interface ReviewAnchor {
@@ -179,19 +148,6 @@ export async function getReviewQueue(
   }
 }
 
-// Library minus outerwear, the anchor, and any duplicate listing of it.
-function styleLibrary(library: any[], anchor: any): any[] {
-  const anchorImg = String(anchor.image_url ?? '')
-  const anchorName = String(anchor.product_name ?? '').toLowerCase().trim()
-  return library.filter(
-    (it) =>
-      !OUTERWEAR.has(String(it.item_type)) &&
-      it.item_id !== anchor.item_id &&
-      String(it.image_url) !== anchorImg &&
-      String(it.product_name ?? '').toLowerCase().trim() !== anchorName,
-  )
-}
-
 export async function composeForReview(anchorItemId: string): Promise<{
   anchor?: { item_id: string; product_name: string; brand_name: string | null; image_url: string; item_type: string; price: string; stock_status?: string | null; stock_sizes?: string[] | null }
   candidates?: ReviewCandidate[]
@@ -200,119 +156,32 @@ export async function composeForReview(anchorItemId: string): Promise<{
   try {
     const anchor: any = await getItem(anchorItemId)
     if (!anchor) return { error: 'Anchor not found' }
-    const [constraints, approvedVectors, config, learnedPairs] = await Promise.all([
+    const [constraints, approvedVectors, config, learnedPairs, styleModel, library] = await Promise.all([
       loadEjectionConstraints(),
       loadApprovedVectors(500),
       loadPipelineConfig(),
       loadLearnedMaterialPairs(),
+      loadStyleModel(),
+      getReadyAndLiveItems(),
     ])
-    const anchorBand = formalityBand([anchor])
-    // Ejection constraints: quarantined items and items ejected 2+ times in
-    // this context never enter the pools.
-    const lib = styleLibrary(await getReadyAndLiveItems(), anchor).filter(
-      (it: any) => !isExcluded(constraints, it.item_id, slotForItemType(it.item_type), anchorBand),
-    )
-    const anchorTier = anchor.brand?.price_tier ?? null
-    const cat = anchorCategory(String(anchor.item_type))
 
-    // Top-ranked, brand-tier-coherent items per slot.
-    const pool = (slot: string) =>
-      lib
-        .filter((it: any) => slotForItemType(it.item_type) === slot && !tierBandViolation([anchorTier, it.brand?.price_tier ?? null]))
-        .map((it: any) => ({ it, c: pairCompat(anchor, it).total }))
-        .sort((a, b) => b.c - a.c)
-        .slice(0, 5)
-        .map((x) => x.it)
-
-    // Required slots → complete outfit. Dress: shoes + bag. Separates: the other
-    // garment + shoes + bag.
-    const garmentSlot = cat === 'top' ? 'bottom' : cat === 'bottom' ? 'top' : null
-    const slotPools: { slot: string; items: any[] }[] = []
-    if (garmentSlot) slotPools.push({ slot: garmentSlot, items: pool(garmentSlot) })
-    slotPools.push({ slot: 'shoe', items: pool('shoe') })
-    slotPools.push({ slot: 'bag', items: pool('bag') })
-
-    const pools = slotPools.filter((p) => p.items.length > 0) // best-effort if a slot is empty
-    if (pools.length === 0) {
-      return { anchor: anchorPayload(anchor), candidates: [] }
-    }
-
-    // Cartesian product of the slot pools.
-    let combos: any[][] = [[]]
-    for (const p of pools) {
-      const next: any[][] = []
-      for (const combo of combos) for (const it of p.items) next.push([...combo, it])
-      combos = next
-    }
-
-    // Style Brain re-rank: blend Chloe's learned taste into the compose score
-    // (safe no-op until there are decisions).
-    const styleModel = await loadStyleModel()
-    const feat = (it: any) => ({
-      item_type: it.item_type, colour_family: it.colour_family ?? null, pattern: it.pattern ?? null,
-      material_formality: it.material_formality ?? null, brand_name: it.brand?.name ?? null,
-      price_tier: it.brand?.price_tier ?? null,
+    // THE REVIEW RECIPE (lib/review-compose): brand-tier-coherent slot pools,
+    // House Style Constitution gate, Style Brain blend, diversity cap. Shared
+    // with the Quality Lab so both surfaces compose the same way.
+    const { picks, rejectionHits } = composeReviewLooks({
+      anchor,
+      library: reviewLibrary(library, anchor, constraints),
+      styleModel,
+      learnedPairs,
     })
-    // HOUSE STYLE CONSTITUTION — the pre-vector gate. Hard rules discard the
-    // combo before it is scored; the learned skip-list is a SOFT penalty inside
-    // the verdict, not a ban. Written rules override learned statistics.
-    const houseOpts = {
-      learnedApprovedPairs: learnedPairs.approved,
-      learnedRejectedPairs: learnedPairs.rejected,
-      softSkipPairs: hardSkipPairs(styleModel),
-    }
-    const houseVerdicts = new Map<string, ReturnType<typeof evaluateHouseStyle>>()
-    const verdictFor = (items: any[]) => {
-      const key = items.map((i) => i.item_id).sort().join('|')
-      let v = houseVerdicts.get(key)
-      if (!v) {
-        v = evaluateHouseStyle(
-          [toHouseItem(anchor), ...items.map((i) => toHouseItem(i))],
-          houseOpts,
-        )
-        houseVerdicts.set(key, v)
-      }
-      return v
-    }
-    const rejectionHits: import('@/lib/house-style').RuleHit[] = []
-
-    const scored = combos
-      .filter((items) => !tierBandViolation([anchorTier, ...items.map((i) => i.brand?.price_tier ?? null)]))
-      .filter((items) => {
-        const v = verdictFor(items)
-        if (!v.pass) rejectionHits.push(...v.violations)
-        return v.pass
-      })
-      .map((items) => ({
-        items,
-        score: Math.max(0, Math.min(1, blendedScore(styleModel, comboScore(anchor, items), [feat(anchor), ...items.map(feat)]))),
-      }))
-      .sort((a, b) => b.score - a.score)
-
     void recordHouseRejections(rejectionHits, anchorItemId)
 
-    // Diversity: no single item appears in more than 2 candidates.
-    const use = new Map<string, number>()
-    const picked: typeof scored = []
-    for (const s of scored) {
-      if (s.items.some((it) => (use.get(it.item_id) ?? 0) >= 2)) continue
-      s.items.forEach((it) => use.set(it.item_id, (use.get(it.item_id) ?? 0) + 1))
-      picked.push(s)
-      if (picked.length >= 6) break
-    }
-    if (picked.length < 6) {
-      for (const s of scored) {
-        if (picked.includes(s)) continue
-        picked.push(s)
-        if (picked.length >= 6) break
-      }
-    }
-
-    const candidates: ReviewCandidate[] = picked.map((s, idx) => {
+    const feat = reviewFeature
+    const candidates: ReviewCandidate[] = picks.map((s, idx) => {
       // Vector + confidence gate at composition time.
       const entries = [
         { item: anchor, slot: slotForItemType(anchor.item_type) },
-        ...s.items.map((it: any) => ({ item: it, slot: slotForItemType(it.item_type) })),
+        ...s.items.map(({ item }) => ({ item, slot: slotForItemType(item.item_type) })),
       ]
       const occasion = deriveOccasionScores(entries)
       const vector = vectorForCandidate(
@@ -334,10 +203,10 @@ export async function composeForReview(anchorItemId: string): Promise<{
       })
       // House verdict: soft penalties fold into confidence; statement + echoes
       // travel with the candidate for display.
-      const hv = verdictFor(s.items)
+      const hv = s.verdict
       const confidence = gate.confidence - hv.penaltyTotal
       const statementIt = hv.statement
-        ? [anchor, ...s.items].find((i: any) => i.item_id === hv.statement!.itemId)
+        ? [anchor, ...s.items.map((i) => i.item)].find((i: any) => i.item_id === hv.statement!.itemId)
         : null
       return {
         candidateIndex: idx,
@@ -350,7 +219,7 @@ export async function composeForReview(anchorItemId: string): Promise<{
           ? `${[statementIt.brand?.name, statementIt.product_name].filter(Boolean).join(' ')} (${hv.statement!.kind})`
           : null,
         echoes: hv.echoes,
-        items: s.items.map((it: any) => ({
+        items: s.items.map(({ item: it }: any) => ({
           slot: slotForItemType(it.item_type),
           item_id: it.item_id,
           product_name: it.product_name,
@@ -366,10 +235,10 @@ export async function composeForReview(anchorItemId: string): Promise<{
 
     // Every shown candidate is an OFFER — the denominator of approval rates.
     void recordStyleOffers(
-      picked.map((s) => ({
-        items: [feat(anchor), ...s.items.map(feat)],
+      picks.map((s) => ({
+        items: [feat(anchor), ...s.items.map((i) => feat(i.item))],
         anchorItemId,
-        itemIds: [anchor.item_id, ...s.items.map((it: any) => it.item_id)],
+        itemIds: [anchor.item_id, ...s.items.map((i) => i.item.item_id)],
       })),
       'review',
     )
@@ -418,7 +287,7 @@ export async function getReviewAddOptions(
     const present = new Set(presentSlots)
     const missing = Array.from(valid).filter((s) => !present.has(s))
 
-    let pool = styleLibrary(await getReadyAndLiveItems(), anchor).filter((it: any) => !exclude.has(it.item_id))
+    let pool = reviewLibrary(await getReadyAndLiveItems(), anchor).filter((it: any) => !exclude.has(it.item_id))
     if (q) {
       pool = pool.filter((it: any) =>
         `${it.product_name} ${it.brand?.name ?? ''} ${String(it.item_type).replace(/_/g, ' ')}`.toLowerCase().includes(q),
@@ -498,7 +367,7 @@ export async function getReviewSwapOptions(
     const anchorTier = anchor.brand?.price_tier ?? null
     const q = query.trim().toLowerCase()
 
-    let pool = styleLibrary(await getReadyAndLiveItems(), anchor).filter((it: any) => !exclude.has(it.item_id))
+    let pool = reviewLibrary(await getReadyAndLiveItems(), anchor).filter((it: any) => !exclude.has(it.item_id))
 
     if (q) {
       pool = pool.filter((it: any) =>

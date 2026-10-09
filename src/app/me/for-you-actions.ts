@@ -70,6 +70,20 @@ export async function loadForYou(asMemberId?: string): Promise<ForYouView> {
     const dims = new Map<string, any>(((rows ?? []) as any[]).map((r) => [r.item_id, r]))
     const prefs = readStylePrefs(member)
 
+    // Styled before she asks: the retail pieces on this page are queued as
+    // warm-ups (lib/styled-ways-queue) so a tap on any of them answers at
+    // once. Cheap when they already have their ways; capped per day.
+    try {
+      const retail = Array.from(new Set(((looks ?? []) as any[])
+        .flatMap((l) => ((l.items ?? []) as any[]).filter((i) => i.item_id && !i.owned).map((i) => i.item_id as string))))
+        .slice(0, 24)
+      if (retail.length) {
+        const { enqueueWarmups, kickStyledWaysDrain } = await import('@/lib/styled-ways-queue')
+        const q = await enqueueWarmups(admin, me.memberId, retail, 'feed')
+        if (q.queued.length) kickStyledWaysDrain()
+      }
+    } catch (err) { console.error('[loadForYou] styled ways', err) }
+
     return {
       ...base,
       looks: ((looks ?? []) as any[]).map((l) => {

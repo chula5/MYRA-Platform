@@ -233,3 +233,29 @@ describe('names the classifier was mistyping (found composing for Alison)', () =
     expect(typeOf('Leather Ballet Flat')).toBe('flat')
   })
 })
+
+describe('a shoe word inside a garment name is not a shoe', () => {
+  // Shoes are read before tops, so these all came through as flats.
+  const at = (title: string, url: string) => classifyExternalProduct(parsed(title, url)).itemType
+  it('keeps a Ballerina top a top', () => {
+    expect(typeOf('Organic Cotton Ballerina Top - Clay')).toBe('blouse')
+    expect(typeOf('Ballerina Wrap Knit Top - Off White')).toBe('knitwear')
+    expect(typeOf('BALLERINA LONG SLEEVE TOP IN MESH JERSEY')).toBe('blouse')
+  })
+  it('reads the category in the path over a colourway called Ballerina', () => {
+    expect(at('CHEBBI Ballerina', 'https://www.sessun.co.uk/catalogue/sweatshirts/chebbi-ballerina.html')).toBe('knitwear')
+    expect(at('TAMAYO Ballerina', 'https://www.sessun.co.uk/catalogue/trousers/tamayo-ballerina.html')).toBe('trousers')
+  })
+  it('does not make shoes of flat-front trousers, a loafer jean or a flat belt', () => {
+    expect(at('viscose and silk velvet trousers night', 'https://forte-forte.com/products/pantalone-flared-flat-front-velluto-liscio-vi-se-night')).toBe('trousers')
+    expect(at('Cath x WYSE Signature Jean - Black', 'https://www.wyselondon.com/products/cath-x-wyse-loafer-jean-black')).toBe('jeans')
+    expect(at('JANE BELT', 'https://nililotan.com/products/janes-belt-flat-calfskin')).toBe('belt')
+    expect(at('KIKI SWEATPANT', 'https://nililotan.com/products/kiki-sweatpant-washed-black')).toBe('trousers')
+  })
+  it('still reads real flats', () => {
+    expect(typeOf('Ballerina Flat - Off White')).toBe('flat')
+    expect(typeOf('black leather Alice ballerinas')).toBe('flat')
+    expect(typeOf('PEDILLE FLAT BALLERINA IN GOATSKIN LEATHER')).toBe('flat')
+    expect(typeOf('Raffia Texture Flat Bag')).not.toBe('flat')
+  })
+})

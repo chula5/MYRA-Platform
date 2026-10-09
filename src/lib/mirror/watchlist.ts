@@ -74,6 +74,40 @@ function currencyFor(url: string): string | null {
   return null
 }
 
+/** A swatch, a logo, a spinner or a skeleton's 1×1: not a piece's picture. */
+const PLACEHOLDER_IMAGE = /placeholder|swatch|logo|sprite|\bicon|spinner|loading|pixel|blank\.|1x1/i
+
+/**
+ * The piece's name, not the tile's text. A reader that took a heading which
+ * wrapped the price too sent "Calista High Pump ⏎⏎ £ 298.00", and a sale tile
+ * "Anika Two Piece £ 498.00 £ 498": the name is the first line once every
+ * price is taken out of it.
+ */
+export function cleanTitle(s: string): string {
+  return s.split('\n')
+    .map((x) => x.replace(/[£$€]\s?\d[\d,]*(?:\.\d{1,2})?/g, ' ').replace(/\s+/g, ' ').trim())
+    .find(Boolean) ?? ''
+}
+
+async function mendPlaceholderImages(
+  admin: any, watchedBrandId: string, seen: { url: string; image: string }[],
+): Promise<void> {
+  try {
+    const { data } = await admin.from('brand_watch_queue')
+      .select('queue_id, shopify_product_id, image_url')
+      .eq('watched_brand_id', watchedBrandId)
+      .or('image_url.ilike.%placeholder%,image_url.ilike.%swatch%')
+      .limit(500)
+    if (!data?.length) return
+    const byPid = new Map(seen.map((p) => [urlHash(p.url), p.image]))
+    for (const row of data as { queue_id: string; shopify_product_id: string; image_url: string | null }[]) {
+      const image = byPid.get(row.shopify_product_id)
+      if (!image || !PLACEHOLDER_IMAGE.test(row.image_url ?? '')) continue
+      await admin.from('brand_watch_queue').update({ image_url: image }).eq('queue_id', row.queue_id)
+    }
+  } catch { /* a mend is a nicety; the queue must not fail for it */ }
+}
+
 /**
  * Queue what she just walked past, for a brand MYRA can only see through her
  * browser. Deduped against the library and the queue exactly as a scan is, so
@@ -86,13 +120,16 @@ export async function queueMirrorProducts(
   admin: any,
   watched: WatchedBrandRow,
   products: MirrorSeenProduct[],
+  /** How many NEW pieces one call may queue. Browsing keeps the PER_VISIT brake; a SCAN IN CHROME lifts it — it is reading the whole grid on purpose. */
+  opts: { limit?: number } = {},
 ): Promise<number> {
   try {
     const candidates = products
+      .map((p) => (typeof p.title === 'string' ? { ...p, title: cleanTitle(p.title) } : p))
       .filter((p): p is MirrorSeenProduct & { url: string; title: string; image: string } =>
         typeof p.url === 'string' && /^https?:\/\//.test(p.url)
         && typeof p.title === 'string' && p.title.trim().length > 1
-        && typeof p.image === 'string' && /^https?:\/\//.test(p.image))
+        && typeof p.image === 'string' && /^https?:\/\//.test(p.image) && !PLACEHOLDER_IMAGE.test(p.image))
     if (!candidates.length) return 0
 
     const scanned = candidates.map((p) => ({
@@ -116,12 +153,18 @@ export async function queueMirrorProducts(
       await admin.from('watched_brand').update({ brand_id: brandId }).eq('watched_brand_id', watched.watched_brand_id)
     }
     const known = await fetchKnownForBrand(admin, brandId)
+    // A piece already queued with the shop's swatch placeholder as its picture
+    // (Reformation, before the reader learned to skip it) is known, so it will
+    // not be queued again — it takes the real picture from this read instead.
+    await mendPlaceholderImages(admin, watched.watched_brand_id, candidates)
 
     const rows = fashion
       .filter(({ raw, product }) => !isKnown(known, { pid: urlHash(raw.url), url: raw.url, name: raw.title, colour: product.colourFamily }))
       // Up to PER_VISIT NEW pieces each visit, so coming back all week walks
-      // deeper into the page instead of re-reading the same first tiles.
-      .slice(0, PER_VISIT)
+      // deeper into the page instead of re-reading the same first tiles. A
+      // scan passes its own limit: capped at 40 a page, a 272-piece grid was
+      // arriving as 101.
+      .slice(0, opts.limit ?? PER_VISIT)
       .map(({ raw, product }) => {
         const currency = currencyFor(raw.url)
         const season = seasonOf({

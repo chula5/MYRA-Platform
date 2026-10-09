@@ -12,11 +12,10 @@
 
 import { useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
-import ComposedLookCard from '@/components/me/ComposedLookCard'
+import WaysToWear from '@/components/me/WaysToWear'
 import ShopLink from '@/components/ShopLink'
-import type { StyledLook } from '@/app/admin/private-stylist/actions'
 import {
-  browseSearch, styleBrowsedPiece, saveBrowsedPiece,
+  browseSearch, saveBrowsedPiece,
   type BrowsePiece, type BrowseFacets, type BrowseSizes, type BrowseFilters,
 } from './actions'
 
@@ -50,7 +49,6 @@ export default function BrowseClient() {
 
   const [picked, setPicked] = useState<string | null>(null)
   const [styling, setStyling] = useState<'wardrobe' | 'new' | null>(null)
-  const [looks, setLooks] = useState<StyledLook[]>([])
   const [note, setNote] = useState<string | null>(null)
 
   const [saved, setSaved] = useState<Set<string>>(new Set())
@@ -65,7 +63,7 @@ export default function BrowseClient() {
     if (!q) return
     setAsked(q); setDraft(q)
     setBusy(true); setPieces(null); setError(null)
-    setPicked(null); setLooks([]); setNote(null)
+    setPicked(null); setStyling(null); setNote(null)
     const r = await browseSearch(q, filters)
     setBusy(false)
     setPieces(r.pieces); setRead(r.read); setError(r.error ?? null)
@@ -85,13 +83,10 @@ export default function BrowseClient() {
     await run(query, {})
   }
 
-  async function style(piece: BrowsePiece, mode: 'wardrobe' | 'new') {
-    if (styling) return
-    setStyling(mode); setLooks([]); setNote(null)
-    const r = await styleBrowsedPiece(piece.item_id, mode)
-    setStyling(null)
-    setLooks(r.looks)
-    setNote(r.error ?? (r.looks.length ? null : 'MYRA could not build a look around this one.'))
+  // The sheet asks, waits and keeps (lib/styled-ways): judged before it shows,
+  // instant the next time she opens the same piece in the same pool.
+  function style(_piece: BrowsePiece, mode: 'wardrobe' | 'new') {
+    setStyling((cur) => (cur === mode ? null : mode)); setNote(null)
   }
 
   async function save(piece: BrowsePiece) {
@@ -259,7 +254,7 @@ export default function BrowseClient() {
                 >
                   <button
                     type="button"
-                    onClick={() => { setPicked(p.item_id); setLooks([]); setNote(null) }}
+                    onClick={() => { setPicked(p.item_id); setStyling(null); setNote(null) }}
                     className="block w-full text-left"
                   >
                     <div className="relative aspect-[3/4] bg-[#F3F2F0] overflow-hidden">
@@ -331,22 +326,20 @@ export default function BrowseClient() {
           </div>
 
           {styling && (
-            <div className="rounded-[16px] bg-white/70 px-6 py-10 text-center mt-6">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/myra-mirror-transparent.png" alt="" className="myra-mirror-wiggle h-24 w-auto mx-auto" />
-              <p className="mt-4 text-[17px] text-[#4A4E57]">
-                {styling === 'wardrobe' ? 'Looking through your wardrobe…' : 'Finding something new for it…'}
-              </p>
+            <div className="mt-6">
+              <WaysToWear
+                inline
+                key={`${chosen.item_id}-${styling}`}
+                itemId={chosen.item_id}
+                mode={styling === 'wardrobe' ? 'wardrobe' : 'inspiration'}
+                piece={{ item_id: chosen.item_id, product_name: chosen.product_name, brand: chosen.brand ?? null, image_url: chosen.image_url ?? null }}
+                heading={styling === 'wardrobe' ? 'WITH YOUR WARDROBE' : 'WITH SOMETHING NEW'}
+                onClose={() => setStyling(null)}
+              />
             </div>
           )}
 
           {note && !styling && <p className="myra-guide-text normal-case text-[18px] text-[#4A4E57] mt-5">{note}</p>}
-
-          {looks.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 mt-6">
-              {looks.map((l, i) => <ComposedLookCard key={l.look_id ?? i} look={l} heroId={chosen.item_id} />)}
-            </div>
-          )}
         </section>
       )}
     </div>

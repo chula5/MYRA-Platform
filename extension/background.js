@@ -70,11 +70,11 @@ const handlers = {
     return { enabled: !c.disabledHosts.includes(host), connected: !!c.token, member: c.member, apiBase: c.apiBase }
   },
 
-  async rank({ host, products }) {
+  async rank({ host, products, scan }) {
     const key = `${host}|${hashKeys(products)}`
     const hit = rankCache.get(key)
     if (hit && Date.now() - hit.at < RANK_TTL_MS) return { ...hit.data, cached: true }
-    const { status, json } = await api('/api/mirror/rank', { method: 'POST', body: JSON.stringify({ host, products }) })
+    const { status, json } = await api('/api/mirror/rank', { method: 'POST', body: JSON.stringify({ host, products, scan: scan === true }) })
     if (status !== 200 || !json) return { error: json?.error || `rank failed (${status})` }
     rankCache.set(key, { at: Date.now(), data: json })
     return json
@@ -267,6 +267,19 @@ const handlers = {
     const { status, json } = await api(`/api/mirror/site-request?host=${encodeURIComponent(host)}`)
     if (status !== 200 || !json || json.error) return { error: json?.error || `Could not check (${status})` }
     return json
+  },
+
+  /** A SCAN IN CHROME feeding one grid page of a mirror-fed brand — queued, never ranked. */
+  async scanFeed({ host, products }) {
+    const { status, json } = await api('/api/mirror/scan-feed', { method: 'POST', body: JSON.stringify({ host, products }) })
+    return status === 200 ? json : { error: json?.error || `feed failed (${status})` }
+  },
+
+  /** Brand Watch asking for a page to open BEHIND her, so she stays where she is. */
+  async openTab({ url }, sender) {
+    if (typeof url !== 'string' || !/^https?:\/\//.test(url)) return { error: 'bad url' }
+    const tab = await ext.tabs.create({ url, active: false, ...(sender?.tab?.index != null ? { index: sender.tab.index + 1 } : {}) })
+    return { tabId: tab?.id ?? null }
   },
 
   /** A SCAN IN CHROME reporting what it has read — the Brand Watch card follows it. */

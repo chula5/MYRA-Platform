@@ -1,5 +1,7 @@
 'use client'
 
+import WaysToWear from '@/components/me/WaysToWear'
+
 import { useState, useEffect, useCallback, useRef } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import { useRouter } from 'next/navigation'
@@ -62,6 +64,8 @@ interface OutfitDetailClientProps {
     wearing: (itemId: string) => OutfitWithItems[]
     /** A result was tapped: open that look in place (optionally straight into a mode). */
     onOpenLook: (lookId: string, mode?: 'similar' | 'explore') => void
+    /** STYLE IT: open this look piece by piece to change and save as a new outfit. */
+    onStyle?: () => void
     onSibling?: (dir: -1 | 1) => void
     hasPrev?: boolean
     hasNext?: boolean
@@ -91,6 +95,9 @@ export default function OutfitDetailClient({
   const showBrowse = showBrowseButtons ?? SHOW_BROWSE_BUTTONS
   const [outfit, setOutfit] = useState<OutfitWithItems | null>(initialOutfit ?? null)
   const [styleItemOutfits, setStyleItemOutfits] = useState<OutfitWithItems[]>([])
+  // WAYS TO WEAR IT — MYRA builds (and keeps) new outfits around the tapped
+  // piece; only for someone signed in as a member, never for a visitor.
+  const [waysFor, setWaysFor] = useState<{ item_id: string; product_name: string; brand: string | null; image_url: string | null } | null>(null)
 
   // Remember what they've opened — powers RECENTLY VIEWED on the landing page.
   // `outfit` is null until the client fetch lands (the public route gets no
@@ -587,6 +594,11 @@ export default function OutfitDetailClient({
                       Coach-tips are slim and staggered — Similar sits higher, the
                       outer two anchor to their edges — so they don't overlap. */}
                   <div className="flex flex-wrap items-center justify-center gap-x-5 sm:gap-x-8 gap-y-1.5">
+                    {host?.onStyle && (
+                      <span className="relative">
+                        <button onClick={host.onStyle} className={ACTION_CLS}>Style it</button>
+                      </span>
+                    )}
                     <span className="relative">
                       <button onClick={openSourcePanel} className={ACTION_CLS}>Source Items</button>
                       <CoachTip size={host ? 'large' : 'small'} id="outfit-source-items" text={host ? "Every piece in this look, and where to buy it." : "Shop direct from the retailer."} arrow="down" widthClass="w-[164px]" className="bottom-full mb-2.5 left-0" delayMs={300} active={coachStep === 1} onResolved={() => advanceCoach(1)} />
@@ -688,6 +700,27 @@ export default function OutfitDetailClient({
           <p className="text-[15px] tracking-[0.06em] text-[#4A4E57] text-center">This is the only look you have with that piece so far.</p>
         </div>
       )}
+
+      {(host || canSave) && activeStyleItemId && (
+        <div className="mt-6 text-center">
+          <button
+            type="button"
+            onClick={() => {
+              const oi = ((outfit?.outfit_item ?? []) as any[]).find((x) => x.item?.item_id === activeStyleItemId)
+              setWaysFor({
+                item_id: activeStyleItemId,
+                product_name: oi?.item?.product_name ?? '',
+                brand: oi?.item?.brand?.name ?? null,
+                image_url: oi?.item?.image_url ?? null,
+              })
+            }}
+            className={`rounded-full bg-[#2B2B2B] text-white px-6 py-3 ${host ? 'text-[20px]' : 'text-[13px] tracking-[0.12em] uppercase'}`}
+          >
+            See it styled three more ways
+          </button>
+        </div>
+      )}
+      {waysFor && <WaysToWear itemId={waysFor.item_id} piece={waysFor} onClose={() => setWaysFor(null)} />}
 
       {/* ── Similar / Explore results ──────────────────────── */}
       {relatedOutfits.length > 0 && !activeStyleItemId && (

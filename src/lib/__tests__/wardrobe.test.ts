@@ -217,6 +217,14 @@ describe('pilot composer with owned items', () => {
     const ownedZara = looks.flatMap((l) => l.items).filter((i) => i.product_name === 'Her jeans')
     expect(ownedZara.every((i) => i.owned)).toBe(true)
   })
+  it('never composes a retail piece from a hidden brand', () => {
+    const taste = emptyTaste()
+    const sessun = item({ item_type: 'structured_bag', item_id: 'sessun-bag', brand_id: 'sessun', brand_name: 'Sessùn', product_name: 'Sessùn bag' })
+    taste.hiddenBrandIds = new Set(['sessun'])
+    const looks = composeMemberLooks(taste, [...library(), sessun], 3)
+    expect(looks.length).toBeGreaterThan(0)
+    expect(looks.every((l) => !l.items.some((i) => i.item_id === 'sessun-bag'))).toBe(true)
+  })
   // ── her rules ──────────────────────────────────────────────────────────
   it('never composes white with cream, even when the white is labelled cream', () => {
     const taste = emptyTaste()

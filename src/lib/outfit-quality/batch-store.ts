@@ -28,6 +28,7 @@ import {
   frozenSnapshotFromRow,
   systemVersionsFromSnapshotRow,
 } from '@/lib/outfit-quality/candidate-store'
+import { loadScopeExclusions } from '@/lib/outfit-quality/scope-exclusions'
 import {
   createComposerGenerator,
   createObjectiveEvidenceProvider,
@@ -37,6 +38,8 @@ import {
 type Admin = ReturnType<typeof createAdminClient>
 
 export interface CreateBatchArgs {
+  /** 'composer' (default) invents looks; 'styled_ways' replays what the real member was shown. */
+  source?: 'composer' | 'styled_ways'
   dataPartition: string
   realMemberId?: string | null
   evaluationProfileId?: string | null
@@ -92,6 +95,7 @@ export async function createBatch(args: CreateBatchArgs, admin: Admin = createAd
       selected_stylist_id: args.selectedStylistId,
       target_count: args.targetCount,
       chunk_limit: args.chunkLimit ?? 25,
+      generation_config: { source: args.source === 'styled_ways' && args.realMemberId ? 'styled_ways' : 'composer' },
       status: 'draft',
       created_by: args.createdBy ?? null,
     })
@@ -111,6 +115,7 @@ interface BatchRow {
   stylist_snapshot_id: string | null
   target_count: number
   chunk_limit: number
+  generation_config: { source?: 'composer' | 'styled_ways' } | null
   status: BatchStatus
   last_error: string | null
 }
@@ -311,6 +316,11 @@ export async function generateChunk(
 
   const store = createCandidatePersistence({ admin, batch, systemVersions })
 
+  // Everything already composed for this stylist + context, across every
+  // batch, so this chunk never re-serves a look or re-leads an anchor.
+  const scope = await loadScopeExclusions(admin, batch)
+  if (scope.warning) console.warn(`[outfit-quality] ${scope.warning}`)
+
   let result: GenerateChunkResult
   try {
     result = await generateAndCheckChunk({
@@ -318,9 +328,12 @@ export async function generateChunk(
       runId: batch.run_id,
       claim,
       startPosition,
+      exclusions: scope.exclusions,
       snapshot: frozen,
       context: genContext,
-      generator: createComposerGenerator(admin),
+      generator: batch.generation_config?.source === 'styled_ways'
+        ? (await import('@/lib/outfit-quality/styled-ways-generator')).createStyledWaysGenerator(admin)
+        : createComposerGenerator(admin),
       evidence: createObjectiveEvidenceProvider(admin),
       subjectiveChecker: createSubjectiveChecker(),
       store,

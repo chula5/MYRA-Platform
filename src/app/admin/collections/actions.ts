@@ -152,11 +152,11 @@ export async function scanBrandCollection(brandName: string): Promise<Collection
   try {
     const client = new Anthropic({ apiKey })
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-sonnet-5-5',
       max_tokens: 8000,
       system: SCAN_SYSTEM,
       tools: [
-        { type: 'web_search_20250305', name: 'web_search', max_uses: 6 } as unknown as Anthropic.Messages.Tool,
+        { type: 'web_search_20260209', name: 'web_search', max_uses: 6 } as unknown as Anthropic.Messages.Tool,
       ],
       messages: [
         {

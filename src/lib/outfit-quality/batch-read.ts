@@ -8,7 +8,7 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase-server'
 import { MIN_CONFIRMED_IMAGES, isEnvelopeUsable, isValidVector } from '@/lib/outfit-quality/stylist-snapshot'
-import { buildPreDecisionCandidate, type PreDecisionCandidate, type PreDecisionItem, type RawSubjectiveCheck } from '@/lib/outfit-quality/queue-read-model'
+import { buildPreDecisionCandidate, type PreDecisionCandidate, type PreDecisionItem, type RawSubjectiveCheck, type RawObjectiveCheck } from '@/lib/outfit-quality/queue-read-model'
 
 type Admin = ReturnType<typeof createAdminClient>
 
@@ -123,17 +123,26 @@ export async function listBatches(admin: Admin = createAdminClient()): Promise<B
   const memberName = new Map<string, string>((members ?? []).map((m: any) => [m.member_id, m.name]))
   const profileName = new Map<string, string>((profiles ?? []).map((p: any) => [p.profile_id, p.name]))
 
-  // Per-batch candidate tallies.
+  // Per-batch candidate tallies: ONE query for every batch on the page,
+  // grouped in memory. (This used to be one sequential round trip per batch —
+  // up to 100 — which is what made the Batches view take tens of seconds.)
+  const tallies = new Map<string, { produced: number; awaiting: number; failed: number }>()
+  const { data: cases, error: caseErr } = await db
+    .from('outfit_quality_case')
+    .select('batch_id, status')
+    .in('batch_id', rows.map((b) => b.batch_id))
+  if (caseErr) throw new Error(`batch counts failed: ${caseErr.message}`)
+  for (const c of (cases ?? []) as any[]) {
+    const t = tallies.get(c.batch_id) ?? { produced: 0, awaiting: 0, failed: 0 }
+    t.produced += 1
+    if (c.status === 'awaiting_human') t.awaiting += 1
+    if (c.status === 'objective_failed') t.failed += 1
+    tallies.set(c.batch_id, t)
+  }
+
   const views: BatchView[] = []
   for (const b of rows) {
-    const { data: cases } = await db
-      .from('outfit_quality_case')
-      .select('case_id, current_version_id, status')
-      .eq('batch_id', b.batch_id)
-    const caseRows = (cases ?? []) as any[]
-    const produced = caseRows.length
-    const awaiting = caseRows.filter((c) => c.status === 'awaiting_human').length
-    const failed = caseRows.filter((c) => c.status === 'objective_failed').length
+    const t = tallies.get(b.batch_id) ?? { produced: 0, awaiting: 0, failed: 0 }
     views.push({
       batch_id: b.batch_id,
       data_partition: b.data_partition,
@@ -146,9 +155,9 @@ export async function listBatches(admin: Admin = createAdminClient()): Promise<B
       target_count: b.target_count,
       chunk_limit: b.chunk_limit,
       status: b.status,
-      produced,
-      awaiting_human: awaiting,
-      objective_failed: failed,
+      produced: t.produced,
+      awaiting_human: t.awaiting,
+      objective_failed: t.failed,
       last_error: b.last_error ?? null,
     })
   }
@@ -187,11 +196,14 @@ export async function listBatchCandidates(
   const versionIds = caseRows.map((c) => c.current_version_id).filter(Boolean)
   if (versionIds.length === 0) return []
 
-  const [{ data: versions }, { data: items }, { data: checks }] = await Promise.all([
+  const [{ data: versions }, { data: items }, { data: checks }, { data: objective }] = await Promise.all([
     db.from('outfit_quality_candidate_version').select('candidate_version_id, case_id, version_no, state').in('candidate_version_id', versionIds),
     db.from('outfit_quality_candidate_item').select('candidate_item_id, candidate_version_id, item_id, slot, sort_order, source_image_url, item_snapshot').in('candidate_version_id', versionIds),
     // Only disclose THAT a subjective check exists — never select its verdict/score/reasons here.
     db.from('outfit_quality_machine_check').select('check_id, candidate_version_id, kind, status').in('candidate_version_id', versionIds).eq('kind', 'subjective'),
+    // Objective gates are deterministic (structure, size, stock) — their
+    // detail is disclosed in words so a stopped look says why.
+    db.from('outfit_quality_machine_check').select('candidate_version_id, check_name, status, issues').in('candidate_version_id', versionIds).eq('kind', 'objective').neq('status', 'passed'),
   ])
 
   const itemsByVersion = new Map<string, PreDecisionItem[]>()
@@ -206,6 +218,12 @@ export async function listBatchCandidates(
       item_snapshot: it.item_snapshot ?? {},
     })
     itemsByVersion.set(it.candidate_version_id, list)
+  }
+  const objByVersion = new Map<string, RawObjectiveCheck[]>()
+  for (const c of (objective ?? []) as any[]) {
+    const list = objByVersion.get(c.candidate_version_id) ?? []
+    list.push({ check_name: c.check_name, status: c.status, detail: c.issues ?? null })
+    objByVersion.set(c.candidate_version_id, list)
   }
   const subjByVersion = new Map<string, RawSubjectiveCheck[]>()
   for (const c of (checks ?? []) as any[]) {
@@ -225,6 +243,7 @@ export async function listBatchCandidates(
       evaluation_profile_id: batch.evaluation_profile_id,
       selected_stylist_id: batch.selected_stylist_id,
       subjectiveChecks: subjByVersion.get(v.candidate_version_id) ?? [],
+      objectiveChecks: objByVersion.get(v.candidate_version_id) ?? [],
       items: itemsByVersion.get(v.candidate_version_id) ?? [],
     }),
   )

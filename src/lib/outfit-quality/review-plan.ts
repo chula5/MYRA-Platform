@@ -9,7 +9,7 @@
 // the verified admin user id from the gated wrapper and stamps every row.
 
 import { validateNoReason } from '@/lib/outfit-quality/review-reasons'
-import { latestActiveDecision, activeHoldFor, type ReviewEventRow, type QueueHoldRow, type RenderJobRow } from '@/lib/outfit-quality/review-state'
+import { latestActiveDecision, latestActiveDismissal, activeHoldFor, type ReviewEventRow, type QueueHoldRow, type RenderJobRow } from '@/lib/outfit-quality/review-state'
 
 export interface PlanVersion {
   candidate_version_id: string
@@ -270,4 +270,43 @@ export function planRelease(ctx: PlanContext): ReleasePlan {
   const released = ctx.holds.filter((h) => h.released_at !== null).sort((a, b) => (b.released_at ?? '').localeCompare(a.released_at ?? ''))
   if (released.length > 0) return { ok: true, reused: true, hold: released[0] }
   return reject('not_held', 'this candidate is not on hold')
+}
+
+// ── Dismiss / restore ──────────────────────────────────────────────────────────
+
+export type DismissPlan =
+  | { ok: true; reused: false; event: { action: 'dismiss'; note: string | null } }
+  | Rejection
+
+/**
+ * DISMISS takes an undecided, unheld candidate out of the queue with no
+ * verdict: nothing is learned, nothing is promoted. It is append-only and
+ * reversible (planRestore), so it is the honest "delete" for a look Chloe
+ * does not want to judge at all.
+ */
+export function planDismiss(ctx: PlanContext, input: { idempotencyKey?: string; note?: string | null }): DismissPlan {
+  const keyErr = checkKey(input.idempotencyKey)
+  if (keyErr) return keyErr
+  if (!ctx.version || !ctx.kase) return reject('not_found', 'candidate version not found')
+  if (ctx.kase.current_version_id !== ctx.version.candidate_version_id) {
+    return reject('stale_version', 'a newer version of this candidate exists — dismiss the current version')
+  }
+  if (latestActiveDecision(ctx.events)) return reject('already_decided', 'this version already has an active decision')
+  if (activeHoldFor(ctx.holds)) return reject('held', 'this candidate is on hold — release it before dismissing')
+  if (ctx.version.state !== 'awaiting_human') return reject('not_dismissible', 'only a candidate awaiting review can be dismissed')
+  return { ok: true, reused: false, event: { action: 'dismiss', note: cleanNote(input.note) } }
+}
+
+export type RestorePlan =
+  | { ok: true; event: { action: 'undo'; note: null; reverses_event_id: string } }
+  | Rejection
+
+/** RESTORE reverses a dismissal: an `undo` event pointing at it, back to review. */
+export function planRestore(ctx: PlanContext, input: { idempotencyKey?: string }): RestorePlan {
+  const keyErr = checkKey(input.idempotencyKey)
+  if (keyErr) return keyErr
+  if (!ctx.version || !ctx.kase) return reject('not_found', 'candidate version not found')
+  const dismissal = latestActiveDismissal(ctx.events)
+  if (!dismissal || ctx.version.state !== 'dismissed') return reject('not_dismissed', 'this candidate is not dismissed')
+  return { ok: true, event: { action: 'undo', note: null, reverses_event_id: dismissal.review_event_id } }
 }

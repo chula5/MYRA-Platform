@@ -31,6 +31,24 @@ const agnesHtml = `
                         " aria-label="Select Size 5" aria-describedby="5" data-attr-value="5" data-url="https://www.agnesb.com/on/demandware.store/Sites-Agnesb-uk-Site/en_GB/Product-Variation?dwvar_0267M434__010_color=010&amp;dwvar_0267M434__010_size=5&amp;pid=0267M434_010&amp;quantity=1" > 5 </button>`
 
 describe('normaliseSizeLabel', () => {
+  it('reads the size segment of a Shopify variant title whichever side the colour is on', () => {
+    const dissh = 'https://dissh.com/products/alias-mae-kruz-black-oily-leather'
+    expect(normaliseSizeLabel('36 / BLACK', dissh)).toBe('36')
+    expect(normaliseSizeLabel('XS / IVORY', dissh)).toBe('XS')
+    expect(normaliseSizeLabel('black / 34', dissh)).toBe('34')
+    expect(normaliseSizeLabel('IVORY / SAND', dissh)).toBeNull()
+    expect(normaliseSizeLabel('FR 34 / Black', dissh)).toBe('FR 34')
+    expect(normaliseSizeLabel('Black / XS', dissh)).toBe('XS')
+    expect(normaliseSizeLabel('XS/S', 'https://uk.skallstudio.com/products/perry-coat')).toBe('XS/S')
+  })
+
+  it('reads Antik Batik\'s "36XS" as the French numeric', () => {
+    const ab = 'https://www.antikbatik.com/products/tildo-trousers-black'
+    expect(normaliseSizeLabel('36XS', ab)).toBe('FR 36')
+    expect(normaliseSizeLabel('38S', ab)).toBe('FR 38')
+    expect(normaliseSizeLabel('42L', ab)).toBe('FR 42')
+  })
+
   it('spells out Wyse London sizes in UK and keeps the length', () => {
     const url = 'https://www.wyselondon.com/products/otti-midi-dress-white'
     expect(normaliseSizeLabel('1R', url)).toBe('1R (UK 8)')

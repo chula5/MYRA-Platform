@@ -341,7 +341,7 @@ async function saveStyleModel(model: StyleModel, stylistId?: string | null): Pro
 export async function recordStyleDecision(opts: {
   items: FeatureItem[]
   decision: 'approve' | 'skip'
-  source: 'composer' | 'review' | 'swap' | 'brand_watch' | 'bench'
+  source: 'composer' | 'review' | 'swap' | 'brand_watch' | 'bench' | 'quality_lab'
   anchorItemId?: string | null
   itemIds?: string[]
   baseScore?: number | null

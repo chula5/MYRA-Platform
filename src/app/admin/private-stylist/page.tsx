@@ -2,6 +2,8 @@ import { loadPilotData } from './actions'
 import PrivateStylistClient from './PrivateStylistClient'
 
 export const dynamic = 'force-dynamic'
+// HER VIEW taps the same ways-to-wear actions as her pages: a minute, not seconds.
+export const maxDuration = 60
 
 export default async function PrivateStylistPage() {
   const data = await loadPilotData()

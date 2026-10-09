@@ -12,6 +12,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import RulesOnlyBadge from './RulesOnlyBadge'
+import { thumbUrl } from '@/lib/image-utils'
+import ItemPickerModal, { type PickerOption } from '@/components/admin/ItemPickerModal'
+import { slotPlanForAnchor, type Slot } from '@/lib/composer'
+import { anchorOf } from '@/lib/outfit-quality/scope-signature'
 import {
   loadReviewQueueAction,
   decideCandidateAction,
@@ -20,6 +24,8 @@ import {
   holdCandidateAction,
   releaseCandidateAction,
   loadCaseHistoryAction,
+  dismissCandidateAction,
+  restoreCandidateAction,
 } from './review-actions.gated'
 import { editQualityCandidate } from './actions.gated'
 import { REVIEW_REASONS, reasonRequiresItem, reviewReason } from '@/lib/outfit-quality/review-reasons'
@@ -43,6 +49,8 @@ type FormState =
 export default function ReviewWorkbench() {
   const [queue, setQueue] = useState<ReviewQueueResult | null>(null)
   const [filters, setFilters] = useState<{ partition: string; stylistId: string; contextType: string; disposition: string }>({
+    // All partitions by default: existing work is mostly TEST, and a queue
+    // that opens empty reads as broken. NEW BATCH defaults to TRAINING.
     partition: '',
     stylistId: '',
     contextType: '',
@@ -320,7 +328,9 @@ function ReviewCardView({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               data-quality-source-image
-              src={it.source_image_url}
+              src={thumbUrl(it.source_image_url, 384)}
+              loading="lazy"
+              decoding="async"
               alt={`Item ${i + 1} of ${card.items.length}, ${it.slot}: ${String(it.item_snapshot?.brand ?? '')} ${String(it.item_snapshot?.item_type ?? 'item')}`.trim()}
               className="aspect-[4/5] w-full bg-[#F7F6F3] object-contain border border-[#E2E0DB]"
             />
@@ -376,7 +386,26 @@ function ReviewCardView({
             <button className={btnLight} onClick={() => setForm({ kind: 'hold', versionId: vid })} aria-label={`Hold candidate version ${card.version_no}`} aria-expanded={form?.kind === 'hold' && form.versionId === vid}>
               HOLD (H)
             </button>
+            <button
+              className={btnWarn}
+              disabled={busy === `dismiss-${vid}`}
+              onClick={() => run(`dismiss-${vid}`, () => dismissCandidateAction(vid, { idempotencyKey: keyFor(`dismiss-${vid}`) }), 'DISMISSED — OUT OF THE QUEUE, NO VERDICT, NOTHING LEARNED. FIND IT UNDER ALL TO RESTORE.')}
+              aria-label={`Dismiss candidate version ${card.version_no} without a verdict`}
+              title="Removes this look from the queue without judging it. Nothing is learned. Reversible under ALL."
+            >
+              DISMISS
+            </button>
           </>
+        )}
+        {card.state === 'dismissed' && card.is_current && (
+          <button
+            className={btnLight}
+            disabled={busy === `restore-${vid}`}
+            onClick={() => run(`restore-${vid}`, () => restoreCandidateAction(vid, { idempotencyKey: keyFor(`restore-${vid}`) }), 'RESTORED — BACK IN THE ACTIVE QUEUE')}
+            aria-label={`Restore dismissed candidate version ${card.version_no} to the queue`}
+          >
+            RESTORE TO QUEUE
+          </button>
         )}
         {/* Editing is offered from any reviewable or reviewed state: it always
             creates a fresh child version and never mutates this card. */}
@@ -448,8 +477,8 @@ function ReviewCardView({
           card={card}
           busy={busy === `edit-${vid}`}
           onCancel={() => setForm(null)}
-          onSubmit={async (items) => {
-            const r = await run(`edit-${vid}`, () => editQualityCandidate({ candidateVersionId: vid, items, editKey: keyFor(`edit-${vid}`) }), 'EDITED — A FRESH CHILD VERSION IS NOW IN REVIEW; THE ORIGINAL IS UNCHANGED')
+          onSubmit={async (items, swaps) => {
+            const r = await run(`edit-${vid}`, () => editQualityCandidate({ candidateVersionId: vid, items, swaps, editKey: keyFor(`edit-${vid}`) }), 'EDITED — A FRESH CHILD VERSION IS NOW IN REVIEW; THE ORIGINAL IS UNCHANGED')
             if (r?.ok) setForm(null)
           }}
         />
@@ -626,6 +655,42 @@ function WithdrawConfirm({ busy, onCancel, onConfirm }: { busy: boolean; onCance
 
 // ── Edit as new version ───────────────────────────────────────────────────────
 
+/** One piece in the edit: what the card showed, or what the picker swapped in. */
+interface EditRow {
+  item_id: string
+  slot: string
+  image_url: string
+  brand: string
+  type: string
+}
+
+function rowFromCard(it: ReviewCard['items'][number]): EditRow {
+  return {
+    item_id: it.item_id,
+    slot: it.slot,
+    image_url: it.source_image_url,
+    brand: String(it.item_snapshot?.brand ?? '—'),
+    type: String(it.item_snapshot?.item_type ?? 'item'),
+  }
+}
+
+function rowFromPick(opt: PickerOption): EditRow {
+  return {
+    item_id: opt.item_id,
+    slot: opt.slot,
+    image_url: opt.image_url,
+    brand: opt.brand_name ?? '—',
+    type: opt.product_name,
+  }
+}
+
+/**
+ * Edit a candidate piece by piece — SWAP a piece for one the picker finds
+ * (search + brand / colour / type), REMOVE an optional layer, ADD one, UNDO
+ * any step — then save the result as a fresh child version. Every swap and
+ * remove is also handed to the server so a training batch learns from it,
+ * exactly like a swap in Outfit Review.
+ */
 function EditForm({
   card,
   busy,
@@ -635,63 +700,160 @@ function EditForm({
   card: ReviewCard
   busy: boolean
   onCancel: () => void
-  onSubmit: (items: { item_id: string; slot: string }[]) => Promise<any>
+  onSubmit: (items: { item_id: string; slot: string }[], swaps: { from_item_id: string; to_item_id: string | null }[]) => Promise<any>
 }) {
-  const [rows, setRows] = useState<{ item_id: string; slot: string }[]>(card.items.map((it) => ({ item_id: it.item_id, slot: it.slot })))
+  const [rows, setRows] = useState<EditRow[]>(card.items.map(rowFromCard))
+  const [undo, setUndo] = useState<EditRow[][]>([])
+  const [swaps, setSwaps] = useState<{ from_item_id: string; to_item_id: string | null }[]>([])
+  const [picker, setPicker] = useState<{ mode: 'swap'; index: number } | { mode: 'add' } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => { ref.current?.querySelector('input')?.focus() }, [])
+  useEffect(() => { ref.current?.querySelector<HTMLButtonElement>('button')?.focus() }, [])
 
-  const SLOT_OPTIONS = ['outerwear', 'top', 'bottom', 'dress', 'shoe', 'bag', 'jewellery', 'accessory']
+  // The anchor is fixed for the life of the edit — it is what the structure
+  // check and the picker's compatibility ranking are both read against.
+  const anchorItemId = anchorOf(card.items) ?? card.items[0]?.item_id ?? ''
+  const anchorSlot = (card.items.find((it) => it.item_id === anchorItemId)?.slot ?? 'top') as Slot
+  const requiredSlots = new Set<string>([anchorSlot, ...slotPlanForAnchor(anchorSlot).required])
+  const canRemove = (r: EditRow) => r.item_id !== anchorItemId && !requiredSlots.has(r.slot)
+
+  // Escape closes the picker first, then the form. Registered in the CAPTURE
+  // phase so that, while the picker is open, the workbench's own Escape
+  // handler (which closes any open form) never sees the keystroke.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (picker) {
+        e.stopImmediatePropagation()
+        e.preventDefault()
+        setPicker(null)
+      } else {
+        onCancel()
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [picker, onCancel])
+
+  function apply(next: EditRow[], change?: { from_item_id: string; to_item_id: string | null }) {
+    setUndo((u) => [...u, rows])
+    setRows(next)
+    if (change) setSwaps((sw) => [...sw, change])
+    setError(null)
+  }
+
+  function undoLast() {
+    const prev = undo[undo.length - 1]
+    if (!prev) return
+    setUndo((u) => u.slice(0, -1))
+    setRows(prev)
+    setSwaps((sw) => sw.slice(0, -1))
+  }
+
+  function onPick(opt: PickerOption) {
+    if (!picker) return
+    if (picker.mode === 'swap') {
+      const from = rows[picker.index]
+      // Keep the SLOT of the piece being replaced: swapping a shoe for a shoe.
+      apply(rows.map((r, k) => (k === picker.index ? { ...rowFromPick(opt), slot: from.slot } : r)), { from_item_id: from.item_id, to_item_id: opt.item_id })
+    } else {
+      apply([...rows, rowFromPick(opt)])
+    }
+    setPicker(null)
+  }
+
+  function remove(index: number) {
+    const r = rows[index]
+    if (!canRemove(r)) return
+    apply(rows.filter((_, k) => k !== index), { from_item_id: r.item_id, to_item_id: null })
+  }
 
   function submit() {
-    const clean = rows.filter((r) => r.item_id.trim())
-    if (clean.length === 0) {
+    if (rows.length === 0) {
       setError('AN EDIT NEEDS AT LEAST ONE ITEM')
       return
     }
-    if (new Set(clean.map((r) => r.item_id.trim())).size !== clean.length) {
+    if (new Set(rows.map((r) => r.item_id)).size !== rows.length) {
       setError('THE SAME ITEM CANNOT APPEAR TWICE')
       return
     }
+    if (undo.length === 0) {
+      setError('NOTHING HAS CHANGED YET — SWAP, REMOVE OR ADD A PIECE FIRST')
+      return
+    }
     setError(null)
-    onSubmit(clean.map((r) => ({ item_id: r.item_id.trim(), slot: r.slot })))
+    onSubmit(rows.map((r) => ({ item_id: r.item_id, slot: r.slot })), swaps)
   }
+
+  const changed = undo.length > 0
 
   return (
     <div ref={ref} className="mt-4 border border-[#E2E0DB] p-4" role="group" aria-label={`Edit candidate version ${card.version_no} as a new version`}>
       <p className="text-[16px] tracking-[0.1em] text-[#6B6B6B] mb-3">
-        EDITING CREATES A FRESH CHILD VERSION WITH NEW CHECKS. THE REJECTED ORIGINAL IS NEVER MUTATED AND NEVER BECOMES A POSITIVE.
+        SWAP, REMOVE OR ADD PIECES, THEN SAVE. EDITING CREATES A FRESH CHILD VERSION WITH NEW CHECKS; THE ORIGINAL IS NEVER MUTATED. ON A TRAINING BATCH EVERY SWAP TEACHES THE STYLIST.
       </p>
-      <div className="flex flex-col gap-2">
+
+      <div
+        className="grid gap-3"
+        style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(11rem, 100%), 1fr))' }}
+      >
         {rows.map((r, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <select
-              className={selectCls}
-              value={r.slot}
-              onChange={(e) => setRows(rows.map((x, k) => (k === i ? { ...x, slot: e.target.value } : x)))}
-              aria-label={`Slot for edited item ${i + 1}`}
-            >
-              {SLOT_OPTIONS.map((s) => (
-                <option key={s} value={s}>{s.toUpperCase()}</option>
-              ))}
-            </select>
-            <input
-              className="border border-[#D8D5CF] px-3 py-2 text-[16px] text-[#0A0A0A] flex-1 font-mono"
-              value={r.item_id}
-              onChange={(e) => setRows(rows.map((x, k) => (k === i ? { ...x, item_id: e.target.value } : x)))}
-              aria-label={`Item id for edited item ${i + 1}`}
+          <figure key={`${r.item_id}-${i}`} className="min-w-0 border border-[#EDEBE6] p-2 bg-white">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={thumbUrl(r.image_url, 384)}
+              loading="lazy"
+              decoding="async"
+              alt={`${r.slot}: ${r.brand} ${r.type}`.trim()}
+              className="aspect-[4/5] w-full bg-[#F7F6F3] object-contain"
             />
-            <button className={btnLight} onClick={() => setRows(rows.filter((_, k) => k !== i))} aria-label={`Remove edited item ${i + 1}`}>×</button>
-          </div>
+            <figcaption className="text-[16px] text-[#6B6B6B] mt-2 leading-snug">
+              {r.slot.toUpperCase()} · {r.brand.toUpperCase()}
+              {r.item_id === anchorItemId && <span className="text-[#0A0A0A]"> · ANCHOR</span>}
+            </figcaption>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button type="button" className={btnLight} disabled={busy} onClick={() => setPicker({ mode: 'swap', index: i })} aria-label={`Swap the ${r.slot}`}>
+                SWAP
+              </button>
+              <button
+                type="button"
+                className={btnLight}
+                disabled={busy || !canRemove(r)}
+                title={canRemove(r) ? undefined : 'This slot is required for the outfit\'s structure — swap it instead'}
+                onClick={() => remove(i)}
+                aria-label={`Remove the ${r.slot}`}
+              >
+                REMOVE
+              </button>
+            </div>
+            {!canRemove(r) && <p className="text-[16px] text-[#6B6B6B] mt-1">REQUIRED — SWAP INSTEAD</p>}
+          </figure>
         ))}
       </div>
-      {error && <p role="alert" className="mt-2 text-[16px] tracking-[0.1em] text-[#B83A3A]">{error}</p>}
-      <div className="mt-3 flex gap-3">
-        <button className={btnLight} onClick={() => setRows([...rows, { item_id: '', slot: 'top' }])}>ADD ITEM</button>
-        <button className={btnDark} disabled={busy} onClick={submit}>{busy ? 'CREATING VERSION…' : 'SAVE AS NEW VERSION'}</button>
-        <button className={btnLight} onClick={onCancel}>CANCEL</button>
+
+      {error && <p role="alert" className="mt-3 text-[16px] tracking-[0.1em] text-[#B83A3A]">{error}</p>}
+
+      <div className="mt-4 flex flex-wrap gap-3">
+        <button type="button" className={btnLight} disabled={busy} onClick={() => setPicker({ mode: 'add' })}>ADD PIECE</button>
+        <button type="button" className={btnLight} disabled={busy || !changed} onClick={undoLast} aria-label="Undo the last swap, remove or add">
+          ↶ UNDO{undo.length ? ` (${undo.length})` : ''}
+        </button>
+        <button type="button" className={btnDark} disabled={busy || !changed} onClick={submit}>{busy ? 'CREATING VERSION…' : 'SAVE AS NEW VERSION'}</button>
+        <button type="button" className={btnLight} disabled={busy} onClick={onCancel}>CANCEL</button>
       </div>
+
+      {picker && (
+        <ItemPickerModal
+          title={picker.mode === 'swap' ? `SWAP THE ${rows[picker.index]?.slot.toUpperCase() ?? 'PIECE'}` : 'ADD A PIECE'}
+          mode={picker.mode}
+          anchorItemId={anchorItemId}
+          slot={picker.mode === 'swap' ? rows[picker.index]?.slot : undefined}
+          presentSlots={rows.map((r) => r.slot)}
+          excludeItemIds={rows.map((r) => r.item_id)}
+          onPick={onPick}
+          onClose={() => setPicker(null)}
+        />
+      )}
     </div>
   )
 }

@@ -7,10 +7,10 @@
 
 import { useEffect, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
-import BuiltOutfit from './BuiltOutfit'
-import { forgetMySavedPiece, loadMySavedPieces, styleMySavedPiece } from './actions'
+import WaysToWear from '@/components/me/WaysToWear'
+import { useWaysReady } from '@/components/me/ways-watch'
+import { forgetMySavedPiece, loadMySavedPieces } from './actions'
 import type { SavedPieceView } from '@/app/admin/private-stylist/actions'
-import type { StyledLook } from '@/app/admin/private-stylist/actions'
 
 const T = 'text-[20px] xl:text-[23px] 2xl:text-[27px]'
 const T_SMALL = 'text-[18px] xl:text-[21px] 2xl:text-[25px]'
@@ -20,10 +20,6 @@ export default function SavedPieces({ testMemberId }: { testMemberId?: string })
   const [pieces, setPieces] = useState<SavedPieceView[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState<string | null>(null)
-  const [looks, setLooks] = useState<StyledLook[]>([])
-  const [busy, setBusy] = useState(false)
-  const [note, setNote] = useState<string | null>(null)
-  const [shuffle, setShuffle] = useState(0)
 
   useEffect(() => {
     let live = true
@@ -31,20 +27,9 @@ export default function SavedPieces({ testMemberId }: { testMemberId?: string })
     return () => { live = false }
   }, [testMemberId])
 
-  async function style(itemId: string, next = 0) {
-    setOpen(itemId)
-    setBusy(true)
-    setNote(null)
-    setLooks([])
-    const r = await styleMySavedPiece(itemId, { shuffle: next }, testMemberId)
-    setBusy(false)
-    setLooks(r.looks ?? [])
-    setNote(r.error ?? (r.looks?.length ? null : 'Nothing in your size goes with it yet.'))
-  }
-
   async function forget(itemId: string) {
     setPieces((cur) => (cur ?? []).filter((p) => p.item_id !== itemId))
-    if (open === itemId) { setOpen(null); setLooks([]) }
+    if (open === itemId) setOpen(null)
     await forgetMySavedPiece(itemId, testMemberId)
   }
 
@@ -64,50 +49,44 @@ export default function SavedPieces({ testMemberId }: { testMemberId?: string })
         {pieces.map((p) => {
           const gone = p.stock_status === 'out_of_stock'
           return (
-            <button key={p.item_id} type="button" onClick={() => { setOpen(p.item_id); setLooks([]); setNote(null) }} className={`text-left bg-white rounded-[16px] overflow-hidden shadow-[0_1px_8px_rgba(43,43,43,0.06)] ${open === p.item_id ? 'ring-2 ring-[#2B2B2B]' : ''}`}>
+            <SavedTile key={p.item_id} piece={p} open={open === p.item_id} gone={gone} onOpen={() => setOpen(p.item_id)} />
+          )
+        })}
+      </div>
+
+      {open && (() => {
+        const p = pieces.find((x) => x.item_id === open)
+        return (
+          <WaysToWear
+            inline
+            itemId={open}
+            piece={p ? { item_id: p.item_id, product_name: p.product_name, brand: p.brand, image_url: p.image_url } : null}
+            testMemberId={testMemberId}
+            onClose={() => setOpen(null)}
+          />
+        )
+      })()}
+    </section>
+  )
+}
+
+function SavedTile({ piece: p, open, gone, onOpen }: { piece: SavedPieceView; open: boolean; gone: boolean; onOpen: () => void }) {
+  const ready = useWaysReady(p.item_id)
+  return (
+            <button type="button" onClick={onOpen} className={`text-left bg-white rounded-[16px] overflow-hidden shadow-[0_1px_8px_rgba(43,43,43,0.06)] ${open ? 'ring-2 ring-[#2B2B2B]' : ''}`}>
               <div className="relative aspect-[3/4] bg-[#F3F2F0] overflow-hidden">
                 {p.image_url && <FallbackImage src={p.image_url} thumbWidth={600} alt={p.product_name} className="absolute inset-0 w-full h-full object-cover" />}
                 {gone && (
                   <span className="absolute top-3 left-3 rounded-full bg-[rgba(255,255,255,0.94)] px-3 py-1 text-[16px] text-[#9B3A3A]">Gone</span>
+                )}
+                {ready && !open && (
+                  <span className="absolute top-3 right-3 rounded-full bg-[#2B2B2B] px-3 py-1 text-[15px] text-white">Ways ready</span>
                 )}
               </div>
               <div className="px-3 py-2">
                 <p className="text-[14px] xl:text-[16px] text-[#2B2B2B] leading-tight truncate">{p.product_name}</p>
               </div>
             </button>
-          )
-        })}
-      </div>
-
-      {open && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-4 flex-wrap">
-            <p className={`${T_SMALL} tracking-[0.12em] text-[#6E6B65]`}>
-              WAYS TO WEAR {(pieces.find((p) => p.item_id === open)?.product_name ?? '').toUpperCase()}
-            </p>
-            {!busy && looks.length > 0 && (
-              <button onClick={() => { const n = shuffle + 1; setShuffle(n); void style(open, n) }} className={`${T_SMALL} px-4 py-2 rounded-full bg-white text-[#2B2B2B] shadow-[0_8px_18px_-12px_rgba(43,43,43,0.5)]`}>
-                Reshuffle
-              </button>
-            )}
-            <button onClick={() => { setOpen(null); setLooks([]) }} className={`${T_SMALL} text-[#6E6B65] underline underline-offset-4`}>Close</button>
-            <button onClick={() => void style(open, 0)} disabled={busy} className={`${T_SMALL} px-4 py-2 rounded-full bg-[#2B2B2B] text-white disabled:opacity-40`}>{busy ? 'Building…' : 'Style it'}</button>
-          </div>
-          {busy && (
-            <div className="rounded-[16px] bg-white/70 px-6 py-10 text-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/myra-mirror-transparent.png" alt="" className="myra-mirror-wiggle h-24 w-auto mx-auto" />
-              <p className={`${T} text-[#4A4E57] mt-4`}>Building outfits around it…</p>
-            </div>
-          )}
-          {note && !busy && <p className={`${T} text-[#4A4E57]`}>{note}</p>}
-          <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
-            {looks.map((l, i) => (
-              <BuiltOutfit key={i} items={l.items} heroId={open} why={l.why} testMemberId={testMemberId} />
-            ))}
-          </div>
-        </div>
-      )}
-    </section>
   )
 }
+

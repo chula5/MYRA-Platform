@@ -217,6 +217,7 @@ export interface MemberTaste {
   families: Map<string, Set<string>> // brand_id → family ids
   excludedPairs: Set<string> // "a|b" with a<b
   inputOnlyBrands: Set<string> // lowercased brand names never recommended
+  hiddenBrandIds?: Set<string> // explicit client vetoes, never recommended
   itemSwapOut: Map<string, number> // item_id → times swapped away
   brandSwapOut: Map<string, number> // brand_id → times swapped away
   // What her decisions say about KINDS of piece, not individual ones. Absent
@@ -334,8 +335,8 @@ export const briefPiece = (it: ItemWithBrand) => ({
  * brand in the brief is worth about a quarter of it, a signature piece an
  * eighth. The moodboard's envelope goes into the shortlist the same way.
  */
-const BRIEF_SHORTLIST_SCALE = 0.12
-const PERSONA_SHORTLIST_SCALE = 0.2
+export const BRIEF_SHORTLIST_SCALE = 0.12
+export const PERSONA_SHORTLIST_SCALE = 0.2
 function stylistPull(t: MemberTaste, lens: PersonaLens | undefined, item: ItemWithBrand): number {
   return BRIEF_SHORTLIST_SCALE * briefPull(briefPiece(item), t.brief) + PERSONA_SHORTLIST_SCALE * personaFitScore(lens, item)
 }
@@ -469,7 +470,8 @@ export function preferLovedShoes(t: MemberTaste, pool: ItemWithBrand[]): ItemWit
   return pool
 }
 
-// Hard gate: excluded brand pairs and input-only brands never appear.
+// Hard gate: excluded brand pairs, input-only brands and explicit client
+// brand vetoes never appear.
 export function memberGate(
   t: MemberTaste,
   anchor: ItemWithBrand,
@@ -482,6 +484,7 @@ export function memberGate(
     // The Zara rule (input, never output) is about what we RECOMMEND. A piece
     // she already owns is never a recommendation, so owned items are exempt.
     if (isOwnedItem(it as any)) continue
+    if (it.brand_id && t.hiddenBrandIds?.has(it.brand_id)) return false
     const name = it.brand?.name?.toLowerCase()
     if (name && t.inputOnlyBrands.has(name)) return false
   }
@@ -734,6 +737,7 @@ export function composeMemberLooks(
     (i) =>
       i.image_url &&
       sellable(i) &&
+      !(!isOwnedItem(i as any) && i.brand_id && t.hiddenBrandIds?.has(i.brand_id)) &&
       // owned pieces are exempt from the input-only (Zara) rule — see memberGate
       (isOwnedItem(i as any) || !(i.brand?.name && t.inputOnlyBrands.has(i.brand.name.toLowerCase()))),
   )
@@ -945,6 +949,7 @@ export function composeMemberVariants(
   // a variant is never built from a piece a fresh delivery wouldn't use.
   const inStock = library.filter(
     (i) => i.image_url && sellable(i) &&
+      !(!isOwnedItem(i as any) && i.brand_id && t.hiddenBrandIds?.has(i.brand_id)) &&
       (isOwnedItem(i as any) || !(i.brand?.name && t.inputOnlyBrands.has(i.brand.name.toLowerCase()))),
   )
   const weatherOk = inStock.filter((i) => !climateReason(occ?.climate, i as any))
@@ -1102,6 +1107,7 @@ export function rankAlternates(
       !excludeIds.has(i.item_id) &&
       i.image_url &&
       sellable(i) &&
+      !(!isOwnedItem(i as any) && i.brand_id && t.hiddenBrandIds?.has(i.brand_id)) &&
       (isOwnedItem(i as any) || !(i.brand?.name && t.inputOnlyBrands.has(i.brand.name.toLowerCase()))),
   )
   // The swap and add pickers were offering everything the COMPOSER refuses:

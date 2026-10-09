@@ -42,7 +42,79 @@ export interface PreDecisionCandidate {
   selected_stylist_id: string
   /** Disclosed: that a machine subjective check exists — never its content. */
   has_subjective_check: boolean
+  /**
+   * Why an objective gate stopped this look, in words ("SIZE UNCONFIRMED ·
+   * Sézane, Antik Batik"). Objective checks are deterministic structure /
+   * size / stock gates, not taste — nothing here is a machine verdict.
+   */
+  objective_failures: string[]
   items: PreDecisionItem[]
+}
+
+/** A non-passing objective check, as stored (`issues` renamed to `detail` so it never reads as a verdict). */
+export interface RawObjectiveCheck {
+  check_name: string
+  status: 'passed' | 'failed' | 'unavailable' | 'error'
+  detail?: unknown
+}
+
+const OBJECTIVE_LABELS: Record<string, { failed: string; unavailable: string }> = {
+  size_possibility: { failed: 'NOT IN HER SIZE', unavailable: 'SIZE UNCONFIRMED' },
+  sellable_stock: { failed: 'NOT SELLABLE', unavailable: 'STOCK UNKNOWN' },
+  source_images: { failed: 'NO IMAGE', unavailable: 'IMAGE UNCONFIRMED' },
+  required_item_data: { failed: 'MISSING ITEM DATA', unavailable: 'ITEM DATA UNCONFIRMED' },
+  valid_structure: { failed: 'INCOMPLETE LOOK', unavailable: 'STRUCTURE UNCONFIRMED' },
+  no_duplicate_membership: { failed: 'DUPLICATE PIECE', unavailable: 'MEMBERSHIP UNCONFIRMED' },
+}
+
+function namesOf(ids: unknown, items: PreDecisionItem[]): string {
+  if (!Array.isArray(ids) || ids.length === 0) return ''
+  const byId = new Map(items.map((i) => [i.item_id, i]))
+  const names = ids.map((id) => {
+    const it = byId.get(String(id))
+    const brand = it ? String(it.item_snapshot?.brand ?? '') : ''
+    return brand || (it ? it.slot : '')
+  }).filter(Boolean)
+  return Array.from(new Set(names)).join(', ')
+}
+
+/**
+ * One line per non-passing objective check, naming the pieces (by brand) that
+ * caused it, so the card says "SIZE UNCONFIRMED · Sézane" instead of a bare
+ * OBJECTIVE_FAILED.
+ */
+export function objectiveFailureLines(checks: RawObjectiveCheck[], items: PreDecisionItem[]): string[] {
+  const lines: string[] = []
+  for (const c of checks) {
+    if (c.status === 'passed') continue
+    const d = (c.detail ?? {}) as Record<string, unknown>
+    const labels = OBJECTIVE_LABELS[c.check_name]
+    const base = labels
+      ? (c.status === 'failed' ? labels.failed : labels.unavailable)
+      : `${c.check_name.replace(/_/g, ' ').toUpperCase()} ${c.status.toUpperCase()}`
+    const parts: string[] = []
+    if (c.check_name === 'size_possibility') {
+      if (c.status === 'failed') parts.push(namesOf(d.not_in_size, items))
+      else parts.push(namesOf(d.unconfirmed, items))
+    } else if (c.check_name === 'sellable_stock') {
+      parts.push(namesOf(c.status === 'failed' ? d.not_sellable : d.unknown, items))
+    } else if (c.check_name === 'source_images') {
+      parts.push(namesOf(d.missing_image_item_ids, items))
+    } else if (c.check_name === 'required_item_data') {
+      const rows = Array.isArray(d.items) ? (d.items as { item_id?: string }[]) : []
+      parts.push(namesOf(rows.map((r) => r.item_id), items))
+    } else if (c.check_name === 'valid_structure') {
+      if (Array.isArray(d.missing_slots)) parts.push(`missing ${(d.missing_slots as string[]).join(', ')}`)
+      else if (d.reason) parts.push(String(d.reason).replace(/_/g, ' '))
+    } else if (c.check_name === 'no_duplicate_membership') {
+      if (Array.isArray(d.duplicate_item_ids)) parts.push(namesOf(d.duplicate_item_ids, items))
+      if (Array.isArray(d.overfull_slots)) parts.push(`two in ${(d.overfull_slots as string[]).join(', ')}`)
+    }
+    if (c.status === 'error') parts.push('check errored')
+    const tail = parts.filter(Boolean).join(' · ')
+    lines.push(tail ? `${base} · ${tail}` : base)
+  }
+  return lines
 }
 
 /** The subjective-check fields that must never appear before a human decision. */
@@ -68,6 +140,8 @@ export interface BuildPreDecisionInput {
   evaluation_profile_id: string | null
   selected_stylist_id: string
   subjectiveChecks: RawSubjectiveCheck[]
+  /** Non-passing objective checks, if the caller loaded them. */
+  objectiveChecks?: RawObjectiveCheck[]
   items: PreDecisionItem[]
 }
 
@@ -86,6 +160,7 @@ export function buildPreDecisionCandidate(input: BuildPreDecisionInput): PreDeci
     context_type: input.real_member_id ? 'real_member' : 'evaluation_profile',
     selected_stylist_id: input.selected_stylist_id,
     has_subjective_check: input.subjectiveChecks.length > 0,
+    objective_failures: objectiveFailureLines(input.objectiveChecks ?? [], input.items),
     items: input.items
       .slice()
       .sort((a, b) => a.sort_order - b.sort_order)

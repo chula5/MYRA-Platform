@@ -18,6 +18,7 @@
 
 import { compositionHash, type CompositionItemRef } from '@/lib/outfit-quality/candidate-hash'
 import { runObjectiveChecks, type ObjectiveEvidence, type ObjectiveManifest, type RuleOutcome, type CheckStatus } from '@/lib/outfit-quality/objective-checks'
+import { mapWithConcurrency } from '@/lib/outfit-quality/concurrency'
 
 export type CandidateState =
   | 'generated'
@@ -40,6 +41,27 @@ export interface GeneratedCandidate {
   /** The slots a complete outfit must include, derived from the anchor. */
   requiredSlots: string[]
   items: GeneratedItem[]
+  /** The lead garment (dress, else top, else bottom) this look was built around. */
+  anchorItemId?: string | null
+  /** Sorted item ids joined with '|': the scope-level dedupe key. */
+  itemsSignature?: string
+}
+
+/**
+ * What has already been composed for this (stylist, member|profile) scope
+ * across every batch: full item signatures and anchors already led. The
+ * generator skips both so GENERATE NEXT CHUNK never re-serves a look.
+ */
+export interface GenerationExclusions {
+  signatures: Set<string>
+  anchorItemIds: Set<string>
+  /**
+   * How many looks in this scope each item already appears in (anchor or
+   * supporting). Drives the variety cap: a piece that has supported its share
+   * of looks is penalised, then excluded, so one neutral heel cannot carry
+   * every look in a batch.
+   */
+  itemUses?: Map<string, number>
 }
 
 export interface FrozenSnapshot {
@@ -62,7 +84,14 @@ export interface GenerationContext {
 // ── Injected adapters ──────────────────────────────────────────────────────────
 
 export interface CompositionGenerator {
-  generate(args: { count: number; snapshot: FrozenSnapshot; context: GenerationContext }): Promise<GeneratedCandidate[]>
+  generate(args: {
+    count: number
+    snapshot: FrozenSnapshot
+    context: GenerationContext
+    /** First position of this chunk (informational; exclusions do the dedupe). */
+    startPosition?: number
+    exclusions?: GenerationExclusions
+  }): Promise<GeneratedCandidate[]>
 }
 
 export interface ObjectiveEvidenceProvider {
@@ -147,8 +176,11 @@ export interface ChildVersionPersistence extends CandidatePersistence {
  * callers must NEVER reissue those positions (no double-claim) and may release
  * only the remaining `claim - persistedCount` reservations.
  */
+/** How many candidates run their machine checks at once within one chunk. */
+export const CHECK_CONCURRENCY = 6
+
 export class CandidatePipelineError extends Error {
-  readonly stage: 'persist' | 'objective' | 'subjective' | 'state' | 'case'
+  readonly stage: 'persist' | 'objective' | 'subjective' | 'state' | 'case' | 'check'
   readonly persistedCount: number
   constructor(stage: CandidatePipelineError['stage'], cause: unknown, persistedCount: number) {
     super(`${stage} failed: ${cause instanceof Error ? cause.message : String(cause)}`)
@@ -170,6 +202,8 @@ export interface GenerateChunkArgs {
   store: CandidatePersistence
   /** First version number assigned (positions after already-claimed work). */
   startPosition: number
+  /** Already-cased signatures/anchors for this scope; see GenerationExclusions. */
+  exclusions?: GenerationExclusions
 }
 
 export interface GeneratedCandidateResult {
@@ -286,13 +320,21 @@ export async function checkPersistedCandidate(args: {
  */
 export async function generateAndCheckChunk(args: GenerateChunkArgs): Promise<GenerateChunkResult> {
   const { snapshot, context, generator, evidence, subjectiveChecker, store } = args
-  const candidates = await generator.generate({ count: args.claim, snapshot, context })
+  const candidates = await generator.generate({
+    count: args.claim,
+    snapshot,
+    context,
+    startPosition: args.startPosition,
+    exclusions: args.exclusions,
+  })
 
-  const results: GeneratedCandidateResult[] = []
-  let awaitingHuman = 0
-  let objectiveFailed = 0
+  // Phase A — persist every candidate, in order, BEFORE any check. Each
+  // position commits its case, immutable version and ordered item manifest so
+  // the auditable record exists even for a later failure. A failed persist
+  // still counts the position as consumed: the case row may exist, so the
+  // position is never reissued to another request.
+  const persistedList: { candidate: GeneratedCandidate; persisted: PersistedCandidate }[] = []
   let persistedCount = 0
-
   for (let idx = 0; idx < candidates.length; idx++) {
     const candidate = candidates[idx]
     const position = args.startPosition + idx
@@ -303,11 +345,6 @@ export async function generateAndCheckChunk(args: GenerateChunkArgs): Promise<Ge
       systemVersions: snapshot.systemVersions,
       items: refs,
     })
-
-    // 1. Commit the case, the immutable version, and the ordered item manifest
-    //    BEFORE any check. This is the auditable record even for a failure. A
-    //    failed persist still counts the position as consumed: the case row may
-    //    exist, so the position is never reissued to another request.
     let persisted: PersistedCandidate
     try {
       persisted = await store.persistCandidate({
@@ -325,9 +362,15 @@ export async function generateAndCheckChunk(args: GenerateChunkArgs): Promise<Ge
       throw new CandidatePipelineError('persist', err, persistedCount)
     }
     persistedCount++
+    persistedList.push({ candidate, persisted })
+  }
 
-    // 2 + 3. Objective then subjective, fail closed, abort on any write error.
-    const result = await checkPersistedCandidate({
+  // Phase B — objective then subjective checks, several candidates at a time.
+  // Each check still fails closed and still aborts the chunk on a write error;
+  // running them in parallel only changes wall-clock time (one Claude vision
+  // call per candidate was the slow part), never the per-candidate outcome.
+  const settled = await mapWithConcurrency(persistedList, CHECK_CONCURRENCY, ({ candidate, persisted }) =>
+    checkPersistedCandidate({
       persisted,
       candidate,
       snapshot,
@@ -335,11 +378,25 @@ export async function generateAndCheckChunk(args: GenerateChunkArgs): Promise<Ge
       evidence,
       subjectiveChecker,
       store,
-      persistedCount,
-    })
-    if (result.state === 'objective_failed') objectiveFailed++
+      // Every position was consumed above, so an abort releases nothing.
+      persistedCount: candidates.length,
+    }),
+  )
+  const firstFailure = settled.find((r): r is PromiseRejectedResult => r.status === 'rejected')
+  if (firstFailure) {
+    const reason = firstFailure.reason
+    if (reason instanceof CandidatePipelineError) throw reason
+    throw new CandidatePipelineError('check', reason, candidates.length)
+  }
+
+  const results: GeneratedCandidateResult[] = []
+  let awaitingHuman = 0
+  let objectiveFailed = 0
+  for (const r of settled) {
+    if (r.status !== 'fulfilled') continue
+    if (r.value.state === 'objective_failed') objectiveFailed++
     else awaitingHuman++
-    results.push(result)
+    results.push(r.value)
   }
 
   return { produced: results.length, awaitingHuman, objectiveFailed, results }

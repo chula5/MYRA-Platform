@@ -19,8 +19,10 @@ import FallbackImage from '@/components/FallbackImage'
 import ShopLink from '@/components/ShopLink'
 import ComposedLookCard from '@/components/me/ComposedLookCard'
 import { useScrollTo } from '@/lib/smooth-scroll'
-import { loadShopBrain, styleSavedPieceFor, type ShopBrainView, type ShopPiece } from './shop-brain-actions'
+import { loadShopBrain, type ShopBrainView, type ShopPiece } from './shop-brain-actions'
+import { warmUpShopBrain, pollWaysMany } from './ways/actions'
 import type { StyledLook } from '@/app/admin/private-stylist/actions'
+import type { StyledWayLook } from '@/lib/styled-ways-core'
 
 type Door = 'similar' | 'brands' | 'styled'
 
@@ -236,29 +238,47 @@ export default function ShopBrain({ testMemberId }: { testMemberId?: string }) {
     }
   }, [testMemberId])
 
-  // The pieces she kept are styled without being asked — three outfits each,
-  // newest first, one after another — so the work is done before she looks.
-  const STYLE_AHEAD = 6
+  // The pieces she kept are styled without being asked. The work is queued
+  // on the server (lib/styled-ways-queue) and judged before it is shown, so
+  // it is done — and kept — whether or not she stays on the page; this only
+  // watches the shelf fill. A piece never styled before reads as "working";
+  // one MYRA could not style says so.
   const done = useRef<Set<string>>(new Set())
-  async function style(itemId: string) {
-    if (done.current.has(itemId)) return
-    done.current.add(itemId)
-    setBusy(itemId)
-    const r = await styleSavedPieceFor(itemId, testMemberId).catch(() => ({ looks: [] as StyledLook[], error: 'MYRA could not style this one just now.' }))
-    setBusy((b) => (b === itemId ? null : b))
-    if (r.error || !r.looks.length) {
-      setFailed((f) => ({ ...f, [itemId]: r.error ?? 'Nothing MYRA would put with it yet.' }))
-      return
-    }
-    setLooks((l) => ({ ...l, [itemId]: r.looks }))
-  }
   useEffect(() => {
     if (!view?.saved.length || queued.current) return
     queued.current = true
     setAnchor((a) => a ?? view.saved[0].item_id)
+    let live = true
+    const ids = view.saved.slice(0, 6).map((s) => s.item_id)
     void (async () => {
-      for (const s of view.saved.slice(0, STYLE_AHEAD)) await style(s.item_id)
+      const w = await warmUpShopBrain(testMemberId).catch(() => ({ looks: {} as Record<string, StyledWayLook[]>, working: [] as string[], capped: false }))
+      if (!live) return
+      setLooks((l) => ({ ...l, ...w.looks }))
+      for (const id of ids) if ((w.looks[id]?.length ?? 0) >= 3) done.current.add(id)
+      let pending = ids.filter((id) => !done.current.has(id))
+      for (const id of pending) if (!w.working.includes(id) && !w.looks[id]) {
+        setFailed((f) => ({ ...f, [id]: w.capped ? 'MYRA will style this one a little later.' : 'Tap to see it styled.' }))
+        done.current.add(id)
+      }
+      pending = pending.filter((id) => !done.current.has(id))
+      let polls = 0
+      while (live && pending.length && polls++ < 40) {
+        await new Promise((r) => setTimeout(r, 3000))
+        const r = await pollWaysMany(pending, testMemberId).catch(() => ({} as Awaited<ReturnType<typeof pollWaysMany>>))
+        if (!live) return
+        for (const id of pending) {
+          const x = r[id]
+          if (!x) continue
+          if (x.looks.length) setLooks((l) => ({ ...l, [id]: x.looks }))
+          if (x.status !== 'working') {
+            done.current.add(id)
+            if (!x.looks.length) setFailed((f) => ({ ...f, [id]: x.error ?? 'Nothing MYRA would put with it yet.' }))
+          }
+        }
+        pending = pending.filter((id) => !done.current.has(id))
+      }
     })()
+    return () => { live = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view])
 
@@ -381,7 +401,7 @@ export default function ShopBrain({ testMemberId }: { testMemberId?: string }) {
                     working={busy === s.item_id || !done.current.has(s.item_id)}
                     note={failed[s.item_id]}
                     active={current?.item_id === s.item_id}
-                    onPick={() => { setAnchor(s.item_id); void style(s.item_id) }}
+                    onPick={() => setAnchor(s.item_id)}
                   />
                 ))}
               </div>

@@ -61,7 +61,9 @@ export async function POST(req: NextRequest) {
     try {
       const admin = createAdminClient() as any
       const fed = await mirrorFedBrandFor(admin, host)
-      if (fed) { fedName = fed.name; queued = await queueMirrorProducts(admin, fed, seen) }
+      // A SCAN IN CHROME reading a grid that only scrolls (no page URLs) comes
+      // through here too, and a scan wants everything on the page, not a visit's 40.
+      if (fed) { fedName = fed.name; queued = await queueMirrorProducts(admin, fed, seen, body?.scan === true ? { limit: seen.length } : {}) }
     } catch { /* the queue is a passenger, never the driver */ }
   }
 

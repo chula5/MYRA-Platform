@@ -7,6 +7,8 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import {
   decideCandidate,
+  dismissCandidate,
+  restoreCandidate,
   undoCandidateDecision,
   withdrawCandidateApproval,
   holdCandidate,
@@ -509,5 +511,117 @@ describe('loadMachineResult', () => {
     await decideCandidate('v1', { decision: 'no', reasonCode: 'global_composition', idempotencyKey: KEY1 }, ACTOR, db.admin)
     await undoCandidateDecision('v1', { idempotencyKey: KEY2 }, ACTOR, db.admin)
     expect(await loadMachineResult('v1', db.admin)).toEqual({ revealed: false })
+  })
+})
+
+// ── The decision teaches the house (Style Brain bridge) ──────────────────────
+
+describe('decideCandidate → house learning sink', () => {
+  function spySink() {
+    const calls: { method: string; args: any[] }[] = []
+    const rec = (method: string) => async (...args: any[]) => { calls.push({ method, args }); return { ok: true as const } }
+    return { calls, sink: { approve: rec('approve'), rejectLook: rec('rejectLook'), rejectItem: rec('rejectItem'), swap: rec('swap') } }
+  }
+
+  it('a TRAINING Yes teaches the stylist the whole look, anchor first', async () => {
+    const db = seedQueue()
+    db.tables.outfit_quality_case[0].data_partition = 'training'
+    const { calls, sink } = spySink()
+    const r = await decideCandidate('v1', { decision: 'yes', idempotencyKey: KEY1 }, ACTOR, db.admin, { learningSink: sink })
+    expect(r.ok).toBe(true)
+    expect(calls).toHaveLength(1)
+    expect(calls[0].method).toBe('approve')
+    expect(calls[0].args[0]).toEqual({ stylistId: '0d535772-8a4f-440f-9e46-f8d637bed0d3', itemIds: ['i1', 'i2'], anchorItemId: 'i1' })
+  })
+
+  it('a TRAINING item-level No ejects THAT piece; a look-level No is a soft negative on the combination', async () => {
+    const db = seedQueue()
+    db.tables.outfit_quality_case[0].data_partition = 'training'
+    const { calls, sink } = spySink()
+    await decideCandidate('v1', { decision: 'no', reasonCode: 'item_wrong_for_member', candidateItemId: 'ci-2', idempotencyKey: KEY1 }, ACTOR, db.admin, { learningSink: sink })
+    expect(calls).toHaveLength(1)
+    expect(calls[0].method).toBe('rejectItem')
+    expect(calls[0].args[1]).toBe('i2')
+    expect(calls[0].args[2]).toBe('item_wrong_for_member')
+
+    const db2 = seedQueue()
+    db2.tables.outfit_quality_case[0].data_partition = 'training'
+    const second = spySink()
+    await decideCandidate('v1', { decision: 'no', reasonCode: 'global_composition', idempotencyKey: KEY2 }, ACTOR, db2.admin, { learningSink: second.sink })
+    expect(second.calls.map((c) => c.method)).toEqual(['rejectLook'])
+  })
+
+  it('a TEST-partition decision teaches nothing', async () => {
+    const db = seedQueue()
+    db.tables.outfit_quality_case[0].data_partition = 'test'
+    const { calls, sink } = spySink()
+    const r = await decideCandidate('v1', { decision: 'yes', idempotencyKey: KEY1 }, ACTOR, db.admin, { learningSink: sink })
+    expect(r.ok).toBe(true)
+    expect(calls).toHaveLength(0)
+  })
+
+  it('a sink failure is a warning on the result, never a failed review', async () => {
+    const db = seedQueue()
+    db.tables.outfit_quality_case[0].data_partition = 'training'
+    const sink = { approve: async () => ({ ok: false as const, warning: 'style learning failed: boom' }), rejectLook: async () => ({ ok: true as const }), rejectItem: async () => ({ ok: true as const }), swap: async () => ({ ok: true as const }) }
+    const r = await decideCandidate('v1', { decision: 'yes', idempotencyKey: KEY1 }, ACTOR, db.admin, { learningSink: sink })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.warnings).toContain('style learning failed: boom')
+    expect(db.tables.outfit_quality_candidate_version[0].state).toBe('approved')
+  })
+})
+
+// ── Dismiss / restore: out of the queue with no verdict, reversible ──────────
+
+describe('dismissCandidate / restoreCandidate', () => {
+  it('dismiss hides the version with no decision, no learning and no promotion; restore brings it back', async () => {
+    const db = seedQueue()
+    db.tables.outfit_quality_case[0].data_partition = 'training'
+    const calls: string[] = []
+    const sink = { approve: async () => (calls.push('approve'), { ok: true as const }), rejectLook: async () => (calls.push('rejectLook'), { ok: true as const }), rejectItem: async () => (calls.push('rejectItem'), { ok: true as const }), swap: async () => ({ ok: true as const }) }
+
+    const d = await dismissCandidate('v1', { idempotencyKey: KEY1, note: 'same boot again' }, ACTOR, db.admin)
+    expect(d).toMatchObject({ ok: true, reused: false, nextState: 'dismissed' })
+    expect(db.tables.outfit_quality_candidate_version[0].state).toBe('dismissed')
+    expect(db.tables.outfit_quality_case[0].status).toBe('dismissed')
+    expect(db.tables.outfit_quality_review_event).toHaveLength(1)
+    expect(db.tables.outfit_quality_review_event[0]).toMatchObject({ action: 'dismiss', decision: null, note: 'same boot again', reviewer_user_id: 'admin-verified-1' })
+    expect(db.tables.outfit_quality_render_job).toHaveLength(0)
+    expect(db.tables.outfit_quality_promotion).toHaveLength(0)
+    expect(calls).toHaveLength(0)
+
+    // Replay is idempotent; a decision on a dismissed version is refused.
+    const again = await dismissCandidate('v1', { idempotencyKey: KEY1 }, ACTOR, db.admin)
+    expect(again).toMatchObject({ ok: true, reused: true })
+    expect(db.tables.outfit_quality_review_event).toHaveLength(1)
+    expect(await decideCandidate('v1', { decision: 'yes', idempotencyKey: KEY2 }, ACTOR, db.admin, { learningSink: sink })).toMatchObject({ ok: false })
+
+    const r = await restoreCandidate('v1', { idempotencyKey: KEY3 }, ACTOR, db.admin)
+    expect(r).toMatchObject({ ok: true, reused: false, nextState: 'awaiting_human' })
+    expect(db.tables.outfit_quality_candidate_version[0].state).toBe('awaiting_human')
+    expect(db.tables.outfit_quality_review_event).toHaveLength(2)
+    expect(db.tables.outfit_quality_review_event[1]).toMatchObject({ action: 'undo', reverses_event_id: db.tables.outfit_quality_review_event[0].review_event_id })
+
+    // Back in review: a decision now works and learning fires as normal.
+    const y = await decideCandidate('v1', { decision: 'yes', idempotencyKey: KEY4 }, ACTOR, db.admin, { learningSink: sink })
+    expect(y.ok).toBe(true)
+    expect(calls).toEqual(['approve'])
+  })
+
+  it('refuses to dismiss a held, decided or stale version, and to restore one that is not dismissed', async () => {
+    const held = seedQueue({ holds: [{ hold_id: 'h1', candidate_version_id: 'v1', held_by: 'a', reason: 'x', released_by: null, created_at: 't', released_at: null }] })
+    expect(await dismissCandidate('v1', { idempotencyKey: KEY1 }, ACTOR, held.admin)).toMatchObject({ ok: false, code: 'held' })
+
+    const decided = seedQueue()
+    await decideCandidate('v1', { decision: 'yes', idempotencyKey: KEY1 }, ACTOR, decided.admin)
+    expect(await dismissCandidate('v1', { idempotencyKey: KEY2 }, ACTOR, decided.admin)).toMatchObject({ ok: false, code: 'already_decided' })
+
+    const stale = seedQueue()
+    stale.tables.outfit_quality_case[0].current_version_id = 'v2'
+    expect(await dismissCandidate('v1', { idempotencyKey: KEY1 }, ACTOR, stale.admin)).toMatchObject({ ok: false, code: 'stale_version' })
+
+    const fresh = seedQueue()
+    expect(await restoreCandidate('v1', { idempotencyKey: KEY1 }, ACTOR, fresh.admin)).toMatchObject({ ok: false, code: 'not_dismissed' })
+    expect(await dismissCandidate('v1', { idempotencyKey: 'nope' }, ACTOR, fresh.admin)).toMatchObject({ ok: false, code: 'invalid_idempotency_key' })
   })
 })

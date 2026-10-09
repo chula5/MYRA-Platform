@@ -111,17 +111,28 @@ export function confidenceFromCheck(verdict: LookVerdict, colourHarmony: number,
 async function lookSheet(pieces: CheckPiece[]): Promise<{ sheet: Buffer; shown: CheckPiece[] } | null> {
   const sharp = (await import('sharp')).default
   const TILE_W = 420, TILE_H = 560, GAP = 16
+  // Fetch every piece photo at once (order preserved); a missing photo is
+  // left out, not fatal.
+  const fetched = await Promise.all(
+    pieces.map(async (p) => {
+      if (!p.image_url) return null
+      const url = p.image_url.includes('res.cloudinary.com') ? p.image_url.replace('/upload/', '/upload/c_limit,w_700/') : p.image_url
+      try {
+        const r = await fetch(url)
+        if (!r.ok) return null
+        const tile = await sharp(Buffer.from(await r.arrayBuffer())).resize(TILE_W, TILE_H, { fit: 'contain', background: '#ffffff' }).jpeg().toBuffer()
+        return { tile, piece: p }
+      } catch {
+        return null
+      }
+    }),
+  )
   const tiles: Buffer[] = []
   const shown: CheckPiece[] = []
-  for (const p of pieces) {
-    if (!p.image_url) continue
-    const url = p.image_url.includes('res.cloudinary.com') ? p.image_url.replace('/upload/', '/upload/c_limit,w_700/') : p.image_url
-    try {
-      const r = await fetch(url)
-      if (!r.ok) continue
-      tiles.push(await sharp(Buffer.from(await r.arrayBuffer())).resize(TILE_W, TILE_H, { fit: 'contain', background: '#ffffff' }).jpeg().toBuffer())
-      shown.push(p)
-    } catch { /* a missing photo is left out, not fatal */ }
+  for (const f of fetched) {
+    if (!f) continue
+    tiles.push(f.tile)
+    shown.push(f.piece)
   }
   if (tiles.length < 2) return null
   const width = tiles.length * TILE_W + (tiles.length + 1) * GAP
@@ -133,7 +144,11 @@ async function lookSheet(pieces: CheckPiece[]): Promise<{ sheet: Buffer; shown: 
 }
 
 /** Check one outfit. Returns null when it cannot be checked (no photos, no key, API error). */
-export async function checkLook(pieces: CheckPiece[], clientDescription: string): Promise<LookCheck | null> {
+export async function checkLook(
+  pieces: CheckPiece[],
+  clientDescription: string,
+  opts: { model?: string } = {},
+): Promise<LookCheck | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return null
   const built = await lookSheet(pieces)
@@ -142,7 +157,7 @@ export async function checkLook(pieces: CheckPiece[], clientDescription: string)
   try {
     const client = new Anthropic({ apiKey })
     const res = await client.beta.messages.create({
-      model: 'claude-opus-5',
+      model: opts.model ?? 'claude-opus-5',
       max_tokens: 16000,
       // A declined request re-runs server-side on Anthropic's recommended fallback.
       betas: ['server-side-fallback-2026-07-01'],
@@ -243,5 +258,35 @@ export async function judgeLooksForMember(
     sizes: Object.fromEntries(
       l.items.filter((it) => it.item_id && sizeMap.has(it.item_id)).map((it) => [it.item_id as string, sizeMap.get(it.item_id)!]),
     ),
+  }))
+}
+
+/**
+ * The same check, delivered look by look: `onEach` fires the moment a look's
+ * verdict is in, so a surface can keep and show the first passing look while
+ * the others are still being judged. Resolves with everything, in order.
+ */
+export async function judgeLooksForMemberEach(
+  admin: any,
+  memberId: string,
+  looks: { items: any[] }[],
+  sizeRefresh: 'none' | 'unknown' | 'all' = 'unknown',
+  onEach?: (index: number, judged: JudgedLook) => void | Promise<void>,
+): Promise<JudgedLook[]> {
+  const { memberMemory } = await import('@/lib/member-memory')
+  const [description, sizeMap] = await Promise.all([
+    memberMemory(memberId).then((m) => m.text).catch(() => loadClientDescription(admin, memberId)),
+    checkSizesForMember(admin, memberId, looks.flatMap((l) => l.items), sizeRefresh),
+  ])
+  const sizesOf = (l: { items: any[] }) => Object.fromEntries(
+    l.items.filter((it) => it.item_id && sizeMap.has(it.item_id)).map((it) => [it.item_id as string, sizeMap.get(it.item_id)!]),
+  )
+  return Promise.all(looks.map(async (l, i) => {
+    const check = await checkLook(l.items, description)
+    const judged: JudgedLook = { check, sizes: sizesOf(l) }
+    if (onEach) {
+      try { await onEach(i, judged) } catch (err) { console.error('[look-check] onEach', err) }
+    }
+    return judged
   }))
 }

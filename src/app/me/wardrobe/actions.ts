@@ -130,6 +130,18 @@ export async function approveMine(extractionId: string, edits: ExtractionEdits):
   if (!c.owner) return { error: c.error! }
   const r = await approveExtraction(extractionId, edits, { allowedOwners: [c.owner] })
   revalidatePath(PATH)
+  // Styled before she asks: her new piece's ways are queued as a warm-up.
+  if (r.itemId) {
+    try {
+      const admin = createAdminClient() as any
+      const { data: m } = await admin.from('pilot_member').select('member_id').eq('auth_user_id', c.owner.id).maybeSingle()
+      if (m?.member_id) {
+        const { enqueueWarmups, kickStyledWaysDrain } = await import('@/lib/styled-ways-queue')
+        const q = await enqueueWarmups(admin, m.member_id, [r.itemId], 'wardrobe')
+        if (q.queued.length) kickStyledWaysDrain()
+      }
+    } catch (err) { console.error('[approveMine] styled ways', err) }
+  }
   return r
 }
 
