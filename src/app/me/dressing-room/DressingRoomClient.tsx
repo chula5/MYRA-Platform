@@ -16,6 +16,7 @@ import { keepStyledLook, myLooksWithPiece, styleMyPiece } from './actions'
 import BuiltOutfit from './BuiltOutfit'
 import SavedPieces from './SavedPieces'
 import DressingRoomScene from '@/components/me/DressingRoomScene'
+import ServiceMark from '@/components/me/ServiceMark'
 import EmailFinds from './EmailFinds'
 import { loadEmailPanel } from './email-actions'
 import { useScrollTo } from '@/lib/smooth-scroll'
@@ -32,6 +33,15 @@ const TYPES: { id: string; label: string; slots: string[] }[] = [
 ]
 
 const CARD = 'bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] rounded-[18px]'
+// The buttons at the top of the room: a mark and one word each.
+const ROOM_BTN = 'inline-flex items-center gap-2.5 rounded-full pl-2 pr-5 py-2 text-[18px] xl:text-[21px] 2xl:text-[25px] tracking-[0.08em] transition-opacity hover:opacity-85'
+function PhotoIcon() {
+  return (
+    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-white text-[#2B2B2B] shadow-[0_2px_8px_rgba(43,43,43,0.12)]">
+      <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" strokeWidth="1.8" /><path d="m5 17 5-5 4 4 2-2 3 3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" /><circle cx="16" cy="9.5" r="1.5" fill="currentColor" /></svg>
+    </span>
+  )
+}
 
 export default function DressingRoomClient({
   view, testMemberId, onOpenPiece,
@@ -138,37 +148,29 @@ export default function DressingRoomClient({
               </h1>
               <p className="text-[21px] xl:text-[24px] 2xl:text-[28px] text-[#4A4E57] mt-2 max-w-md">
                 {view.pieces.length
-                  ? `${view.pieces.length} piece${view.pieces.length === 1 ? '' : 's'} in here${styledCount ? `, ${styledCount} already styled` : ''}.`
-                  : 'Nothing in here yet — add your pieces, or find what you have bought below.'}
+                  ? `${view.pieces.length} piece${view.pieces.length === 1 ? '' : 's'}${styledCount ? ` · ${styledCount} styled` : ''}`
+                  : 'Nothing in here yet.'}
               </p>
+            </div>
+
+            {/* The ways to fill the room: a mark and a word each, no sentences. */}
+            <div className="flex flex-wrap items-center gap-3 mb-2">
               {inboxes !== null && (
-                <button
-                  onClick={emailSync}
-                  data-tour="email-sync"
-                  className="mt-4 inline-flex items-center gap-2.5 text-[19px] xl:text-[22px] 2xl:text-[26px] px-5 py-2.5 rounded-full bg-[#2B2B2B] text-white hover:opacity-85 transition-opacity"
-                >
-                  {inboxes ? 'Update email sync' : 'Connect your email'} <span aria-hidden>→</span>
+                <button onClick={emailSync} data-tour="email-sync" className={`${ROOM_BTN} bg-[#2B2B2B] text-white`} title={inboxes ? 'Read your inbox again for new orders' : 'Connect your email and MYRA finds what you have bought'}>
+                  <ServiceMark service="gmail" size="sm" />{inboxes ? 'Sync email' : 'Email'}
                 </button>
               )}
-            </div>
-
-            {/* The two ways to fill the room, from the top of it. */}
-            <div className="flex flex-wrap gap-4 mb-4">
               {!testMemberId && (
-                <Link href="/me/inspiration#archival-looks" className="text-[20px] xl:text-[23px] underline underline-offset-4 text-[#2B2B2B]">
-                  Add from Instagram or your photos
-                </Link>
+                <>
+                  <Link href="/me/inspiration#archival-looks" className={`${ROOM_BTN} bg-white/90 text-[#2B2B2B]`} title="Add your own outfits from Instagram">
+                    <ServiceMark service="instagram" size="sm" />Instagram
+                  </Link>
+                  <Link href="/me/inspiration#archival-looks" className={`${ROOM_BTN} bg-white/90 text-[#2B2B2B]`} title="Add your own outfits from your photos">
+                    <PhotoIcon />Photos
+                  </Link>
+                </>
               )}
-              <a href="#email-finds" className="text-[20px] xl:text-[23px] underline underline-offset-4 text-[#2B2B2B]">
-                Find what you&rsquo;ve bought
-              </a>
             </div>
-
-            {view.pieces.length > 0 && (
-              <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} aria-label="Filter wardrobe by type" className="rounded-full bg-white/85 px-5 py-2.5 text-[18px] xl:text-[21px] text-[#2B2B2B] outline-none">
-                {types.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
-              </select>
-            )}
           </div>
 
           {/* Your look — the card standing in the room */}
@@ -197,10 +199,29 @@ export default function DressingRoomClient({
           <section className={`${CARD} px-6 sm:px-8 py-8`}>
             <div className="grid xl:grid-cols-[minmax(0,1fr)_minmax(460px,36%)] 2xl:grid-cols-[minmax(0,1fr)_42%] gap-8">
               <div className="min-w-0">
-                <div className="flex flex-wrap items-baseline justify-between gap-4 mb-6">
+                <div className="flex flex-wrap items-baseline justify-between gap-4 mb-4">
                   <h2 className="text-[26px] xl:text-[29px] 2xl:text-[33px] tracking-[0.06em] text-[#2B2B2B]">YOUR WARDROBE</h2>
-                  <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#6E6B65]">{shown.length} shown</p>
+                  <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#6E6B65]">{shown.length}</p>
                 </div>
+                {types.length > 1 && (
+                  <div data-lenis-prevent className="flex gap-2 overflow-x-auto pb-2 mb-5 -mx-1 px-1" role="tablist" aria-label="Filter wardrobe by type">
+                    {types.map((t) => {
+                      const on = typeFilter === t.id
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          role="tab"
+                          aria-selected={on}
+                          onClick={() => setTypeFilter(t.id)}
+                          className={`shrink-0 rounded-full px-4 py-2 text-[17px] xl:text-[20px] 2xl:text-[24px] tracking-[0.08em] transition-colors ${on ? 'bg-[#2B2B2B] text-white' : 'bg-[#F3F2F0] text-[#55534E] hover:text-[#2B2B2B]'}`}
+                        >
+                          {t.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
                 <div data-tour="wardrobe" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-3 2xl:grid-cols-4 min-[2200px]:grid-cols-5 min-[2800px]:grid-cols-6 gap-4">
                   {shown.map((p) => {
                     const on = picked?.item_id === p.item_id

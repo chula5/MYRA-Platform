@@ -202,8 +202,20 @@ function Door({
   )
 }
 
-export default function ShopBrain({ testMemberId }: { testMemberId?: string }) {
+/** Does this view draw anything at all? Mirrors the early return below. */
+const hasContent = (v: ShopBrainView | null) => !!v && (v.saved.length > 0 || v.similar.length > 0 || v.fromBrands.length > 0)
+
+export default function ShopBrain({ testMemberId, onReady }: {
+  testMemberId?: string
+  /** Called once the section knows what it has — so the page's curtain can
+   *  wait for it, and so an empty page can say so instead of staying blank. */
+  onReady?: (hasContent: boolean) => void
+}) {
   const [view, setView] = useState<ShopBrainView | null>(null)
+  const onReadyRef = useRef(onReady)
+  useEffect(() => { onReadyRef.current = onReady }, [onReady])
+  const told = useRef(false)
+  const tell = (has: boolean) => { if (told.current) return; told.current = true; onReadyRef.current?.(has) }
   const [door, setDoor] = useState<Door | null>(null)
   const [anchor, setAnchor] = useState<string | null>(null)
   const [looks, setLooks] = useState<Record<string, StyledLook[]>>({})
@@ -225,8 +237,10 @@ export default function ShopBrain({ testMemberId }: { testMemberId?: string }) {
         if (!live) return
         viewRef.current = v
         setView(v)
+        tell(hasContent(v))
       } catch {
         if (live && attempt < 2) setTimeout(() => void load(attempt + 1), 1500 * (attempt + 1))
+        else if (live) tell(false)
       }
     }
     void load(0)

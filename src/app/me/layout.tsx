@@ -5,6 +5,7 @@ import MeTour from '@/components/me/MeTour'
 import ClientJourneyTracker from '@/components/analytics/ClientJourneyTracker'
 import StylistChat from './StylistChat'
 import { resolveClientMember } from '@/lib/client-member'
+import NativeShareBridge from '@/components/me/NativeShareBridge'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,6 +34,9 @@ export default async function MeLayout({ children }: { children: React.ReactNode
           browsing is not a client's journey. The tracker refuses to write for
           her anyway — this is the first of the two gates, not the only one. */}
       {!isAdmin && <ClientJourneyTracker />}
+      {/* Inside the iPhone app: hand her sign-in to the share sheet, so
+          "share to MYRA" from Safari works without the Safari extension. */}
+      <NativeShareBridge />
     </div>
   )
 }

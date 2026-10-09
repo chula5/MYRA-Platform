@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import VirginConnect from './VirginConnect'
+import ServiceMark from '@/components/me/ServiceMark'
 import {
   addFindPhoto, addFoundPiece, disconnectInbox, findPhotoInEmails, keepReturned, loadEmailPanel, notMine, removeReturned,
   scanAgain, scanNow,
@@ -114,6 +115,8 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
 
   if (!view) return null
   if (!view.memberId) return null
+  const plain = (e: string | null | undefined) =>
+    /EMAIL_SECRET_ENCRYPTION_KEY/.test(e ?? '') ? 'MYRA’s email key is not set on the server yet — your stylist has been told.' : e
   const returnPath = testMemberId ? '/admin/private-stylist' : '/me/dressing-room'
   const gmailHref = `/api/email/google/start?return=${encodeURIComponent(returnPath)}${testMemberId ? `&member=${testMemberId}` : ''}`
 
@@ -122,8 +125,7 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
       <div>
         <h2 className="myra-section-label">FIND WHAT YOU&rsquo;VE BOUGHT</h2>
         <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#2B2B2B] mt-3 max-w-3xl">
-          Connect your email and MYRA reads your order confirmations from the past year, finds the clothes, shoes and bags you bought, and lets you add them to your dressing room.
-          Only order emails are read, and nothing else is kept.
+          MYRA reads your order emails from the past year and finds what you bought. Only order emails are read.
         </p>
         {view.test && (
           <p className="text-[18px] xl:text-[21px] 2xl:text-[25px] tracking-[0.08em] text-[#7C838B] mt-3">
@@ -142,10 +144,10 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
             <div key={c.connection_id} className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-[#C3BFB8] pt-3">
               <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#2B2B2B]">{c.provider === 'gmail' ? 'Gmail' : 'Virgin Media'} · {c.email}</p>
               <p className="text-[18px] xl:text-[21px] 2xl:text-[25px] text-[#55534E]">
-                {c.status === 'error' ? <span className="text-[#B83A3A]">{c.error}</span>
+                {c.status === 'error' ? <span className="text-[#B83A3A]">{plain(c.error)}</span>
                   : c.scan && (c.scan.status === 'queued' || c.scan.status === 'running')
                     ? (c.scan.phase === 'list' ? 'Looking for order emails…' : `Reading ${c.scan.read} of ${c.scan.total} order emails · ${c.scan.found} pieces found`)
-                    : c.scan?.status === 'failed' ? <span className="text-[#B83A3A]">Scan stopped: {c.scan.error}</span>
+                    : c.scan?.status === 'failed' ? <span className="text-[#B83A3A]">Stopped: {plain(c.scan.error)}</span>
                       : c.last_scanned_at ? `Last read ${new Date(c.last_scanned_at).toLocaleDateString('en-GB')}` : 'Not read yet'}
               </p>
               <button disabled={working(`scan-${c.connection_id}`)} onClick={() => act(`scan-${c.connection_id}`, () => scanAgain(c.connection_id, testMemberId), 'Reading new order emails…')} className="text-[18px] xl:text-[21px] 2xl:text-[25px] underline underline-offset-4 text-[#2B2B2B] disabled:opacity-40">Read again</button>
@@ -158,12 +160,14 @@ export default function EmailFinds({ testMemberId, onAdded }: { testMemberId?: s
       {/* Connect */}
       <div className="flex flex-wrap gap-3">
         {view.gmailReady ? (
-          <a href={gmailHref} className="text-[22px] xl:text-[25px] 2xl:text-[29px] px-7 py-3.5 bg-[#2B2B2B] text-white rounded-full">Connect Gmail</a>
+          <a href={gmailHref} className="inline-flex items-center gap-3 text-[22px] xl:text-[25px] 2xl:text-[29px] pl-3 pr-7 py-2.5 bg-[#2B2B2B] text-white rounded-full"><ServiceMark service="gmail" size="sm" />Gmail</a>
         ) : (
-          <span className="text-[20px] xl:text-[23px] 2xl:text-[27px] px-6 py-3 border border-[#C3BFB8] text-[#8C8A85] rounded-full" title="Needs the Google keys set up">Connect Gmail (not set up yet)</span>
+          <span className="inline-flex items-center gap-3 text-[20px] xl:text-[23px] 2xl:text-[27px] pl-3 pr-6 py-2.5 border border-[#C3BFB8] text-[#8C8A85] rounded-full" title="Needs the Google keys set up on the server">
+            <ServiceMark service="gmail" size="sm" />Gmail · not set up yet
+          </span>
         )}
-        <button onClick={() => setVirginStep(virginStep ? 0 : 1)} className="text-[22px] xl:text-[25px] 2xl:text-[29px] px-7 py-3.5 border border-[#2B2B2B] text-[#2B2B2B] rounded-full">
-          Connect Virgin Media / Blueyonder mail
+        <button onClick={() => setVirginStep(virginStep ? 0 : 1)} className="inline-flex items-center gap-3 text-[22px] xl:text-[25px] 2xl:text-[29px] pl-3 pr-7 py-2.5 border border-[#2B2B2B] text-[#2B2B2B] rounded-full">
+          <ServiceMark service="email" size="sm" />Virgin Media
         </button>
       </div>
 
