@@ -27,7 +27,7 @@ const POLL_MS = 1_500
 const MAX_POLLS = 90
 
 export default function WaysToWear({
-  itemId, piece, mode = 'blend', testMemberId, onClose, inline = false, heading, autoStart = true,
+  itemId, piece, mode = 'blend', testMemberId, onClose, inline = false, heading, autoStart = true, onStatus,
 }: {
   itemId: string
   /** What to pin while the first answer loads; the server's own copy replaces it. */
@@ -40,6 +40,8 @@ export default function WaysToWear({
   heading?: string
   /** False: show what is kept and wait to be asked (a rest on a piece, not a tap). */
   autoStart?: boolean
+  /** Where the sheet has got to — for a page that shows its own progress mark. */
+  onStatus?: (status: WaysStatus | 'opening') => void
 }) {
   const [looks, setLooks] = useState<StyledWayLook[]>([])
   const [status, setStatus] = useState<WaysStatus | 'opening'>('opening')
@@ -95,6 +97,7 @@ export default function WaysToWear({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemId, mode, testMemberId])
+  useEffect(() => { onStatus?.(status) }, [status]) // eslint-disable-line react-hooks/exhaustive-deps
   // Asked for after a passive open: start now.
   useEffect(() => {
     if (autoStart && status === 'idle') void open(false)

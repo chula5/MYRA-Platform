@@ -16,6 +16,22 @@
 import { useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import WaysToWear from '@/components/me/WaysToWear'
+import { useScrollTo } from '@/lib/smooth-scroll'
+
+// A dress form on its stand — the mark at the top of the page that wiggles
+// while MYRA is styling a piece and goes still when the outfits are ready.
+function Mannequin({ working }: { working: boolean }) {
+  return (
+    <svg viewBox="0 0 64 120" className={`h-16 w-auto text-[#2B2B2B] ${working ? 'myra-mirror-wiggle' : ''}`} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M32 4v8" />
+      <circle cx="32" cy="4" r="2.5" />
+      <path d="M22 14c0 8-3 12-6 18-3 7-2 16 4 20h24c6-4 7-13 4-20-3-6-6-10-6-18" />
+      <path d="M20 52c-6 6-8 16-6 26 1 5 6 8 18 8s17-3 18-8c2-10 0-20-6-26" />
+      <path d="M32 86v24" />
+      <path d="M18 114c4-3 24-3 28 0" />
+    </svg>
+  )
+}
 import ShopLink, { type ShopLinkItem } from '@/components/ShopLink'
 import {
   browseSearch, saveBrowsedPiece,
@@ -56,6 +72,10 @@ export default function BrowseClient() {
 
   const [picked, setPicked] = useState<string | null>(null)
   const [styling, setStyling] = useState<'wardrobe' | 'new' | null>(null)
+  // Where the styling has got to, for the button and the mark at the top.
+  const [phase, setPhase] = useState<'idle' | 'working' | 'ready' | 'failed'>('idle')
+  const waysRef = useRef<HTMLDivElement | null>(null)
+  const scrollTo = useScrollTo()
   const [note, setNote] = useState<string | null>(null)
 
   const [saved, setSaved] = useState<Set<string>>(new Set())
@@ -96,8 +116,10 @@ export default function BrowseClient() {
   // The sheet asks, waits and keeps (lib/styled-ways): judged before it shows,
   // instant the next time she opens the same piece in the same pool.
   function style(_piece: BrowsePiece, mode: 'wardrobe' | 'new') {
-    setStyling((cur) => (cur === mode ? null : mode)); setNote(null)
+    setStyling((cur) => (cur === mode ? null : mode)); setPhase('idle'); setNote(null)
   }
+  const styleLabel = (mode: 'wardrobe' | 'new', idle: string) =>
+    styling !== mode ? idle : phase === 'working' ? 'STYLING…' : phase === 'ready' ? 'DONE' : idle
 
   async function save(piece: BrowsePiece) {
     if (saved.has(piece.item_id) || savingId) return
@@ -320,18 +342,18 @@ export default function BrowseClient() {
             <button
               type="button"
               onClick={() => void style(chosen, 'wardrobe')}
-              disabled={!!styling}
-              className="text-[15px] tracking-[0.06em] rounded-full bg-[#2B2B2B] text-white px-6 py-3 disabled:opacity-40"
+              disabled={phase === 'working' && styling !== 'wardrobe'}
+              className="text-[18px] xl:text-[20px] tracking-[0.08em] rounded-full bg-[#2B2B2B] text-white px-8 py-4 shadow-[0_10px_24px_-14px_rgba(43,43,43,0.8)] disabled:opacity-40"
             >
-              {styling === 'wardrobe' ? 'BUILDING…' : 'STYLE IT WITH MY WARDROBE'}
+              {styleLabel('wardrobe', 'STYLE IT WITH MY WARDROBE')}
             </button>
             <button
               type="button"
               onClick={() => void style(chosen, 'new')}
-              disabled={!!styling}
-              className="text-[15px] tracking-[0.06em] rounded-full border border-[#2B2B2B] text-[#2B2B2B] px-6 py-3 disabled:opacity-40"
+              disabled={phase === 'working' && styling !== 'new'}
+              className="text-[18px] xl:text-[20px] tracking-[0.08em] rounded-full bg-[#2B2B2B] text-white px-8 py-4 shadow-[0_10px_24px_-14px_rgba(43,43,43,0.8)] disabled:opacity-40"
             >
-              {styling === 'new' ? 'BUILDING…' : 'STYLE IT WITH SOMETHING NEW'}
+              {styleLabel('new', 'STYLE IT WITH SOMETHING NEW')}
             </button>
             <button
               type="button"
@@ -351,8 +373,21 @@ export default function BrowseClient() {
             )}
           </div>
 
+          {/* The mark at the top of the page: the dress form wiggles while MYRA
+              styles, then stands still and says DONE — tap it to come to the outfits. */}
+          {styling && (phase === 'working' || phase === 'ready') && (
+            <button
+              type="button"
+              onClick={() => { if (waysRef.current) scrollTo(waysRef.current, { offset: -24 }) }}
+              className="fixed top-[150px] right-5 sm:right-8 z-[60] flex items-center gap-3 rounded-full bg-white/95 shadow-[0_10px_30px_-12px_rgba(43,43,43,0.6)] pl-3 pr-5 py-2"
+              aria-live="polite"
+            >
+              <Mannequin working={phase === 'working'} />
+              <span className="text-[16px] xl:text-[18px] tracking-[0.14em] text-[#2B2B2B]">{phase === 'working' ? 'STYLING…' : 'DONE · SEE IT'}</span>
+            </button>
+          )}
           {styling && (
-            <div className="mt-6">
+            <div className="mt-6" ref={waysRef}>
               <WaysToWear
                 inline
                 key={`${chosen.item_id}-${styling}`}
@@ -360,7 +395,8 @@ export default function BrowseClient() {
                 mode={styling === 'wardrobe' ? 'wardrobe' : 'inspiration'}
                 piece={{ item_id: chosen.item_id, product_name: chosen.product_name, brand: chosen.brand ?? null, image_url: chosen.image_url ?? null }}
                 heading={styling === 'wardrobe' ? 'WITH YOUR WARDROBE' : 'WITH SOMETHING NEW'}
-                onClose={() => setStyling(null)}
+                onStatus={(st) => setPhase(st === 'opening' || st === 'working' ? 'working' : st === 'ready' ? 'ready' : st === 'idle' ? 'idle' : 'failed')}
+                onClose={() => { setStyling(null); setPhase('idle') }}
               />
             </div>
           )}

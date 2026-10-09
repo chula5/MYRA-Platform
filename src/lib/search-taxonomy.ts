@@ -66,7 +66,7 @@ export const MATERIAL_TERMS: Record<string, string[]> = {
   satin: ['satin', 'duchesse', 'duchess satin'],
   leather: ['leather', 'nappa', 'calfskin', 'lambskin', 'calf leather', 'lamb leather', 'patent'],
   suede: ['suede', 'nubuck'],
-  wool: ['wool', 'merino', 'lambswool', 'virgin wool', 'wool blend', 'boiled wool', 'flannel', 'alpaca', 'mohair'],
+  wool: ['wool', 'merino', 'lambswool', 'virgin wool', 'wool blend', 'boiled wool', 'flannel', 'alpaca', 'mohair', 'yak'],
   cashmere: ['cashmere'],
   cotton: ['cotton', 'poplin', 'organic cotton', 'cotton blend', 'chambray', 'broderie anglaise', 'pique', 'piqué'],
   linen: ['linen', 'linen blend'],
@@ -84,10 +84,34 @@ export const MATERIAL_TERMS: Record<string, string[]> = {
   jersey: ['jersey'],
 }
 
-/** Does this piece count as the cloth she named? Label first, then the name. */
+// Cloths that can share a name without contradicting each other. A word for
+// one family in the NAME only counts when nothing from another family is
+// named too: "Kalua Silk Yak" is a knit with silk in it, not a silk skirt
+// (Chloe, 2026-10-09: "silk slip skirt" showed the MKDT knit).
+const MATERIAL_GROUP: Record<string, string> = {
+  silk: 'fine', satin: 'fine', lace: 'fine', velvet: 'fine', sequin: 'fine', feather: 'fine',
+  wool: 'knit', cashmere: 'knit', knit: 'knit', tweed: 'knit', jersey: 'knit',
+  cotton: 'woven', linen: 'woven', denim: 'woven',
+  leather: 'skin', suede: 'skin',
+}
+function namesAnotherCloth(text: string | null | undefined, material: string): boolean {
+  const group = MATERIAL_GROUP[material]
+  return Object.entries(MATERIAL_TERMS).some(([family, ts]) =>
+    family !== material && (MATERIAL_GROUP[family] ?? family) !== (group ?? material) && ts.some((t) => hasWord(text, t)))
+}
+
+/**
+ * Does this piece count as the cloth she named? The label decides when it
+ * can: a label that names this cloth holds, a label that names a cloth from
+ * another family fails. Otherwise the name, unless the name itself says the
+ * piece is really something else.
+ */
 export function hasMaterial(item: { material_primary?: string | null; product_name?: string | null }, material: string): boolean {
   const terms = MATERIAL_TERMS[material] ?? [material]
-  return terms.some((t) => hasWord(item.material_primary, t) || hasWord(item.product_name, t))
+  if (terms.some((t) => hasWord(item.material_primary, t))) return true
+  if (item.material_primary && namesAnotherCloth(item.material_primary, material)) return false
+  if (!terms.some((t) => hasWord(item.product_name, t))) return false
+  return !namesAnotherCloth(item.product_name, material)
 }
 
 // Two-word pieces, read before the single words so "slip skirt" is a SKIRT

@@ -47,6 +47,19 @@ describe('parseQuery reads the way the Edit search does', () => {
   })
 })
 
+describe('hasMaterial reads the label before the name', () => {
+  it('does not take a knit with silk in its name for silk', () => {
+    expect(hasMaterial({ product_name: 'KALUA SILK YAK - IVORY', material_primary: 'knit' }, 'silk')).toBe(false)
+    expect(hasMaterial({ product_name: 'KALUA SILK YAK - IVORY', material_primary: null }, 'silk')).toBe(false)
+    expect(hasMaterial({ product_name: 'Wool Silk Blend Jumper', material_primary: null }, 'silk')).toBe(false)
+  })
+  it('still takes silk by label or by an uncontradicted name', () => {
+    expect(hasMaterial({ product_name: 'Laren Skirt', material_primary: 'silk' }, 'silk')).toBe(true)
+    expect(hasMaterial({ product_name: 'Silk Satin Slip Skirt', material_primary: null }, 'silk')).toBe(true)
+    expect(hasMaterial({ product_name: 'Fanniry Silk Skirt', material_primary: 'silk' }, 'silk')).toBe(true)
+  })
+})
+
 describe('rankPieces holds every facet as a requirement', () => {
   const silkSkirt = { item_id: 'a', product_name: 'Nerly silk skirt', item_type: 'skirt', material_primary: 'silk', brand_id: 'im', brand: { name: 'Isabel Marant' }, status: 'live' }
   const cottonSkirt = { item_id: 'b', product_name: 'Aubrey organic cotton skirt', item_type: 'skirt', material_primary: 'organic cotton', brand_id: 'mb', brand: { name: 'By Malene Birger' } }

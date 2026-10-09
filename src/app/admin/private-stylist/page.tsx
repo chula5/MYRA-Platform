@@ -12,13 +12,7 @@ export default async function PrivateStylistPage() {
     // uses the full viewport, with only the same small gutter at either edge.
     <div className="mx-[calc(50%-50vw)] w-screen px-4 sm:px-6">
       <div className="mb-8">
-        <p className="text-[20px] tracking-[0.2em] text-[#C4A882] mb-1">ONE HOUSE · THREE ROOMS</p>
         <h1 className="text-[26px] tracking-[0.06em] text-[#0A0A0A]">PRIVATE STYLIST</h1>
-        <p className="text-[20px] tracking-[0.06em] text-[#6B6B6B] mt-2 max-w-3xl leading-relaxed">
-          The always-on stylist pilot. A member is never assigned to a room — she has a weighting
-          across all three, tilted by occasion, clamped by the formality floor on work days.
-          Nothing here is visible on the live site.
-        </p>
       </div>
       {!data.ready && (
         <div className="border border-[#B83A3A] px-5 py-4 mb-8">
