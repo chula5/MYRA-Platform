@@ -23,13 +23,13 @@ export default function MeChrome() {
       {/* A desktop keeps the six rooms down the left, the way Instagram keeps
           its own: icon over word, the room she is in drawn in ink. The phone
           carries the same six in the tab bar at the foot instead. */}
-      <nav aria-label="Your rooms" data-tour="rooms" className="hidden sm:flex fixed inset-y-0 left-0 z-40 w-[160px] flex-col items-center justify-center gap-5 border-r border-[rgba(43,43,43,0.14)] bg-[rgba(230,230,233,0.9)] backdrop-blur-md">
+      <nav aria-label="Your rooms" data-tour="rooms" className="hidden sm:flex fixed inset-y-0 left-0 z-40 w-[200px] flex-col items-center justify-center gap-7 border-r border-[rgba(43,43,43,0.14)] bg-[rgba(230,230,233,0.9)] backdrop-blur-md">
         {ROW_ROOMS.map((room) => {
           const on = room.id === active
           return (
             <Link key={room.id} href={room.href} prefetch aria-label={room.label} aria-current={on ? 'page' : undefined} className={`flex w-full flex-col items-center gap-2 py-1 transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#8C8A85] hover:text-[#2B2B2B]'}`}>
-              <span className="block h-16 w-16"><RoomIcon id={room.id} /></span>
-              <span className="text-[13px] tracking-[0.08em] uppercase">{room.short}</span>
+              <span className="block h-[88px] w-[88px]"><RoomIcon id={room.id} /></span>
+              <span className="text-[19px] xl:text-[21px] tracking-[0.1em] uppercase">{room.short}</span>
             </Link>
           )
         })}

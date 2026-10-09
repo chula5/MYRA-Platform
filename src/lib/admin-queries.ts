@@ -267,6 +267,7 @@ export interface ItemsPage {
   brands: ItemFacet[]
   types: ItemFacet[]
   colours: ItemFacet[]
+  months: ItemFacet[] // value = 'YYYY-MM' of created_at, newest first
 }
 
 // One page of the item library plus facet counts for the filter dropdowns.
@@ -280,6 +281,7 @@ export async function getItemsPage(opts: {
   brand?: string
   itemType?: string
   colour?: string
+  month?: string // 'YYYY-MM' — items added in that calendar month (UTC)
   page?: number
   pageSize?: number
 }): Promise<ItemsPage> {
@@ -300,7 +302,7 @@ export async function getItemsPage(opts: {
     const pages = Math.ceil((scopeTotal ?? 0) / 1000)
     const facetBatches = await Promise.all(
       Array.from({ length: pages }, (_, i) =>
-        applyScope((supabase as any).from('item').select('item_type, colour_family, brand:brand_id(name)'))
+        applyScope((supabase as any).from('item').select('item_type, colour_family, created_at, brand:brand_id(name)'))
           .order('item_id')
           .range(i * 1000, i * 1000 + 999)
           .then((r: any) => { if (r.error) throw r.error; return r.data ?? [] }),
@@ -316,11 +318,24 @@ export async function getItemsPage(opts: {
     const brands = tally(facetRows, (r) => r.brand?.name ?? null)
     const types = tally(facetRows, (r) => r.item_type ?? null)
     const colours = tally(facetRows, (r) => r.colour_family ?? null)
+    const monthOf = (r: any) => (typeof r.created_at === 'string' ? r.created_at.slice(0, 7) : null)
+    const months = tally(facetRows, monthOf).sort((a, b) => b.value.localeCompare(a.value))
+
+    const month = opts.month && /^\d{4}-\d{2}$/.test(opts.month) ? opts.month : undefined
+    const monthRange = month
+      ? (() => {
+          const [y, m] = month.split('-').map(Number)
+          const from = new Date(Date.UTC(y, m - 1, 1)).toISOString()
+          const to = new Date(Date.UTC(y, m, 1)).toISOString()
+          return { from, to }
+        })()
+      : undefined
 
     const matches = (r: any) =>
       (!opts.brand || r.brand?.name === opts.brand) &&
       (!opts.itemType || r.item_type === opts.itemType) &&
-      (!opts.colour || r.colour_family === opts.colour)
+      (!opts.colour || r.colour_family === opts.colour) &&
+      (!month || monthOf(r) === month)
     const total = facetRows.filter(matches).length
 
     const totalPages = Math.max(1, Math.ceil(total / pageSize))
@@ -336,13 +351,14 @@ export async function getItemsPage(opts: {
     if (opts.brand) q = q.eq('brand.name', opts.brand)
     if (opts.itemType) q = q.eq('item_type', opts.itemType)
     if (opts.colour) q = q.eq('colour_family', opts.colour)
+    if (monthRange) q = q.gte('created_at', monthRange.from).lt('created_at', monthRange.to)
     const { data, error } = await q
     if (error) throw error
 
-    return { items: (data ?? []) as unknown as ItemWithBrand[], total, page, pageSize, brands, types, colours }
+    return { items: (data ?? []) as unknown as ItemWithBrand[], total, page, pageSize, brands, types, colours, months }
   } catch (err) {
     console.error('[getItemsPage]', err)
-    return { items: [], total: 0, page: 1, pageSize, brands: [], types: [], colours: [] }
+    return { items: [], total: 0, page: 1, pageSize, brands: [], types: [], colours: [], months: [] }
   }
 }
 

@@ -12,6 +12,13 @@ import { createOutfitFromSelectedItems, deleteItems } from '@/app/admin/items/ac
 const SELECT_CLS = 'text-[10px] tracking-[0.09em] uppercase px-3 py-2 border border-[#E2E0DB] rounded-[10px] bg-white text-[#4A4E57] hover:border-[#0A0A0A] focus:outline-none focus:border-[#0A0A0A] transition-colors max-w-[240px]'
 const TYPE_LABELS = new Map(PICKER_TYPES.map((t) => [t.value, t.label]))
 const COLOUR_LABELS = new Map(PICKER_COLOURS.map((c) => [c.value, c.label]))
+const MONTH_NAMES = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
+// '2026-01' → 'JAN-26'
+function monthLabel(ym: string): string {
+  const [y, m] = ym.split('-')
+  const name = MONTH_NAMES[Number(m) - 1]
+  return name ? `${name}-${y.slice(2)}` : ym
+}
 
 interface Props {
   items: ItemWithBrand[]
@@ -21,9 +28,10 @@ interface Props {
   brands: ItemFacet[]
   types: ItemFacet[]
   colours: ItemFacet[]
+  months: ItemFacet[]
 }
 
-export default function ItemsGrid({ items, total, page, pageSize, brands, types, colours }: Props) {
+export default function ItemsGrid({ items, total, page, pageSize, brands, types, colours, months }: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -39,6 +47,7 @@ export default function ItemsGrid({ items, total, page, pageSize, brands, types,
   const fBrand = searchParams.get('brand') ?? ''
   const fType = searchParams.get('type') ?? ''
   const fColour = searchParams.get('colour') ?? ''
+  const fMonth = searchParams.get('month') ?? ''
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
   function setParam(key: string, value: string) {
@@ -133,7 +142,7 @@ export default function ItemsGrid({ items, total, page, pageSize, brands, types,
 
   return (
     <>
-      {/* Brand / type / colour filter dropdowns + pagination */}
+      {/* Brand / type / colour / month-added filter dropdowns + pagination */}
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <select value={fBrand} onChange={(e) => setParam('brand', e.target.value)} className={SELECT_CLS}>
           <option value="">ALL BRANDS</option>
@@ -151,6 +160,12 @@ export default function ItemsGrid({ items, total, page, pageSize, brands, types,
           <option value="">ALL COLOURS</option>
           {colours.map((c) => (
             <option key={c.value} value={c.value}>{COLOUR_LABELS.get(c.value) ?? c.value.toUpperCase()} · {c.count}</option>
+          ))}
+        </select>
+        <select value={fMonth} onChange={(e) => setParam('month', e.target.value)} className={SELECT_CLS}>
+          <option value="">ANY MONTH ADDED</option>
+          {months.map((m) => (
+            <option key={m.value} value={m.value}>{monthLabel(m.value)} · {m.count}</option>
           ))}
         </select>
         <span className="text-[10px] tracking-[0.12em] text-[#6B6B6B] ml-1">

@@ -25,7 +25,7 @@ export default async function MeLayout({ children }: { children: React.ReactNode
       <div className="myra-safe-top" aria-hidden />
       <MeChrome />
       {/* pb-28 on a phone keeps the last of the page clear of the tab bar. */}
-      <main className="w-full px-6 sm:pl-[200px] sm:pr-10 pt-10 pb-28 sm:pb-10">{children}</main>
+      <main className="w-full px-6 sm:pl-[232px] sm:pr-10 pt-10 pb-28 sm:pb-10">{children}</main>
       <MeTour />
       {/* The house of stylists, one button away on every page. */}
       <StylistChat />
