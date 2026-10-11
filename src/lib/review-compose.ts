@@ -212,6 +212,9 @@ export interface ReviewComposeResult {
 
 const EXTRA_SLOT_POOL = 3
 
+/** Slots that finish a look rather than make it: swapping one of these alone is not a new outfit. */
+const FINISH_SLOTS = new Set(['shoe', 'bag', 'jewellery'])
+
 /** How many pieces two picks of `n` additions may share before they read as the same outfit. */
 export function maxSharedWith(n: number): number {
   return Math.max(1, n - 2)
@@ -293,7 +296,12 @@ function composeReviewLooksOnce(opts: ReviewComposeOpts): ReviewComposeResult {
     for (const slot of coreSlots) {
       const pin = pinned.find((p) => p.slot === slot)
       const items = pin ? [pin.item] : pool(slot, perSlotPool)
-      if (items.length === 0) continue // best-effort if a core slot is empty
+      if (items.length === 0) {
+        // Best-effort for a missing shoe or bag; a missing garment means this
+        // shape has no clothes (a coat over nothing), so the shape is out.
+        if (!FINISH_SLOTS.has(slot)) { viable = false; break }
+        continue
+      }
       slotChoices.push(items.map((item) => ({ item, slot })))
     }
     for (const extra of extras) {
@@ -390,7 +398,16 @@ function composeReviewLooksOnce(opts: ReviewComposeOpts): ReviewComposeResult {
     const ids = new Set(b.items.map(({ item }) => item.item_id))
     return a.items.filter(({ item }) => ids.has(item.item_id)).length
   }
-  const isTwin = (s: (typeof scored)[number]) => picked.some((p) => shared(s, p) > maxSharedWith(Math.min(s.items.length, p.items.length)))
+  // The clothes make the outfit: the same top + trousers under the same coat
+  // with other shoes and another bag is the same look (2026-10-11, the Rixo
+  // coat and the Isabel Marant gilet each came back as two pairs of twins
+  // that the piece count let through). Shoes, bag and jewellery are finishes.
+  const clothesKey = (s: (typeof scored)[number]) =>
+    s.items.filter(({ slot }) => !FINISH_SLOTS.has(slot)).map(({ item }) => item.item_id).sort().join('|')
+  const isTwin = (s: (typeof scored)[number]) =>
+    picked.some((p) =>
+      shared(s, p) > maxSharedWith(Math.min(s.items.length, p.items.length)) ||
+      (clothesKey(s) !== '' && clothesKey(s) === clothesKey(p)))
   const passes: ((s: (typeof scored)[number]) => boolean)[] = [
     (s) => !isTwin(s) && !s.items.some(({ item }) => (use.get(item.item_id) ?? 0) >= maxUsesPerItem),
     (s) => !isTwin(s),

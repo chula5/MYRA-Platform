@@ -187,3 +187,22 @@ describe('composeReviewLooks — no near-twin looks', () => {
     }
   })
 })
+
+describe('composeReviewLooks — the clothes make the outfit', () => {
+  it('never shows the same clothes twice with only the shoes and bag changed', () => {
+    const coat = item('fur-coat', 'coat', 'brown', { pattern: 4, surface: 1 })
+    const lib = [
+      item('top-a', 'knitwear', 'brown', { surface: 1 }),
+      item('top-b', 'knitwear', 'black', { surface: 1 }),
+      item('trouser-a', 'trousers', 'brown', { surface: 1 }),
+      item('trouser-b', 'trousers', 'black', { surface: 1 }),
+      ...['s1', 's2', 's3'].map((id) => item(id, 'flat', 'brown', { surface: 1 })),
+      ...['b1', 'b2', 'b3'].map((id) => item(id, 'tote', 'brown', { surface: 1 })),
+    ]
+    const r = composeReviewLooks({ anchor: coat, library: lib, count: 6, noTwins: true })
+    expect(r.picks.length).toBeGreaterThan(1)
+    const clothes = r.picks.map((p) =>
+      p.items.filter((i) => i.slot !== 'shoe' && i.slot !== 'bag').map((i) => i.item.item_id).sort().join('|'))
+    expect(new Set(clothes).size).toBe(clothes.length)
+  })
+})
