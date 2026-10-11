@@ -17,7 +17,7 @@ import FallbackImage from '@/components/FallbackImage'
 import BuiltOutfit from '@/app/me/dressing-room/BuiltOutfit'
 import SaveOutfit from '@/components/me/SaveOutfit'
 import type { LookItem } from '@/lib/pilot-stylist'
-import { openWaysToWear, pollWaysToWear, type WaysPiece, type WaysStatus } from '@/app/me/ways/actions'
+import { openWaysToWear, pollWaysToWear, reactToWay, type WaysPiece, type WaysStatus } from '@/app/me/ways/actions'
 import { WAYS, type StyledWayLook, type WayMode } from '@/lib/styled-ways-core'
 import { watchWays, clearWaysReady } from './ways-watch'
 
@@ -40,8 +40,8 @@ export default function WaysToWear({
   heading?: string
   /** False: show what is kept and wait to be asked (a rest on a piece, not a tap). */
   autoStart?: boolean
-  /** Where the sheet has got to — for a page that shows its own progress mark. */
-  onStatus?: (status: WaysStatus | 'opening') => void
+  /** Where the sheet has got to, and how many ways have landed — for a page that shows its own progress mark. */
+  onStatus?: (status: WaysStatus | 'opening', landed: number) => void
 }) {
   const [looks, setLooks] = useState<StyledWayLook[]>([])
   const [status, setStatus] = useState<WaysStatus | 'opening'>('opening')
@@ -50,6 +50,21 @@ export default function WaysToWear({
   const [test, setTest] = useState(false)
   // What each way looks like after her swaps — what SAVE keeps.
   const [edited, setEdited] = useState<Record<string, LookItem[]>>({})
+  // Her verdicts this sitting: a like is saved at once (the look id), a dislike is gone.
+  const [liked, setLiked] = useState<Record<string, string>>({})
+  const [reacting, setReacting] = useState<string | null>(null)
+
+  async function react(l: StyledWayLook, reaction: 'like' | 'dislike') {
+    if (reacting) return
+    setReacting(l.styled_way_id)
+    if (reaction === 'dislike') setLooks((cur) => cur.filter((x) => x.styled_way_id !== l.styled_way_id))
+    try {
+      const r = await reactToWay(l.styled_way_id, reaction, testMemberId)
+      if (!live.current) return
+      if (reaction === 'like' && r.lookId) setLiked((m) => ({ ...m, [l.styled_way_id]: r.lookId as string }))
+      if (r.error) setError(r.error)
+    } finally { if (live.current) setReacting(null) }
+  }
   const polls = useRef(0)
   const live = useRef(true)
   const working = useRef(false)
@@ -97,7 +112,7 @@ export default function WaysToWear({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemId, mode, testMemberId])
-  useEffect(() => { onStatus?.(status) }, [status]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { onStatus?.(status, looks.length) }, [status, looks.length]) // eslint-disable-line react-hooks/exhaustive-deps
   // Asked for after a passive open: start now.
   useEffect(() => {
     if (autoStart && status === 'idle') void open(false)
@@ -154,11 +169,48 @@ export default function WaysToWear({
         {Array.from({ length: slots }).map((_, i) => {
           const l = looks[i]
           if (l) {
+            const savedLook = liked[l.styled_way_id] ?? (l.reaction === 'like' ? l.saved_look_id ?? null : null)
             return (
               <div key={l.styled_way_id} className="space-y-2">
                 {l.occasion_label && <p className={`${T_SMALL} tracking-[0.12em] text-[#6E6B65]`}>{l.occasion_label.toUpperCase()}</p>}
+                {l.image_url && (
+                  // MYRA's picture of the outfit, made ahead; the pieces below stay for swapping.
+                  <div className="relative aspect-[3/4] bg-[#E4E2DD] rounded-[14px] overflow-hidden">
+                    <FallbackImage src={l.image_url} thumbWidth={900} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                  </div>
+                )}
                 <BuiltOutfit items={l.items} heroId={itemId} why={l.why} testMemberId={testMemberId} onChange={(items) => setEdited((e) => ({ ...e, [l.styled_way_id]: items }))} />
-                <SaveOutfit items={edited[l.styled_way_id] ?? l.items} why={l.why} occasion={l.occasion_id ?? null} testMemberId={testMemberId} />
+                {!savedLook && (
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <button
+                      type="button"
+                      disabled={reacting === l.styled_way_id}
+                      onClick={() => void react(l, 'like')}
+                      className={`${T_SMALL} px-5 py-2.5 rounded-full border border-[#2B2B2B] text-[#2B2B2B] disabled:opacity-40`}
+                      aria-label="Like this outfit — it is saved to your looks"
+                    >
+                      {reacting === l.styled_way_id ? 'Saving…' : '♥ Love it'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={reacting === l.styled_way_id}
+                      onClick={() => void react(l, 'dislike')}
+                      className={`${T_SMALL} px-5 py-2.5 rounded-full text-[#6E6B65] underline underline-offset-4 disabled:opacity-40`}
+                    >
+                      Not for me
+                    </button>
+                  </div>
+                )}
+                <SaveOutfit
+                  key={savedLook ? `saved-${savedLook}` : 'unsaved'}
+                  items={edited[l.styled_way_id] ?? l.items}
+                  why={l.why}
+                  occasion={l.occasion_id ?? null}
+                  testMemberId={testMemberId}
+                  styledWayId={l.styled_way_id}
+                  pictureUrl={l.image_url}
+                  initialLookId={savedLook}
+                />
                 {test && <p className="text-[15px] text-[#7C838B]">{l.verdict === 'works' ? 'works' : 'borderline'} · kept {new Date(l.judged_at).toLocaleDateString('en-GB')}</p>}
               </div>
             )

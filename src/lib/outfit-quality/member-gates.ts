@@ -13,6 +13,7 @@ import {
   itemPriceVerdict,
   memberItemScore,
   preferLovedShoes,
+  MEMBER_SHORTLIST_SCALE,
   type MemberTaste,
 } from '@/lib/pilot-composer'
 import { avoidReasons } from '@/lib/pilot-stylist'
@@ -21,13 +22,8 @@ import { judgeLook } from '@/lib/style-rules'
 import { hardSkipPairs } from '@/lib/pipeline'
 import { toHouseItem } from '@/lib/house-item'
 
-/**
- * How strongly her taste pulls a piece onto a slot's shortlist, next to the
- * pairwise compat (0..1) it is ranked on. memberItemScore runs ~[-0.5, 1.4]:
- * a loved type (+0.15) or colour (+0.18) lifts a piece a few places; a brand
- * she keeps swapping out sinks it.
- */
-export const MEMBER_SHORTLIST_SCALE = 0.3
+/** The scale lives with the composer (lib/pilot-composer); re-exported for the Lab. */
+export { MEMBER_SHORTLIST_SCALE }
 
 export function gateToMemberTaste(t: MemberTaste, pool: ItemWithBrand[]): ItemWithBrand[] {
   const bans = !!t.brief?.nevers?.some((n) => n.kind === 'ban')

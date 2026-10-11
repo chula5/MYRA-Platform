@@ -4,6 +4,7 @@
 import type { HouseItem } from '@/lib/house-style'
 import type { ItemWithBrand } from '@/lib/admin-queries'
 import { slotForItemType } from '@/lib/composer'
+import { knownCurrency, toGbpAmount } from '@/lib/currency'
 
 export function toHouseItem(it: ItemWithBrand, slot?: string): HouseItem {
   const a = it as any
@@ -32,8 +33,9 @@ export function toHouseItem(it: ItemWithBrand, slot?: string): HouseItem {
     jewellery_finish: a.jewellery_finish ?? null,
     jewellery_style: a.jewellery_style ?? null,
     // Owned items have no retail price: null here means the price-integrity
-    // rule simply skips them rather than failing the outfit.
-    price: a.price ?? null,
+    // rule simply skips them rather than failing the outfit. Always in POUNDS:
+    // a native price is converted, never read raw (298,000 won is not £298,000).
+    price: a.price_gbp != null && Number(a.price_gbp) > 0 ? Number(a.price_gbp) : a.price != null && knownCurrency(a.currency ?? 'GBP') ? toGbpAmount(a.price, a.currency ?? 'GBP') : null,
     price_tier: (it.brand as any)?.price_tier ?? null,
     print_flag: a.print_flag ?? null,
     neckline: a.neckline ?? null,

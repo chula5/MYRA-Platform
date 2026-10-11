@@ -13,7 +13,7 @@ import type { ItemWithBrand } from '@/lib/admin-queries'
 import { slotForItemType } from '@/lib/composer'
 import { toFeature } from '@/lib/pilot-composer'
 import { toHouseItem } from '@/lib/house-item'
-import { recordStyleDecision } from '@/lib/style-brain-store'
+import { teachFromChloe } from '@/lib/learning-sink'
 import { recordMaterialPairings } from '@/lib/house-style-store'
 import { recordEjection } from '@/lib/pipeline-store'
 import { computeSwapDeltas, formalityBand } from '@/lib/pipeline'
@@ -76,13 +76,13 @@ export function createStyleBrainSink(admin: Admin = createAdminClient()): Qualit
         const byId = await loadItems(admin, look.itemIds)
         const { anchor, all } = orderedLook(byId, look)
         if (all.length < 2) return
-        await recordStyleDecision({
+        await teachFromChloe({
           items: all.map(toFeature),
           decision: 'approve',
           source: 'quality_lab',
           anchorItemId: anchor?.item_id ?? null,
           itemIds: all.map((it) => it.item_id),
-          stylistId: look.stylistId,
+          layerStylistId: look.stylistId,
         })
         await recordMaterialPairings(all.map((it) => toHouseItem(it)), 'approve')
       }),
@@ -92,14 +92,14 @@ export function createStyleBrainSink(admin: Admin = createAdminClient()): Qualit
         const byId = await loadItems(admin, look.itemIds)
         const { anchor, all } = orderedLook(byId, look)
         if (all.length < 2) return
-        await recordStyleDecision({
+        await teachFromChloe({
           items: all.map(toFeature),
           decision: 'skip',
           source: 'quality_lab',
           anchorItemId: anchor?.item_id ?? null,
           itemIds: all.map((it) => it.item_id),
           extraFeatures: reasonCode ? { quality_reason: reasonCode } : undefined,
-          stylistId: look.stylistId,
+          layerStylistId: look.stylistId,
         })
       }),
 
@@ -116,7 +116,7 @@ export function createStyleBrainSink(admin: Admin = createAdminClient()): Qualit
         const band = formalityBand(all as any[])
         const slot = slotForItemType(offending.item_type)
         await Promise.all([
-          recordStyleDecision({
+          teachFromChloe({
             items: [toFeature(against), toFeature(offending)],
             decision: 'skip',
             source: 'quality_lab',
@@ -126,7 +126,7 @@ export function createStyleBrainSink(admin: Admin = createAdminClient()): Qualit
               swap: { action: 'remove', from: label(offending), to: null, fromType: offending.item_type, toType: null, changed: [], different: true, deltas: {}, slot, band },
               ...(reasonCode ? { quality_reason: reasonCode } : {}),
             },
-            stylistId: look.stylistId,
+            layerStylistId: look.stylistId,
           }),
           recordEjection({ itemId: offending.item_id, slot, band, occasion: null, anchorItemId: against.item_id, replacedBy: null, deltas: {} }),
         ])
@@ -156,14 +156,14 @@ export function createStyleBrainSink(admin: Admin = createAdminClient()): Qualit
         const band = formalityBand(all as any[])
         const slot = slotForItemType(from.item_type)
         await Promise.all([
-          recordStyleDecision({
+          teachFromChloe({
             items: [toFeature(against), toFeature(from)],
             decision: 'skip',
             source: 'swap',
             anchorItemId: against.item_id,
             itemIds: [against.item_id, from.item_id],
             extraFeatures: { swap: { action: to ? 'swap' : 'remove', from: label(from), to: to ? label(to) : null, fromType: from.item_type, toType: to?.item_type ?? null, changed, different, deltas, slot, band } },
-            stylistId: look.stylistId,
+            layerStylistId: look.stylistId,
           }),
           recordEjection({ itemId: from.item_id, slot, band, occasion: null, anchorItemId: against.item_id, replacedBy: to?.item_id ?? null, deltas }),
         ])

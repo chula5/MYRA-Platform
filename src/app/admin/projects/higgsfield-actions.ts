@@ -23,14 +23,50 @@ const execFileP = promisify(execFile)
 const HF_MODEL = 'seedream_v4_5'
 
 /** Extract the first JSON array/object from CLI stdout (ignores any progress lines). */
+/**
+ * Every top-level JSON document in the CLI's stdout, in order. The old version
+ * sliced from the first '[' to the last ']', which cut the middle out of a job
+ * OBJECT that merely contains arrays (input_images, reference_elements) — so
+ * `generate wait` and `generate get` parsed as garbage from CLI 1.1.23 on
+ * (found 2026-10-11). This walks balanced brackets, honouring strings.
+ */
+function extractJsonDocs(stdout: string): string[] {
+  const s = stdout
+  const docs: string[] = []
+  let i = 0
+  while (i < s.length) {
+    const a = s.indexOf('{', i)
+    const b = s.indexOf('[', i)
+    const start = a === -1 ? b : b === -1 ? a : Math.min(a, b)
+    if (start === -1) break
+    let depth = 0
+    let inStr = false
+    let esc = false
+    let end = -1
+    for (let j = start; j < s.length; j++) {
+      const c = s[j]
+      if (inStr) {
+        if (esc) esc = false
+        else if (c === '\\') esc = true
+        else if (c === '"') inStr = false
+        continue
+      }
+      if (c === '"') inStr = true
+      else if (c === '{' || c === '[') depth++
+      else if (c === '}' || c === ']') { depth--; if (depth === 0) { end = j; break } }
+    }
+    if (end === -1) break
+    const candidate = s.slice(start, end + 1)
+    try { JSON.parse(candidate); docs.push(candidate) } catch { /* not a document: a stray bracket in prose */ }
+    i = end + 1
+  }
+  return docs
+}
+
+/** The LAST document: a wait that printed its polls ends on the final state. */
 function extractJson(stdout: string): string | null {
-  const start = stdout.indexOf('[')
-  const end = stdout.lastIndexOf(']')
-  if (start !== -1 && end > start) return stdout.slice(start, end + 1)
-  const oStart = stdout.indexOf('{')
-  const oEnd = stdout.lastIndexOf('}')
-  if (oStart !== -1 && oEnd > oStart) return stdout.slice(oStart, oEnd + 1)
-  return null
+  const docs = extractJsonDocs(stdout)
+  return docs.length ? docs[docs.length - 1] : null
 }
 
 /**
@@ -170,8 +206,11 @@ export async function runHiggsfieldGeneration(
     // one picture. Keep them all; the first is still the default so every
     // existing caller is unchanged.
     const createdList: any[] = Array.isArray(created) ? created : [created]
+    // CLI 1.1.23 (2026-08) prints a bare array of job-id strings; older builds
+    // printed job objects. Take either, or every shoot dies at "no provider job id".
+    const idOf = (j: any): unknown => (typeof j === 'string' ? j : j?.id ?? j?.job_id ?? j?.jobId)
     const providerJobIds: string[] = createdList
-      .map((j) => j?.id ?? j?.job_id ?? j?.jobId)
+      .map(idOf)
       .filter((u: unknown): u is string => typeof u === 'string' && !!u)
     if (!providerJobIds.length) {
       return { error: 'Higgsfield create returned no provider job id' }
@@ -185,7 +224,7 @@ export async function runHiggsfieldGeneration(
     const resultUrls: string[] = []
     let retrievalError: string | null = null
     for (const job of createdList) {
-      const jobId = job?.id ?? job?.job_id ?? job?.jobId
+      const jobId = idOf(job)
       if (typeof job?.result_url === 'string' && job.result_url) {
         resultUrls.push(job.result_url)
         continue

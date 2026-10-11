@@ -12,22 +12,25 @@
 //      the anchor (plus any `shortlistAdjust` pull), brand tiers kept in band
 //      (high-street / contemporary never with luxury / ultra; premium bridges).
 //   3. Cartesian product of the slot pools: the other garment (for a
-//      separates anchor) + shoes + bag. Outerwear and jewellery are never
-//      composed here — they are styled on afterwards, by hand.
+//      separates anchor) + shoes + bag. Review itself never composes
+//      outerwear or jewellery (styled on by hand); a member's look may ask for
+//      them as EXTRA slots, where a coat has to earn its place.
 //   4. House Style Constitution hard rules discard a combo before scoring;
 //      the learned skip-list is a soft penalty inside the verdict.
 //   5. Style Brain blend on top of the hand-tuned coherence score.
-//   6. Diversity: no piece in more than `maxUsesPerItem` of the picks.
+//   6. Diversity: no piece in more than `maxUsesPerItem` of the picks, and
+//      no two picks sharing all but one piece (no same-look-new-shoes twins).
 //
 // Pure: string-in, looks-out. Loading the model, learned pairs and ejection
 // constraints is the caller's job.
 
 import type { ItemWithBrand } from '@/lib/admin-queries'
 import { pairCompat, slotForItemType } from '@/lib/composer'
-import { evaluateHouseStyle, type HouseVerdict, type RuleHit } from '@/lib/house-style'
+import { evaluateHouseStyle, statementKind, type HouseVerdict, type RuleHit } from '@/lib/house-style'
 import { toHouseItem } from '@/lib/house-item'
 import { blendedScore, emptyModel, type FeatureItem, type StyleModel } from '@/lib/style-brain'
 import { formalityBand, hardSkipPairs, isExcluded, type EjectionConstraints } from '@/lib/pipeline'
+import { judgeLook, type MemberRules } from '@/lib/style-rules'
 
 // Anchor garments a review look is built around.
 export const REVIEW_DRESS = new Set(['mini_dress', 'midi_dress', 'maxi_dress', 'shirt_dress', 'slip_dress'])
@@ -63,6 +66,26 @@ export function reviewSlotsFor(cat: ReviewAnchorCategory): { garment: 'top' | 'b
   return { garment, slots: [...(garment ? [garment] : []), 'shoe', 'bag'] }
 }
 
+// A coat or jacket can also be the piece a look is built AROUND (Outfit
+// Review's type filter: "fur coat outfits"). Kept out of reviewAnchorCategory
+// on purpose: the Lab and the member composers pick their own anchors from the
+// garments, and only Review offers outerwear as an anchor.
+export type ReviewAnchorKind = ReviewAnchorCategory | 'outerwear'
+
+export function reviewAnchorKind(itemType: string | null | undefined): ReviewAnchorKind | null {
+  return reviewAnchorCategory(itemType) ?? (REVIEW_OUTERWEAR.has(String(itemType ?? '')) ? 'outerwear' : null)
+}
+
+/**
+ * The shapes a look can take for an anchor, one slot list per shape. A garment
+ * anchor has one shape (the other garment + shoes + bag); an outerwear anchor
+ * goes over separates OR over a dress, and the two shapes compete on score.
+ */
+export function reviewSlotPlansFor(kind: ReviewAnchorKind): string[][] {
+  if (kind === 'outerwear') return [['top', 'bottom', 'shoe', 'bag'], ['dress', 'shoe', 'bag']]
+  return [reviewSlotsFor(kind).slots]
+}
+
 /**
  * Library minus outerwear, the anchor, and any duplicate listing of it (same
  * image or same name), minus what the ejection constraints exclude for this
@@ -72,13 +95,14 @@ export function reviewLibrary(
   library: ItemWithBrand[],
   anchor: ItemWithBrand,
   constraints?: EjectionConstraints | null,
+  opts: { keepOuterwear?: boolean } = {},
 ): ItemWithBrand[] {
   const anchorImg = String(anchor.image_url ?? '')
   const anchorName = String(anchor.product_name ?? '').toLowerCase().trim()
   const band = formalityBand([anchor])
   return library.filter(
     (it) =>
-      !REVIEW_OUTERWEAR.has(String(it.item_type)) &&
+      (opts.keepOuterwear || !REVIEW_OUTERWEAR.has(String(it.item_type))) &&
       it.item_id !== anchor.item_id &&
       !(anchorImg && String(it.image_url) === anchorImg) &&
       !(anchorName && String(it.product_name ?? '').toLowerCase().trim() === anchorName) &&
@@ -110,12 +134,27 @@ export function reviewFeature(it: ItemWithBrand): FeatureItem {
   }
 }
 
+export interface ExtraSlot {
+  slot: string
+  /** A required extra slot with nothing to fill it means no look; an optional one competes with being left out. */
+  required: boolean
+  perSlotPool?: number
+}
+
 export interface ReviewComposeOpts {
   anchor: ItemWithBrand
   /** Already a `reviewLibrary` (or anything narrower). */
   library: ItemWithBrand[]
   /** Whose learned taste re-ranks: Chloe's live model in Review, the frozen stylist model in the Lab. */
   styleModel?: StyleModel | null
+  /**
+   * THE HOUSE BASE under `styleModel`: Chloe's learned model when the look is
+   * being composed for another stylist. Both blend in at their own confidence
+   * and their skip-pairs are pooled, so a stylist with ten decisions still
+   * composes on everything Chloe has taught, and her own ten narrow it. Leave
+   * unset when `styleModel` IS Chloe's — the same model twice would count double.
+   */
+  baseStyleModel?: StyleModel | null
   learnedPairs?: { approved: Set<string>; rejected: Set<string> } | null
   perSlotPool?: number
   count?: number
@@ -130,6 +169,32 @@ export interface ReviewComposeOpts {
   comboBonus?: (all: ItemWithBrand[]) => number
   /** A further hard gate on the whole look (anchor first): a member's rule layer, say. */
   lookGate?: (all: ItemWithBrand[]) => boolean
+  /**
+   * A MEMBER'S RULE LAYER (lib/style-rules). When given, the House Style
+   * Constitution is judged through her codes — global bans for everyone, her
+   * persona's constitution or Chloe's — instead of the whole constitution:
+   * a blocked code discards the combo, a soft one (the statement rule) lowers
+   * its score. This is how a persona that dropped the statement rule keeps it
+   * dropped, and how the relaxed pass can hand in the global bans alone.
+   */
+  rules?: MemberRules | null
+  /**
+   * Slots beyond the review shape (other garment + shoes + bag): outerwear
+   * when the weather calls for it, jewellery to finish. An optional slot's
+   * pool carries "leave it out", so a coat has to earn its place.
+   */
+  extraSlots?: ExtraSlot[]
+  /** Pieces fixed in their slot before anything is chosen: an owned bag or coat the look is built around. */
+  pinned?: { item: ItemWithBrand; slot: string }[]
+  /** The occasion, for the constitution's occasion rules. */
+  occasion?: string | null
+  /**
+   * Show fewer looks rather than pad the set with near-twins (Outfit Review,
+   * where every pick is shown side by side). Off, the twins still go to the
+   * back of the list — callers that run their own distinctness passes over a
+   * wide candidate list (pilot composer, Quality Lab) keep every candidate.
+   */
+  noTwins?: boolean
 }
 
 export interface ReviewPick {
@@ -145,96 +210,200 @@ export interface ReviewComposeResult {
   rejectionHits: RuleHit[]
 }
 
+const EXTRA_SLOT_POOL = 3
+
+/** How many pieces two picks of `n` additions may share before they read as the same outfit. */
+export function maxSharedWith(n: number): number {
+  return Math.max(1, n - 2)
+}
+/** Shortlist places kept for statement pieces when the anchor is plain. */
+const STATEMENT_RESERVE = 2
+
+/**
+ * Compose, widening the per-slot shortlist when nothing passes. Five pieces
+ * per slot is the right width when the shortlist has range; on a large
+ * library it can be five near-identical pieces (the same camel knit five
+ * times), and then the constitution refuses every combination for want of a
+ * fitted piece, an echo or a statement. Doubling the shortlist twice gives
+ * the rules something to choose from before the anchor is given up on.
+ */
 export function composeReviewLooks(opts: ReviewComposeOpts): ReviewComposeResult {
+  const base = opts.perSlotPool ?? REVIEW_PER_SLOT_POOL
+  let result = composeReviewLooksOnce({ ...opts, perSlotPool: base })
+  for (const size of [base * 2, base * 4]) {
+    if (result.picks.length > 0 || size > REVIEW_MAX_SLOT_POOL) break
+    result = composeReviewLooksOnce({ ...opts, perSlotPool: size })
+  }
+  return result
+}
+
+/** The widest a slot shortlist is allowed to grow (20³ = 8,000 combinations). */
+const REVIEW_MAX_SLOT_POOL = 20
+
+function composeReviewLooksOnce(opts: ReviewComposeOpts): ReviewComposeResult {
   const {
     anchor,
-    library,
     perSlotPool = REVIEW_PER_SLOT_POOL,
     count = REVIEW_PICK_COUNT,
     maxUsesPerItem = REVIEW_MAX_USES_PER_ITEM,
     shortlistAdjust,
     comboBonus,
     lookGate,
+    rules,
   } = opts
   const styleModel = opts.styleModel ?? emptyModel()
-  const cat = reviewAnchorCategory(anchor.item_type)
+  const baseModel = opts.baseStyleModel ?? null
+  const cat = reviewAnchorKind(anchor.item_type)
   if (!cat) return { picks: [], rejectionHits: [] }
+  const anchorSlot = slotForItemType(anchor.item_type)
   const anchorTier = anchor.brand?.price_tier ?? null
+  const pinned = opts.pinned ?? []
+  const pinnedIds = new Set(pinned.map((p) => p.item.item_id))
+  const library = pinnedIds.size ? opts.library.filter((it) => !pinnedIds.has(it.item_id)) : opts.library
 
-  // Top-ranked, brand-tier-coherent pieces per slot.
-  const pool = (slot: string) =>
-    library
+  // Top-ranked, brand-tier-coherent pieces per slot. When the anchor is a
+  // plain piece, the last STATEMENT_RESERVE places go to the best statement
+  // pieces (a hero print, a bold accessory, a colour pop) if the top of the
+  // list has none — the constitution wants exactly one statement element,
+  // and a shortlist of five perfectly compatible plain pieces can never
+  // provide it. Measured 2026-10-11 on a 7k library: an Isabel Marant black
+  // sweater produced 125 combinations and the rule refused every one.
+  const anchorIsStatement = statementKind(toHouseItem(anchor)) != null
+  const pool = (slot: string, size: number) => {
+    const ranked = library
       .filter((it) => slotForItemType(it.item_type) === slot && !tierBandViolation([anchorTier, it.brand?.price_tier ?? null]))
       .map((it) => ({ it, rank: pairCompat(anchor, it).total + (shortlistAdjust ? shortlistAdjust(it) : 0) }))
       .sort((a, b) => b.rank - a.rank)
-      .slice(0, perSlotPool)
-      .map((x) => x.it)
-
-  const pools = reviewSlotsFor(cat).slots
-    .map((slot) => ({ slot, items: pool(slot) }))
-    .filter((p) => p.items.length > 0) // best-effort if a slot is empty
-  if (pools.length === 0) return { picks: [], rejectionHits: [] }
-
-  // Cartesian product of the slot pools.
-  let combos: { item: ItemWithBrand; slot: string }[][] = [[]]
-  for (const p of pools) {
-    const next: typeof combos = []
-    for (const combo of combos) for (const it of p.items) next.push([...combo, { item: it, slot: p.slot }])
-    combos = next
+    const top = ranked.slice(0, size).map((x) => x.it)
+    if (anchorIsStatement || top.some((it) => statementKind(toHouseItem(it, slot)) != null)) return top
+    const statements = ranked.filter((x) => statementKind(toHouseItem(x.it, slot)) != null).slice(0, STATEMENT_RESERVE).map((x) => x.it)
+    if (statements.length === 0) return top
+    return [...top.slice(0, Math.max(0, size - statements.length)), ...statements]
   }
+
+  type Choice = { item: ItemWithBrand; slot: string } | null
+  // One cartesian product per shape the look can take (a garment anchor has
+  // one; an outerwear anchor goes over separates or over a dress), all scored
+  // together below.
+  const combos: Choice[][] = []
+  for (const coreSlots of reviewSlotPlansFor(cat)) {
+    const slotChoices: Choice[][] = []
+    const extras = (opts.extraSlots ?? []).filter((e) => !coreSlots.includes(e.slot) && e.slot !== anchorSlot)
+    let viable = true
+    for (const slot of coreSlots) {
+      const pin = pinned.find((p) => p.slot === slot)
+      const items = pin ? [pin.item] : pool(slot, perSlotPool)
+      if (items.length === 0) continue // best-effort if a core slot is empty
+      slotChoices.push(items.map((item) => ({ item, slot })))
+    }
+    for (const extra of extras) {
+      const pin = pinned.find((p) => p.slot === extra.slot)
+      const items = pin ? [pin.item] : pool(extra.slot, extra.perSlotPool ?? EXTRA_SLOT_POOL)
+      if (items.length === 0) {
+        if (extra.required) { viable = false; break }
+        continue
+      }
+      const choices: Choice[] = items.map((item) => ({ item, slot: extra.slot }))
+      if (!extra.required && !pin) choices.push(null) // leave it out
+      slotChoices.push(choices)
+    }
+    if (!viable || slotChoices.length === 0) continue
+
+    // Cartesian product of this shape's slot pools.
+    let shapeCombos: Choice[][] = [[]]
+    for (const choices of slotChoices) {
+      const next: Choice[][] = []
+      for (const combo of shapeCombos) for (const c of choices) next.push([...combo, c])
+      shapeCombos = next
+    }
+    combos.push(...shapeCombos)
+  }
+  if (combos.length === 0) return { picks: [], rejectionHits: [] }
 
   // HOUSE STYLE CONSTITUTION — the pre-score gate. Hard rules discard the
   // combo before it is scored; the learned skip-list is a SOFT penalty inside
-  // the verdict, not a ban. Written rules override learned statistics.
+  // the verdict, not a ban. Written rules override learned statistics. For a
+  // member the verdict is read through her rule layer (judgeLook).
   const houseOpts = {
+    occasion: opts.occasion ?? null,
     learnedApprovedPairs: opts.learnedPairs?.approved,
     learnedRejectedPairs: opts.learnedPairs?.rejected,
-    softSkipPairs: hardSkipPairs(styleModel),
+    softSkipPairs: baseModel
+      ? new Set([...hardSkipPairs(baseModel), ...hardSkipPairs(styleModel)])
+      : hardSkipPairs(styleModel),
   }
   const verdicts = new Map<string, HouseVerdict>()
+  const houseItemsOf = (items: { item: ItemWithBrand; slot: string }[]) =>
+    [toHouseItem(anchor), ...items.map((i) => toHouseItem(i.item, i.slot))]
   const verdictFor = (items: { item: ItemWithBrand; slot: string }[]) => {
     const key = items.map((i) => i.item.item_id).sort().join('|')
     let v = verdicts.get(key)
     if (!v) {
-      v = evaluateHouseStyle([toHouseItem(anchor), ...items.map((i) => toHouseItem(i.item, i.slot))], houseOpts)
+      v = evaluateHouseStyle(houseItemsOf(items), houseOpts)
       verdicts.set(key, v)
     }
     return v
   }
   const rejectionHits: RuleHit[] = []
-
-  const scored = combos
-    .filter((items) => !tierBandViolation([anchorTier, ...items.map((i) => i.item.brand?.price_tier ?? null)]))
-    .filter((items) => {
+  // Pass / penalty through the whole constitution (Review), or through her codes.
+  const judge = (items: { item: ItemWithBrand; slot: string }[]): { pass: boolean; penalty: number } => {
+    if (!rules) {
       const v = verdictFor(items)
       if (!v.pass) rejectionHits.push(...v.violations)
-      return v.pass
-    })
-    .filter((items) => !lookGate || lookGate([anchor, ...items.map((i) => i.item)]))
-    .map((items) => {
+      return { pass: v.pass, penalty: 0 }
+    }
+    const j = judgeLook(houseItemsOf(items), rules, houseOpts)
+    if (j.blocked) rejectionHits.push(...j.violations)
+    return { pass: !j.blocked, penalty: j.penalty }
+  }
+
+  const scored = combos
+    .map((combo) => combo.filter((c): c is { item: ItemWithBrand; slot: string } => c != null))
+    .filter((items) => items.length > 0)
+    .filter((items) => !tierBandViolation([anchorTier, ...items.map((i) => i.item.brand?.price_tier ?? null)]))
+    .map((items) => ({ items, judged: judge(items) }))
+    .filter(({ judged }) => judged.pass)
+    .filter(({ items }) => !lookGate || lookGate([anchor, ...items.map((i) => i.item)]))
+    .map(({ items, judged }) => {
       const all = [anchor, ...items.map((i) => i.item)]
-      const base = blendedScore(styleModel, reviewComboScore(anchor, items.map((i) => i.item)), all.map(reviewFeature))
-      const score = Math.max(0, Math.min(1, base + (comboBonus ? comboBonus(all) : 0)))
+      const features = all.map(reviewFeature)
+      const coherence = reviewComboScore(anchor, items.map((i) => i.item))
+      // The house base first, the stylist's own learning on top of it.
+      const base = blendedScore(styleModel, baseModel ? blendedScore(baseModel, coherence, features) : coherence, features)
+      const score = Math.max(0, Math.min(1, base - judged.penalty + (comboBonus ? comboBonus(all) : 0)))
       return { items, score, verdict: verdictFor(items) }
     })
     .sort((a, b) => b.score - a.score)
 
-  // Diversity: no single piece in more than `maxUsesPerItem` picks; top up
-  // from the rest only if that leaves the set short.
+  // Diversity: no single piece in more than `maxUsesPerItem` picks, and no
+  // pick a near-twin of one already taken. The per-piece cap alone let the
+  // top two scores through as the same dress + same bag with only the shoes
+  // swapped (2026-10-11: "the same outfit twice every time"), because two
+  // uses each is exactly what a twin needs. A pick may share at most
+  // `maxSharedWith(n)` of its pieces with any earlier pick — one of three,
+  // two of four. Top up in loosening passes only if that leaves the set
+  // short: drop the per-piece cap first, then (last resort, unless
+  // `noTwins`) the twin rule.
   const use = new Map<string, number>()
-  const picked: ReviewPick[] = []
-  for (const s of scored) {
-    if (s.items.some(({ item }) => (use.get(item.item_id) ?? 0) >= maxUsesPerItem)) continue
-    s.items.forEach(({ item }) => use.set(item.item_id, (use.get(item.item_id) ?? 0) + 1))
-    picked.push(s)
-    if (picked.length >= count) break
+  const picked: (typeof scored)[number][] = []
+  const shared = (a: (typeof scored)[number], b: (typeof scored)[number]) => {
+    const ids = new Set(b.items.map(({ item }) => item.item_id))
+    return a.items.filter(({ item }) => ids.has(item.item_id)).length
   }
-  if (picked.length < count) {
+  const isTwin = (s: (typeof scored)[number]) => picked.some((p) => shared(s, p) > maxSharedWith(Math.min(s.items.length, p.items.length)))
+  const passes: ((s: (typeof scored)[number]) => boolean)[] = [
+    (s) => !isTwin(s) && !s.items.some(({ item }) => (use.get(item.item_id) ?? 0) >= maxUsesPerItem),
+    (s) => !isTwin(s),
+    ...(opts.noTwins ? [] : [() => true]),
+  ]
+  for (const ok of passes) {
     for (const s of scored) {
-      if (picked.includes(s)) continue
-      picked.push(s)
       if (picked.length >= count) break
+      if (picked.includes(s) || !ok(s)) continue
+      s.items.forEach(({ item }) => use.set(item.item_id, (use.get(item.item_id) ?? 0) + 1))
+      picked.push(s)
     }
+    if (picked.length >= count) break
   }
   return { picks: picked, rejectionHits }
 }

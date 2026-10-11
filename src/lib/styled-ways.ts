@@ -17,7 +17,7 @@ import type { LookItem } from '@/lib/pilot-stylist'
 export type { StyledWayLook, WayMode } from '@/lib/styled-ways-core'
 export { WAYS } from '@/lib/styled-ways-core'
 
-const COLS = 'styled_way_id, member_id, hero_item_id, mode, items, item_ids, items_signature, verdict, confidence, why, occasion_id, occasion_label, source, judged_at, stale'
+const COLS = 'styled_way_id, member_id, hero_item_id, mode, items, item_ids, items_signature, verdict, confidence, why, occasion_id, occasion_label, source, judged_at, stale, image_url, reaction, saved_look_id'
 
 export interface WayToSave {
   items: LookItem[]

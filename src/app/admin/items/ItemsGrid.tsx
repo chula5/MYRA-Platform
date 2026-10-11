@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import StatusBadge from '@/components/admin/StatusBadge'
@@ -8,6 +8,10 @@ import StockBadge from '@/components/admin/StockBadge'
 import { PICKER_COLOURS, PICKER_TYPES } from '@/components/admin/ItemPickerModal'
 import type { ItemFacet, ItemWithBrand } from '@/lib/admin-queries'
 import { createOutfitFromSelectedItems, deleteItems } from '@/app/admin/items/actions'
+import { checkItemStock } from '@/app/admin/items/stock-check.gated'
+
+type StockStatus = 'in_stock' | 'low_stock' | 'out_of_stock' | 'unknown'
+const CHECK_CONCURRENCY = 4
 
 const SELECT_CLS = 'text-[10px] tracking-[0.09em] uppercase px-3 py-2 border border-[#E2E0DB] rounded-[10px] bg-white text-[#4A4E57] hover:border-[#0A0A0A] focus:outline-none focus:border-[#0A0A0A] transition-colors max-w-[240px]'
 const TYPE_LABELS = new Map(PICKER_TYPES.map((t) => [t.value, t.label]))
@@ -39,8 +43,16 @@ export default function ItemsGrid({ items, total, page, pageSize, brands, types,
   const [selectMode, setSelectMode] = useState(false)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
+  // CHECK STOCK on the selection: each selected piece is re-read at its
+  // retailer; the badges update as results land, and the low / out pieces can
+  // then be selected in one tap so DELETE acts on exactly those.
+  const [checking, setChecking] = useState(false)
+  const [checkDone, setCheckDone] = useState(0)
+  const [checkTotal, setCheckTotal] = useState(0)
+  const [checked, setChecked] = useState<Map<string, StockStatus | 'failed'>>(new Map())
 
   // Filters and page live in the URL — the server sends back one page of
   // matching items plus facet counts, so this stays fast at 10k+ items.
@@ -48,6 +60,21 @@ export default function ItemsGrid({ items, total, page, pageSize, brands, types,
   const fType = searchParams.get('type') ?? ''
   const fColour = searchParams.get('colour') ?? ''
   const fMonth = searchParams.get('month') ?? ''
+  const fStock = searchParams.get('stock') ?? ''
+  const fQuery = searchParams.get('q') ?? ''
+  // Search box: typed locally, pushed to the URL after a short pause.
+  const [query, setQuery] = useState(fQuery)
+  const pushedQuery = useRef(fQuery)
+  useEffect(() => {
+    if (fQuery !== pushedQuery.current) { pushedQuery.current = fQuery; setQuery(fQuery) }
+  }, [fQuery])
+  useEffect(() => {
+    const next = query.trim()
+    if (next === pushedQuery.current.trim()) return
+    const t = setTimeout(() => { pushedQuery.current = next; setParam('q', next) }, 350)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query])
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
   function setParam(key: string, value: string) {
@@ -84,12 +111,57 @@ export default function ItemsGrid({ items, total, page, pageSize, brands, types,
     if (chosen.length === 0) return
     setDeleting(true)
     setCreateError(null)
+    setNotice(null)
     const res = await deleteItems(chosen)
     setDeleting(false)
     setDeleteConfirm(false)
     if (res.error) { setCreateError(res.error); return }
+    if (res.archived) {
+      setNotice(
+        `Deleted ${res.count ?? 0} · archived ${res.archived} instead (affiliate or Quality Lab history)`,
+      )
+    }
     setSelected(new Set())
     router.refresh()
+  }
+
+  async function handleCheckStock() {
+    const chosen = Array.from(selected)
+    if (chosen.length === 0) return
+    setChecking(true)
+    setCreateError(null)
+    setChecked(new Map())
+    setCheckDone(0)
+    setCheckTotal(chosen.length)
+    const results = new Map<string, StockStatus | 'failed'>()
+    const queue = [...chosen]
+    async function worker() {
+      while (queue.length > 0) {
+        const id = queue.shift()
+        if (!id) return
+        const r = await checkItemStock(id)
+        results.set(id, r.error || !r.status ? 'failed' : r.status)
+        setChecked(new Map(results))
+        setCheckDone((d) => d + 1)
+      }
+    }
+    await Promise.all(Array.from({ length: CHECK_CONCURRENCY }, () => worker()))
+    setChecking(false)
+    router.refresh()
+  }
+
+  const checkedIds = (statuses: StockStatus[]) =>
+    Array.from(checked.entries()).filter(([, st]) => (statuses as string[]).includes(st)).map(([id]) => id)
+  const checkTally = {
+    low: checkedIds(['low_stock']).length,
+    out: checkedIds(['out_of_stock']).length,
+    ok: checkedIds(['in_stock']).length,
+    unknown: checkedIds(['unknown']).length,
+    failed: Array.from(checked.values()).filter((st) => st === 'failed').length,
+  }
+  function selectLowAndOut() {
+    setSelected(new Set(checkedIds(['low_stock', 'out_of_stock'])))
+    setDeleteConfirm(false)
   }
 
   async function handleCreateOutfit() {
@@ -142,6 +214,32 @@ export default function ItemsGrid({ items, total, page, pageSize, brands, types,
 
   return (
     <>
+      {/* Free-text search — brand, name, type and colour, every word must match */}
+      <div className="relative mb-3 max-w-[560px]">
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { const next = query.trim(); pushedQuery.current = next; setParam('q', next) }
+            if (e.key === 'Escape') setQuery('')
+          }}
+          placeholder="SEARCH ITEMS — E.G. ISABEL MARANT FUR JACKET"
+          aria-label="Search items"
+          className="w-full text-[13px] tracking-[0.05em] px-4 py-2.5 pr-10 border border-[#E2E0DB] rounded-[10px] bg-white text-[#4A4E57] placeholder:text-[#A8A8A4] placeholder:text-[11px] placeholder:tracking-[0.09em] hover:border-[#0A0A0A] focus:outline-none focus:border-[#0A0A0A] transition-colors"
+        />
+        {query && (
+          <button
+            type="button"
+            onClick={() => setQuery('')}
+            aria-label="Clear search"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-[14px] text-[#A8A8A4] hover:text-[#0A0A0A]"
+          >
+            ×
+          </button>
+        )}
+      </div>
+
       {/* Brand / type / colour / month-added filter dropdowns + pagination */}
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <select value={fBrand} onChange={(e) => setParam('brand', e.target.value)} className={SELECT_CLS}>
@@ -168,6 +266,21 @@ export default function ItemsGrid({ items, total, page, pageSize, brands, types,
             <option key={m.value} value={m.value}>{monthLabel(m.value)} · {m.count}</option>
           ))}
         </select>
+        {/* Stock — a toggle, not a dropdown: OUT OF STOCK is the one she reaches for before a cull. */}
+        {([['out_of_stock', 'OUT OF STOCK'], ['low_stock', 'LOW STOCK'], ['flagged', 'LOW + OUT']] as const).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setParam('stock', fStock === value ? '' : value)}
+            className={`text-[10px] tracking-[0.09em] px-3 py-1.5 transition-colors duration-200 ${
+              fStock === value
+                ? 'bg-[#B83A3A] text-white'
+                : 'border border-[#E8B4B4] text-[#B83A3A] hover:bg-[#FDECEC]'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
         <span className="text-[10px] tracking-[0.12em] text-[#6B6B6B] ml-1">
           {total} ITEM{total === 1 ? '' : 'S'}{totalPages > 1 ? ` · PAGE ${page} OF ${totalPages}` : ''}
         </span>
@@ -220,11 +333,42 @@ export default function ItemsGrid({ items, total, page, pageSize, brands, types,
               <button
                 type="button"
                 onClick={() => setDeleteConfirm(true)}
-                className="text-[10px] tracking-[0.09em] px-3 py-1.5 border border-[#E8B4B4] text-[#B83A3A] hover:bg-[#B83A3A] hover:text-white hover:border-[#B83A3A] transition-colors duration-200"
+                disabled={checking}
+                className="text-[10px] tracking-[0.09em] px-3 py-1.5 border border-[#E8B4B4] text-[#B83A3A] hover:bg-[#B83A3A] hover:text-white hover:border-[#B83A3A] transition-colors duration-200 disabled:opacity-50"
               >
                 🗑 DELETE
               </button>
             )
+          )}
+          {selectMode && hasSelection && !deleteConfirm && (
+            <button
+              type="button"
+              onClick={handleCheckStock}
+              disabled={checking || deleting}
+              title="Re-read every selected piece at its retailer"
+              className="text-[10px] tracking-[0.09em] px-3 py-1.5 border border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors duration-200 disabled:opacity-50"
+            >
+              {checking ? `CHECKING STOCK… ${checkDone}/${checkTotal}` : `✓ CHECK STOCK (${selected.size})`}
+            </button>
+          )}
+          {selectMode && !checking && checked.size > 0 && (
+            <>
+              <span className="text-[10px] tracking-[0.09em] text-[#4A4E57]">
+                {checkTally.ok} IN · {checkTally.low} LOW · {checkTally.out} OUT
+                {checkTally.unknown ? ` · ${checkTally.unknown} UNREADABLE` : ''}
+                {checkTally.failed ? ` · ${checkTally.failed} FAILED` : ''}
+              </span>
+              {checkTally.low + checkTally.out > 0 && (
+                <button
+                  type="button"
+                  onClick={selectLowAndOut}
+                  title="Select just the low and out-of-stock pieces, then DELETE"
+                  className="text-[10px] tracking-[0.09em] px-3 py-1.5 border border-[#E8B4B4] text-[#B83A3A] hover:bg-[#FDECEC] transition-colors duration-200"
+                >
+                  SELECT LOW + OUT ({checkTally.low + checkTally.out})
+                </button>
+              )}
+            </>
           )}
         </div>
 
@@ -296,6 +440,11 @@ export default function ItemsGrid({ items, total, page, pageSize, brands, types,
           {createError.toUpperCase()}
         </p>
       )}
+      {notice && !createError && (
+        <p className="text-[10px] tracking-[0.09em] text-[#4A4E57] mb-3 text-right">
+          {notice.toUpperCase()}
+        </p>
+      )}
 
       {/* Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
@@ -333,7 +482,7 @@ export default function ItemsGrid({ items, total, page, pageSize, brands, types,
                 <div className="absolute top-2 left-2 flex flex-col gap-1">
                   <StatusBadge status={item.status} />
                   {item.stock_status && item.stock_status !== 'in_stock' && (
-                    <StockBadge status={item.stock_status} size="sm" />
+                    <StockBadge status={(() => { const c = checked.get(item.item_id); return c && c !== 'failed' ? c : item.stock_status })()} size="sm" />
                   )}
                 </div>
               </div>
@@ -389,7 +538,7 @@ export default function ItemsGrid({ items, total, page, pageSize, brands, types,
       {shown.length === 0 && (
         <div className="py-20 text-center">
           <p className="text-[11px] tracking-[0.09em] text-[#A8A8A4]">
-            {total === 0 ? 'NOTHING MATCHES THESE FILTERS.' : 'NO ITEMS ON THIS PAGE.'}
+            {total === 0 ? (fQuery ? `NOTHING MATCHES “${fQuery.toUpperCase()}”.` : 'NOTHING MATCHES THESE FILTERS.') : 'NO ITEMS ON THIS PAGE.'}
           </p>
         </div>
       )}

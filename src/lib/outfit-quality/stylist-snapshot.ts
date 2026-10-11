@@ -45,10 +45,12 @@ export const SNAPSHOT_SYSTEM_VERSIONS: SystemVersions = {
   // snapshot frozen from now on. Sonnet 5.5 is several times faster than Opus
   // on the contact-sheet verdict and is what lets a chunk arrive in seconds.
   subjective_check_model: 'claude-sonnet-5-5',
-  // v2: the checker prompt is built from the frozen snapshot payload
-  // (constitution, brief, rules, learned model, inspiration summary).
-  subjective_prompt_version: 'quality-lab-subjective-v2',
-  composer_version: 'pilot-composer-v1',
+  // v3: the checker prompt also names the house base (Chloe's learned model)
+  // the stylist's rules stand on.
+  subjective_prompt_version: 'quality-lab-subjective-v3',
+  // v2: the review recipe (lib/review-compose) on Chloe's frozen house base,
+  // the stylist's own model and envelope layered on top.
+  composer_version: 'review-compose-v2',
   item_query_version: 'quality-lab-item-query-v1',
 }
 
@@ -104,11 +106,24 @@ export interface LoadedInspirationImage {
   created_at: string | null
 }
 
+/**
+ * THE HOUSE BASE: Chloe's learned model and her envelope, frozen beside the
+ * selected stylist's own so every stylist composes on top of what the house
+ * has learned. Loaded by the house stylist's immutable id; omitted (null in
+ * the payload) when the selected stylist IS the house.
+ */
+export interface LoadedHouseBase {
+  stylistId: string
+  model: LoadedLearnedModel
+  envelope: unknown | null
+}
+
 export interface SelectedStylistInputs {
   stylist: LoadedStylist
   itemMask: ItemMaskDecision[]
   learnedModel: LoadedLearnedModel
   confirmedInspiration: LoadedInspirationImage[]
+  houseBase?: LoadedHouseBase | null
   systemVersions?: SystemVersions
 }
 
@@ -215,12 +230,21 @@ export interface SnapshotPayload {
     decisions: { item_id: string; eligibility: string; source: string; updated_at: string | null }[]
   }
   learned_model: {
-    /** 'loaded' = this stylist's own model row; 'absent' = it has none (never borrowed). */
+    /** 'loaded' = this stylist's own model row; 'absent' = it has none. Her own is never substituted — the house is a separate, named layer below. */
     status: 'loaded' | 'absent'
     payload: unknown | null
     version: number | null
     decision_count: number
   }
+  /**
+   * THE HOUSE BASE under this stylist: Chloe's learned model and envelope,
+   * frozen with the batch. Null when the selected stylist is Chloe herself.
+   */
+  house_base: {
+    stylist_id: string
+    model: { status: 'loaded' | 'absent'; payload: unknown | null; version: number | null; decision_count: number }
+    envelope: { mean: number[]; spread: number[]; looks: number[][] | null } | null
+  } | null
   inspiration: {
     confirmed_count: number
     images: {
@@ -248,16 +272,32 @@ export interface SnapshotPayload {
   system_versions: SystemVersions
 }
 
+function frozenModel(m: LoadedLearnedModel): SnapshotPayload['learned_model'] {
+  return m.present
+    ? { status: 'loaded', payload: m.payload ?? null, version: m.version ?? null, decision_count: m.decisionCount }
+    : { status: 'absent', payload: null, version: null, decision_count: 0 }
+}
+
+function frozenHouseEnvelope(envelope: unknown): SnapshotPayload['house_base'] extends infer H ? (H extends { envelope: infer E } ? E : never) : never {
+  if (!isEnvelopeUsable(envelope)) return null
+  const e = envelope as { mean: number[]; spread: number[]; looks?: unknown }
+  const looks = Array.isArray(e.looks) ? (e.looks as unknown[]).filter((v): v is number[] => isValidVector(v)) : []
+  return { mean: [...e.mean], spread: [...e.spread], looks: looks.length ? looks : null }
+}
+
 /**
  * Build the complete canonical payload for one explicitly selected stylist.
- * Only this stylist's own evidence is included; nothing is ever borrowed. Set
- * like collections are sorted by a stable id so the payload — and therefore its
- * hash — is independent of load order.
+ * The stylist's own evidence is hers alone — never substituted — and the house
+ * base (Chloe's model + envelope) is frozen beside it as a separate, named
+ * layer, null when she IS the house. Set-like collections are sorted by a
+ * stable id so the payload — and therefore its hash — is independent of load
+ * order.
  */
 export function buildSnapshotPayload(inputs: SelectedStylistInputs): SnapshotPayload {
   const { stylist, itemMask, learnedModel } = inputs
   const brief = stylist.brief
   const systemVersions = inputs.systemVersions ?? SNAPSHOT_SYSTEM_VERSIONS
+  const houseBase = inputs.houseBase && inputs.houseBase.stylistId !== stylist.stylist_id ? inputs.houseBase : null
 
   // Only this stylist's own confirmed inspiration — never substituted.
   const confirmed = inputs.confirmedInspiration.filter((i) => i.status === 'confirmed')
@@ -311,16 +351,13 @@ export function buildSnapshotPayload(inputs: SelectedStylistInputs): SnapshotPay
       how_she_routes: brief.how_she_routes ?? null,
     },
     item_mask: { count: decisions.length, decisions },
-    learned_model: learnedModel.present
-      ? {
-          status: 'loaded',
-          payload: learnedModel.payload ?? null,
-          version: learnedModel.version ?? null,
-          decision_count: learnedModel.decisionCount,
-        }
-      : { status: 'absent', payload: null, version: null, decision_count: 0 },
+    learned_model: frozenModel(learnedModel),
+    house_base: houseBase
+      ? { stylist_id: houseBase.stylistId, model: frozenModel(houseBase.model), envelope: frozenHouseEnvelope(houseBase.envelope) }
+      : null,
     inspiration: { confirmed_count: confirmedCount, images },
-    // A rules-only snapshot carries no envelope at all — never a borrowed one.
+    // A rules-only snapshot carries no envelope of HER OWN — the house base
+    // above is the only other eye, and it is named as such.
     envelope: envelopeUsable
       ? { payload: stylist.envelope, status: stylist.envelope_status ?? null, computed_at: stylist.envelope_computed_at ?? null }
       : null,
@@ -399,6 +436,8 @@ export interface StylistSnapshotLoader {
    */
   loadLearnedModel(stylistId: string): Promise<LoadedLearnedModel>
   loadConfirmedInspiration(stylistId: string): Promise<LoadedInspirationImage[]>
+  /** The house base (Chloe's model + envelope). Optional: a loader without it freezes no base. */
+  loadHouseBase?(): Promise<LoadedHouseBase | null>
 }
 
 export interface StylistSnapshotInsert extends BuiltStylistSnapshot {
@@ -459,10 +498,11 @@ export async function createStylistSnapshot(args: CreateStylistSnapshotArgs): Pr
     throw new StylistSnapshotError('stylist_not_loadable', `Selected stylist ${stylistId} could not be loaded`, stylistId)
   }
 
-  const [itemMask, learnedModel, confirmedInspiration] = await Promise.all([
+  const [itemMask, learnedModel, confirmedInspiration, houseBase] = await Promise.all([
     loader.loadItemMask(stylistId),
     loader.loadLearnedModel(stylistId),
     loader.loadConfirmedInspiration(stylistId),
+    loader.loadHouseBase ? loader.loadHouseBase() : Promise.resolve(null),
   ])
 
   const built = buildStylistSnapshot({
@@ -470,6 +510,7 @@ export async function createStylistSnapshot(args: CreateStylistSnapshotArgs): Pr
     itemMask,
     learnedModel,
     confirmedInspiration,
+    houseBase,
     systemVersions: args.systemVersions,
   })
 

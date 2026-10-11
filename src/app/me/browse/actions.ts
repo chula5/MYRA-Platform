@@ -21,7 +21,7 @@
 
 import { createAdminClient } from '@/lib/supabase-server'
 import { resolveClientMember } from '@/lib/client-member'
-import { parseQuery, STOPWORDS, MATERIAL_TERMS, TYPE_FORMALITY, COLOUR, TYPE, MATERIAL, type ParsedQuery } from '@/lib/search-taxonomy'
+import { parseQuery, STOPWORDS, MATERIAL_TERMS, TYPE_FORMALITY, COLOUR, TYPE, MATERIAL, isTypoOf, type ParsedQuery } from '@/lib/search-taxonomy'
 import { rankPieces, facetCount, type RankContext, type Scored } from '@/lib/browse-rank'
 import { brandKey, loadBrandGraph, computeSimilarBrands } from '@/lib/brand-affinity'
 import { isOwnedItem } from '@/lib/wardrobe/owned-items'
@@ -163,6 +163,43 @@ function brandsInQuery(q: string, known: KnownBrand[]): { names: string[]; byKey
   return { names, byKey }
 }
 
+/**
+ * Her words with a misspelled label put right: "isabel marrant", "isabelle
+ * marant" and "antick batik" all read as the label. Each word may be one typo
+ * out, and at most two words of a label may be. A label spelled right is left
+ * alone, and a plain word ("black", "silk") is never bent into a label.
+ */
+function fixBrandTypos(q: string, known: KnownBrand[]): string {
+  const toks = brandKey(q).split(' ').filter(Boolean)
+  if (!toks.length) return q
+  let best: { at: number; len: number; key: string; slips: number } | null = null
+  for (const b of known) {
+    for (const k of b.keys) {
+      if (k.length < 5 || isPlainWord(k)) continue
+      const kt = k.split(' ')
+      for (let at = 0; at + kt.length <= toks.length; at++) {
+        let slips = 0
+        let ok = true
+        for (let i = 0; i < kt.length && ok; i++) {
+          const t = toks[at + i]
+          if (t === kt[i]) continue
+          // A one-word label needs a long word to bend: "sando" (a vest's
+          // name) must not turn into Sandro.
+          if (STOPWORDS.has(t) || isPlainWord(t) || (kt.length === 1 && t.length < 6) || !isTypoOf(t, kt[i])) ok = false
+          else slips += 1
+        }
+        if (!ok) continue
+        if (slips === 0) return q // spelled right: nothing to fix
+        if (slips <= 2 && (!best || kt.length > best.len || (kt.length === best.len && slips < best.slips))) {
+          best = { at, len: kt.length, key: k, slips }
+        }
+      }
+    }
+  }
+  if (!best) return q
+  return [...toks.slice(0, best.at), best.key, ...toks.slice(best.at + best.len)].join(' ')
+}
+
 // ── Reading the question back to her ─────────────────────────────────────────
 
 function formalityLabel(range: [number, number]): string {
@@ -233,8 +270,9 @@ export async function browseSearch(
 
   // 1. Read her words: which label, piece, colour, cloth and occasion she named.
   const known = await loadKnownBrands(admin)
-  const inQuery = brandsInQuery(q, known)
-  const parsed = parseQuery(q, inQuery.names)
+  const read = fixBrandTypos(q, known)
+  const inQuery = brandsInQuery(read, known)
+  const parsed = parseQuery(read, inQuery.names)
   const brandRows = parsed.brand ? (inQuery.byKey.get(brandKey(parsed.brand)) ?? []) : []
   const brandIds = brandRows.map((b) => b.brand_id)
   const brandName = brandRows[0]?.name ?? null
@@ -404,6 +442,14 @@ export async function saveBrowsedPiece(itemId: string, asMemberId?: string): Pro
   if (me.authUserId) {
     try { await admin.from('saved_item').upsert({ user_id: me.authUserId, item_id: itemId }, { onConflict: 'user_id,item_id' }) } catch { /* optional mirror */ }
   }
+
+  // Saved means she will come back to it: its ways are styled now (blend, the
+  // pool her saved shelf opens in). A queue problem never fails the save.
+  try {
+    const { enqueueWarmups, kickStyledWaysDrain } = await import('@/lib/styled-ways-queue')
+    const q = await enqueueWarmups(admin, me.memberId, [itemId], 'save')
+    if (q.queued.length) kickStyledWaysDrain()
+  } catch (err) { console.error('[saveBrowsedPiece] styled ways', err) }
   return { saved: true }
 }
 

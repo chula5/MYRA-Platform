@@ -22,7 +22,7 @@ export async function holdForMember(member: MirrorMember, product: SiteProduct, 
   const hero = ensured.item
   const host = (() => { try { return new URL(product.url).host.replace(/^www\./, '') } catch { return 'a brand site' } })()
 
-  const { data: memberRow } = await admin.from('pilot_member').select('member_id, room_weights').eq('member_id', member.member_id).single()
+  const { data: memberRow } = await admin.from('pilot_member').select('member_id').eq('member_id', member.member_id).single()
   if (!memberRow) return { error: 'Member not found' }
 
   // One open "held" delivery per member; a new one only when none is open.
@@ -52,7 +52,6 @@ export async function holdForMember(member: MirrorMember, product: SiteProduct, 
   const saved = await saveLook({
     delivery_id: deliveryId,
     position: (count ?? 0) + 1,
-    room_mix: memberRow.room_weights,
     items,
     notes: `Held on ${host} via MYRA Mirror${look && look.length ? ' — composed look' : ''}`,
   })

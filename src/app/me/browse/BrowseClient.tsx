@@ -13,9 +13,12 @@
 // likes, or ask MYRA to style it. Tapping a piece opens it on the shop's own
 // site (in Safari from the app) and keeps it chosen here for styling.
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import WaysToWear from '@/components/me/WaysToWear'
+import { WAYS_READY_EVENT } from '@/components/me/ways-watch'
+import { noticePieces } from '@/app/me/ways/actions'
+import { WAYS } from '@/lib/styled-ways-core'
 import { useScrollTo } from '@/lib/smooth-scroll'
 
 // A dress form on its stand — the mark at the top of the page that wiggles
@@ -45,6 +48,13 @@ const EMPTY_FACETS: BrowseFacets = { brands: [], colours: [], types: [] }
 const EMPTY_SIZES: BrowseSizes = { clothing: [], shoes: [], mineClothing: [], mineShoes: [], hasClothing: false, hasShoes: false }
 
 const titleCase = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+
+/** A card in view this long is one she is looking at, not scrolling past. */
+const DWELL_MS = 1_500
+/** Noticed cards travel to the server together, once the scroll settles. */
+const FLUSH_MS = 800
+/** Cards styled before she asks, per search — a scroll must not spend the judge on everything. */
+const BROWSE_WARM_PER_SEARCH = 8
 
 export default function BrowseClient() {
   const [draft, setDraft] = useState('')
@@ -77,6 +87,71 @@ export default function BrowseClient() {
   const waysRef = useRef<HTMLDivElement | null>(null)
   const scrollTo = useScrollTo()
   const [note, setNote] = useState<string | null>(null)
+  // How many of the three ways have landed while MYRA styles the chosen piece.
+  const [landed, setLanded] = useState(0)
+
+  // Styled before she asks (lib/styled-ways-queue). A card she rests on for a
+  // moment, or picks, is noticed: its ways in the shopping pool are queued
+  // then, so STYLE IT WITH SOMETHING NEW usually opens on an instant answer.
+  // Pieces that already have their ways carry a small mark.
+  const [ready, setReady] = useState<Set<string>>(new Set())
+  const observer = useRef<IntersectionObserver | null>(null)
+  const cardIds = useRef<WeakMap<Element, string>>(new WeakMap())
+  const dwell = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  const pending = useRef<Set<string>>(new Set())
+  const flush = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const warmedThisSearch = useRef<Set<string>>(new Set())
+
+  const markReady = (ids: string[]) => {
+    if (ids.length) setReady((s) => { const n = new Set(s); ids.forEach((id) => n.add(id)); return n })
+  }
+  function flushNotice() {
+    flush.current = null
+    const ids = Array.from(pending.current); pending.current.clear()
+    if (!ids.length) return
+    noticePieces(ids, 'inspiration', 'browse').then((r) => markReady(r.ready)).catch(() => { /* a warm-up is a nicety */ })
+  }
+  function noticeCard(id: string) {
+    if (warmedThisSearch.current.has(id) || warmedThisSearch.current.size >= BROWSE_WARM_PER_SEARCH) return
+    warmedThisSearch.current.add(id)
+    pending.current.add(id)
+    if (!flush.current) flush.current = setTimeout(flushNotice, FLUSH_MS)
+  }
+  function forgetCards() {
+    observer.current?.disconnect()
+    dwell.current.forEach(clearTimeout); dwell.current.clear()
+    warmedThisSearch.current.clear()
+  }
+  useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined') return
+    const timers = dwell.current
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        const id = cardIds.current.get(e.target)
+        if (!id) continue
+        const t = timers.get(id)
+        if (e.isIntersecting) {
+          if (!t) timers.set(id, setTimeout(() => { timers.delete(id); noticeCard(id) }, DWELL_MS))
+        } else if (t) { clearTimeout(t); timers.delete(id) }
+      }
+    }, { threshold: 0.6 })
+    observer.current = io
+    // A piece she walked away from mid-styling shows its mark when it lands.
+    const onReady = (e: Event) => { const d = (e as CustomEvent).detail; if (d?.mode === 'inspiration' && d.itemId) markReady([d.itemId]) }
+    window.addEventListener(WAYS_READY_EVENT, onReady)
+    return () => {
+      io.disconnect(); observer.current = null
+      timers.forEach(clearTimeout); timers.clear()
+      if (flush.current) clearTimeout(flush.current)
+      window.removeEventListener(WAYS_READY_EVENT, onReady)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  const registerCard = (el: HTMLElement | null, id: string) => {
+    if (!el || !observer.current) return
+    cardIds.current.set(el, id)
+    observer.current.observe(el)
+  }
 
   const [saved, setSaved] = useState<Set<string>>(new Set())
   const [savingId, setSavingId] = useState<string | null>(null)
@@ -90,7 +165,8 @@ export default function BrowseClient() {
     if (!q) return
     setAsked(q); setDraft(q)
     setBusy(true); setPieces(null); setError(null)
-    setPicked(null); setStyling(null); setNote(null)
+    setPicked(null); setStyling(null); setNote(null); setLanded(0)
+    forgetCards()
     const r = await browseSearch(q, filters)
     setBusy(false)
     setPieces(r.pieces); setRead(r.read); setError(r.error ?? null)
@@ -118,8 +194,9 @@ export default function BrowseClient() {
   function style(_piece: BrowsePiece, mode: 'wardrobe' | 'new') {
     setStyling((cur) => (cur === mode ? null : mode)); setPhase('idle'); setNote(null)
   }
+  const progress = landed > 0 && landed < WAYS ? `${landed} OF ${WAYS}` : 'STYLING…'
   const styleLabel = (mode: 'wardrobe' | 'new', idle: string) =>
-    styling !== mode ? idle : phase === 'working' ? 'STYLING…' : phase === 'ready' ? 'DONE' : idle
+    styling !== mode ? idle : phase === 'working' ? progress : phase === 'ready' ? 'DONE' : idle
 
   async function save(piece: BrowsePiece) {
     if (saved.has(piece.item_id) || savingId) return
@@ -140,7 +217,11 @@ export default function BrowseClient() {
     brand: p.brand ? { name: p.brand } : null,
   })
 
-  const pick = (p: BrowsePiece) => { setPicked(p.item_id); setStyling(null); setNote(null) }
+  const pick = (p: BrowsePiece) => {
+    setPicked(p.item_id); setStyling(null); setNote(null); setLanded(0)
+    // A head start: her pick is styled in the shopping pool before she chooses a button.
+    noticePieces([p.item_id], 'inspiration', 'pick').then((r) => markReady(r.ready)).catch(() => { /* a warm-up is a nicety */ })
+  }
 
   const similarTitle = similarKind === 'brands'
     ? `MORE LIKE ${(brandName ?? asked ?? '').toUpperCase()}`
@@ -156,6 +237,8 @@ export default function BrowseClient() {
           picked={picked === p.item_id}
           saved={saved.has(p.item_id)}
           saving={savingId === p.item_id}
+          ready={ready.has(p.item_id)}
+          cardRef={(el) => registerCard(el, p.item_id)}
           onPick={() => pick(p)}
           onSave={() => void save(p)}
         />
@@ -383,7 +466,7 @@ export default function BrowseClient() {
               aria-live="polite"
             >
               <Mannequin working={phase === 'working'} />
-              <span className="text-[16px] xl:text-[18px] tracking-[0.14em] text-[#2B2B2B]">{phase === 'working' ? 'STYLING…' : 'DONE · SEE IT'}</span>
+              <span className="text-[16px] xl:text-[18px] tracking-[0.14em] text-[#2B2B2B]">{phase === 'working' ? progress : 'DONE · SEE IT'}</span>
             </button>
           )}
           {styling && (
@@ -395,7 +478,7 @@ export default function BrowseClient() {
                 mode={styling === 'wardrobe' ? 'wardrobe' : 'inspiration'}
                 piece={{ item_id: chosen.item_id, product_name: chosen.product_name, brand: chosen.brand ?? null, image_url: chosen.image_url ?? null }}
                 heading={styling === 'wardrobe' ? 'WITH YOUR WARDROBE' : 'WITH SOMETHING NEW'}
-                onStatus={(st) => setPhase(st === 'opening' || st === 'working' ? 'working' : st === 'ready' ? 'ready' : st === 'idle' ? 'idle' : 'failed')}
+                onStatus={(st, n) => { setLanded(n); setPhase(st === 'opening' || st === 'working' ? 'working' : st === 'ready' ? 'ready' : st === 'idle' ? 'idle' : 'failed') }}
                 onClose={() => { setStyling(null); setPhase('idle') }}
               />
             </div>
@@ -412,12 +495,15 @@ export default function BrowseClient() {
 // through the tracked click-out, opened in a new tab — from the iOS app that
 // is Safari. Tapping also chooses the piece here, so the two ways to style it
 // are waiting when she comes back. STYLE chooses without leaving the page.
-function PieceCard({ piece, shopItem, picked, saved, saving, onPick, onSave }: {
+function PieceCard({ piece, shopItem, picked, saved, saving, ready = false, cardRef, onPick, onSave }: {
   piece: BrowsePiece
   shopItem: ShopLinkItem
   picked: boolean
   saved: boolean
   saving: boolean
+  /** MYRA already has this piece's ways in the shopping pool: a tap is instant. */
+  ready?: boolean
+  cardRef?: (el: HTMLDivElement | null) => void
   onPick: () => void
   onSave: () => void
 }) {
@@ -430,11 +516,12 @@ function PieceCard({ piece, shopItem, picked, saved, saving, onPick, onSave }: {
         {piece.brand && <p className="text-[12px] tracking-[0.12em] text-[#6E6B65] truncate">{piece.brand.toUpperCase()}</p>}
         <p className="text-[15px] text-[#2B2B2B] leading-tight truncate">{piece.product_name}</p>
         {piece.price_gbp != null && <p className="text-[13px] text-[#6E6B65] mt-0.5">£{Math.round(piece.price_gbp)}</p>}
+        {ready && <p className="text-[13px] tracking-[0.12em] text-[#7C838B] mt-1">STYLED · READY</p>}
       </div>
     </>
   )
   return (
-    <div className={`relative text-left bg-white rounded-[16px] overflow-hidden shadow-[0_1px_8px_rgba(43,43,43,0.06)] transition-shadow ${picked ? 'ring-2 ring-[#2B2B2B]' : ''}`}>
+    <div ref={cardRef} className={`relative text-left bg-white rounded-[16px] overflow-hidden shadow-[0_1px_8px_rgba(43,43,43,0.06)] transition-shadow ${picked ? 'ring-2 ring-[#2B2B2B]' : ''}`}>
       {piece.url ? (
         <ShopLink item={shopItem} onNavigate={onPick} className="block w-full text-left">
           {body}

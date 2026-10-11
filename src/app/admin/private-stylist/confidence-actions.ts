@@ -261,7 +261,6 @@ export type ScoredAskLook = AskPreviewLook & {
 
 export interface AskPreviewResult {
   looks: ScoredAskLook[]
-  mix: Record<string, number>
   /** Whether the look check ran, so the % means something. */
   scoreUsable: boolean
   /** Looks composed but not shown because they clashed or held a piece not in her size. */
@@ -287,7 +286,7 @@ export async function previewAskForMember(
   occasion: string,
   climate: string | null,
 ): Promise<AskPreviewResult> {
-  const empty: AskPreviewResult = { looks: [], mix: {}, scoreUsable: false }
+  const empty: AskPreviewResult = { looks: [], scoreUsable: false }
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user || user.id !== process.env.ADMIN_USER_ID) return { ...empty, error: 'Not authorised' }
@@ -306,7 +305,6 @@ export async function previewAskForMember(
     const failed = scored.filter(fails)
     const looks = passing.length ? passing.slice(0, ASK_LOOKS) : scored.slice(0, ASK_LOOKS)
     return {
-      mix: planned.mix ?? {},
       scoreUsable: scored.some((l) => l.check),
       looks,
       hiddenByCheck: passing.length ? failed.length : 0,

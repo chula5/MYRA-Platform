@@ -472,6 +472,14 @@ function classifyAndScore(p: {
   // type after all.
   const typeHay = hay.replace(AMBIGUOUS_CATEGORY, ' ')
   if (!itemType) for (const [re, t] of TYPE_RULES) { if (re.test(typeHay)) { itemType = t; break } }
+  // A bare "vest" falls to the sleeveless-top rule, but Antik Batik and
+  // Isabel Marant name their fur gilets "Ivan vest", "Jocya vest": the fur
+  // lives in the description or the material. When it says fur, shearling
+  // or padding, it is outerwear (Chloe, 2026-10-11).
+  if (itemType === 'blouse' && /\bvests?\b/.test(p.title.toLowerCase()) && !/\bvest[\s-]?top|\btank\b|\bcami/.test(p.title.toLowerCase())) {
+    const clothText = [tagValue(p.tags, 'material') ?? '', p.bodyText.slice(0, 600)].join(' ').toLowerCase()
+    if (/\b(?:faux[\s-]?fur|fur|shearling|sheepskin|sherpa|teddy|fourrure|padded|quilted|down[\s-]filled)\b/.test(clothText)) itemType = 'gilet'
+  }
 
   const colTag = (tagValue(p.tags, 'color') ?? tagValue(p.tags, 'colour') ?? '').toLowerCase()
   const optCol = p.optionColours.join(' ').toLowerCase()

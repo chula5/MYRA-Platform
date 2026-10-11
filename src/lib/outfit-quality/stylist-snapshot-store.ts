@@ -8,6 +8,7 @@
 
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase-server'
+import { CHLOE_STYLIST_ID } from '@/lib/outfit-quality/identities'
 import { parseBrief } from '@/lib/stylist-brief'
 import {
   createStylistSnapshot,
@@ -23,6 +24,7 @@ import {
   type SnapshotPayload,
   type SystemVersions,
   type StylistSnapshotResult,
+  type LoadedHouseBase,
 } from '@/lib/outfit-quality/stylist-snapshot'
 
 type Admin = ReturnType<typeof createAdminClient>
@@ -136,6 +138,25 @@ export function createSupabaseStylistSnapshotLoader(admin: Admin = createAdminCl
               ? model.decisions
               : 0,
       }
+    },
+
+    async loadHouseBase(): Promise<LoadedHouseBase | null> {
+      // THE HOUSE: Chloe's model and envelope, by her immutable stylist id —
+      // frozen beside the selected stylist's own so every batch composes on
+      // top of what the house has learned. A read error fails the run closed,
+      // like every other source.
+      const [model, { data: stylist, error }] = await Promise.all([
+        this.loadLearnedModel(CHLOE_STYLIST_ID),
+        db.from('stylist').select('envelope').eq('stylist_id', CHLOE_STYLIST_ID).maybeSingle(),
+      ])
+      if (error) {
+        throw new StylistSnapshotError(
+          'source_read_failed',
+          `house base read failed: ${error.message ?? 'unknown error'}`,
+          CHLOE_STYLIST_ID,
+        )
+      }
+      return { stylistId: CHLOE_STYLIST_ID, model, envelope: stylist?.envelope ?? null }
     },
 
     async loadConfirmedInspiration(stylistId: string): Promise<LoadedInspirationImage[]> {

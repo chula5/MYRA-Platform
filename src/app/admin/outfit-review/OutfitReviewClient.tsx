@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { thumbUrl } from '@/lib/image-utils'
 import { composeForReview, getReviewQueue } from './actions.gated'
-import type { ReviewAnchor, ReviewCandidate, ReviewItem } from './actions'
+import type { QueueFacet, ReviewAnchor, ReviewCandidate, ReviewItem } from './actions'
+import { PICKER_COLOURS, PICKER_TYPES } from '@/components/admin/ItemPickerModal'
 import { approveCandidate, rescoreCandidate, recordSkipDecision, recordSwap, recordFastLaneOutcome, recordReviewOutcome } from '@/app/admin/composer/actions.gated'
 import { generateHiggsfieldShootForOutfit } from '@/app/admin/projects/higgsfield-actions.gated'
 import type { Slot } from '@/lib/composer'
@@ -19,6 +20,8 @@ async function fetchReviewOptions(params: {
   exclude: string[]
   q: string
   brand?: string
+  colour?: string
+  itemType?: string
 }): Promise<{ options: ReviewItem[]; missingSlots?: string[]; brands?: { name: string; count: number }[] }> {
   const sp = new URLSearchParams()
   sp.set('mode', params.mode)
@@ -28,6 +31,8 @@ async function fetchReviewOptions(params: {
   if (params.slot) sp.set('slot', params.slot)
   if (params.present) sp.set('present', params.present.join(','))
   if (params.brand) sp.set('brand', params.brand)
+  if (params.colour) sp.set('colour', params.colour)
+  if (params.itemType) sp.set('type', params.itemType)
   try {
     const r = await fetch(`/api/admin/review-options?${sp.toString()}`, { cache: 'no-store' })
     if (!r.ok) return { options: [] }
@@ -70,84 +75,156 @@ interface CandState {
   shootError?: string
 }
 
+// Chip labels/swatches from the shared picker constants, so the queue's type
+// and colour chips match every other picker in the admin.
+const TYPE_LABEL = Object.fromEntries(PICKER_TYPES.map((t) => [t.value, t.label])) as Record<string, string>
+const COLOUR_SWATCH = Object.fromEntries(PICKER_COLOURS.map((c) => [c.value, c.swatch])) as Record<string, string>
+const CHIP = 'px-3 py-1.5 text-[9px] tracking-[0.1em] rounded-full border transition-colors disabled:opacity-50'
+const CHIP_ON = 'bg-[#0A0A0A] text-white border-[#0A0A0A]'
+const CHIP_OFF = 'text-[#6B6B6B] border-[#E2E0DB] hover:border-[#0A0A0A]'
+
+// Facets in the picker's order (coats first, then shirts…; colours by swatch
+// list), any value the picker doesn't know appended after.
+function orderFacets(facets: QueueFacet[], order: { value: string }[]): QueueFacet[] {
+  const byValue = new Map(facets.map((f) => [f.value, f]))
+  const known = order.map((o) => byValue.get(o.value)).filter((f): f is QueueFacet => !!f)
+  const rest = facets.filter((f) => !order.some((o) => o.value === f.value))
+  return [...known, ...rest]
+}
+
+function typeLabel(value: string): string {
+  return (TYPE_LABEL[value] ?? value.replace(/_/g, ' ')).toUpperCase()
+}
+
+type QueueQuery = { brand: string | null; type: string | null; colour: string | null; q: string }
+
 export default function OutfitReviewClient({
   anchors,
   brands = [],
+  types = [],
+  colours = [],
   mode = 'needs-more',
 }: {
   anchors: ReviewAnchor[]
   brands?: { name: string; count: number }[]
+  types?: QueueFacet[]
+  colours?: QueueFacet[]
   mode?: 'needs-more' | 'exactly-one'
 }) {
   const [queue, setQueue] = useState(anchors)
   const [visible, setVisible] = useState(8)
   const [refreshKey, setRefreshKey] = useState(0)  // remount cards on refresh
   const [refreshing, setRefreshing] = useState(false)
-  // Brand filter: null = all brands. A selected brand loads ALL of that brand's
-  // anchors still needing outfits (not just the shuffled 60).
-  const [brandFilter, setBrandFilter] = useState<string | null>(null)
-  const [brandLoading, setBrandLoading] = useState(false)
+  // Filters — brand, item type, colour and a text search — all AND together.
+  // null / '' = everything. A filtered queue loads up to 500 matching anchors
+  // still needing outfits (not just the shuffled 60) — more than any one type.
+  const [filter, setFilter] = useState<QueueQuery>({ brand: null, type: null, colour: null, q: '' })
+  const [searchInput, setSearchInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const reqRef = useRef(0) // drop stale responses when filters change quickly
+  const filtered = !!(filter.brand || filter.type || filter.colour || filter.q.trim())
 
-  // Reshuffle which anchors appear (they're the same on every page load otherwise).
-  async function refresh() {
-    setRefreshing(true)
-    const res = await getReviewQueue(brandFilter ? 300 : 60, true, mode, brandFilter)
-    setRefreshing(false)
-    if (res.anchors?.length) {
-      setQueue(res.anchors)
-      setVisible(8)
-      setRefreshKey((k) => k + 1)
-    }
-  }
-
-  // Filter the queue to a single brand's under-3-outfit items (or all).
-  async function selectBrand(name: string | null) {
-    if (brandLoading) return
-    setBrandFilter(name)
-    setBrandLoading(true)
-    const res = await getReviewQueue(name ? 300 : 60, false, mode, name)
-    setBrandLoading(false)
+  async function loadQueue(next: QueueQuery, shuffle = false) {
+    const id = ++reqRef.current
+    const any = !!(next.brand || next.type || next.colour || next.q.trim())
+    setLoading(true)
+    const res = await getReviewQueue(any ? 500 : 60, shuffle, mode, next.brand, {
+      q: next.q,
+      itemType: next.type ?? '',
+      colour: next.colour ?? '',
+      includeOuterwear: true,
+    })
+    if (id !== reqRef.current) return
+    setLoading(false)
     setQueue(res.anchors ?? [])
     setVisible(8)
     setRefreshKey((k) => k + 1)
   }
 
+  function applyFilter(patch: Partial<QueueQuery>) {
+    const next = { ...filter, ...patch }
+    setFilter(next)
+    void loadQueue(next)
+  }
+
+  // Text search, debounced: name, brand, type, colour or material.
+  useEffect(() => {
+    const q = searchInput.trim()
+    if (q === filter.q) return
+    const t = setTimeout(() => applyFilter({ q }), 300)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchInput])
+
+  // Reshuffle which anchors appear (they're the same on every page load otherwise).
+  async function refresh() {
+    setRefreshing(true)
+    await loadQueue(filter, true)
+    setRefreshing(false)
+  }
+
+  function clearFilters() {
+    setSearchInput('')
+    applyFilter({ brand: null, type: null, colour: null, q: '' })
+  }
+
+  const typeChips = orderFacets(types, PICKER_TYPES)
+  const colourChips = orderFacets(colours, PICKER_COLOURS)
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <p className="text-[10px] tracking-[0.14em] text-[#A8A8A4]">
-          {queue.length} ANCHOR{queue.length === 1 ? '' : 'S'} IN QUEUE
-          {brandFilter && <span className="text-[#4A4E57]"> · {brandFilter.toUpperCase()}</span>}
+          {loading ? 'LOADING…' : `${queue.length} ANCHOR${queue.length === 1 ? '' : 'S'} IN QUEUE`}
+          {filter.brand && <span className="text-[#4A4E57]"> · {filter.brand.toUpperCase()}</span>}
+          {filter.type && <span className="text-[#4A4E57]"> · {typeLabel(filter.type)}</span>}
+          {filter.colour && <span className="text-[#4A4E57]"> · {filter.colour.toUpperCase()}</span>}
+          {filter.q && <span className="text-[#4A4E57]"> · “{filter.q.toUpperCase()}”</span>}
         </p>
         <button
           onClick={refresh}
-          disabled={refreshing}
+          disabled={refreshing || loading}
           className="border border-[#0A0A0A] text-[#4A4E57] px-5 py-2 text-[10px] tracking-[0.14em] rounded-full hover:bg-[#0A0A0A] hover:text-white transition-colors disabled:opacity-50"
         >
           {refreshing ? 'SHUFFLING…' : '↻ REFRESH ANCHORS'}
         </button>
       </div>
 
-      {/* Brand filter — tap a brand to see only its items still needing outfits */}
+      {/* Search — "fur", "leopard", "silk", "wide leg": name, brand, type, colour or material */}
+      <div className="flex flex-col sm:flex-row gap-2">
+        <input
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          placeholder="SEARCH ANCHORS — FUR, LEOPARD, SILK, WIDE LEG, A BRAND…"
+          className="flex-1 border border-[#E2E0DB] rounded-[10px] px-4 py-2.5 text-[11px] tracking-[0.08em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A]"
+        />
+        {filtered && (
+          <button
+            onClick={clearFilters}
+            className="px-4 py-2.5 text-[10px] tracking-[0.14em] border border-[#E2E0DB] text-[#6B6B6B] rounded-full hover:border-[#0A0A0A] transition-colors"
+          >
+            ✕ CLEAR FILTERS
+          </button>
+        )}
+      </div>
+
+      {/* Brand — tap a brand to see only its pieces still needing outfits */}
       {brands.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[8px] tracking-[0.18em] text-[#A8A8A4] w-14">BRAND</span>
           <button
-            onClick={() => selectBrand(null)}
-            disabled={brandLoading}
-            className={`px-3 py-1.5 text-[9px] tracking-[0.1em] rounded-full border transition-colors disabled:opacity-50 ${
-              brandFilter === null ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'text-[#6B6B6B] border-[#E2E0DB] hover:border-[#0A0A0A]'
-            }`}
+            onClick={() => applyFilter({ brand: null })}
+            disabled={loading}
+            className={`${CHIP} ${filter.brand === null ? CHIP_ON : CHIP_OFF}`}
           >
             ALL BRANDS
           </button>
           {brands.map((b) => (
             <button
               key={b.name}
-              onClick={() => selectBrand(b.name)}
-              disabled={brandLoading}
-              className={`px-3 py-1.5 text-[9px] tracking-[0.1em] rounded-full border transition-colors disabled:opacity-50 ${
-                brandFilter === b.name ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'text-[#6B6B6B] border-[#E2E0DB] hover:border-[#0A0A0A]'
-              }`}
+              onClick={() => applyFilter({ brand: filter.brand === b.name ? null : b.name })}
+              disabled={loading}
+              className={`${CHIP} ${filter.brand === b.name ? CHIP_ON : CHIP_OFF}`}
             >
               {b.name.toUpperCase()} <span className="opacity-50">{b.count}</span>
             </button>
@@ -155,9 +232,46 @@ export default function OutfitReviewClient({
         </div>
       )}
 
+      {/* Item type — coats and jackets are anchors too, so "fur coat outfits" is one tap */}
+      {typeChips.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[8px] tracking-[0.18em] text-[#A8A8A4] w-14">TYPE</span>
+          {typeChips.map((t) => (
+            <button
+              key={t.value}
+              onClick={() => applyFilter({ type: filter.type === t.value ? null : t.value })}
+              disabled={loading}
+              className={`${CHIP} ${filter.type === t.value ? CHIP_ON : CHIP_OFF}`}
+            >
+              {typeLabel(t.value)} <span className="opacity-50">{t.count}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Colour */}
+      {colourChips.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[8px] tracking-[0.18em] text-[#A8A8A4] w-14">COLOUR</span>
+          {colourChips.map((c) => (
+            <button
+              key={c.value}
+              onClick={() => applyFilter({ colour: filter.colour === c.value ? null : c.value })}
+              disabled={loading}
+              className={`${CHIP} flex items-center gap-1.5 ${filter.colour === c.value ? CHIP_ON : CHIP_OFF}`}
+            >
+              {COLOUR_SWATCH[c.value] && (
+                <span className="w-2.5 h-2.5 rounded-full border border-[#E2E0DB]" style={{ background: COLOUR_SWATCH[c.value] }} />
+              )}
+              {c.value.toUpperCase()} <span className="opacity-50">{c.count}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {queue.length === 0 ? (
         <p className="text-[12px] tracking-[0.09em] text-[#A8A8A4] py-20 text-center">
-          EVERY ANCHOR ALREADY HAS 3+ OUTFITS — NOTHING TO REVIEW. 🎉
+          {loading ? 'LOADING…' : filtered ? 'NO ANCHORS MATCH THESE FILTERS.' : 'EVERY ANCHOR ALREADY HAS 3+ OUTFITS — NOTHING TO REVIEW. 🎉'}
         </p>
       ) : (
         <div className="space-y-12">
@@ -195,6 +309,8 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
   const [swapOptions, setSwapOptions] = useState<ReviewItem[]>([])
   const [swapQuery, setSwapQuery] = useState('')
   const [swapBrand, setSwapBrand] = useState('')
+  const [swapColour, setSwapColour] = useState('')
+  const [swapType, setSwapType] = useState('')
   const [swapBrands, setSwapBrands] = useState<{ name: string; count: number }[]>([])
   const [swapLoading, setSwapLoading] = useState(false)
 
@@ -264,6 +380,8 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
     setSwap({ candIdx, itemIdx, slot, mode: 'swap' })
     setSwapQuery('')
     setSwapBrand('')
+    setSwapColour('')
+    setSwapType('')
     setSwapLoading(true)
     const exclude = [anchor.item_id, ...cands[candIdx].items.map((i) => i.item_id)]
     const res = await fetchReviewOptions({ mode: 'swap', anchor: anchor.item_id, slot, exclude, q: '' })
@@ -278,6 +396,8 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
     setSwap({ candIdx, itemIdx: -1, slot: '', mode: 'add' })
     setSwapQuery('')
     setSwapBrand('')
+    setSwapColour('')
+    setSwapType('')
     setSwapLoading(true)
     const exclude = [anchor.item_id, ...cands[candIdx].items.map((i) => i.item_id)]
     const present = cands[candIdx].items.map((i) => i.slot)
@@ -287,15 +407,16 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
     setSwapLoading(false)
   }
 
-  // Re-run the current swap/add search with the given text query + brand filter.
-  async function runSwapSearch(q: string, brand: string) {
+  // Re-run the current swap/add search with the given text query + brand,
+  // colour and type filters (all AND).
+  async function runSwapSearch(q: string, brand: string, colour = swapColour, itemType = swapType) {
     if (!swap) return
     setSwapLoading(true)
     const exclude = [anchor.item_id, ...cands[swap.candIdx].items.map((i) => i.item_id)]
     const res =
       swap.mode === 'add'
-        ? await fetchReviewOptions({ mode: 'add', anchor: anchor.item_id, present: cands[swap.candIdx].items.map((i) => i.slot), exclude, q, brand })
-        : await fetchReviewOptions({ mode: 'swap', anchor: anchor.item_id, slot: swap.slot, exclude, q, brand })
+        ? await fetchReviewOptions({ mode: 'add', anchor: anchor.item_id, present: cands[swap.candIdx].items.map((i) => i.slot), exclude, q, brand, colour, itemType })
+        : await fetchReviewOptions({ mode: 'swap', anchor: anchor.item_id, slot: swap.slot, exclude, q, brand, colour, itemType })
     setSwapOptions(res.options)
     // Keep the brand list in sync with the current text query (but not the
     // brand filter itself — the server computes it before applying the filter).
@@ -311,6 +432,18 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
   function runSwapBrand(brand: string) {
     setSwapBrand(brand)
     void runSwapSearch(swapQuery, brand)
+  }
+
+  function runSwapColour(colour: string) {
+    const next = swapColour === colour ? '' : colour
+    setSwapColour(next)
+    void runSwapSearch(swapQuery, swapBrand, next, swapType)
+  }
+
+  function runSwapType(itemType: string) {
+    const next = swapType === itemType ? '' : itemType
+    setSwapType(next)
+    void runSwapSearch(swapQuery, swapBrand, swapColour, next)
   }
 
   async function performSwap(opt: ReviewItem) {
@@ -517,6 +650,34 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
                   <option key={b.name} value={b.name}>{b.name.toUpperCase()} ({b.count})</option>
                 ))}
               </select>
+            </div>
+            {/* Colour + type chips — the same filters as every other picker */}
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {PICKER_COLOURS.map((c) => (
+                <button
+                  key={c.value}
+                  onClick={() => runSwapColour(c.value)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 text-[8px] tracking-[0.08em] rounded-full border transition-colors ${
+                    swapColour === c.value ? 'border-[#0A0A0A] bg-[#0A0A0A] text-white' : 'border-[#E2E0DB] text-[#4A4E57] hover:border-[#0A0A0A]'
+                  }`}
+                >
+                  <span className="w-2.5 h-2.5 rounded-full border border-[#E2E0DB]" style={{ background: c.swatch }} />
+                  {c.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-1.5 mb-4">
+              {PICKER_TYPES.map((t) => (
+                <button
+                  key={t.value}
+                  onClick={() => runSwapType(t.value)}
+                  className={`px-2.5 py-1.5 text-[8px] tracking-[0.08em] rounded-full border transition-colors ${
+                    swapType === t.value ? 'border-[#0A0A0A] bg-[#0A0A0A] text-white' : 'border-[#E2E0DB] text-[#4A4E57] hover:border-[#0A0A0A]'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
             </div>
             {swapLoading ? (
               <p className="text-[10px] tracking-[0.16em] text-[#A8A8A4] py-8 text-center">LOADING…</p>

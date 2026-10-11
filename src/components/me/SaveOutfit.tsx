@@ -16,17 +16,24 @@ const EVERY_MS = 6_000
 const MAX_POLLS = 40
 
 export default function SaveOutfit({
-  items, why, occasion, testMemberId, label = 'Save this outfit',
+  items, why, occasion, testMemberId, label = 'Save this outfit', styledWayId, pictureUrl, initialLookId, onSaved,
 }: {
   items: LookItem[]
   why?: string
   occasion?: string | null
   testMemberId?: string
   label?: string
+  /** The kept way this outfit came from: the save links back to it. */
+  styledWayId?: string
+  /** MYRA's picture already made for this way: the saved look uses it, no second shoot. */
+  pictureUrl?: string | null
+  /** Already saved (a like did it): open in the saved state. */
+  initialLookId?: string | null
+  onSaved?: (lookId: string) => void
 }) {
-  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-  const [lookId, setLookId] = useState<string | null>(null)
-  const [imageUrl, setImageUrl] = useState<string | null>(null)
+  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>(initialLookId ? 'saved' : 'idle')
+  const [lookId, setLookId] = useState<string | null>(initialLookId ?? null)
+  const [imageUrl, setImageUrl] = useState<string | null>(pictureUrl ?? null)
   const [waited, setWaited] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const live = useRef(true)
@@ -34,10 +41,10 @@ export default function SaveOutfit({
 
   async function save() {
     setState('saving'); setError(null)
-    const r = await saveMyOutfit(items, why ?? '', occasion ?? null, testMemberId)
+    const r = await saveMyOutfit(items, why ?? '', occasion ?? null, testMemberId, { styledWayId, imageUrl: pictureUrl ?? null })
     if (!live.current) return
     if (r.error || !r.lookId) { setState('error'); setError(r.error ?? 'Could not save this outfit'); return }
-    setState('saved'); setLookId(r.lookId)
+    setState('saved'); setLookId(r.lookId); onSaved?.(r.lookId)
   }
 
   // The picture: polled while it is being made, shown the moment it lands.

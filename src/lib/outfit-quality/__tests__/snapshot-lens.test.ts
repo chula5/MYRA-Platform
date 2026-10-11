@@ -3,7 +3,8 @@
 // and a rules-only or model-less snapshot yields nothing, never a borrowed lens.
 
 import { describe, it, expect } from 'vitest'
-import { personaLensFromSnapshot, styleModelFromSnapshot } from '@/lib/outfit-quality/snapshot-lens'
+import { personaLensFromSnapshot, styleModelFromSnapshot, houseBaseModelFromSnapshot, houseLensFromSnapshot } from '@/lib/outfit-quality/snapshot-lens'
+import { HOUSE_LENS_WEIGHT } from '@/lib/pilot-composer'
 import { VECTOR_DIM } from '@/lib/taste-vector'
 import { PERSONA_START_WEIGHT } from '@/lib/user-persona'
 
@@ -64,5 +65,38 @@ describe('styleModelFromSnapshot', () => {
   it('is null when the stylist has no model of her own (never borrowed)', () => {
     expect(styleModelFromSnapshot(payload({ learned_model: { status: 'absent', payload: null, version: null, decision_count: 0 } }))).toBeNull()
     expect(styleModelFromSnapshot(payload({ learned_model: { status: 'loaded', payload: { nonsense: true }, version: null, decision_count: 0 } }))).toBeNull()
+  })
+})
+
+describe('house base', () => {
+  const houseBase = () => ({
+    stylist_id: 'chloe',
+    model: { status: 'loaded', payload: { version: 3, decisions: 400, approves: 300, skips: 100, singles: { 'colour:black': [300, 20] }, pairs: {} }, version: 3, decision_count: 400 },
+    envelope: { mean: vec(0.55), spread: vec(0.1), looks: [vec(0.5), vec(0.6), [1, 2]] },
+  })
+
+  it('reads the house model out as the base, separate from her own', () => {
+    const base = houseBaseModelFromSnapshot(payload({ house_base: houseBase() }))
+    expect(base?.decisions).toBe(400)
+    expect(styleModelFromSnapshot(payload({ house_base: houseBase() }))?.decisions).toBe(12)
+    expect(houseBaseModelFromSnapshot(payload({ house_base: null }))).toBeNull()
+    expect(houseBaseModelFromSnapshot(payload())).toBeNull()
+  })
+
+  it('gives a rules-only stylist a lens with the house layer alone', () => {
+    const lens = personaLensFromSnapshot(payload({ rules_only: true, house_base: houseBase() }))
+    expect(lens).toBeDefined()
+    expect(lens!.envelope).toBeNull()
+    expect(lens!.house?.weight).toBe(HOUSE_LENS_WEIGHT)
+    expect(lens!.house?.envelope?.mean).toHaveLength(VECTOR_DIM)
+    expect(lens!.house?.looks).toHaveLength(2) // the malformed look is dropped
+  })
+
+  it('layers the house under her own envelope, and is absent when she is the house', () => {
+    const lens = personaLensFromSnapshot(payload({ house_base: houseBase() }))
+    expect(lens!.envelope?.mean).toHaveLength(VECTOR_DIM)
+    expect(lens!.house?.envelope?.mean).toHaveLength(VECTOR_DIM)
+    expect(houseLensFromSnapshot(payload({ house_base: null }))).toBeUndefined()
+    expect(personaLensFromSnapshot(payload({ rules_only: true, house_base: null }))).toBeUndefined()
   })
 })

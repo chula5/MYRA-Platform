@@ -42,6 +42,11 @@ export const TYPE: Record<string, string[]> = {
   top: _TOPS, tops: _TOPS, shirt: ['shirt'], blouse: ['blouse'], tee: ['t-shirt'], tshirt: ['t-shirt'],
   knit: ['knitwear'], knitwear: ['knitwear'], jumper: ['knitwear'], sweater: ['knitwear'], cardigan: ['knitwear'], corset: ['corset'], bodysuit: ['bodysuit'],
   coat: ['coat'], trench: ['trench'], jacket: ['jacket'], blazer: ['blazer'], gilet: ['gilet'], cape: ['cape'],
+  coats: ['coat'], jackets: ['jacket'], blazers: ['blazer'], gilets: ['gilet'], capes: ['cape'],
+  // A gilet is sold as a vest or a body warmer as often as a gilet. "Vest"
+  // alone is also a sleeveless top here, so it reaches both.
+  bodywarmer: ['gilet'], bodywarmers: ['gilet'], vest: ['gilet', 'blouse', 'knitwear'], vests: ['gilet', 'blouse', 'knitwear'],
+  waistcoat: ['blouse', 'gilet'], waistcoats: ['blouse', 'gilet'],
   shoe: _SHOES, shoes: _SHOES, boot: ['boot'], boots: ['boot'], heel: ['heel'], heels: ['heel'], pump: ['heel'], flat: ['flat'], flats: ['flat'], sneaker: ['sneaker'], trainer: ['sneaker'], mule: ['mule'], sandal: ['sandal'], sandals: ['sandal'],
   bag: _BAGS, bags: _BAGS, handbag: _BAGS, tote: ['tote'], clutch: ['clutch'], crossbody: ['crossbody'],
   jewellery: _JEWEL, jewelry: _JEWEL, necklace: ['necklace'], earrings: ['earrings'], bracelet: ['bracelet'], ring: ['ring'], brooch: ['brooch'],
@@ -55,6 +60,8 @@ export const MATERIAL: Record<string, string> = {
   satin: 'satin', silk: 'silk', velvet: 'velvet', leather: 'leather', suede: 'suede', denim: 'denim',
   linen: 'linen', cotton: 'cotton', wool: 'wool', tweed: 'tweed', crochet: 'crochet', knitted: 'knit',
   mesh: 'mesh', organza: 'organza', chiffon: 'chiffon', cashmere: 'cashmere', jersey: 'jersey',
+  fur: 'fur', furs: 'fur', furry: 'fur', fluffy: 'fur', fourrure: 'fur',
+  shearling: 'shearling', sheepskin: 'shearling', sherpa: 'shearling', teddy: 'shearling',
 }
 
 // Canonical material tag → every word on a label that COUNTS as that cloth.
@@ -82,6 +89,9 @@ export const MATERIAL_TERMS: Record<string, string[]> = {
   organza: ['organza'],
   chiffon: ['chiffon'],
   jersey: ['jersey'],
+  // Shearling is fur to her: "fur gilet" shows the shearling ones too.
+  fur: ['fur', 'faux fur', 'fourrure', 'shearling', 'sheepskin', 'sherpa', 'teddy', 'mongolian'],
+  shearling: ['shearling', 'sheepskin', 'sherpa', 'teddy'],
 }
 
 // Cloths that can share a name without contradicting each other. A word for
@@ -93,6 +103,7 @@ const MATERIAL_GROUP: Record<string, string> = {
   wool: 'knit', cashmere: 'knit', knit: 'knit', tweed: 'knit', jersey: 'knit',
   cotton: 'woven', linen: 'woven', denim: 'woven',
   leather: 'skin', suede: 'skin',
+  fur: 'fur', shearling: 'fur',
 }
 function namesAnotherCloth(text: string | null | undefined, material: string): boolean {
   const group = MATERIAL_GROUP[material]
@@ -137,6 +148,8 @@ const TYPE_PHRASES: Record<string, TypePhrase> = {
   'wide leg pants': { types: ['trousers'], descriptor: 'wide leg' },
   'wide leg jeans': { types: ['jeans'], descriptor: 'wide leg' },
   'tank top': { types: _TOPS, descriptor: 'tank' },
+  'vest top': { types: _TOPS, descriptor: 'vest' },
+  'body warmer': { types: ['gilet'] },
   'ankle boots': { types: ['boot'], descriptor: 'ankle' },
   'ankle boot': { types: ['boot'], descriptor: 'ankle' },
   'knee high boots': { types: ['boot'], descriptor: 'knee' },
@@ -231,37 +244,51 @@ export const STOPWORDS = new Set([
   // How she asks: "what should I wear to a wedding", "find me a silk skirt please".
   'what', 'should', 'could', 'would', 'can', 'do', 'does', 'go', 'going', 'have', 'has', 'is', 'it', 'be', 'am', 'are', 'im',
   'please', 'find', 'show', 'get', 'like', 'piece', 'pieces', 'clothes', 'ideas', 'idea', 'options', 'from', 'by', 'or', 'as',
+  // Praise words carry no facet — and "best" is one slip from "belt".
+  'best', 'good', 'nice', 'perfect', 'lovely',
 ])
 
 // ── Normalisation + fuzzy matching ───────────────────────────────────────────
 
-function levenshtein(a: string, b: string): number {
+// Edit distance with a swapped pair counted as one slip ("jakcet"), so
+// "sherling", "gillet" and "jakcet" each sit one typo from the word.
+function editDistance(a: string, b: string): number {
   const m = a.length, n = b.length
   if (Math.abs(m - n) > 1) return 2 // we only care about ≤1
-  const dp = Array.from({ length: m + 1 }, (_, i) => i)
-  for (let j = 1; j <= n; j++) {
-    let prev = dp[0]; dp[0] = j
-    for (let i = 1; i <= m; i++) {
-      const tmp = dp[i]
-      dp[i] = a[i - 1] === b[j - 1] ? prev : 1 + Math.min(prev, dp[i], dp[i - 1])
-      prev = tmp
+  const d: number[][] = Array.from({ length: m + 1 }, (_, i) => Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)))
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost)
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1)
     }
   }
-  return dp[m]
+  return d[m][n]
 }
 
-// Fuzzy-lookup a token in a dictionary (exact, then Levenshtein ≤ 1 for typos).
-function fuzzyGet<T>(dict: Record<string, T>, token: string): T | undefined {
+/**
+ * Is `token` one typo away from `word`? Only for words of four letters or
+ * more, and a short word must keep its first letter — "best" is not "vest",
+ * "boat" is not "boot".
+ */
+export function isTypoOf(token: string, word: string): boolean {
+  if (token === word) return true
+  if (token.length < 4 || word.length < 4) return false
+  if (token.length <= 5 && token[0] !== word[0]) return false
+  return editDistance(token, word) <= 1
+}
+
+// Fuzzy-lookup a token in a dictionary (exact, then one typo).
+export function fuzzyGet<T>(dict: Record<string, T>, token: string): T | undefined {
   if (dict[token] !== undefined) return dict[token]
-  if (token.length < 4) return undefined // don't fuzzy tiny tokens
   for (const key of Object.keys(dict)) {
-    if (!key.includes(' ') && Math.abs(key.length - token.length) <= 1 && levenshtein(key, token) <= 1) return dict[key]
+    if (!key.includes(' ') && isTypoOf(token, key)) return dict[key]
   }
   return undefined
 }
 
 function escapeRe(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\function normalise(raw: string): string {')
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 function normalise(raw: string): string {
@@ -326,19 +353,36 @@ export function parseQuery(raw: string, knownBrands: string[] = []): ParsedQuery
     if (compact !== key && compact.length >= 4 && new RegExp(`\\b${escapeRe(compact)}\\b`).test(text)) { p.brand = b; consume(compact); break }
   }
 
-  // 3. Single tokens (with fuzzy typo tolerance).
-  for (const tok of text.split(' ').filter(Boolean)) {
+  // 3. Single tokens (with fuzzy typo tolerance). A word that is spelled
+  // right in any dictionary is read as that word before any typo is guessed,
+  // so "boat" stays an occasion rather than becoming "boot".
+  const exactAnywhere = (tok: string) =>
+    [COLOUR, TYPE, MATERIAL, OCCASION_RULES, OCCASION, SETTING, FORMALITY, TIME].some((d) => (d as Record<string, unknown>)[tok] !== undefined) || SEASON.includes(tok)
+  for (let tok of text.split(' ').filter(Boolean)) {
     if (STOPWORDS.has(tok)) continue
-    const c = fuzzyGet(COLOUR, tok); if (c) { add(p.colourFamilies, [c]); continue }
-    const t = fuzzyGet(TYPE, tok); if (t) { add(p.itemTypes, t); continue }
-    const m = fuzzyGet(MATERIAL, tok); if (m) { add(p.materials, [m]); continue }
-    const rule = fuzzyGet(OCCASION_RULES, tok); if (rule) { applyRule(p, addGroup, rule); continue }
-    const o = fuzzyGet(OCCASION, tok); if (o) { addGroup(o); continue }
-    const s = fuzzyGet(SETTING, tok); if (s) { addGroup(s); continue }
+    if (!exactAnywhere(tok)) {
+      // Settle the typo once, against every dictionary in the same order.
+      for (const d of [COLOUR, TYPE, MATERIAL, OCCASION_RULES, OCCASION, SETTING, FORMALITY, TIME] as Record<string, unknown>[]) {
+        const key = Object.keys(d).find((k) => !k.includes(' ') && isTypoOf(tok, k))
+        if (key) { tok = key; break }
+      }
+    }
+    // tok is now spelled right (or unknown), so the lookups are exact.
+    const c = COLOUR[tok]; if (c) { add(p.colourFamilies, [c]); continue }
+    const t = TYPE[tok]; if (t) { add(p.itemTypes, t); continue }
+    const m = MATERIAL[tok]; if (m) { add(p.materials, [m]); continue }
+    const rule = OCCASION_RULES[tok]; if (rule) { applyRule(p, addGroup, rule); continue }
+    const o = OCCASION[tok]; if (o) { addGroup(o); continue }
+    const s = SETTING[tok]; if (s) { addGroup(s); continue }
     if (SEASON.includes(tok)) { const season = tok === 'fall' ? 'autumn' : tok; addGroup([season]); add(p.seasons, [season]); continue }
-    const f = fuzzyGet(FORMALITY, tok); if (f) { p.formalityRange = mergeRange(p.formalityRange, f); continue }
-    const td = fuzzyGet(TIME, tok); if (td != null) { p.timeOfDay = td; continue }
+    const f = FORMALITY[tok]; if (f) { p.formalityRange = mergeRange(p.formalityRange, f); continue }
+    const td = TIME[tok]; if (td != null) { p.timeOfDay = td; continue }
     if (tok.length > 2) p.intentTerms.push(tok) // leftover adjective → soft signal
+  }
+  // A fur or shearling "jacket" or "coat" is very often a sleeveless one:
+  // Antik Batik and Isabel Marant sell theirs as vests and gilets.
+  if (p.materials.some((m) => m === 'fur' || m === 'shearling') && p.itemTypes.some((t) => t === 'jacket' || t === 'coat')) {
+    add(p.itemTypes, ['gilet'])
   }
   return p
 }

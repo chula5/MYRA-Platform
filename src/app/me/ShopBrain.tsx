@@ -18,9 +18,11 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import ShopLink from '@/components/ShopLink'
 import ComposedLookCard from '@/components/me/ComposedLookCard'
+import Mannequin from '@/components/me/Mannequin'
+import { WAYS } from '@/lib/styled-ways-core'
 import { useScrollTo } from '@/lib/smooth-scroll'
 import { loadShopBrain, type ShopBrainView, type ShopPiece } from './shop-brain-actions'
-import { warmUpShopBrain, pollWaysMany } from './ways/actions'
+import { warmUpShopBrain, pollWaysMany, openWaysToWear } from './ways/actions'
 import type { StyledLook } from '@/app/admin/private-stylist/actions'
 import type { StyledWayLook } from '@/lib/styled-ways-core'
 
@@ -169,8 +171,8 @@ function Door({
               neighbours, and it is set above the tallest wrap so nothing is
               clipped. */}
           <p
-            className="bg-[rgba(255,255,255,0.9)] backdrop-blur-[2px] rounded-full flex items-center justify-center px-2 sm:px-3 text-center text-[10px] md:text-[13px] tracking-[0.05em] leading-[1.15] text-[#2B2B2B] shadow-[0_2px_16px_rgba(43,43,43,0.16)]"
-            style={{ width: 'min(180px, 88%)', height: 'clamp(44px, 2.8vw, 54px)' }}
+            className="bg-[rgba(255,255,255,0.9)] backdrop-blur-[2px] rounded-full flex items-center justify-center px-3 sm:px-4 text-center text-[15px] md:text-[17px] xl:text-[19px] tracking-[0.05em] leading-[1.15] text-[#2B2B2B] shadow-[0_2px_16px_rgba(43,43,43,0.16)]"
+            style={{ width: 'min(260px, 90%)', height: 'clamp(54px, 3.6vw, 68px)' }}
           >
             {title}
           </p>
@@ -223,7 +225,17 @@ export default function ShopBrain({ testMemberId, onReady }: {
   const [failed, setFailed] = useState<Record<string, string>>({})
   const queued = useRef(false)
   const openRef = useRef<HTMLDivElement>(null)
+  const outfitsRef = useRef<HTMLDivElement>(null)
   const scrollTo = useScrollTo()
+  // Pieces MYRA is styling on this visit (the pill at the top counts them),
+  // the ones she tapped herself, and the last of those to come back ready.
+  const [track, setTrack] = useState<string[]>([])
+  const tapped = useRef<Set<string>>(new Set())
+  const [ready, setReady] = useState<string | null>(null)
+  const [hintGone, setHintGone] = useState(false)
+  const [, bump] = useState(0)
+  const pageLive = useRef(true)
+  useEffect(() => { pageLive.current = true; return () => { pageLive.current = false } }, [])
 
   // The section draws nothing until the view arrives, and on a phone the call
   // can be dropped with the page — a suspended tab, a flaky network — so it
@@ -258,12 +270,39 @@ export default function ShopBrain({ testMemberId, onReady }: {
   // watches the shelf fill. A piece never styled before reads as "working";
   // one MYRA could not style says so.
   const done = useRef<Set<string>>(new Set())
+
+  // Watch pieces until MYRA has finished them. A piece she tapped herself
+  // turns the pill to READY when its outfits land.
+  async function pollUntilDone(ids: string[], live: () => boolean) {
+    let pending = ids.filter((id) => !done.current.has(id))
+    let polls = 0
+    while (live() && pending.length && polls++ < 40) {
+      await new Promise((r) => setTimeout(r, 3000))
+      pending = pending.filter((id) => !done.current.has(id))
+      if (!pending.length) break
+      const r = await pollWaysMany(pending, testMemberId).catch(() => ({} as Awaited<ReturnType<typeof pollWaysMany>>))
+      if (!live()) return
+      for (const id of pending) {
+        const x = r[id]
+        if (!x) continue
+        if (x.looks.length) setLooks((l) => ({ ...l, [id]: x.looks }))
+        if (x.status !== 'working') {
+          done.current.add(id)
+          if (!x.looks.length) setFailed((f) => ({ ...f, [id]: x.error ?? 'Nothing MYRA would put with it yet.' }))
+          else if (tapped.current.has(id)) setReady(id)
+        }
+      }
+      pending = pending.filter((id) => !done.current.has(id))
+      bump((n) => n + 1)
+    }
+  }
+
   useEffect(() => {
     if (!view?.saved.length || queued.current) return
     queued.current = true
     setAnchor((a) => a ?? view.saved[0].item_id)
     let live = true
-    const ids = view.saved.slice(0, 6).map((s) => s.item_id)
+    const ids = view.saved.slice(0, 12).map((s) => s.item_id)
     void (async () => {
       const w = await warmUpShopBrain(testMemberId).catch(() => ({ looks: {} as Record<string, StyledWayLook[]>, working: [] as string[], capped: false }))
       if (!live) return
@@ -275,26 +314,44 @@ export default function ShopBrain({ testMemberId, onReady }: {
         done.current.add(id)
       }
       pending = pending.filter((id) => !done.current.has(id))
-      let polls = 0
-      while (live && pending.length && polls++ < 40) {
-        await new Promise((r) => setTimeout(r, 3000))
-        const r = await pollWaysMany(pending, testMemberId).catch(() => ({} as Awaited<ReturnType<typeof pollWaysMany>>))
-        if (!live) return
-        for (const id of pending) {
-          const x = r[id]
-          if (!x) continue
-          if (x.looks.length) setLooks((l) => ({ ...l, [id]: x.looks }))
-          if (x.status !== 'working') {
-            done.current.add(id)
-            if (!x.looks.length) setFailed((f) => ({ ...f, [id]: x.error ?? 'Nothing MYRA would put with it yet.' }))
-          }
-        }
-        pending = pending.filter((id) => !done.current.has(id))
-      }
+      setTrack((t) => Array.from(new Set([...t, ...pending])))
+      await pollUntilDone(pending, () => live)
     })()
     return () => { live = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view])
+
+  // A TAP: her piece comes forward, the page goes down to its outfits, and a
+  // piece without its three is styled now — a tap job jumps the warm-ups.
+  async function pick(id: string) {
+    setAnchor(id)
+    setHintGone(true)
+    if (ready === id) setReady(null)
+    setTimeout(() => { if (outfitsRef.current) scrollTo(outfitsRef.current, { offset: -24 }) }, 50)
+    if ((looks[id]?.length ?? 0) >= WAYS) return
+    done.current.delete(id)
+    tapped.current.add(id)
+    setFailed((f) => { const n = { ...f }; delete n[id]; return n })
+    setTrack((t) => (t.includes(id) ? t : [...t, id]))
+    const r = await openWaysToWear(id, {}, testMemberId).catch(() => null)
+    if (!pageLive.current) return
+    if (r?.looks.length) setLooks((l) => ({ ...l, [id]: r.looks as StyledWayLook[] }))
+    if (!r || r.status !== 'working') {
+      done.current.add(id)
+      if (!r?.looks.length) setFailed((f) => ({ ...f, [id]: r?.error ?? 'MYRA could not style this piece just now.' }))
+      bump((n) => n + 1)
+      return
+    }
+    await pollUntilDone([id], () => pageLive.current)
+  }
+
+  // The pill: tap it and she is at the outfits, whichever door was open.
+  function goToReady() {
+    setDoor('styled')
+    if (ready) setAnchor(ready)
+    setReady(null)
+    setTimeout(() => { if (outfitsRef.current) scrollTo(outfitsRef.current, { offset: -24 }) }, 80)
+  }
 
   function toggle(d: Door) {
     const next = door === d ? null : d
@@ -308,6 +365,9 @@ export default function ShopBrain({ testMemberId, onReady }: {
   const labels = view.brands.slice(0, 2)
   const current = anchor ? view.saved.find((s) => s.item_id === anchor) ?? view.saved[0] : view.saved[0]
   const shown = current ? looks[current.item_id] : undefined
+  const stillWorking = track.filter((id) => !done.current.has(id))
+  const finishedCount = track.length - stillWorking.length
+  const currentWorking = !!current && !done.current.has(current.item_id)
   const brandsTitle = 'MORE FROM YOUR BRANDS'
   const brandsNote = 'FROM THE BRANDS YOU LOVE'
   const firstLook = current ? looks[current.item_id]?.[0] : undefined
@@ -335,7 +395,23 @@ export default function ShopBrain({ testMemberId, onReady }: {
         {view.fromLooking && <p className="myra-section-note mt-3">FROM WHAT YOU LOOKED AT{view.searches.length ? ' AND SEARCHED FOR' : ''}</p>}
       </div>
 
-      {/* The three doors. */}
+      {/* The mark at the top of the page: the dress form wiggles while MYRA
+          styles, and says READY when a piece she tapped is done — tap it to
+          come back to the outfits from anywhere on the page. */}
+      {(stillWorking.length > 0 || ready) && (
+        <button
+          type="button"
+          onClick={goToReady}
+          className="fixed top-[150px] right-5 sm:right-8 z-[60] flex items-center gap-3 rounded-full bg-white/95 shadow-[0_10px_30px_-12px_rgba(43,43,43,0.6)] pl-3 pr-5 py-2"
+          aria-live="polite"
+        >
+          <Mannequin working={!ready} />
+          <span className="text-[16px] xl:text-[18px] tracking-[0.14em] text-[#2B2B2B]">
+            {ready ? 'READY · SEE IT' : `STYLING ${Math.min(finishedCount + 1, track.length)} OF ${track.length}`}
+          </span>
+        </button>
+      )}
+
       {/* The three doors. A phone stacks them down the page, one at a time,
           so each picture is read at its own size; a desktop stands them in a
           row, which is how the row of three was drawn. The row waits for a
@@ -377,7 +453,7 @@ export default function ShopBrain({ testMemberId, onReady }: {
             <div>
               <p className={HEAD}>{door === 'similar' ? 'MORE OF THE SAME' : door === 'brands' ? brandsTitle : 'STYLED FOR YOU'}</p>
               <p className={NOTE}>
-                {door === 'similar' ? 'CLOSE TO WHAT YOU KEPT' : door === 'brands' ? brandsNote : 'HOVER A PIECE FOR ITS OUTFITS · TAP TO SEE THEM FULL SIZE'}
+                {door === 'similar' ? 'CLOSE TO WHAT YOU KEPT' : door === 'brands' ? brandsNote : 'TAP A PIECE TO STYLE IT'}
               </p>
             </div>
             <button type="button" onClick={() => setDoor(null)} aria-label="Close" className="text-[19px] tracking-[0.14em] text-[#4A4E57] underline underline-offset-4 whitespace-nowrap">
@@ -406,6 +482,16 @@ export default function ShopBrain({ testMemberId, onReady }: {
 
           {door === 'styled' && (
             <>
+              {!hintGone && (
+                <div className="flex justify-center mb-8">
+                  <p
+                    className="animate-bounce bg-white rounded-full px-6 py-3 text-[17px] xl:text-[19px] tracking-[0.12em] text-[#2B2B2B] shadow-[0_2px_16px_rgba(43,43,43,0.16)]"
+                    style={{ animationIterationCount: 3 }}
+                  >
+                    ♥ TAP A PIECE TO STYLE IT ↓
+                  </p>
+                </div>
+              )}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-x-6 gap-y-10">
                 {view.saved.map((s) => (
                   <StyledPiece
@@ -415,21 +501,27 @@ export default function ShopBrain({ testMemberId, onReady }: {
                     working={busy === s.item_id || !done.current.has(s.item_id)}
                     note={failed[s.item_id]}
                     active={current?.item_id === s.item_id}
-                    onPick={() => setAnchor(s.item_id)}
+                    onPick={() => void pick(s.item_id)}
                   />
                 ))}
               </div>
 
               {current && (
-                <p className="text-[21px] xl:text-[24px] text-[#2B2B2B] mt-12">
+                <p ref={outfitsRef} className="text-[21px] xl:text-[24px] text-[#2B2B2B] mt-12 scroll-mt-6">
                   {current.brand ?? current.product_name}
                   {current.host ? <span className="text-[#7C838B]"> · {current.kind === 'viewed' ? 'you looked at this on ' : ''}{current.host}</span> : null}
                 </p>
               )}
 
               <div className="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                {shown ? (
-                  shown.map((l, i) => <ComposedLookCard key={i} look={l} heroId={current?.item_id} />)
+                {shown?.length ? (
+                  // Each outfit shows the moment it is judged; the rest keep their place.
+                  <>
+                    {shown.map((l, i) => <ComposedLookCard key={i} look={l} heroId={current?.item_id} saveable testMemberId={testMemberId} />)}
+                    {currentWorking && Array.from({ length: Math.max(0, WAYS - shown.length) }).map((_, i) => (
+                      <div key={`w${i}`} className="h-[260px] rounded-[18px] bg-gradient-to-r from-[#EFEFED] via-[#F7F7F5] to-[#EFEFED] animate-pulse" />
+                    ))}
+                  </>
                 ) : current && !failed[current.item_id] ? (
                   [0, 1, 2].map((i) => (
                     <div key={i} className="h-[260px] rounded-[18px] bg-gradient-to-r from-[#EFEFED] via-[#F7F7F5] to-[#EFEFED]" />

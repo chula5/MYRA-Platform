@@ -41,8 +41,7 @@ export async function keepStyledLook(
   const me = await resolveClientMember(asMemberId)
   if (!me || !me.test) return { error: 'Only her stylist can send a look to her looks' }
   const occ = occasion || 'casual_day'
-  const mix = await impl.effectiveWeightsForMember(me.memberId, occ)
-  return impl.keepAskPreview(me.memberId, occ, null, why || '', mix, [{ items, notes: why || null }], [], false)
+  return impl.keepAskPreview(me.memberId, occ, null, why || '', [{ items, notes: why || null }], [], false)
 }
 
 /** The pieces she saved from the shops, through the mirror. */

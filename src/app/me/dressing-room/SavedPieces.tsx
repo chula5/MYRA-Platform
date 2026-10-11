@@ -23,7 +23,18 @@ export default function SavedPieces({ testMemberId }: { testMemberId?: string })
 
   useEffect(() => {
     let live = true
-    void loadMySavedPieces(testMemberId).then((r) => { if (!live) return; setPieces(r.pieces); setError(r.error ?? null) })
+    void loadMySavedPieces(testMemberId).then((r) => {
+      if (!live) return
+      setPieces(r.pieces); setError(r.error ?? null)
+      // The morning note links a piece straight here (?piece=<id>): open its ways.
+      try {
+        const wanted = new URLSearchParams(window.location.search).get('piece')
+        if (wanted && r.pieces.some((p) => p.item_id === wanted)) {
+          setOpen(wanted)
+          setTimeout(() => document.getElementById(`saved-${wanted}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150)
+        }
+      } catch { /* no window, no deep link */ }
+    })
     return () => { live = false }
   }, [testMemberId])
 
@@ -49,7 +60,9 @@ export default function SavedPieces({ testMemberId }: { testMemberId?: string })
         {pieces.map((p) => {
           const gone = p.stock_status === 'out_of_stock'
           return (
-            <SavedTile key={p.item_id} piece={p} open={open === p.item_id} gone={gone} onOpen={() => setOpen(p.item_id)} />
+            <div key={p.item_id} id={`saved-${p.item_id}`}>
+              <SavedTile piece={p} open={open === p.item_id} gone={gone} onOpen={() => setOpen(p.item_id)} />
+            </div>
           )
         })}
       </div>

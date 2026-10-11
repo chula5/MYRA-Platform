@@ -213,15 +213,13 @@ export async function requestLooks(
   try {
     const admin = createAdminClient() as any
     const { data: member } = await admin
-      .from('pilot_member').select('room_weights, work_dress_code, is_synthetic').eq('member_id', me.memberId).single()
+      .from('pilot_member').select('is_synthetic').eq('member_id', me.memberId).single()
 
-    const { effectiveWeights } = await import('@/lib/pilot-stylist')
     const row: Record<string, unknown> = {
       member_id: me.memberId,
       trigger: 'request',
       request_text: words.trim() || CLIENT_OCCASIONS.find((o) => o.id === occasion)?.label || '',
       occasion,
-      effective_weights: effectiveWeights(member?.room_weights, occasion as any, member?.work_dress_code),
       is_synthetic: !!member?.is_synthetic,
     }
     if (climate) row.climate = climate

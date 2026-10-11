@@ -142,6 +142,15 @@ export function accumulate(acc: number[], outfitVec: number[], weight: number): 
   return out
 }
 
+/**
+ * A look's taste vector from the pieces themselves — what the outfit IS, not
+ * the target it was composed for. Replaces the retired room-mix vector on
+ * delivery looks and taste events (2026-10-10).
+ */
+export function lookVectorFromItems(items: any[]): number[] {
+  return buildOutfitVector({ occasion_tags: [], outfit_item: items.map((item) => ({ item })) } as any)
+}
+
 export function zeroVector(): number[] {
   return new Array(VECTOR_DIM).fill(0)
 }

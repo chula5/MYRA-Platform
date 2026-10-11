@@ -14,6 +14,8 @@
 const GBP_PER: Record<string, number> = {
   GBP: 1,
   EUR: 0.857,
+  // South Korean won (LÉMÉLS): ~1,800 ₩ to the pound, so a 298,000 ₩ flat is ~£165, not £298,000.
+  KRW: 0.00055,
   USD: 0.747,
   AUD: 0.521,
   CAD: 0.532,
@@ -31,7 +33,7 @@ const GBP_PER: Record<string, number> = {
 }
 
 const SYMBOL: Record<string, string> = {
-  GBP: '£', USD: '$', EUR: '€', AUD: 'A$', CAD: 'C$', JPY: '¥', CHF: 'CHF ',
+  GBP: '£', USD: '$', EUR: '€', AUD: 'A$', CAD: 'C$', JPY: '¥', CHF: 'CHF ', KRW: '₩',
   DKK: 'kr ', SEK: 'kr ', NOK: 'kr ', PLN: 'zł ', CZK: 'Kč ',
 }
 

@@ -23,6 +23,7 @@ import {
   change,
   type Bucket,
 } from '@/lib/metrics-core'
+import { WAYS } from '@/lib/styled-ways-core'
 
 export const METRIC_KEYS = [
   'outfits-generated',
@@ -37,6 +38,7 @@ export const METRIC_KEYS = [
   'composer-reject-rate',
   'render-failure-rate',
   'search-zero-rate',
+  'ways-coverage',
 ] as const
 
 export type MetricKey = (typeof METRIC_KEYS)[number]
@@ -125,6 +127,9 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
     adSpend,
     signupDates,
     stockCounts,
+    demand,
+    waysJobs,
+    waysFresh,
   ] = await Promise.all([
     readSince<{ created_at: string; decided_at: string | null; status: string; overridden: boolean; lane: string; prerender_status: string }>(
       'composed_outfit',
@@ -162,6 +167,19 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
     ),
     listSignupDates(),
     currentStockCounts(),
+    readSince<{ first_seen_at: string; last_seen_at: string; member_id: string; hero_item_id: string; mode: string; source: string; taps: number; tap_hits: number }>(
+      'styled_way_demand',
+      'first_seen_at',
+      since,
+      'first_seen_at, last_seen_at, member_id, hero_item_id, mode, source, taps, tap_hits',
+    ),
+    readSince<{ created_at: string; status: string; priority: number; reason: string; first_look_ms: number | null; cost_gbp: number | null }>(
+      'styled_way_job',
+      'created_at',
+      since,
+      'created_at, status, priority, reason, first_look_ms, cost_gbp',
+    ),
+    freshWayCounts(),
   ])
 
   // ── Composition ───────────────────────────────────────────────────────────
@@ -204,6 +222,25 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
     'created_at',
     buckets,
   )
+
+  // ── Ways to wear ──────────────────────────────────────────────────────────
+  // Coverage: of the pieces put in front of members (styled_way_demand, by the
+  // week first seen), how many have their three fresh ways NOW. A point-in-
+  // time numerator over a per-week denominator, so an old week can climb as
+  // the nightly sweep catches up. The area card uses the last 7 days.
+  const wayKey = (r: Record<string, any>) => `${r.member_id}|${r.hero_item_id}|${r.mode}`
+  const isCovered = (r: Record<string, any>) => (waysFresh.get(wayKey(r)) ?? 0) >= WAYS
+  const surfacedSeries = bucketCount(demand.rows, 'first_seen_at', buckets)
+  const coveredSeries = bucketCount(demand.rows, 'first_seen_at', buckets, isCovered)
+  const coverageSeries = ratioSeries(coveredSeries, surfacedSeries)
+  const weekAgo = Date.now() - 7 * 86_400_000
+  const demandRecent = demand.rows.filter((r) => new Date(r.last_seen_at).getTime() >= weekAgo)
+  const coverageNow = demandRecent.length ? demandRecent.filter(isCovered).length / demandRecent.length : 0
+  const tapsAll = demand.rows.reduce((n, r) => n + (r.taps ?? 0), 0)
+  const hitsAll = demand.rows.reduce((n, r) => n + (r.tap_hits ?? 0), 0)
+  const waysCostWeek = waysJobs.rows
+    .filter((r) => new Date(r.created_at).getTime() >= weekAgo)
+    .reduce((n, r) => n + Number(r.cost_gbp ?? 0), 0)
 
   // ── Money ─────────────────────────────────────────────────────────────────
   // Declined transactions are excluded — a returned order was never revenue.
@@ -383,10 +420,26 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
       sub: 'OF SEARCHES',
       available: landing.available,
     }),
+    'ways-coverage': metric({
+      key: 'ways-coverage',
+      label: 'WAYS COVERAGE',
+      definition:
+        'Of the pieces put in front of members that week (a Browse card she lingered on or picked, a look she opened, FOR YOU, a save, a Mirror view — styled_way_demand by first_seen_at), the share that has three fresh judged ways in the memory now. The bar is 80%: below it, taps are landing cold.',
+      format: 'pct',
+      series: coverageSeries,
+      labels,
+      inverted: false,
+      colour: SERIES[3],
+      area: { label: 'WAYS TO WEAR', href: '/admin/metrics/ways-coverage' },
+      sub: 'OF SURFACED PIECES WITH 3 WAYS',
+      available: demand.available,
+      alert: demandRecent.length && coverageNow < 0.8 ? 'BELOW THE 80% COVERAGE BAR' : undefined,
+    }),
   }
 
   // ── Area health ───────────────────────────────────────────────────────────
   const pendingReview = await countRows(admin, 'composed_outfit', (q) => q.eq('status', 'pending'))
+  const waysQueued = await countRows(admin, 'styled_way_job', (q) => q.eq('status', 'queued'))
   const needsDesktop = await countRows(admin, 'outfit', (q) => q.eq('status', 'needs_desktop'))
   const liveOutfits = await countRows(admin, 'outfit', (q) => q.eq('status', 'live'))
 
@@ -440,6 +493,15 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
       caption: 'OUTFITS LIVE',
       tone: liveOutfits > 0 ? 'good' : 'warning',
       detail: `${fmtInt(m['outfit-views'].current)} VIEWS LAST WEEK`,
+    },
+    {
+      label: 'WAYS TO WEAR',
+      href: '/admin/metrics/ways-coverage',
+      value: demandRecent.length ? pct(coverageNow) : '—',
+      caption: 'COVERAGE · LAST 7 DAYS',
+      // Higher is good here, so the tone reads the uncovered share.
+      tone: demandRecent.length ? rateTone(1 - coverageNow, 0.2, 0.4) : 'neutral',
+      detail: `${fmtInt(waysQueued)} QUEUED · ${tapsAll ? pct(hitsAll / tapsAll) : '—'} TAPS INSTANT · £${waysCostWeek.toFixed(2)} JUDGED THIS WEEK`,
     },
   ]
 
@@ -518,6 +580,35 @@ async function currentStockCounts(): Promise<{ total: number; out: number; low: 
   } catch {
     return { total: 0, out: 0, low: 0, flagged: 0 }
   }
+}
+
+/**
+ * How many fresh ways every (member, piece, mode) has — one paged read of the
+ * memory, so coverage is a lookup rather than a query per surfaced piece.
+ * Empty when the table is not there yet.
+ */
+async function freshWayCounts(): Promise<Map<string, number>> {
+  const admin = createAdminClient()
+  const out = new Map<string, number>()
+  try {
+    const PAGE = 1000
+    for (let from = 0; from < 50_000; from += PAGE) {
+      const { data, error } = await admin
+        .from('styled_way' as any)
+        .select('member_id, hero_item_id, mode')
+        .eq('stale', false)
+        .range(from, from + PAGE - 1)
+      if (error || !data) break
+      for (const r of data as any[]) {
+        const k = `${r.member_id}|${r.hero_item_id}|${r.mode}`
+        out.set(k, (out.get(k) ?? 0) + 1)
+      }
+      if (data.length < PAGE) break
+    }
+  } catch {
+    /* the memory is not there yet */
+  }
+  return out
 }
 
 /** Every auth user's created_at, paged. Returns [] if the admin API is unavailable. */

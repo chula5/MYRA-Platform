@@ -390,6 +390,24 @@ describe('createComposerGenerator — the frozen stylist lens reaches the compos
     expect(opts.styleModel?.decisions).toBe(40)
   })
 
+  it('passes the frozen HOUSE BASE model under the stylist\'s own', async () => {
+    POOL = [garment({ item_id: 'a-1' }), SHOE]
+    const snapshot = {
+      ...SNAPSHOT,
+      payload: {
+        item_mask: { decisions: [] },
+        rules_only: true,
+        learned_model: { status: 'absent', payload: null, version: null, decision_count: 0 },
+        house_base: { stylist_id: 'chloe', model: { status: 'loaded', payload: { version: 1, decisions: 400, approves: 300, skips: 100, singles: {}, pairs: {} }, version: 1, decision_count: 400 }, envelope: null },
+      },
+    }
+    const gen = createComposerGenerator({} as any)
+    await gen.generate({ count: 1, snapshot: snapshot as any, context: memberCtx })
+    const opts = composeSpy.mock.calls[0][0]
+    expect(opts.baseStyleModel?.decisions).toBe(400)
+    expect(opts.styleModel ?? null).toBeNull()
+  })
+
   it('attaches no model and no shortlist pull when the stylist has no model, no envelope and an empty brief', async () => {
     POOL = [garment({ item_id: 'a-1' }), SHOE]
     const snapshot = {

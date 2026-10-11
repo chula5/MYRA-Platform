@@ -21,7 +21,7 @@ import {
 import { ownerRefsForMember, styledInCounts, isOwnedItem } from '@/lib/wardrobe/owned-items'
 import { rankUnlockPurchases } from '@/lib/wardrobe/unlock'
 import { memberGate, memberItemScore, occasionItemScore, personaFitScore, type OccasionContext } from '@/lib/pilot-composer'
-import { lookTasteVector, normalise, effectiveWeights, type OccasionId } from '@/lib/pilot-stylist'
+import type { OccasionId } from '@/lib/pilot-stylist'
 import type { ExtractionEdits, WardrobeBatch, BatchCost, WardrobeExtraction, WardrobePhoto } from '@/lib/wardrobe/types'
 import { loadMemberLibrary, loadMemberPersonaLens, loadMemberTasteFor, rebuildLooksWithoutItems } from '@/app/admin/private-stylist/actions'
 
@@ -347,7 +347,7 @@ export async function unlockPurchases(memberId: string, occasion?: OccasionId | 
   const [taste, library, { data: member }, lens] = await Promise.all([
     loadMemberTasteFor(memberId),
     loadMemberLibrary(memberId),
-    admin.from('pilot_member').select('room_weights, work_dress_code').eq('member_id', memberId).single(),
+    admin.from('pilot_member').select('work_dress_code').eq('member_id', memberId).single(),
     loadMemberPersonaLens(memberId),
   ])
   if (!taste) return { error: 'Member not found' }
@@ -355,7 +355,7 @@ export async function unlockPurchases(memberId: string, occasion?: OccasionId | 
   if (!owned.length) return { rows: [], ownedCount: 0 }
   const retail = library.filter((i) => !isOwnedItem(i as any) && i.image_url && i.stock_status !== 'out_of_stock')
   const occ: OccasionContext | undefined = occasion && member
-    ? { id: occasion, vector: lookTasteVector(normalise(effectiveWeights(member.room_weights, occasion, member.work_dress_code))) }
+    ? { id: occasion, workDressCode: member.work_dress_code ?? null }
     : undefined
   // The same bar composition uses: her hard gate (input-only brands, excluded
   // brand pairs) — and ranking through HER stylist persona, so the order here

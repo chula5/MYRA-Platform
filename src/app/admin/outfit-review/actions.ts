@@ -4,6 +4,7 @@
 // wrappers in ./actions.gated.ts. Don't add 'use server' here.
 
 import { createAdminClient } from '@/lib/supabase-server'
+import { priceOfItem } from '@/lib/brand-affinity'
 import { getItem, getReadyAndLiveItems } from '@/lib/admin-queries'
 import { pairCompat, slotForItemType, slotPlanForAnchor, deriveSlotScores, deriveOutfitLevelScores } from '@/lib/composer'
 import { loadStyleModel, recordStyleOffers } from '@/lib/style-brain-store'
@@ -13,7 +14,7 @@ import {
   confidenceGate,
 } from '@/lib/pipeline'
 import { loadLearnedMaterialPairs, recordHouseRejections } from '@/lib/house-style-store'
-import { composeReviewLooks, reviewLibrary, reviewFeature, tierBandViolation, REVIEW_ANCHOR_TYPES } from '@/lib/review-compose'
+import { composeReviewLooks, reviewLibrary, reviewFeature, tierBandViolation, REVIEW_ANCHOR_TYPES, REVIEW_OUTERWEAR } from '@/lib/review-compose'
 import {
   loadEjectionConstraints,
   loadApprovedVectors,
@@ -25,6 +26,13 @@ import {
 const ANCHOR_TYPES = REVIEW_ANCHOR_TYPES
 
 const TARGET = 3
+
+/** A piece's price in POUNDS when it can be converted (a 298,000 ₩ flat is £165), else as listed. */
+function fmtItemPrice(it: { price?: unknown; price_gbp?: unknown; currency?: unknown }): string {
+  const { gbp } = priceOfItem(it)
+  if (gbp != null && String(it.currency ?? 'GBP').toUpperCase() !== 'GBP') return `£${Math.round(gbp)}`
+  return fmtPrice(it.price as string | null | undefined, it.currency as string | null | undefined)
+}
 
 function fmtPrice(price: string | null | undefined, currency: string | null | undefined): string {
   if (!price) return ''
@@ -40,10 +48,42 @@ export interface ReviewAnchor {
   brand_name: string | null
   image_url: string
   item_type: string
+  colour_family: string | null
   price: string
   existingCount: number
   stock_status?: 'in_stock' | 'low_stock' | 'out_of_stock' | 'unknown' | null
   stock_sizes?: string[] | null
+}
+
+/** The queue's filters — brand is its own argument; these AND with it. */
+export interface QueueFilters {
+  /** Free text over name, brand, type, colour and material: "fur", "leopard", "wide leg". */
+  q?: string
+  itemType?: string
+  colour?: string
+  /** Offer coats and jackets as anchors too (the Review pages do; the autonomous pipeline does not). */
+  includeOuterwear?: boolean
+}
+
+export interface QueueFacet {
+  value: string
+  count: number
+}
+
+// What a text search reads on a piece: name, brand, type, colour, material.
+// "fur" finds a faux-fur coat by its name or its material either way.
+function itemSearchText(it: any): string {
+  return [
+    it.product_name,
+    it.brand?.name,
+    String(it.item_type ?? '').replace(/_/g, ' '),
+    it.colour_family,
+    it.material_primary,
+    it.material_category,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
 }
 
 export interface ReviewItem {
@@ -81,7 +121,8 @@ export async function getReviewQueue(
   shuffle = false,
   mode: 'needs-more' | 'exactly-one' = 'needs-more',
   brand: string | null = null,
-): Promise<{ anchors: ReviewAnchor[]; brands: { name: string; count: number }[]; error?: string }> {
+  filters: QueueFilters = {},
+): Promise<{ anchors: ReviewAnchor[]; brands: { name: string; count: number }[]; types: QueueFacet[]; colours: QueueFacet[]; error?: string }> {
   try {
     const admin = createAdminClient()
     const library = await getReadyAndLiveItems()
@@ -92,41 +133,69 @@ export async function getReviewQueue(
       .neq('status', 'archived')
 
     const count = new Map<string, number>()
+    // A coat counts wherever it is worn: an outfit anchored on a top still
+    // counts as one of the coat's outfits.
+    const wornAsOuterwear = new Map<string, number>()
     for (const o of (outfits ?? []) as any[]) {
       const items = (o.outfit_item ?? []) as { item_id: string; slot: string }[]
       const bySlot = (s: string) => items.find((i) => i.slot === s)?.item_id
       const anchorId = bySlot('dress') || bySlot('top') || bySlot('bottom') || bySlot('outerwear') || items[0]?.item_id
       if (anchorId) count.set(anchorId, (count.get(anchorId) ?? 0) + 1)
+      for (const i of items) {
+        if (i.slot === 'outerwear') wornAsOuterwear.set(i.item_id, (wornAsOuterwear.get(i.item_id) ?? 0) + 1)
+      }
     }
 
-    const mapped: ReviewAnchor[] = (library as any[])
-      .filter((it) => ANCHOR_TYPES.has(String(it.item_type)) && it.image_url)
-      .map((it) => ({
-        item_id: it.item_id,
-        product_name: it.product_name,
-        brand_name: it.brand?.name ?? null,
-        image_url: it.image_url,
-        item_type: String(it.item_type),
-        price: fmtPrice(it.price, it.currency),
-        existingCount: count.get(it.item_id) ?? 0,
-        stock_status: it.stock_status ?? null,
-        stock_sizes: it.stock_sizes ?? null,
-      }))
-      .filter((a) => (mode === 'exactly-one' ? a.existingCount === 1 : a.existingCount < TARGET))
+    const isAnchor = (t: string) => ANCHOR_TYPES.has(t) || (!!filters.includeOuterwear && REVIEW_OUTERWEAR.has(t))
+    const rows = (library as any[])
+      .filter((it) => isAnchor(String(it.item_type)) && it.image_url)
+      .map((it) => {
+        const type = String(it.item_type)
+        const anchor: ReviewAnchor = {
+          item_id: it.item_id,
+          product_name: it.product_name,
+          brand_name: it.brand?.name ?? null,
+          image_url: it.image_url,
+          item_type: type,
+          colour_family: it.colour_family ?? null,
+          price: fmtItemPrice(it),
+          existingCount: (REVIEW_OUTERWEAR.has(type) ? wornAsOuterwear : count).get(it.item_id) ?? 0,
+          stock_status: it.stock_status ?? null,
+          stock_sizes: it.stock_sizes ?? null,
+        }
+        return { anchor, text: itemSearchText(it) }
+      })
+      .filter(({ anchor: a }) => (mode === 'exactly-one' ? a.existingCount === 1 : a.existingCount < TARGET))
+    const mapped: ReviewAnchor[] = rows.map((r) => r.anchor)
 
-    // Brand list (with counts) across ALL anchors that still need outfits —
-    // computed before the brand filter + limit so the chips + counts are complete.
-    const brandCounts = new Map<string, number>()
-    for (const a of mapped) {
-      const name = a.brand_name?.trim()
-      if (name) brandCounts.set(name, (brandCounts.get(name) ?? 0) + 1)
+    // Facets (brand, type, colour) with counts across ALL anchors that still
+    // need outfits — computed before the filters + limit so every chip stays
+    // selectable and its count is complete.
+    const tally = (key: (a: ReviewAnchor) => string | null | undefined): QueueFacet[] => {
+      const counts = new Map<string, number>()
+      for (const a of mapped) {
+        const v = (key(a) ?? '').trim()
+        if (v) counts.set(v, (counts.get(v) ?? 0) + 1)
+      }
+      return [...counts.entries()]
+        .map(([value, count]) => ({ value, count }))
+        .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value))
     }
-    const brands = [...brandCounts.entries()]
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    const brands = tally((a) => a.brand_name).map(({ value, count }) => ({ name: value, count }))
+    const types = tally((a) => a.item_type)
+    const colours = tally((a) => a.colour_family)
 
-    // Narrow to a single brand's items when a brand is selected.
-    const pool = brand ? mapped.filter((a) => (a.brand_name ?? '') === brand) : mapped
+    // Narrow to the chosen brand / type / colour and the text query (all AND).
+    const q = (filters.q ?? '').trim().toLowerCase()
+    const typeFilter = (filters.itemType ?? '').trim()
+    const colourFilter = (filters.colour ?? '').trim().toLowerCase()
+    const pool = rows
+      .filter(({ anchor: a, text }) =>
+        (!brand || (a.brand_name ?? '') === brand) &&
+        (!typeFilter || a.item_type === typeFilter) &&
+        (!colourFilter || (a.colour_family ?? '').toLowerCase() === colourFilter) &&
+        (!q || text.includes(q)))
+      .map((r) => r.anchor)
 
     // Refresh = reshuffle so different anchors surface each time. We still keep
     // most-needed (fewest existing outfits) first; the shuffle randomises ties,
@@ -141,10 +210,10 @@ export async function getReviewQueue(
       .sort((a, b) => a.existingCount - b.existingCount || (shuffle ? 0 : a.product_name.localeCompare(b.product_name)))
       .slice(0, limit)
 
-    return { anchors, brands }
+    return { anchors, brands, types, colours }
   } catch (err) {
     console.error('[getReviewQueue]', err)
-    return { anchors: [], brands: [], error: err instanceof Error ? err.message : 'Failed to load queue' }
+    return { anchors: [], brands: [], types: [], colours: [], error: err instanceof Error ? err.message : 'Failed to load queue' }
   }
 }
 
@@ -173,6 +242,7 @@ export async function composeForReview(anchorItemId: string): Promise<{
       library: reviewLibrary(library, anchor, constraints),
       styleModel,
       learnedPairs,
+      noTwins: true,
     })
     void recordHouseRejections(rejectionHits, anchorItemId)
 
@@ -225,7 +295,7 @@ export async function composeForReview(anchorItemId: string): Promise<{
           product_name: it.product_name,
           brand_name: it.brand?.name ?? null,
           image_url: it.image_url,
-          price: fmtPrice(it.price, it.currency),
+          price: fmtItemPrice(it),
           compat: Number(pairCompat(anchor, it).total.toFixed(3)),
           stock_status: it.stock_status ?? null,
           stock_sizes: it.stock_sizes ?? null,
@@ -257,7 +327,7 @@ function anchorPayload(anchor: any) {
     brand_name: anchor.brand?.name ?? null,
     image_url: anchor.image_url,
     item_type: String(anchor.item_type),
-    price: fmtPrice(anchor.price, anchor.currency),
+    price: fmtItemPrice(anchor),
     stock_status: anchor.stock_status ?? null,
     stock_sizes: anchor.stock_sizes ?? null,
   }
@@ -289,9 +359,7 @@ export async function getReviewAddOptions(
 
     let pool = reviewLibrary(await getReadyAndLiveItems(), anchor).filter((it: any) => !exclude.has(it.item_id))
     if (q) {
-      pool = pool.filter((it: any) =>
-        `${it.product_name} ${it.brand?.name ?? ''} ${String(it.item_type).replace(/_/g, ' ')}`.toLowerCase().includes(q),
-      )
+      pool = pool.filter((it: any) => itemSearchText(it).includes(q))
     } else if (!filters.itemType) {
       pool = pool.filter((it: any) => missing.includes(slotForItemType(it.item_type)))
     }
@@ -309,7 +377,7 @@ export async function getReviewAddOptions(
         product_name: it.product_name,
         brand_name: it.brand?.name ?? null,
         image_url: it.image_url,
-        price: fmtPrice(it.price, it.currency),
+        price: fmtItemPrice(it),
         compat: Number(pairCompat(anchor, it).total.toFixed(3)),
         stock_status: it.stock_status ?? null,
         stock_sizes: it.stock_sizes ?? null,
@@ -370,9 +438,7 @@ export async function getReviewSwapOptions(
     let pool = reviewLibrary(await getReadyAndLiveItems(), anchor).filter((it: any) => !exclude.has(it.item_id))
 
     if (q) {
-      pool = pool.filter((it: any) =>
-        `${it.product_name} ${it.brand?.name ?? ''} ${String(it.item_type).replace(/_/g, ' ')}`.toLowerCase().includes(q),
-      )
+      pool = pool.filter((it: any) => itemSearchText(it).includes(q))
     } else if (!filters.itemType) {
       pool = pool.filter((it: any) => slotForItemType(it.item_type) === slot)
     }
@@ -393,7 +459,7 @@ export async function getReviewSwapOptions(
         product_name: it.product_name,
         brand_name: it.brand?.name ?? null,
         image_url: it.image_url,
-        price: fmtPrice(it.price, it.currency),
+        price: fmtItemPrice(it),
         compat: Number(pairCompat(anchor, it).total.toFixed(3)),
         stock_status: it.stock_status ?? null,
         stock_sizes: it.stock_sizes ?? null,

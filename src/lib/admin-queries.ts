@@ -1,5 +1,6 @@
 import { retailOnly } from '@/lib/wardrobe/owned-items'
 import { createAdminClient } from '@/lib/supabase-server'
+import { COLOUR, MATERIAL, STOPWORDS, TYPE, fuzzyGet, hasMaterial, isTypoOf } from '@/lib/search-taxonomy'
 import type { Brand, Item, AdminProject, Outfit, OutfitWithItems, Lookbook } from '@/types/database'
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
@@ -275,9 +276,44 @@ export interface ItemsPage {
 // empties the other dropdowns); total reflects every active filter. Built to
 // stay fast at 10k+ items: the page fetch is a single ranged query and the
 // facet sweep pulls only three tiny columns per row, in parallel.
+//
+// `search` is free text ("isabel marant fur jacket"). Every word must land
+// somewhere on the piece: the start of a word in its brand, name, type, colour
+// or cloth, one typo out ("sherling", "marrant"), or a word for its type or
+// cloth ("gilet" finds a vest filed as a gilet, "fur" finds a label that says
+// shearling). It narrows the facets too, so the dropdowns show what's inside
+// the search.
+const searchFold = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+function itemSearchMatcher(search: string | undefined): ((r: any) => boolean) | null {
+  const words = searchFold(search ?? '').split(/[^a-z0-9]+/).filter((w) => w && !STOPWORDS.has(w))
+  if (words.length === 0) return null
+  const materials = words.map((w) => fuzzyGet(MATERIAL, w)).filter(Boolean) as string[]
+  // A fur "jacket" is often a sleeveless one (see parseQuery).
+  const furOuter = materials.some((m) => m === 'fur' || m === 'shearling')
+  return (r: any) => {
+    const text = searchFold(
+      [r.brand?.name, r.product_name, r.item_type?.replace(/_/g, ' '), r.colour_family, r.material_primary].filter(Boolean).join(' '),
+    ).replace(/[^a-z0-9]+/g, ' ')
+    const hay = text.split(' ').filter(Boolean)
+    return words.every((w) => {
+      if (hay.some((h) => h.startsWith(w) || isTypoOf(w, h))) return true
+      const types = fuzzyGet(TYPE, w)
+      // A broad word ("vest", "top") only reaches by type when it names a
+      // gilet; otherwise it has to be in the name, or "vest" is every blouse.
+      if (types && ((types.includes(r.item_type) && (types.length === 1 || r.item_type === 'gilet')) || (furOuter && r.item_type === 'gilet' && types.some((t) => t === 'jacket' || t === 'coat')))) return true
+      const colour = fuzzyGet(COLOUR, w)
+      if (colour && r.colour_family === colour) return true
+      const material = fuzzyGet(MATERIAL, w)
+      if (material && hasMaterial(r, material)) return true
+      return false
+    })
+  }
+}
+
 export async function getItemsPage(opts: {
   status?: string
   stockFilter?: 'flagged' | 'out_of_stock' | 'low_stock'
+  search?: string
   brand?: string
   itemType?: string
   colour?: string
@@ -302,13 +338,14 @@ export async function getItemsPage(opts: {
     const pages = Math.ceil((scopeTotal ?? 0) / 1000)
     const facetBatches = await Promise.all(
       Array.from({ length: pages }, (_, i) =>
-        applyScope((supabase as any).from('item').select('item_type, colour_family, created_at, brand:brand_id(name)'))
+        applyScope((supabase as any).from('item').select('item_id, product_name, item_type, colour_family, material_primary, created_at, brand:brand_id(name)'))
           .order('item_id')
           .range(i * 1000, i * 1000 + 999)
           .then((r: any) => { if (r.error) throw r.error; return r.data ?? [] }),
       ),
     )
-    const facetRows: any[] = facetBatches.flat()
+    const searchMatch = itemSearchMatcher(opts.search)
+    const facetRows: any[] = searchMatch ? facetBatches.flat().filter(searchMatch) : facetBatches.flat()
 
     const tally = (rows: any[], key: (r: any) => string | null): ItemFacet[] => {
       const m = new Map<string, number>()
@@ -340,6 +377,24 @@ export async function getItemsPage(opts: {
 
     const totalPages = Math.max(1, Math.ceil(total / pageSize))
     const page = Math.min(Math.max(1, opts.page ?? 1), totalPages)
+
+    // A search is resolved from the sweep: page the matching ids (newest
+    // first), then fetch just those rows.
+    if (searchMatch) {
+      const pageIds = facetRows
+        .filter(matches)
+        .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+        .slice((page - 1) * pageSize, page * pageSize)
+        .map((r) => r.item_id)
+      if (pageIds.length === 0) return { items: [], total, page, pageSize, brands, types, colours, months }
+      const { data, error } = await (supabase as any)
+        .from('item')
+        .select('*, brand(*)')
+        .in('item_id', pageIds)
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      return { items: (data ?? []) as unknown as ItemWithBrand[], total, page, pageSize, brands, types, colours, months }
+    }
 
     let q = applyScope(
       (supabase as any)
@@ -430,7 +485,46 @@ export async function getItem(id: string): Promise<ItemWithBrand | null> {
 // one count, so a full read is one round trip longer than a capped one.
 const POOL_PAGE = 1000
 
+// The full read is 7k+ rows with their brands and takes seconds (20s on a
+// slow afternoon), and eight parallel 1,000-row pages were enough to make the
+// database refuse some of them — a refused page emptied the whole pool and
+// every composer then found "no combinations". So: one read shared for five
+// minutes, concurrent askers share the read in flight, pages are read two at
+// a time with retries, and if a fresh read fails the last good pool is served
+// rather than nothing. Stock, status and size changes reach the pool within
+// the window; a bulk change can call resetReadyAndLiveItemsCache().
+const POOL_TTL_MS = 5 * 60 * 1000
+const POOL_PAGE_CONCURRENCY = 2
+const POOL_PAGE_RETRIES = 3
+let poolCache: { at: number; items: ItemWithBrand[] } | null = null
+let poolInFlight: Promise<ItemWithBrand[]> | null = null
+
+/** Test seam / after a bulk change: forget the shared pool. */
+export function resetReadyAndLiveItemsCache(): void {
+  poolCache = null
+  poolInFlight = null
+}
+
 export async function getReadyAndLiveItems(): Promise<ItemWithBrand[]> {
+  if (poolCache && Date.now() - poolCache.at < POOL_TTL_MS) return poolCache.items
+  if (poolInFlight) return poolInFlight
+  poolInFlight = readReadyAndLiveItems()
+    .then((items) => {
+      if (items) {
+        poolCache = { at: Date.now(), items }
+        return items
+      }
+      // The read failed: the last good pool is better than an empty one.
+      return poolCache?.items ?? []
+    })
+    .finally(() => { poolInFlight = null })
+  return poolInFlight
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+/** The pool, or null when the read failed (never a silently empty pool). */
+async function readReadyAndLiveItems(): Promise<ItemWithBrand[] | null> {
   const supabase = createAdminClient()
   try {
     const statuses = ['draft', 'ready', 'live']
@@ -440,22 +534,35 @@ export async function getReadyAndLiveItems(): Promise<ItemWithBrand[]> {
       .in('status', statuses)
     if (countErr) throw countErr
     const pages = Math.max(1, Math.ceil((count ?? 0) / POOL_PAGE))
-    const results = await Promise.all(
-      Array.from({ length: pages }, (_, i) =>
-        supabase
+    const readPage = async (i: number) => {
+      let lastErr: unknown = null
+      for (let attempt = 0; attempt < POOL_PAGE_RETRIES; attempt++) {
+        const r = await supabase
           .from('item')
           .select('*, brand(*)')
           .in('status', statuses)
           .order('created_at', { ascending: false })
           .order('item_id', { ascending: true })
-          .range(i * POOL_PAGE, i * POOL_PAGE + POOL_PAGE - 1),
-      ),
-    )
+          .range(i * POOL_PAGE, i * POOL_PAGE + POOL_PAGE - 1)
+        if (!r.error) return (r.data ?? []) as unknown as ItemWithBrand[]
+        lastErr = r.error
+        await sleep(300 * (attempt + 1))
+      }
+      throw lastErr
+    }
+    const results: ItemWithBrand[][] = new Array(pages)
+    let next = 0
+    const worker = async () => {
+      while (next < pages) {
+        const i = next++
+        results[i] = await readPage(i)
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(POOL_PAGE_CONCURRENCY, pages) }, worker))
     const rows: ItemWithBrand[] = []
     const seen = new Set<string>()
-    for (const r of results) {
-      if (r.error) throw r.error
-      for (const it of (r.data ?? []) as unknown as ItemWithBrand[]) {
+    for (const page of results) {
+      for (const it of page) {
         if (seen.has(it.item_id)) continue // a page boundary moved under us
         seen.add(it.item_id)
         rows.push(it)
@@ -466,7 +573,7 @@ export async function getReadyAndLiveItems(): Promise<ItemWithBrand[]> {
     return retailOnly(rows)
   } catch (err) {
     console.error('[getReadyAndLiveItems]', err)
-    return []
+    return null
   }
 }
 

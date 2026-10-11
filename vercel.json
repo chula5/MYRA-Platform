@@ -70,6 +70,14 @@
     {
       "path": "/api/cron/styled-ways",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/styled-ways-nightly",
+      "schedule": "0 2 */3 * *"
+    },
+    {
+      "path": "/api/cron/styled-ways-digest",
+      "schedule": "0 8 */3 * *"
     }
   ]
 }

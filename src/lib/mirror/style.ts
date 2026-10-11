@@ -19,7 +19,7 @@ import { composeMemberVariants, tooSimilarVariant } from '@/lib/pilot-composer'
 import { slotForItemType } from '@/lib/composer'
 import { judgeLooksForMember, hasPieceOutOfSize } from '@/lib/look-check'
 import { whyThisSuitsHer } from '@/lib/look-why'
-import { readStylePrefs, effectiveWeights, normalise, lookTasteVector } from '@/lib/pilot-stylist'
+import { readStylePrefs } from '@/lib/pilot-stylist'
 import { occasionsForMember, OCCASION_LABEL } from '@/lib/client-occasions'
 import {
   loadComposableLibrary, loadMemberTaste, loadPersonaLens, loadComposeHistory, type StyledLook,
@@ -176,7 +176,7 @@ export async function styleExternalPiece(
   // different answer each time, the way Reshuffle does in the Dressing Room.
   ;(occasionIds.length ? occasionIds : [null]).forEach((id, oi) => {
     const occ = id
-      ? { id: id as any, vector: lookTasteVector(normalise(effectiveWeights(row.room_weights, id as any, row.work_dress_code))), climate: null }
+      ? { id: id as any, climate: null, workDressCode: row.work_dress_code ?? null }
       : undefined
     for (const look of composeMemberVariants(taste, pool as any, hero.item_id, 2, occ, lens, history, { ownedMode, shuffle: oi })) {
       perOccasion.push({ id, label: id ? (OCCASION_LABEL[id] ?? id) : '', look })

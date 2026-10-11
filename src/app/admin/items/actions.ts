@@ -404,22 +404,46 @@ export async function createOutfitFromSelectedItems(
 // there's no foreign-key violation / orphaned rows (this also removes the item
 // from any outfits it was part of), then deletes the item rows.
 
-export async function deleteItems(itemIds: string[]): Promise<{ ok?: boolean; count?: number; error?: string }> {
+// Rows that must outlive their item: affiliate clicks + commissions are money
+// records, and Quality Lab candidates are training history. Their foreign keys
+// block a delete, so items they reference are archived instead.
+const KEEP_HISTORY_TABLES = ['click', 'commission_transaction', 'outfit_quality_candidate_item'] as const
+
+export async function deleteItems(
+  itemIds: string[],
+): Promise<{ ok?: boolean; count?: number; archived?: number; error?: string }> {
   await assertAdmin()
-  const ids = (itemIds ?? []).filter(Boolean)
+  const ids = Array.from(new Set((itemIds ?? []).filter(Boolean)))
   if (ids.length === 0) return { error: 'No items selected' }
 
   const supabase = createAdminClient()
   try {
-    // Unlink from any outfits first.
-    const { error: linkErr } = await (supabase.from('outfit_item') as any).delete().in('item_id', ids)
-    if (linkErr) throw linkErr
+    const held = new Set<string>()
+    for (const table of KEEP_HISTORY_TABLES) {
+      const { data, error } = await (supabase.from(table) as any).select('item_id').in('item_id', ids)
+      if (error) throw error
+      for (const r of data ?? []) if (r.item_id) held.add(r.item_id)
+    }
+    const toArchive = ids.filter((id) => held.has(id))
+    const toDelete = ids.filter((id) => !held.has(id))
 
-    const { error: itemErr } = await (supabase.from('item') as any).delete().in('item_id', ids)
-    if (itemErr) throw itemErr
+    if (toArchive.length) {
+      const { error } = await (supabase.from('item') as any).update({ status: 'archived' }).in('item_id', toArchive)
+      if (error) throw error
+    }
+
+    // Batches keep each statement well inside the 8s timeout.
+    for (let i = 0; i < toDelete.length; i += 100) {
+      const batch = toDelete.slice(i, i + 100)
+      // Unlink from any outfits first.
+      const { error: linkErr } = await (supabase.from('outfit_item') as any).delete().in('item_id', batch)
+      if (linkErr) throw linkErr
+      const { error: itemErr } = await (supabase.from('item') as any).delete().in('item_id', batch)
+      if (itemErr) throw itemErr
+    }
 
     revalidatePath('/admin/items')
-    return { ok: true, count: ids.length }
+    return { ok: true, count: toDelete.length, archived: toArchive.length }
   } catch (err: unknown) {
     console.error('[deleteItems]', err)
     return { error: formatError(err, 'Failed to delete items') }

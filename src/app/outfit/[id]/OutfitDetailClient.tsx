@@ -1,6 +1,7 @@
 'use client'
 
 import WaysToWear from '@/components/me/WaysToWear'
+import { noticePieces } from '@/app/me/ways/actions'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import FallbackImage from '@/components/FallbackImage'
@@ -165,6 +166,16 @@ export default function OutfitDetailClient({
   const [siblings, setSiblings] = useState<{ id: string; image: string }[]>([])
   const touchStartX = useRef<number | null>(null)
   const touchStartY = useRef<number | null>(null)
+
+  // A signed-in member opening a look on The Edit: its pieces are styled
+  // before she taps one (lib/styled-ways-queue). Hosted looks are noticed by
+  // the host page, which knows whose view this is; the public has nobody to style for.
+  useEffect(() => {
+    if (!outfit || host || !canSave) return
+    const ids = ((outfit.outfit_item ?? []) as any[]).map((oi) => oi.item?.item_id).filter(Boolean) as string[]
+    if (ids.length) noticePieces(ids, 'blend', 'look').catch(() => { /* a warm-up is a nicety */ })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [outfit?.outfit_id, canSave])
 
   // ── Fetch main outfit ─────────────────────────────────────
   useEffect(() => {

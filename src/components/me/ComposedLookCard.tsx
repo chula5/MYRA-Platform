@@ -8,9 +8,18 @@
 // three across on stone, the piece it was built around ringed.
 
 import FallbackImage from '@/components/FallbackImage'
+import SaveOutfit from '@/components/me/SaveOutfit'
 import type { StyledLook } from '@/app/admin/private-stylist/actions'
 
-export default function ComposedLookCard({ look, heroId }: { look: StyledLook; heroId?: string }) {
+type CardLook = StyledLook & { styled_way_id?: string; saved_look_id?: string | null }
+
+export default function ComposedLookCard({ look, heroId, saveable, testMemberId }: {
+  look: CardLook
+  heroId?: string
+  /** A kept way: offer SAVE LOOK, which keeps it among her looks and has MYRA make its picture. */
+  saveable?: boolean
+  testMemberId?: string
+}) {
   return (
     <article className="bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] rounded-[18px] overflow-hidden">
       {look.image_url ? (
@@ -34,6 +43,20 @@ export default function ComposedLookCard({ look, heroId }: { look: StyledLook; h
         <p className="text-[21px] xl:text-[24px] text-[#6E6B65]">
           {look.items.filter((it) => it.owned).length} of your own
         </p>
+        {saveable && look.styled_way_id && (
+          <div className="mt-4">
+            <SaveOutfit
+              items={look.items}
+              why={look.why}
+              occasion={look.occasion_id ?? null}
+              testMemberId={testMemberId}
+              label="Save look"
+              styledWayId={look.styled_way_id}
+              pictureUrl={look.image_url}
+              initialLookId={look.saved_look_id ?? null}
+            />
+          </div>
+        )}
       </div>
     </article>
   )

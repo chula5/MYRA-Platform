@@ -27,6 +27,7 @@ import type { Item, Brand, ItemType } from '@/types/database'
 import { ArchiveCard } from '@/components/ArchiveCard'
 import OutfitDetailClient from '@/app/outfit/[id]/OutfitDetailClient'
 import WaysToWear from '@/components/me/WaysToWear'
+import { noticePieces } from '@/app/me/ways/actions'
 import StyleOutfit from '@/components/me/StyleOutfit'
 import type { OutfitWithItems } from '@/types/database'
 import { previewAskForMember, rescoreAskLook, type AskPreviewResult } from '@/app/admin/private-stylist/confidence-actions'
@@ -107,6 +108,14 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = prev }
   }, [openLook])
+  // The retail pieces of a look she opens are styled before she taps one
+  // (lib/styled-ways-queue), so OTHER WAYS TO WEAR IT usually opens warm.
+  useEffect(() => {
+    if (!openLook) return
+    const ids = openLook.items.filter((i) => i.item_id && !i.owned).map((i) => i.item_id as string)
+    if (ids.length) noticePieces(ids, 'blend', 'look', view.memberId ?? undefined).catch(() => { /* a warm-up is a nicety */ })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openLook?.look_id])
   const [recent, setRecent] = useState<string[]>([])
 
   // Which pieces are already hung in her wardrobe — the hearts in Shop the Look.
@@ -1518,7 +1527,7 @@ function AskPanel({
                 // What MYRA made and you did not take is a lesson as much as what you kept.
                 const passedOver = preview.looks.filter((_, i) => !accepted.has(i)).map((l) => ({ items: l.items, notes: l.notes }))
                 // Kept looks get a light Higgsfield shoot straight away.
-                const r = await keepAskPreview(testMemberId!, occasion, climate, words, preview.mix, chosen, chosenEdits, true, passedOver)
+                const r = await keepAskPreview(testMemberId!, occasion, climate, words, chosen, chosenEdits, true, passedOver)
                 setBusy(false)
                 if (r.error) setError(r.error)
                 else setKept(true)

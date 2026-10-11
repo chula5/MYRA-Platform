@@ -22,6 +22,7 @@ const HEADLINE: { key: MetricKey; large?: boolean }[] = [
   { key: 'retailer-clicks' },
   { key: 'saves' },
   { key: 'cost-per-signup' },
+  { key: 'ways-coverage' },
 ]
 
 function gbp0(n: number): string {

@@ -14,16 +14,16 @@
 
 import type { ItemWithBrand } from '@/lib/admin-queries'
 import {
-  generateCandidates,
   pairCompat,
   slotForItemType,
   type Slot,
-  type ComposerCandidate,
 } from '@/lib/composer'
-import type { LookItem, StylePrefs, PriceBands } from '@/lib/pilot-stylist'
-import { avoidReasons, lovedScore, priceVerdict } from '@/lib/pilot-stylist'
+import { composeReviewLooks, reviewLibrary, reviewAnchorCategory, tierBandViolation, type ExtraSlot, type ReviewPick } from '@/lib/review-compose'
+import { lookVectorFromItems } from '@/lib/taste-vector'
+import type { LookItem, StylePrefs, PriceBands, WorkDressCode } from '@/lib/pilot-stylist'
+import { avoidReasons, lovedScore, priceVerdict, WORK_OCCASIONS, FORMALITY_FLOOR_BAND } from '@/lib/pilot-stylist'
 import { mixesWhiteAndCream } from '@/lib/pale-tone'
-import { judgeLook, type MemberRules } from '@/lib/style-rules'
+import { judgeLook, rulesForMember, type MemberRules } from '@/lib/style-rules'
 import { toHouseItem } from '@/lib/house-item'
 import { learnedBonus, blendStrength, type StyleModel, type FeatureItem } from '@/lib/style-brain'
 import { isExcluded, formalityBand, hardSkipPairs, type EjectionConstraints } from '@/lib/pipeline'
@@ -74,10 +74,23 @@ export interface PersonaLens {
    * piece that belongs in ONE of them is recognised as belonging.
    */
   referenceLooks?: number[][] | null
+  /**
+   * THE HOUSE — Chloe's own approved looks, as an envelope and look by look.
+   * Every member starts here: the base every persona and every member's own
+   * learning narrows from. It never fades and it never teaches anyone; it is
+   * what MYRA looks like before it knows her.
+   */
+  house?: { envelope: { mean: number[]; spread: number[] } | null; looks: number[][] | null; weight: number } | null
 }
 
 /** How much her reference pictures pull, relative to the house style's lens. */
 export const REFERENCE_LENS_WEIGHT = 0.5
+/**
+ * How much the house (Chloe's looks) pulls, under a persona (0.9 fading to
+ * 0.3) and her own pictures (0.5): the base every look starts from, never the
+ * loudest voice once she has one of her own.
+ */
+export const HOUSE_LENS_WEIGHT = 0.4
 
 /**
  * The dimensions a SINGLE GARMENT can be compared to an outfit-level envelope
@@ -117,6 +130,11 @@ export function personaFitScore(lens: PersonaLens | undefined, item: ItemWithBra
     score += envelopeFit(lens.reference.envelope, item) * lens.reference.weight
   }
   score += nearestLookFit(lens.referenceLooks, item)
+  // The house underneath everything: Chloe's looks, at the house weight.
+  if (lens.house && lens.house.weight > 0) {
+    if (lens.house.envelope?.mean?.length) score += envelopeFit(lens.house.envelope, item) * lens.house.weight
+    if (lens.house.looks?.length) score += nearestLookFit(lens.house.looks, item) * lens.house.weight
+  }
   return score
 }
 
@@ -165,16 +183,33 @@ function envelopeFit(envelope: { mean: number[]; spread: number[] }, item: ItemW
 
 // ── Occasion fit ─────────────────────────────────────────────────────────────
 // The delivery's effective_weights already carry the occasion tilt (and the
-// work formality floor), so its room-mix vector is the occasion-shaped target.
-// On top of the vector, deterministic type priors keep the obvious rules firm:
-// no stilettos at daytime casual, no sneakers at an event.
+// work formality floor). The rooms (tailored / romantic / ease) and their
+// vector were retired on 2026-10-10: deterministic type priors keep the
+// obvious rules firm (no stilettos at daytime casual, no sneakers at an event),
+// the climate gates the fabric, and her work dress code sets a formality floor.
 
 export interface OccasionContext {
   id: string | null
-  vector: number[] | null // lookTasteVector(effective_weights)
   // Where she is going, not just what for. A hot holiday and a ski week are
   // both 'travel'.
   climate?: ClimateId | null
+  /** Her office's dress code: on work occasions a floor on how dressed a look must read. */
+  workDressCode?: WorkDressCode | null
+}
+
+const BAND_RANK = { casual: 0, mid: 1, dressy: 2 } as const
+
+/**
+ * The formality floor, as a rule on the whole look: on a work occasion a
+ * suited office never gets a casual-band look, an unwritten-rules office never
+ * gets one below mid. Not a preference — it is socially expensive to get
+ * slightly wrong, so it holds in the relaxed pass too.
+ */
+export function occasionFormalityOk(occ: OccasionContext | undefined, items: ItemWithBrand[]): boolean {
+  if (!occ?.id || !occ.workDressCode || !(WORK_OCCASIONS as readonly string[]).includes(occ.id)) return true
+  const floor = FORMALITY_FLOOR_BAND[occ.workDressCode]
+  if (!floor) return true
+  return BAND_RANK[formalityBand(items as any)] >= BAND_RANK[floor]
 }
 
 const OCCASION_TYPE_PRIOR: Record<string, { favour: string[]; avoid: string[] }> = {
@@ -196,7 +231,7 @@ function pseudoVec(item: ItemWithBrand): number[] {
   return v
 }
 
-// ~[-0.5, 0.65]: type prior dominates, room-mix vector breaks ties.
+// ~[-0.35, 0.15]: the type prior for the occasion, nothing else.
 export function occasionItemScore(occ: OccasionContext | undefined, item: ItemWithBrand): number {
   if (!occ) return 0
   let s = 0
@@ -205,12 +240,16 @@ export function occasionItemScore(occ: OccasionContext | undefined, item: ItemWi
     if (prior.favour.includes(item.item_type)) s += 0.15
     if (prior.avoid.includes(item.item_type)) s -= 0.35
   }
-  if (occ.vector) {
-    const c = cosine(pseudoVec(item), occ.vector)
-    s += Math.max(-0.15, Math.min(0.15, (c - 0.8) * 1.5))
-  }
   return s
 }
+
+/**
+ * How strongly her taste pulls a piece onto a slot's shortlist, next to the
+ * pairwise compat (0..1) it is ranked on. memberItemScore runs ~[-0.5, 1.4]:
+ * a loved type (+0.15) or colour (+0.18) lifts a piece a few places; a brand
+ * she keeps swapping out sinks it. Shared with the Quality Lab's member gates.
+ */
+export const MEMBER_SHORTLIST_SCALE = 0.3
 
 export interface MemberTaste {
   affinity: Map<string, number> // brand_id → 0..1
@@ -478,6 +517,8 @@ export function memberGate(
   items: { item: ItemWithBrand; slot: Slot }[],
   /** false = her house-style / Chloe-style rules are relaxed; global bans still hold. */
   strict = true,
+  /** judgeRules false = her constitution codes are judged by the caller (the review recipe), not here. */
+  opts: { judgeRules?: boolean } = {},
 ): boolean {
   const all = [anchor, ...items.map((i) => i.item)]
   for (const it of all) {
@@ -506,10 +547,12 @@ export function memberGate(
       if (isExcluded(t.ejections, x.item.item_id, x.slot, band)) return false
     }
   }
-  const j = judgeMemberLook(t, all, [undefined, ...items.map((x) => x.slot)])
-  if (j?.blocked) {
-    // Relaxed pass: only the global bans still block.
-    if (strict || j.violations.some((v) => GLOBAL_BAN_CODES.has(v.code))) return false
+  if (opts.judgeRules !== false) {
+    const j = judgeMemberLook(t, all, [undefined, ...items.map((x) => x.slot)])
+    if (j?.blocked) {
+      // Relaxed pass: only the global bans still block.
+      if (strict || j.violations.some((v) => GLOBAL_BAN_CODES.has(v.code))) return false
+    }
   }
   // Her stylist's NEVERS — a ban is a ban in the relaxed pass too: a piece the
   // stylist would never put on her is not "nearly right". What she already
@@ -518,7 +561,7 @@ export function memberGate(
   return true
 }
 
-const GLOBAL_BAN_CODES = new Set(['colour.fuchsia', 'colour.discordant', 'category.activewear'])
+const GLOBAL_BAN_CODES = new Set(['colour.fuchsia', 'colour.discordant', 'category.activewear', 'layer.same_shape', 'set.coord_mismatch'])
 
 export function toLookItem(item: ItemWithBrand): LookItem {
   const owned = isOwnedItem(item as any)
@@ -544,7 +587,6 @@ export function toLookItem(item: ItemWithBrand): LookItem {
 }
 
 // Slots a composed look should always carry if the library can fill them.
-const ENSURE_SLOTS: Slot[] = ['bag']
 
 export interface ComposedLook {
   items: LookItem[]
@@ -552,18 +594,19 @@ export interface ComposedLook {
   score: number
   /** How many of the pieces she already owns (wardrobe import). */
   ownedCount: number
+  /** The look's taste vector, from its pieces (lookVectorFromItems). */
+  vector: number[]
 }
 
 // ── Owned-items modes ───────────────────────────────────────────────────────
 //
-// NOTE on the House Style Constitution: it governs what MYRA PUBLISHES — the
-// public feed, via the Outfit Composer, the pipeline and outfit review. It does
-// NOT run here. A private client's looks are filtered by HER stylist persona
-// (the moodboard envelope, via personaFitScore) plus her own authored
-// preferences and her feedback history, which sharpen as she responds. A rule
-// like "every look needs exactly one statement element" is a house editorial
-// position, not a universal one — for a quiet persona it would reject precisely
-// the looks that are right for her.
+// NOTE on the House Style Constitution: a private client's looks are held to
+// her RULE LAYER (lib/style-rules, via judgeMemberLook): the global bans for
+// everyone, her persona's constitution when she has one, and otherwise Chloe's
+// constitution — every member is a Chloe client until a persona says otherwise
+// (2026-10-10). On top sit her stylist persona (the moodboard envelope, via
+// personaFitScore), the house's own looks underneath it, and her authored
+// preferences and feedback history, which sharpen as she responds.
 export interface ComposeOptions {
   /**
    * blend        — (default) her owned pieces sit in the pool and compete for
@@ -689,14 +732,125 @@ function varietyAdjust(h: ComposeHistory | undefined, itemId: string, seed: numb
   return -historyPenalty(h, itemId) + varietyJitter(itemId, seed)
 }
 
-/** The piece that completes a slot (the bag): the best few by fit, then her history and rotation decide. */
-function pickFill(
-  t: MemberTaste, library: ItemWithBrand[], slot: Slot, keep: ItemWithBrand[], exclude: Set<string>,
-  occ: OccasionContext | undefined, lens: PersonaLens | undefined, history: ComposeHistory | undefined, seed: number,
-): { item: ItemWithBrand; score: number } | undefined {
-  return rankAlternates(t, library, slot, keep, exclude, 6, occ, lens)
-    .map((o) => ({ ...o, score: o.score + varietyAdjust(history, o.item.item_id, seed) }))
-    .sort((a, b) => b.score - a.score)[0]
+/** The brief's pull and penalty on a whole look — the learned part that is not a model (the models are blended inside the recipe). */
+function briefLearningBonus(t: MemberTaste, all: ItemWithBrand[]): number {
+  if (!t.brief) return 0
+  let b = -judgeAgainstBrief(all.map(briefPiece), t.brief).penalty
+  b += Math.min(BRIEF_LIFT_CAP, all.reduce((acc, it) => acc + briefAffinity(briefPiece(it), t.brief!), 0) * BRIEF_LIFT_PER_HIT)
+  return b
+}
+
+/** Outerwear earns its place by the weather: required when it is cold, optional when mild, never when hot. Jewellery finishes a look, optionally. */
+function extraSlotsFor(occ: OccasionContext | undefined): ExtraSlot[] {
+  const climate = occ?.climate ?? null
+  const slots: ExtraSlot[] = []
+  if (climate === 'cold') slots.push({ slot: 'outerwear', required: true })
+  else if (climate !== 'hot') slots.push({ slot: 'outerwear', required: false })
+  slots.push({ slot: 'jewellery', required: false })
+  return slots
+}
+
+/** How far her learned terms may move a look's score: a nudge among coherent looks, never past coherence. */
+const MEMBER_COMBO_CAP = 0.15
+
+interface MemberRecipeConfig {
+  occ: OccasionContext | undefined
+  lens: PersonaLens | undefined
+  history: ComposeHistory | undefined
+  seed: number
+  /** false = her house-style / Chloe-style rules relaxed to the global bans. */
+  strict: boolean
+  count: number
+  maxUsesPerItem: number
+}
+
+/**
+ * THE OUTFIT REVIEW RECIPE, for her. One anchor, her pool, and every member
+ * input in the slot the recipe gives it:
+ *
+ *   * her gates (brands, pairs, white+cream, ejections, brief bans, the work
+ *     formality floor) as the look gate; her rule layer judged inside the
+ *     recipe (global bans for everyone, her persona's or Chloe's constitution);
+ *   * her taste, history, occasion and climate as the per-slot shortlist pull;
+ *   * Chloe's model as the base, her persona's (or routed stylist's) on top;
+ *   * her brief, pair history, persona fit and occasion as a CAPPED bonus.
+ *
+ * A hero that is not a garment (an owned bag, shoes, a coat) is pinned and the
+ * body of the look is composed around it. Returns the recipe's picks, anchor
+ * excluded, best first.
+ */
+function composeForAnchor(t: MemberTaste, hero: ItemWithBrand, pool: ItemWithBrand[], cfg: MemberRecipeConfig): ReviewPick[] {
+  const { occ, lens, history, seed, strict } = cfg
+  const extraSlots = extraSlotsFor(occ)
+  const keepOuterwear = extraSlots.some((e) => e.slot === 'outerwear')
+  // Her rules: hers when strict, the global bans alone when relaxed. A member
+  // with no rule layer of her own is held to the global bans, never the whole
+  // constitution — that is Chloe's editorial position, not a universal one.
+  const rules = strict ? (t.rules ?? rulesForMember(null, false)) : rulesForMember(null, false)
+  const styleModel = t.houseStyleModel ?? t.styleModel ?? null
+  const baseStyleModel = t.houseStyleModel ? t.styleModel ?? null : null
+  const shortlistAdjust = (i: ItemWithBrand) =>
+    varietyAdjust(history, i.item_id, seed) +
+    stylistPull(t, lens, i) +
+    MEMBER_SHORTLIST_SCALE * memberItemScore(t, i) +
+    occasionItemScore(occ, i) +
+    climateScore(occ?.climate, i as any)
+  const comboBonus = (all: ItemWithBrand[]) => {
+    const rest = all.slice(1)
+    const asSlots = rest.map((item) => ({ item, slot: slotForItemType(item.item_type) }))
+    const perPiece = rest.reduce(
+      (sum, i) => sum + personaFitScore(lens, i) + occasionItemScore(occ, i) - historyPenalty(history, i.item_id) - learnedRulePenalty(t, i, occ?.id) + varietyJitter(i.item_id, seed),
+      0,
+    ) / Math.max(1, rest.length)
+    const raw = 0.4 * (memberComboBonus(t, all[0], asSlots) + briefLearningBonus(t, all) + perPiece)
+    return Math.max(-MEMBER_COMBO_CAP, Math.min(MEMBER_COMBO_CAP, raw))
+  }
+  const lookGate = (all: ItemWithBrand[]) =>
+    memberGate(t, all[0], all.slice(1).map((item) => ({ item, slot: slotForItemType(item.item_type) })), strict, { judgeRules: false }) &&
+    occasionFormalityOk(occ, all)
+  const common = {
+    styleModel,
+    baseStyleModel,
+    learnedPairs: t.learnedPairs ?? null,
+    rules,
+    count: cfg.count,
+    maxUsesPerItem: cfg.maxUsesPerItem,
+    shortlistAdjust,
+    comboBonus,
+    lookGate,
+    occasion: occ?.id ?? null,
+  }
+
+  if (reviewAnchorCategory(hero.item_type)) {
+    const library = reviewLibrary(pool, hero, t.ejections, { keepOuterwear })
+    return composeReviewLooks({ ...common, anchor: hero, library, extraSlots }).picks
+  }
+
+  // Not a garment: pin the hero in its slot and build the body around it, from
+  // the lead garments that sit best with it.
+  const heroSlot = slotForItemType(hero.item_type)
+  const bodies = pool
+    .filter((i) => i.item_id !== hero.item_id && reviewAnchorCategory(i.item_type) != null)
+    .map((i) => ({ i, rank: pairCompat(hero, i).total + shortlistAdjust(i) }))
+    .sort((a, b) => b.rank - a.rank)
+    .slice(0, 6)
+    .map((x) => x.i)
+  const slotsForHero: ExtraSlot[] =
+    heroSlot === 'outerwear'
+      ? [...extraSlots.filter((e) => e.slot !== 'outerwear'), { slot: 'outerwear', required: true }]
+      : extraSlots
+  const picks: ReviewPick[] = []
+  for (const body of bodies) {
+    const library = reviewLibrary(pool, body, t.ejections, { keepOuterwear: keepOuterwear || heroSlot === 'outerwear' })
+    const r = composeReviewLooks({ ...common, anchor: body, library, extraSlots: slotsForHero, pinned: [{ item: hero, slot: heroSlot }] })
+    for (const pick of r.picks) {
+      picks.push({
+        ...pick,
+        items: [{ item: body, slot: slotForItemType(body.item_type) }, ...pick.items.filter((x) => x.item.item_id !== hero.item_id)],
+      })
+    }
+  }
+  return picks.sort((a, b) => b.score - a.score).slice(0, cfg.count)
 }
 
 // Compose up to `count` looks. Anchors are the member's highest-affinity
@@ -776,11 +930,9 @@ export function composeMemberLooks(
     memberItemScore(t, i) + occasionItemScore(occ, i) + climateScore(occ?.climate, i as any) + personaFitScore(lens, i)
       - historyPenalty(history, i.item_id) - learnedRulePenalty(t, i, occ?.id) + varietyJitter(i.item_id, seed)
 
-  // Regular anchors: dresses and tops (owned or retail, in blend mode).
-  const anchorPool = usable.filter((i) => {
-    const slot = slotForItemType(i.item_type)
-    return slot === 'dress' || slot === 'top'
-  })
+  // Regular anchors: the lead garment of a look — a dress, a top or a bottom
+  // (owned or retail, in blend mode), as Review queues them.
+  const anchorPool = usable.filter((i) => reviewAnchorCategory(i.item_type) != null)
   // A piece that already anchored an approved look has had its outfit. Styling
   // it again is what STYLE 3 WAYS does, deliberately; a fresh delivery should
   // be finding her something new. Relaxed only if nothing is left to anchor.
@@ -818,49 +970,15 @@ export function composeMemberLooks(
     if (brandId && usedAnchorBrands.has(brandId) && anchorsInPhase > count) return false
 
     const anchorOwned = isOwnedItem(a.item as any)
-    // The persona lens and her own preferences do the filtering; the only hard
-    // gate is hers — input-only brands and brand pairs she has excluded.
-    const cands = generateCandidates({
-      anchor: a.item,
-      library: usable,
-      perSlotPool: 5,
-      maxCandidates: 5,
-      // Compatibility makes the outfit work; this makes sure her own brand
-      // priorities can get into the small per-slot pool where that outfit is
-      // assembled. Previously affinity only arrived after five items had
-      // already been shortlisted by visual fit, so a 0.10 baseline brand
-      // could repeatedly beat a declared 0.90 brand before taste had a say.
-      shortlistAdjust: (i) =>
-        varietyAdjust(history, i.item_id, seed) +
-        stylistPull(t, lens, i) +
-        0.15 * memberItemScore(t, i),
-      minScore: 0.5,
-      excludeItemIds: Array.from(usedItems),
-      learnedBonus: (items) =>
-        memberComboBonus(t, a.item, items) + styleLearningBonus(t, a.item, items) +
-        items.reduce((sum, i) => sum + occasionItemScore(occ, i.item) + personaFitScore(lens, i.item)
-          - historyPenalty(history, i.item.item_id) - learnedRulePenalty(t, i.item, occ?.id) + varietyJitter(i.item.item_id, seed), 0) /
-          Math.max(1, items.length),
-      learnedBlend: 0.4,
-      houseGate: (items) => memberGate(t, a.item, items, strictRules),
-    })
-    const best = cands[0]
+    const best = composeForAnchor(t, a.item, usable.filter((i) => !usedItems.has(i.item_id)), {
+      occ, lens, history, seed, strict: strictRules, count: 1, maxUsesPerItem: 1,
+    })[0]
     if (!best) return false
 
     const all = [
       { item: a.item, slot: slotForItemType(a.item.item_type) },
       ...best.items,
     ]
-
-    // A finished look carries a bag. The shared composer treats bag as
-    // optional (it competes with omitting it), so top it up here rather than
-    // changing slot planning for the main Outfit Composer.
-    for (const need of ENSURE_SLOTS) {
-      if (all.some((x) => x.slot === need)) continue
-      const exclude = new Set([...Array.from(usedItems), ...all.map((x) => x.item.item_id)])
-      const pick = pickFill(t, usable, need, all.map((x) => x.item), exclude, occ, lens, history, seed)
-      if (pick) all.push({ item: pick.item, slot: need })
-    }
 
     // She has already passed this exact combination over. Only offer it again
     // if relaxing everything else still leaves the delivery short.
@@ -894,7 +1012,7 @@ export function composeMemberLooks(
       .filter(Boolean)
       .join(' · ')
 
-    looks.push({ items: all.map(({ item }) => toLookItem(item)), notes, score: best.score, ownedCount })
+    looks.push({ items: all.map(({ item }) => toLookItem(item)), notes, score: best.score, ownedCount, vector: lookVectorFromItems(all.map(({ item }) => item)) })
     if (ownedCount) ownedLooks++
     return true
   }
@@ -924,8 +1042,8 @@ export function composeMemberLooks(
 // ── VARIANTS PER HERO ────────────────────────────────────────────────────────
 // The member's real question is "what else can I wear this with?" — so hold ONE
 // hero fixed and compose several genuinely different looks around it.
-// generateCandidates already returns many ranked outfits for one anchor; we keep
-// the most DISTINCT few (no more than half their supporting pieces shared) so the
+// The review recipe returns many ranked outfits for one anchor; we keep the
+// most DISTINCT few (no more than half their supporting pieces shared) so the
 // set reads as real alternatives, not the same look nudged. Each returned look is
 // an ordinary ComposedLook whose first item is the shared hero, so it approves,
 // swaps and shoots exactly like any other look.
@@ -966,41 +1084,20 @@ export function composeMemberVariants(
     ?? libraryIn.find((i) => i.item_id === heroId)
   if (!anchor) return []
 
-  const cands = generateCandidates({
-    anchor,
-    library: usable,
-    perSlotPool: 8,
-    maxCandidates: 20,
-    // Keep "style this three ways" on the same brand-priority policy as a
-    // fresh delivery. A named or learned label should reach the shortlist
-    // before a merely stocked baseline label when their visual fit is close.
-    shortlistAdjust: (i) =>
-      varietyAdjust(history, i.item_id, seed) +
-      stylistPull(t, lens, i) +
-      0.15 * memberItemScore(t, i),
-    minScore: 0.45,
-    excludeItemIds: [],
-    learnedBonus: (items) =>
-      memberComboBonus(t, anchor, items) + styleLearningBonus(t, anchor, items) +
-      items.reduce((sum, i) => sum + occasionItemScore(occ, i.item) + personaFitScore(lens, i.item)
-        - historyPenalty(history, i.item.item_id) - learnedRulePenalty(t, i.item, occ?.id) + varietyJitter(i.item.item_id, seed), 0) /
-        Math.max(1, items.length),
-    learnedBlend: 0.4,
-    houseGate: (items) => memberGate(t, anchor, items),
-  })
+  const cands = composeForAnchor(t, anchor, usable, { occ, lens, history, seed, strict: true, count: 20, maxUsesPerItem: 2 })
 
-  const supportIds = (c: ComposerCandidate) => new Set(c.items.map((x) => x.item.item_id))
+  const supportIds = (c: ReviewPick) => new Set(c.items.map((x) => x.item.item_id))
   const overlap = (a: Set<string>, b: Set<string>) => {
     let shared = 0
     a.forEach((id) => { if (b.has(id)) shared++ })
     return shared / Math.max(a.size, b.size, 1)
   }
-  const picked: ComposerCandidate[] = []
+  const picked: ReviewPick[] = []
   // Ways to wear the same hero should not all finish with the same necklace or
   // bag — one pearl necklace ended up on two variants of Alison's looks.
-  const finishIds = (c: ComposerCandidate) =>
+  const finishIds = (c: ReviewPick) =>
     new Set(c.items.filter((x) => x.slot === 'jewellery' || x.slot === 'bag').map((x) => x.item.item_id))
-  const sharesFinish = (a: ComposerCandidate, b: ComposerCandidate) => {
+  const sharesFinish = (a: ReviewPick, b: ReviewPick) => {
     const fb = finishIds(b)
     return Array.from(finishIds(a)).some((id) => fb.has(id))
   }
@@ -1009,17 +1106,16 @@ export function composeMemberVariants(
   // allow a repeat except the top and the shoe; then, only if the library is
   // genuinely too thin, rank order. Sharing half the pieces used to pass, and
   // that is how one white shirt and one pair of trainers ended up in every look.
-  const keyOf = (c: ComposerCandidate, slot: string) => c.items.find((x) => x.slot === slot)?.item.item_id ?? null
-  const sharesSlot = (a: ComposerCandidate, b: ComposerCandidate, slots: readonly string[]) =>
+  const keyOf = (c: ReviewPick, slot: string) => c.items.find((x) => x.slot === slot)?.item.item_id ?? null
+  const sharesSlot = (a: ReviewPick, b: ReviewPick, slots: readonly string[]) =>
     slots.some((sl) => { const x = keyOf(a, sl); return !!x && x === keyOf(b, sl) })
-  const joins = (c: ComposerCandidate, slots: readonly string[], maxOverlap: number) =>
+  const joins = (c: ReviewPick, slots: readonly string[], maxOverlap: number) =>
     picked.every((p) => overlap(supportIds(c), supportIds(p)) <= maxOverlap && !sharesSlot(c, p, slots) && !sharesFinish(c, p))
   for (const c of cands) { if (picked.length >= count) break; if (joins(c, VARIANT_DISTINCT_SLOTS, 0.34)) picked.push(c) }
   for (const c of cands) { if (picked.length >= count) break; if (!picked.includes(c) && joins(c, ['top', 'shoe'], 0.5)) picked.push(c) }
   for (const c of cands) { if (picked.length >= count) break; if (!picked.includes(c)) picked.push(c) }
 
   const heroSlot = slotForItemType(anchor.item_type)
-  const fillUsed = new Set<string>() // bags added to earlier variants
   const anchorOwned = isOwnedItem(anchor as any)
   const anchorLabel = anchorOwned ? `her own ${anchor.product_name}` : anchor.brand?.name ?? '—'
   // What each slot has already worn across these variants. The shortlist can be
@@ -1035,18 +1131,14 @@ export function composeMemberVariants(
   }
   return picked.map((best) => {
     const all = [{ item: anchor, slot: heroSlot }, ...best.items]
-    for (const need of ENSURE_SLOTS) {
-      if (all.some((x) => x.slot === need)) continue
-      const exclude = new Set([...Array.from(fillUsed), ...all.map((x) => x.item.item_id)])
-      const pick = pickFill(t, usable, need, all.map((x) => x.item), exclude, occ, lens, history, seed)
-      if (pick) { all.push({ item: pick.item, slot: need }); fillUsed.add(pick.item.item_id) }
-    }
     for (const entry of all) {
       const slot = entry.slot
       if (!slot || slot === heroSlot || !VARIANT_DISTINCT_SLOTS.includes(slot as any)) continue
       if (!usedIn(slot).has(entry.item.item_id)) { noteUsed(slot, entry.item.item_id); continue }
-      const exclude = new Set([...Array.from(usedIn(slot)), ...all.map((x) => x.item.item_id), ...Array.from(fillUsed)])
-      const swap = pickFill(t, usable, slot as any, all.filter((x) => x !== entry).map((x) => x.item), exclude, occ, lens, history, seed)
+      const exclude = new Set([...Array.from(usedIn(slot)), ...all.map((x) => x.item.item_id)])
+      const swap = rankAlternates(t, usable, slot as any, all.filter((x) => x !== entry).map((x) => x.item), exclude, 6, occ, lens)
+        .map((o) => ({ ...o, score: o.score + varietyAdjust(history, o.item.item_id, seed) }))
+        .sort((a, b) => b.score - a.score)[0]
       if (swap) entry.item = swap.item
       noteUsed(slot, entry.item.item_id)
     }
@@ -1056,7 +1148,7 @@ export function composeMemberVariants(
       `coherence ${best.score.toFixed(2)}`,
       ownedCount ? `◈ ${ownedCount} from her wardrobe` : null,
     ].filter(Boolean).join(' · ')
-    return { items: all.map(({ item }) => toLookItem(item)), notes, score: best.score, ownedCount }
+    return { items: all.map(({ item }) => toLookItem(item)), notes, score: best.score, ownedCount, vector: lookVectorFromItems(all.map(({ item }) => item)) }
   })
 }
 
@@ -1127,14 +1219,33 @@ export function rankAlternates(
       // Her stylist's bans hold in the picker as they do in the shortlist.
       (isOwnedItem(i as any) || !briefBlocks(briefPiece(i), t.brief)),
   )
-  return (allowed.length ? allowed : inSlot)
+  // Review's shortlist, for one slot: brand tiers kept in band with the rest
+  // of the look, ranked by fit with it plus her pull — then judged WITH the
+  // kept pieces through her gates, so a swap never breaks a rule the composer
+  // keeps. An empty slot picker is worse than an imperfect one, so each cut
+  // falls back to the one before it.
+  const pool = allowed.length ? allowed : inSlot
+  const keepTiers = keepItems.map((k) => k.brand?.price_tier ?? null)
+  const inBand = pool.filter((i) => !tierBandViolation([...keepTiers, i.brand?.price_tier ?? null]))
+  const ranked = (inBand.length ? inBand : pool)
     .map((i) => {
       const compat =
         keepItems.length > 0
           ? keepItems.reduce((s, k) => s + pairCompat(k, i).total, 0) / keepItems.length
           : 0.7
-      return { item: i, score: 0.5 * memberItemScore(t, i) + 0.5 * compat + occasionItemScore(occ, i) + personaFitScore(lens, i) + BRIEF_SHORTLIST_SCALE * briefPull(briefPiece(i), t.brief) - learnedRulePenalty(t, i, occ?.id) }
+      const pull =
+        MEMBER_SHORTLIST_SCALE * memberItemScore(t, i) +
+        stylistPull(t, lens, i) +
+        occasionItemScore(occ, i) +
+        climateScore(occ?.climate, i as any) -
+        learnedRulePenalty(t, i, occ?.id)
+      return { item: i, score: compat + pull }
     })
     .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
+  const judged = keepItems.length
+    ? ranked.filter((r) =>
+        memberGate(t, keepItems[0], [...keepItems.slice(1), r.item].map((item) => ({ item, slot: slotForItemType(item.item_type) })), true),
+      )
+    : ranked
+  return (judged.length ? judged : ranked).slice(0, limit)
 }

@@ -14,9 +14,8 @@ import type { TransferPoint } from '@/lib/learning-scope'
 import { CLIMATES, type ClimateId } from '@/lib/climate'
 import { HIGGSFIELD_POSE_OPTIONS } from '@/lib/higgsfield-shoot'
 import { lookSpend, formatLookSpend } from '@/lib/wardrobe/owned-items'
+import { parsePriceQuery } from '@/lib/price-query'
 import {
-  ROOMS,
-  ROOM_KEYS,
   OCCASION_TYPES,
   FREQUENCY_OPTIONS,
   WORK_DRESS_CODES,
@@ -25,15 +24,8 @@ import {
   SYNTH_PERSONAS,
   DRY_RUN_SCRIPT,
   DRY_RUN_PASS_CRITERIA,
-  effectiveWeights,
-  roomWeightsFromBrands,
-  formatRoomMix,
-  normalise,
   isFastFashion,
-  vectorRoomRead,
   coverageChecks,
-  type RoomWeights,
-  type RoomKey,
   type OccasionId,
   type WorkDressCode,
   type Frequency,
@@ -45,14 +37,9 @@ import {
   PRICE_BUCKETS,
   type StylePrefs,
   type PriceBands, PIECE_PREFERENCES } from '@/lib/pilot-stylist'
-import { createMember, updateMember, deleteMember, seedSyntheticPersonas, addKnownEvent, removeKnownEvent, addWardrobeItem, removeWardrobeItem, createDelivery, createCalibrationSet, deleteDelivery, reopenDelivery, deleteDeliveryAndMemory, updateDelivery, saveLook, deleteLook, clearLook, clearDeliveryLooks, markStockChecked, sendDelivery, recordResponse, logActivity, recomputeWeights, assignMemberPersona, composeDeliveryLooks, lookAlternates, swapComposedLookItem, removeComposedLookItem, lookAddOptions, addComposedLookItem, approveComposedLook, skipComposedLook, composeLookVariants, restoreLookShoot, deleteLookShoot, loadMemberTrust, recordMemberLookFeedback, setMemberBrands, addMemberBrand, removeMemberBrand, restoreMemberBrand, loadMemberBrandMap } from './actions.gated'
+import { createMember, updateMember, deleteMember, seedSyntheticPersonas, addKnownEvent, removeKnownEvent, addWardrobeItem, removeWardrobeItem, createDelivery, deleteDelivery, reopenDelivery, deleteDeliveryAndMemory, updateDelivery, saveLook, deleteLook, clearLook, clearDeliveryLooks, markStockChecked, sendDelivery, recordResponse, logActivity, assignMemberPersona, composeDeliveryLooks, lookAlternates, swapComposedLookItem, removeComposedLookItem, lookAddOptions, addComposedLookItem, approveComposedLook, skipComposedLook, composeLookVariants, restoreLookShoot, deleteLookShoot, loadMemberTrust, recordMemberLookFeedback, setMemberBrands, addMemberBrands, removeMemberBrand, restoreMemberBrand, loadMemberBrandMap } from './actions.gated'
 import type { MemberTrust, MemberBrandMap, MemberBrandDot, SwapOption, PilotData, PilotMember, PilotDelivery, PilotLook, PilotActivity } from './actions'
 
-const ROOM_COLOUR: Record<RoomKey, string> = {
-  tailored: '#0A0A0A',
-  romantic: '#C4A882',
-  ease: '#A8A8A4',
-}
 
 const TABS = ['MEMBERS', 'DELIVERIES', 'HER VIEW', 'JOURNEY', 'OUTFIT QUALITY', 'DRY RUN', 'EXIT ARTEFACT'] as const
 type Tab = (typeof TABS)[number]
@@ -170,22 +157,6 @@ const btnTiny =
   'border border-[#E2E0DB] text-[#6B6B6B] text-[20px] tracking-[0.12em] px-2.5 py-1 hover:border-[#0A0A0A] hover:text-[#0A0A0A] transition-colors duration-300'
 
 // ── Shared bits ─────────────────────────────────────────────────────────────
-
-function WeightBar({ weights, compact }: { weights: RoomWeights; compact?: boolean }) {
-  const w = normalise(weights)
-  return (
-    <div>
-      <div className={`flex w-full overflow-hidden ${compact ? 'h-1.5' : 'h-2.5'}`}>
-        {ROOM_KEYS.map((k) => (
-          <div key={k} style={{ width: `${w[k] * 100}%`, background: ROOM_COLOUR[k] }} />
-        ))}
-      </div>
-      {!compact && (
-        <p className="text-[20px] tracking-[0.14em] text-[#6B6B6B] mt-1.5">{formatRoomMix(w)}</p>
-      )}
-    </div>
-  )
-}
 
 function OccasionPicker({
   value,
@@ -384,21 +355,6 @@ function MembersTab({ data, run, busy }: { data: PilotData; run: Run; busy: stri
         </p>
       )}
 
-      <div className="border border-[#E2E0DB] px-5 py-4">
-        <p className={`${label} mb-3`}>THE THREE ROOMS</p>
-        <div className="grid grid-cols-3 gap-4">
-          {ROOM_KEYS.map((k) => (
-            <div key={k}>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="inline-block w-2 h-2" style={{ background: ROOM_COLOUR[k] }} />
-                <span className="text-[20px] tracking-[0.14em] text-[#0A0A0A]">{ROOMS[k].label}</span>
-              </div>
-              <p className="text-[20px] tracking-[0.06em] text-[#6B6B6B]">{ROOMS[k].axis}</p>
-              <p className="text-[20px] tracking-[0.06em] text-[#A8A8A4] mt-1">{ROOMS[k].palette.join(' · ')}</p>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   )
 }
@@ -415,7 +371,6 @@ function NewMemberForm({ run, busy, done }: { run: Run; busy: string | null; don
   const [notes, setNotes] = useState('')
 
   const brands = useMemo(() => parseBrandLines(brandText), [brandText])
-  const preview = useMemo(() => (brands.length ? roomWeightsFromBrands(brands) : null), [brands])
 
   return (
     <div className="border border-[#0A0A0A] px-6 py-6 space-y-5">
@@ -434,12 +389,6 @@ function NewMemberForm({ run, busy, done }: { run: Run; busy: string | null; don
           value={brandText}
           onChange={(e) => setBrandText(e.target.value)}
         />
-        {preview && (
-          <div className="mt-2 max-w-sm">
-            <p className={`${label} mb-1`}>COMPUTED WEIGHTING — SANITY-CHECK AGAINST YOUR OWN READ</p>
-            <WeightBar weights={preview} />
-          </div>
-        )}
       </div>
       <div>
         <p className={`${label} mb-1.5`}>INPUT-ONLY BRANDS (SIGNAL + WARDROBE, NEVER RECOMMENDED) — COMMA SEPARATED</p>
@@ -741,6 +690,226 @@ const DOT_ROLES: { role: MemberBrandDot['role']; label: string; colour: string }
   { role: 'hidden', label: 'HIDDEN', colour: '#B83A3A' },
 ]
 
+// ── Bulk brand picker ───────────────────────────────────────────────────────
+// Onboarding a new client one brand at a time is slow. Filter every brand by
+// typical price ("under £400", "around 250", band chips) and by style (curated
+// families + onboarding groups), tick many, add them in one call.
+
+type BulkGroupBy = 'price' | 'style' | 'az'
+
+function BulkBrandPicker({ memberId, name, data, run, busy, onDone }: {
+  memberId: string; name: string; data: MemberBrandMap; run: Run; busy: string | null; onDone: () => void
+}) {
+  const [q, setQ] = useState('')
+  const [bands, setBands] = useState<Set<number>>(new Set())
+  const [styles, setStyles] = useState<Set<string>>(new Set())
+  const [groupBy, setGroupBy] = useState<BulkGroupBy>('price')
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [result, setResult] = useState<string | null>(null)
+
+  const bandNames = data.bandNames ?? []
+  const bounds = data.bandBounds ?? []
+  const styleName = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const f of data.families ?? []) m.set(`f:${f.id}`, f.name)
+    for (const g of data.groups ?? []) m.set(`g:${g.key}`, g.name)
+    return m
+  }, [data])
+  const stylesOf = (d: MemberBrandDot) => [...d.families.map((f) => `f:${f}`), ...d.groups.map((g) => `g:${g}`)]
+  const hers = (d: MemberBrandDot) => d.role === 'named' || d.role === 'learned'
+  const bandRange = (i: number) =>
+    i === 0 ? `UNDER £${bounds[0]}` : i >= bounds.length ? `£${bounds[bounds.length - 1]}+` : `£${bounds[i - 1]}–${bounds[i]}`
+
+  const pq = useMemo(() => parsePriceQuery(q), [q])
+  const priceFiltered = pq.min != null || pq.max != null
+
+  // everything but the chip being counted, so chip counts show what clicking it would give
+  const matches = (d: MemberBrandDot, skip?: 'band' | 'style') => {
+    if (pq.rest) {
+      const hay = [d.name, ...stylesOf(d).map((s) => styleName.get(s) ?? '')].join(' ').toLowerCase()
+      if (!pq.rest.split(' ').every((w) => hay.includes(w))) return false
+    }
+    if (priceFiltered) {
+      if (d.typicalPrice == null) return false
+      if (pq.min != null && d.typicalPrice < pq.min) return false
+      if (pq.max != null && d.typicalPrice > pq.max) return false
+    }
+    if (skip !== 'band' && bands.size && (d.band == null || !bands.has(d.band))) return false
+    if (skip !== 'style' && styles.size && !stylesOf(d).some((s) => styles.has(s))) return false
+    return true
+  }
+
+  const shown = useMemo(
+    () => data.dots.filter((d) => matches(d)).sort((a, b) => (a.typicalPrice ?? 1e9) - (b.typicalPrice ?? 1e9) || a.name.localeCompare(b.name)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data, pq, bands, styles],
+  )
+  const bandCounts = useMemo(() => {
+    const c = new Map<number, number>()
+    for (const d of data.dots) if (d.band != null && matches(d, 'band')) c.set(d.band, (c.get(d.band) ?? 0) + 1)
+    return c
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, pq, styles])
+  const styleCounts = useMemo(() => {
+    const c = new Map<string, number>()
+    for (const d of data.dots) if (matches(d, 'style')) for (const s of stylesOf(d)) c.set(s, (c.get(s) ?? 0) + 1)
+    return c
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, pq, bands])
+
+  const sections = useMemo(() => {
+    const out = new Map<string, MemberBrandDot[]>()
+    const push = (k: string, d: MemberBrandDot) => out.set(k, [...(out.get(k) ?? []), d])
+    for (const d of shown) {
+      if (groupBy === 'az') push('ALL', d)
+      else if (groupBy === 'price') push(d.band == null ? 'NO PRICE YET' : `${bandNames[d.band] ?? `BAND ${d.band}`} · ${bandRange(d.band)}`, d)
+      else {
+        const ss = stylesOf(d).filter((s) => !styles.size || styles.has(s))
+        if (!ss.length) push('NO STYLE GROUP', d)
+        for (const s of ss) push((styleName.get(s) ?? s).toUpperCase(), d)
+      }
+    }
+    const keys = Array.from(out.keys())
+    if (groupBy === 'style') keys.sort((a, b) => (a === 'NO STYLE GROUP' ? 1 : b === 'NO STYLE GROUP' ? -1 : a.localeCompare(b)))
+    if (groupBy === 'price') keys.sort((a, b) => (a === 'NO PRICE YET' ? 1 : b === 'NO PRICE YET' ? -1 : 0))
+    return keys.map((k) => ({ key: k, dots: out.get(k)! }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shown, groupBy, styles])
+
+  const toggle = <T,>(set: Set<T>, v: T) => { const n = new Set(set); n.has(v) ? n.delete(v) : n.add(v); return n }
+  const selectable = (ds: MemberBrandDot[]) => ds.filter((d) => !hers(d))
+  const allPicked = (ds: MemberBrandDot[]) => selectable(ds).length > 0 && selectable(ds).every((d) => picked.has(d.brand_id))
+  const setMany = (ds: MemberBrandDot[], on: boolean) =>
+    setPicked((p) => { const n = new Set(p); for (const d of selectable(ds)) on ? n.add(d.brand_id) : n.delete(d.brand_id); return n })
+
+  const pickedNames = data.dots.filter((d) => picked.has(d.brand_id)).map((d) => d.name)
+  const first = name.split(' ')[0].toUpperCase()
+  const chip = (on: boolean) =>
+    `border px-2.5 py-1 text-[20px] tracking-[0.1em] transition-colors ${on ? 'border-[#0A0A0A] bg-[#0A0A0A] text-white' : 'border-[#E2E0DB] text-[#6B6B6B] hover:border-[#0A0A0A]'}`
+
+  const add = async () => {
+    const r = await run(`mbb-${memberId}`, () => addMemberBrands(memberId, pickedNames), 'BRANDS ADDED')
+    if (r && !r.error) {
+      const parts = [`${r.added.length} ADDED`]
+      if (r.already.length) parts.push(`${r.already.length} ALREADY HERS`)
+      if (r.unmatched.length) parts.push(`${r.unmatched.length} NOT IN TABLE`)
+      if (r.capped.length) parts.push(`${r.capped.length} OVER THE 60-BRAND CAP: ${r.capped.join(', ').toUpperCase()}`)
+      setResult(parts.join(' · '))
+      setPicked(new Set())
+      onDone()
+    }
+  }
+
+  return (
+    <div className="mt-4 border-t border-[#EFEDE9] pt-3">
+      <p className={label}>ADD MANY — FILTER BY PRICE OR STYLE, TICK, ADD</p>
+      <input
+        className={`${input} mt-2`}
+        placeholder="E.G. UNDER £400 · AROUND £250 · £200–300 · PARISIAN UNDER 400"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+      />
+      {(priceFiltered || pq.rest) && (
+        <p className="text-[20px] tracking-[0.08em] text-[#6B6B6B] mt-1">
+          {priceFiltered && <>TYPICAL ITEM {pq.min != null ? `£${pq.min}` : ''}{pq.min != null && pq.max != null ? '–' : ''}{pq.max != null ? `${pq.min == null ? 'UP TO ' : ''}£${pq.max}` : '+'}</>}
+          {priceFiltered && pq.rest ? ' · ' : ''}
+          {pq.rest && <>MATCHING “{pq.rest.toUpperCase()}”</>}
+        </p>
+      )}
+
+      <p className="text-[20px] tracking-[0.12em] text-[#A8A8A4] mt-3">PRICE BAND</p>
+      <div className="flex flex-wrap gap-1.5 mt-1">
+        {bandNames.map((b, i) => (
+          <button key={b} className={chip(bands.has(i))} onClick={() => setBands((s) => toggle(s, i))}>
+            {b} <span className="opacity-60">{bandRange(i)} · {bandCounts.get(i) ?? 0}</span>
+          </button>
+        ))}
+      </div>
+
+      <p className="text-[20px] tracking-[0.12em] text-[#A8A8A4] mt-3">STYLE</p>
+      <div className="flex flex-wrap gap-1.5 mt-1">
+        {Array.from(styleName.entries()).filter(([k]) => (styleCounts.get(k) ?? 0) > 0 || styles.has(k)).map(([k, n]) => (
+          <button key={k} className={chip(styles.has(k))} onClick={() => setStyles((s) => toggle(s, k))}>
+            {n.toUpperCase()} <span className="opacity-60">· {styleCounts.get(k) ?? 0}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 mt-3">
+        <span className="text-[20px] tracking-[0.12em] text-[#A8A8A4]">GROUP BY</span>
+        {(['price', 'style', 'az'] as BulkGroupBy[]).map((g) => (
+          <button key={g} className={chip(groupBy === g)} onClick={() => setGroupBy(g)}>
+            {g === 'price' ? 'PRICE' : g === 'style' ? 'STYLE' : 'A–Z'}
+          </button>
+        ))}
+        <span className="text-[20px] tracking-[0.08em] text-[#6B6B6B] ml-2">{shown.length} BRANDS</span>
+        {shown.length > 0 && (
+          <button className={`${btnTiny} !text-[20px]`} onClick={() => setMany(shown, !allPicked(shown))}>
+            {allPicked(shown) ? 'UNSELECT ALL' : `SELECT ALL ${selectable(shown).length}`}
+          </button>
+        )}
+        {(q || bands.size > 0 || styles.size > 0) && (
+          <button className={`${btnTiny} !text-[20px]`} onClick={() => { setQ(''); setBands(new Set()); setStyles(new Set()) }}>CLEAR FILTERS</button>
+        )}
+      </div>
+
+      <div className="mt-2 max-h-[520px] overflow-y-auto border border-[#EFEDE9]" data-lenis-prevent>
+        {sections.map((sec) => (
+          <div key={sec.key}>
+            {groupBy !== 'az' && (
+              <div className="sticky top-0 bg-[#F7F6F3] flex items-center justify-between px-3 py-1.5 border-b border-[#EFEDE9]">
+                <span className="text-[20px] tracking-[0.12em] text-[#0A0A0A]">{sec.key} <span className="text-[#A8A8A4]">· {sec.dots.length}</span></span>
+                {selectable(sec.dots).length > 0 && (
+                  <button className="text-[20px] tracking-[0.1em] text-[#6B6B6B] hover:text-[#0A0A0A]" onClick={() => setMany(sec.dots, !allPicked(sec.dots))}>
+                    {allPicked(sec.dots) ? 'UNSELECT ALL' : `SELECT ALL ${selectable(sec.dots).length}`}
+                  </button>
+                )}
+              </div>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+              {sec.dots.map((d) => {
+                const isHers = hers(d)
+                const on = isHers || picked.has(d.brand_id)
+                return (
+                  <label
+                    key={`${sec.key}-${d.brand_id}`}
+                    className={`flex items-center gap-2 px-3 py-1.5 border-b border-[#F4F3F0] ${isHers ? 'opacity-45 cursor-default' : 'cursor-pointer hover:bg-[#FAFAF8]'}`}
+                  >
+                    <input
+                      type="checkbox"
+                      className="accent-[#0A0A0A] w-4 h-4"
+                      checked={on}
+                      disabled={isHers}
+                      onChange={() => setPicked((p) => toggle(p, d.brand_id))}
+                    />
+                    <span className="text-[20px] tracking-[0.04em] text-[#0A0A0A] truncate">{d.name.toUpperCase()}</span>
+                    <span className="text-[20px] tracking-[0.04em] text-[#7C838B] ml-auto shrink-0">
+                      {isHers ? 'HERS' : d.role === 'hidden' ? 'REMOVED · ' : ''}
+                      {!isHers && (d.typicalPrice ? `£${Math.round(d.typicalPrice)}` : 'NO PRICE')}
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+        {!shown.length && <p className="text-[20px] tracking-[0.08em] text-[#A8A8A4] p-3">NO BRANDS MATCH.</p>}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 mt-3">
+        <button className={btnDark} disabled={!picked.size || busy === `mbb-${memberId}`} onClick={add}>
+          {busy === `mbb-${memberId}` ? 'ADDING…' : `ADD ${picked.size} BRAND${picked.size === 1 ? '' : 'S'} FOR ${first}`}
+        </button>
+        {picked.size > 0 && <button className={`${btnTiny} !text-[20px]`} onClick={() => setPicked(new Set())}>CLEAR SELECTION</button>}
+        {result && <span className="text-[20px] tracking-[0.08em] text-[#0A0A0A]">{result}</span>}
+      </div>
+      {picked.size > 0 && (
+        <p className="text-[20px] tracking-[0.04em] text-[#6B6B6B] mt-1">{pickedNames.join(' · ').toUpperCase()}</p>
+      )}
+    </div>
+  )
+}
+
 function MemberBrandMapView({ memberId, name, run, busy }: { memberId: string; name: string; run: Run; busy: string | null }) {
   const [data, setData] = useState<MemberBrandMap | null>(null)
   const [loading, setLoading] = useState(false)
@@ -907,12 +1076,12 @@ function MemberBrandMapView({ memberId, name, run, busy }: { memberId: string; n
                 placeholder="ADD A BRAND FOR HER"
                 value={newBrand}
                 onChange={(e) => setNewBrand(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && newBrand.trim()) (async () => { await run(`mba-${memberId}`, () => addMemberBrand(memberId, newBrand), 'BRAND ADDED AT FULL AFFINITY'); setNewBrand(''); load() })() }}
+                onKeyDown={(e) => { if (e.key === 'Enter' && newBrand.trim()) (async () => { await run(`mba-${memberId}`, () => addMemberBrands(memberId, [newBrand]), 'BRAND ADDED AT FULL AFFINITY'); setNewBrand(''); load() })() }}
               />
               <button
                 className={`${btnTiny} !text-[20px]`}
                 disabled={!newBrand.trim() || busy === `mba-${memberId}`}
-                onClick={async () => { await run(`mba-${memberId}`, () => addMemberBrand(memberId, newBrand), 'BRAND ADDED AT FULL AFFINITY'); setNewBrand(''); load() }}
+                onClick={async () => { await run(`mba-${memberId}`, () => addMemberBrands(memberId, [newBrand]), 'BRAND ADDED AT FULL AFFINITY'); setNewBrand(''); load() }}
               >
                 ADD
               </button>
@@ -922,6 +1091,7 @@ function MemberBrandMapView({ memberId, name, run, busy }: { memberId: string; n
           <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4] mt-1">
             {plotted.length} OF {data.dots.length} BRANDS POSITIONED · THE REST HAVE NO CODES OR NO PRICE YET
           </p>
+          <BulkBrandPicker memberId={memberId} name={name} data={data} run={run} busy={busy} onDone={load} />
           {data.unmatched.length > 0 && (
             <p className="text-[20px] tracking-[0.08em] text-[#B83A3A] mt-1">
               NAMED BUT NOT IN MYRA&rsquo;S BRAND TABLE, SO THEY REACH NOTHING: {data.unmatched.join(' · ').toUpperCase()}
@@ -1612,7 +1782,6 @@ function MemberCard({
   const [newEvent, setNewEvent] = useState({ label: '', date: '' })
   const [newPiece, setNewPiece] = useState({ label: '', brand: '' })
 
-  const eff = effectiveWeights(m.room_weights, previewOccasion, m.work_dress_code)
 
   return (
     <div className="border border-[#E2E0DB] px-6 py-5">
@@ -1626,48 +1795,11 @@ function MemberCard({
               </span>
             )}
           </div>
-          <div className="mt-3 max-w-md">
-            <p className={`${label} mb-1`}>ROOM WEIGHTING — LEARNED FROM HER SIGNALS</p>
-            <WeightBar weights={m.room_weights} />
-            {(() => {
-              const read = vectorRoomRead(m.taste_vector)
-              return read ? (
-                <div className="mt-3">
-                  <p className={`${label} mb-1`}>VECTOR READ — 34-DIM CROSS-CHECK, SHOULD BROADLY AGREE</p>
-                  <WeightBar weights={read} />
-                </div>
-              ) : (
-                <p className="text-[20px] tracking-[0.12em] text-[#A8A8A4] mt-2">
-                  NO TASTE VECTOR YET — BUILDS FROM HER FIRST YES / SAVE / CLICK / PURCHASE
-                </p>
-              )
-            })()}
-          </div>
+          <p className="text-[20px] tracking-[0.12em] text-[#A8A8A4] mt-3">
+            {m.taste_vector?.length ? 'TASTE VECTOR — BUILT FROM WHAT SHE SAYS YES TO' : 'NO TASTE VECTOR YET — BUILDS FROM HER FIRST YES / SAVE / CLICK / PURCHASE'}
+          </p>
         </div>
         <div className="flex gap-2 shrink-0">
-          <button
-            className={btnTiny}
-            disabled={busy === `calib-${m.member_id}`}
-            title="3 scaffolded looks, one per room, for LIKE / DISLIKE — an extra taste-onboarding step"
-            onClick={() =>
-              run(
-                `calib-${m.member_id}`,
-                () => createCalibrationSet(m.member_id),
-                'CALIBRATION SET CREATED — ASSEMBLE THE 3 LOOKS IN DELIVERIES',
-              )
-            }
-          >
-            CALIBRATION SET
-          </button>
-          <button
-            className={btnTiny}
-            disabled={busy === `recompute-${m.member_id}`}
-            onClick={() =>
-              run(`recompute-${m.member_id}`, () => recomputeWeights(m.member_id), 'WEIGHTS RECOMPUTED — SNAPSHOT SAVED')
-            }
-          >
-            WEEKLY RECOMPUTE
-          </button>
           <button className={btnTiny} onClick={() => setOpen((s) => !s)}>
             {open ? 'CLOSE' : 'OPEN'}
           </button>
@@ -1751,9 +1883,8 @@ function MemberCard({
                 </button>
               ))}
             </div>
-            <WeightBar weights={eff} />
             {WORK_OCCASIONS.includes(previewOccasion) && m.work_dress_code && (
-              <p className="text-[20px] tracking-[0.1em] text-[#7C838B] mt-1.5">FORMALITY FLOOR APPLIED — OVERRIDES TASTE</p>
+              <p className="text-[20px] tracking-[0.1em] text-[#7C838B] mt-1.5">FORMALITY FLOOR APPLIED — A WORK LOOK NEVER READS BELOW HER DRESS CODE</p>
             )}
           </div>
 
@@ -1767,7 +1898,6 @@ function MemberCard({
                 clicks: m.taste_event_counts.click_out,
                 saves: m.taste_event_counts.save,
                 purchases: m.taste_event_counts.purchase,
-                weeklySnapshots: m.snapshots.filter((s) => s.source === 'weekly').length,
               }).map((c) => (
                 <p
                   key={c.label}
@@ -2453,7 +2583,6 @@ function NewDeliveryForm({
   const [climate, setClimate] = useState<ClimateId | null>(null)
   const [text, setText] = useState(preset?.request_text ?? '')
   const member = members.find((m) => m.member_id === memberId)
-  const eff = member ? effectiveWeights(member.room_weights, occasion, member.work_dress_code) : null
 
   return (
     <div className="border border-[#0A0A0A] px-6 py-5 space-y-4">
@@ -2521,12 +2650,6 @@ function NewDeliveryForm({
         <p className={`${label} mb-1.5`}>{trigger === 'request' ? 'HER WORDS' : 'THE MOVE — E.G. “GREECE IS COMING — I’VE STARTED THREE LOOKS”'}</p>
         <input className={input} value={text} onChange={(e) => setText(e.target.value)} />
       </div>
-      {eff && (
-        <div className="max-w-sm">
-          <p className={`${label} mb-1`}>EFFECTIVE WEIGHTS FOR THIS DELIVERY</p>
-          <WeightBar weights={eff} />
-        </div>
-      )}
       <button
         className={btnDark}
         disabled={!memberId || busy === 'newDelivery'}
@@ -2636,10 +2759,6 @@ function DeliveryCard({
             )}
           </div>
           {d.request_text && <p className="text-[20px] tracking-[0.06em] text-[#6B6B6B] mt-1.5">“{d.request_text.toUpperCase()}”</p>}
-          <p className="text-[20px] tracking-[0.14em] text-[#6B6B6B] mt-2">
-            {formatRoomMix(d.effective_weights)}
-            {calibration && ' — RAW WEIGHTING, NO OCCASION TILT'}
-          </p>
         </div>
         <div className="flex gap-2 shrink-0">
           {!calibration && (
@@ -3075,7 +3194,7 @@ function LookRow({
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <p className="text-[20px] tracking-[0.14em] text-[#0A0A0A]">
-            LOOK {l.position} — {formatRoomMix(l.room_mix) || 'NO ROOM MIX'}
+            LOOK {l.position}
             {l.approved_at && <span className="ml-2 text-[#3D7A50]">· APPROVED ✓</span>}
             {composed && (
               <span className="ml-2 text-[#7C838B]" title="What she'd pay — owned pieces are £0 of new spend but still count toward reuse">
@@ -3656,11 +3775,6 @@ function LookEditor({
   run: Run
   done: () => void
 }) {
-  const [mix, setMix] = useState<Record<RoomKey, string>>({
-    tailored: String(Math.round((look?.room_mix?.tailored ?? 0) * 100)),
-    romantic: String(Math.round((look?.room_mix?.romantic ?? 0) * 100)),
-    ease: String(Math.round((look?.room_mix?.ease ?? 0) * 100)),
-  })
   const [items, setItems] = useState<LookItem[]>(look?.items ?? [])
   const [imageUrl, setImageUrl] = useState(look?.image_url ?? '')
   const [notes, setNotes] = useState(look?.notes ?? '')
@@ -3670,18 +3784,6 @@ function LookEditor({
   return (
     <div className="border border-[#0A0A0A] px-4 py-4 space-y-3">
       <p className="text-[20px] tracking-[0.16em] text-[#0A0A0A]">LOOK {look?.position ?? position}</p>
-      <div>
-        <p className={`${label} mb-1.5`}>ROOM MIX % — EVERY OUTFIT NAMES ITS MIX</p>
-        <div className="flex gap-2 max-w-sm">
-          {ROOM_KEYS.map((k) => (
-            <div key={k} className="flex-1">
-              <input className={input} value={mix[k]} onChange={(e) => setMix({ ...mix, [k]: e.target.value })} />
-              <p className="text-[20px] tracking-[0.12em] text-[#6B6B6B] mt-1">{ROOMS[k].label}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
       <div>
         <p className={`${label} mb-1.5`}>ITEMS — TICK OWNED FOR WARDROBE PIECES (FAST FASHION ALLOWED ONLY WHEN OWNED)</p>
         {items.map((it, i) => (
@@ -3733,11 +3835,6 @@ function LookEditor({
                   look_id: look?.look_id,
                   delivery_id: deliveryId,
                   position: look?.position ?? position ?? 1,
-                  room_mix: {
-                    tailored: Number(mix.tailored) || 0,
-                    romantic: Number(mix.romantic) || 0,
-                    ease: Number(mix.ease) || 0,
-                  },
                   items: items.filter((it) => it.brand || it.product_name),
                   image_url: imageUrl,
                   notes,
@@ -3806,7 +3903,6 @@ function DryRunTab({
           {DRY_RUN_SCRIPT.map((b, i) => {
             const persona = synthByName[b.persona]
             const existing = briefDeliveries[b.id]
-            const eff = persona ? effectiveWeights(persona.room_weights, b.occasion, persona.work_dress_code) : null
             return (
               <div key={b.id} className="border border-[#E2E0DB] px-4 py-3 flex items-start justify-between gap-4">
                 <div className="min-w-0">
@@ -3814,9 +3910,6 @@ function DryRunTab({
                     {i + 1}. “{b.brief.toUpperCase()}” — {b.persona}
                   </p>
                   <p className="text-[20px] tracking-[0.06em] text-[#6B6B6B] mt-1">{b.tests.toUpperCase()}</p>
-                  {eff && (
-                    <p className="text-[20px] tracking-[0.14em] text-[#C4A882] mt-1.5">→ {formatRoomMix(eff)}</p>
-                  )}
                 </div>
                 <div className="shrink-0">
                   {existing ? (
@@ -3889,23 +3982,9 @@ function ArtefactTab({ data }: { data: PilotData }) {
                 <span className="text-[20px] tracking-[0.14em] text-[#7C838B] border border-[#DCDEE1] px-2 py-0.5">SYNTHETIC</span>
               )}
             </div>
-            <div className="grid grid-cols-3 gap-8 mb-5 max-w-3xl">
-              <div>
-                <p className={`${label} mb-1.5`}>ROOM WEIGHTING AT INTAKE</p>
-                {a.intakeWeights ? <WeightBar weights={a.intakeWeights} /> : <p className="text-[20px] text-[#A8A8A4]">NO INTAKE SNAPSHOT</p>}
-              </div>
-              <div>
-                <p className={`${label} mb-1.5`}>NOW — DID THE READ OF HER MOVE?</p>
-                <WeightBar weights={a.currentWeights} />
-              </div>
-              <div>
-                <p className={`${label} mb-1.5`}>34-DIM VECTOR READ — AGREES?</p>
-                {(() => {
-                  const read = vectorRoomRead(m.taste_vector)
-                  return read ? <WeightBar weights={read} /> : <p className="text-[20px] text-[#A8A8A4]">NO VECTOR YET</p>
-                })()}
-              </div>
-            </div>
+            <p className="text-[20px] tracking-[0.12em] text-[#A8A8A4] mb-5">
+              {m.taste_vector?.length ? 'TASTE VECTOR — BUILT FROM WHAT SHE SAYS YES TO' : 'NO TASTE VECTOR YET'}
+            </p>
             <div className="grid grid-cols-4 gap-x-8 gap-y-3 max-w-3xl">
               <Stat label="UNPROMPTED RETURNS" value={String(a.unpromptedReturns)} rank="1" />
               <Stat label="PURCHASES" value={String(a.purchases)} rank="2" />

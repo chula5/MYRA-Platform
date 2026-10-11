@@ -511,6 +511,7 @@
     maybePicksBadge()
   }
   function ensurePanelEl() {
+    hideTopBanner()
     closePicks()
     if (panel) return
     panel = document.createElement('div')
@@ -865,6 +866,7 @@
   async function openPicks() {
     closePanel()
     hidePicksBadge()
+    hideTopBanner()
     picksPanel = document.createElement('div')
     picksPanel.className = 'myra-mirror-picks-panel'
     picksPanel.style.cssText = `position:fixed;z-index:2147483646;top:12px;right:12px;bottom:12px;width:min(420px,calc(100vw - 24px));background:linear-gradient(160deg,#F7F7F9 0%,#E9E9EC 55%,#DEDEE2 100%);border-radius:24px;box-shadow:0 24px 60px rgba(0,0,0,.26);overflow:hidden auto;font:400 14px/1.4 ${FONT};color:#2B2B2B;transform:translateX(24px);opacity:0;transition:transform .28s ease,opacity .28s ease;`
@@ -980,12 +982,102 @@
   }
 
 
+  // ── PICKS FOR YOU, AT THE TOP ─────────────────────────────────────────────
+  // The one thing that does open on its own. She lands on a shop MYRA can
+  // read, the page is ranked, and there are pieces here she would want: a bar
+  // slides down from the top — "Here are our picks for you" — with the three
+  // pieces and, a moment later, the looks MYRA has built around them. The
+  // looks are asked for the moment the bar appears, so by the time she taps
+  // they are usually there. Once per shop per sitting: close it and it stays
+  // closed on that shop until she opens a new tab or window. Never over a
+  // panel she already has open, and never while her Chrome is scanning.
+  let topBanner = null, topBannerFor = null
+  const BANNER_KEY = `myra:mirror:banner:${location.host}`
+  const bannerClosed = () => { try { return sessionStorage.getItem(BANNER_KEY) === '1' } catch { return false } }
+  const rememberBannerClosed = () => { try { sessionStorage.setItem(BANNER_KEY, '1') } catch {} }
+
+  function hideTopBanner() {
+    if (!topBanner) return
+    const el = topBanner
+    topBanner = null
+    topBannerFor = null
+    el.style.transform = 'translateY(-110%)'
+    el.style.opacity = '0'
+    setTimeout(() => el.remove(), 340)
+  }
+
+  function maybeTopBanner(scored, products) {
+    if (!pageHasPicks || scan || bannerClosed() || panel || picksPanel || picking) return
+    if (topBanner && topBannerFor === location.href) return
+    const byKey = new Map(products.map((p) => [p.key, p]))
+    const top = scored
+      .filter((p) => (p.score ?? 0) >= 0.4 && p.fit !== 'no' && p.fit !== 'sold_out')
+      .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+      .map((p) => {
+        const d = byKey.get(p.key) || {}
+        return { key: p.key, score: p.score, why: p.why, title: d.title || null, brand: d.brand || p.brand || null, image: d.image || null, price: d.price ?? null, url: d.url || (generic ? p.key : `${location.origin}/products/${p.key}`) }
+      })
+      .filter((p) => p.image && p.title)
+      .slice(0, 3)
+    if (top.length < 2) return
+    hideTopBanner()
+    topBannerFor = location.href
+    const shop = location.host.replace(/^www\./i, '')
+    topBanner = document.createElement('div')
+    topBanner.className = 'myra-mirror-top'
+    topBanner.style.cssText = `position:fixed;z-index:2147483645;top:0;left:0;right:0;background:linear-gradient(160deg,#F7F7F9 0%,#E9E9EC 100%);box-shadow:0 14px 40px rgba(0,0,0,.22);font:400 15px/1.4 ${FONT};color:#2B2B2B;transform:translateY(-110%);opacity:0;transition:transform .34s ease,opacity .34s ease;`
+    const tiles = top.map((p) => `
+      <a href="${esc(p.url)}" target="_blank" rel="noreferrer" style="flex:0 0 auto;display:flex;gap:10px;align-items:center;text-decoration:none;color:inherit;background:rgba(255,255,255,.85);border-radius:16px;padding:8px 12px 8px 8px;box-shadow:0 2px 14px rgba(43,43,43,.08);max-width:240px">
+        <img src="${esc(p.image)}" alt="" style="width:46px;height:61px;object-fit:contain;background:#fff;border-radius:6px;flex:0 0 auto">
+        <span style="min-width:0">
+          <span style="display:block;font-size:12px;letter-spacing:.12em;text-transform:uppercase;opacity:.55;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.brand || shop)}</span>
+          <span style="display:block;font-size:15px;font-weight:600;line-height:1.25;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.title)}</span>
+          <span style="display:block;font-size:13px;opacity:.62;margin-top:2px">${typeof p.price === 'number' ? `£${Math.round(p.price)}` : ''}${WHY[p.why] ? `${typeof p.price === 'number' ? ' · ' : ''}${esc(WHY[p.why])}` : ''}</span>
+        </span>
+      </a>`).join('')
+    topBanner.innerHTML = `
+      <div style="max-width:1280px;margin:0 auto;padding:14px 18px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+        <img src="${esc(ext.runtime.getURL('icons/mirror.png'))}" alt="" style="width:30px;height:auto;flex:0 0 auto">
+        <div style="flex:1 1 240px;min-width:0">
+          <div style="font-size:12px;letter-spacing:.2em;text-transform:uppercase;opacity:.5">MYRA · ${esc(shop)}</div>
+          <div style="font-size:19px;font-weight:600;line-height:1.2;margin-top:3px;letter-spacing:.01em">Here are our picks for you</div>
+          <div data-myra="sub" style="font-size:15px;opacity:.68;margin-top:3px">The pieces on this page for your wardrobe and your taste — MYRA is styling them now…</div>
+        </div>
+        <div style="display:flex;gap:10px;overflow-x:auto;max-width:100%;padding:2px 0;scrollbar-width:none">${tiles}</div>
+        <button type="button" data-myra="looks" style="${BTN_DARK};padding:12px 18px;font-size:13px">See them styled for you</button>
+        <button type="button" data-myra="close" aria-label="Close" style="flex:0 0 auto;width:34px;height:34px;border-radius:50%;border:0;background:#EFEFED;font-size:18px;cursor:pointer;color:#2B2B2B">×</button>
+      </div>`
+    document.body.appendChild(topBanner)
+    requestAnimationFrame(() => { if (topBanner) { topBanner.style.transform = 'translateY(0)'; topBanner.style.opacity = '1' } })
+    topBanner.querySelector('[data-myra="close"]')?.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); rememberBannerClosed(); hideTopBanner() })
+    topBanner.querySelector('[data-myra="looks"]')?.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); rememberBannerClosed(); hideTopBanner(); openPicks() })
+
+    // Ask for the looks now, so the panel is ready when she taps. The worker
+    // keeps the answer; opening the panel is then a cache hit. An older
+    // background that does not know the message is left alone — the panel
+    // asks MYRA from the page when she opens it.
+    const mine = topBanner
+    Promise.resolve(send({ type: 'picks', host: location.host, products: pageProducts })).then((r) => {
+      if (!topBanner || topBanner !== mine) return
+      const sub = topBanner.querySelector('[data-myra="sub"]')
+      const btn = topBanner.querySelector('[data-myra="looks"]')
+      if (!r || r.error) { if (sub) sub.textContent = 'The pieces on this page for your wardrobe and your taste'; return }
+      const looks = (r.picks || []).filter((p) => p.look).length
+      if (!looks) {
+        if (sub) sub.textContent = 'The pieces on this page for your wardrobe and your taste — no looks around them yet'
+        if (btn) btn.style.display = 'none'
+        return
+      }
+      if (sub) sub.textContent = `${looks} look${looks === 1 ? '' : 's'} styled for you around ${looks === 1 ? 'the piece' : 'these pieces'}, with what you own`
+      if (btn) btn.textContent = looks === 1 ? 'See it styled for you' : 'See them styled for you'
+    }).catch(() => {})
+  }
+
   // ── THE BADGE ON THE EDGE ───────────────────────────────────────────────
-  // Nothing opens on its own any more: not the card over a tile, not the
-  // panel when a styling lands, not a corner badge when the page has picks.
-  // This one small disc, midway down the right edge, is the only thing MYRA
-  // puts on a page unasked — quiet, out of the way, always in the same
-  // place. A dot on it means something is waiting for her: a finished
+  // Nothing else opens on its own: not the card over a tile, not the panel
+  // when a styling lands. Besides the picks bar at the top (above), this one
+  // small disc, midway down the right edge, is the only thing MYRA puts on a
+  // page unasked — quiet, out of the way, always in the same place. A dot on it means something is waiting for her: a finished
   // styling, or picks this page can offer. Everything else is one click
   // away, and a second click puts it away again.
   let badge = null, badgeDot = null, jobWaiting = false, picksWorth = false
@@ -1018,6 +1110,7 @@
    * stuck on screen, and nothing old opens itself twice.
    */
   async function badgeClick() {
+    if (topBanner) { rememberBannerClosed(); hideTopBanner(); return }
     if (panel) { closePanel(); return }
     if (picksPanel) { closePicks(); return }
     if (pill) { hidePiece(); return }
@@ -1330,6 +1423,7 @@
     clearInterval(navSettle)
     hidePiece()
     hidePicksBadge()
+    hideTopBanner()
     stopPicking()
     // The picks the dot stood for belonged to the page she just left.
     maybePicksBadge()
@@ -1394,6 +1488,7 @@
       pageProducts = products
       pageHasPicks = res.products.some((p) => (p.score ?? 0) >= 0.4)
       maybePicksBadge()
+      maybeTopBanner(res.products, products)
       // A job that finished while this page was still being read, or while she
       // was somewhere that is not a shop, belongs here: this is the first shop
       // page since. (One she closed is already gone from the worker.) It no

@@ -22,6 +22,11 @@ export async function addMemberBrand(...args: Parameters<typeof impl.addMemberBr
   return impl.addMemberBrand(...args)
 }
 
+export async function addMemberBrands(...args: Parameters<typeof impl.addMemberBrands>): Promise<Awaited<ReturnType<typeof impl.addMemberBrands>>> {
+  await assertAdmin()
+  return impl.addMemberBrands(...args)
+}
+
 export async function addWardrobeItem(...args: Parameters<typeof impl.addWardrobeItem>): Promise<Awaited<ReturnType<typeof impl.addWardrobeItem>>> {
   await assertAdmin()
   return impl.addWardrobeItem(...args)
@@ -60,11 +65,6 @@ export async function composeDeliveryLooks(...args: Parameters<typeof impl.compo
 export async function composeLookVariants(...args: Parameters<typeof impl.composeLookVariants>): Promise<Awaited<ReturnType<typeof impl.composeLookVariants>>> {
   await assertAdmin()
   return impl.composeLookVariants(...args)
-}
-
-export async function createCalibrationSet(...args: Parameters<typeof impl.createCalibrationSet>): Promise<Awaited<ReturnType<typeof impl.createCalibrationSet>>> {
-  await assertAdmin()
-  return impl.createCalibrationSet(...args)
 }
 
 export async function createDelivery(...args: Parameters<typeof impl.createDelivery>): Promise<Awaited<ReturnType<typeof impl.createDelivery>>> {
@@ -135,11 +135,6 @@ export async function lookAlternates(...args: Parameters<typeof impl.lookAlterna
 export async function markStockChecked(...args: Parameters<typeof impl.markStockChecked>): Promise<Awaited<ReturnType<typeof impl.markStockChecked>>> {
   await assertAdmin()
   return impl.markStockChecked(...args)
-}
-
-export async function recomputeWeights(...args: Parameters<typeof impl.recomputeWeights>): Promise<Awaited<ReturnType<typeof impl.recomputeWeights>>> {
-  await assertAdmin()
-  return impl.recomputeWeights(...args)
 }
 
 export async function recordMemberLookFeedback(...args: Parameters<typeof impl.recordMemberLookFeedback>): Promise<Awaited<ReturnType<typeof impl.recordMemberLookFeedback>>> {

@@ -11,7 +11,11 @@ import { createAdminClient } from '@/lib/supabase-server'
 
 const TO = process.env.STUDIO_EMAIL_TO ?? 'chloe@myraassistant.co.uk'
 const FROM = process.env.STUDIO_EMAIL_FROM ?? 'MYRA Studio <studio@myraassistant.co.uk>'
-const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://myraassistant.co.uk'
+// What a member sees: MYRA herself, and a reply lands with Chloe (Chloe's ask, 2026-10-11).
+const MEMBER_FROM = process.env.MEMBER_EMAIL_FROM ?? 'MYRA <myra@myraassistant.co.uk>'
+const MEMBER_REPLY_TO = process.env.MEMBER_EMAIL_REPLY_TO ?? 'chloe@myraassistant.co.uk'
+// The bare domain fails the TLS handshake (checked 2026-10-11); www is the one that answers.
+const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.myraassistant.co.uk'
 
 export function siteUrl(path: string): string {
   return `${SITE.replace(/\/$/, '')}${path}`
@@ -22,6 +26,11 @@ export type EmailKind =
   // Shopper-facing sends (stock alerts on saved pieces). Same transport, and
   // logged in the same ledger, but never subject to the studio digest caps.
   | 'shopper_stock_digest' | 'shopper_stock_urgent'
+  // The morning after the overnight sweep: the pieces MYRA styled for her while she slept.
+  | 'shopper_ways_digest'
+
+/** Shopper-facing kinds go out as MYRA, with replies to Chloe; the studio kinds stay MYRA Studio. */
+const isMemberKind = (kind: EmailKind) => kind.startsWith('shopper_')
 
 export async function countEmailsToday(kind: EmailKind): Promise<number> {
   try {
@@ -49,6 +58,8 @@ export async function sendStudioEmail(opts: {
 }): Promise<{ sent: boolean; error?: string; id?: string; from?: string; to?: string }> {
   const key = process.env.RESEND_API_KEY
   const to = opts.to ?? TO
+  const from = isMemberKind(opts.kind) ? MEMBER_FROM : FROM
+  const replyTo = isMemberKind(opts.kind) ? MEMBER_REPLY_TO : undefined
   if (!key) {
     console.error('[sendStudioEmail] RESEND_API_KEY not set — skipping:', opts.subject)
     return { sent: false, error: 'RESEND_API_KEY not set' }
@@ -57,14 +68,14 @@ export async function sendStudioEmail(opts: {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: FROM, to: [to], subject: opts.subject, html: opts.html }),
+      body: JSON.stringify({ from, to: [to], subject: opts.subject, html: opts.html, ...(replyTo ? { reply_to: replyTo } : {}) }),
     })
     const raw = await res.text()
     if (!res.ok) {
       // Surface Resend's own words — "domain not verified", "invalid from"
       // etc. are the usual causes and are far more useful than a bare code.
       console.error('[sendStudioEmail]', res.status, raw.slice(0, 300))
-      return { sent: false, error: `Resend ${res.status}: ${raw.slice(0, 300)}`, from: FROM, to }
+      return { sent: false, error: `Resend ${res.status}: ${raw.slice(0, 300)}`, from, to }
     }
     let id: string | undefined
     try { id = JSON.parse(raw)?.id } catch { /* id is a convenience only */ }
@@ -74,7 +85,7 @@ export async function sendStudioEmail(opts: {
         kind: opts.kind, subject: opts.subject, meta: opts.meta ?? null,
       })
     } catch { /* ledger failure never blocks the send result */ }
-    return { sent: true, id, from: FROM, to }
+    return { sent: true, id, from, to }
   } catch (err) {
     console.error('[sendStudioEmail]', err)
     return { sent: false, error: err instanceof Error ? err.message : 'send failed' }

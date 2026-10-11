@@ -313,6 +313,83 @@ export async function getBreakdowns(key: MetricKey): Promise<Breakdown[]> {
         ]
       }
 
+      case 'ways-coverage': {
+        const [{ data: demand }, { data: fresh }, { data: jobs }] = await Promise.all([
+          admin.from('styled_way_demand' as any).select('member_id, hero_item_id, mode, source, taps, tap_hits').gte('first_seen_at', since).limit(20000),
+          admin.from('styled_way' as any).select('member_id, hero_item_id, mode').eq('stale', false).limit(50000),
+          admin.from('styled_way_job' as any).select('status, priority, reason, first_look_ms, cost_gbp').gte('created_at', since).limit(20000),
+        ])
+        const freshCount = new Map<string, number>()
+        for (const r of (fresh ?? []) as any[]) {
+          const k = `${r.member_id}|${r.hero_item_id}|${r.mode}`
+          freshCount.set(k, (freshCount.get(k) ?? 0) + 1)
+        }
+        const covered = (r: any) => (freshCount.get(`${r.member_id}|${r.hero_item_id}|${r.mode}`) ?? 0) >= 3
+
+        const byMode = new Map<string, { surfaced: number; covered: number }>()
+        const bySource = new Map<string, { surfaced: number; covered: number; taps: number; hits: number }>()
+        for (const r of (demand ?? []) as any[]) {
+          const m = byMode.get(r.mode) ?? { surfaced: 0, covered: 0 }
+          m.surfaced++; if (covered(r)) m.covered++
+          byMode.set(r.mode, m)
+          const s = bySource.get(r.source) ?? { surfaced: 0, covered: 0, taps: 0, hits: 0 }
+          s.surfaced++; if (covered(r)) s.covered++
+          s.taps += Number(r.taps ?? 0); s.hits += Number(r.tap_hits ?? 0)
+          bySource.set(r.source, s)
+        }
+
+        const coldTaps = ((jobs ?? []) as any[]).filter((j) => j.priority === 1 && j.first_look_ms != null).map((j) => Number(j.first_look_ms)).sort((a, b) => a - b)
+        const quantile = (q: number) => (coldTaps.length ? coldTaps[Math.min(coldTaps.length - 1, Math.floor(q * coldTaps.length))] : 0)
+        const byStatus = new Map<string, number>()
+        const costByReason = new Map<string, number>()
+        for (const j of (jobs ?? []) as any[]) {
+          byStatus.set(j.status, (byStatus.get(j.status) ?? 0) + 1)
+          costByReason.set(j.reason, (costByReason.get(j.reason) ?? 0) + Number(j.cost_gbp ?? 0))
+        }
+
+        return [
+          {
+            title: 'COVERED BY POOL',
+            format: 'count',
+            rows: Array.from(byMode.entries()).map(([mode, v]) => ({ label: mode.toUpperCase(), value: v.covered, note: `OF ${v.surfaced} SURFACED` })),
+            empty: 'NOTHING SURFACED IN THIS WINDOW',
+          },
+          {
+            title: 'SURFACED BY WHERE SHE SAW IT',
+            format: 'count',
+            rows: top(bySource, (v) => v.surfaced).map(([source, v]) => ({
+              label: source.toUpperCase(),
+              value: v.surfaced,
+              note: `${v.covered} COVERED${v.taps ? ` · ${v.hits}/${v.taps} TAPS INSTANT` : ''}`,
+            })),
+            empty: 'NOTHING SURFACED IN THIS WINDOW',
+          },
+          {
+            title: 'COLD TAP · SECONDS TO FIRST LOOK',
+            format: 'count',
+            rows: coldTaps.length
+              ? [
+                { label: 'MEDIAN', value: Math.round(quantile(0.5) / 1000), note: `${coldTaps.length} COLD TAPS` },
+                { label: '90TH PERCENTILE', value: Math.round(quantile(0.9) / 1000), note: 'SECONDS' },
+              ]
+              : [],
+            empty: 'NO COLD TAPS IN THIS WINDOW',
+          },
+          {
+            title: 'JOBS BY STATUS',
+            format: 'count',
+            rows: top(byStatus, (v) => v).map(([status, v]) => ({ label: status.toUpperCase(), value: v })),
+            empty: 'NO JOBS IN THIS WINDOW',
+          },
+          {
+            title: 'JUDGE SPEND BY REASON',
+            format: 'gbp',
+            rows: top(costByReason, (v) => v).map(([reason, v]) => ({ label: reason.toUpperCase(), value: v })),
+            empty: 'NOTHING JUDGED IN THIS WINDOW',
+          },
+        ]
+      }
+
       default:
         return []
     }

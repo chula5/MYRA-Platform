@@ -473,3 +473,34 @@ describe('createStylistSnapshot', () => {
     expect(genView?.payload).toEqual(checkView?.payload)
   })
 })
+
+describe('house base', () => {
+  const house = () => ({
+    stylistId: 'chloe-stylist-id',
+    model: { present: true, payload: { version: 5, decisions: 400, approves: 300, skips: 100 }, version: 5, decisionCount: 400 },
+    envelope: { mean: Array.from({ length: 34 }, () => 0.5), spread: Array.from({ length: 34 }, () => 0.1), n: 40, looks: [Array.from({ length: 34 }, () => 0.6)] },
+  })
+
+  it('freezes Chloe\'s model and envelope beside the stylist\'s own, as a named layer', () => {
+    const p = buildSnapshotPayload(inputs({ houseBase: house() }))
+    expect(p.house_base?.stylist_id).toBe('chloe-stylist-id')
+    expect(p.house_base?.model.status).toBe('loaded')
+    expect(p.house_base?.model.decision_count).toBe(400)
+    expect(p.house_base?.envelope?.mean).toHaveLength(34)
+    expect(p.house_base?.envelope?.looks).toHaveLength(1)
+    // Her own model is still hers — not replaced by the base.
+    expect(p.learned_model.decision_count).toBe(37)
+  })
+
+  it('freezes no base when the selected stylist IS the house', () => {
+    const p = buildSnapshotPayload(inputs({ houseBase: { ...house(), stylistId: STYLIST_ID } }))
+    expect(p.house_base).toBeNull()
+  })
+
+  it('is null without a loader for it, and changes the hash when the base changes', () => {
+    expect(buildSnapshotPayload(inputs()).house_base).toBeNull()
+    const a = computePayloadHash(buildSnapshotPayload(inputs({ houseBase: house() })))
+    const b = computePayloadHash(buildSnapshotPayload(inputs({ houseBase: { ...house(), model: { ...house().model, decisionCount: 401, payload: { version: 5, decisions: 401 } } } })))
+    expect(a).not.toBe(b)
+  })
+})

@@ -16,11 +16,11 @@ import { PERSONA_START_WEIGHT } from '@/lib/user-persona'
 import {
   loadComposableLibrary, loadMemberTaste, loadPersonaLens, loadComposeHistory,
 } from '@/app/admin/private-stylist/actions'
-import { effectiveWeights, normalise, lookTasteVector } from '@/lib/pilot-stylist'
 import { parseBrief, briefIsEmpty, type StylistBrief } from '@/lib/stylist-brief'
 import { isOwnedItem } from '@/lib/wardrobe/owned-items'
 import { OCCASION_LABEL } from '@/lib/client-occasions'
 import { loadStyleModel, recordStyleOffers } from '@/lib/style-brain-store'
+import { CHLOE_STYLIST_ID } from '@/lib/outfit-quality/identities'
 import type { StyleModel } from '@/lib/style-brain'
 import { scoreBenchColumn, scoreDistinctness, brandsInStock, type BenchScorecard } from '@/lib/stylist-bench'
 
@@ -76,17 +76,18 @@ export interface BenchResult {
   error?: string
 }
 
-function stylistOnlyTaste(brief: StylistBrief | undefined, model: StyleModel): MemberTaste {
+function stylistOnlyTaste(brief: StylistBrief | undefined, model: StyleModel, house: StyleModel | null): MemberTaste {
   return {
     affinity: new Map(), families: new Map(), excludedPairs: new Set(), inputOnlyBrands: new Set(),
     itemSwapOut: new Map(), brandSwapOut: new Map(), pairNet: new Map(),
     rules: rulesForMember(null, false),
     brief,
-    // Her own Style Brain, in the slot the composer reads skip-pairs from.
-    // Not houseStyleModel as well: styleLearningBonus adds both, and the same
-    // model twice would count double. "The stylist alone" means Chloe's model
-    // is absent here.
-    styleModel: model,
+    // The house (Chloe's model) in the base slot the composer reads skip-pairs
+    // from, and the stylist's own Style Brain on top — the same layering every
+    // member composes through. For Chloe's own column there is no base: the
+    // same model twice would count double.
+    styleModel: house ?? model,
+    houseStyleModel: house ? model : undefined,
   }
 }
 
@@ -126,10 +127,10 @@ export async function benchRun(
   const occ = occasionId
     ? {
         id: occasionId as any,
-        // Her rooms shape the occasion's target; with no client the occasion
-        // is its type priors alone — no sneakers at dinner, still.
-        vector: member ? lookTasteVector(normalise(effectiveWeights(member.room_weights, occasionId as any, member.work_dress_code))) : null,
+        // The occasion is its type priors and, for a client, her work
+        // formality floor — no sneakers at dinner, still.
         climate: null,
+        workDressCode: member?.work_dress_code ?? null,
       }
     : undefined
 
@@ -138,8 +139,12 @@ export async function benchRun(
     item_id: hero.item_id, product_name: hero.product_name, image_url: hero.image_url ?? null,
     brand_name: hero.brand?.name ?? null, item_type: hero.item_type,
   }
-  // Each stylist's own Style Brain, once, before the loop.
-  const models = await Promise.all(bench.map((s: any) => loadStyleModel(s.stylist_id)))
+  // Each stylist's own Style Brain, once, before the loop — and the house
+  // (Chloe's) once, the base every other column stands on.
+  const [models, houseModel] = await Promise.all([
+    Promise.all(bench.map((s: any) => loadStyleModel(s.stylist_id))),
+    loadStyleModel(CHLOE_STYLIST_ID),
+  ])
 
   const columns: BenchColumn[] = []
   const offers: { stylistId: string; items: any[]; itemIds: string[] }[] = []
@@ -165,7 +170,7 @@ export async function benchRun(
             loadPersonaLens(admin, member.member_id, s.stylist_id),
           ])
         : [
-            stylistOnlyTaste(has_brief ? parsed : undefined, model),
+            stylistOnlyTaste(has_brief ? parsed : undefined, model, s.stylist_id === CHLOE_STYLIST_ID ? null : houseModel),
             {
               name: s.name,
               envelope: has_envelope ? { mean: s.envelope.mean, spread: s.envelope.spread ?? [] } : null,

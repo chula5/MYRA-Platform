@@ -12,7 +12,7 @@ import { createAdminClient } from '@/lib/supabase-server'
 import { memberMemory } from '@/lib/member-memory'
 import { listOwnedItems } from '@/lib/wardrobe/store'
 import { ownerRefsForMember } from '@/lib/wardrobe/owned-items'
-import { effectiveWeights, lookTasteVector, normalise, readStylePrefs } from '@/lib/pilot-stylist'
+import { readStylePrefs } from '@/lib/pilot-stylist'
 import { composeMemberLooks, composeMemberVariants, personaFitScore, toLookItem, type OccasionContext } from '@/lib/pilot-composer'
 import type { LookItem } from '@/lib/pilot-stylist'
 import { judgeAgainstBrief, briefAffinity, parseBrief, briefIsEmpty } from '@/lib/stylist-brief'
@@ -85,8 +85,7 @@ export async function outfitsFor(
     loadPersonaLens(admin, memberId, opts.stylistId),
     loadComposeHistory(admin, memberId),
   ])
-  const mix = normalise(effectiveWeights(member.room_weights, asked.occasion as any, member.work_dress_code))
-  const occ: OccasionContext = { id: asked.occasion, vector: lookTasteVector(mix), climate: null }
+  const occ: OccasionContext = { id: asked.occasion, climate: null, workDressCode: member.work_dress_code ?? null }
   const want = Math.max(1, Math.min(opts.count ?? LOOKS, 5))
   const composed = composeMemberLooks(taste, library as any, want + 2, occ, lens, history, { ownedMode: 'blend' })
   if (!composed.length) return { looks: [], occasionLabel: asked.label, error: 'Nothing in her size goes together for that right now' }

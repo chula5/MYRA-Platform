@@ -22,6 +22,7 @@ import {
 import type { BatchView } from '@/lib/outfit-quality/batch-read'
 import type { PreDecisionCandidate } from '@/lib/outfit-quality/queue-read-model'
 import RulesOnlyBadge from './RulesOnlyBadge'
+import { CHLOE_STYLIST_ID } from '@/lib/outfit-quality/identities'
 import { thumbUrl } from '@/lib/image-utils'
 import ReviewWorkbench from './ReviewWorkbench'
 import CoverageView from './CoverageView'
@@ -92,6 +93,15 @@ function BatchesView() {
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  // Chloe by default: most Lab styling is in her style, and every other
+  // stylist composes on her base anyway. Only fills an empty selection.
+  useEffect(() => {
+    if (!data || stylistId) return
+    const chloe = data.stylists.find((s) => s.stylist_id === CHLOE_STYLIST_ID)
+    if (chloe) void onStylistChange(chloe.stylist_id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data])
 
   async function run(key: string, fn: () => Promise<any>, ok: string) {
     setBusy(key)
@@ -245,7 +255,7 @@ function BatchesView() {
         </fieldset>
 
         <label className="flex flex-col gap-2 text-[18px] tracking-[0.1em] text-[#6B6B6B] mt-6 max-w-3xl">
-          SELECTED STYLIST (REQUIRED — NO DEFAULT)
+          SELECTED STYLIST (CHLOE BY DEFAULT — EVERY OTHER STYLIST COMPOSES ON HER BASE)
           <select
             value={stylistId}
             onChange={(e) => onStylistChange(e.target.value)}

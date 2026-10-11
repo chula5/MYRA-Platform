@@ -5,17 +5,18 @@ import ItemsGrid from './ItemsGrid'
 const STATUS_TABS = ['all', 'draft', 'ready', 'live', 'archived'] as const
 
 interface PageProps {
-  searchParams: Promise<{ status?: string; stock?: string; brand?: string; type?: string; colour?: string; month?: string; page?: string }>
+  searchParams: Promise<{ status?: string; stock?: string; q?: string; brand?: string; type?: string; colour?: string; month?: string; page?: string }>
 }
 
 export default async function ItemsPage({ searchParams }: PageProps) {
-  const { status, stock, brand, type, colour, month, page } = await searchParams
+  const { status, stock, q, brand, type, colour, month, page } = await searchParams
   const activeTab = status || 'all'
   const stockFilter =
     stock === 'flagged' || stock === 'out_of_stock' || stock === 'low_stock' ? stock : undefined
   const data = await getItemsPage({
     status: activeTab === 'all' ? undefined : activeTab,
     stockFilter,
+    search: q?.trim() || undefined,
     brand: brand || undefined,
     itemType: type || undefined,
     colour: colour || undefined,

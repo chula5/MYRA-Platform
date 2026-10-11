@@ -16,7 +16,7 @@ import { composeMemberVariants, tooSimilarVariant } from '@/lib/pilot-composer'
 import { slotForItemType } from '@/lib/composer'
 import { judgeLooksForMemberEach } from '@/lib/look-check'
 import { whyThisSuitsHer } from '@/lib/look-why'
-import { readStylePrefs, effectiveWeights, normalise, lookTasteVector } from '@/lib/pilot-stylist'
+import { readStylePrefs } from '@/lib/pilot-stylist'
 import { occasionsForMember, OCCASION_LABEL } from '@/lib/client-occasions'
 import { isOwnedItem } from '@/lib/wardrobe/owned-items'
 import {
@@ -98,7 +98,7 @@ export async function composeStyledWays(
   const perOccasion: { id: string | null; label: string; look: any }[] = []
   ;(occasionIds.length ? occasionIds : [null]).forEach((id, oi) => {
     const occ = id
-      ? { id: id as any, vector: lookTasteVector(normalise(effectiveWeights(member.room_weights, id as any, member.work_dress_code))), climate: null }
+      ? { id: id as any, climate: null, workDressCode: member.work_dress_code ?? null }
       : undefined
     for (const look of composeMemberVariants(taste, pool as any, heroId, PER_OCCASION, occ, lens, history, { ownedMode, shuffle: shuffle + oi })) {
       perOccasion.push({ id, label: id ? (OCCASION_LABEL[id] ?? id) : '', look })

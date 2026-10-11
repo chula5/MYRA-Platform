@@ -8,7 +8,8 @@
 import { createAdminClient } from '@/lib/supabase-server'
 import { assertAdmin } from '@/lib/admin-audit'
 import { benchRun, type BenchItem, type BenchResult } from './bench-run'
-import { recordStyleDecision, loadStyleModel } from '@/lib/style-brain-store'
+import { loadStyleModel } from '@/lib/style-brain-store'
+import { teachFromChloe } from '@/lib/learning-sink'
 import type { FeatureItem } from '@/lib/style-brain'
 import { parseBrief, briefText } from '@/lib/stylist-brief'
 import { neverFromPiece, appendNever, type NeverAttr } from '@/lib/stylist-bench'
@@ -109,7 +110,8 @@ export async function recordBenchVerdict(input: {
     })
     const wrong = (input.wrongItemIds ?? []).filter((id) => byId.has(id) && id !== input.heroId)
     const taught = input.verdict === 'no' && wrong.length ? [input.heroId, ...wrong] : ids
-    await recordStyleDecision({
+    // Chloe's verdict teaches the house base and this stylist's layer alike.
+    await teachFromChloe({
       items: taught.map((id) => byId.get(id)).filter(Boolean).map(feat),
       decision: input.verdict === 'yes' ? 'approve' : 'skip',
       source: 'bench',
@@ -122,7 +124,7 @@ export async function recordBenchVerdict(input: {
         ...(input.trialRunId ? { trial_run_id: input.trialRunId } : {}),
         ...(wrong.length ? { wrong_item_ids: wrong } : {}),
       },
-      stylistId: input.stylistId,
+      layerStylistId: input.stylistId,
     })
 
     let nevers_added = 0

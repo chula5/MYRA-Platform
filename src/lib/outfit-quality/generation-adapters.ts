@@ -38,7 +38,7 @@ import {
 } from '@/lib/outfit-quality/candidate-generation'
 import { personaFitScore, briefPiece, PERSONA_SHORTLIST_SCALE, BRIEF_SHORTLIST_SCALE } from '@/lib/pilot-composer'
 import { briefBlocks, briefPull } from '@/lib/stylist-brief'
-import { personaLensFromSnapshot, styleModelFromSnapshot } from '@/lib/outfit-quality/snapshot-lens'
+import { personaLensFromSnapshot, styleModelFromSnapshot, houseBaseModelFromSnapshot } from '@/lib/outfit-quality/snapshot-lens'
 import { itemsSignature } from '@/lib/outfit-quality/scope-signature'
 import { itemUsesFromSignatures } from '@/lib/outfit-quality/scope-exclusions'
 import { SNAPSHOT_SYSTEM_VERSIONS, type SnapshotPayload, type SystemVersions } from '@/lib/outfit-quality/stylist-snapshot'
@@ -214,6 +214,8 @@ export function createComposerGenerator(admin: Admin = createAdminClient(), deps
       // lens — and the next Start picks up what this round's reviews taught.
       const lens = personaLensFromSnapshot(payload)
       const model = styleModelFromSnapshot(payload)
+      // THE HOUSE BASE under her: Chloe's frozen model (null when she IS Chloe).
+      const baseModel = houseBaseModelFromSnapshot(payload)
       const brief = payload?.brief ?? null
 
       let pool = (await getReadyAndLiveItems())
@@ -300,6 +302,7 @@ export function createComposerGenerator(admin: Admin = createAdminClient(), deps
             anchor,
             library: lib,
             styleModel: model,
+            baseStyleModel: baseModel,
             learnedPairs: house.learnedPairs,
             count: maxCandidates,
             shortlistAdjust,

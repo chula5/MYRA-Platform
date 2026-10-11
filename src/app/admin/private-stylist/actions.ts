@@ -25,9 +25,12 @@ import {
   pcaProject1D,
   isThinBrand,
   resolveBrandNames,
+  brandKey,
+  positioningBand,
+  BAND_NAMES,
 } from '@/lib/brand-affinity'
+import { BRAND_GROUPS } from '@/app/onboarding/brand-groups'
 import {
-  type RoomWeights,
   type OccasionId,
   type WorkDressCode,
   type Frequency,
@@ -37,19 +40,14 @@ import {
   SYNTH_PERSONAS,
   PILOT_SIGNAL_WEIGHTS,
   type PilotTasteEventType,
-  effectiveWeights,
-  roomWeightsFromBrands,
-  replayEvents,
-  lookTasteVector,
-  calibrationPlan,
   validateDelivery,
-  normalise,
+  isFastFashion,
   readStylePrefs,
   readPriceBands,
   type StylePrefs,
   type PriceBands,
 } from '@/lib/pilot-stylist'
-import { accumulate, buildOutfitVector, zeroVector } from '@/lib/taste-vector'
+import { accumulate, buildOutfitVector, zeroVector, lookVectorFromItems } from '@/lib/taste-vector'
 import { getAllItems, type ItemWithBrand } from '@/lib/admin-queries'
 import {
   composeMemberLooks,
@@ -88,11 +86,15 @@ import { readTrust, trustHeadline, TRAILING, type LookOutcome, type TrustRead } 
 import { explainTraits } from '@/lib/member-traits'
 import { type ClimateId } from '@/lib/climate'
 import { DEFAULT_SCOPE, parsePatternKey, type LearnedRuleMatch } from '@/lib/learning-scope'
-import { tooSimilarVariant, REFERENCE_LENS_WEIGHT } from '@/lib/pilot-composer'
+import { tooSimilarVariant, REFERENCE_LENS_WEIGHT, HOUSE_LENS_WEIGHT } from '@/lib/pilot-composer'
 import { pieceVerdicts } from '@/lib/piece-verdicts'
 import { rulesForMember, type MemberRules } from '@/lib/style-rules'
 import { parseBrief, briefIsEmpty, type StylistBrief } from '@/lib/stylist-brief'
 import { loadStyleModel, recordStyleDecision } from '@/lib/style-brain-store'
+import { teachFromChloe } from '@/lib/learning-sink'
+import { toHouseItem } from '@/lib/house-item'
+import type { FeatureItem } from '@/lib/style-brain'
+import { resolveStylistId } from '@/lib/stylist-store'
 import { computeEnvelope, sampleLooks } from '@/lib/inspiration'
 import { linkMemberToStyleProfile } from '@/lib/style-profile-store'
 import { correctPaleColour } from '@/lib/pale-colour-store'
@@ -109,7 +111,6 @@ export interface PilotMember {
   is_synthetic: boolean
   brands: RankedBrand[]
   brands_input_only: string[]
-  room_weights: RoomWeights
   occasions: Partial<Record<OccasionId, Frequency>>
   work_dress_code: WorkDressCode | null
   sizes: Record<string, string>
@@ -148,14 +149,12 @@ export interface PilotMember {
     colour: string | null
     notes: string | null
   }[]
-  snapshots: { snapshot_id: string; room_weights: RoomWeights; source: string; note: string | null; created_at: string }[]
 }
 
 export interface PilotLook {
   look_id: string
   delivery_id: string
   position: number
-  room_mix: RoomWeights
   items: LookItem[]
   image_url: string | null
   notes: string | null
@@ -177,8 +176,7 @@ export interface PilotDelivery {
   member_id: string
   trigger: 'request' | 'anticipation' | 'calibration'
   request_text: string | null
-  occasion: OccasionId | null // null = calibration set (no occasion tilt)
-  effective_weights: RoomWeights
+  occasion: OccasionId | null
   status: 'draft' | 'sent' | 'responded'
   is_synthetic: boolean
   dry_run_brief: string | null
@@ -199,8 +197,6 @@ export interface PilotActivity {
 }
 
 export interface ExitArtefact {
-  intakeWeights: RoomWeights | null
-  currentWeights: RoomWeights
   deliveriesSent: number
   looksSent: number
   looksResponded: number
@@ -235,12 +231,11 @@ export interface PilotData {
 
 export async function loadPilotData(): Promise<PilotData> {
   const admin = createAdminClient()
-  const [membersRes, eventsRes, wardrobeRes, snapshotsRes, deliveriesRes, looksRes, activityRes, tasteRes] =
+  const [membersRes, eventsRes, wardrobeRes, deliveriesRes, looksRes, activityRes, tasteRes] =
     await Promise.all([
       admin.from('pilot_member' as any).select('*').order('created_at'),
       admin.from('pilot_known_event' as any).select('*').order('event_date'),
       admin.from('pilot_wardrobe_item' as any).select('*').order('created_at'),
-      admin.from('pilot_weight_snapshot' as any).select('*').order('created_at'),
       admin.from('pilot_delivery' as any).select('*').order('created_at', { ascending: false }),
       admin.from('pilot_look' as any).select('*').order('position'),
       admin.from('pilot_activity' as any).select('*').order('created_at', { ascending: false }),
@@ -275,7 +270,6 @@ export async function loadPilotData(): Promise<PilotData> {
 
   const events = (eventsRes.data ?? []) as any[]
   const wardrobe = (wardrobeRes.data ?? []) as any[]
-  const snapshots = (snapshotsRes.data ?? []) as any[]
   const looks = (looksRes.data ?? []) as any[]
   const tasteEvents = (tasteRes.data ?? []) as any[]
 
@@ -303,7 +297,6 @@ export async function loadPilotData(): Promise<PilotData> {
       taste_event_counts: counts,
       events: events.filter((e) => e.member_id === m.member_id),
       wardrobe: wardrobe.filter((w) => w.member_id === m.member_id),
-      snapshots: snapshots.filter((s) => s.member_id === m.member_id),
       persona_id: assignByMember.get(m.member_id)?.persona_id ?? null,
       persona_name: personaById.get(assignByMember.get(m.member_id)?.persona_id)?.name ?? null,
       persona_weight: assignByMember.get(m.member_id)?.weight ?? null,
@@ -357,8 +350,6 @@ function buildArtefact(
   const acts = activity.filter((a) => a.member_id === m.member_id)
   const stockChecks = mine.flatMap((d) => d.looks).flatMap((l) => l.items).filter((it) => !it.owned && it.stock_checked_at).length
   return {
-    intakeWeights: m.snapshots.find((s) => s.source === 'intake')?.room_weights ?? null,
-    currentWeights: m.room_weights,
     deliveriesSent: mine.length,
     looksSent,
     looksResponded,
@@ -381,7 +372,6 @@ export async function createMember(input: {
   is_synthetic?: boolean
   brands: RankedBrand[]
   brands_input_only: string[]
-  room_weights?: RoomWeights // omit to compute from brands
   occasions: Partial<Record<OccasionId, Frequency>>
   work_dress_code: WorkDressCode | null
   sizes?: Record<string, string>
@@ -390,15 +380,20 @@ export async function createMember(input: {
   notes?: string
 }): Promise<{ member_id?: string; error?: string }> {
   const admin = createAdminClient()
-  const weights = normalise(input.room_weights ?? roomWeightsFromBrands(input.brands))
+  // Every member is a Chloe client from the first look: Chloe's constitution,
+  // Chloe's learned rules, Chloe's model underneath. A persona (user_persona)
+  // layers on top later; her own yes/no narrows from there. Members inserted
+  // without this (after migration 0052) composed on global-only rules — from
+  // zero. Migration 0095 brings those rows in line.
+  const houseStylistId = await resolveStylistId(null)
   const { data, error } = await admin
     .from('pilot_member' as any)
     .insert({
       name: input.name,
       is_synthetic: input.is_synthetic ?? false,
+      stylist_id: houseStylistId,
       brands: input.brands,
       brands_input_only: input.brands_input_only,
-      room_weights: weights,
       occasions: input.occasions,
       work_dress_code: input.work_dress_code,
       sizes: input.sizes ?? {},
@@ -410,12 +405,6 @@ export async function createMember(input: {
     .single()
   if (error) return { error: error.message }
   const memberId = (data as any).member_id as string
-  await admin.from('pilot_weight_snapshot' as any).insert({
-    member_id: memberId,
-    room_weights: weights,
-    source: 'intake',
-    note: 'Intake — computed at onboarding',
-  })
   // Brand-affinity onboarding seed: named brands 1.0, similar brands expanded
   // with a trace, everything else at baseline; warm-starts the taste vector.
   // Best-effort — onboarding must not fail if 0032 hasn't run yet.
@@ -447,6 +436,68 @@ export async function addMemberBrand(memberId: string, brandName: string): Promi
     return {}
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+// Add many brands at once — the bulk picker on the brand map (filter by price
+// band / style group, tick, add). Goes through setMemberBrands, NOT a bare
+// affinity write: sendDelivery validates looks against pilot_member.brands,
+// so a brand only in user_brand_affinity would compose and then fail to send.
+// New brands go to the END of the ranking so her rank 1 is never displaced.
+const MAX_MEMBER_BRANDS = 60
+
+export async function addMemberBrands(
+  memberId: string,
+  rawNames: string[],
+): Promise<{ error?: string; added: string[]; already: string[]; unmatched: string[]; capped: string[] }> {
+  const res = { added: [] as string[], already: [] as string[], unmatched: [] as string[], capped: [] as string[] }
+  const admin = createAdminClient() as any
+  try {
+    const graph = await loadBrandGraph(admin)
+    const { data: member, error: mErr } = await admin
+      .from('pilot_member').select('brands, brands_input_only').eq('member_id', memberId).single()
+    if (mErr) return { ...res, error: mErr.message }
+    const brands: RankedBrand[] = [...((member?.brands ?? []) as RankedBrand[])]
+    let inputOnly: string[] = [...((member?.brands_input_only ?? []) as string[])]
+    const have = new Set(brands.map((b) => brandKey(b.name)))
+    const unhideIds: string[] = []
+
+    for (const raw of rawNames) {
+      const name = String(raw ?? '').trim()
+      if (!name) continue
+      const { matched } = resolveBrandNames(graph, [name])
+      const b = matched[0]
+      if (!b) { res.unmatched.push(name); continue }
+      const key = brandKey(b.name)
+      if (have.has(key)) { res.already.push(b.name); continue }
+      // fast fashion is taste signal only — a look containing it fails validateDelivery
+      if (isFastFashion(b.name)) {
+        if (!inputOnly.some((n) => brandKey(n) === key)) inputOnly.push(b.name)
+        res.added.push(b.name); have.add(key); continue
+      }
+      if (brands.length >= MAX_MEMBER_BRANDS) { res.capped.push(b.name); continue }
+      inputOnly = inputOnly.filter((n) => brandKey(n) !== key)
+      brands.push({ name: b.name, rank: brands.length + 1 })
+      have.add(key)
+      unhideIds.push(b.brand_id)
+      res.added.push(b.name)
+    }
+    if (!res.added.length) {
+      if (res.unmatched.length && !res.already.length) return { ...res, error: `${res.unmatched.join(', ').toUpperCase()} NOT IN MYRA'S BRAND TABLE` }
+      if (res.capped.length) return { ...res, error: `HER LIST IS AT THE ${MAX_MEMBER_BRANDS}-BRAND CAP — REMOVE ONE FIRST` }
+      return res
+    }
+
+    // Naming a brand she was taken off is the later, truer word — clear hidden
+    // before the re-seed (seeding writes the affinity but not the flag).
+    if (unhideIds.length) {
+      await admin.from('user_brand_affinity').update({ hidden: false }).eq('user_id', memberId).in('brand_id', unhideIds)
+    }
+    const r = await setMemberBrands(memberId, brands, inputOnly)
+    if (r.error) return { ...res, error: r.error }
+    return res
+  } catch (e) {
+    return { ...res, error: e instanceof Error ? e.message : String(e) }
   }
 }
 
@@ -493,12 +544,21 @@ export interface MemberBrandDot {
   affinity: number
   role: 'named' | 'suggested' | 'learned' | 'baseline' | 'hidden'
   trace: string | null // "because you like X"
+  band: number | null // index into BAND_NAMES, from price_position
+  typicalPrice: number | null // £ median of her core category — what the bands use; overall median is skewed by accessories
+  families: string[] // curated brand_family ids
+  groups: string[] // onboarding BRAND_GROUPS keys
 }
 
 export interface MemberBrandMap {
   dots: MemberBrandDot[]
   counts: Record<string, number>
   unmatched: string[] // named brands with no brand row — they influence nothing
+  // for the bulk picker's chips
+  bandBounds?: number[]
+  bandNames?: string[]
+  families?: { id: string; name: string }[]
+  groups?: { key: string; name: string }[]
   migrationNeeded?: boolean
   error?: string
 }
@@ -535,6 +595,14 @@ export async function loadMemberBrandMap(memberId: string): Promise<MemberBrandM
     const { matched: namedBrands, unmatched } = resolveBrandNames(graph, namedRaw)
     const namedIds = new Set(namedBrands.map((b: any) => b.brand_id))
 
+    // Style groupings for the bulk picker: curated families + onboarding groups.
+    const famsByBrand = new Map<string, string[]>()
+    for (const m of graph.memberships) famsByBrand.set(m.brand_id, [...(famsByBrand.get(m.brand_id) ?? []), m.family_id])
+    const groupsByBrand = new Map<string, string[]>()
+    for (const g of BRAND_GROUPS) {
+      for (const b of resolveBrandNames(graph, g.brands).matched) groupsByBrand.set(b.brand_id, [...(groupsByBrand.get(b.brand_id) ?? []), g.key])
+    }
+
     const counts: Record<string, number> = { named: 0, suggested: 0, learned: 0, baseline: 0, hidden: 0 }
     const dots: MemberBrandDot[] = graph.brands.map((b: any) => {
       const a = affById.get(b.brand_id)
@@ -556,11 +624,21 @@ export async function loadMemberBrandMap(memberId: string): Promise<MemberBrandM
         affinity: a?.affinity ?? 0,
         role,
         trace: a?.expansion_trace && a.expansion_trace !== 'baseline' ? a.expansion_trace : null,
+        band: positioningBand(b.price_position, graph.config.bandBounds),
+        typicalPrice: b.price_position != null ? Math.round(Math.exp(b.price_position)) : b.median_price_overall,
+        families: famsByBrand.get(b.brand_id) ?? [],
+        groups: groupsByBrand.get(b.brand_id) ?? [],
       }
     })
 
     // A named brand MYRA has no row for cannot reach the composer at all.
-    return { dots, counts, unmatched }
+    return {
+      dots, counts, unmatched,
+      bandBounds: graph.config.bandBounds,
+      bandNames: BAND_NAMES,
+      families: graph.families.map((f) => ({ id: f.family_id, name: f.name })),
+      groups: BRAND_GROUPS.map((g) => ({ key: g.key, name: g.name })),
+    }
   } catch (e) {
     return { ...empty, migrationNeeded: true, error: e instanceof Error ? e.message : String(e) }
   }
@@ -635,7 +713,6 @@ export async function updateMember(
     name: string
     brands: RankedBrand[]
     brands_input_only: string[]
-    room_weights: RoomWeights
     occasions: Partial<Record<OccasionId, Frequency>>
     work_dress_code: WorkDressCode | null
     sizes: Record<string, string>
@@ -694,7 +771,6 @@ export async function seedSyntheticPersonas(): Promise<{ seeded?: number; error?
       is_synthetic: true,
       brands: p.brands,
       brands_input_only: p.brands_input_only,
-      room_weights: p.room_weights, // spec's hand-set guesses, not computed
       occasions: p.occasions,
       work_dress_code: p.work_dress_code,
       notes: p.notes,
@@ -772,18 +848,16 @@ export async function createDelivery(input: {
   const admin = createAdminClient()
   const { data: member, error: mErr } = await admin
     .from('pilot_member' as any)
-    .select('room_weights, work_dress_code, is_synthetic')
+    .select('work_dress_code, is_synthetic')
     .eq('member_id', input.member_id)
     .single()
   if (mErr || !member) return { error: mErr?.message ?? 'MEMBER NOT FOUND' }
   const m = member as any
-  const weights = effectiveWeights(m.room_weights, input.occasion, m.work_dress_code)
   const row: Record<string, unknown> = {
     member_id: input.member_id,
     trigger: input.trigger,
     request_text: input.request_text,
     occasion: input.occasion,
-    effective_weights: weights,
     is_synthetic: m.is_synthetic,
     dry_run_brief: input.dry_run_brief ?? null,
   }
@@ -802,50 +876,6 @@ export async function createDelivery(input: {
   return { delivery_id: (data as any).delivery_id }
 }
 
-// Taste-calibration onboarding: one delivery with 3 scaffolded looks, one per
-// room, ordered dominant → weakest. Chloe assembles the actual outfits into
-// the scaffolds; the member then LIKEs / DISLIKEs each. No occasion tilt —
-// effective weights snapshot her raw weighting.
-export async function createCalibrationSet(
-  memberId: string,
-): Promise<{ delivery_id?: string; error?: string }> {
-  const admin = createAdminClient()
-  const { data: member, error: mErr } = await admin
-    .from('pilot_member' as any)
-    .select('name, brands, room_weights, is_synthetic')
-    .eq('member_id', memberId)
-    .single()
-  if (mErr || !member) return { error: mErr?.message ?? 'MEMBER NOT FOUND' }
-  const m = member as any
-  const { data, error } = await admin
-    .from('pilot_delivery' as any)
-    .insert({
-      member_id: memberId,
-      trigger: 'calibration',
-      request_text: 'Taste calibration — like / dislike each look',
-      occasion: null,
-      effective_weights: m.room_weights,
-      is_synthetic: m.is_synthetic,
-    })
-    .select('delivery_id')
-    .single()
-  if (error) return { error: error.message }
-  const deliveryId = (data as any).delivery_id as string
-  for (const plan of calibrationPlan(m.brands ?? [], m.room_weights)) {
-    const { error: lErr } = await admin.from('pilot_look' as any).insert({
-      delivery_id: deliveryId,
-      position: plan.position,
-      room_mix: plan.room_mix,
-      taste_vector: lookTasteVector(plan.room_mix),
-      items: [],
-      notes: plan.note,
-    })
-    if (lErr) return { error: lErr.message }
-  }
-  revalidatePath(PATH)
-  return { delivery_id: deliveryId }
-}
-
 export async function deleteDelivery(deliveryId: string) {
   const admin = createAdminClient()
   const { error } = await admin.from('pilot_delivery' as any).delete().eq('delivery_id', deliveryId)
@@ -853,24 +883,30 @@ export async function deleteDelivery(deliveryId: string) {
   return error ? { error: error.message } : {}
 }
 
+/** A look's taste vector from its pieces — the item rows behind its LookItems (null when none resolve). */
+async function vectorForLookItems(admin: any, items: LookItem[]): Promise<number[] | null> {
+  const ids = (items ?? []).map((i) => i?.item_id).filter(Boolean) as string[]
+  if (!ids.length) return null
+  const { data } = await admin.from('item').select('*, brand(*)').in('item_id', ids)
+  const rows = (data ?? []) as any[]
+  return rows.length ? lookVectorFromItems(rows) : null
+}
+
 export async function saveLook(input: {
   look_id?: string
   delivery_id: string
   position: number
-  room_mix: RoomWeights
   items: LookItem[]
   image_url?: string
   notes?: string
 }): Promise<{ look_id?: string; error?: string }> {
   const admin = createAdminClient()
-  const mix = normalise(input.room_mix)
   const row = {
     delivery_id: input.delivery_id,
     position: input.position,
-    room_mix: mix,
-    // every look carries its 34-dim vector (room-centroid blend) so any
-    // signal against it can teach the member's taste vector
-    taste_vector: lookTasteVector(mix),
+    // Every look carries its 34-dim vector, from its PIECES, so any signal
+    // against it can teach the member's taste vector.
+    taste_vector: await vectorForLookItems(admin, input.items),
     items: input.items,
     image_url: input.image_url || null,
     notes: input.notes || null,
@@ -1017,12 +1053,7 @@ export async function updateDelivery(
     const row: Record<string, unknown> = {}
     if (patch.request_text !== undefined) row.request_text = patch.request_text
     if (patch.climate !== undefined) row.climate = patch.climate
-    if (patch.occasion && patch.occasion !== d.occasion) {
-      row.occasion = patch.occasion
-      const { data: m } = await admin.from('pilot_member')
-        .select('room_weights, work_dress_code').eq('member_id', d.member_id).single()
-      if (m) row.effective_weights = effectiveWeights(m.room_weights, patch.occasion, m.work_dress_code)
-    }
+    if (patch.occasion && patch.occasion !== d.occasion) row.occasion = patch.occasion
     if (!Object.keys(row).length) return {}
     const { error } = await admin.from('pilot_delivery').update(row).eq('delivery_id', deliveryId)
     if (error) return { error: error.message }
@@ -1103,7 +1134,7 @@ export async function sendDelivery(deliveryId: string): Promise<{ errors?: strin
     .single()
   const brandNames = (((member as any)?.brands ?? []) as RankedBrand[]).map((b) => b.name)
   const errors = validateDelivery(
-    ((looks ?? []) as any[]).map((l) => ({ room_mix: l.room_mix, items: l.items })),
+    ((looks ?? []) as any[]).map((l) => ({ items: l.items })),
     brandNames,
     { calibration: (delivery as any).trigger === 'calibration' },
   )
@@ -1181,20 +1212,20 @@ async function writeTasteEvent(input: {
   look_id?: string | null
 }): Promise<{ error?: string }> {
   const admin = createAdminClient()
-  // Resolve room mix + vector: from the look when we have one, else from the
-  // delivery's effective weights (a delivery-level click still carries signal)
-  let roomMix = null as any
+  // Resolve the vector: the look's own (from its pieces), else built from its
+  // pieces now; a delivery-level click with no look still carries signal.
+  let attached = false
   let vector: number[] | null = null
   let deliveryId = input.delivery_id ?? null
   if (input.look_id) {
     const { data: look } = await admin
       .from('pilot_look' as any)
-      .select('room_mix, taste_vector, delivery_id, items')
+      .select('taste_vector, delivery_id, items')
       .eq('look_id', input.look_id)
       .single()
     if (look) {
-      roomMix = (look as any).room_mix
-      vector = (look as any).taste_vector ?? lookTasteVector((look as any).room_mix)
+      attached = true
+      vector = (look as any).taste_vector ?? (await vectorForLookItems(admin, ((look as any).items ?? []) as LookItem[]))
       deliveryId = (look as any).delivery_id
       // Brand-affinity learning: the look's item brands carry the signal
       // (yes/save/click_out/purchase step up, repeated no decays). Best-effort
@@ -1207,18 +1238,15 @@ async function writeTasteEvent(input: {
       } catch { /* brand affinity is additive; ignore */ }
     }
   }
-  if (!roomMix && deliveryId) {
+  if (!attached && deliveryId) {
     const { data: delivery } = await admin
       .from('pilot_delivery' as any)
-      .select('effective_weights')
+      .select('delivery_id')
       .eq('delivery_id', deliveryId)
       .single()
-    if (delivery) {
-      roomMix = (delivery as any).effective_weights
-      vector = lookTasteVector((delivery as any).effective_weights)
-    }
+    if (delivery) attached = true
   }
-  if (!roomMix) return { error: 'NO LOOK OR DELIVERY TO ATTACH THE SIGNAL TO' }
+  if (!attached) return { error: 'NO LOOK OR DELIVERY TO ATTACH THE SIGNAL TO' }
 
   const { data: member } = await admin
     .from('pilot_member' as any)
@@ -1231,7 +1259,7 @@ async function writeTasteEvent(input: {
     look_id: input.look_id ?? null,
     event_type: input.event_type,
     signal_weight: PILOT_SIGNAL_WEIGHTS[input.event_type],
-    room_mix: roomMix,
+    room_mix: {},
     taste_vector: vector,
     is_synthetic: (member as any)?.is_synthetic ?? false,
   })
@@ -1402,55 +1430,6 @@ export async function logActivity(input: {
   return {}
 }
 
-// ── Weekly recompute ────────────────────────────────────────────────────────
-// Replays every responded look from the intake snapshot forward. For a REAL
-// member only non-synthetic deliveries are read (defence in depth — a real
-// member should never have synthetic deliveries anyway). A synthetic member's
-// recompute only ever touches that synthetic member: plumbing test, contained.
-
-export async function recomputeWeights(memberId: string): Promise<{ weights?: RoomWeights; error?: string }> {
-  const admin = createAdminClient()
-  const [{ data: member, error: mErr }, { data: snaps }] = await Promise.all([
-    admin.from('pilot_member' as any).select('is_synthetic').eq('member_id', memberId).single(),
-    admin
-      .from('pilot_weight_snapshot' as any)
-      .select('room_weights, source, created_at')
-      .eq('member_id', memberId)
-      .eq('source', 'intake')
-      .order('created_at')
-      .limit(1),
-  ])
-  if (mErr || !member) return { error: mErr?.message ?? 'MEMBER NOT FOUND' }
-  const intake = ((snaps ?? []) as any[])[0]?.room_weights
-  if (!intake) return { error: 'NO INTAKE SNAPSHOT — ONBOARD FIRST' }
-
-  // Replay the full taste-event history: every yes/no/save/click/purchase,
-  // signal-weighted. Real members read only non-synthetic events.
-  let eq = admin
-    .from('pilot_taste_event' as any)
-    .select('event_type, signal_weight, room_mix')
-    .eq('member_id', memberId)
-    .order('created_at')
-  if (!(member as any).is_synthetic) eq = eq.eq('is_synthetic', false)
-  const { data: evts, error: eErr } = await eq
-  if (eErr) return { error: eErr.message }
-  const tasteEvents = (evts ?? []) as any[]
-
-  const weights = replayEvents(intake, tasteEvents)
-  const { error: uErr } = await admin
-    .from('pilot_member' as any)
-    .update({ room_weights: weights, updated_at: new Date().toISOString() })
-    .eq('member_id', memberId)
-  if (uErr) return { error: uErr.message }
-  await admin.from('pilot_weight_snapshot' as any).insert({
-    member_id: memberId,
-    room_weights: weights,
-    source: 'weekly',
-    note: `Recomputed from ${tasteEvents.length} taste event${tasteEvents.length === 1 ? '' : 's'}`,
-  })
-  revalidatePath(PATH)
-  return { weights }
-}
 
 
 // ── COMPOSED LOOKS — the system builds, Chloe reviews, the review teaches ───
@@ -1560,6 +1539,28 @@ async function loadLearnedRulesFor(admin: any, member: { stylist_id?: string | n
  * builds its own Style Brain (SCandi-Mum learns from SCandi-Mum clients). Never
  * throws into the decision it rides on; synthetic members never train it.
  */
+/** The Style Brain features of a look's pieces, read from the item rows. */
+async function lookFeatures(admin: any, items: LookItem[]): Promise<{ ids: string[]; features: FeatureItem[]; rows: any[] }> {
+  const ids = items.map((i) => i?.item_id).filter(Boolean) as string[]
+  if (!ids.length) return { ids: [], features: [], rows: [] }
+  const { data: rows } = await admin.from('item').select('*, brand(*)').in('item_id', ids)
+  const list = (rows ?? []) as any[]
+  const features: FeatureItem[] = list.map((r) => ({
+    item_type: r.item_type,
+    colour_family: r.colour_family ?? null,
+    pattern: r.pattern ?? null,
+    material_formality: r.material_formality ?? null,
+    brand_name: r.brand?.name ?? null,
+    price_tier: r.brand?.price_tier ?? null,
+  }))
+  return { ids, features, rows: list }
+}
+
+/**
+ * A MEMBER'S OWN yes/no (from /me) teaches her persona's brain — her layer —
+ * and never the house base. Chloe's own decisions on a member's looks go
+ * through teachChloeFromMemberLook instead (lib/learning-sink: one base).
+ */
 async function teachHouseStyle(
   admin: any,
   memberId: string,
@@ -1572,24 +1573,45 @@ async function teachHouseStyle(
     if (!a?.persona_id) return
     const { data: m } = await admin.from('pilot_member').select('is_synthetic').eq('member_id', memberId).maybeSingle()
     if (m?.is_synthetic) return
-    const ids = items.map((i) => i?.item_id).filter(Boolean) as string[]
-    if (!ids.length) return
-    const { data: rows } = await admin.from('item')
-      .select('item_id, item_type, colour_family, pattern, material_formality, brand(name, price_tier)').in('item_id', ids)
-    const features = ((rows ?? []) as any[]).map((r) => ({
-      item_type: r.item_type,
-      colour_family: r.colour_family ?? null,
-      pattern: r.pattern ?? null,
-      material_formality: r.material_formality ?? null,
-      brand_name: r.brand?.name ?? null,
-      price_tier: r.brand?.price_tier ?? null,
-    }))
+    const { ids, features } = await lookFeatures(admin, items)
     if (!features.length) return
     await recordStyleDecision({ items: features as any, decision, source, itemIds: ids, stylistId: a.persona_id })
   } catch (err) {
     console.error('[teachHouseStyle]', err)
   }
 }
+
+/**
+ * CHLOE'S decision on a member's look — approving, passing over, swapping or
+ * removing in the admin — teaches the house base and, if the member has a
+ * persona, that layer too. Synthetic members teach nothing.
+ */
+async function teachChloeFromMemberLook(
+  admin: any,
+  memberId: string,
+  items: LookItem[],
+  decision: 'approve' | 'skip',
+  source: 'review' | 'swap',
+): Promise<void> {
+  try {
+    const { data: m } = await admin.from('pilot_member').select('is_synthetic').eq('member_id', memberId).maybeSingle()
+    if (m?.is_synthetic) return
+    const { data: a } = await admin.from('user_persona').select('persona_id').eq('user_id', memberId).maybeSingle()
+    const { ids, features, rows } = await lookFeatures(admin, items)
+    if (!features.length) return
+    await teachFromChloe({
+      items: features,
+      decision,
+      source,
+      itemIds: ids,
+      layerStylistId: a?.persona_id ?? null,
+      houseItems: rows.map((r) => toHouseItem(r)),
+    })
+  } catch (err) {
+    console.error('[teachChloeFromMemberLook]', err)
+  }
+}
+
 
 /**
  * Which rules her looks are held to (lib/style-rules). Her assigned house style
@@ -1612,7 +1634,9 @@ async function loadMemberRules(
     if (style?.constitution?.articles?.length) {
       return { rules: rulesForMember({ name: style.name ?? null, constitution: style.constitution }, false), brief }
     }
-    if (brief) return { rules: rulesForMember(null, false), brief }
+    // A persona with a brief but no constitution of its own stands on the
+    // house: Chloe's constitution underneath, the brief's bans and pulls on top.
+    if (brief) return { rules: rulesForMember(null, true), brief }
   }
   let chloeStyle = false
   if (member.stylist_id) {
@@ -1649,10 +1673,17 @@ export async function loadMemberTaste(
     const { data: styleAssignment } = await admin
       .from('user_persona').select('persona_id').eq('user_id', member.member_id).maybeSingle()
     const housePersona = opts.personaId || styleAssignment?.persona_id
+    // THE HOUSE → HER STYLIST → HER. Chloe's model is the base under every
+    // member (styleModel); her persona's model — or her routed stylist's, when
+    // that is not Chloe — layers on top (houseStyleModel). Never the same row
+    // twice: styleLearningBonus adds both.
+    const houseId = await resolveStylistId(null)
+    const ownStylist = (member as any).stylist_id as string | null | undefined
+    const topLayer = housePersona ?? (ownStylist && ownStylist !== houseId ? ownStylist : null)
     const [ruleSet, styleModel, houseStyleModel, learnedRules, ejections, learnedPairs] = await Promise.all([
       loadMemberRules(admin, member as any, opts.personaId),
-      loadStyleModel((member as any).stylist_id ?? null),
-      housePersona ? loadStyleModel(housePersona) : Promise.resolve(undefined),
+      loadStyleModel(houseId),
+      topLayer && topLayer !== houseId ? loadStyleModel(topLayer) : Promise.resolve(undefined),
       loadLearnedRulesFor(admin, member as any),
       loadEjectionConstraints(),
       loadLearnedMaterialPairs(),
@@ -1834,8 +1865,50 @@ function readTasteVector(value: unknown): number[] | null {
  * source must stay scoped to Chloe rather than silently shaping another
  * member's lens. The looks remain global; only their influence is personal.
  */
-async function chloeComposerDraftVectors(admin: any, memberName?: string | null): Promise<number[][]> {
-  if (!/^chloe cotter$/i.test(memberName ?? '')) return []
+/**
+ * THE HOUSE LOOKS — Chloe's approved outfits as taste vectors: every ready or
+ * live outfit, plus the Composer drafts project. This is what MYRA looks like
+ * before it knows a member, and the base lens every member starts from
+ * (PersonaLens.house). Memoised for ten minutes: it is hundreds of rows, read
+ * on every compose, and it changes only when Chloe approves a look.
+ */
+const HOUSE_LOOKS_TTL_MS = 10 * 60 * 1000
+let houseLooksCache: { at: number; vectors: number[][] } | null = null
+
+export async function houseLookVectors(admin: any): Promise<number[][]> {
+  if (houseLooksCache && Date.now() - houseLooksCache.at < HOUSE_LOOKS_TTL_MS) return houseLooksCache.vectors
+  const [approved, drafts] = await Promise.all([approvedOutfitVectors(admin), chloeComposerDraftVectors(admin)])
+  const vectors = [...approved, ...drafts]
+  houseLooksCache = { at: Date.now(), vectors }
+  return vectors
+}
+
+/** Test seam: forget the memoised house looks. */
+export function resetHouseLooksCache(): void {
+  houseLooksCache = null
+}
+
+async function approvedOutfitVectors(admin: any): Promise<number[][]> {
+  try {
+    const out: number[][] = []
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await admin.from('outfit')
+        .select('taste_vector').in('status', ['ready', 'live']).not('taste_vector', 'is', null).range(from, from + 999)
+      if (error) throw new Error(error.message)
+      for (const row of data ?? []) {
+        const v = readTasteVector(row.taste_vector)
+        if (v) out.push(v)
+      }
+      if (!data || data.length < 1000) break
+    }
+    return out
+  } catch (err) {
+    console.error('[houseLookVectors] approved outfits', err)
+    return []
+  }
+}
+
+async function chloeComposerDraftVectors(admin: any): Promise<number[][]> {
   try {
     const { data: project } = await admin.from('admin_project')
       .select('outfit_ids').eq('title', 'Composer drafts').maybeSingle()
@@ -1853,7 +1926,7 @@ async function chloeComposerDraftVectors(admin: any, memberName?: string | null)
     }
     return outfits
       .map((outfit) => readTasteVector(outfit.taste_vector) ?? buildOutfitVector(outfit as any))
-      .filter((vector): vector is number[] => Array.isArray(vector) && vector.length)
+      .filter((vector): vector is number[] => Array.isArray(vector) && vector.length > 0)
   } catch {
     // A member's own pictures remain useful even when a pre-project schema is
     // missing one of these tables. The private stylist must still compose.
@@ -1862,10 +1935,12 @@ async function chloeComposerDraftVectors(admin: any, memberName?: string | null)
 }
 
 /**
- * The member's persona lens: the envelope computed from that persona's
- * CONFIRMED moodboard images, plus the current weight. A persona with no
- * confirmed images has no envelope and therefore no influence — the moodboard
- * has to have been reviewed before it can style anyone.
+ * The member's lens, in layers: the HOUSE (Chloe's approved looks) under
+ * everyone; her persona's envelope — computed from that persona's CONFIRMED
+ * moodboard images, at the current weight — on top when she has one; her own
+ * reference pictures beside it. A persona with no confirmed images has no
+ * envelope and therefore no influence — the moodboard has to have been
+ * reviewed before it can style anyone — but the house still does.
  */
 export async function loadPersonaLens(
   admin: any,
@@ -1899,31 +1974,38 @@ export async function loadPersonaLens(
   const owners = [memberId, member?.auth_user_id].filter(Boolean)
   // Two kinds of her own evidence, read into one envelope: the pictures she
   // keeps (what she likes) and her archival looks (what she actually wears).
-  const [{ data: refs }, { data: archival }, composerDraftLooks] = await Promise.all([
+  const [{ data: refs }, { data: archival }, houseLooks] = await Promise.all([
     admin.from('inspiration_image').select('vector').in('user_id', owners).in('status', ['scored', 'confirmed']),
     admin.from('archival_look').select('taste_vector').eq('member_id', memberId).eq('hidden', false).not('taste_vector', 'is', null),
-    chloeComposerDraftVectors(admin, member?.name),
+    houseLookVectors(admin),
   ])
   const vectors = [
     ...((refs ?? []) as any[]).map((r) => r.vector),
     ...((archival ?? []) as any[]).map((r) => r.taste_vector),
-    ...composerDraftLooks,
   ]
     .filter((v) => Array.isArray(v) && v.length)
   const refEnv = vectors.length ? computeEnvelope(vectors, 1) : null
   const reference = refEnv ? { envelope: { mean: refEnv.mean, spread: refEnv.spread }, weight: REFERENCE_LENS_WEIGHT } : null
 
-  if (!envelope && !reference) return undefined
+  // The house under everything: Chloe's looks, at the house weight. The base
+  // every member starts from on day one; it never fades and never learns her.
+  const houseEnv = houseLooks.length ? computeEnvelope(houseLooks, 1) : null
+  const house = houseEnv
+    ? { envelope: { mean: houseEnv.mean, spread: houseEnv.spread }, looks: sampleLooks(houseLooks), weight: HOUSE_LENS_WEIGHT }
+    : null
+
+  if (!envelope && !reference && !house) return undefined
   return {
     name,
     envelope,
     weight: typeof assignment?.weight === 'number' ? assignment.weight : PERSONA_START_WEIGHT,
     reference,
     // The newest of her looks, kept whole beside their average (nearestLookFit).
-    referenceLooks: sampleLooks(vectors),
+    referenceLooks: vectors.length ? sampleLooks(vectors) : null,
     // The style's own moodboard, kept whole for the same reason — the range of
     // the persona's eye, not only its centre.
     looks,
+    house,
   }
 }
 
@@ -2081,9 +2163,9 @@ export async function loadComposeHistory(admin: any, memberId: string): Promise<
 
 async function planDeliveryLooks(
   admin: any,
-  delivery: { member_id: string; occasion: string | null; climate?: ClimateId | null; effective_weights?: any },
+  delivery: { member_id: string; occasion: string | null; climate?: ClimateId | null },
   options: ComposeDeliveryOptions = {},
-): Promise<{ looks?: PlannedLooks; mix?: RoomWeights; error?: string }> {
+): Promise<{ looks?: PlannedLooks; error?: string }> {
   const { data: member, error: merr } = await admin.from('pilot_member').select('*').eq('member_id', delivery.member_id).single()
   if (merr || !member) return { error: merr?.message ?? 'Member not found' }
 
@@ -2091,8 +2173,7 @@ async function planDeliveryLooks(
   const library = await loadComposableLibrary(member)
   // A pale piece added today is read before the nightly sweep can reach it.
   await correctPaleColour(admin, library as any, 20)
-  const mix = normalise(delivery.effective_weights ?? {})
-  const occ: OccasionContext = { id: delivery.occasion ?? null, vector: lookTasteVector(mix), climate: delivery.climate ?? null }
+  const occ: OccasionContext = { id: delivery.occasion ?? null, climate: delivery.climate ?? null, workDressCode: member.work_dress_code ?? null }
   const lens = await loadPersonaLens(admin, delivery.member_id)
 
   const history = await loadComposeHistory(admin, delivery.member_id)
@@ -2109,7 +2190,7 @@ async function planDeliveryLooks(
         : 'Could not compose — not enough compatible in-stock items in the library',
     }
   }
-  return { looks, mix }
+  return { looks }
 }
 
 export async function composeDeliveryLooks(deliveryId: string, options: ComposeDeliveryOptions = {}): Promise<{ created?: number; ownedLooks?: number; droppedByCheck?: number; error?: string }> {
@@ -2123,8 +2204,7 @@ export async function composeDeliveryLooks(deliveryId: string, options: ComposeD
   // clashes, or holds a piece no longer in her size, never reaches the draft.
   const want = Math.max(1, Math.min(6, options.count ?? 3))
   const planned = await planDeliveryLooks(admin, delivery, { ...options, count: Math.min(6, want + 2) })
-  if (planned.error || !planned.looks || !planned.mix) return { error: planned.error ?? 'Could not compose' }
-  const { mix } = planned
+  if (planned.error || !planned.looks) return { error: planned.error ?? 'Could not compose' }
   const judged = await judgeLooksForMember(admin, delivery.member_id, planned.looks, 'unknown')
   const rank = (i: number) => (judged[i].check?.verdict === 'works' ? 0 : judged[i].check ? 1 : 2)
   const passing = planned.looks.map((_, i) => i)
@@ -2146,8 +2226,7 @@ export async function composeDeliveryLooks(deliveryId: string, options: ComposeD
   const rows = looks.map((l, i) => ({
     delivery_id: deliveryId,
     position: startPos + i,
-    room_mix: mix,
-    taste_vector: lookTasteVector(mix),
+    taste_vector: l.vector,
     items: l.items,
     notes: l.notes,
   }))
@@ -2180,23 +2259,17 @@ export async function previewAskLooks(
   occasion: string,
   climate: string | null,
   count = 3,
-): Promise<{ looks?: AskPreviewLook[]; mix?: Record<string, number>; error?: string }> {
+): Promise<{ looks?: AskPreviewLook[]; error?: string }> {
   if (!(await requireAdmin())) return { error: 'Not authorised' }
   const admin = createAdminClient() as any
-  const { data: member } = await admin
-    .from('pilot_member').select('room_weights, work_dress_code').eq('member_id', memberId).single()
-  if (!member) return { error: 'Member not found' }
-  const { effectiveWeights } = await import('@/lib/pilot-stylist')
   const planned = await planDeliveryLooks(admin, {
     member_id: memberId,
     occasion,
     climate: climate as ClimateId | null,
-    effective_weights: effectiveWeights(member.room_weights, occasion as any, member.work_dress_code),
   }, { count })
   if (planned.error || !planned.looks) return { error: planned.error ?? 'Could not compose' }
   return {
     looks: planned.looks.map((l: any) => ({ items: l.items, notes: l.notes ?? null })),
-    mix: planned.mix as unknown as Record<string, number>,
   }
 }
 
@@ -2226,13 +2299,6 @@ export interface AskSwapFilters {
  * her avoids, what goes with the rest of the look); nothing is saved and
  * nothing is learned, because playing with an outfit is not a decision.
  */
-/** Her room mix for an occasion — what a delivery records as its effective weights. */
-export async function effectiveWeightsForMember(memberId: string, occasion: string): Promise<Record<string, number>> {
-  const admin = createAdminClient() as any
-  const { data: member } = await admin.from('pilot_member').select('room_weights, work_dress_code').eq('member_id', memberId).maybeSingle()
-  const { effectiveWeights } = await import('@/lib/pilot-stylist')
-  return effectiveWeights(member?.room_weights, occasion as any, member?.work_dress_code) as unknown as Record<string, number>
-}
 
 export async function swapOwnedLookItem(
   memberId: string,
@@ -2309,14 +2375,12 @@ export async function askPreviewAlternates(
   const admin = createAdminClient() as any
   const { data: member } = await admin.from('pilot_member').select('*').eq('member_id', memberId).single()
   if (!member) return { error: 'Member not found' }
-  const { effectiveWeights } = await import('@/lib/pilot-stylist')
   const taste = await loadMemberTaste(admin, member)
   const library = await loadComposableLibrary(member)
   const keepIds = items.filter((it, i) => i !== itemIndex && it.item_id).map((it) => it.item_id as string)
   const keepItems = library.filter((i) => keepIds.includes(i.item_id))
   const exclude = new Set(items.filter((it) => it.item_id).map((it) => it.item_id as string))
-  const mix = normalise(effectiveWeights(member.room_weights, occasion as any, member.work_dress_code))
-  const occ: OccasionContext = { id: occasion, vector: lookTasteVector(mix), climate: (climate as ClimateId | null) ?? null }
+  const occ: OccasionContext = { id: occasion, climate: (climate as ClimateId | null) ?? null, workDressCode: member.work_dress_code ?? null }
   const lens = await loadPersonaLens(admin, memberId)
   // Rank everything her gates allow in this slot, then filter — so a search
   // never offers a piece the composer would refuse, and the brand list is
@@ -2373,7 +2437,6 @@ export async function keepAskPreview(
   occasion: string,
   climate: string | null,
   words: string,
-  mix: Record<string, number>,
   looks: AskPreviewLook[],
   edits: AskLookEdits[] = [],
   shoot = false,
@@ -2388,12 +2451,11 @@ export async function keepAskPreview(
     trigger: 'request',
     request_text: words.trim() || null,
     occasion,
-    effective_weights: mix,
   }
   if (climate) row.climate = climate
   const { data: created, error } = await admin.from('pilot_delivery').insert(row).select('delivery_id').single()
   if (error || !created) return { error: error?.message ?? 'Could not create the delivery' }
-  const norm = normalise(mix as unknown as RoomWeights)
+  const vectors = await Promise.all(looks.map((l) => vectorForLookItems(admin, l.items)))
   // Keeping a test look IS accepting it: saved approved, so the confidence
   // score and the composer count it exactly like an approval in DELIVERIES.
   // Without this, every look Chloe accepted straight away was invisible to the
@@ -2402,8 +2464,7 @@ export async function keepAskPreview(
   const { data: inserted, error: lerr } = await admin.from('pilot_look').insert(looks.map((l, i) => ({
     delivery_id: created.delivery_id,
     position: i + 1,
-    room_mix: norm,
-    taste_vector: lookTasteVector(norm),
+    taste_vector: vectors[i],
     items: l.items,
     notes: l.notes,
     approved_at: approvedAt,
@@ -2459,16 +2520,16 @@ export async function keepAskPreview(
       if (brandsIn.length) await applyBrandSignals(admin, memberId, brandsIn, 'yes')
     } catch { /* affinity nudge is best-effort, as on a delivery */ }
     for (const e of edits) {
-      for (const sw of e?.swaps ?? []) await teachHouseStyle(admin, memberId, [sw.out], 'skip', 'swap')
-      for (const rm of e?.removes ?? []) await teachHouseStyle(admin, memberId, [rm.out], 'skip', 'swap')
+      for (const sw of e?.swaps ?? []) await teachChloeFromMemberLook(admin, memberId, [sw.out], 'skip', 'swap')
+      for (const rm of e?.removes ?? []) await teachChloeFromMemberLook(admin, memberId, [rm.out], 'skip', 'swap')
     }
   }
   // Keeping a look is approving it, for the style as for a delivery.
-  for (const l of looks) await teachHouseStyle(admin, memberId, l.items, 'approve', 'review')
+  for (const l of looks) await teachChloeFromMemberLook(admin, memberId, l.items, 'approve', 'review')
   // The looks composed beside them and passed over teach the style too — what
   // MYRA offered and Chloe did not take. Style-level only: no piece is marked
   // rejected for having lost to a better look in the same test.
-  for (const l of passedOver) await teachHouseStyle(admin, memberId, l.items, 'skip', 'review')
+  for (const l of passedOver) await teachChloeFromMemberLook(admin, memberId, l.items, 'skip', 'review')
   // And they are remembered as combinations, so the same outfit is not composed
   // again for the next brief.
   await recordPassedLooks(admin, memberId, occasion, passedOver)
@@ -2519,8 +2580,7 @@ export async function composeLookVariants(
 
   const taste = await loadMemberTaste(admin, member)
   const library = await loadComposableLibrary(member)
-  const mix = normalise(delivery.effective_weights ?? {})
-  const occ: OccasionContext = { id: delivery.occasion ?? null, vector: lookTasteVector(mix), climate: delivery.climate ?? null }
+  const occ: OccasionContext = { id: delivery.occasion ?? null, climate: delivery.climate ?? null, workDressCode: member.work_dress_code ?? null }
   const lens = await loadPersonaLens(admin, delivery.member_id)
 
   // Same history read as a fresh delivery, so variants avoid pieces she's rejected.
@@ -2572,8 +2632,7 @@ export async function composeLookVariants(
   const rows = fresh.map((l, i) => ({
     delivery_id: look.delivery_id,
     position: startPos + i,
-    room_mix: mix,
-    taste_vector: lookTasteVector(mix),
+    taste_vector: l.vector,
     items: l.items,
     notes: l.notes,
     variant_group: groupId,
@@ -2620,7 +2679,7 @@ export async function lookAlternates(lookId: string, itemIndex: number): Promise
   const keepItems = library.filter((i) => keepIds.includes(i.item_id))
   const exclude = new Set(items.filter((it) => it.item_id).map((it) => it.item_id as string))
 
-  const occ: OccasionContext = { id: delivery?.occasion ?? null, vector: lookTasteVector(normalise(delivery?.effective_weights ?? {})), climate: delivery?.climate ?? null }
+  const occ: OccasionContext = { id: delivery?.occasion ?? null, climate: delivery?.climate ?? null, workDressCode: member.work_dress_code ?? null }
   const lens = await loadPersonaLens(admin, delivery?.member_id)
   const ranked = rankAlternates(taste, library, slot, keepItems, exclude, 200, occ, lens)
   return {
@@ -2653,7 +2712,7 @@ export async function lookAddOptions(lookId: string, slot: string): Promise<{ op
   const keepIds = items.filter((it) => it.item_id).map((it) => it.item_id as string)
   const keepItems = library.filter((i) => keepIds.includes(i.item_id))
   const exclude = new Set(keepIds)
-  const occ: OccasionContext = { id: delivery?.occasion ?? null, vector: lookTasteVector(normalise(delivery?.effective_weights ?? {})), climate: delivery?.climate ?? null }
+  const occ: OccasionContext = { id: delivery?.occasion ?? null, climate: delivery?.climate ?? null, workDressCode: member.work_dress_code ?? null }
 
   const lens = await loadPersonaLens(admin, delivery?.member_id)
   const ranked = rankAlternates(taste, library, slot as Slot, keepItems, exclude, 200, occ, lens)
@@ -2759,7 +2818,7 @@ export async function swapComposedLookItem(lookId: string, itemIndex: number, ne
     if (outgoing.brand) await applyBrandSignals(admin, delivery.member_id, [outgoing.brand], 'no')
     if (incoming.brand) await applyBrandSignals(admin, delivery.member_id, [incoming.brand], 'yes')
   } catch { /* affinity nudge is best-effort */ }
-  await teachHouseStyle(admin, delivery.member_id, [outgoing], 'skip', 'swap')
+  await teachChloeFromMemberLook(admin, delivery.member_id, [outgoing], 'skip', 'swap')
 
   revalidatePath(PATH)
   return {}
@@ -2801,7 +2860,7 @@ export async function removeComposedLookItem(lookId: string, itemIndex: number):
   try {
     if (outgoing.brand) await applyBrandSignals(admin, delivery.member_id, [outgoing.brand], 'no')
   } catch { /* best-effort */ }
-  await teachHouseStyle(admin, delivery.member_id, [outgoing], 'skip', 'swap')
+  await teachChloeFromMemberLook(admin, delivery.member_id, [outgoing], 'skip', 'swap')
 
   revalidatePath(PATH)
   return {}
@@ -2835,7 +2894,7 @@ export async function approveComposedLook(lookId: string): Promise<{ error?: str
     const brandNames = Array.from(new Set(items.map((it) => it.brand).filter(Boolean)))
     if (brandNames.length) await applyBrandSignals(admin, delivery.member_id, brandNames, 'yes')
   } catch { /* best-effort */ }
-  await teachHouseStyle(admin, delivery.member_id, items, 'approve', 'review')
+  await teachChloeFromMemberLook(admin, delivery.member_id, items, 'approve', 'review')
 
   revalidatePath(PATH)
   return {}
@@ -2877,7 +2936,7 @@ export async function skipComposedLook(lookId: string): Promise<{ error?: string
     const brandNames = Array.from(new Set(items.map((it) => it.brand).filter(Boolean)))
     if (brandNames.length) await applyBrandSignals(admin, delivery.member_id, brandNames, 'no')
   } catch { /* best-effort */ }
-  await teachHouseStyle(admin, delivery.member_id, items, 'skip', 'review')
+  await teachChloeFromMemberLook(admin, delivery.member_id, items, 'skip', 'review')
 
   const { error: derr } = await admin.from('pilot_look').delete().eq('look_id', lookId)
   if (derr) return { error: derr.message }
@@ -3086,7 +3145,7 @@ export async function rebuildLooksWithoutItems(itemIds: string[]): Promise<{ reb
   let rebuilt = 0
   try {
     const looks = await looksUsingItems(itemIds)
-    const byMember = new Map<string, { taste: MemberTaste; library: ItemWithBrand[]; lens?: PersonaLens }>()
+    const byMember = new Map<string, { taste: MemberTaste; library: ItemWithBrand[]; lens?: PersonaLens; workDressCode: WorkDressCode | null }>()
     for (const look of looks) {
       const kept: LookItem[] = look.items.filter((it: any) => !(it?.item_id && removed.has(it.item_id)))
       const gone: LookItem[] = look.items.filter((it: any) => it?.item_id && removed.has(it.item_id))
@@ -3096,11 +3155,11 @@ export async function rebuildLooksWithoutItems(itemIds: string[]): Promise<{ reb
       if (!ctx) {
         const { data: member } = await admin.from('pilot_member').select('*').eq('member_id', look.member_id).single()
         if (!member) continue
-        ctx = { taste: await loadMemberTaste(admin, member), library: await loadComposableLibrary(member), lens: await loadPersonaLens(admin, look.member_id) }
+        ctx = { taste: await loadMemberTaste(admin, member), library: await loadComposableLibrary(member), lens: await loadPersonaLens(admin, look.member_id), workDressCode: (member.work_dress_code ?? null) as WorkDressCode | null }
         byMember.set(look.member_id, ctx)
       }
       const { data: delivery } = await admin.from('pilot_delivery').select('*').eq('delivery_id', look.delivery_id).single()
-      const occ: OccasionContext = { id: delivery?.occasion ?? null, vector: lookTasteVector(normalise(delivery?.effective_weights ?? {})), climate: delivery?.climate ?? null }
+      const occ: OccasionContext = { id: delivery?.occasion ?? null, climate: delivery?.climate ?? null, workDressCode: ctx.workDressCode }
 
       const keepIds = kept.filter((it) => it.item_id).map((it) => it.item_id as string)
       const items: LookItem[] = [...kept]
@@ -3648,8 +3707,7 @@ export async function styleOwnedPiece(
     ])
     let occ: OccasionContext | undefined
     if (opts.occasion) {
-      const mix = normalise(effectiveWeights(member.room_weights, opts.occasion as any, member.work_dress_code))
-      occ = { id: opts.occasion as any, vector: lookTasteVector(mix), climate: null }
+      occ = { id: opts.occasion as any, climate: null, workDressCode: member.work_dress_code ?? null }
     }
 
     const composed = composeMemberVariants(taste, pool, itemId, STYLE_THIS_LOOKS + 2, occ, lens, history, { ownedMode: 'blend', shuffle: opts.shuffle ?? 0 })

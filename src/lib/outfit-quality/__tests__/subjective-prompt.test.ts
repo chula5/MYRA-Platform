@@ -42,6 +42,7 @@ function payload(overrides: Partial<SnapshotPayload> = {}): SnapshotPayload {
     },
     item_mask: { count: 0, decisions: [] },
     learned_model: { status: 'loaded', payload: { weights: [0.1, 0.2] }, version: 7, decision_count: 142 },
+    house_base: null,
     inspiration: {
       confirmed_count: 18,
       images: [
@@ -143,5 +144,20 @@ describe('buildSubjectiveCheckPrompt — different frozen lenses give different 
       payload({ learned_model: { status: 'absent', payload: null, version: null, decision_count: 0 } }),
     )
     expect(prompt).toMatch(/learned model.*absent/i)
+  })
+})
+
+describe('house base', () => {
+  it('names the house base under the stylist when the snapshot froze one, and says nothing when she is the house', () => {
+    const withBase = buildSubjectiveCheckPrompt(payload({
+      house_base: {
+        stylist_id: 'chloe-1',
+        model: { status: 'loaded', payload: { version: 1, decisions: 400 }, version: 1, decision_count: 400 },
+        envelope: null,
+      },
+    }))
+    expect(withBase).toContain('House base:')
+    expect(withBase).toContain('400 decisions')
+    expect(buildSubjectiveCheckPrompt(payload({ house_base: null }))).not.toContain('House base:')
   })
 })

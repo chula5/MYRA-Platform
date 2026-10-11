@@ -63,6 +63,9 @@ export function buildSubjectiveCheckPrompt(payload: SnapshotPayload): string {
       : 'No exclusion rules recorded.',
     voice.voice_notes ? `Voice notes: ${voice.voice_notes}` : '',
     `Frozen evidence: ${model}; ${inspirationSummary}.`,
+    payload.house_base
+      ? `House base: ${payload.house_base.model.status === 'loaded' ? `Chloe's learned house model (trained on ${payload.house_base.model.decision_count} decisions, digest ${digest(payload.house_base.model.payload)})` : "the house's rules alone (no learned house model)"} underlies this stylist's rules; her own brief and learning narrow it.`
+      : '',
     payload.rules_only
       ? 'This snapshot is RULES ONLY (insufficient confirmed inspiration or no usable envelope): judge strictly by the stated rules, constitution, and brief.'
       : '',

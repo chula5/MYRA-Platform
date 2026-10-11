@@ -13,6 +13,7 @@ import { loadMemberSizeProfile, upsertSizeAvailability } from '@/lib/size-availa
 import { checkStockDetailed } from '@/app/admin/items/stock-check'
 import { ensureMirrorItem, type SiteProduct } from './style'
 import type { MirrorMember } from './auth'
+import { enqueueWarmups, kickStyledWaysDrain } from '@/lib/styled-ways-queue'
 
 const MIGRATION_HINT = 'Run migration 0060 in Supabase first — saves across sites live in member_saved_item.'
 
@@ -52,6 +53,14 @@ export async function saveForMember(member: MirrorMember, product: SiteProduct):
 
   const ctx = await loadMemberSizeProfile(member.member_id)
   await subscribeToItems(alertKeyFor(member), [{ item_id: item.item_id, item_type: item.item_type }], 'saved_item', null, ctx)
+
+  // A save is the clearest sign she will tap it: its three ways are styled
+  // now, not when she next opens FOR YOU. Never lets a queue problem fail the save.
+  try {
+    const q = await enqueueWarmups(admin, member.member_id, [item.item_id], 'save')
+    if (q.queued.length) kickStyledWaysDrain()
+  } catch (err) { console.error('[mirror/save] styled ways', err) }
+
   return { saved: true, item_id: item.item_id, count: await countSaves(admin, member.member_id) }
 }
 

@@ -9,13 +9,17 @@ import type { LookItem } from '@/lib/pilot-stylist'
 /** How many ways a piece is shown in. */
 export const WAYS = 3
 /** Warm-up jobs a member may queue in a day before MYRA waits for a tap instead. */
-export const WARMUP_CAP_DEFAULT = 40
+export const WARMUP_CAP_DEFAULT = 80
+/** Pieces the overnight sweep may style per member per run, counted apart from the daytime cap (Chloe: 15, 2026-10-11). */
+export const NIGHTLY_CAP_DEFAULT = 15
 /** What one judged look costs (the look check's own estimate: ~2p a look). */
 export const COST_PER_JUDGED_LOOK_GBP = 0.02
 
 export type WayMode = 'blend' | 'wardrobe' | 'inspiration'
 export type WaySource = 'tap' | 'warmup' | 'mcp' | 'mirror'
 export type WayVerdict = 'works' | 'borderline'
+/** Like saves the outfit to her looks at once; dislike retires the way. */
+export type WayReaction = 'like' | 'dislike'
 
 export interface StyledWayRow {
   styled_way_id: string
@@ -33,19 +37,25 @@ export interface StyledWayRow {
   source: WaySource
   judged_at: string
   stale: boolean
+  /** MYRA's picture of the outfit (migration 0097), when it has been made. */
+  image_url?: string | null
+  reaction?: WayReaction | null
+  saved_look_id?: string | null
 }
 
 /** The look as every member surface draws it (ComposedLookCard / BuiltOutfit). */
 export interface StyledWayLook {
   styled_way_id: string
   look_id: null
-  image_url: null
+  image_url: string | null
   items: LookItem[]
   why: string
   verdict: WayVerdict
   occasion_id?: string | null
   occasion_label?: string | null
   judged_at: string
+  reaction?: WayReaction | null
+  saved_look_id?: string | null
 }
 
 export const idsOf = (items: { item_id?: string | null }[]): string[] =>
@@ -96,13 +106,15 @@ export function toStyledLook(row: StyledWayRow): StyledWayLook {
   return {
     styled_way_id: row.styled_way_id,
     look_id: null,
-    image_url: null,
+    image_url: row.image_url ?? null,
     items: row.items,
     why: row.why,
     verdict: row.verdict,
     occasion_id: row.occasion_id,
     occasion_label: row.occasion_label,
     judged_at: row.judged_at,
+    reaction: row.reaction ?? null,
+    saved_look_id: row.saved_look_id ?? null,
   }
 }
 
