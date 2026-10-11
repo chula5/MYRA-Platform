@@ -19,6 +19,16 @@ let styleJob = null // { id, product, mode, status, looks, hero, error, startedA
 const HISTORY_MAX = 20
 let styleHistory = null // [{ id, product, mode, looks, hero, at }]
 
+// 0.4.2: once, move a dev-server copy onto the live site. The dev server was
+// slow enough (~30s+) that stylings were cut off before they landed. The
+// popup's advanced field can still point it back.
+;(async () => {
+  const st = await ext.storage.local.get(['apiBase', 'apiBaseLive042'])
+  if (st?.apiBaseLive042) return
+  if (/localhost|127\.0\.0\.1/i.test(st?.apiBase || '')) await ext.storage.local.set({ apiBase: DEFAULTS.apiBase })
+  await ext.storage.local.set({ apiBaseLive042: true })
+})().catch(() => {})
+
 async function loadHistory() {
   if (styleHistory) return styleHistory
   const stored = await ext.storage.local.get('styleHistory')
@@ -61,7 +71,19 @@ async function api(path, init = {}) {
   return { status: res.status, json }
 }
 
+// Chrome puts an idle service worker to sleep after ~30s, and a pending fetch
+// does not count as activity — a styling that took longer (the dev server's
+// quick pass alone is ~30s) was cut off mid-request: the job sat on "loading"
+// forever and never reached her history. Any extension API call resets the
+// idle clock, so while a job is building, make one every 20s.
+let keepAwake = null
+function holdAwake(on) {
+  if (on && !keepAwake) keepAwake = setInterval(() => { Promise.resolve(ext.runtime.getPlatformInfo()).catch(() => {}) }, 20_000)
+  if (!on && keepAwake) { clearInterval(keepAwake); keepAwake = null }
+}
+
 async function saveJob() {
+  holdAwake(styleJob?.status === 'loading' || styleJob?.status === 'partial')
   try { await ext.storage.local.set({ styleJob }) } catch {}
   // Every open tab redraws from the job it is told about.
   try {

@@ -312,8 +312,11 @@ export async function autoKeepForBrand(admin: any, watched: WatchedBrandRow, tru
       const trust = confidenceTrustFor(data, watched)
       if (!trust.trusted && !overridden) notes.push(`AUTO-KEEP BY CONFIDENCE PAUSED — ${trust.summary}`)
       else {
-        const since = watched.auto_keep_confidence_since ?? new Date().toISOString()
-        for (const q of await queuedFor(admin, watched.brand_id, since)) {
+        // The whole queue, not only what arrived after the switch: the bar is
+        // her decision about the brand, and a piece found before it can climb
+        // over it as she teaches the model. Reading only newer pieces left 47
+        // ME+EM pieces sitting at 95%+ under a 95% bar.
+        for (const q of await queuedFor(admin, watched.brand_id, null)) {
           if (!keepable(q)) continue
           const row = { ...typedRow(q), brand_id: watched.brand_id }
           const p = confidenceOf(data, row)
@@ -348,8 +351,8 @@ export async function autoKeepForBrand(admin: any, watched: WatchedBrandRow, tru
 
 /**
  * ADD THE BACKLOG — every queued piece for this brand already above her bar,
- * on her press. Automation itself only ever takes pieces found after it was
- * switched on; this is how the queue that built up before it catches up.
+ * on her press, all at once (up to 200). Each scan's automation also reads the
+ * whole queue now, but takes at most 40 a run; this clears it in one go.
  */
 export async function keepConfidentNow(admin: any, watched: WatchedBrandRow, cap = TWINS_NOW_CAP): Promise<{ kept: number; error?: string }> {
   if (!watched.brand_id) return { kept: 0, error: 'This brand has no pieces yet' }

@@ -1378,6 +1378,29 @@
       Promise.resolve(send({ type: 'viewedProduct', product, dwellMs: Date.now() - openedAt })).catch(() => {})
     }, VIEW_AFTER_MS)
   }
+  // ── STYLED WHILE SHE LOOKS ────────────────────────────────────────────────
+  // A piece's own page she stays on is styled for her without asking — quietly,
+  // in the worker: no panel opens, the badge's dot lights when the looks are
+  // ready, and they land in her history. Never over a styling still building,
+  // and never a piece she already has looks for.
+  const AUTO_STYLE_AFTER_MS = 4000
+  const autoStyled = new Set()
+  let autoTimer = null, autoKey = null
+  function autoStyle(product) {
+    if (vinted) return
+    const key = product?.url || null
+    if (key === autoKey) return
+    clearTimeout(autoTimer); autoKey = key
+    if (!key || autoStyled.has(key)) return
+    autoTimer = setTimeout(async () => {
+      if (autoKey !== key || document.hidden || panel || picking) return
+      autoStyled.add(key)
+      const [cur, hist] = await Promise.all([send({ type: 'styleJob' }), send({ type: 'styleHistory' })])
+      if (cur?.job && (cur.job.status === 'loading' || cur.job.status === 'partial')) return
+      if ((hist?.items || []).some((it) => it.product?.url === key)) return
+      await send({ type: 'styleStart', product, mode: 'inspiration' })
+    }, AUTO_STYLE_AFTER_MS)
+  }
   const searchedSent = new Set()
   // A search typed at Google is about anything at all; only a search typed at
   // a shop is a style brief. Those hosts never reach here (the guard at the
@@ -1436,6 +1459,7 @@
       if (p) {
         pagePiece = p
         noteView(p)
+        autoStyle(p)
         // Noted, not shown: the badge opens this piece's card when she asks.
       }
       if (p || ++tries >= 20) clearInterval(navSettle)
@@ -1453,6 +1477,7 @@
       // One piece on its own page: keep it or style it, whatever the shop.
       pagePiece = M.pageProduct?.() ?? null
       noteView(pagePiece)
+      autoStyle(pagePiece)
       noteSearch()
       // The page's piece is only ever recorded here — its card waits behind
       // the badge now, for the click that asks for it.

@@ -1767,13 +1767,27 @@ export async function checkWatchedBrand(watchedIn: WatchedBrandRow): Promise<Bra
 }
 
 // Run the whole watchlist (the Monday cron, and RUN CHECK NOW in admin).
-export async function runBrandWatch(): Promise<BrandCheckResult[]> {
+/**
+ * One pass over the watchlist, stalest brand first, stopping before the
+ * function's time limit. It used to walk all ~180 brands A→Z in a single
+ * 300s run, which died around the Ls every Monday — ME+EM and everything
+ * after it went weeks unscanned. Now each run takes the brands longest
+ * unchecked, and the cron runs hourly with `dueAfterMs` so every brand is
+ * still read about once a week.
+ */
+export async function runBrandWatch(opts: { budgetMs?: number; dueAfterMs?: number } = {}): Promise<BrandCheckResult[]> {
+  const started = Date.now()
+  const budgetMs = opts.budgetMs ?? 240_000
   const admin = createAdminClient()
-  const { data } = await (admin as any)
+  let query = (admin as any)
     .from('watched_brand')
     .select('*')
     .eq('active', true)
-    .order('name')
+  if (opts.dueAfterMs) {
+    const cutoff = new Date(Date.now() - opts.dueAfterMs).toISOString()
+    query = query.or(`last_checked_at.is.null,last_checked_at.lt.${cutoff}`)
+  }
+  const { data } = await query.order('last_checked_at', { ascending: true, nullsFirst: true })
   const results: BrandCheckResult[] = []
   const brands = (data ?? []) as unknown as WatchedBrandRow[]
   // Loaded here, not at the top: AUTOMATE reaches the Style Brain store, which
@@ -1782,6 +1796,8 @@ export async function runBrandWatch(): Promise<BrandCheckResult[]> {
   // Trust is measured once per run, from decisions made before this scan.
   const trust = brands.some(automationOn) ? await loadBrandTrust(admin as any) : undefined
   for (const w of brands) {
+    // The rest wait for the next run — they are now the stalest.
+    if (Date.now() - started > budgetMs) break
     try {
       const result = await checkWatchedBrand(w)
       const auto = await autoKeepForBrand(admin as any, w, trust)

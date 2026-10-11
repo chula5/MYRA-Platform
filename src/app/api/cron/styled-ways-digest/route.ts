@@ -14,6 +14,7 @@
 //               pieces that already have ways, whatever styled them
 //   ?to=a@b.c   send the sample to this address instead of the member's own
 //   ?preview=1  return the sample as HTML to look at, send nothing
+//   ?heroes=<id,id>  sample only: just these pieces
 //   ?site=http://localhost:3000   sample only: links open here instead of the live
 //               site (pictures stay on the live site, an inbox cannot reach localhost)
 
@@ -34,7 +35,7 @@ function authorised(req: NextRequest): boolean {
   return req.headers.get('authorization') === `Bearer ${secret}`
 }
 
-interface StyledPiece { item_id: string; name: string; brand: string | null; image_url: string | null; ways: number; saved: boolean }
+interface StyledPiece { item_id: string; name: string; brand: string | null; image_url: string | null; ways: number; saved: boolean; pictures: string[] }
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
@@ -44,9 +45,11 @@ const linkFor = (p: StyledPiece, base?: string) => (base ? `${base.replace(/\/$/
 const pictureFor = (url: string) => { const t = thumbUrl(url, 256); return t.startsWith('/') ? siteUrl(t) : t }
 
 /** The pieces the sweep styled for one member since `since`, with how many ways each now has. */
-async function styledOvernight(admin: any, memberId: string, since: string, sample = false): Promise<StyledPiece[]> {
+async function styledOvernight(admin: any, memberId: string, since: string, sample = false, only?: string[]): Promise<StyledPiece[]> {
   let heroes: string[]
-  if (sample) {
+  if (sample && only?.length) {
+    heroes = only
+  } else if (sample) {
     // An example: whatever already has ways for her, newest first.
     const { data: ways } = await admin.from('styled_way').select('hero_item_id, judged_at')
       .eq('member_id', memberId).eq('stale', false).order('judged_at', { ascending: false }).limit(60)
@@ -59,14 +62,21 @@ async function styledOvernight(admin: any, memberId: string, since: string, samp
   if (!heroes.length) return []
   const [{ data: items }, { data: ways }, { data: saved }] = await Promise.all([
     admin.from('item').select('item_id, product_name, image_url, status, brand:brand_id(name)').in('item_id', heroes).neq('status', 'archived'),
-    admin.from('styled_way').select('hero_item_id').eq('member_id', memberId).eq('stale', false).in('hero_item_id', heroes),
+    admin.from('styled_way').select('hero_item_id, image_url, judged_at').eq('member_id', memberId).eq('stale', false).in('hero_item_id', heroes).order('judged_at', { ascending: false }),
     admin.from('member_saved_item').select('item_id').eq('member_id', memberId).in('item_id', heroes),
   ])
   const count = new Map<string, number>()
-  for (const w of (ways ?? []) as any[]) count.set(w.hero_item_id, (count.get(w.hero_item_id) ?? 0) + 1)
+  const pictures = new Map<string, string[]>()
+  for (const w of (ways ?? []) as any[]) {
+    count.set(w.hero_item_id, (count.get(w.hero_item_id) ?? 0) + 1)
+    if (w.image_url) pictures.set(w.hero_item_id, [...(pictures.get(w.hero_item_id) ?? []), w.image_url])
+  }
   const savedIds = new Set(((saved ?? []) as any[]).map((s) => s.item_id))
   return ((items ?? []) as any[])
-    .map((i) => ({ item_id: i.item_id, name: i.product_name, brand: i.brand?.name ?? null, image_url: i.image_url ?? null, ways: Math.min(WAYS, count.get(i.item_id) ?? 0), saved: savedIds.has(i.item_id) }))
+    .map((i) => ({
+      item_id: i.item_id, name: i.product_name, brand: i.brand?.name ?? null, image_url: i.image_url ?? null,
+      ways: Math.min(WAYS, count.get(i.item_id) ?? 0), saved: savedIds.has(i.item_id), pictures: (pictures.get(i.item_id) ?? []).slice(0, WAYS),
+    }))
     // Only pieces with all three ways kept: a link in the note opens on outfits, never on a wait (Chloe, 2026-10-11).
     .filter((p) => p.ways >= WAYS)
     .sort((a, b) => Number(b.saved) - Number(a.saved))
@@ -75,19 +85,28 @@ async function styledOvernight(admin: any, memberId: string, since: string, samp
 function digestHtml(firstName: string, pieces: StyledPiece[], base?: string): string {
   const shown = pieces.slice(0, MAX_PIECES_SHOWN)
   const home = base ? `${base.replace(/\/$/, '')}/me` : siteUrl('/me')
-  const rows = shown.map((p) => `
+  // One block per piece: the piece, then MYRA's pictures of its outfits where
+  // they have been made (three across), else the piece alone.
+  const rows = shown.map((p) => {
+    const link = linkFor(p, base)
+    const outfits = p.pictures.length
+      ? `<tr><td colspan="2" style="padding:0 0 10px 0;"><table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>${p.pictures.map((u) =>
+          `<td style="padding:0 6px 0 0;"><a href="${link}"><img src="${pictureFor(u)}" width="160" style="display:block;width:160px;height:auto;border-radius:8px;border:1px solid #e2e0db;" alt="" /></a></td>`).join('')}</tr></table></td></tr>`
+      : ''
+    return `
     <tr>
-      <td style="padding:8px 12px 8px 0;vertical-align:top;width:84px;">
-        <a href="${linkFor(p, base)}">${p.image_url
-          ? `<img src="${pictureFor(p.image_url)}" width="84" style="display:block;width:84px;height:auto;border-radius:6px;border:1px solid #e2e0db;" alt="${esc(p.name)}" />`
-          : '<div style="width:84px;height:112px;background:#ededed;border-radius:6px;"></div>'}</a>
+      <td style="padding:14px 12px 8px 0;vertical-align:top;width:64px;">
+        <a href="${link}">${p.image_url
+          ? `<img src="${pictureFor(p.image_url)}" width="64" style="display:block;width:64px;height:auto;border-radius:6px;border:1px solid #e2e0db;" alt="${esc(p.name)}" />`
+          : '<div style="width:64px;height:85px;background:#ededed;border-radius:6px;"></div>'}</a>
       </td>
-      <td style="padding:8px 0;vertical-align:middle;">
+      <td style="padding:14px 0 8px 0;vertical-align:middle;">
         ${p.brand ? `<p style="margin:0 0 2px 0;font-size:11px;letter-spacing:0.12em;color:#7c838b;">${esc(p.brand.toUpperCase())}</p>` : ''}
         <p style="margin:0 0 6px 0;font-size:15px;color:#2b2b2b;">${esc(p.name)}</p>
-        <a href="${linkFor(p, base)}" style="font-size:12px;letter-spacing:0.08em;color:#2b2b2b;text-decoration:underline;">${p.ways} WAYS TO WEAR IT</a>
+        <a href="${link}" style="font-size:12px;letter-spacing:0.08em;color:#2b2b2b;text-decoration:underline;">${p.ways} WAYS TO WEAR IT</a>
       </td>
-    </tr>`).join('')
+    </tr>${outfits}`
+  }).join('')
   const more = pieces.length > shown.length ? `<p style="margin:8px 0 0 0;font-size:12px;color:#7c838b;">and ${pieces.length - shown.length} more in your Dressing Room.</p>` : ''
   const body = `
     <p style="margin:0 0 14px 0;font-size:15px;color:#2b2b2b;">${esc(firstName ? `${firstName}, ` : '')}while you slept MYRA styled ${pieces.length === 1 ? 'one of your pieces' : `${pieces.length} of your pieces`} — three outfits each, every one checked in your size before you see it.</p>
@@ -105,6 +124,7 @@ export async function GET(req: NextRequest) {
   const preview = q.get('preview') === '1'
   const toOverride = q.get('to')
   const base = sample && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(q.get('site') ?? '') ? q.get('site')! : undefined
+  const only = sample ? (q.get('heroes') ?? '').split(',').map((s) => s.trim()).filter(Boolean) : []
   const hours = Math.max(1, Math.min(96, Number(q.get('hours') ?? 24) || 24))
   const since = new Date(Date.now() - hours * 3_600_000).toISOString()
   const admin = createAdminClient() as any
@@ -121,7 +141,7 @@ export async function GET(req: NextRequest) {
   const report: Record<string, unknown>[] = []
   let sent = 0
   for (const m of (rows ?? []) as { member_id: string; name: string | null; auth_user_id: string }[]) {
-    const pieces = await styledOvernight(admin, m.member_id, since, sample)
+    const pieces = await styledOvernight(admin, m.member_id, since, sample, only)
     if (!pieces.length) { report.push({ member: m.name ?? m.member_id, pieces: 0, sent: false }); continue }
     const firstName = (m.name ?? '').trim().split(/\s+/)[0] ?? ''
     if (preview) return new NextResponse(digestHtml(firstName, pieces, base), { headers: { 'Content-Type': 'text/html; charset=utf-8' } })

@@ -11,7 +11,7 @@ import type { TwinTrust } from '@/lib/brand-watch-twins'
 import {
   addWatchedBrandInBackground, checkAllBrandsNowInBackground, checkBrandNowInBackground, fullScanBrandInBackground,
   keepAllForBrandInBackground, keepConfidentNowInBackground, keepShownInBackground, loadBrandJobs,
-  keepItems, loadQueuePage, removeWatchedBrand, setWatchedBrandActive, setWatchedBrandAutoKeep, setWatchedBrandScanUrl, startMirrorScan,
+  keepItems, removeWatchedBrand, setWatchedBrandActive, setWatchedBrandAutoKeep, setWatchedBrandScanUrl, startMirrorScan,
   setWatchedBrandAutoKeepConfidence, setWatchedBrandConfidenceBar, loadAutoAdded, undoAutoKeep,
   setWatchedBrandAutoKeepAll, enableAutoAddForBrands,
   loadSiteRequests, decideSiteRequest,
@@ -20,6 +20,10 @@ import {
   type BrandJobState,
 } from './actions'
 import { bulkLine, bulkLineVisible, type BulkJob } from '@/lib/brand-watch-jobs'
+
+/** Brand names compared without case, accents or punctuation — same as foldBrandName on the server. */
+const foldBrandName = (t: string | null | undefined) =>
+  String(t ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')
 
 const CHIP = 'px-3 py-1.5 rounded-full text-[9px] tracking-[0.12em] border transition-colors'
 const CHIP_ON = `${CHIP} bg-[#0A0A0A] text-white border-[#0A0A0A]`
@@ -215,6 +219,18 @@ export default function BrandWatchClient(props: Props) {
     return names.map((b) => ({ value: b, label: b.toUpperCase(), count: page.brandCounts[b] ?? 0 }))
   }, [page.brandCounts, fBrand])
 
+  // Queue counts by folded name: the watchlist says "MAX&Co.", the pieces are
+  // filed under "MAX&CO", and both are the same brand.
+  const countByFold = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const [n, c] of Object.entries(page.brandCounts)) {
+      const k = foldBrandName(n)
+      m.set(k, (m.get(k) ?? 0) + c)
+    }
+    return m
+  }, [page.brandCounts])
+  const countOf = (name: string) => countByFold.get(foldBrandName(name)) ?? 0
+
   const shown = useMemo(() => queue.filter((q) => !gone.has(q.item_id)), [queue, gone])
   // The watchlist row behind the selected brand chip — the brand-scoped buttons
   // need its id, because that is what a background job is keyed on.
@@ -235,17 +251,45 @@ export default function BrandWatchClient(props: Props) {
   const filtersNow = (over: Partial<QueueFilters> = {}): QueueFilters =>
     ({ itemType: fType, colour: fColour, minScore, showPredicted, sort: fSort, season: fSeason, ...over })
 
+  // A brand's own load skips the whole-queue read behind every brand's count
+  // (the slow part of a brand click); the counts already on the page stay,
+  // with the chosen brand's fresh one merged in.
+  // Through a route handler, not the server action: actions queue behind each
+  // other, so a click used to wait for the page's own background refreshes.
+  const fetchPage = async (offset: number, brand: string, filters: QueueFilters): Promise<QueuePage> => {
+    const res = await fetch('/api/admin/brand-watch-queue', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ offset, brand: brand || null, filters: brand ? { ...filters, brandCountsKnown: true } : filters }),
+    })
+    const r = await res.json()
+    if (!res.ok) throw new Error(r?.error ?? `Queue load failed (${res.status})`)
+    return r as QueuePage
+  }
+  const withCounts = (prev: QueuePage, r: QueuePage, brand: string): QueuePage =>
+    brand ? { ...r, brandCounts: { ...prev.brandCounts, ...r.brandCounts } } : r
+
+  // Every brand-and-filter view she has opened, so going back to one shows its
+  // cards at once while a fresh read replaces them. Her keeps and skips clear
+  // it — a remembered view would show decided pieces again for a moment.
+  const viewCache = useRef(new Map<string, QueuePage>())
+  const viewKey = (brand: string, filters: QueueFilters) => JSON.stringify([brand, filters])
+
   // A queue load never blocks the page and never overwrites a newer one: rapid
   // brand clicks are the normal case, and the last one she tapped must win.
   const loadSeq = useRef(0)
   const load = (brand: string, filters: QueueFilters) => {
     const seq = ++loadSeq.current
+    const key = viewKey(brand, filters)
+    const remembered = viewCache.current.get(key)
+    if (remembered) { setPage((p) => withCounts(p, remembered, brand)); setGone(new Set()) }
     setQueueLoading(true)
     void (async () => {
       try {
-        const r = await loadQueuePage(0, brand || undefined, filters)
+        const r = await fetchPage(0, brand, filters)
         if (seq !== loadSeq.current) return
-        startTransition(() => { setPage(r); setGone(new Set()) })
+        viewCache.current.set(key, r)
+        startTransition(() => { setPage((p) => withCounts(p, r, brand)); setGone(new Set()) })
       } catch (e) {
         if (seq === loadSeq.current) setNotice(e instanceof Error ? e.message : String(e))
       } finally {
@@ -273,8 +317,12 @@ export default function BrandWatchClient(props: Props) {
   const reloadQueue = () => load(fBrand, filtersNow())
   quietReload.current = () => {
     const brand = fBrand
-    void loadQueuePage(0, brand || undefined, filtersNow())
-      .then((r) => { if (brandRef.current === brand) { setPage(r); setGone(new Set()) } })
+    const filters = filtersNow()
+    void fetchPage(0, brand, filters)
+      .then((r) => {
+        viewCache.current.set(viewKey(brand, filters), r)
+        if (brandRef.current === brand) { setPage((p) => withCounts(p, r, brand)); setGone(new Set()) }
+      })
       .catch(() => undefined)
   }
 
@@ -345,6 +393,7 @@ export default function BrandWatchClient(props: Props) {
       setSimilarPrompt(null)
     }
     setGone((g) => new Set(Array.from(g).concat(ids)))
+    viewCache.current.clear()
     setSelected((s) => new Set(Array.from(s).filter((id) => !ids.includes(id))))
     if (!keep) { setLastSkip(ids); setReasonFor(ids) } else setReasonFor([])
     // Fire-and-forget, OUTSIDE the shared transition: the card is already hidden
@@ -400,6 +449,11 @@ export default function BrandWatchClient(props: Props) {
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [bulkBar, setBulkBar] = useState<number>(DEFAULT_CONFIDENCE)
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
+  // Find a brand by name across all four rooms. Accents and spacing don't
+  // matter: "lemels" finds LÉMÉLS, "me em" finds ME+EM.
+  const [brandSearch, setBrandSearch] = useState('')
+  const fold = foldBrandName
+  const searchKey = fold(brandSearch)
   const togglePick = (id: string) =>
     setPicked((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n })
   const sections = useMemo(() => {
@@ -423,8 +477,10 @@ export default function BrandWatchClient(props: Props) {
       { key: 'auto', label: 'AUTO-ADDING', hint: auto.length ? byBar : 'NOTHING RUNS BY ITSELF YET', rows: auto, openByDefault: true },
       { key: 'new', label: 'NEW · NOTHING KEPT YET', hint: 'REVIEW A FEW PIECES SO MYRA CAN LEARN THE BRAND', rows: fresh, openByDefault: false },
       { key: 'rest', label: 'REVIEWING BY HAND', hint: 'KEPT SOME, GATE NOT EARNED YET', rows: rest, openByDefault: false },
-    ]
-  }, [watched, confidenceTrust, trust, decided])
+    ].map((sec) => (searchKey ? { ...sec, rows: sec.rows.filter((w) => fold(w.name).includes(searchKey)) } : sec))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watched, confidenceTrust, trust, decided, searchKey])
+  const searchHits = searchKey ? sections.flatMap((sec) => sec.rows) : []
 
   // ---- one brand, folded ---------------------------------------------------
   // A room shows one line per brand — name, queue, what runs and at what bar —
@@ -435,7 +491,7 @@ export default function BrandWatchClient(props: Props) {
     setExpanded((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
   const brandRow = (w: WatchedBrandRow) => {
     const id = w.watched_brand_id
-    const inQueue = page.brandCounts[w.name] ?? 0
+    const inQueue = countOf(w.name)
     const selected = fBrand === w.name
     const barPct = Math.round(Number(w.confidence_bar ?? DEFAULT_CONFIDENCE) * 100)
     const job = jobs[id]
@@ -502,7 +558,7 @@ export default function BrandWatchClient(props: Props) {
   // AUTO-ADD control above the list.
   const brandCard = (w: WatchedBrandRow) => {
         const id = w.watched_brand_id
-        const inQueue = page.brandCounts[w.name] ?? 0
+        const inQueue = countOf(w.name)
         const selected = fBrand === w.name
         // A job reports on its own brand's card, so a brand she is not
         // looking at still says what it is doing.
@@ -795,12 +851,33 @@ export default function BrandWatchClient(props: Props) {
           </div>
         )}
 
+        <div className="mb-2 relative">
+          <input
+            type="search"
+            value={brandSearch}
+            onChange={(e) => setBrandSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && searchHits.length) selectBrand(searchHits[0].name)
+              if (e.key === 'Escape') setBrandSearch('')
+            }}
+            placeholder="SEARCH BRANDS"
+            className="w-full border border-[#E2E0DB] rounded-[8px] px-3 py-2 text-[10px] tracking-[0.08em] outline-none focus:border-[#0A0A0A] uppercase placeholder:text-[#A8A8A4]"
+            title="Type a brand name — ENTER opens the first match"
+          />
+          {searchKey && (
+            <p className="mt-1 text-[8px] tracking-[0.1em] text-[#A8A8A4]">
+              {searchHits.length ? `${searchHits.length} MATCH${searchHits.length === 1 ? '' : 'ES'} — ENTER OPENS ${searchHits[0].name.toUpperCase()}` : 'NO WATCHED BRAND MATCHES'}
+            </p>
+          )}
+        </div>
+
         <div data-lenis-prevent className="border border-[#E2E0DB] rounded-[10px] overflow-hidden max-h-[60vh] overflow-y-auto">
           {watched.length === 0 && (
             <p className="px-3 py-4 text-[9px] tracking-[0.1em] text-[#A8A8A4]">NOTHING WATCHED YET — PASTE A SHOPIFY BRAND URL ABOVE.</p>
           )}
-          {sections.map((s) => {
-            const open = openSections[s.key] ?? s.openByDefault
+          {sections.filter((s) => !searchKey || s.rows.length > 0).map((s) => {
+            // While searching, every room with a match is open.
+            const open = searchKey ? true : (openSections[s.key] ?? s.openByDefault)
             const allPicked = s.rows.length > 0 && s.rows.every((w) => picked.has(w.watched_brand_id))
             return (
               <div key={s.key} className="border-b border-[#E2E0DB] last:border-b-0">
@@ -1104,12 +1181,12 @@ export default function BrandWatchClient(props: Props) {
                 </button>
               )
             })()}
-            {selectedBrand && (page.brandCounts[fBrand] ?? 0) > 0 && (
+            {selectedBrand && countOf(fBrand) > 0 && (
               <button
                 disabled={busyWith(`keepall:${selectedBrand.watched_brand_id}`)}
                 onClick={() => {
                   const sel = selectedBrand
-                  const n = page.brandCounts[fBrand] ?? 0
+                  const n = countOf(fBrand)
                   if (!confirm(`Keep ALL ${n} ${fBrand} pieces in the queue — including ones not loaded on this page? It runs in the background.`)) return
                   act(`keepall:${sel.watched_brand_id}`, () => keepAllForBrandInBackground(sel.watched_brand_id, { includeOutOfSeason: fSeason !== 'in' }), (r) => {
                     if (r?.error) { setNotice(String(r.error).toUpperCase()); return }
@@ -1121,7 +1198,7 @@ export default function BrandWatchClient(props: Props) {
                 className="bg-[#C4A882] text-white rounded-full px-4 py-2 text-[9px] tracking-[0.12em] hover:opacity-85 transition-opacity disabled:opacity-40"
                 title="Keep every queued draft for this brand — the whole queue, not just the loaded page. Runs in the background."
               >
-                {busyWith(`keepall:${selectedBrand.watched_brand_id}`) ? 'STARTING…' : `KEEP ALL ${fBrand.toUpperCase()} · ${page.brandCounts[fBrand] ?? 0}`}
+                {busyWith(`keepall:${selectedBrand.watched_brand_id}`) ? 'STARTING…' : `KEEP ALL ${fBrand.toUpperCase()} · ${countOf(fBrand)}`}
               </button>
             )}
             <button
@@ -1245,7 +1322,7 @@ export default function BrandWatchClient(props: Props) {
             <div className="mt-6 text-center">
               <button
                 disabled={busyWith('more')}
-                onClick={() => act('more', () => loadQueuePage(queue.length, fBrand || undefined, filtersNow()), (r: QueuePage) => setPage((p) => ({ ...r, queue: p.queue.concat(r.queue.filter((n) => !p.queue.some((e) => e.item_id === n.item_id))) })))}
+                onClick={() => act('more', () => fetchPage(queue.length, fBrand, filtersNow()), (r: QueuePage) => setPage((p) => ({ ...withCounts(p, r, fBrand), queue: p.queue.concat(r.queue.filter((n) => !p.queue.some((e) => e.item_id === n.item_id))) })))}
                 className="border border-[#0A0A0A] rounded-full px-6 py-2 text-[9px] tracking-[0.14em] text-[#0A0A0A] hover:bg-[#0A0A0A] hover:text-white transition-colors disabled:opacity-40"
               >
                 {busyWith('more') ? 'LOADING…' : `LOAD MORE (${page.queueTotal - queue.length} REMAINING)`}

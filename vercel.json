@@ -13,7 +13,7 @@
     },
     {
       "path": "/api/cron/brand-watch",
-      "schedule": "0 7 * * 1"
+      "schedule": "20 * * * *"
     },
     {
       "path": "/api/cron/audit-digest",

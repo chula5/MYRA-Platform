@@ -85,6 +85,12 @@ export interface QueueFilters {
   sort?: QueueSort
   /** Kept for compatibility with older callers; Brand Watch currently exposes autumn/current stock only. */
   season?: 'in' | 'out' | 'all'
+  /**
+   * The page already holds every brand's count, so a brand click can skip the
+   * whole-queue read behind them (~6s at 11,000 queued) and return the chosen
+   * brand's count alone for the page to merge in.
+   */
+  brandCountsKnown?: boolean
 }
 
 export interface BrandWatchData extends QueuePage {
@@ -205,6 +211,24 @@ export async function loadQueuePage(offset: number, brandName?: string | null, f
   return queuePage(offset, brandName, filters)
 }
 
+// The learning behind the ranking reads every keep and skip ever made (14,000
+// rows, 1-5s). Brand clicks come in quick runs, so one read serves them for a
+// short while; her own keeps and skips here drop it, so the next load still
+// re-trains on them at once.
+// Held on globalThis: the queue route and these actions can be bundled
+// separately, and a keep here must clear the copy the route reads.
+const TRUST_TTL_MS = 60_000
+const trustSlot = globalThis as unknown as { __bwTrust?: { at: number; p: Promise<QueueTrustData> } | null }
+function cachedQueueTrust(admin: any): Promise<QueueTrustData> {
+  const hit = trustSlot.__bwTrust
+  if (hit && Date.now() - hit.at < TRUST_TTL_MS) return hit.p
+  const p = loadQueueTrust(admin)
+  trustSlot.__bwTrust = { at: Date.now(), p }
+  p.catch(() => { if (trustSlot.__bwTrust?.p === p) trustSlot.__bwTrust = null })
+  return p
+}
+function dropTrustCache() { trustSlot.__bwTrust = null }
+
 // trustIn lets the page load share one read of the trust models with the brand
 // cards. A selected-brand click builds the queue-only trust itself, overlapped
 // with the queue reads below.
@@ -212,10 +236,11 @@ async function queuePage(offset: number, brandName?: string | null, filters: Que
   const admin = createAdminClient() as any
   // Started first, so the trust read overlaps the queue reads instead of
   // queueing behind them.
-  const trust = trustIn ? Promise.resolve(trustIn) : loadQueueTrust(admin)
+  const trust = trustIn ? Promise.resolve(trustIn) : cachedQueueTrust(admin)
   let drafts: any[]
   let chipRows: any[] | null = null
   let wbs: any[] = []
+  let resolvedNames: string[] = []
   try {
     if (brandName) {
       // One brand selected: the rows to rank come narrowed from the database
@@ -223,10 +248,21 @@ async function queuePage(offset: number, brandName?: string | null, filters: Que
       // whole-queue counts from a much lighter read of it. The brand name
       // resolves through the brand table — the same names its queue rows
       // carry, so the scope is exactly the one the chips promise.
-      const { data: brands } = await admin.from('brand').select('brand_id').eq('name', brandName)
-      const ids = ((brands ?? []) as any[]).map((b) => b.brand_id)
+      // The watchlist's name and the brand table's can differ in case or
+      // punctuation ("MAX&Co." watches the brand filed as "MAX&CO"), so the
+      // watched row's own brand_id counts too — an exact name match alone
+      // left MAX&CO at 0 in the sidebar with 70 pieces queued.
+      const [{ data: byName }, { data: wbRow }] = await Promise.all([
+        admin.from('brand').select('brand_id, name').eq('name', brandName),
+        admin.from('watched_brand').select('brand_id').eq('name', brandName).not('brand_id', 'is', null),
+      ])
+      const linked = ((wbRow ?? []) as any[]).map((w) => w.brand_id).filter((id: string) => !((byName ?? []) as any[]).some((b) => b.brand_id === id))
+      const { data: byId } = linked.length ? await admin.from('brand').select('brand_id, name').in('brand_id', linked) : { data: [] }
+      const brands = [...((byName ?? []) as any[]), ...((byId ?? []) as any[])]
+      resolvedNames = brands.map((b) => b.name as string)
+      const ids = brands.map((b) => b.brand_id)
       const [light, scoped, wb] = await Promise.all([
-        fetchBrandWatchRows(admin, ['queued'], LIGHT_FIELDS),
+        filters.brandCountsKnown ? Promise.resolve(null) : fetchBrandWatchRows(admin, ['queued'], LIGHT_FIELDS),
         ids.length ? fetchBrandWatchRows(admin, ['queued'], RANK_FIELDS, (q) => q.in('brand_id', ids)) : Promise.resolve([] as any[]),
         admin.from('watched_brand').select('name, min_score'),
       ])
@@ -266,6 +302,11 @@ async function queuePage(offset: number, brandName?: string | null, filters: Que
   for (const r of (chipRows ?? live).filter(banned)) {
     const b = r.brand?.name ?? '?'
     brandCounts[b] = (brandCounts[b] ?? 0) + 1
+  }
+  // Skipped the whole-queue read: the chosen brand's own count, for the page
+  // to merge into the counts it already has (0 included — it may have emptied).
+  if (brandName && filters.brandCountsKnown && !chipRows) {
+    for (const n of [brandName, ...resolvedNames]) brandCounts[n] = brandCounts[n] ?? 0
   }
 
   // Filters run over the whole queue, not the loaded page: filtering the page
@@ -615,6 +656,7 @@ export async function undoAutoKeep(queueId: string): Promise<{ error?: string }>
     .update({ status: 'skipped', auto_kept: false, item_id: null, decided_at: new Date().toISOString() })
     .eq('queue_id', queueId)
   if (error) return { error: error.message }
+  dropTrustCache()
   revalidatePath('/admin/brand-watch')
   return {}
 }
@@ -1074,6 +1116,7 @@ export async function keepItems(itemIds: string[]): Promise<{ updated: number; o
   // (hundreds of fetches inside one action) — the sentinel catches up on those.
   const report: KeepReport = { outOfStock: [], lowStock: [], untyped: [] }
   const updated = await keepQueueRows(admin, itemIds, { liveStock: itemIds.length <= 25, report })
+  dropTrustCache()
   // No revalidatePath: the client hides the card optimistically and re-queries
   // fresh (with retrained learning) on the next queue load. Revalidating here
   // re-rendered the whole heavy admin page on every single click, which froze
@@ -1094,6 +1137,7 @@ export async function undoSkip(itemIds: string[]): Promise<{ restored: number }>
     .in('queue_id', itemIds)
     .eq('status', 'skipped')
     .select('queue_id')
+  dropTrustCache()
   revalidatePath('/admin/brand-watch')
   return { restored: (data ?? []).length }
 }
@@ -1110,6 +1154,7 @@ export async function setSkipReason(itemIds: string[], reason: string): Promise<
   if (error) {
     return { updated: 0, error: /skip_reason/.test(error.message) ? 'Run migration 0055 in Supabase to save skip reasons' : error.message }
   }
+  dropTrustCache()
   return { updated: (data ?? []).length }
 }
 
@@ -1126,6 +1171,7 @@ export async function skipItems(itemIds: string[]): Promise<{ updated: number }>
     .eq('status', 'queued')
     .select('queue_id, item_type, colour_family, brand:brand_id(name)')
   for (const q of (data ?? []) as any[]) await teachStyleBrain(q, 'skip')
+  dropTrustCache()
   // No revalidatePath — see keepItems. The optimistic hide + next-load re-query
   // keep the queue correct without re-rendering the whole page on every skip.
   return { updated: (data ?? []).length }

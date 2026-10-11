@@ -1,5 +1,7 @@
-// Brand Watch cron — Mondays 07:00 UTC (see vercel.json). Scans every active
-// watched brand's Shopify catalogue, diffs against what has already been seen,
+// Brand Watch cron — hourly (see vercel.json). Each run scans the active
+// watched brands not read in the last ~6.5 days, stalest first, until its time
+// budget is spent; so every brand is still scanned about weekly, without one
+// 300s run having to reach all ~180. Diffs against what has already been seen
 // and queues new on-taste pieces as draft items for /admin/brand-watch.
 //
 // Also callable manually:
@@ -20,7 +22,7 @@ function authorised(req: NextRequest): boolean {
 export async function GET(req: NextRequest) {
   if (!authorised(req)) return new NextResponse('Unauthorized', { status: 401 })
 
-  const results = await runBrandWatch()
+  const results = await runBrandWatch({ budgetMs: 240_000, dueAfterMs: 6.5 * 24 * 3600_000 })
   return NextResponse.json({
     brands: results.length,
     queued: results.reduce((n, r) => n + r.queued, 0),
