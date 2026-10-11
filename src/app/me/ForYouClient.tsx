@@ -8,6 +8,7 @@ import Link from 'next/link'
 import FallbackImage from '@/components/FallbackImage'
 import ShopTheLookOverlay from '@/components/source-panel/ShopTheLookOverlay'
 import MirrorCurtain from '@/components/me/MirrorCurtain'
+import Mannequin from '@/components/me/Mannequin'
 import ShopBrain from './ShopBrain'
 import { thumbUrl } from '@/lib/image-utils'
 import { answerLook, explainAnswer, type ForYouLook, type ForYouView } from './for-you-actions'
@@ -82,6 +83,15 @@ export default function ForYouClient({ view, testMemberId }: { view: ForYouView;
           {/* What she kept on other people's sites, already worked on. Draws
               nothing until there is something to show. */}
           <ShopBrain testMemberId={testMemberId} onReady={(has) => setBrain(has ? 'content' : 'empty')} />
+
+          {/* The curtain has a ceiling; if it lifts before her shop section
+              is back, say MYRA is on it — never a blank page under HELLO. */}
+          {curtain === 'gone' && brain === 'loading' && view.looks.length === 0 && (
+            <div className="flex flex-col items-center gap-4 mt-16 mb-16" aria-live="polite">
+              <Mannequin working />
+              <p className="text-[19px] xl:text-[22px] tracking-[0.12em] text-[#4A4E57]">MYRA IS GATHERING WHAT YOU KEPT</p>
+            </div>
+          )}
 
           {nothingYet && (
             <div className="text-center max-w-[560px] mx-auto mt-6 mb-16">

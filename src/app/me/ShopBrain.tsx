@@ -14,7 +14,7 @@
 // It draws nothing at all until she has kept something — an empty promise is
 // worse than no promise.
 
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import ShopLink from '@/components/ShopLink'
 import ComposedLookCard from '@/components/me/ComposedLookCard'
@@ -28,8 +28,8 @@ import type { StyledWayLook } from '@/lib/styled-ways-core'
 
 type Door = 'similar' | 'brands' | 'styled'
 
-const HEAD = 'myra-section-label'
-const NOTE = 'myra-section-note mt-1.5'
+const HEAD = 'myra-section-label !text-[clamp(28px,3vw,46px)]'
+const NOTE = 'myra-section-note mt-2 !text-[clamp(17px,1.6vw,24px)]'
 const FLIP = 'transition-transform duration-[600ms] [transition-timing-function:cubic-bezier(0.175,0.885,0.32,1.275)]'
 
 function Piece({ piece }: { piece: ShopPiece }) {
@@ -40,9 +40,9 @@ function Piece({ piece }: { piece: ShopPiece }) {
           <FallbackImage src={piece.image_url} thumbWidth={400} alt={piece.product_name} className="absolute inset-0 w-full h-full object-contain" />
         )}
       </div>
-      <p className="mt-3 text-[19px] xl:text-[22px] text-[#2B2B2B] leading-[1.2]">{piece.brand ?? piece.product_name}</p>
-      <p className="text-[17px] xl:text-[19px] text-[#7C838B] leading-[1.25] line-clamp-1">{piece.product_name}</p>
-      {piece.price_gbp != null && <p className="text-[17px] xl:text-[19px] text-[#7C838B]">£{Math.round(piece.price_gbp)}</p>}
+      <p className="mt-3 text-[22px] xl:text-[26px] text-[#2B2B2B] leading-[1.2]">{piece.brand ?? piece.product_name}</p>
+      <p className="text-[19px] xl:text-[22px] text-[#7C838B] leading-[1.25] line-clamp-1">{piece.product_name}</p>
+      {piece.price_gbp != null && <p className="text-[19px] xl:text-[22px] text-[#7C838B]">£{Math.round(piece.price_gbp)}</p>}
     </>
   )
   if (!piece.url) return <div className="block">{body}</div>
@@ -123,8 +123,8 @@ function StyledPiece({ piece, looks, working, note, active, onPick }: {
       </div>
       {/* The piece whose outfits are open below says so in its name — there is
           no card left to shade. */}
-      <p className={`mt-3 text-[19px] xl:text-[22px] text-[#2B2B2B] leading-[1.2] ${active ? 'underline underline-offset-4' : ''}`}>{piece.brand ?? piece.product_name}</p>
-      <p className="text-[17px] xl:text-[19px] text-[#7C838B] leading-[1.25] line-clamp-1">{piece.product_name}</p>
+      <p className={`mt-3 text-[22px] xl:text-[26px] text-[#2B2B2B] leading-[1.2] ${active ? 'underline underline-offset-4' : ''}`}>{piece.brand ?? piece.product_name}</p>
+      <p className="text-[19px] xl:text-[22px] text-[#7C838B] leading-[1.25] line-clamp-1">{piece.product_name}</p>
     </button>
   )
 }
@@ -233,6 +233,17 @@ export default function ShopBrain({ testMemberId, onReady }: {
   const tapped = useRef<Set<string>>(new Set())
   const [ready, setReady] = useState<string | null>(null)
   const [hintGone, setHintGone] = useState(false)
+  // A phone gets her outfits as a sheet in from the right; a wider screen
+  // opens them in the grid, straight under the piece she tapped.
+  const [phone, setPhone] = useState(false)
+  const [sheet, setSheet] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)')
+    const on = () => setPhone(mq.matches)
+    on()
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
   const [, bump] = useState(0)
   const pageLive = useRef(true)
   useEffect(() => { pageLive.current = true; return () => { pageLive.current = false } }, [])
@@ -250,6 +261,15 @@ export default function ShopBrain({ testMemberId, onReady }: {
         viewRef.current = v
         setView(v)
         tell(hasContent(v))
+        // That was her kept view, there at once. Now the fresh one, quietly:
+        // swapped in only if it says something different, and never an empty
+        // answer (a failed rebuild) over one that had pieces in it.
+        if (attempt === 0) void loadShopBrain(testMemberId, { fresh: true }).then((f) => {
+          if (!live || (!hasContent(f) && hasContent(v))) return
+          if (JSON.stringify(f) === JSON.stringify(v)) return
+          viewRef.current = f
+          setView(f)
+        }).catch(() => {})
       } catch {
         if (live && attempt < 2) setTimeout(() => void load(attempt + 1), 1500 * (attempt + 1))
         else if (live) tell(false)
@@ -326,8 +346,10 @@ export default function ShopBrain({ testMemberId, onReady }: {
   async function pick(id: string) {
     setAnchor(id)
     setHintGone(true)
+    setSheet(true)
     if (ready === id) setReady(null)
-    setTimeout(() => { if (outfitsRef.current) scrollTo(outfitsRef.current, { offset: -24 }) }, 50)
+    // Keep the bottom of her piece in view above its outfits.
+    if (!phone) setTimeout(() => { if (outfitsRef.current) scrollTo(outfitsRef.current, { offset: -220 }) }, 50)
     if ((looks[id]?.length ?? 0) >= WAYS) return
     done.current.delete(id)
     tapped.current.add(id)
@@ -350,7 +372,8 @@ export default function ShopBrain({ testMemberId, onReady }: {
     setDoor('styled')
     if (ready) setAnchor(ready)
     setReady(null)
-    setTimeout(() => { if (outfitsRef.current) scrollTo(outfitsRef.current, { offset: -24 }) }, 80)
+    setSheet(true)
+    if (!phone) setTimeout(() => { if (outfitsRef.current) scrollTo(outfitsRef.current, { offset: -220 }) }, 80)
   }
 
   function toggle(d: Door) {
@@ -370,6 +393,36 @@ export default function ShopBrain({ testMemberId, onReady }: {
   const currentWorking = !!current && !done.current.has(current.item_id)
   const brandsTitle = 'MORE FROM YOUR BRANDS'
   const brandsNote = 'FROM THE BRANDS YOU LOVE'
+
+  // The tapped piece's outfits — drawn under it in the grid, or in the sheet
+  // on a phone.
+  const outfitsPanel = (
+    <>
+      {current && (
+        <p ref={outfitsRef} className="text-[22px] xl:text-[26px] text-[#2B2B2B] scroll-mt-6">
+          {current.brand ?? current.product_name}
+          {current.host ? <span className="text-[#7C838B]"> · {current.kind === 'viewed' ? 'you looked at this on ' : ''}{current.host}</span> : null}
+        </p>
+      )}
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        {shown?.length ? (
+          // Each outfit shows the moment it is judged; the rest keep their place.
+          <>
+            {shown.map((l, i) => <ComposedLookCard key={i} look={l} heroId={current?.item_id} saveable testMemberId={testMemberId} />)}
+            {currentWorking && Array.from({ length: Math.max(0, WAYS - shown.length) }).map((_, i) => (
+              <div key={`w${i}`} className="h-[260px] rounded-[18px] bg-gradient-to-r from-[#EFEFED] via-[#F7F7F5] to-[#EFEFED] animate-pulse" />
+            ))}
+          </>
+        ) : current && !failed[current.item_id] ? (
+          [0, 1, 2].map((i) => (
+            <div key={i} className="h-[260px] rounded-[18px] bg-gradient-to-r from-[#EFEFED] via-[#F7F7F5] to-[#EFEFED]" />
+          ))
+        ) : (
+          <p className="text-[19px] xl:text-[21px] text-[#55534E]">{(current && failed[current.item_id]) ?? 'Tap a piece to see it styled.'}</p>
+        )}
+      </div>
+    </>
+  )
   const firstLook = current ? looks[current.item_id]?.[0] : undefined
   const styledCover = firstLook?.image_url ?? current?.image_url ?? null
   const styledInside = view.saved.slice(0, 9).map((s) => s.image_url ?? null)
@@ -456,7 +509,7 @@ export default function ShopBrain({ testMemberId, onReady }: {
                 {door === 'similar' ? 'CLOSE TO WHAT YOU KEPT' : door === 'brands' ? brandsNote : 'TAP A PIECE TO STYLE IT'}
               </p>
             </div>
-            <button type="button" onClick={() => setDoor(null)} aria-label="Close" className="text-[19px] tracking-[0.14em] text-[#4A4E57] underline underline-offset-4 whitespace-nowrap">
+            <button type="button" onClick={() => setDoor(null)} aria-label="Close" className="text-[21px] xl:text-[24px] tracking-[0.14em] text-[#4A4E57] underline underline-offset-4 whitespace-nowrap">
               CLOSE
             </button>
           </div>
@@ -482,54 +535,51 @@ export default function ShopBrain({ testMemberId, onReady }: {
 
           {door === 'styled' && (
             <>
-              {!hintGone && (
-                <div className="flex justify-center mb-8">
-                  <p
-                    className="animate-bounce bg-white rounded-full px-6 py-3 text-[17px] xl:text-[19px] tracking-[0.12em] text-[#2B2B2B] shadow-[0_2px_16px_rgba(43,43,43,0.16)]"
-                    style={{ animationIterationCount: 3 }}
-                  >
-                    ♥ TAP A PIECE TO STYLE IT ↓
-                  </p>
-                </div>
-              )}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-x-6 gap-y-10">
+              {/* Stays up the whole time the section is open — she asked for
+                  it to be there, and big, not gone after the first tap. */}
+              <div className="flex justify-center mb-10">
+                <p
+                  className={`${hintGone ? '' : 'animate-bounce'} bg-white rounded-full px-8 xl:px-10 py-4 xl:py-5 text-[21px] xl:text-[26px] tracking-[0.12em] text-[#2B2B2B] shadow-[0_2px_16px_rgba(43,43,43,0.16)]`}
+                  style={{ animationIterationCount: 3 }}
+                >
+                  ♥ TAP A PIECE TO STYLE IT ↓
+                </p>
+              </div>
+              {/* Dense flow: the outfits panel follows the tapped piece and
+                  spans the row, and the pieces after it close up the gap — so
+                  her outfits open directly beneath the piece, never down past
+                  the whole grid where she might miss them. */}
+              <div className="grid grid-flow-row-dense grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-x-6 gap-y-10">
                 {view.saved.map((s) => (
-                  <StyledPiece
-                    key={s.item_id}
-                    piece={s}
-                    looks={looks[s.item_id]}
-                    working={busy === s.item_id || !done.current.has(s.item_id)}
-                    note={failed[s.item_id]}
-                    active={current?.item_id === s.item_id}
-                    onPick={() => void pick(s.item_id)}
-                  />
+                  <Fragment key={s.item_id}>
+                    <StyledPiece
+                      piece={s}
+                      looks={looks[s.item_id]}
+                      working={busy === s.item_id || !done.current.has(s.item_id)}
+                      note={failed[s.item_id]}
+                      active={current?.item_id === s.item_id}
+                      onPick={() => void pick(s.item_id)}
+                    />
+                    {!phone && current?.item_id === s.item_id && (
+                      <div className="col-span-full rounded-[22px] bg-[#F4F4F2] px-5 md:px-8 py-7 -mt-4">
+                        {outfitsPanel}
+                      </div>
+                    )}
+                  </Fragment>
                 ))}
               </div>
 
-              {current && (
-                <p ref={outfitsRef} className="text-[21px] xl:text-[24px] text-[#2B2B2B] mt-12 scroll-mt-6">
-                  {current.brand ?? current.product_name}
-                  {current.host ? <span className="text-[#7C838B]"> · {current.kind === 'viewed' ? 'you looked at this on ' : ''}{current.host}</span> : null}
-                </p>
+              {phone && sheet && current && (
+                <div className="fixed inset-0 z-[90]">
+                  <div className="absolute inset-0 bg-black/30" onClick={() => setSheet(false)} />
+                  <div data-lenis-prevent className="myra-sheet-in-right absolute inset-y-0 right-0 w-full bg-[#F7F7F5] overflow-y-auto overscroll-contain px-5 pt-6 pb-16">
+                    <button type="button" onClick={() => setSheet(false)} className="text-[19px] tracking-[0.12em] text-[#4A4E57] underline underline-offset-4 mb-4">
+                      ← YOUR PIECES
+                    </button>
+                    {outfitsPanel}
+                  </div>
+                </div>
               )}
-
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                {shown?.length ? (
-                  // Each outfit shows the moment it is judged; the rest keep their place.
-                  <>
-                    {shown.map((l, i) => <ComposedLookCard key={i} look={l} heroId={current?.item_id} saveable testMemberId={testMemberId} />)}
-                    {currentWorking && Array.from({ length: Math.max(0, WAYS - shown.length) }).map((_, i) => (
-                      <div key={`w${i}`} className="h-[260px] rounded-[18px] bg-gradient-to-r from-[#EFEFED] via-[#F7F7F5] to-[#EFEFED] animate-pulse" />
-                    ))}
-                  </>
-                ) : current && !failed[current.item_id] ? (
-                  [0, 1, 2].map((i) => (
-                    <div key={i} className="h-[260px] rounded-[18px] bg-gradient-to-r from-[#EFEFED] via-[#F7F7F5] to-[#EFEFED]" />
-                  ))
-                ) : (
-                  <p className="text-[19px] text-[#55534E]">{(current && failed[current.item_id]) ?? 'Tap a piece to see it styled.'}</p>
-                )}
-              </div>
             </>
           )}
         </div>

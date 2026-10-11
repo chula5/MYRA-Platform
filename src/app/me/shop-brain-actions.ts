@@ -14,8 +14,9 @@
 // VIEW, the member she names — honoured only for the admin). Her candidates
 // are the SAME pool the composer uses: ready and live, in her size.
 
+import { unstable_cache } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase-server'
-import { resolveClientMember } from '@/lib/client-member'
+import { resolveClientMember, type ClientMember } from '@/lib/client-member'
 import { loadComposableLibrary, type StyledLook } from '@/app/admin/private-stylist/actions'
 import { itemPseudoVector, brandCosine, loadBrandGraph, computeSimilarBrands } from '@/lib/brand-affinity'
 import { isOwnedItem } from '@/lib/wardrobe/owned-items'
@@ -148,9 +149,26 @@ async function itemsInLiveOutfitsTagged(admin: any, tag: string): Promise<Set<st
   return out
 }
 
-export async function loadShopBrain(asMemberId?: string): Promise<ShopBrainView> {
+// FOR YOU opens on this, so it must answer at once. Built from cold it reads
+// the whole retail library first (13s+ on a fresh server), which left her a
+// blank page under a lifted curtain. So her last view is kept in the shared
+// data cache and handed back straight away; the page then asks for a fresh
+// one (`fresh`) in the background and swaps it in if anything changed.
+const SHOP_BRAIN_KEEP_S = 600
+
+export async function loadShopBrain(asMemberId?: string, opts?: { fresh?: boolean }): Promise<ShopBrainView> {
   const me = await resolveClientMember(asMemberId)
   if (!me) return EMPTY
+  if (opts?.fresh) return buildShopBrain(me)
+  const kept = unstable_cache(
+    () => buildShopBrain(me),
+    ['shop-brain-v1', me.memberId, me.test ? 'test' : 'self'],
+    { revalidate: SHOP_BRAIN_KEEP_S },
+  )
+  return kept()
+}
+
+async function buildShopBrain(me: ClientMember): Promise<ShopBrainView> {
   const admin = createAdminClient() as any
   try {
     const since = new Date(Date.now() - LOOK_DAYS * 24 * 3600 * 1000).toISOString()
