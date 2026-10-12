@@ -165,7 +165,11 @@ final class ShareViewController: UIViewController {
             let code = (response as? HTTPURLResponse)?.statusCode ?? 0
             let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
             if let message = json?["message"] as? String, !message.isEmpty {
-                await show(code < 300 ? "Kept" : "Not this time", message)
+                // The server answers 200 with a sentence even when it could not
+                // file anything, so the heading follows what it found.
+                let kind = json?["kind"] as? String
+                let heading = code >= 300 || kind == "unknown" ? "Not this time" : kind == "brand" ? "Watching" : "Kept"
+                await show(heading, message)
             } else if let error = json?["error"] as? String {
                 await show("Not this time", error)
             } else {

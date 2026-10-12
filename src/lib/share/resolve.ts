@@ -11,6 +11,7 @@
 // sheet can show, because silence there reads as broken.
 
 import 'server-only'
+import Anthropic from '@anthropic-ai/sdk'
 
 export interface ResolvedProduct { url: string; title: string; brand: string | null; image: string | null; price: number | null; host: string }
 export interface ResolvedBrand { handle: string; name: string | null; website: string; via: string }
@@ -172,19 +173,183 @@ export async function resolveInstagramBrand(handle: string): Promise<ResolvedBra
   const clean = handle.replace(/^@/, '').trim().toLowerCase()
   if (!/^[a-z0-9._]{1,30}$/.test(clean)) return null
   const page = await fetchText(`https://www.instagram.com/${clean}/`)
-  if (!page) return null
-  const { website, name } = extractInstagram(page.html)
-  // A login wall and a genuinely linkless bio look the same from here: no site.
-  if (!website) return null
+  const { website, name } = page ? extractInstagram(page.html) : { website: null, name: null }
+  // A login wall and a genuinely linkless bio look the same from here: no
+  // site. Instagram now shows a server the wall for every profile, so the
+  // bio link is a bonus and the handle itself is the usual way in.
+  const fromBio = website ? await siteFromBioLink(website) : null
+  if (fromBio) return { handle: clean, name, ...fromBio }
+  return findBrandSiteFromHandle(clean, name)
+}
+
+async function siteFromBioLink(website: string): Promise<{ website: string; via: string } | null> {
   const host = hostOf(website)
   if (!host || isSocialHost(host)) return null
-  if (!isAggregatorHost(host)) return { handle: clean, name, website, via: 'the link in their bio' }
+  if (!isAggregatorHost(host)) return { website, via: 'the link in their bio' }
   // A link-hub is a doorway, not the shop: step through it once, to the first
   // link that is a site of its own.
   const hub = await fetchText(website)
   const onward = hub ? firstOutboundLink(hub.html, hub.url) : null
   if (!onward) return null
-  return { handle: clean, name, website: onward, via: `the link in their bio, through ${hubNameOf(host)}` }
+  return { website: onward, via: `the link in their bio, through ${hubNameOf(host)}` }
+}
+
+// ── THE HANDLE AS THE CLUE ───────────────────────────────────────────────────
+//
+// A brand's handle is nearly always its domain: @meandem is meandem.com,
+// @sezane is sezane.com. So the handle is tried as a domain first, and the
+// page checked to be a shop of that name rather than a parked domain. When
+// no guess answers, a web search for the name finds the site the way she
+// would herself.
+
+// Words brands bolt onto a taken handle; none of them are in the domain.
+const HANDLE_DECORATIONS = ['official', 'theofficial', 'uk', 'london', 'paris', 'shop', 'store', 'studio', 'brand', 'clothing', 'thelabel', 'label', 'collection', 'co']
+
+export function domainGuessesFor(handle: string): string[] {
+  const compact = handle.toLowerCase().replace(/[^a-z0-9]/g, '')
+  if (!compact) return []
+  const stems = [compact]
+  for (const d of HANDLE_DECORATIONS) {
+    if (compact.length > d.length + 2 && compact.endsWith(d)) stems.push(compact.slice(0, -d.length))
+    if (compact.length > d.length + 2 && compact.startsWith(d)) stems.push(compact.slice(d.length))
+  }
+  // Dots and underscores often stand for hyphens in the real domain.
+  const hyphened = handle.toLowerCase().replace(/[._]+/g, '-').replace(/^-+|-+$/g, '')
+  if (/^[a-z0-9-]+$/.test(hyphened) && hyphened.includes('-')) stems.push(hyphened)
+  const out: string[] = []
+  for (const stem of Array.from(new Set(stems))) {
+    for (const tld of ['com', 'co.uk', 'co']) out.push(`https://${stem}.${tld}`)
+  }
+  return out
+}
+
+// What separates a brand's shop from a parked domain or a magazine of the
+// same name: somewhere to buy something.
+export function looksLikeShop(html: string): boolean {
+  return /"@type"\s*:\s*"Product"|add to (bag|basket|cart)|\/cart\b|\/checkout\b|cdn\.shopify\.com|\/collections\/|\/products\/|product:price|og:price/i.test(html)
+}
+
+// The shop's own name, as the page states it, is the handle: "ME+EM" and
+// @meandem, "Sézane" and @sezane. A name that merely contains the handle
+// ("RIXO Bryggan" for @rixo) is some other shop.
+const compactName = (s: string) =>
+  s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[+&]/g, 'and').replace(/[^a-z0-9]/g, '')
+
+export function handleStems(handle: string): string[] {
+  const h = compactName(handle)
+  if (h.length < 3) return []
+  const stems = [h]
+  for (const d of HANDLE_DECORATIONS) {
+    if (h.length > d.length + 2 && h.endsWith(d)) stems.push(h.slice(0, -d.length))
+    if (h.length > d.length + 2 && h.startsWith(d)) stems.push(h.slice(d.length))
+  }
+  return stems
+}
+
+export function siteNameMatchesHandle(html: string, handle: string): boolean {
+  const stems = handleStems(handle)
+  if (!stems.length) return false
+  // Titles carry the name among other words ("Trousers | ME+EM"), so each
+  // segment between separators is a candidate name on its own.
+  const segments: string[] = []
+  for (const raw of [metaContent(html, 'og:site_name'), metaContent(html, 'og:title'), titleTag(html)]) {
+    if (!raw) continue
+    for (const seg of decodeEntities(raw).split(/[|–—:·•]|\s-\s/)) { const c = compactName(seg); if (c) segments.push(c) }
+  }
+  // "Sézane Official Site" is still Sézane: a decoration either side is allowed.
+  const dressed = (seg: string, st: string) => {
+    if (seg === st) return true
+    if (seg.startsWith(st)) return HANDLE_DECORATIONS.some((d) => seg.slice(st.length) === d || seg.slice(st.length) === `official${d}` || seg.slice(st.length) === `${d}official`) || ['officialsite', 'officialwebsite', 'officialstore', 'officialonlineshop', 'onlineshop', 'onlinestore'].includes(seg.slice(st.length))
+    if (seg.endsWith(st)) return HANDLE_DECORATIONS.includes(seg.slice(0, -st.length)) || seg.slice(0, -st.length) === 'the'
+    return false
+  }
+  return segments.some((seg) => stems.some((st) => dressed(seg, st)))
+}
+
+// The host the guess landed on, as a name: "www.sezane.com" → "sezane".
+const hostLabel = (host: string): string => host.replace(/^www\./, '').split('.')[0].replace(/[^a-z0-9]/g, '')
+
+// Bot walls answer a server with these and a human with the shop.
+const WALLED = new Set([401, 403, 405, 429, 503])
+
+async function fetchStatus(url: string): Promise<{ status: number; html: string; url: string } | null> {
+  try {
+    const res = await fetch(url, {
+      headers: { 'user-agent': UA, 'accept': 'text/html,application/xhtml+xml', 'accept-language': 'en-GB,en;q=0.9' },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    })
+    const html = res.ok ? (await res.text()).slice(0, MAX_BODY) : ''
+    return { status: res.status, html, url: res.url }
+  } catch { return null }
+}
+
+// A guessed domain is the brand when it answers as a shop carrying the
+// handle's name, or hides behind a bot wall (which a parked domain never does).
+async function confirmGuess(guess: string, handle: string): Promise<string | null> {
+  const r = await fetchStatus(guess)
+  if (!r) return null
+  const landedHost = hostOf(r.url)
+  if (!landedHost || isSocialHost(landedHost) || isAggregatorHost(landedHost)) return null
+  // Behind a wall there is no name to read, so only a host that *is* the
+  // handle is trusted (sezane.com, not wherever rixo.com forwards to).
+  if (WALLED.has(r.status)) return handleStems(handle).includes(hostLabel(landedHost)) ? r.url : null
+  if (r.status !== 200 || !r.html) return null
+  if (!looksLikeShop(r.html)) return null
+  if (!siteNameMatchesHandle(r.html, handle)) return null
+  return r.url
+}
+
+export interface SearchedSite { website: string | null; name: string | null }
+
+export function parseSearchedSite(text: string): SearchedSite | null {
+  const cleaned = text.replace(/```[a-z]*\n?/gi, '')
+  const first = cleaned.indexOf('{'); const last = cleaned.lastIndexOf('}')
+  if (first === -1 || last <= first) return null
+  try {
+    const p = JSON.parse(cleaned.slice(first, last + 1))
+    const website = typeof p?.website === 'string' && /^https?:\/\//.test(p.website) ? p.website : null
+    return { website, name: str(p?.name) }
+  } catch { return null }
+}
+
+// The search she would do herself: the brand's name, its official site.
+async function searchBrandSite(handle: string, name: string | null): Promise<SearchedSite | null> {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) return null
+  try {
+    const client = new Anthropic({ apiKey })
+    const who = name ? `the fashion brand "${name}" (Instagram @${handle})` : `the fashion brand behind the Instagram account @${handle}`
+    const response = await client.messages.create({
+      model: 'claude-sonnet-5-5',
+      max_tokens: 600,
+      system: 'You find a fashion brand\'s own official website. Never a retailer, marketplace, social network, link hub, Wikipedia or press page. If you cannot find the brand\'s own site with confidence, say so. Reply with JSON only.',
+      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 3 } as unknown as Anthropic.Messages.Tool],
+      messages: [{ role: 'user', content: `Find the official website of ${who}. Reply with exactly one JSON object: {"website": "https://…", "name": "Brand name"} or {"website": null, "name": null}.` }],
+    })
+    const text = response.content.filter((b) => b.type === 'text').map((b: any) => b.text).join('\n')
+    return parseSearchedSite(text)
+  } catch (e) {
+    console.error('[share/resolve] search failed for', handle, e)
+    return null
+  }
+}
+
+export async function findBrandSiteFromHandle(handle: string, name: string | null): Promise<ResolvedBrand | null> {
+  for (const guess of domainGuessesFor(handle)) {
+    const site = await confirmGuess(guess, handle)
+    if (site) return { handle, name, website: site, via: 'their handle' }
+  }
+  const found = await searchBrandSite(handle, name)
+  if (!found?.website) return null
+  const host = hostOf(found.website)
+  if (!host || isSocialHost(host) || isAggregatorHost(host)) return null
+  // The search's answer is checked the way a guess is, minus the name test:
+  // the search already matched the name.
+  const r = await fetchStatus(found.website)
+  if (!r) return null
+  if (!WALLED.has(r.status) && (r.status !== 200 || !looksLikeShop(r.html))) return null
+  return { handle, name: name ?? found.name, website: r.url, via: 'a search for their name' }
 }
 
 // ── PRODUCT PAGES ────────────────────────────────────────────────────────────
@@ -279,7 +444,7 @@ async function fetchText(url: string): Promise<{ html: string; url: string } | n
 function brandResolution(brand: ResolvedBrand | null): ShareResolution {
   return brand
     ? { kind: 'brand', brand }
-    : { kind: 'unknown', reason: 'I couldn’t find that brand’s own site from Instagram' }
+    : { kind: 'unknown', reason: 'I couldn’t find that brand’s own site — share their website instead' }
 }
 
 export async function resolveShare(rawUrl: string): Promise<ShareResolution> {

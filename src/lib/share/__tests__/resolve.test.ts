@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  classifyUrl, extractInstagram, extractProduct, firstOutboundLink,
-  instagramAuthorFromHtml, isAggregatorHost, isSocialHost,
+  classifyUrl, domainGuessesFor, extractInstagram, extractProduct, firstOutboundLink,
+  instagramAuthorFromHtml, isAggregatorHost, isSocialHost, looksLikeShop, parseSearchedSite, siteNameMatchesHandle,
 } from '@/lib/share/resolve'
 
 describe('classifyUrl — what the share sheet handed over', () => {
@@ -152,5 +152,61 @@ describe('extractProduct — a piece from a shop page', () => {
   it('returns null without a usable title or image', () => {
     expect(extractProduct('<html><head></head><body>nothing</body></html>', 'https://www.shop.com/')).toBeNull()
     expect(extractProduct('<html><head><meta property="og:title" content="Only a title"></head></html>', 'https://www.shop.com/')).toBeNull()
+  })
+})
+
+describe('domainGuessesFor — the handle as the domain', () => {
+  it('tries the handle itself first, .com before .co.uk', () => {
+    expect(domainGuessesFor('meandem').slice(0, 2)).toEqual(['https://meandem.com', 'https://meandem.co.uk'])
+  })
+  it('strips the words brands bolt onto a taken handle', () => {
+    expect(domainGuessesFor('sezaneofficial')).toContain('https://sezane.com')
+    expect(domainGuessesFor('varley_uk')).toContain('https://varley.com')
+  })
+  it('turns dots and underscores into hyphens as a later guess', () => {
+    const g = domainGuessesFor('the.frankie.shop')
+    expect(g[0]).toBe('https://thefrankieshop.com')
+    expect(g).toContain('https://the-frankie-shop.com')
+  })
+  it('gives nothing for an empty handle', () => {
+    expect(domainGuessesFor('___')).toEqual([])
+  })
+})
+
+describe('looksLikeShop / siteNameMatchesHandle — a shop of that name, not a parked domain', () => {
+  const shop = '<html><head><title>Mid Weight Trouser | ME+EM</title><meta property="og:site_name" content="ME+EM"></head><body><a href="/cart">Bag</a></body></html>'
+  const parked = '<html><head><title>meandem.com is for sale</title></head><body>Buy this domain</body></html>'
+  it('knows a shop by somewhere to buy', () => {
+    expect(looksLikeShop(shop)).toBe(true)
+    expect(looksLikeShop(parked)).toBe(false)
+  })
+  it('matches the handle to the shop’s own name, accents and punctuation aside', () => {
+    expect(siteNameMatchesHandle(shop, 'meandem')).toBe(true)
+    expect(siteNameMatchesHandle('<title>Sézane</title>', 'sezane')).toBe(true)
+    expect(siteNameMatchesHandle('<title>Sézane</title>', 'sezaneofficial')).toBe(true)
+    expect(siteNameMatchesHandle('<title>Some Other Shop</title>', 'meandem')).toBe(false)
+  })
+})
+
+describe('parseSearchedSite — what the search answered', () => {
+  it('reads the JSON out of prose and fences', () => {
+    expect(parseSearchedSite('Found it:\n```json\n{"website": "https://www.sezane.com", "name": "Sézane"}\n```')).toEqual({ website: 'https://www.sezane.com', name: 'Sézane' })
+  })
+  it('treats a null or non-http website as none', () => {
+    expect(parseSearchedSite('{"website": null, "name": null}')).toEqual({ website: null, name: null })
+    expect(parseSearchedSite('{"website": "sezane.com"}')?.website).toBeNull()
+    expect(parseSearchedSite('no json here')).toBeNull()
+  })
+})
+
+describe('siteNameMatchesHandle — the name is the handle, not merely contains it', () => {
+  it('reads + as "and" and allows a decorated site title', () => {
+    expect(siteNameMatchesHandle('<title>Women’s Designer Fashion | ME+EM</title>', 'meandem')).toBe(true)
+    expect(siteNameMatchesHandle('<meta property="og:site_name" content="Sézane Official Site">', 'sezane')).toBe(true)
+    expect(siteNameMatchesHandle('<title>The Frankie Shop</title>', 'the.frankie.shop')).toBe(true)
+  })
+  it('turns away another shop whose name contains the handle', () => {
+    expect(siteNameMatchesHandle('<title>RIXO Bryggan – Restaurang</title>', 'rixo')).toBe(false)
+    expect(siteNameMatchesHandle('<title>RIXO | Official Site</title>', 'rixo')).toBe(true)
   })
 })
