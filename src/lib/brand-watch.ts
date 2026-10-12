@@ -627,7 +627,7 @@ const WOMEN_PATH_RE = /\/(femme|femmes|women|womens|woman|damen|donna|mujer|fema
 // Domain label → provisional display name, skipping locale/storefront
 // subdomains so en.munthe.com yields "Munthe", never "En". Only a placeholder
 // until the first scan adopts the site's own name.
-const GENERIC_SUBDOMAINS = new Set(['www', 'en', 'uk', 'us', 'eu', 'de', 'fr', 'es', 'it', 'nl', 'dk', 'se', 'no', 'shop', 'store', 'int', 'intl', 'global', 'world', 'row', 'com'])
+const GENERIC_SUBDOMAINS = new Set(['www', 'en', 'uk', 'us', 'eu', 'de', 'fr', 'es', 'it', 'nl', 'dk', 'se', 'no', 'shop', 'store', 'int', 'intl', 'global', 'world', 'row', 'com', 'gb', 'au', 'ca', 'ie', 'jp', 'ch', 'at', 'be', 'pl', 'pt'])
 export function provisionalNameFromUrl(base: string): string {
   const labels = new URL(base).hostname.toLowerCase().split('.')
   const label = labels.find((l) => !GENERIC_SUBDOMAINS.has(l)) ?? labels[0]
@@ -639,11 +639,29 @@ export function provisionalNameFromUrl(base: string): string {
 // still an auto-generated provisional, adopt the real name — and repair the
 // linked brand row: rename it if it was auto-created, or re-link to an
 // existing brand of that name (moving queue/item rows off the orphan).
+// A label the products carry is only the brand's name when it matches the
+// shop's own address. Product labels are often initials ("GD" on
+// gerarddarel.com, "LM WOMEN" on louisemisha.com), a section ("Woman" on
+// palomawool.com), a season ("STAUD FALL 2026") or, at a multi-brand shop,
+// someone else entirely ("Christian Dior" on sprl.shop). Season words come off
+// first; then the folded label and the folded domain must contain one another.
+const SEASON_WORDS_RE = /\b(?:pre[-\s]?fall|fall|spring|summer|winter|autumn|resort|cruise|holiday|collection|ss|aw|fw|pf)\s*'?\d{2,4}\b|\b(?:19|20)\d{2}\b|\b(?:pre[-\s]?fall|resort|cruise)\b/gi
+export function brandNameFromLabel(label: string | null | undefined, baseUrl: string): string | null {
+  const cleaned = String(label ?? '').replace(SEASON_WORDS_RE, ' ').replace(/\s{2,}/g, ' ').replace(/[\s\-–|·]+$/, '').trim()
+  if (!cleaned) return null
+  const fold = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[&+]/g, 'and').replace(/[^a-z0-9]/g, '')
+  const name = fold(cleaned)
+  const host = new URL(baseUrl).hostname.toLowerCase().split('.').filter((l) => !GENERIC_SUBDOMAINS.has(l))
+  const domain = fold(host[0] ?? '')
+  if (name.length < 3 || domain.length < 3) return null
+  return domain.includes(name) || name.includes(domain) ? cleaned : null
+}
+
 async function adoptRealBrandName(
   admin: any, watched: WatchedBrandRow, candidate: string | null | undefined,
 ): Promise<{ name: string; brand_id: string | null }> {
   const current = { name: watched.name, brand_id: watched.brand_id }
-  const clean = (candidate ?? '').trim()
+  const clean = brandNameFromLabel(candidate, watched.base_url) ?? ''
   if (!clean || clean.toLowerCase() === watched.name.toLowerCase()) return current
   const autoNames = new Set([
     provisionalNameFromUrl(watched.base_url).toLowerCase(),
