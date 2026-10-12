@@ -25,7 +25,7 @@ import {
   loadComposableLibrary, loadMemberTaste, loadPersonaLens, loadComposeHistory, type StyledLook,
 } from '@/app/admin/private-stylist/actions'
 import type { MirrorMember } from './auth'
-import { getStyledWays, saveStyledWays } from '@/lib/styled-ways'
+import { getStyledWays, saveStyledWays, shownPieceCounts } from '@/lib/styled-ways'
 
 /**
  * wardrobe    — only what she owns goes around the piece.
@@ -158,11 +158,22 @@ export async function styleExternalPiece(
     pool = [...library.filter((i) => !isOwnedItem(i as any)), hero]
   }
 
-  const [taste, lens, history] = await Promise.all([
+  const [taste, lens, history, shown] = await Promise.all([
     loadMemberTaste(admin, row),
     loadPersonaLens(admin, member.member_id),
     loadComposeHistory(admin, member.member_id),
+    shownPieceCounts(admin, member.member_id).catch(() => new Map<string, number>()),
   ])
+  // What the Mirror has already put around her other pieces counts as shown.
+  // The delivery history alone never saw it, so the same flat, tote and
+  // bracelet took their slots for every piece she looked at (7 of 15 looks
+  // wore one pair of ME+EM flats). Shown pieces step back; her kept ones
+  // still step forward.
+  shown.forEach((n, id) => { if (id !== hero.item_id) history.seenCounts.set(id, (history.seenCounts.get(id) ?? 0) + n) })
+  // Near-ties break differently for each piece: the rotation is seeded by the
+  // hero as well as the occasion, so two pieces with the same history do not
+  // shortlist the same eight shoes in the same order.
+  const heroShuffle = Array.from(hero.item_id as string).reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 997, 7)
   // ONE PIECE, THREE LIVES. A blazer she is looking at is worth having only if
   // she can see where she would wear it, so the panel answers in her own
   // occasions — the ones she actually dresses for, most often first — rather
@@ -178,7 +189,10 @@ export async function styleExternalPiece(
     const occ = id
       ? { id: id as any, climate: null, workDressCode: row.work_dress_code ?? null }
       : undefined
-    for (const look of composeMemberVariants(taste, pool as any, hero.item_id, 2, occ, lens, history, { ownedMode, shuffle: oi })) {
+    // Three occasions compose a pair each; a member who dresses for none
+    // gets one composition, so it has to carry the full set on its own.
+    const perPass = occasionIds.length ? 2 : LOOKS
+    for (const look of composeMemberVariants(taste, pool as any, hero.item_id, perPass, occ, lens, history, { ownedMode, shuffle: oi + heroShuffle })) {
       perOccasion.push({ id, label: id ? (OCCASION_LABEL[id] ?? id) : '', look })
     }
   })

@@ -1266,6 +1266,36 @@
     try { return new URL(src, location.href).href } catch { return null }
   }
 
+  /** The picture a tile shows right now — the largest one actually on screen, so a carousel's hidden slides do not count. */
+  function tileImageEl(tile) {
+    let best = null, area = 0
+    for (const img of tile.querySelectorAll('img')) {
+      const r = img.getBoundingClientRect()
+      const a = r.width * r.height
+      if (a > area) { area = a; best = img }
+    }
+    return best
+  }
+
+  /**
+   * The buttons sit over the PICTURE, never over the words. A tile often
+   * carries its name and price under the photo (Maygel Coronel, most Shopify
+   * themes), and buttons pinned to the tile's bottom edge covered them. So the
+   * bottom inset is measured from the picture's bottom edge — again on hover
+   * and when the picture finishes loading, since a lazy tile is one line of
+   * text tall until then.
+   */
+  function placeActions(tile, wrap) {
+    const img = tileImageEl(tile)
+    let inset = 10
+    if (img) {
+      const t = tile.getBoundingClientRect()
+      const r = img.getBoundingClientRect()
+      if (r.height > 40 && r.bottom > t.top) inset = Math.max(10, Math.round(t.bottom - r.bottom) + 10)
+    }
+    wrap.style.bottom = `${inset}px`
+  }
+
   /** The two things a piece offers on hover: MYRA's answer, and somewhere to keep it. */
   function styleButton(tile, product) {
     if (tile.querySelector(':scope > .myra-mirror-actions')) return
@@ -1305,6 +1335,7 @@
 
     wrap.append(ask, fav)
     tile.addEventListener('mouseenter', () => {
+      placeActions(tile, wrap)
       wrap.style.opacity = '1'
       clearTimeout(pillRevert)
       // The card no longer follows the cursor: crossing a tile only reveals
@@ -1312,6 +1343,9 @@
     })
     tile.addEventListener('mouseleave', () => { if (!menu) wrap.style.opacity = '0'; revertPiece(pagePiece) })
     tile.appendChild(wrap)
+    placeActions(tile, wrap)
+    const img = tileImageEl(tile)
+    if (img && !img.complete) img.addEventListener('load', () => placeActions(tile, wrap), { once: true })
     touched.add(tile)
   }
 

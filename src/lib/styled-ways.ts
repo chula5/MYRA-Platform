@@ -115,6 +115,29 @@ export async function saveStyledWays(
   return ((data ?? []) as StyledWayRow[]).map(toStyledLook)
 }
 
+/**
+ * How often each supporting piece has already been styled for her, across
+ * every hero and every pool, stale ways included — shown is shown.
+ *
+ * The composer's variety nudge reads the delivery history only, so what the
+ * Mirror styled never counted: the same flat, tote and bracelet won the slot
+ * for every piece she looked at. Folded into ComposeHistory.seenCounts before
+ * composing, so each new piece is answered with pieces she has not just seen.
+ */
+export async function shownPieceCounts(admin: any, memberId: string): Promise<Map<string, number>> {
+  const counts = new Map<string, number>()
+  const { data, error } = await admin.from('styled_way').select('hero_item_id, item_ids')
+    .eq('member_id', memberId).order('judged_at', { ascending: false }).limit(600)
+  if (error) return counts
+  for (const r of (data ?? []) as { hero_item_id: string; item_ids: string[] }[]) {
+    for (const id of r.item_ids ?? []) {
+      if (id === r.hero_item_id) continue
+      counts.set(id, (counts.get(id) ?? 0) + 1)
+    }
+  }
+  return counts
+}
+
 /** A piece can no longer be bought: every kept way holding it is retired. */
 export async function markStyledWaysStale(admin: any, itemId: string, reason: string): Promise<number> {
   const { data, error } = await admin.from('styled_way')
