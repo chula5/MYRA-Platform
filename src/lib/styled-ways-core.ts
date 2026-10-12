@@ -16,7 +16,7 @@ export const NIGHTLY_CAP_DEFAULT = 15
 export const COST_PER_JUDGED_LOOK_GBP = 0.02
 
 export type WayMode = 'blend' | 'wardrobe' | 'inspiration'
-export type WaySource = 'tap' | 'warmup' | 'mcp' | 'mirror'
+export type WaySource = 'tap' | 'warmup' | 'mcp' | 'mirror' | 'event'
 export type WayVerdict = 'works' | 'borderline'
 /** Like saves the outfit to her looks at once; dislike retires the way. */
 export type WayReaction = 'like' | 'dislike'

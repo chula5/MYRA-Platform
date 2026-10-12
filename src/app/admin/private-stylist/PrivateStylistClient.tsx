@@ -37,7 +37,7 @@ import {
   PRICE_BUCKETS,
   type StylePrefs,
   type PriceBands, PIECE_PREFERENCES } from '@/lib/pilot-stylist'
-import { createMember, updateMember, deleteMember, seedSyntheticPersonas, addKnownEvent, removeKnownEvent, addWardrobeItem, removeWardrobeItem, createDelivery, deleteDelivery, reopenDelivery, deleteDeliveryAndMemory, updateDelivery, saveLook, deleteLook, clearLook, clearDeliveryLooks, markStockChecked, sendDelivery, recordResponse, logActivity, assignMemberPersona, composeDeliveryLooks, lookAlternates, swapComposedLookItem, removeComposedLookItem, lookAddOptions, addComposedLookItem, approveComposedLook, skipComposedLook, composeLookVariants, restoreLookShoot, deleteLookShoot, loadMemberTrust, recordMemberLookFeedback, setMemberBrands, addMemberBrands, removeMemberBrand, restoreMemberBrand, loadMemberBrandMap } from './actions.gated'
+import { createMember, updateMember, deleteMember, seedSyntheticPersonas, addKnownEvent, removeKnownEvent, setKnownEventBriefAdmin, loadEventPicksAdmin, composeEventPicksNow, setEventPickShownAdmin, removeEventPickAdmin, addWardrobeItem, removeWardrobeItem, createDelivery, deleteDelivery, reopenDelivery, deleteDeliveryAndMemory, updateDelivery, saveLook, deleteLook, clearLook, clearDeliveryLooks, markStockChecked, sendDelivery, recordResponse, logActivity, assignMemberPersona, composeDeliveryLooks, lookAlternates, swapComposedLookItem, removeComposedLookItem, lookAddOptions, addComposedLookItem, approveComposedLook, skipComposedLook, composeLookVariants, restoreLookShoot, deleteLookShoot, loadMemberTrust, recordMemberLookFeedback, setMemberBrands, addMemberBrands, removeMemberBrand, restoreMemberBrand, loadMemberBrandMap } from './actions.gated'
 import type { MemberTrust, MemberBrandMap, MemberBrandDot, SwapOption, PilotData, PilotMember, PilotDelivery, PilotLook, PilotActivity } from './actions'
 
 
@@ -1779,7 +1779,7 @@ function MemberCard({
   const [occasions, setOccasions] = useState(m.occasions)
   const [dressCode, setDressCode] = useState(m.work_dress_code)
   const [previewOccasion, setPreviewOccasion] = useState<OccasionId>('dinner_drinks')
-  const [newEvent, setNewEvent] = useState({ label: '', date: '' })
+  const [newEvent, setNewEvent] = useState({ label: '', date: '', brief: '' })
   const [newPiece, setNewPiece] = useState({ label: '', brand: '' })
 
 
@@ -1911,31 +1911,39 @@ function MemberCard({
 
           {/* Known events */}
           <div>
-            <p className={`${label} mb-2`}>KNOWN EVENTS — THESE DRIVE THE ANTICIPATION MOVES</p>
+            <p className={`${label} mb-2`}>KNOWN EVENTS — THESE DRIVE THE ANTICIPATION MOVES AND THE WEEKLY OPTIONS</p>
             {m.events.map((e) => (
-              <div key={e.event_id} className="flex items-center gap-3 mb-1">
+              <div key={e.event_id} className="flex flex-wrap items-center gap-3 mb-1">
                 <p className="text-[20px] tracking-[0.06em] text-[#0A0A0A]">
                   {e.label.toUpperCase()} — {e.event_date}
                 </p>
+                <input
+                  className={`${input} max-w-sm`}
+                  placeholder="WHAT SHE IS LOOKING FOR (A COCKTAIL DRESS, PROBABLY LONG)"
+                  defaultValue={e.brief ?? ''}
+                  onBlur={(ev) => { const v = ev.target.value; if (v !== (e.brief ?? '')) void run(`ev-brief-${e.event_id}`, () => setKnownEventBriefAdmin(e.event_id, v), 'BRIEF SAVED') }}
+                />
                 <button className={btnTiny} onClick={() => run(`ev-${e.event_id}`, () => removeKnownEvent(e.event_id), 'EVENT REMOVED')}>
                   ×
                 </button>
               </div>
             ))}
-            <div className="flex gap-2 mt-2 max-w-md">
+            <div className="flex flex-wrap gap-2 mt-2 max-w-2xl">
               <input className={input} placeholder="EVENT" value={newEvent.label} onChange={(e) => setNewEvent({ ...newEvent, label: e.target.value })} />
               <input className={input} placeholder="2026-09" value={newEvent.date} onChange={(e) => setNewEvent({ ...newEvent, date: e.target.value })} />
+              <input className={input} placeholder="LOOKING FOR…" value={newEvent.brief} onChange={(e) => setNewEvent({ ...newEvent, brief: e.target.value })} />
               <button
                 className={btnTiny}
                 disabled={!newEvent.label || !newEvent.date}
                 onClick={async () => {
-                  await run(`ev-add-${m.member_id}`, () => addKnownEvent(m.member_id, newEvent.label, newEvent.date), 'EVENT LOGGED')
-                  setNewEvent({ label: '', date: '' })
+                  await run(`ev-add-${m.member_id}`, () => addKnownEvent(m.member_id, newEvent.label, newEvent.date, newEvent.brief), 'EVENT LOGGED')
+                  setNewEvent({ label: '', date: '', brief: '' })
                 }}
               >
                 ADD
               </button>
             </div>
+            <EventPicksPanel memberId={m.member_id} run={run} busy={busy} />
           </div>
 
           <PriceBandsEditor member={m} run={run} busy={busy} ready={bandsReady} />
@@ -4012,6 +4020,65 @@ function Stat({ label: l, value, sub, rank }: { label: string; value: string; su
       </p>
       <p className="text-[20px] tracking-[0.04em] text-[#0A0A0A] mt-0.5">{value}</p>
       {sub && <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4]">{sub}</p>}
+    </div>
+  )
+}
+
+// ── EVENT PICKS — the weekly options MYRA found for her events ───────────────
+//
+// What the Monday cron (/api/cron/event-picks) made, held ones included. FIND
+// NOW runs the same composer this minute: HELD keeps the picks from her until
+// each is let through (a trial), SHOW HER shows them at once. A pick's outfits
+// open on the live site exactly as they open for her.
+function EventPicksPanel({ memberId, run, busy }: { memberId: string; run: Run; busy: any }) {
+  const [events, setEvents] = useState<Awaited<ReturnType<typeof loadEventPicksAdmin>>['events']>([])
+  const [open, setOpen] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const reload = async () => {
+    const r = await loadEventPicksAdmin(memberId)
+    setEvents(r.events)
+    setErr(r.error ?? null)
+  }
+  useEffect(() => { if (open) void reload() }, [open, memberId]) // eslint-disable-line react-hooks/exhaustive-deps
+  const total = events.reduce((n, e) => n + e.picks.length, 0)
+  const isBusy = (k: string) => typeof busy === 'string' ? busy === k : Array.isArray(busy) ? busy.includes(k) : !!busy?.[k]
+  return (
+    <div className="mt-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <button className={btnTiny} onClick={() => setOpen((o) => !o)}>{open ? 'HIDE' : 'SHOW'} EVENT OPTIONS{open && total ? ` (${total})` : ''}</button>
+        {open && (
+          <>
+            <button className={btnTiny} disabled={isBusy(`ep-hold-${memberId}`)} onClick={() => run(`ep-hold-${memberId}`, async () => { await composeEventPicksNow(memberId, { hold: true }); await reload() }, 'OPTIONS FOUND — HELD')}>FIND NOW (HELD)</button>
+            <button className={btnTiny} disabled={isBusy(`ep-show-${memberId}`)} onClick={() => run(`ep-show-${memberId}`, async () => { await composeEventPicksNow(memberId, { hold: false }); await reload() }, 'OPTIONS FOUND — SHOWN')}>FIND NOW (SHOW HER)</button>
+          </>
+        )}
+      </div>
+      {open && err && <p className="text-[16px] text-[#B83A3A] mt-2">{err}</p>}
+      {open && !err && !events.length && <p className="text-[16px] text-[#6B6B6B] mt-2">NO UPCOMING EVENTS.</p>}
+      {open && events.map((e) => (
+        <div key={e.event_id} className="mt-3">
+          <p className="text-[16px] tracking-[0.08em] text-[#6B6B6B]">{e.label.toUpperCase()} — {e.event_date}{e.brief ? ` — “${e.brief}”` : ''} · READ AS: {e.reading.toUpperCase()}</p>
+          {!e.picks.length && <p className="text-[16px] text-[#6B6B6B]">NO OPTIONS YET.</p>}
+          <div className="flex flex-wrap gap-3 mt-1">
+            {e.picks.map((p) => (
+              <div key={p.event_pick_id} className={`flex gap-2 border p-2 ${p.shown ? 'border-[#0A0A0A]' : 'border-dashed border-[#9A9A9A]'}`} style={{ width: 300 }}>
+                {p.image_url && <img src={p.image_url} alt="" className="w-[72px] h-[96px] object-cover" />}
+                <div className="min-w-0 flex-1">
+                  <p className="text-[14px] tracking-[0.08em] text-[#6B6B6B]">{(p.brand ?? '').toUpperCase()} · {p.price_gbp != null ? `£${Math.round(p.price_gbp)}` : ''} · {p.ways.length} OUTFIT{p.ways.length === 1 ? '' : 'S'}</p>
+                  <p className="text-[16px] text-[#0A0A0A] leading-tight">{p.product_name}</p>
+                  <p className="text-[13px] text-[#6B6B6B] leading-snug mt-1">{p.why}</p>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    <span className="text-[12px] tracking-[0.08em] text-[#6B6B6B]">{p.shown ? 'SHOWN' : 'HELD'}{p.told_at ? ' · TOLD' : ''} · {p.week_key}</span>
+                    <button className={btnTiny} disabled={isBusy(p.event_pick_id)} onClick={() => run(p.event_pick_id, async () => { await setEventPickShownAdmin(p.event_pick_id, !p.shown); await reload() }, p.shown ? 'HELD' : 'SHOWN TO HER')}>{p.shown ? 'HOLD' : 'SHOW HER'}</button>
+                    <button className={btnTiny} disabled={isBusy(p.event_pick_id)} onClick={() => run(p.event_pick_id, async () => { await removeEventPickAdmin(memberId, p.event_pick_id); await reload() }, 'REMOVED')}>×</button>
+                    <a className="text-[12px] underline" href={`/me/ways/${p.item_id}?member=${memberId}`} target="_blank" rel="noreferrer">OPEN</a>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

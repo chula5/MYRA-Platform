@@ -51,6 +51,12 @@ export async function composeStyledWays(
     want?: number
     onLook?: (look: StyledWayLook) => void | Promise<void>
     admin?: any
+    /**
+     * Compose for THESE occasions instead of the ones she dresses for most —
+     * a dress picked for her New Year's Eve is styled for the night, not for
+     * the office she goes to every day (events, 2026-10-12).
+     */
+    occasions?: string[]
   } = {},
 ): Promise<ComposeWaysResult> {
   const t0 = Date.now()
@@ -94,7 +100,8 @@ export async function composeStyledWays(
   // see where she would wear — each composing three from its own rotation.
   // Composing costs ~1.6s a call over her whole library (measured 2026-10-08),
   // so this is two calls, not one per occasion she has.
-  const occasionIds = occasionsForMember(member.occasions).filter((id) => id !== 'kids').slice(0, OCCASIONS_PER_ASK)
+  const occasionIds = (opts.occasions?.length ? opts.occasions : occasionsForMember(member.occasions))
+    .filter((id) => id !== 'kids').slice(0, OCCASIONS_PER_ASK)
   const perOccasion: { id: string | null; label: string; look: any }[] = []
   ;(occasionIds.length ? occasionIds : [null]).forEach((id, oi) => {
     const occ = id

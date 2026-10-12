@@ -15,6 +15,7 @@
 // this section writes to the live taste tables at all.
 
 import { createAdminClient } from '@/lib/supabase-server'
+import { composeEventPicks, dismissPick, eventsWithPicks, setPickShown, type ComposePicksResult, type EventWithPicks } from '@/lib/events/picks'
 import { revalidatePath } from 'next/cache'
 import {
   applyBrandSignals,
@@ -140,7 +141,7 @@ export interface PilotMember {
   // pieces are approved and composable.
   auth_user_id: string | null
   owned_count: number
-  events: { event_id: string; label: string; event_date: string; done: boolean }[]
+  events: { event_id: string; label: string; event_date: string; done: boolean; brief?: string | null }[]
   wardrobe: {
     wardrobe_id: string
     label: string
@@ -799,13 +800,55 @@ export async function seedSyntheticPersonas(): Promise<{ seeded?: number; error?
 
 // ── Events & wardrobe ───────────────────────────────────────────────────────
 
-export async function addKnownEvent(memberId: string, label: string, eventDate: string) {
+export async function addKnownEvent(memberId: string, label: string, eventDate: string, brief?: string) {
   const admin = createAdminClient()
+  const clean = (brief ?? '').trim().slice(0, 300)
   const { error } = await admin
     .from('pilot_known_event' as any)
-    .insert({ member_id: memberId, label, event_date: eventDate })
+    .insert({ member_id: memberId, label, event_date: eventDate, ...(clean ? { brief: clean } : {}) })
   revalidatePath(PATH)
   return error ? { error: error.message } : {}
+}
+
+/** What she is looking for for an event, set by Chloe on her behalf (0099). */
+export async function setKnownEventBriefAdmin(eventId: string, brief: string): Promise<{ error?: string }> {
+  const admin = createAdminClient() as any
+  const clean = (brief ?? '').trim().slice(0, 300)
+  const { error } = await admin.from('pilot_known_event')
+    .update({ brief: clean || null, updated_at: new Date().toISOString() }).eq('event_id', eventId)
+  revalidatePath(PATH)
+  return error ? { error: error.message } : {}
+}
+
+// ── Event picks (lib/events/picks) — the options MYRA finds for her events ──
+
+/** Her events with every pick, held ones included — Chloe's view. */
+export async function loadEventPicksAdmin(memberId: string): Promise<{ events: EventWithPicks[]; error?: string }> {
+  try { return { events: await eventsWithPicks(memberId, { includeHeld: true }) } }
+  catch (err) { return { events: [], error: err instanceof Error ? err.message : String(err) } }
+}
+
+/**
+ * Find this week's options now rather than waiting for Monday. `hold` keeps
+ * them from her until Chloe lets each through; otherwise they show at once
+ * (every pick has at least one outfit that passed the check).
+ */
+export async function composeEventPicksNow(memberId: string, opts: { hold?: boolean; perEvent?: number; force?: boolean } = {}): Promise<ComposePicksResult> {
+  const r = await composeEventPicks(memberId, { hold: !!opts.hold, perEvent: opts.perEvent, force: opts.force ?? true })
+  revalidatePath(PATH)
+  return r
+}
+
+export async function setEventPickShownAdmin(pickId: string, shown: boolean): Promise<{ error?: string }> {
+  const r = await setPickShown(createAdminClient() as any, pickId, shown)
+  revalidatePath(PATH)
+  return r
+}
+
+export async function removeEventPickAdmin(memberId: string, pickId: string): Promise<{ error?: string }> {
+  const r = await dismissPick(createAdminClient() as any, memberId, pickId)
+  revalidatePath(PATH)
+  return r
 }
 
 export async function removeKnownEvent(eventId: string) {

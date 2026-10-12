@@ -28,6 +28,8 @@ export type EmailKind =
   | 'shopper_stock_digest' | 'shopper_stock_urgent'
   // The morning after the overnight sweep: the pieces MYRA styled for her while she slept.
   | 'shopper_ways_digest'
+  // New options for the events she has coming up (weekly, after the Monday upload).
+  | 'shopper_event_picks'
 
 /** Shopper-facing kinds go out as MYRA, with replies to Chloe; the studio kinds stay MYRA Studio. */
 const isMemberKind = (kind: EmailKind) => kind.startsWith('shopper_')

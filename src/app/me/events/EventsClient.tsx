@@ -17,11 +17,15 @@ import {
 } from '../dressing-room/calendar-actions'
 import { appleCalendarAvailable, readAppleCalendar } from '@/lib/native/apple-calendar'
 import {
-  loadMyEvents, removeMyStylingTask, scheduleMyStylingTask, setMyStylingTaskStatus, type EventsAreaView,
+  dismissMyEventPick, loadMyEvents, removeMyStylingTask, scheduleMyStylingTask, setMyEventBrief, setMyStylingTaskStatus, type EventsAreaView,
 } from './actions'
+import WaysToWear from '@/components/me/WaysToWear'
+import FallbackImage from '@/components/FallbackImage'
 
 type Task = EventsAreaView['tasks'][number]
 type TaskSource = Task['source']
+type EventPicks = EventsAreaView['picks'][number]
+type Pick = EventPicks['picks'][number]
 
 const T = 'text-[clamp(20px,1.2vw,36px)]'
 const SMALL = 'text-[clamp(18px,1.05vw,30px)]'
@@ -75,6 +79,69 @@ function SourcePicker({ value, onChange }: { value: TaskSource; onChange: (v: Ta
   )
 }
 
+/**
+ * The options MYRA picked for one event: each piece, why it, and the outfits
+ * kept around it — opened in the same WAYS sheet a tap on any piece opens.
+ */
+function PicksRow({ picks, onOpen, onDismiss, busy }: {
+  picks: Pick[]
+  onOpen: (p: Pick) => void
+  onDismiss: (p: Pick) => void
+  busy: (k: string) => boolean
+}) {
+  if (!picks.length) return null
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 pt-1">
+      {picks.map((p) => (
+        <div key={p.event_pick_id} className="flex gap-4 rounded-[14px] bg-[#F7F6F3] p-3">
+          <button type="button" onClick={() => onOpen(p)} className="shrink-0 w-[96px] md:w-[120px] aspect-[3/4] overflow-hidden rounded-[10px] bg-white" aria-label={`Outfits around ${p.product_name}`}>
+            <FallbackImage src={p.image_url} alt="" className="w-full h-full object-cover" loading="lazy" />
+          </button>
+          <div className="min-w-0 flex-1 flex flex-col gap-1">
+            {p.brand && <p className={`${SMALL} tracking-[0.1em] text-[#6E6B65] uppercase`}>{p.brand}</p>}
+            <p className={`${T} text-[#2B2B2B] leading-tight`}>{p.product_name}{p.price_gbp != null ? <span className="text-[#6E6B65]"> · £{Math.round(p.price_gbp)}</span> : null}</p>
+            <p className={`${SMALL} text-[#6E6B65] leading-snug`}>{p.why}</p>
+            <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-1 pt-1">
+              <button type="button" onClick={() => onOpen(p)} className={`${SMALL} rounded-full bg-[#2B2B2B] px-4 py-[0.4em] text-white`}>
+                {p.ways.length ? `${p.ways.length} ${p.ways.length === 1 ? 'outfit' : 'outfits'}` : 'See outfits'}
+              </button>
+              <button type="button" disabled={busy(p.event_pick_id)} onClick={() => onDismiss(p)} className={`${SMALL} underline underline-offset-4 text-[#6E6B65] disabled:opacity-40`}>Not this one</button>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** What she is looking for, on the event itself; MYRA's next options follow it. */
+function BriefLine({ eventId, brief, reading, onSave, busy }: {
+  eventId: string
+  brief: string | null
+  reading?: string
+  onSave: (eventId: string, brief: string) => Promise<void>
+  busy: boolean
+}) {
+  const [editing, setEditing] = useState(false)
+  const [text, setText] = useState(brief ?? '')
+  useEffect(() => { setText(brief ?? '') }, [brief])
+  if (editing) {
+    return (
+      <div className="flex flex-wrap items-center gap-3 w-full">
+        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="A cocktail dress, probably long" className={`${FIELD} sm:max-w-[32em]`} aria-label="What are you looking for?" />
+        <button type="button" disabled={busy} onClick={async () => { await onSave(eventId, text); setEditing(false) }} className={`${SMALL} rounded-full bg-[#2B2B2B] px-4 py-[0.4em] text-white disabled:opacity-40`}>{busy ? 'Saving…' : 'Save'}</button>
+        <button type="button" onClick={() => { setText(brief ?? ''); setEditing(false) }} className={`${SMALL} underline underline-offset-4 text-[#6E6B65]`}>Cancel</button>
+      </div>
+    )
+  }
+  return (
+    <p className={`${SMALL} text-[#6E6B65]`}>
+      {brief ? <>Looking for: <span className="text-[#2B2B2B]">“{brief}”</span></> : <>What are you looking for?{reading ? <span> MYRA is going on: {reading}.</span> : null}</>}
+      {' '}<button type="button" onClick={() => setEditing(true)} className="underline underline-offset-4 text-[#2B2B2B]">{brief ? 'Change' : 'Tell MYRA'}</button>
+    </p>
+  )
+}
+
 export default function EventsClient({ testMemberId }: { testMemberId?: string }) {
   const [calendar, setCalendar] = useState<CalendarPanelView | null>(null)
   const [area, setArea] = useState<EventsAreaView | null>(null)
@@ -85,6 +152,8 @@ export default function EventsClient({ testMemberId }: { testMemberId?: string }
   const [source, setSource] = useState<TaskSource>('both')
   const [adding, setAdding] = useState(false)
   const [mine, setMine] = useState({ label: '', date: '', brief: '', source: 'both' as TaskSource })
+  // The WAYS sheet over the room: the pick she tapped.
+  const [ways, setWays] = useState<Pick | null>(null)
 
   const working = (k: string) => busy.includes(k)
   const run = async (k: string, fn: () => Promise<void>) => {
@@ -158,8 +227,20 @@ export default function EventsClient({ testMemberId }: { testMemberId?: string }
     await refresh()
   })
 
+  const saveBrief = async (eventId: string, brief: string) => run(`brief:${eventId}`, async () => {
+    const r = await setMyEventBrief(eventId, brief, testMemberId)
+    setMsg(r.error ?? (brief.trim() ? 'Noted. The next options follow this.' : 'Cleared.'))
+    await refresh()
+  })
+  const dismissPick = (p: Pick) => run(p.event_pick_id, async () => {
+    const r = await dismissMyEventPick(p.event_pick_id, testMemberId)
+    if (r.error) setMsg(r.error)
+    await refresh()
+  })
+
   if (!calendar || !area || !area.memberId) return null
   const connected = calendar.connections.filter((c) => c.status !== 'disconnected')
+  const picksByEvent = new Map(area.picks.map((e) => [e.event_id, e]))
   const returnPath = typeof window !== 'undefined' ? window.location.pathname : '/me/events'
   const connectHref = `/api/calendar/google/start?return=${encodeURIComponent(returnPath)}${testMemberId ? `&member=${testMemberId}` : ''}`
 
@@ -293,13 +374,31 @@ export default function EventsClient({ testMemberId }: { testMemberId?: string }
             <h2 className={`${HEADING} flex items-center gap-3`}><ClockIcon />COMING UP</h2>
             <button type="button" onClick={() => setAdding(true)} className={`${SMALL} rounded-full bg-[#2B2B2B] px-4 py-2 text-white`}>Add one</button>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {area.knownEvents.map((event) => (
-              <div key={event.event_id} className={`${ROW} flex items-center justify-between gap-4`}>
-                <div><p className={`${T} text-[#2B2B2B]`}>{event.label}</p><p className={`${SMALL} text-[#6E6B65]`}>{readDay(event.event_date).full}</p></div>
-                <button type="button" onClick={() => { setAdding(true); setMine((m) => ({ ...m, label: event.label, date: event.event_date })) }} className={`${SMALL} underline underline-offset-4`}>Style it</button>
-              </div>
-            ))}
+          <div className="space-y-3">
+            {area.knownEvents.map((event) => {
+              const ep = picksByEvent.get(event.event_id)
+              const task = area.tasks.find((t) => t.known_event_id === event.event_id)
+              return (
+                <div key={event.event_id} className={`${ROW} space-y-3`}>
+                  <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+                    <div className="flex items-center gap-x-6">
+                      <div className="text-center shrink-0 w-[4.2em]">
+                        <p className={`${SMALL} tracking-[0.1em] text-[#6E6B65]`}>{readDay(event.event_date).month}</p>
+                        <p className="text-[clamp(30px,1.9vw,56px)] leading-none text-[#2B2B2B]">{readDay(event.event_date).day || '·'}</p>
+                      </div>
+                      <div><p className={`${T} text-[#2B2B2B] leading-tight`}>{event.label}</p><p className={`${SMALL} text-[#6E6B65]`}>{readDay(event.event_date).full}</p></div>
+                    </div>
+                    {!task && (
+                      <button type="button" onClick={() => { setAdding(true); setMine((m) => ({ ...m, label: event.label, date: event.event_date, brief: event.brief ?? '' })) }} className={`${SMALL} underline underline-offset-4`}>Set a task</button>
+                    )}
+                  </div>
+                  <BriefLine eventId={event.event_id} brief={event.brief ?? task?.brief ?? null} reading={ep?.reading} onSave={saveBrief} busy={working(`brief:${event.event_id}`)} />
+                  {ep?.picks.length
+                    ? <PicksRow picks={ep.picks} onOpen={setWays} onDismiss={dismissPick} busy={working} />
+                    : <p className={`${SMALL} text-[#6E6B65]`}>MYRA looks for options every Monday and tells you when they land.</p>}
+                </div>
+              )
+            })}
           </div>
         </section>
       )}
@@ -322,6 +421,9 @@ export default function EventsClient({ testMemberId }: { testMemberId?: string }
                 <div className="min-w-0 flex-1">
                   <p className={`${T} text-[#2B2B2B] leading-tight`}>{t.brief}</p>
                   <p className={`${SMALL} text-[#6E6B65]`}>{[t.event_label, day.full, SOURCE_LABEL[t.source]].filter(Boolean).join(' · ')}</p>
+                  {t.known_event_id && !area.knownEvents.some((e) => e.event_id === t.known_event_id) && picksByEvent.get(t.known_event_id)?.picks.length
+                    ? <div className="pt-3"><PicksRow picks={picksByEvent.get(t.known_event_id)!.picks} onOpen={setWays} onDismiss={dismissPick} busy={working} /></div>
+                    : null}
                 </div>
                 <div className="flex flex-wrap items-center gap-4">
                   {t.status === 'styled' && <span className={`${T} text-[#2B2B2B]`}>✓ Styled</span>}
@@ -393,6 +495,15 @@ export default function EventsClient({ testMemberId }: { testMemberId?: string }
           )}
         </div>
       </section>
+
+      {ways && (
+        <WaysToWear
+          itemId={ways.item_id}
+          piece={{ item_id: ways.item_id, product_name: ways.product_name, brand: ways.brand, image_url: ways.image_url }}
+          testMemberId={testMemberId}
+          onClose={() => setWays(null)}
+        />
+      )}
     </div>
   )
 }

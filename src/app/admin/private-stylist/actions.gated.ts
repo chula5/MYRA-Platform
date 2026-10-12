@@ -221,3 +221,28 @@ export async function updateMember(...args: Parameters<typeof impl.updateMember>
   await assertAdmin()
   return impl.updateMember(...args)
 }
+
+export async function setKnownEventBriefAdmin(...args: Parameters<typeof impl.setKnownEventBriefAdmin>): Promise<Awaited<ReturnType<typeof impl.setKnownEventBriefAdmin>>> {
+  await assertAdmin()
+  return impl.setKnownEventBriefAdmin(...args)
+}
+
+export async function loadEventPicksAdmin(...args: Parameters<typeof impl.loadEventPicksAdmin>): Promise<Awaited<ReturnType<typeof impl.loadEventPicksAdmin>>> {
+  await assertAdmin()
+  return impl.loadEventPicksAdmin(...args)
+}
+
+export async function composeEventPicksNow(...args: Parameters<typeof impl.composeEventPicksNow>): Promise<Awaited<ReturnType<typeof impl.composeEventPicksNow>>> {
+  await assertAdmin()
+  return impl.composeEventPicksNow(...args)
+}
+
+export async function setEventPickShownAdmin(...args: Parameters<typeof impl.setEventPickShownAdmin>): Promise<Awaited<ReturnType<typeof impl.setEventPickShownAdmin>>> {
+  await assertAdmin()
+  return impl.setEventPickShownAdmin(...args)
+}
+
+export async function removeEventPickAdmin(...args: Parameters<typeof impl.removeEventPickAdmin>): Promise<Awaited<ReturnType<typeof impl.removeEventPickAdmin>>> {
+  await assertAdmin()
+  return impl.removeEventPickAdmin(...args)
+}

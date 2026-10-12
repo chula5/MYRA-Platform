@@ -23,6 +23,8 @@ export type TaskStatus = 'planned' | 'styled'
 export interface StylingTaskView {
   task_id: string
   calendar_event_id: string | null
+  /** The known event the studio plans around — where the event's picks hang. */
+  known_event_id: string | null
   event_label: string
   event_date: string
   brief: string
@@ -30,9 +32,9 @@ export interface StylingTaskView {
   status: TaskStatus
   created_at: string
 }
-export interface KnownEventView { event_id: string; label: string; event_date: string }
+export interface KnownEventView { event_id: string; label: string; event_date: string; brief: string | null }
 
-const COLUMNS = 'task_id, calendar_event_id, event_label, event_date, brief, source, status, created_at'
+const COLUMNS = 'task_id, calendar_event_id, known_event_id, event_label, event_date, brief, source, status, created_at'
 
 export interface CreateStylingTaskInput {
   /** Set when the task is for a calendar event; the event supplies the label and date. */
@@ -60,7 +62,7 @@ export async function listStylingTasks(memberId: string): Promise<StylingTaskVie
 export async function listKnownEvents(memberId: string): Promise<KnownEventView[]> {
   const admin = createAdminClient() as any
   const { data, error } = await admin.from('pilot_known_event')
-    .select('event_id, label, event_date')
+    .select('event_id, label, event_date, brief')
     .eq('member_id', memberId)
     .gte('event_date', new Date().toISOString().slice(0, 10))
     .order('event_date')

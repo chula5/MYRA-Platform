@@ -7,28 +7,51 @@
 // from the browser selects a row; it never grants access to one.
 
 import { resolveClientMember } from '@/lib/client-member'
+import { createAdminClient } from '@/lib/supabase-server'
 import {
   EVENTS_MIGRATION_HINT, createStylingTask, listKnownEvents, listStylingTasks, removeStylingTask, setStylingTaskStatus,
   type KnownEventView, type StylingTaskView, type TaskSource, type TaskStatus,
 } from '@/lib/events/store'
+import { dismissPick, eventsWithPicks, setKnownEventBrief, type EventWithPicks } from '@/lib/events/picks'
 
 export interface EventsAreaView {
   memberId: string | null
   tasks: StylingTaskView[]
   knownEvents: KnownEventView[]
+  /** The options MYRA has picked for each upcoming event (shown ones only), with their outfits. */
+  picks: EventWithPicks[]
   error?: string
 }
 
 export async function loadMyEvents(asMemberId?: string): Promise<EventsAreaView> {
   const me = await resolveClientMember(asMemberId)
-  if (!me) return { memberId: null, tasks: [], knownEvents: [] }
+  if (!me) return { memberId: null, tasks: [], knownEvents: [], picks: [] }
   try {
-    const [tasks, knownEvents] = await Promise.all([listStylingTasks(me.memberId), listKnownEvents(me.memberId)])
-    return { memberId: me.memberId, tasks, knownEvents }
+    const [tasks, knownEvents, picks] = await Promise.all([
+      listStylingTasks(me.memberId),
+      listKnownEvents(me.memberId),
+      // Picks are additive: a missing table (migration not run) costs the picks, never the room.
+      eventsWithPicks(me.memberId).catch((err) => { console.error('[events] picks', err); return [] as EventWithPicks[] }),
+    ])
+    return { memberId: me.memberId, tasks, knownEvents, picks }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    return { memberId: me.memberId, tasks: [], knownEvents: [], error: /member_styling_task/.test(msg) ? EVENTS_MIGRATION_HINT : msg }
+    return { memberId: me.memberId, tasks: [], knownEvents: [], picks: [], error: /member_styling_task/.test(msg) ? EVENTS_MIGRATION_HINT : msg }
   }
+}
+
+/** What she is looking for, on one of her events, in her words. */
+export async function setMyEventBrief(eventId: string, brief: string, asMemberId?: string): Promise<{ error?: string }> {
+  const me = await resolveClientMember(asMemberId)
+  if (!me) return { error: 'Not signed in' }
+  return setKnownEventBrief(createAdminClient() as any, me.memberId, eventId, brief)
+}
+
+/** Not this one: the option goes and is not picked again for that event. */
+export async function dismissMyEventPick(pickId: string, asMemberId?: string): Promise<{ error?: string }> {
+  const me = await resolveClientMember(asMemberId)
+  if (!me) return { error: 'Not signed in' }
+  return dismissPick(createAdminClient() as any, me.memberId, pickId)
 }
 
 export async function scheduleMyStylingTask(
