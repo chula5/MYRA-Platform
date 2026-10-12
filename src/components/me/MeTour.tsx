@@ -14,6 +14,7 @@ import { useScrollTo } from '@/lib/smooth-scroll'
 import { markTourDone } from '@/app/me/welcome/actions'
 import { scanNow } from '@/app/me/dressing-room/email-actions'
 import { nudgeArchival } from '@/app/me/dressing-room/archival-actions'
+import { inNativeApp } from '@/components/me/AppFirstOpen'
 
 const KEY = 'myra:tour'
 
@@ -31,6 +32,8 @@ interface Step {
   body: string
   /** Something to do from the step itself, not only read about. */
   cta?: { label: string; href: string }
+  /** Said differently inside the iPhone app, where the Mirror came with the app. */
+  app?: { body: string; cta?: { label: string; href: string } }
 }
 
 /** The mirror's listing, once it is published; until then, her connect page. */
@@ -62,6 +65,10 @@ const STEPS: Step[] = [
     title: 'MYRA WHERE YOU SHOP',
     body: 'Add MYRA to your browser and every shop you open is in your order — keep a piece, or ask what to wear with it, without leaving the shop.',
     cta: { label: 'Add MYRA to my browser', href: MIRROR_HREF },
+    app: {
+      body: 'MYRA Mirror came with this app. Turn it on in Settings → Apps → Safari → Extensions, connect it once from YOU, and every shop you open in Safari is in your order — keep a piece, or ask what to wear with it, without leaving the shop.',
+      cta: { label: 'Show me where', href: '/me/profile#mirror' },
+    },
   },
   {
     path: '/me/profile',
@@ -82,6 +89,8 @@ export default function MeTour() {
   const [step, setStep] = useState<number | null>(null)
   const [box, setBox] = useState<Box | null>(null)
   const [ready, setReady] = useState(false)
+  const [native, setNative] = useState(false)
+  useEffect(() => { setNative(inNativeApp()) }, [])
   const el = useRef<Element | null>(null)
   /** The last step the tour moved her for, so a redirected route cannot loop. */
   const moved = useRef<number | null>(null)
@@ -192,6 +201,8 @@ export default function MeTour() {
 
   if (step == null) return null
   const s = STEPS[step]
+  const body = native && s.app ? s.app.body : s.body
+  const cta = native && s.app ? s.app.cta : s.cta
   const last = step === STEPS.length - 1
   const lit = ready && box && box.height > 4
 
@@ -222,15 +233,15 @@ export default function MeTour() {
           <p className="text-[clamp(22px,1.25vw,38px)] tracking-[0.16em] text-[#2B2B2B]">{s.title}</p>
           <p className="text-[clamp(18px,1vw,30px)] text-[#6E6B65] shrink-0">{step + 1} of {STEPS.length}</p>
         </div>
-        <p className="mt-[0.5em] text-[clamp(27px,1.6vw,48px)] leading-snug text-[#2B2B2B]">{s.body}</p>
-        {s.cta && (
+        <p className="mt-[0.5em] text-[clamp(27px,1.6vw,48px)] leading-snug text-[#2B2B2B]">{body}</p>
+        {cta && (
           <a
-            href={s.cta.href}
-            target={s.cta.href.startsWith('http') ? '_blank' : undefined}
-            rel={s.cta.href.startsWith('http') ? 'noopener noreferrer' : undefined}
+            href={cta.href}
+            target={cta.href.startsWith('http') ? '_blank' : undefined}
+            rel={cta.href.startsWith('http') ? 'noopener noreferrer' : undefined}
             className="mt-[0.9em] inline-block text-[clamp(22px,1.2vw,36px)] tracking-[0.06em] px-[1.3em] py-[0.55em] rounded-full bg-white text-[#2B2B2B] shadow-[0_10px_24px_-16px_rgba(43,43,43,0.7)]"
           >
-            {s.cta.label} →
+            {cta.label} →
           </a>
         )}
         <div className="mt-[1em] flex items-center justify-between gap-4 text-[clamp(22px,1.2vw,36px)]">

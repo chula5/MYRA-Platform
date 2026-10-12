@@ -12,7 +12,13 @@
 // THEN, CONNECT YOUR ACCOUNTS. Four round icons, not cards of text: Instagram,
 // email, calendar, photos. Hovering one says what MYRA does with it; a tick
 // shows what is connected. All optional, so the way past sits above them,
-// loud. All live on in her Dressing Room. Then: the tour.
+// loud. All live on in her Dressing Room.
+//
+// THEN, MYRA WHERE SHE SHOPS. The Mirror is how MYRA comes to know her — every
+// shop she opens in her order, a piece styled without leaving the shop — so it
+// is a page of its own, not an icon she might not tap: the steps for the
+// device in her hand (the iPhone app, where the extension came with the app;
+// Safari on an iPhone; Chrome on a laptop), then the tour.
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -23,15 +29,20 @@ import { loadEmailPanel, scanNow, type EmailPanelView } from '../dressing-room/e
 import { loadArchivalPanel, syncArchivalInstagram, uploadArchivalPhoto, nudgeArchival, type ArchivalPanelView } from '../dressing-room/archival-actions'
 import { loadCalendarPanel, syncMyCalendar, type CalendarPanelView } from '../dressing-room/calendar-actions'
 import { startTour } from '@/components/me/MeTour'
+import { inNativeApp, APP_WELCOMED_KEY } from '@/components/me/AppFirstOpen'
+import { markWelcomed } from './actions'
 
 const S = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.4, strokeLinecap: 'round', strokeLinejoin: 'round' } as const
 // The Chrome Web Store listing for the MYRA Mirror extension, once published.
 const MIRROR_STORE_URL = process.env.NEXT_PUBLIC_MIRROR_STORE_URL ?? ''
 const MIRROR_IOS_URL = process.env.NEXT_PUBLIC_MIRROR_IOS_URL ?? ''
+const SITE = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.myraassistant.co.uk').replace(/\/+$/, '')
 const BODY = 'text-[clamp(22px,1.35vw,40px)]'
 const PILL = 'text-[clamp(21px,1.2vw,32px)] inline-block px-[1.3em] py-[0.6em] bg-white text-[#2B2B2B] rounded-full shadow-[0_8px_18px_-12px_rgba(43,43,43,0.5)] hover:bg-[#2B2B2B] hover:text-white transition-colors'
 
-type Phase = 'brands' | 'connect'
+const DARK = 'text-[clamp(21px,1.2vw,32px)] inline-block px-[1.3em] py-[0.6em] bg-[#2B2B2B] text-white rounded-full hover:opacity-85 transition-opacity'
+
+type Phase = 'brands' | 'connect' | 'mirror'
 
 export default function WelcomeFlow({ firstName, previewMemberId }: { firstName: string; previewMemberId?: string }) {
   const router = useRouter()
@@ -47,6 +58,10 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
   const [msg, setMsg] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  // The device in her hand decides what the Mirror step says.
+  const [native, setNative] = useState(false)
+  const [iphone, setIphone] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const refresh = async () => { const [e, a, c] = await Promise.all([loadEmailPanel(previewMemberId), loadArchivalPanel(previewMemberId), loadCalendarPanel(previewMemberId)]); setEmail(e); setArchival(a); setCalendar(c) }
 
@@ -58,6 +73,15 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
     if (q.get('calendar_connected')) { setMsg('Calendar connected. MYRA is reading what is coming up.'); void syncMyCalendar(previewMemberId).then(refresh).catch(() => undefined) }
     const err = q.get('email_error') || q.get('instagram_error') || q.get('calendar_error')
     if (err) setMsg(err)
+    const app = inNativeApp()
+    setNative(app)
+    setIphone(/iPhone|iPad/.test(navigator.userAgent))
+    // The app's first open brought her here: noted on her login and in the
+    // app, so For You opens as itself from now on. Not for a preview.
+    if (app && !previewMemberId) {
+      try { localStorage.setItem(APP_WELCOMED_KEY, String(Date.now())) } catch { /* private window */ }
+      void markWelcomed({ app: true }).catch(() => undefined)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -89,6 +113,18 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
   const igHref = `/api/instagram/start?return=${encodeURIComponent('/me/welcome')}${member}`
   const calHref = `/api/calendar/google/start?return=${encodeURIComponent('/me/welcome')}${member}`
   const tour = () => { startTour(); router.push('/me') }
+  // Connecting the Mirror means opening /mirror/connect IN THE BROWSER THAT
+  // HAS THE EXTENSION — inside the app that is Safari, so the app hands the
+  // page to Safari itself (the same door YOU uses).
+  const connectPath = `/mirror/connect${previewMemberId ? `?as=${previewMemberId}` : ''}`
+  const connectHref = `${SITE}${connectPath}`
+  function connectMirror() {
+    if (native) { window.location.href = `x-safari-${connectHref}`; return }
+    window.open(connectPath, '_blank', 'noopener')
+  }
+  async function copyConnectLink() {
+    try { await navigator.clipboard.writeText(connectHref); setCopied(true); setTimeout(() => setCopied(false), 2500) } catch { /* she can type it */ }
+  }
 
   // ── Phase one: the brands she loves ───────────────────────────────────────
   if (phase === 'brands') {
@@ -128,6 +164,94 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
     )
   }
 
+  // ── Phase three: MYRA where she shops ─────────────────────────────────────
+  if (phase === 'mirror') {
+    const who = firstName ? `${firstName}, ` : ''
+    const safari = native || iphone
+    const step = (n: number, text: React.ReactNode) => (
+      <li className="flex items-start gap-5">
+        <span className="shrink-0 grid h-[2.1em] w-[2.1em] place-items-center rounded-full bg-[#2B2B2B] text-white text-[clamp(18px,1.05vw,28px)]">{n}</span>
+        <span className={`${BODY} myra-guide-text text-[#2B2B2B] leading-snug pt-[0.15em]`}>{text}</span>
+      </li>
+    )
+    return (
+      <div className="w-full max-w-[1100px] mx-auto space-y-7 pb-10">
+        {previewMemberId && (
+          <p className="text-center text-[15px] tracking-[0.12em] bg-[#7C838B] text-white py-2.5 rounded-full">
+            PREVIEW · STEP 4 OF 4 · MYRA WHERE {firstName.toUpperCase() || 'SHE'} SHOPS · CONNECTING HERE IS REAL
+          </p>
+        )}
+
+        <header className="text-center space-y-4 pt-2">
+          <h1 className="text-[clamp(34px,3.6vw,76px)] leading-[1.08] text-[#2B2B2B]">
+            {safari ? `${who}put MYRA in Safari` : `${who}take MYRA where you shop`}
+          </h1>
+          <p className={`${BODY} myra-guide-text text-[#4A4E57]`}>
+            {native
+              ? 'MYRA Mirror came with this app. Turn it on once and every shop you open in Safari is in your order — keep a piece, or ask what to wear with it, without leaving the shop. It is how MYRA gets to know you.'
+              : safari
+                ? 'MYRA Mirror lives inside the MYRA app. Install the app, turn the extension on, and every shop you open in Safari is in your order. It is how MYRA gets to know you.'
+                : 'Add MYRA Mirror to Chrome and every brand site you open is in your order — keep a piece, or ask what to wear with it, without leaving the shop. It is how MYRA gets to know you.'}
+          </p>
+          {/* The way past, above the steps: she can do all of this later from YOU. */}
+          <button onClick={tour} className="text-[clamp(24px,1.5vw,44px)] tracking-[0.1em] px-[1.6em] py-[0.6em] bg-[#2B2B2B] text-white rounded-full hover:opacity-85 transition-opacity">
+            NEXT: SHOW ME AROUND →
+          </button>
+        </header>
+
+        <div className="rounded-[28px] bg-white/80 shadow-[0_18px_40px_-24px_rgba(43,43,43,0.35)] p-6 sm:p-9 space-y-7">
+          {native ? (
+            <>
+              <ol className="space-y-5">
+                {step(1, <>Open <strong>Settings → Apps → Safari → Extensions</strong>.</>)}
+                {step(2, <>Tap <strong>MYRA Mirror</strong>. Turn it on, and set <strong>All Websites</strong> to <strong>Allow</strong>.</>)}
+                {step(3, <>Come back here and tap <strong>CONNECT MYRA</strong>. It opens in Safari — once, and MYRA knows it is you.</>)}
+              </ol>
+              <div className="flex flex-wrap items-center gap-4">
+                <button type="button" onClick={connectMirror} className={DARK}>CONNECT MYRA IN SAFARI</button>
+                <button type="button" onClick={copyConnectLink} className={PILL}>{copied ? 'Copied' : 'Copy the link'}</button>
+              </div>
+              <p className="text-[clamp(18px,1.05vw,30px)] myra-guide-text text-[#6E6B65] [overflow-wrap:anywhere]">
+                If Safari does not open, go to {connectHref.replace(/^https?:\/\//, '')} in Safari yourself. On a laptop, add MYRA to Chrome from YOU any time.
+              </p>
+            </>
+          ) : safari ? (
+            <>
+              <ol className="space-y-5">
+                {step(1, <>Install the <strong>MYRA</strong> app. The Safari extension comes inside it.</>)}
+                {step(2, <>Open <strong>Settings → Apps → Safari → Extensions</strong>, tap <strong>MYRA Mirror</strong>, turn it on, and set <strong>All Websites</strong> to <strong>Allow</strong>.</>)}
+                {step(3, <>Come back and tap <strong>CONNECT MYRA</strong> — once, and MYRA knows it is you.</>)}
+              </ol>
+              <div className="flex flex-wrap items-center gap-4">
+                {MIRROR_IOS_URL
+                  ? <a href={MIRROR_IOS_URL} target="_blank" rel="noopener noreferrer" className={DARK}>GET THE MYRA APP</a>
+                  : <span className={`${PILL} opacity-60`}>iPhone app link coming soon</span>}
+                <button type="button" onClick={connectMirror} className={PILL}>Connect MYRA</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <ol className="space-y-5">
+                {step(1, <>Add <strong>MYRA Mirror</strong> to Chrome.</>)}
+                {step(2, <>Tap <strong>CONNECT MYRA</strong> — once, and MYRA knows it is you.</>)}
+                {step(3, <>Open any brand site. The pieces you would wear come first; tap one to style it.</>)}
+              </ol>
+              <div className="flex flex-wrap items-center gap-4">
+                {MIRROR_STORE_URL
+                  ? <a href={MIRROR_STORE_URL} target="_blank" rel="noopener noreferrer" className={DARK}>ADD MYRA TO CHROME</a>
+                  : <span className={`${PILL} opacity-60`}>Chrome link coming soon</span>}
+                <button type="button" onClick={connectMirror} className={PILL}>Connect MYRA</button>
+              </div>
+              <p className="text-[clamp(18px,1.05vw,30px)] myra-guide-text text-[#6E6B65]">On your iPhone, MYRA Mirror comes inside the MYRA app — Settings → Apps → Safari → Extensions.</p>
+            </>
+          )}
+        </div>
+
+        <p className="text-center text-[clamp(18px,1.05vw,30px)] text-[#6E6B65]">You can do this any time from YOU.</p>
+      </div>
+    )
+  }
+
   // ── Phase two: connect your accounts ──────────────────────────────────────
   return (
     <div className="w-full max-w-[1700px] mx-auto space-y-7 pb-10">
@@ -141,8 +265,8 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
         <h1 className="text-[clamp(34px,3.6vw,76px)] leading-[1.08] text-[#2B2B2B]">{firstName ? `${firstName}, connect your accounts` : 'Connect your accounts'}</h1>
         <p className={`${BODY} text-[#4A4E57]`}>Tap one. Hover to see what it does.</p>
         {/* The way past, above the cards: both are optional and she should never feel stuck. */}
-        <button onClick={tour} className="text-[clamp(24px,1.5vw,44px)] tracking-[0.1em] px-[1.6em] py-[0.6em] bg-[#2B2B2B] text-white rounded-full hover:opacity-85 transition-opacity">
-          {anything ? 'NEXT: SHOW ME AROUND →' : 'SKIP FOR NOW →'}
+        <button onClick={() => setPhase('mirror')} className="text-[clamp(24px,1.5vw,44px)] tracking-[0.1em] px-[1.6em] py-[0.6em] bg-[#2B2B2B] text-white rounded-full hover:opacity-85 transition-opacity">
+          {anything ? 'NEXT: MYRA WHERE YOU SHOP →' : 'SKIP FOR NOW →'}
         </button>
       </header>
 
