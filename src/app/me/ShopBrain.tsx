@@ -207,13 +207,15 @@ function Door({
 /** Does this view draw anything at all? Mirrors the early return below. */
 const hasContent = (v: ShopBrainView | null) => !!v && (v.saved.length > 0 || v.similar.length > 0 || v.fromBrands.length > 0)
 
-export default function ShopBrain({ testMemberId, onReady }: {
+export default function ShopBrain({ testMemberId, initialView, onReady }: {
   testMemberId?: string
+  /** Gathered on the server behind the mirror — drawn at once, no fetch. */
+  initialView?: ShopBrainView
   /** Called once the section knows what it has — so the page's curtain can
    *  wait for it, and so an empty page can say so instead of staying blank. */
   onReady?: (hasContent: boolean) => void
 }) {
-  const [view, setView] = useState<ShopBrainView | null>(null)
+  const [view, setView] = useState<ShopBrainView | null>(initialView ?? null)
   const onReadyRef = useRef(onReady)
   useEffect(() => { onReadyRef.current = onReady }, [onReady])
   const told = useRef(false)
@@ -251,12 +253,13 @@ export default function ShopBrain({ testMemberId, onReady }: {
   // The section draws nothing until the view arrives, and on a phone the call
   // can be dropped with the page — a suspended tab, a flaky network — so it
   // retries, and picks the load back up when she returns with nothing shown.
-  const viewRef = useRef<ShopBrainView | null>(null)
+  const viewRef = useRef<ShopBrainView | null>(initialView ?? null)
   useEffect(() => {
     let live = true
     const load = async (attempt: number) => {
       try {
-        const v = await loadShopBrain(testMemberId)
+        // Already here from the server: skip straight to the fresh check.
+        const v = attempt === 0 && viewRef.current ? viewRef.current : await loadShopBrain(testMemberId)
         if (!live) return
         viewRef.current = v
         setView(v)

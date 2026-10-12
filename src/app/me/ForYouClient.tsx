@@ -12,6 +12,9 @@ import Mannequin from '@/components/me/Mannequin'
 import ShopBrain from './ShopBrain'
 import { thumbUrl } from '@/lib/image-utils'
 import { answerLook, explainAnswer, type ForYouLook, type ForYouView } from './for-you-actions'
+import type { ShopBrainView } from './shop-brain-actions'
+
+const shopBrainHasContent = (v: ShopBrainView) => v.saved.length > 0 || v.similar.length > 0 || v.fromBrands.length > 0
 
 /** The width the look cards ask for — the curtain warms this same picture. */
 const LOOK_THUMB_WIDTH = 900
@@ -25,7 +28,13 @@ const REASONS: { id: string; label: string }[] = [
   { id: 'too_expensive', label: 'Too expensive' },
 ]
 
-export default function ForYouClient({ view, testMemberId }: { view: ForYouView; testMemberId?: string }) {
+export default function ForYouClient({ view, testMemberId, shopBrain }: {
+  view: ForYouView
+  testMemberId?: string
+  /** Her shop section, already gathered on the server behind the mirror.
+   *  null: it was not back in time, so the section fetches it itself. */
+  shopBrain?: ShopBrainView | null
+}) {
   // Until the page is ready the screen is only the mirror. The page is drawn
   // underneath it the whole time: the curtain waits for the first pictures of
   // her looks AND for what MYRA did while she shopped to arrive, then rises
@@ -35,7 +44,9 @@ export default function ForYouClient({ view, testMemberId }: { view: ForYouView;
   // at most, so a slow network never holds her at the door.
   const [curtain, setCurtain] = useState<'waiting' | 'leaving' | 'gone'>('waiting')
   const [picturesReady, setPicturesReady] = useState(false)
-  const [brain, setBrain] = useState<'loading' | 'empty' | 'content'>('loading')
+  const [brain, setBrain] = useState<'loading' | 'empty' | 'content'>(
+    shopBrain ? (shopBrainHasContent(shopBrain) ? 'content' : 'empty') : 'loading',
+  )
   const [beatPassed, setBeatPassed] = useState(false)
   const [waitedEnough, setWaitedEnough] = useState(false)
 
@@ -53,17 +64,21 @@ export default function ForYouClient({ view, testMemberId }: { view: ForYouView;
       img.src = thumbUrl(u, LOOK_THUMB_WIDTH)
     }))).then(() => { if (live) setPicturesReady(true) })
     const beat = setTimeout(() => { if (live) setBeatPassed(true) }, 700)
-    const most = setTimeout(() => { if (live) setWaitedEnough(true) }, 6000)
+    const most = setTimeout(() => { if (live) setWaitedEnough(true) }, 4000)
     return () => { live = false; clearTimeout(beat); clearTimeout(most) }
   }, [view.looks])
 
   const ready = waitedEnough || (picturesReady && brain !== 'loading' && beatPassed)
   useEffect(() => {
-    if (curtain !== 'waiting' || !ready) return
-    setCurtain('leaving')
+    if (curtain === 'waiting' && ready) setCurtain('leaving')
+  }, [ready, curtain])
+  // Its own effect: when it lived in the one above, the change to 'leaving'
+  // re-ran that effect and cancelled this timer, so the curtain never went.
+  useEffect(() => {
+    if (curtain !== 'leaving') return
     const t = setTimeout(() => setCurtain('gone'), 760)
     return () => clearTimeout(t)
-  }, [ready, curtain])
+  }, [curtain])
 
   // Nothing at all to show — no looks yet, nothing kept out in the shops —
   // is said plainly, with the way onward, never left as a blank page.
@@ -82,7 +97,7 @@ export default function ForYouClient({ view, testMemberId }: { view: ForYouView;
 
           {/* What she kept on other people's sites, already worked on. Draws
               nothing until there is something to show. */}
-          <ShopBrain testMemberId={testMemberId} onReady={(has) => setBrain(has ? 'content' : 'empty')} />
+          <ShopBrain testMemberId={testMemberId} initialView={shopBrain ?? undefined} onReady={(has) => setBrain(has ? 'content' : 'empty')} />
 
           {/* The curtain has a ceiling; if it lifts before her shop section
               is back, say MYRA is on it — never a blank page under HELLO. */}
