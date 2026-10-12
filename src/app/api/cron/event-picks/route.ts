@@ -46,11 +46,12 @@ function sayDate(iso: string): string {
 const money = (n: number | null) => (n == null ? '' : `£${Math.round(n)}`)
 const base = (b?: string) => (b ? b.replace(/\/$/, '') : siteUrl(''))
 const pictureFor = (url: string) => { const t = thumbUrl(url, 256); return t.startsWith('/') ? siteUrl(t) : t }
-const waysLink = (p: EventPickView, b?: string) => `${base(b)}/me/ways/${encodeURIComponent(p.item_id)}`
+/** Her piece's ways. A note sent to Chloe instead carries ?member= so the link opens AS HER (her kept outfits, not Chloe's). */
+const waysLink = (p: EventPickView, b?: string, asMember?: string) => `${base(b)}/me/ways/${encodeURIComponent(p.item_id)}${asMember ? `?member=${encodeURIComponent(asMember)}` : ''}`
 
 /** One pick: the piece, then each kept outfit as a row of its pieces. */
-function pickHtml(p: EventPickView, b?: string): string {
-  const link = waysLink(p, b)
+function pickHtml(p: EventPickView, b?: string, asMember?: string): string {
+  const link = waysLink(p, b, asMember)
   const outfits = p.ways.slice(0, 3).map((w) => {
     const pieces = w.items.filter((it) => it.image_url && it.item_id !== p.item_id).slice(0, 4)
     if (!pieces.length) return ''
@@ -78,17 +79,17 @@ function pickHtml(p: EventPickView, b?: string): string {
     </table>`
 }
 
-function noteHtml(firstName: string, events: EventWithPicks[], b?: string): string {
+function noteHtml(firstName: string, events: EventWithPicks[], b?: string, asMember?: string): string {
   const total = events.reduce((n, e) => n + e.picks.length, 0)
   const sections = events.map((e) => `
     <p style="margin:22px 0 2px 0;font-size:11px;letter-spacing:0.14em;color:#7c838b;">${esc(sayDate(e.event_date).toUpperCase())}</p>
     <p style="margin:0 0 4px 0;font-size:19px;color:#2b2b2b;">${esc(e.label)}</p>
     ${e.brief ? `<p style="margin:0 0 14px 0;font-size:13px;color:#7c838b;">You asked for: “${esc(e.brief)}”</p>` : '<p style="margin:0 0 14px 0;"></p>'}
-    ${e.picks.map((p) => pickHtml(p, b)).join('')}`).join('')
+    ${e.picks.map((p) => pickHtml(p, b, asMember)).join('')}`).join('')
   const body = `
     <p style="margin:0 0 6px 0;font-size:15px;color:#2b2b2b;">${esc(firstName ? `${firstName}, ` : '')}MYRA has ${total === 1 ? 'a new option' : `${total} new options`} for what you have coming up — in your size, within your budget, each styled and checked before you see it.</p>
     ${sections}
-    <p style="margin:26px 0 0 0;">${emailButton(`${base(b)}/me/events`, 'SEE YOUR EVENTS')}</p>
+    <p style="margin:26px 0 0 0;">${emailButton(`${base(b)}/me/events${asMember ? `?member=${encodeURIComponent(asMember)}` : ''}`, 'SEE YOUR EVENTS')}</p>
     <p style="margin:14px 0 0 0;font-size:12px;color:#7c838b;">Tell MYRA what you are looking for on each event and the next options follow your brief.</p>`
   return emailShell('FOR YOUR EVENTS', body, 'MYRA · YOUR STYLIST')
 }
@@ -147,7 +148,8 @@ export async function GET(req: NextRequest) {
       entry.untold = fresh.reduce((n, e) => n + e.picks.length, 0)
       if (!fresh.length) { entry.sent = false; continue }
       const firstName = (m.name ?? '').trim().split(/\s+/)[0] ?? ''
-      const html = noteHtml(firstName, fresh, site)
+      // To Chloe (a trial), the links open as the member; to her, as herself.
+      const html = noteHtml(firstName, fresh, site, toOverride || preview ? m.member_id : undefined)
       if (preview) return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
       if (dry) { entry.sent = false; entry.subject = subjectFor(fresh); continue }
 
