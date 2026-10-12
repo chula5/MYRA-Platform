@@ -204,5 +204,10 @@ describe('composeReviewLooks — the clothes make the outfit', () => {
     const clothes = r.picks.map((p) =>
       p.items.filter((i) => i.slot !== 'shoe' && i.slot !== 'bag').map((i) => i.item.item_id).sort().join('|'))
     expect(new Set(clothes).size).toBe(clothes.length)
+    // And no two looks share more than one piece (same jumper + same boots is a twin too).
+    const ids = r.picks.map((p) => new Set(p.items.map((i) => i.item.item_id)))
+    for (let i = 0; i < ids.length; i++)
+      for (let j = i + 1; j < ids.length; j++)
+        expect([...ids[i]].filter((id) => ids[j].has(id)).length).toBeLessThanOrEqual(1)
   })
 })

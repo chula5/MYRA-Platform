@@ -215,9 +215,14 @@ const EXTRA_SLOT_POOL = 3
 /** Slots that finish a look rather than make it: swapping one of these alone is not a new outfit. */
 const FINISH_SLOTS = new Set(['shoe', 'bag', 'jewellery'])
 
-/** How many pieces two picks of `n` additions may share before they read as the same outfit. */
-export function maxSharedWith(n: number): number {
-  return Math.max(1, n - 2)
+/**
+ * How many pieces two picks may share before they read as the same outfit.
+ * One, whatever the look's size: on a four-piece look, sharing two (same
+ * jumper + same boots, another skirt) still read as a twin side by side
+ * (2026-10-12).
+ */
+export function maxSharedWith(_n: number): number {
+  return 1
 }
 /** Shortlist places kept for statement pieces when the anchor is plain. */
 const STATEMENT_RESERVE = 2
@@ -387,9 +392,8 @@ function composeReviewLooksOnce(opts: ReviewComposeOpts): ReviewComposeResult {
   // pick a near-twin of one already taken. The per-piece cap alone let the
   // top two scores through as the same dress + same bag with only the shoes
   // swapped (2026-10-11: "the same outfit twice every time"), because two
-  // uses each is exactly what a twin needs. A pick may share at most
-  // `maxSharedWith(n)` of its pieces with any earlier pick — one of three,
-  // two of four. Top up in loosening passes only if that leaves the set
+  // uses each is exactly what a twin needs. Any two picks share at most
+  // `maxSharedWith` pieces — one. Top up in loosening passes only if that leaves the set
   // short: drop the per-piece cap first, then (last resort, unless
   // `noTwins`) the twin rule.
   const use = new Map<string, number>()
