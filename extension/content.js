@@ -513,6 +513,11 @@
   function ensurePanelEl() {
     hideTopBanner()
     closePicks()
+    // The panel is where a styling lands: once it is open the badge has
+    // nothing left to say about it.
+    jobBuilding = false
+    badgeSay(null)
+    badgeMark()
     if (panel) return
     panel = document.createElement('div')
     panel.className = 'myra-mirror-panel'
@@ -652,19 +657,31 @@
   // the two ways to style it appear. A guide at the bottom says so, and goes
   // the moment she has chosen (or closed it).
   let picking = false, guide = null
-  function stopPicking() { picking = false; guide?.remove(); guide = null }
-  function startPicking() {
+  // Picking survives the click that opens a piece's own page — a tile the
+  // mirror had not read, a link to the piece — and the shop that changes page
+  // without reloading. The next page reads the flag back and offers the piece
+  // straight away, so "tap a piece" never ends in silence on the piece's page.
+  const PICK_KEY = 'myra-mirror-picking'
+  function rememberPicking() { try { sessionStorage.setItem(PICK_KEY, String(Date.now())) } catch {} }
+  function forgetPicking() { try { sessionStorage.removeItem(PICK_KEY) } catch {} }
+  function pickingAsked() {
+    try { const at = Number(sessionStorage.getItem(PICK_KEY) || 0); return at > 0 && Date.now() - at < 90_000 } catch { return false }
+  }
+  const HERE_IT_IS = 'Here it is — ask what to wear with it, below.'
+  function stopPicking() { picking = false; guide?.remove(); guide = null; forgetPicking() }
+  function startPicking(say) {
     hidePanel()
     picking = true
+    rememberPicking()
     guide?.remove()
     guide = document.createElement('div')
     guide.className = 'myra-mirror-guide'
     guide.style.cssText = `position:fixed;z-index:2147483646;left:50%;bottom:16px;transform:translateX(-50%);max-width:calc(100vw - 32px);background:#141414;color:#F7F6F3;border-radius:999px;padding:11px 14px 11px 16px;box-shadow:0 14px 40px rgba(0,0,0,.3);font:500 13px/1.3 ${FONT};display:flex;gap:12px;align-items:center;`
-    const text = pagePiece
+    const text = (typeof say === 'string' && say) || (pagePiece
       ? 'Tap a piece to style it — or this page’s own piece, below.'
       : productOf.size
         ? 'Tap a piece to style it.'
-        : 'Open a piece, or a page of pieces, then tap one to style it.'
+        : 'Open a piece, or a page of pieces, then tap one to style it.')
     guide.innerHTML = `<span>${esc(text)}</span><button type="button" aria-label="Stop" style="border:0;background:rgba(255,255,255,.14);color:#F7F6F3;width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:15px;line-height:26px;padding:0">×</button>`
     guide.querySelector('button').addEventListener('click', stopPicking)
     document.body.appendChild(guide)
@@ -1080,11 +1097,59 @@
   // page unasked — quiet, out of the way, always in the same place. A dot on it means something is waiting for her: a finished
   // styling, or picks this page can offer. Everything else is one click
   // away, and a second click puts it away again.
-  let badge = null, badgeDot = null, jobWaiting = false, picksWorth = false
+  let badge = null, badgeDot = null, jobWaiting = false, jobBuilding = false, picksWorth = false
 
   function badgeMark() {
     if (!badgeDot) return
     badgeDot.style.display = jobWaiting || picksWorth ? 'block' : 'none'
+    // While MYRA builds, the badge breathes: that is where the answer lands.
+    if (badge) badge.style.animation = jobBuilding ? 'myraBadgeBreathe 1.6s ease-in-out infinite' : ''
+  }
+
+  // ── WHAT THE BADGE SAYS ───────────────────────────────────────────────────
+  // She taps a piece, the styling goes to the worker, and the page she is on
+  // may be a different one by the time it lands — the panel she watched it
+  // start in is gone with the page she left. The one thing always in the same
+  // place is the badge, so the badge speaks for the styling: "MYRA is styling
+  // this — tap to watch" while it builds, "your looks are ready — tap to see"
+  // once it has landed. Tapping the words is tapping the badge. It says
+  // nothing while the panel is open, and nothing about a styling she closed.
+  let badgeSayEl = null
+  function badgeSay(text, building = false) {
+    if (!text) { badgeSayEl?.remove(); badgeSayEl = null; return }
+    if (!badge) return
+    if (!badgeSayEl) {
+      badgeSayEl = document.createElement('button')
+      badgeSayEl.type = 'button'
+      badgeSayEl.className = 'myra-mirror-badge-say'
+      badgeSayEl.style.cssText = `position:fixed;z-index:2147483645;right:46px;top:50%;transform:translateY(-50%);max-width:min(330px,calc(100vw - 70px));border:0;background:#141414;color:#F7F6F3;border-radius:999px;padding:11px 15px 11px 14px;font:500 13px/1.3 ${FONT};text-align:left;box-shadow:0 12px 32px rgba(0,0,0,.28);cursor:pointer;display:flex;gap:9px;align-items:center;opacity:0;transition:opacity .25s ease;`
+      badgeSayEl.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); badgeClick() })
+      document.body.appendChild(badgeSayEl)
+      requestAnimationFrame(() => { if (badgeSayEl) badgeSayEl.style.opacity = '1' })
+    }
+    const dot = `<span style="width:8px;height:8px;border-radius:50%;background:#F7F6F3;flex:0 0 auto;${building ? 'animation:myraPulse 1.2s infinite' : ''}"></span>`
+    badgeSayEl.innerHTML = `${dot}<span style="flex:1;min-width:0">${esc(text)}</span><span aria-hidden="true" style="opacity:.65;flex:0 0 auto">→</span>`
+  }
+  const shortName = (t) => { const s = String(t || '').trim(); return s.length > 34 ? `${s.slice(0, 32).trim()}…` : s }
+
+  /**
+   * The styling's state, as the badge should show it: called with the job
+   * whenever the worker reports one (or none). A job she closed while it built
+   * is hers to forget until it lands — the worker lifts `dismissed` then.
+   */
+  function noteJob(job) {
+    if (!job) { jobWaiting = false; jobBuilding = false; badgeMark(); badgeSay(null); return }
+    if (panel) { jobBuilding = false; badgeMark(); badgeSay(null); return }
+    const building = (job.status === 'loading' || job.status === 'partial') && !job.dismissed
+    const landed = job.status !== 'loading' && job.status !== 'partial' && !job.dismissed
+    jobBuilding = building
+    if (landed) jobWaiting = true
+    badgeMark()
+    const name = job.product?.title ? `“${shortName(job.product.title)}”` : 'this piece'
+    if (building) badgeSay(`MYRA is styling ${name} — tap to watch`, true)
+    else if (landed && job.status === 'error') badgeSay(`MYRA could not style ${name} — tap to see why`)
+    else if (landed) badgeSay(`Your looks for ${name} are ready — tap to see`)
+    else badgeSay(null)
   }
 
   function makeBadge() {
@@ -1099,6 +1164,12 @@
     badgeDot = badge.querySelector('.myra-mirror-badge-dot')
     badge.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); badgeClick() })
     document.body.appendChild(badge)
+    if (!document.getElementById('myra-mirror-badge-css')) {
+      const css = document.createElement('style')
+      css.id = 'myra-mirror-badge-css'
+      css.textContent = '@keyframes myraBadgeBreathe{0%,100%{box-shadow:-3px 4px 18px rgba(0,0,0,.18)}50%{box-shadow:-3px 4px 18px rgba(0,0,0,.18),0 0 0 7px rgba(20,20,20,.16)}}@keyframes myraPulse{0%,100%{opacity:1}50%{opacity:.3}}'
+      document.documentElement.appendChild(css)
+    }
     badgeMark()
   }
 
@@ -1115,11 +1186,12 @@
     if (picksPanel) { closePicks(); return }
     if (pill) { hidePiece(); return }
     if (picking) { stopPicking(); return }
-    // A styling that just landed opens straight away; otherwise the panel
-    // opens on her history, with this page's piece and picks a tap away.
-    if (jobWaiting) {
-      const waiting = await send({ type: 'styleJob' })
-      if (waiting?.job && waiting.job.status !== 'loading') { openPanel(waiting.job); return }
+    // A styling that just landed opens straight away, and one still building
+    // opens to be watched; otherwise the panel opens on her history, with
+    // this page's piece and picks a tap away.
+    if (jobWaiting || jobBuilding) {
+      const cur = await send({ type: 'styleJob' })
+      if (cur?.job && !cur.job.dismissed) { openPanel(cur.job); return }
     }
     openHome()
   }
@@ -1481,7 +1553,9 @@
     hidePiece()
     hidePicksBadge()
     hideTopBanner()
+    const wasPicking = picking
     stopPicking()
+    if (wasPicking) rememberPicking()
     // The picks the dot stood for belonged to the page she just left.
     maybePicksBadge()
     // The shop writes the new piece a beat after the address changes. Watch
@@ -1494,7 +1568,9 @@
         pagePiece = p
         noteView(p)
         autoStyle(p)
-        // Noted, not shown: the badge opens this piece's card when she asks.
+        // Noted, not shown: the badge opens this piece's card when she asks —
+        // unless she was picking a piece, and this is the one she opened.
+        if (pickingAsked()) startPicking(HERE_IT_IS)
       }
       if (p || ++tries >= 20) clearInterval(navSettle)
     }, 150)
@@ -1554,7 +1630,7 @@
       // longer opens itself — it lights the badge's dot until she asks.
       if (!panel) {
         const waiting = await send({ type: 'styleJob' })
-        if (waiting?.job && waiting.job.status !== 'loading' && !waiting.job.dismissed) { jobWaiting = true; badgeMark() }
+        noteJob(waiting?.job || null)
       }
       const top = res.products.filter((p) => p.score >= LIFT_MIN).sort((a, b) => b.score - a.score).slice(0, 6)
         .map((p) => ({ brand: p.brand, title: (details.get(p.key) || {}).title || p.key, confidence: p.confidence, why: WHY[p.why] || '', fit: FIT[p.fit] || '' }))
@@ -1592,7 +1668,7 @@
     if (msg?.type === 'styleUpdate') {
       if (panel && panelView === 'home') { if (msg.job?.status !== 'loading') openHome() }
       else if (panel) renderPanel(msg.job)
-      else if ((pagePiece || productOf.size) && msg.job && msg.job.status !== 'loading' && !msg.job.dismissed) { jobWaiting = true; badgeMark() }
+      else if (pagePiece || productOf.size) noteJob(msg.job || null)
     }
     if (msg?.type === 'rerun') { lastSig = ''; observer.observe(document.body, { childList: true, subtree: true }); schedule() }
   })
@@ -1618,6 +1694,12 @@
   // it. Anywhere else it waits in the worker rather than interrupting, and
   // the next shop page picks it up.
   const inFlight = await send({ type: 'styleJob' })
-  if (inFlight?.job && (panel || pagePiece || productOf.size) && inFlight.job.status !== 'loading' && !inFlight.job.dismissed) { jobWaiting = true; badgeMark() }
+  if (panel || pagePiece || productOf.size) noteJob(inFlight?.job || null)
+  // She was picking a piece and her click opened its page, or another page
+  // of pieces: carry on here, the piece offered straight away.
+  if (pickingAsked()) {
+    if (pagePiece || productOf.size) startPicking(pagePiece ? HERE_IT_IS : null)
+    else forgetPicking()
+  }
   observer.observe(document.body, { childList: true, subtree: true })
 })()
