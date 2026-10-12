@@ -424,29 +424,49 @@ export async function getAllItems(
 ): Promise<ItemWithBrand[]> {
   const supabase = createAdminClient()
   try {
+    const filtered = <Q extends { eq: any; in: any }>(query: Q): Q => {
+      if (status && status !== 'all') query = query.eq('status', status)
+      if (stockFilter === 'flagged') query = query.in('stock_status', ['out_of_stock', 'low_stock'])
+      else if (stockFilter === 'out_of_stock' || stockFilter === 'low_stock') query = query.eq('stock_status', stockFilter)
+      return query
+    }
     // Page past PostgREST's 1,000-row response cap — the library is bigger.
-    const out: ItemWithBrand[] = []
-    for (let from = 0; ; from += 1000) {
-      let query = supabase
-        .from('item')
-        .select('*, brand(*)')
+    //
+    // Twelve thousand pieces used to come back a page at a time, each page
+    // carrying its brand row again (a third of the bytes) through a lateral
+    // join, and the library took thirty seconds of every tap (measured
+    // 2026-10-12). Now: the brands once, the count, then the pages three at
+    // a time — not all at once, which on a busy evening tripped the
+    // statement timeout — each ordered the same way so they tile without
+    // overlap, joined to their brand here.
+    const PAGE = 1000
+    const PARALLEL = 3
+    const [{ data: brandRows, error: brandErr }, { count, error: countErr }] = await Promise.all([
+      supabase.from('brand').select('*'),
+      filtered(supabase.from('item').select('item_id', { count: 'exact', head: true })),
+    ])
+    if (brandErr) throw brandErr
+    if (countErr) throw countErr
+    const brands = new Map<string, Brand>(((brandRows ?? []) as Brand[]).map((b) => [b.brand_id, b]))
+    const pages = Math.max(1, Math.ceil((count ?? 0) / PAGE))
+    const readPage = async (p: number, attempt = 0): Promise<Item[]> => {
+      const { data, error } = await filtered(supabase.from('item').select('*'))
         .order('created_at', { ascending: false })
-        .range(from, from + 999)
-
-      if (status && status !== 'all') {
-        query = query.eq('status', status)
+        .order('item_id', { ascending: true })
+        .range(p * PAGE, p * PAGE + PAGE - 1)
+      if (error) {
+        // A page that fell to a timeout under load gets one quiet retry.
+        if (attempt < 1) return readPage(p, attempt + 1)
+        throw error
       }
-
-      if (stockFilter === 'flagged') {
-        query = query.in('stock_status', ['out_of_stock', 'low_stock'])
-      } else if (stockFilter === 'out_of_stock' || stockFilter === 'low_stock') {
-        query = query.eq('stock_status', stockFilter)
+      return (data ?? []) as unknown as Item[]
+    }
+    const out: ItemWithBrand[] = []
+    for (let p = 0; p < pages; p += PARALLEL) {
+      const batch = await Promise.all(Array.from({ length: Math.min(PARALLEL, pages - p) }, (_, k) => readPage(p + k)))
+      for (const rows of batch) {
+        for (const row of rows) out.push({ ...row, brand: (row.brand_id && brands.get(row.brand_id)) || null } as unknown as ItemWithBrand)
       }
-
-      const { data, error } = await query
-      if (error) throw error
-      out.push(...((data ?? []) as unknown as ItemWithBrand[]))
-      if (!data || data.length < 1000) break
     }
     // Owned wardrobe items (migration 0046) belong to ONE client — they never
     // enter a shared pool. Filtered in memory so this stays safe pre-migration.

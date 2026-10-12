@@ -13,7 +13,7 @@
 // likes, or ask MYRA to style it. Tapping a piece opens it on the shop's own
 // site (in Safari from the app) and keeps it chosen here for styling.
 
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import WaysToWear from '@/components/me/WaysToWear'
 import { WAYS_READY_EVENT } from '@/components/me/ways-watch'
@@ -194,6 +194,13 @@ export default function BrowseClient() {
   function style(_piece: BrowsePiece, mode: 'wardrobe' | 'new') {
     setStyling((cur) => (cur === mode ? null : mode)); setPhase('idle'); setNote(null)
   }
+  useEffect(() => {
+    if (!styling || !waysRef.current) return
+    const el = waysRef.current
+    const id = window.setTimeout(() => scrollTo(el, { offset: -96 }), 60)
+    return () => window.clearTimeout(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [styling, picked])
   const progress = landed > 0 && landed < WAYS ? `${landed} OF ${WAYS}` : 'STYLING…'
   const styleLabel = (mode: 'wardrobe' | 'new', idle: string) =>
     styling !== mode ? idle : phase === 'working' ? progress : phase === 'ready' ? 'DONE' : idle
@@ -218,6 +225,7 @@ export default function BrowseClient() {
   })
 
   const pick = (p: BrowsePiece) => {
+    if (picked === p.item_id) { setPicked(null); setStyling(null); setPhase('idle'); setNote(null); return }
     setPicked(p.item_id); setStyling(null); setNote(null); setLanded(0)
     // A head start: her pick is styled in the shopping pool before she chooses a button.
     noticePieces([p.item_id], 'inspiration', 'pick').then((r) => markReady(r.ready)).catch(() => { /* a warm-up is a nicety */ })
@@ -227,21 +235,66 @@ export default function BrowseClient() {
     ? `MORE LIKE ${(brandName ?? asked ?? '').toUpperCase()}`
     : 'SIMILAR TO WHAT YOU ASKED'
 
+  // The piece she picked, and the outfits MYRA builds around it. Drawn in the
+  // grid itself, spanning the row under her piece — never down past the whole
+  // grid where she might miss them. Dense flow lets the pieces after hers
+  // close up the rest of that row.
+  const stylePanel = chosen && styling ? (
+    <div ref={waysRef} className="col-span-full rounded-[22px] bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] px-5 sm:px-8 py-7 scroll-mt-6">
+      <div className="flex flex-wrap items-center gap-3 mb-5">
+        <p className="text-[16px] sm:text-[18px] tracking-[0.14em] text-[#2B2B2B] mr-auto">
+          {(chosen.brand ? `${chosen.brand} · ` : '') + chosen.product_name.toUpperCase()}
+        </p>
+        <button
+          type="button"
+          onClick={() => void save(chosen)}
+          disabled={savingId === chosen.item_id || saved.has(chosen.item_id)}
+          className="text-[16px] tracking-[0.06em] rounded-full border border-[#2B2B2B] text-[#2B2B2B] px-6 py-3 disabled:opacity-40"
+        >
+          {saved.has(chosen.item_id) ? 'SAVED' : savingId === chosen.item_id ? 'SAVING…' : 'SAVE'}
+        </button>
+        {chosen.url && (
+          <ShopLink
+            item={shopItem(chosen)}
+            className="text-[16px] tracking-[0.06em] rounded-full bg-[#B48A5A] text-white px-6 py-3"
+          >
+            VIEW ON SITE
+          </ShopLink>
+        )}
+      </div>
+      <WaysToWear
+        inline
+        key={`${chosen.item_id}-${styling}`}
+        itemId={chosen.item_id}
+        mode={styling === 'wardrobe' ? 'wardrobe' : 'inspiration'}
+        piece={{ item_id: chosen.item_id, product_name: chosen.product_name, brand: chosen.brand ?? null, image_url: chosen.image_url ?? null }}
+        heading={styling === 'wardrobe' ? 'WITH YOUR WARDROBE' : 'WITH SOMETHING NEW'}
+        onStatus={(st, n) => { setLanded(n); setPhase(st === 'opening' || st === 'working' ? 'working' : st === 'ready' ? 'ready' : st === 'idle' ? 'idle' : 'failed') }}
+        onClose={() => { setStyling(null); setPhase('idle') }}
+      />
+    </div>
+  ) : null
+
   const grid = (list: BrowsePiece[]) => (
-    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4">
+    <div className="grid grid-flow-row-dense grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4">
       {list.map((p) => (
-        <PieceCard
-          key={p.item_id}
-          piece={p}
-          shopItem={shopItem(p)}
-          picked={picked === p.item_id}
-          saved={saved.has(p.item_id)}
-          saving={savingId === p.item_id}
-          ready={ready.has(p.item_id)}
-          cardRef={(el) => registerCard(el, p.item_id)}
-          onPick={() => pick(p)}
-          onSave={() => void save(p)}
-        />
+        <Fragment key={p.item_id}>
+          <PieceCard
+            piece={p}
+            shopItem={shopItem(p)}
+            picked={picked === p.item_id}
+            styling={picked === p.item_id ? styling : null}
+            working={picked === p.item_id && phase === 'working'}
+            saved={saved.has(p.item_id)}
+            saving={savingId === p.item_id}
+            ready={ready.has(p.item_id)}
+            cardRef={(el) => registerCard(el, p.item_id)}
+            onPick={() => pick(p)}
+            onStyle={(mode) => void style(p, mode)}
+            onSave={() => void save(p)}
+          />
+          {picked === p.item_id && stylePanel}
+        </Fragment>
       ))}
     </div>
   )
@@ -392,6 +445,16 @@ export default function BrowseClient() {
               Nothing exact for that yet. Here is what comes close.
             </p>
           )}
+          {pieces.length > 0 && (
+            <div className="flex justify-center mb-8">
+              <p
+                className={`${picked ? '' : 'animate-bounce'} bg-white rounded-full px-8 xl:px-10 py-4 xl:py-5 text-[19px] xl:text-[24px] tracking-[0.12em] text-[#2B2B2B] shadow-[0_2px_16px_rgba(43,43,43,0.16)]`}
+                style={{ animationIterationCount: 3 }}
+              >
+                STYLE ANY ITEM · TAP STYLE ON IT ↓
+              </p>
+            </div>
+          )}
           {pieces.length > 0 && grid(pieces)}
 
           {/* What answers most of her words, never in front of the real answers. */}
@@ -415,78 +478,20 @@ export default function BrowseClient() {
         </div>
       )}
 
-      {/* The piece she picked, and the two ways to see it. */}
-      {chosen && !busy && (
-        <section className="mt-9 rounded-[18px] bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] px-6 sm:px-8 py-7">
-          <div className="flex flex-wrap items-center gap-3">
-            <p className="text-[15px] tracking-[0.14em] text-[#2B2B2B] mr-auto">
-              {(chosen.brand ? `${chosen.brand} · ` : '') + chosen.product_name.toUpperCase()}
-            </p>
-            <button
-              type="button"
-              onClick={() => void style(chosen, 'wardrobe')}
-              disabled={phase === 'working' && styling !== 'wardrobe'}
-              className="text-[18px] xl:text-[20px] tracking-[0.08em] rounded-full bg-[#2B2B2B] text-white px-8 py-4 shadow-[0_10px_24px_-14px_rgba(43,43,43,0.8)] disabled:opacity-40"
-            >
-              {styleLabel('wardrobe', 'STYLE IT WITH MY WARDROBE')}
-            </button>
-            <button
-              type="button"
-              onClick={() => void style(chosen, 'new')}
-              disabled={phase === 'working' && styling !== 'new'}
-              className="text-[18px] xl:text-[20px] tracking-[0.08em] rounded-full bg-[#2B2B2B] text-white px-8 py-4 shadow-[0_10px_24px_-14px_rgba(43,43,43,0.8)] disabled:opacity-40"
-            >
-              {styleLabel('new', 'STYLE IT WITH SOMETHING NEW')}
-            </button>
-            <button
-              type="button"
-              onClick={() => void save(chosen)}
-              disabled={savingId === chosen.item_id || saved.has(chosen.item_id)}
-              className="text-[15px] tracking-[0.06em] rounded-full border border-[#2B2B2B] text-[#2B2B2B] px-6 py-3 disabled:opacity-40"
-            >
-              {saved.has(chosen.item_id) ? 'SAVED' : savingId === chosen.item_id ? 'SAVING…' : 'SAVE'}
-            </button>
-            {chosen.url && (
-              <ShopLink
-                item={shopItem(chosen)}
-                className="text-[15px] tracking-[0.06em] rounded-full bg-[#B48A5A] text-white px-6 py-3"
-              >
-                VIEW ON SITE
-              </ShopLink>
-            )}
-          </div>
-
-          {/* The mark at the top of the page: the dress form wiggles while MYRA
-              styles, then stands still and says DONE — tap it to come to the outfits. */}
-          {styling && (phase === 'working' || phase === 'ready') && (
-            <button
-              type="button"
-              onClick={() => { if (waysRef.current) scrollTo(waysRef.current, { offset: -24 }) }}
-              className="fixed top-[150px] right-5 sm:right-8 z-[60] flex items-center gap-3 rounded-full bg-white/95 shadow-[0_10px_30px_-12px_rgba(43,43,43,0.6)] pl-3 pr-5 py-2"
-              aria-live="polite"
-            >
-              <Mannequin working={phase === 'working'} />
-              <span className="text-[16px] xl:text-[18px] tracking-[0.14em] text-[#2B2B2B]">{phase === 'working' ? progress : 'DONE · SEE IT'}</span>
-            </button>
-          )}
-          {styling && (
-            <div className="mt-6" ref={waysRef}>
-              <WaysToWear
-                inline
-                key={`${chosen.item_id}-${styling}`}
-                itemId={chosen.item_id}
-                mode={styling === 'wardrobe' ? 'wardrobe' : 'inspiration'}
-                piece={{ item_id: chosen.item_id, product_name: chosen.product_name, brand: chosen.brand ?? null, image_url: chosen.image_url ?? null }}
-                heading={styling === 'wardrobe' ? 'WITH YOUR WARDROBE' : 'WITH SOMETHING NEW'}
-                onStatus={(st, n) => { setLanded(n); setPhase(st === 'opening' || st === 'working' ? 'working' : st === 'ready' ? 'ready' : st === 'idle' ? 'idle' : 'failed') }}
-                onClose={() => { setStyling(null); setPhase('idle') }}
-              />
-            </div>
-          )}
-
-          {note && !styling && <p className="myra-guide-text normal-case text-[18px] text-[#4A4E57] mt-5">{note}</p>}
-        </section>
+      {/* The mark at the top of the page: the dress form wiggles while MYRA
+          styles, then stands still and says DONE — tap it to come to the outfits. */}
+      {chosen && styling && (phase === 'working' || phase === 'ready') && (
+        <button
+          type="button"
+          onClick={() => { if (waysRef.current) scrollTo(waysRef.current, { offset: -96 }) }}
+          className="fixed top-[210px] right-5 sm:right-8 z-[60] flex items-center gap-3 rounded-full bg-white/95 shadow-[0_10px_30px_-12px_rgba(43,43,43,0.6)] pl-3 pr-5 py-2"
+          aria-live="polite"
+        >
+          <Mannequin working={phase === 'working'} />
+          <span className="text-[16px] xl:text-[18px] tracking-[0.14em] text-[#2B2B2B]">{phase === 'working' ? progress : 'DONE · SEE IT'}</span>
+        </button>
       )}
+      {note && !styling && <p className="myra-guide-text normal-case text-[18px] text-[#4A4E57] mt-6">{note}</p>}
     </div>
   )
 }
@@ -495,18 +500,35 @@ export default function BrowseClient() {
 // through the tracked click-out, opened in a new tab — from the iOS app that
 // is Safari. Tapping also chooses the piece here, so the two ways to style it
 // are waiting when she comes back. STYLE chooses without leaving the page.
-function PieceCard({ piece, shopItem, picked, saved, saving, ready = false, cardRef, onPick, onSave }: {
+function PieceCard({ piece, shopItem, picked, styling, working = false, saved, saving, ready = false, cardRef, onPick, onStyle, onSave }: {
   piece: BrowsePiece
   shopItem: ShopLinkItem
   picked: boolean
+  /** Which way she is styling this piece, when it is the one she picked. */
+  styling: 'wardrobe' | 'new' | null
+  working?: boolean
   saved: boolean
   saving: boolean
   /** MYRA already has this piece's ways in the shopping pool: a tap is instant. */
   ready?: boolean
   cardRef?: (el: HTMLDivElement | null) => void
   onPick: () => void
+  onStyle: (mode: 'wardrobe' | 'new') => void
   onSave: () => void
 }) {
+  const choice = (mode: 'wardrobe' | 'new', label: string) => {
+    const on = styling === mode
+    return (
+      <button
+        type="button"
+        onClick={() => onStyle(mode)}
+        disabled={working && !on}
+        className={`text-[14px] xl:text-[15px] tracking-[0.1em] rounded-full px-4 py-2.5 shadow-[0_1px_8px_rgba(43,43,43,0.18)] text-left whitespace-nowrap disabled:opacity-40 ${on ? 'bg-[#2B2B2B] text-white' : 'bg-white/95 text-[#2B2B2B] hover:bg-white'}`}
+      >
+        {on && working ? 'STYLING…' : label}
+      </button>
+    )
+  }
   const body = (
     <>
       <div className="relative aspect-[3/4] bg-[#F3F2F0] overflow-hidden">
@@ -544,10 +566,17 @@ function PieceCard({ piece, shopItem, picked, saved, saving, ready = false, card
         type="button"
         onClick={onPick}
         aria-label={`Style ${piece.product_name}`}
-        className={`absolute top-2.5 left-2.5 text-[14px] tracking-[0.12em] rounded-full px-3.5 py-2 shadow-[0_1px_6px_rgba(43,43,43,0.14)] ${picked ? 'bg-[#2B2B2B] text-white' : 'bg-white/90 text-[#2B2B2B]'}`}
+        className={`absolute top-2.5 left-2.5 text-[16px] xl:text-[18px] tracking-[0.12em] rounded-full px-5 py-3 shadow-[0_2px_10px_rgba(43,43,43,0.18)] ${picked ? 'bg-[#2B2B2B] text-white' : 'bg-white/90 text-[#2B2B2B] hover:bg-white'}`}
       >
-        {picked ? 'CHOSEN' : 'STYLE'}
+        {picked ? 'CHOSEN ✕' : 'STYLE'}
       </button>
+      {/* Tapped: the two ways to style it, right under the button. */}
+      {picked && (
+        <div className="absolute top-[64px] left-2.5 flex flex-col gap-2 z-10">
+          {choice('wardrobe', 'WITH MY WARDROBE')}
+          {choice('new', 'WITH SOMETHING NEW')}
+        </div>
+      )}
     </div>
   )
 }
