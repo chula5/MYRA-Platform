@@ -31,9 +31,10 @@ import {
 import { houseBanOf } from './brand-watch-bans'
 import { seasonOf, inCurrentSeason, type Season } from './season'
 import { keepQueueRows } from './brand-watch-keep'
+import { classifyItemTypeFromImage } from '@/app/admin/ai/classify-item-type'
 import type { WatchedBrandRow } from './brand-watch'
 
-const AUTO_KEEP_PER_SCAN = 40
+const AUTO_KEEP_PER_SCAN = 200
 /** Most twins one KEEP TWINS NOW press keeps. */
 const TWINS_NOW_CAP = 200
 
@@ -278,9 +279,33 @@ async function queuedFor(admin: any, brandId: string, since: string | null): Pro
   return (data ?? []) as any[]
 }
 
+/**
+ * A piece's type is read from its picture once, when it is queued. When that
+ * read failed (no AI credits, a timeout) the piece stayed untyped for good, and
+ * an untyped piece is never auto-added — 115 pieces over their bar sat waiting
+ * on 2026-10-12. Each sweep retries a few; the first failed read stops it, so
+ * a run without credits costs one request.
+ */
+const RETYPE_PER_RUN = 30
+async function retypeUntyped(admin: any, brandId: string): Promise<number> {
+  const { data } = await admin.from('brand_watch_queue').select('queue_id, image_url, product_name')
+    .eq('status', 'queued').eq('brand_id', brandId).is('item_type', null).neq('image_url', '').limit(RETYPE_PER_RUN)
+  let typed = 0
+  for (const r of (data ?? []) as any[]) {
+    if (typeFromStoredRow(r)) continue // the name gives it; the keep reads that itself
+    const v = await classifyItemTypeFromImage(String(r.image_url))
+    if (v.error) break
+    if (!v.itemType) continue
+    await admin.from('brand_watch_queue').update({ item_type: v.itemType }).eq('queue_id', r.queue_id)
+    typed++
+  }
+  return typed
+}
+
 /** After a scan: keep the brand's new pieces that qualify under whichever levels are on and still earned. */
 export async function autoKeepForBrand(admin: any, watched: WatchedBrandRow, trustData?: BrandTrustData): Promise<AutoKeepResult | null> {
   if (!automationOn(watched) || !watched.brand_id) return null
+  try { await retypeUntyped(admin, watched.brand_id) } catch { /* the next sweep tries again */ }
   const data = trustData ?? (await loadBrandTrust(admin))
   const notes: string[] = []
   const picks = new Map<string, number>() // queue_id → rank
@@ -363,6 +388,7 @@ export async function autoKeepForBrand(admin: any, watched: WatchedBrandRow, tru
  */
 export async function keepConfidentNow(admin: any, watched: WatchedBrandRow, cap = TWINS_NOW_CAP): Promise<{ kept: number; error?: string }> {
   if (!watched.brand_id) return { kept: 0, error: 'This brand has no pieces yet' }
+  try { await retypeUntyped(admin, watched.brand_id) } catch { /* left for the next sweep */ }
   const data = await loadBrandTrust(admin)
   const bar = Number(watched.confidence_bar ?? DEFAULT_CONFIDENCE)
   const ids = (await queuedFor(admin, watched.brand_id, null))

@@ -1829,7 +1829,7 @@ export async function runBrandWatch(opts: { budgetMs?: number; dueAfterMs?: numb
   const scanning = new Set(brands.map((w) => w.watched_brand_id))
   for (const w of automated) {
     if (scanning.has(w.watched_brand_id)) continue // swept after its scan below
-    if (Date.now() - started > budgetMs / 3) break
+    if (Date.now() - started > budgetMs / 2) break
     try { await autoKeepForBrand(admin as any, w, trust) } catch { /* its next run tries again */ }
   }
   for (const w of brands) {
