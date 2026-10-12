@@ -23,13 +23,15 @@ export default function MeChrome() {
       {/* A desktop keeps the six rooms down the left, the way Instagram keeps
           its own: icon over word, the room she is in drawn in ink. The phone
           carries the same six in the tab bar at the foot instead. */}
-      <nav aria-label="Your rooms" data-tour="rooms" className="hidden sm:flex fixed inset-y-0 left-0 z-40 w-[200px] flex-col items-center justify-center gap-7 border-r border-[rgba(43,43,43,0.14)] bg-[rgba(230,230,233,0.9)] backdrop-blur-md">
+      <nav aria-label="Your rooms" data-tour="rooms" className="hidden sm:flex fixed inset-y-0 left-0 z-40 w-[250px] flex-col items-center justify-center gap-[clamp(10px,2.4vh,32px)] border-r border-[rgba(43,43,43,0.14)] bg-[rgba(230,230,233,0.9)] backdrop-blur-md">
         {ROW_ROOMS.map((room) => {
           const on = room.id === active
           return (
             <Link key={room.id} href={room.href} prefetch aria-label={room.label} aria-current={on ? 'page' : undefined} className={`flex w-full flex-col items-center gap-2 py-1 transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#8C8A85] hover:text-[#2B2B2B]'}`}>
-              <span className="block h-[88px] w-[88px]"><RoomIcon id={room.id} /></span>
-              <span className="text-[19px] xl:text-[21px] tracking-[0.1em] uppercase">{room.short}</span>
+              {/* Big, but sized to the screen's height so all the rooms still fit
+                  on a short window — set inline so the build cannot drop it. */}
+              <span className="block" style={{ width: 'clamp(64px, 10.5vh, 112px)', height: 'clamp(64px, 10.5vh, 112px)' }}><RoomIcon id={room.id} /></span>
+              <span className="text-[23px] xl:text-[26px] tracking-[0.1em] uppercase">{room.short}</span>
             </Link>
           )
         })}
@@ -43,7 +45,7 @@ export default function MeChrome() {
             {/* Desktop: the MYRA mark sits on the same line as her profile.
                 The rooms are down the left side and the search lives in the
                 BROWSE room, so the front door is just the mark and her. */}
-            <div className="hidden sm:block pl-[200px] pr-10">
+            <div className="hidden sm:block pl-[250px] pr-10">
               <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-6 pt-4 pb-4">
                 <span />
                 <Link href="/me" className="shrink-0">
@@ -67,7 +69,7 @@ export default function MeChrome() {
           </>
         ) : (
           <>
-            <div className="hidden sm:flex items-center gap-4 pl-[200px] pr-10 py-3">
+            <div className="hidden sm:flex items-center gap-4 pl-[250px] pr-10 py-3">
               <Link href="/me" className="shrink-0">
                 <img src="/myra-logo-black.png" alt="MYRA" className="h-10 w-auto" />
               </Link>

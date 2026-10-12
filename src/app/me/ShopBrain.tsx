@@ -171,8 +171,8 @@ function Door({
               neighbours, and it is set above the tallest wrap so nothing is
               clipped. */}
           <p
-            className="bg-[rgba(255,255,255,0.9)] backdrop-blur-[2px] rounded-full flex items-center justify-center px-3 sm:px-4 text-center text-[15px] md:text-[17px] xl:text-[19px] tracking-[0.05em] leading-[1.15] text-[#2B2B2B] shadow-[0_2px_16px_rgba(43,43,43,0.16)]"
-            style={{ width: 'min(260px, 90%)', height: 'clamp(54px, 3.6vw, 68px)' }}
+            className="bg-[rgba(255,255,255,0.9)] backdrop-blur-[2px] rounded-full flex items-center justify-center px-4 sm:px-5 text-center text-[19px] md:text-[23px] xl:text-[27px] tracking-[0.05em] leading-[1.15] text-[#2B2B2B] shadow-[0_2px_16px_rgba(43,43,43,0.16)]"
+            style={{ width: 'min(360px, 92%)', height: 'clamp(70px, 4.8vw, 92px)' }}
           >
             {title}
           </p>
