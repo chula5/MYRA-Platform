@@ -257,7 +257,18 @@ const QUEUED_COLS = 'queue_id, brand_id, product_name, item_type, colour_family,
  * piece from such a feed is invisible to automation for ever.
  */
 const typedRow = (q: any) => (q.item_type ? q : { ...q, item_type: typeFromStoredRow(q) })
-const keepable = (q: any) => { const r = typedRow(q); return r.item_type && !houseBanOf({ title: r.product_name, materialPrimary: r.material_primary, itemType: r.item_type }) }
+// A row with no picture is a shop's category page read as a piece, never a
+// piece: automation must not file "Women's Designer Pants" into the library.
+const keepable = (q: any) => { const r = typedRow(q); return !!q.image_url && r.item_type && !houseBanOf({ title: r.product_name, materialPrimary: r.material_primary, itemType: r.item_type }) }
+
+/**
+ * AUTO-ADD at her bar takes what the card says: a piece showing at or above the
+ * bar is added. The gate measurement and the never-kept-this-kind hold used to
+ * pause it silently — Soeur showed 143 pieces over 90% with AUTO-ADD on and
+ * none were taken. Switching it on at a bar is her decision; the measurement is
+ * still shown on the brand card, and every auto-add can be sent back.
+ */
+const overBar = (p: number | null, bar: number) => p != null && p >= bar
 
 async function queuedFor(admin: any, brandId: string, since: string | null): Promise<any[]> {
   let query = admin.from('brand_watch_queue').select(QUEUED_COLS).eq('status', 'queued').eq('brand_id', brandId)
@@ -309,9 +320,7 @@ export async function autoKeepForBrand(admin: any, watched: WatchedBrandRow, tru
     // higher proof bar (measureBoth).
     if (watched.auto_keep_confidence) {
       const bar = Number(watched.confidence_bar ?? DEFAULT_CONFIDENCE)
-      const trust = confidenceTrustFor(data, watched)
-      if (!trust.trusted && !overridden) notes.push(`AUTO-KEEP BY CONFIDENCE PAUSED — ${trust.summary}`)
-      else {
+      {
         // The whole queue, not only what arrived after the switch: the bar is
         // her decision about the brand, and a piece found before it can climb
         // over it as she teaches the model. Reading only newer pieces left 47
@@ -320,9 +329,7 @@ export async function autoKeepForBrand(admin: any, watched: WatchedBrandRow, tru
           if (!keepable(q)) continue
           const row = { ...typedRow(q), brand_id: watched.brand_id }
           const p = confidenceOf(data, row)
-          // The same gate the trust measure was taken through — a kind she has
-          // never kept is shown a number but is never taken unsupervised.
-          if (wouldAutoKeepByConfidence(p, data.learnCareful(toDecided(row)), bar)) picks.set(q.queue_id, 200 + p!)
+          if (overBar(p, bar)) picks.set(q.queue_id, 200 + p!)
         }
       }
     }
@@ -357,17 +364,12 @@ export async function autoKeepForBrand(admin: any, watched: WatchedBrandRow, tru
 export async function keepConfidentNow(admin: any, watched: WatchedBrandRow, cap = TWINS_NOW_CAP): Promise<{ kept: number; error?: string }> {
   if (!watched.brand_id) return { kept: 0, error: 'This brand has no pieces yet' }
   const data = await loadBrandTrust(admin)
-  const trust = confidenceTrustFor(data, watched as any)
-  // She can switch the level on before the gate is earned; the backlog it is
-  // switched on FOR must obey the same decision, or the switch means nothing
-  // for everything already waiting.
-  if (!trust.trusted && !manualOverride(watched)) return { kept: 0, error: `NOT YET — ${trust.summary}` }
   const bar = Number(watched.confidence_bar ?? DEFAULT_CONFIDENCE)
   const ids = (await queuedFor(admin, watched.brand_id, null))
     .filter((q) => {
       if (!keepable(q)) return false
       const row = { ...typedRow(q), brand_id: watched.brand_id }
-      return wouldAutoKeepByConfidence(confidenceOf(data, row), data.learnCareful(toDecided(row)), bar)
+      return overBar(confidenceOf(data, row), bar)
     })
     .slice(0, cap)
     .map((q) => q.queue_id)

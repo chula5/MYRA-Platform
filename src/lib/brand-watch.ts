@@ -649,7 +649,11 @@ async function adoptRealBrandName(
     provisionalNameFromUrl(watched.base_url).toLowerCase(),
     new URL(watched.base_url).hostname.replace(/^www\./, '').split('.')[0].replace(/-/g, ' ').toLowerCase(),
   ])
-  if (!autoNames.has(watched.name.toLowerCase())) return current // hand-edited — respect it
+  // Exactly the placeholder, case included: a name she typed that differs only
+  // in case ("SPRL" for sprl.shop's "Sprl") is hers. Compared loosely, SPRL — a
+  // multi-brand shop — was renamed after its first piece's label, Christian Dior.
+  const exactAuto = new Set([provisionalNameFromUrl(watched.base_url), new URL(watched.base_url).hostname.replace(/^www\./, '').split('.')[0].replace(/-/g, ' ')])
+  if (!exactAuto.has(watched.name)) return current // hand-edited — respect it
 
   await admin.from('watched_brand').update({ name: clean }).eq('watched_brand_id', watched.watched_brand_id)
   if (!watched.brand_id) return { name: clean, brand_id: null }
@@ -965,6 +969,10 @@ async function queueProducts(
   let skippedSeason = 0
   const rows = products
     .filter((p) => !isKnown(known, { pid: p.shopifyProductId, url: p.url, name: p.title, colour: p.colourFamily }))
+    // No picture, no piece. A browser-read shop hands back its own category
+    // pages as links too ("The Icon Edit", "Women's Designer Shoes") — 330 of
+    // them sat in the queue as blank cards, and some were kept into the library.
+    .filter((p) => !!p.images[0])
     // Not worth reviewing: last season's stock, and not something the shop has
     // just put out. That is the opposite season AND anything the shop filed under
     // a season already gone by — a piece tagged AW25 is last autumn's stock, and
@@ -1793,8 +1801,19 @@ export async function runBrandWatch(opts: { budgetMs?: number; dueAfterMs?: numb
   // Loaded here, not at the top: AUTOMATE reaches the Style Brain store, which
   // is server-only and would break every test that imports this file.
   const { autoKeepForBrand, loadBrandTrust } = await import('./brand-watch-auto')
+  // Every AUTO-ADD brand is swept each run, scanned this time or not: a piece
+  // already waiting climbs over her bar as she teaches the model, and it
+  // should be added within the hour, not on the brand's next weekly scan.
+  const { data: autoRows } = await (admin as any).from('watched_brand').select('*').eq('active', true)
+  const automated = ((autoRows ?? []) as unknown as WatchedBrandRow[]).filter(automationOn)
   // Trust is measured once per run, from decisions made before this scan.
-  const trust = brands.some(automationOn) ? await loadBrandTrust(admin as any) : undefined
+  const trust = automated.length || brands.some(automationOn) ? await loadBrandTrust(admin as any) : undefined
+  const scanning = new Set(brands.map((w) => w.watched_brand_id))
+  for (const w of automated) {
+    if (scanning.has(w.watched_brand_id)) continue // swept after its scan below
+    if (Date.now() - started > budgetMs / 3) break
+    try { await autoKeepForBrand(admin as any, w, trust) } catch { /* its next run tries again */ }
+  }
   for (const w of brands) {
     // The rest wait for the next run — they are now the stalest.
     if (Date.now() - started > budgetMs) break
