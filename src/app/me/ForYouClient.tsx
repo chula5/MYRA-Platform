@@ -64,7 +64,7 @@ export default function ForYouClient({ view, testMemberId, shopBrain }: {
       img.src = thumbUrl(u, LOOK_THUMB_WIDTH)
     }))).then(() => { if (live) setPicturesReady(true) })
     const beat = setTimeout(() => { if (live) setBeatPassed(true) }, 700)
-    const most = setTimeout(() => { if (live) setWaitedEnough(true) }, 4000)
+    const most = setTimeout(() => { if (live) setWaitedEnough(true) }, 2500)
     return () => { live = false; clearTimeout(beat); clearTimeout(most) }
   }, [view.looks])
 

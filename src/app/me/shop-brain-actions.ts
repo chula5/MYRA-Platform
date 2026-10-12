@@ -159,13 +159,40 @@ const SHOP_BRAIN_KEEP_S = 600
 export async function loadShopBrain(asMemberId?: string, opts?: { fresh?: boolean }): Promise<ShopBrainView> {
   const me = await resolveClientMember(asMemberId)
   if (!me) return EMPTY
-  if (opts?.fresh) return buildShopBrain(me)
+  const admin = createAdminClient() as any
+  if (opts?.fresh) {
+    const v = await buildShopBrain(me)
+    await keepShopBrain(admin, me, v)
+    return v
+  }
+  // Kept on her row (migration 0098), so it survives deploys — the data
+  // cache below is emptied by every one. Read in one row, answered at once.
+  const { data: row, error } = await admin.from('pilot_member').select('shop_brain_view').eq('member_id', me.memberId).maybeSingle()
+  if (!error && row?.shop_brain_view) return { ...(row.shop_brain_view as ShopBrainView), test: me.test }
   const kept = unstable_cache(
     () => buildShopBrain(me),
     ['shop-brain-v1', me.memberId, me.test ? 'test' : 'self'],
     { revalidate: SHOP_BRAIN_KEEP_S },
   )
-  return kept()
+  const v = await kept()
+  if (!error) await keepShopBrain(admin, me, v)
+  return v
+}
+
+/** Writes her view back to her row — never an empty one (a failed rebuild)
+ *  over one that had pieces in it. Pre-0098 the column is missing: skipped. */
+async function keepShopBrain(admin: any, me: ClientMember, v: ShopBrainView): Promise<void> {
+  try {
+    const has = v.saved.length > 0 || v.similar.length > 0 || v.fromBrands.length > 0
+    if (!has) {
+      const { data } = await admin.from('pilot_member').select('shop_brain_view').eq('member_id', me.memberId).maybeSingle()
+      const prev = data?.shop_brain_view as ShopBrainView | null
+      if (prev && (prev.saved?.length || prev.similar?.length || prev.fromBrands?.length)) return
+    }
+    await admin.from('pilot_member')
+      .update({ shop_brain_view: { ...v, test: false }, shop_brain_at: new Date().toISOString() })
+      .eq('member_id', me.memberId)
+  } catch (err) { console.error('[shop-brain] keep', err) }
 }
 
 async function buildShopBrain(me: ClientMember): Promise<ShopBrainView> {
