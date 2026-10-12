@@ -45,7 +45,7 @@ export default function MeChrome() {
             {/* Desktop: the MYRA mark sits on the same line as her profile.
                 The rooms are down the left side and the search lives in the
                 BROWSE room, so the front door is just the mark and her. */}
-            <div className="hidden sm:block pl-[250px] pr-10">
+            <div className="hidden sm:block pl-[290px] pr-10">
               <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-6 pt-4 pb-4">
                 <span />
                 <Link href="/me" className="shrink-0">
@@ -69,12 +69,13 @@ export default function MeChrome() {
           </>
         ) : (
           <>
-            <div className="hidden sm:flex items-center gap-4 pl-[250px] pr-10 py-3">
+            <div className="hidden sm:flex items-center gap-4 pl-[290px] pr-10 py-3">
               <Link href="/me" className="shrink-0">
                 <img src="/myra-logo-black.png" alt="MYRA" className="h-10 w-auto" />
               </Link>
               <div className="flex-1 min-w-0 flex justify-end">
-                <RoomSearch variant="header" />
+                {/* BROWSE has its own search in the middle of the room — a second pill in the bar was one too many. */}
+                {active !== 'browse' && <RoomSearch variant="header" />}
               </div>
               <YouButton active={active === 'profile'} />
             </div>

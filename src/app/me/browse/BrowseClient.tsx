@@ -250,9 +250,9 @@ export default function BrowseClient() {
     <div className="w-full">
       {/* The bar: middle of the page until she asks, then up out of the way. */}
       <div className={`transition-[padding] duration-500 ease-out ${started ? 'pt-0' : 'pt-[20vh]'}`}>
-        <form onSubmit={(e) => { e.preventDefault(); void ask(draft) }} className="relative w-full max-w-[760px] mx-auto px-1">
-          <button type="submit" aria-label="Search" className="absolute left-5 top-1/2 -translate-y-1/2 p-1 text-[#55534E] hover:text-[#2B2B2B]">
-            <svg viewBox="0 0 17 16" fill="none" className="w-6 h-6 sm:w-7 sm:h-7" aria-hidden>
+        <form onSubmit={(e) => { e.preventDefault(); void ask(draft) }} className="relative w-full max-w-[1100px] mx-auto px-1">
+          <button type="submit" aria-label="Search" className="absolute left-6 sm:left-8 top-1/2 -translate-y-1/2 p-1 text-[#55534E] hover:text-[#2B2B2B]">
+            <svg viewBox="0 0 17 16" fill="none" className="w-6 h-6 sm:w-8 sm:h-8" aria-hidden>
               <path d="M7.667 12.667A5.333 5.333 0 107.667 2a5.333 5.333 0 000 10.667zM14.334 14l-2.9-2.9" stroke="currentColor" strokeWidth="1.333" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
@@ -263,11 +263,11 @@ export default function BrowseClient() {
             aria-label="Search through MYRA"
             data-tour="browse-search"
             type="text"
-            className="w-full rounded-full bg-white border-2 border-transparent shadow-md transition-all duration-300 focus:outline-none focus:border-[#2B2B2B] text-[#2B2B2B] placeholder:text-[#8C8A85] text-[17px] sm:text-[clamp(19px,1.3vw,26px)] pl-16 pr-14 py-4"
+            className="w-full rounded-full bg-white border-2 border-transparent shadow-md transition-all duration-300 focus:outline-none focus:border-[#2B2B2B] text-[#2B2B2B] placeholder:text-[#8C8A85] text-[18px] sm:text-[clamp(22px,1.5vw,32px)] pl-16 sm:pl-20 pr-14 sm:pr-20 py-4 sm:py-6"
           />
           {draft && (
-            <button type="button" onClick={() => setDraft('')} aria-label="Clear search" className="absolute right-5 top-1/2 -translate-y-1/2 p-1 text-[#55534E] hover:text-[#2B2B2B]">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-6 h-6 sm:w-7 sm:h-7" aria-hidden>
+            <button type="button" onClick={() => setDraft('')} aria-label="Clear search" className="absolute right-6 sm:right-8 top-1/2 -translate-y-1/2 p-1 text-[#55534E] hover:text-[#2B2B2B]">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-6 h-6 sm:w-8 sm:h-8" aria-hidden>
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
@@ -285,7 +285,7 @@ export default function BrowseClient() {
                   key={p}
                   type="button"
                   onClick={() => void ask(p)}
-                  className="text-[15px] tracking-[0.04em] rounded-full border border-[rgba(43,43,43,0.25)] px-4 py-2 text-[#2B2B2B] hover:bg-white"
+                  className="text-[16px] sm:text-[18px] tracking-[0.04em] rounded-full border border-[rgba(43,43,43,0.25)] px-5 py-2.5 text-[#2B2B2B] hover:bg-white"
                 >
                   {p}
                 </button>
@@ -310,12 +310,12 @@ export default function BrowseClient() {
         <div className="mt-10">
           <div className="flex flex-wrap items-center gap-3 mb-5">
             {read.length > 0 && (
-              <p className="text-[14px] tracking-[0.16em] text-[#6E6B65] mr-auto">READ AS {read.join(' · ')}</p>
+              <p className="text-[16px] sm:text-[18px] tracking-[0.14em] text-[#6E6B65] mr-auto">READ AS {read.join(' · ')}</p>
             )}
             <button
               type="button"
               onClick={() => setFiltersOpen((o) => !o)}
-              className={`ml-auto text-[14px] tracking-[0.1em] rounded-full border px-4 py-2 ${activeCount ? 'bg-[#2B2B2B] text-white border-[#2B2B2B]' : 'border-[rgba(43,43,43,0.3)] text-[#2B2B2B] hover:bg-white'}`}
+              className={`ml-auto text-[16px] sm:text-[18px] tracking-[0.1em] rounded-full border px-5 py-2.5 ${activeCount ? 'bg-[#2B2B2B] text-white border-[#2B2B2B]' : 'border-[rgba(43,43,43,0.3)] text-[#2B2B2B] hover:bg-white'}`}
             >
               FILTER{activeCount ? ` · ${activeCount}` : ''}
             </button>
@@ -512,11 +512,11 @@ function PieceCard({ piece, shopItem, picked, saved, saving, ready = false, card
       <div className="relative aspect-[3/4] bg-[#F3F2F0] overflow-hidden">
         {piece.image_url && <FallbackImage src={piece.image_url} thumbWidth={600} alt={piece.product_name} className="absolute inset-0 w-full h-full object-cover" />}
       </div>
-      <div className="px-3 py-2.5">
-        {piece.brand && <p className="text-[12px] tracking-[0.12em] text-[#6E6B65] truncate">{piece.brand.toUpperCase()}</p>}
-        <p className="text-[15px] text-[#2B2B2B] leading-tight truncate">{piece.product_name}</p>
-        {piece.price_gbp != null && <p className="text-[13px] text-[#6E6B65] mt-0.5">£{Math.round(piece.price_gbp)}</p>}
-        {ready && <p className="text-[13px] tracking-[0.12em] text-[#7C838B] mt-1">STYLED · READY</p>}
+      <div className="px-4 py-3.5">
+        {piece.brand && <p className="text-[15px] sm:text-[16px] tracking-[0.12em] text-[#6E6B65] truncate">{piece.brand.toUpperCase()}</p>}
+        <p className="text-[17px] sm:text-[19px] text-[#2B2B2B] leading-snug truncate mt-0.5">{piece.product_name}</p>
+        {piece.price_gbp != null && <p className="text-[16px] sm:text-[18px] text-[#6E6B65] mt-1">£{Math.round(piece.price_gbp)}</p>}
+        {ready && <p className="text-[14px] sm:text-[15px] tracking-[0.12em] text-[#7C838B] mt-1.5">STYLED · READY</p>}
       </div>
     </>
   )
@@ -544,7 +544,7 @@ function PieceCard({ piece, shopItem, picked, saved, saving, ready = false, card
         type="button"
         onClick={onPick}
         aria-label={`Style ${piece.product_name}`}
-        className={`absolute top-2.5 left-2.5 text-[11px] tracking-[0.12em] rounded-full px-3 py-1.5 shadow-[0_1px_6px_rgba(43,43,43,0.14)] ${picked ? 'bg-[#2B2B2B] text-white' : 'bg-white/90 text-[#2B2B2B]'}`}
+        className={`absolute top-2.5 left-2.5 text-[14px] tracking-[0.12em] rounded-full px-3.5 py-2 shadow-[0_1px_6px_rgba(43,43,43,0.14)] ${picked ? 'bg-[#2B2B2B] text-white' : 'bg-white/90 text-[#2B2B2B]'}`}
       >
         {picked ? 'CHOSEN' : 'STYLE'}
       </button>
@@ -555,7 +555,7 @@ function PieceCard({ piece, shopItem, picked, saved, saving, ready = false, card
 function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-wrap items-center gap-2 py-2.5 border-b border-[rgba(43,43,43,0.08)] last:border-0">
-      <span className="text-[12px] tracking-[0.14em] text-[#6E6B65] w-full sm:w-[96px] shrink-0">{label}</span>
+      <span className="text-[15px] tracking-[0.14em] text-[#6E6B65] w-full sm:w-[120px] shrink-0">{label}</span>
       {children}
     </div>
   )
@@ -566,7 +566,7 @@ function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; chi
     <button
       type="button"
       onClick={onClick}
-      className={`text-[13px] tracking-[0.04em] rounded-full border px-3.5 py-1.5 ${on ? 'bg-[#2B2B2B] text-white border-[#2B2B2B]' : 'border-[rgba(43,43,43,0.28)] text-[#2B2B2B] hover:bg-white'}`}
+      className={`text-[16px] tracking-[0.04em] rounded-full border px-4 py-2 ${on ? 'bg-[#2B2B2B] text-white border-[#2B2B2B]' : 'border-[rgba(43,43,43,0.28)] text-[#2B2B2B] hover:bg-white'}`}
     >
       {children}
     </button>
