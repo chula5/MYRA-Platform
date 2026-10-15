@@ -3,8 +3,10 @@ import { resolveMirrorToken } from '@/lib/mirror/auth'
 import { createAdminClient } from '@/lib/supabase-server'
 import { hashAssistantToken } from '@/lib/mcp/link'
 import {
-  brandsFor, outfitToText, outfitsAroundPiece, outfitsFor, savedFor, styleFor, wardrobeFor,
+  brandsFor, outfitsAroundPiece, outfitsFor, savedFor, styleFor, wardrobeFor, type OutfitAnswer,
 } from '@/lib/mcp/myra-tools'
+import { SHOW_PICTURES, outfitToText, picturesOf } from '@/lib/mcp/outfit-text'
+import { pictureBlocks } from '@/lib/mcp/pictures'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -19,6 +21,11 @@ export const maxDuration = 120
 //
 // Add in Claude or ChatGPT as a custom connector:
 //   https://www.myraassistant.co.uk/api/mcp/<her token>
+//
+// An outfit is pictures, not a list. Every tool that returns pieces sends each
+// piece's picture twice: as a markdown image line under the piece, for the
+// assistant to copy into its reply, and as an image block beside the text, so
+// the tool result itself shows the look and the assistant can see it.
 
 const PROTOCOL = '2025-06-18'
 
@@ -26,7 +33,7 @@ const TOOLS = [
   {
     name: 'find_outfits',
     description:
-      'Outfits MYRA would put together for her, for an occasion — "dinner", "a wedding in June", "work". Uses her own wardrobe, her brands, her sizes and her stylist\'s rules, and every look is checked before it is returned.',
+      'Outfits MYRA would put together for her, for an occasion — "dinner", "a wedding in June", "work". Uses her own wardrobe, her brands, her sizes and her stylist\'s rules, and every look is checked before it is returned. Each piece comes with its picture: show the pictures in your reply, not just names and links.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -38,7 +45,7 @@ const TOOLS = [
   },
   {
     name: 'style_a_piece',
-    description: 'Ways to wear one piece she owns or has saved — name it however she would ("my navy blazer", "the cream lace dress").',
+    description: 'Ways to wear one piece she owns or has saved — name it however she would ("my navy blazer", "the cream lace dress"). Each piece comes with its picture: show the pictures in your reply, not just names and links.',
     inputSchema: {
       type: 'object',
       properties: { piece: { type: 'string', description: 'The piece, in her words.' } },
@@ -52,7 +59,7 @@ const TOOLS = [
   },
   { name: 'my_wardrobe', description: 'The pieces she owns, as MYRA has them.', inputSchema: { type: 'object', properties: {} } },
   { name: 'my_brands', description: 'The brands she wears, in her order, and the ones MYRA never recommends back.', inputSchema: { type: 'object', properties: {} } },
-  { name: 'my_saved_pieces', description: 'Pieces she saved while shopping, with prices, links and whether they have gone.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'my_saved_pieces', description: 'Pieces she saved while shopping, with pictures, prices, links and whether they have gone.', inputSchema: { type: 'object', properties: {} } },
 ] as const
 
 const CORS = {
@@ -67,6 +74,20 @@ const json = (body: unknown, status = 200) =>
 const rpc = (id: unknown, result: unknown) => json({ jsonrpc: '2.0', id, result })
 const rpcError = (id: unknown, code: number, message: string) => json({ jsonrpc: '2.0', id, error: { code, message } })
 const text = (s: string) => ({ content: [{ type: 'text', text: s }] })
+
+/**
+ * Looks, as text with the pictures beside it. The text (with its markdown
+ * image lines) is what the assistant writes from; the image blocks are what
+ * the tool result shows and what the assistant sees. A picture that will not
+ * fetch is left out of the blocks — its line is still in the text.
+ */
+async function looksAnswer(intro: string, looks: OutfitAnswer[]) {
+  const body = [intro, SHOW_PICTURES, '', ...looks.map(outfitToText)].join('\n')
+  const pieces = picturesOf(looks)
+  const blocks = await pictureBlocks(pieces.map((p) => p.url))
+  const pictures = pieces.flatMap((p, i) => (blocks[i] ? [{ type: 'text', text: p.caption }, blocks[i]] : []))
+  return { content: [{ type: 'text', text: body }, ...pictures] }
+}
 
 export async function OPTIONS() { return new Response(null, { status: 204, headers: CORS }) }
 
@@ -124,7 +145,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
             capabilities: { tools: { listChanged: false } },
             serverInfo: { name: 'MYRA', version: '1.0.0' },
             instructions:
-              'MYRA is her private stylist. Ask find_outfits for an occasion, style_a_piece to wear something she owns, or my_style to know her taste before advising. Outfits are composed from pieces MYRA can actually source in her size; a piece marked ◈ is already hers.',
+              'MYRA is her private stylist. Ask find_outfits for an occasion, style_a_piece to wear something she owns, or my_style to know her taste before advising. Outfits are composed from pieces MYRA can actually source in her size; a piece marked ◈ is already hers. Every piece comes with its picture as a markdown image line — copy those lines into your reply so she sees each piece. Never answer with names and links alone.',
           },
         })
         break
@@ -165,12 +186,12 @@ async function callTool(memberId: string, name: string, args: any) {
       const asked = String(args?.occasion ?? '').slice(0, 200)
       const r = await outfitsFor(memberId, { words: asked, count: Number(args?.count) || 3 })
       if (r.error) return { ...text(r.error), isError: true }
-      return text([`${r.looks.length} outfit${r.looks.length === 1 ? '' : 's'} for ${r.occasionLabel.toLowerCase()} — ◈ is a piece she already owns.`, '', ...r.looks.map(outfitToText)].join('\n'))
+      return looksAnswer(`${r.looks.length} outfit${r.looks.length === 1 ? '' : 's'} for ${r.occasionLabel.toLowerCase()} — ◈ is a piece she already owns.`, r.looks)
     }
     case 'style_a_piece': {
       const r = await outfitsAroundPiece(memberId, String(args?.piece ?? '').slice(0, 200))
       if (r.error) return { ...text(r.error), isError: true }
-      return text([`Ways to wear ${r.piece}:`, '', ...r.looks.map(outfitToText)].join('\n'))
+      return looksAnswer(`Ways to wear ${r.piece}:`, r.looks)
     }
     case 'my_style': return text(await styleFor(memberId))
     case 'my_wardrobe': return text(await wardrobeFor(memberId))

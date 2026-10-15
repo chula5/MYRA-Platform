@@ -15,6 +15,7 @@ import { ownerRefsForMember } from '@/lib/wardrobe/owned-items'
 import { readStylePrefs } from '@/lib/pilot-stylist'
 import { composeMemberLooks, composeMemberVariants, personaFitScore, toLookItem, type OccasionContext } from '@/lib/pilot-composer'
 import type { LookItem } from '@/lib/pilot-stylist'
+import { outfitToText, pictureLine, type OutfitPiece } from '@/lib/mcp/outfit-text'
 import { judgeAgainstBrief, briefAffinity, parseBrief, briefIsEmpty } from '@/lib/stylist-brief'
 import { judgeLooksForMember, hasPieceOutOfSize } from '@/lib/look-check'
 import { whyThisSuitsHer } from '@/lib/look-why'
@@ -26,7 +27,7 @@ import {
 const LOOKS = 3
 
 export interface OutfitAnswer {
-  pieces: { name: string; brand: string; price_gbp: number | null; owned: boolean; url: string | null }[]
+  pieces: OutfitPiece[]
   why: string
   /** The same pieces with their pictures, for a surface that draws the look. */
   items?: LookItem[]
@@ -35,14 +36,18 @@ export interface OutfitAnswer {
 /** Which stylist's eye and nevers to style through — her assigned one by default. */
 export interface ThroughStylist { stylistId?: string | null }
 
-const answerFor = (items: LookItem[], why: string): OutfitAnswer => ({
-  pieces: items.map((it) => ({ name: it.product_name, brand: it.brand, price_gbp: it.price_gbp ?? null, owned: !!it.owned, url: it.url ?? null })),
+/**
+ * A composed look as an answer. A piece's picture comes off the look item, or
+ * off the library row it was composed from when the item arrived without one.
+ */
+const answerFor = (items: LookItem[], why: string, pictures?: Map<string, any>): OutfitAnswer => ({
+  pieces: items.map((it) => ({
+    name: it.product_name, brand: it.brand, price_gbp: it.price_gbp ?? null, owned: !!it.owned, url: it.url ?? null,
+    image_url: it.image_url ?? pictures?.get(it.item_id ?? '')?.image_url ?? null,
+  })),
   why,
   items,
 })
-
-const lineFor = (p: OutfitAnswer['pieces'][number]) =>
-  `${p.owned ? '◈ ' : ''}${p.brand} — ${p.name}${p.owned ? ' (hers already)' : p.price_gbp != null ? ` · £${Math.round(p.price_gbp)}` : ''}${p.url ? ` · ${p.url}` : ''}`
 
 /** The occasion an assistant's words are asking for, in MYRA's own vocabulary. */
 export function occasionFromWords(words: string): { occasion: string; label: string } {
@@ -107,6 +112,7 @@ export async function outfitsFor(
         composed[i].items.map((it) => ({ ...(dims.get(it.item_id ?? '') ?? {}), product_name: it.product_name, owned: !!it.owned })),
         prefs,
       ),
+      dims,
     )),
   }
 }
@@ -160,7 +166,7 @@ export async function outfitsAroundPiece(memberId: string, query: string, opts: 
   })), 'mcp').catch((err) => console.error('[styled-ways] mcp keep', err))
   return {
     piece: hit.product_name,
-    looks: (passing.length ? passing : composed.map((_, i) => i)).slice(0, LOOKS).map((i) => answerFor(composed[i].items, whyOf(i))),
+    looks: (passing.length ? passing : composed.map((_, i) => i)).slice(0, LOOKS).map((i) => answerFor(composed[i].items, whyOf(i), dims)),
   }
 }
 
@@ -264,13 +270,18 @@ export async function brandsFor(memberId: string): Promise<string> {
 export async function savedFor(memberId: string): Promise<string> {
   const admin = createAdminClient() as any
   const { data } = await admin.from('member_saved_item')
-    .select('saved_at, source_host, item:item_id(product_name, price_gbp, retailer_url, stock_status, brand:brand_id(name))')
+    .select('saved_at, source_host, item:item_id(product_name, price_gbp, retailer_url, stock_status, image_url, brand:brand_id(name))')
     .eq('member_id', memberId).order('saved_at', { ascending: false }).limit(40)
   const rows = ((data ?? []) as any[]).filter((r) => r.item)
   if (!rows.length) return 'She has not saved anything from the shops yet.'
-  return [`${rows.length} pieces saved from the shops:`, ...rows.map((r) => {
+  return [`${rows.length} pieces saved from the shops:`, ...rows.flatMap((r) => {
     const i = r.item
-    return `· ${i.brand?.name ?? r.source_host ?? ''} — ${i.product_name}${i.price_gbp ? ` · £${Math.round(Number(i.price_gbp))}` : ''}${i.stock_status === 'out_of_stock' ? ' (gone)' : ''}${i.retailer_url ? ` · ${i.retailer_url}` : ''}`
+    const brand = i.brand?.name ?? r.source_host ?? ''
+    const picture = pictureLine({ brand, name: i.product_name, image_url: i.image_url ?? null })
+    return [
+      `· ${brand} — ${i.product_name}${i.price_gbp ? ` · £${Math.round(Number(i.price_gbp))}` : ''}${i.stock_status === 'out_of_stock' ? ' (gone)' : ''}${i.retailer_url ? ` · ${i.retailer_url}` : ''}`,
+      picture ? `  ${picture}` : '',
+    ].filter(Boolean)
   })].join('\n')
 }
 
@@ -280,6 +291,5 @@ export async function styleFor(memberId: string): Promise<string> {
   return m.text || 'MYRA has not learned anything about her yet.'
 }
 
-/** An outfit, written out. */
-export const outfitToText = (o: OutfitAnswer, i: number): string =>
-  [`Look ${i + 1}`, ...o.pieces.map((p) => `  ${lineFor(p)}`), o.why ? `  Why: ${o.why}` : ''].filter(Boolean).join('\n')
+/** An outfit, written out — each piece with its picture under it. */
+export { outfitToText }
