@@ -1109,6 +1109,8 @@
       // A wiggle, then a rest: the mirror rocks on its feet for the first
       // half of each cycle and stands still for the second.
       + '@keyframes myraWiggle{0%,46%,100%{transform:rotate(0)}8%{transform:rotate(-14deg)}16%{transform:rotate(12deg)}24%{transform:rotate(-9deg)}32%{transform:rotate(6deg)}40%{transform:rotate(-3deg)}}'
+      // The app's own dress-form wiggle (globals.css .myra-mirror-wiggle).
+      + '@keyframes myraFormWiggle{0%,100%{transform:rotate(0)}20%{transform:rotate(-7deg)}40%{transform:rotate(6deg)}60%{transform:rotate(-4deg)}80%{transform:rotate(3deg)}}'
     document.documentElement.appendChild(css)
   }
 
@@ -1407,21 +1409,26 @@
     for (const [tile, product] of productOf) wiggleTile(tile, product)
   }
   function wiggleTile(tile, product) {
-    const icon = tile.querySelector(':scope > .myra-mirror-actions .myra-mirror-ask img')
+    const icon = tile.querySelector(':scope > .myra-mirror-actions .myra-mirror-ask-icon')
     if (!icon) return
     const mine = !!buildingKey && (product.url === buildingKey || product.key === buildingKey)
-    icon.style.animation = mine ? 'myraWiggle 1.6s ease-in-out infinite' : ''
+    icon.style.animation = mine ? 'myraFormWiggle 1.1s ease-in-out infinite' : ''
   }
 
   /**
    * The two things a piece offers: MYRA's answer to "what do I wear with
-   * this?" behind her dressing mirror, and a heart to keep it. Two small discs
+   * this?" behind a dress form, and a heart to keep it. Two small discs
    * in the picture's bottom-right corner — never a strip across the tile, so
    * the brand's name and price under the photo stay readable on a phone, where
-   * the discs are always showing. Tapping the mirror asks: with her wardrobe,
-   * or with new pieces. The mirror wiggles while MYRA is styling this piece.
+   * the discs are always showing. Tapping the form asks: with her wardrobe,
+   * or with new pieces. The form wiggles while MYRA is styling this piece —
+   * the mirror stays on the edge badge, where the answer lands.
    */
   const DISC = 'flex:0 0 auto;width:34px;height:34px;border-radius:50%;border:0;padding:0;margin:0;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.95);color:#2B2B2B;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.18);line-height:1;'
+  // The dress form on its stand — the same one the app draws while MYRA is
+  // styling (src/components/me/Mannequin.tsx). It wiggles on its stand here
+  // too, so the tile says "styling" the way the app does.
+  const MANNEQUIN = '<svg class="myra-mirror-ask-icon" viewBox="0 0 64 120" width="13" height="24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:block;transform-origin:50% 100%"><path d="M32 4v8"/><circle cx="32" cy="4" r="2.5"/><path d="M22 14c0 8-3 12-6 18-3 7-2 16 4 20h24c6-4 7-13 4-20-3-6-6-10-6-18"/><path d="M20 52c-6 6-8 16-6 26 1 5 6 8 18 8s17-3 18-8c2-10 0-20-6-26"/><path d="M32 86v24"/><path d="M18 114c4-3 24-3 28 0"/></svg>'
   function styleButton(tile, product) {
     if (tile.querySelector(':scope > .myra-mirror-actions')) return
     ensureCss()
@@ -1435,7 +1442,7 @@
     ask.className = 'myra-mirror-ask'
     ask.title = 'What do I wear with this?'
     ask.setAttribute('aria-label', 'What do I wear with this?')
-    ask.innerHTML = `<img src="${ext.runtime.getURL('icons/mirror.png')}" alt="" style="width:22px;height:22px;object-fit:contain;transform-origin:50% 90%;display:block">`
+    ask.innerHTML = MANNEQUIN
     ask.style.cssText = DISC
     ask.addEventListener('click', (e) => {
       e.preventDefault(); e.stopPropagation()
