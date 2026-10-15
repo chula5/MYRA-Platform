@@ -428,6 +428,7 @@
 
   async function startStyling(product, mode) {
     openPanel({ status: 'loading', product, mode })
+    noteBuilding({ status: 'loading', product, mode })
     const r = await send({ type: 'styleStart', product, mode })
     if (!r?.error) { if (r?.job) renderPanel(r.job) ; return }
     // An extension whose background is older than this page does not know
@@ -1099,11 +1100,26 @@
   // away, and a second click puts it away again.
   let badge = null, badgeDot = null, jobWaiting = false, jobBuilding = false, picksWorth = false
 
+  function ensureCss() {
+    if (document.getElementById('myra-mirror-css')) return
+    const css = document.createElement('style')
+    css.id = 'myra-mirror-css'
+    css.textContent = '@keyframes myraBadgeBreathe{0%,100%{box-shadow:-3px 4px 18px rgba(0,0,0,.18)}50%{box-shadow:-3px 4px 18px rgba(0,0,0,.18),0 0 0 7px rgba(20,20,20,.16)}}'
+      + '@keyframes myraPulse{0%,100%{opacity:1}50%{opacity:.3}}'
+      // A wiggle, then a rest: the mirror rocks on its feet for the first
+      // half of each cycle and stands still for the second.
+      + '@keyframes myraWiggle{0%,46%,100%{transform:rotate(0)}8%{transform:rotate(-14deg)}16%{transform:rotate(12deg)}24%{transform:rotate(-9deg)}32%{transform:rotate(6deg)}40%{transform:rotate(-3deg)}}'
+    document.documentElement.appendChild(css)
+  }
+
   function badgeMark() {
     if (!badgeDot) return
     badgeDot.style.display = jobWaiting || picksWorth ? 'block' : 'none'
-    // While MYRA builds, the badge breathes: that is where the answer lands.
+    // While MYRA builds, the badge breathes and its mirror wiggles: that is
+    // where the answer lands, whatever page she is on by then.
     if (badge) badge.style.animation = jobBuilding ? 'myraBadgeBreathe 1.6s ease-in-out infinite' : ''
+    const icon = badge?.querySelector('.myra-mirror-badge-icon')
+    if (icon) icon.style.animation = jobBuilding ? 'myraWiggle 1.6s ease-in-out infinite' : ''
   }
 
   // ── WHAT THE BADGE SAYS ───────────────────────────────────────────────────
@@ -1138,13 +1154,18 @@
    * is hers to forget until it lands — the worker lifts `dismissed` then.
    */
   function noteJob(job) {
+    noteBuilding(job)
     if (!job) { jobWaiting = false; jobBuilding = false; badgeMark(); badgeSay(null); return }
     if (panel) { jobBuilding = false; badgeMark(); badgeSay(null); return }
     const building = (job.status === 'loading' || job.status === 'partial') && !job.dismissed
     const landed = job.status !== 'loading' && job.status !== 'partial' && !job.dismissed
+    const wasBuilding = jobBuilding
     jobBuilding = building
     if (landed) jobWaiting = true
     badgeMark()
+    // It has just landed in front of her: the mirror gives two last wiggles
+    // and the dot stays on until she opens it.
+    if (landed && wasBuilding) { const icon = badge?.querySelector('.myra-mirror-badge-icon'); if (icon) icon.style.animation = 'myraWiggle 1.6s ease-in-out 2' }
     const name = job.product?.title ? `“${shortName(job.product.title)}”` : 'this piece'
     if (building) badgeSay(`MYRA is styling ${name} — tap to watch`, true)
     else if (landed && job.status === 'error') badgeSay(`MYRA could not style ${name} — tap to see why`)
@@ -1160,16 +1181,11 @@
     badge.title = 'MYRA — open what is waiting here'
     badge.setAttribute('aria-label', 'Open MYRA')
     badge.style.cssText = `position:fixed;z-index:2147483645;right:0;top:50%;transform:translateY(-50%);width:38px;height:38px;border:0;border-radius:19px 0 0 19px;background:rgba(255,255,255,.96);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0 6px 0 10px;box-shadow:-3px 4px 18px rgba(0,0,0,.18);font:400 14px/1.4 ${FONT};color:#2B2B2B;`
-    badge.innerHTML = `<img src="${ext.runtime.getURL('icons/mirror.png')}" alt="" style="width:20px;height:20px;object-fit:contain"><span class="myra-mirror-badge-dot" style="position:absolute;top:4px;left:6px;width:8px;height:8px;border-radius:50%;background:#141414;box-shadow:0 0 0 2px rgba(255,255,255,.9);display:none"></span>`
+    badge.innerHTML = `<img class="myra-mirror-badge-icon" src="${ext.runtime.getURL('icons/mirror.png')}" alt="" style="width:20px;height:20px;object-fit:contain;transform-origin:50% 90%"><span class="myra-mirror-badge-dot" style="position:absolute;top:4px;left:6px;width:8px;height:8px;border-radius:50%;background:#141414;box-shadow:0 0 0 2px rgba(255,255,255,.9);display:none"></span>`
     badgeDot = badge.querySelector('.myra-mirror-badge-dot')
     badge.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); badgeClick() })
     document.body.appendChild(badge)
-    if (!document.getElementById('myra-mirror-badge-css')) {
-      const css = document.createElement('style')
-      css.id = 'myra-mirror-badge-css'
-      css.textContent = '@keyframes myraBadgeBreathe{0%,100%{box-shadow:-3px 4px 18px rgba(0,0,0,.18)}50%{box-shadow:-3px 4px 18px rgba(0,0,0,.18),0 0 0 7px rgba(20,20,20,.16)}}@keyframes myraPulse{0%,100%{opacity:1}50%{opacity:.3}}'
-      document.documentElement.appendChild(css)
-    }
+    ensureCss()
     badgeMark()
   }
 
@@ -1353,34 +1369,74 @@
    * The buttons sit over the PICTURE, never over the words. A tile often
    * carries its name and price under the photo (Maygel Coronel, most Shopify
    * themes), and buttons pinned to the tile's bottom edge covered them. So the
-   * bottom inset is measured from the picture's bottom edge — again on hover
-   * and when the picture finishes loading, since a lazy tile is one line of
-   * text tall until then.
+   * bottom inset is measured from the picture's bottom edge — again on hover,
+   * whenever a picture inside the tile finishes loading, and whenever the
+   * tile changes size (a lazy tile is one line of text tall until its photo
+   * arrives, and a phone never hovers to trigger a re-measure).
    */
   function placeActions(tile, wrap) {
     const img = tileImageEl(tile)
-    let inset = 10
+    let inset = 8
     if (img) {
       const t = tile.getBoundingClientRect()
       const r = img.getBoundingClientRect()
-      if (r.height > 40 && r.bottom > t.top) inset = Math.max(10, Math.round(t.bottom - r.bottom) + 10)
+      if (r.height > 40 && r.bottom > t.top) inset = Math.max(8, Math.round(t.bottom - r.bottom) + 8)
     }
     wrap.style.bottom = `${inset}px`
   }
+  const tileWatch = typeof ResizeObserver === 'function'
+    ? new ResizeObserver((entries) => {
+        for (const en of entries) {
+          const w = en.target.querySelector(':scope > .myra-mirror-actions')
+          if (w) placeActions(en.target, w)
+        }
+      })
+    : null
 
-  /** The two things a piece offers on hover: MYRA's answer, and somewhere to keep it. */
+  // ── THE MIRROR WIGGLES ────────────────────────────────────────────────────
+  // While MYRA styles a piece, the mirror on that piece's tile wiggles, and
+  // so does the mirror on the edge — which is on every page of every shop, so
+  // the wiggle follows her as she walks on, and stops when the looks land.
+  let buildingKey = null
+  const jobKey = (job) => job?.product?.url || job?.product?.key || null
+  const isBuilding = (job) => !!job && (job.status === 'loading' || job.status === 'partial') && !job.dismissed
+  function noteBuilding(job) {
+    const next = isBuilding(job) ? jobKey(job) : null
+    if (next === buildingKey) return
+    buildingKey = next
+    for (const [tile, product] of productOf) wiggleTile(tile, product)
+  }
+  function wiggleTile(tile, product) {
+    const icon = tile.querySelector(':scope > .myra-mirror-actions .myra-mirror-ask img')
+    if (!icon) return
+    const mine = !!buildingKey && (product.url === buildingKey || product.key === buildingKey)
+    icon.style.animation = mine ? 'myraWiggle 1.6s ease-in-out infinite' : ''
+  }
+
+  /**
+   * The two things a piece offers: MYRA's answer to "what do I wear with
+   * this?" behind her dressing mirror, and a heart to keep it. Two small discs
+   * in the picture's bottom-right corner — never a strip across the tile, so
+   * the brand's name and price under the photo stay readable on a phone, where
+   * the discs are always showing. Tapping the mirror asks: with her wardrobe,
+   * or with new pieces. The mirror wiggles while MYRA is styling this piece.
+   */
+  const DISC = 'flex:0 0 auto;width:34px;height:34px;border-radius:50%;border:0;padding:0;margin:0;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.95);color:#2B2B2B;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.18);line-height:1;'
   function styleButton(tile, product) {
     if (tile.querySelector(':scope > .myra-mirror-actions')) return
+    ensureCss()
     if (getComputedStyle(tile).position === 'static') { tile.dataset.myraPos = '1'; tile.style.position = 'relative' }
     const wrap = document.createElement('div')
     wrap.className = 'myra-mirror-actions'
-    wrap.style.cssText = `position:absolute;left:10px;right:10px;bottom:10px;display:flex;gap:6px;align-items:center;justify-content:space-between;z-index:6;opacity:${TOUCH_DEVICE ? 1 : 0};transition:opacity .15s;font:500 13px/1 ${FONT};`
+    wrap.style.cssText = `position:absolute;right:8px;bottom:8px;display:flex;gap:6px;align-items:center;z-index:6;opacity:${TOUCH_DEVICE ? 1 : 0};transition:opacity .15s;font:500 13px/1 ${FONT};`
 
     const ask = document.createElement('button')
     ask.type = 'button'
     ask.className = 'myra-mirror-ask'
-    ask.innerHTML = `<img src="${ext.runtime.getURL('icons/mirror.png')}" alt="" style="width:18px;height:18px;object-fit:contain;filter:invert(1)"><span>What do I wear with this?</span>`
-    ask.style.cssText = 'flex:1 1 auto;min-width:0;display:flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:999px;background:rgba(20,20,20,.92);color:#F7F6F3;padding:9px 12px;cursor:pointer;font:500 12.5px/1 ' + FONT + ';letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;overflow:hidden;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);'
+    ask.title = 'What do I wear with this?'
+    ask.setAttribute('aria-label', 'What do I wear with this?')
+    ask.innerHTML = `<img src="${ext.runtime.getURL('icons/mirror.png')}" alt="" style="width:22px;height:22px;object-fit:contain;transform-origin:50% 90%;display:block">`
+    ask.style.cssText = DISC
     ask.addEventListener('click', (e) => {
       e.preventDefault(); e.stopPropagation()
       openMenu(ask, { ...product, image: product.image || tileImage(tile) })
@@ -1392,7 +1448,7 @@
     fav.title = 'Add to Mirror favourites'
     fav.setAttribute('aria-label', 'Add to Mirror favourites')
     fav.textContent = '♥'
-    fav.style.cssText = 'flex:0 0 auto;width:34px;height:34px;border-radius:50%;border:0;background:rgba(255,255,255,.95);color:#2B2B2B;font-size:15px;line-height:34px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.18);'
+    fav.style.cssText = DISC + 'font-size:15px;'
     fav.addEventListener('click', async (e) => {
       e.preventDefault(); e.stopPropagation()
       fav.disabled = true
@@ -1416,8 +1472,12 @@
     tile.addEventListener('mouseleave', () => { if (!menu) wrap.style.opacity = '0'; revertPiece(pagePiece) })
     tile.appendChild(wrap)
     placeActions(tile, wrap)
-    const img = tileImageEl(tile)
-    if (img && !img.complete) img.addEventListener('load', () => placeActions(tile, wrap), { once: true })
+    // A picture that loads after the discs do (load does not bubble, but it
+    // is seen on the way down), and a tile that changes size, both put the
+    // discs back on the picture's bottom edge.
+    tile.addEventListener('load', () => placeActions(tile, wrap), true)
+    tileWatch?.observe(tile)
+    wiggleTile(tile, product)
     touched.add(tile)
   }
 
@@ -1640,6 +1700,7 @@
 
   function restore() {
     for (const el of touched) {
+      tileWatch?.unobserve(el)
       if (el.dataset.myraOrder != null) { el.style.order = el.dataset.myraOrder; delete el.dataset.myraOrder }
       if (el.dataset.myraPos) { el.style.position = ''; delete el.dataset.myraPos }
       el.querySelectorAll(':scope > .myra-mirror-mark, :scope > .myra-mirror-actions').forEach((d) => d.remove())
@@ -1666,9 +1727,10 @@
     // dot instead, and on a page that is not a shop it simply waits in the
     // worker for the next shop page.
     if (msg?.type === 'styleUpdate') {
+      noteBuilding(msg.job || null)
       if (panel && panelView === 'home') { if (msg.job?.status !== 'loading') openHome() }
       else if (panel) renderPanel(msg.job)
-      else if (pagePiece || productOf.size) noteJob(msg.job || null)
+      else noteJob(msg.job || null)
     }
     if (msg?.type === 'rerun') { lastSig = ''; observer.observe(document.body, { childList: true, subtree: true }); schedule() }
   })
@@ -1689,12 +1751,13 @@
       else { scanBadge(scanStatus()); await scanLoop() }
     })()
   }
-  // A panel that was building when she left the last page still belongs to
-  // her — if here is a shop, the badge's dot says it is ready and she opens
-  // it. Anywhere else it waits in the worker rather than interrupting, and
-  // the next shop page picks it up.
+  // A styling that was building when she left the last page still belongs to
+  // her — the badge is on every page of a shop, so its mirror keeps wiggling
+  // here until the looks land, and then its dot says they are ready. (On a
+  // site that is not a shop at all there is no badge; the styling waits in
+  // the worker for the next shop page.)
   const inFlight = await send({ type: 'styleJob' })
-  if (panel || pagePiece || productOf.size) noteJob(inFlight?.job || null)
+  noteJob(inFlight?.job || null)
   // She was picking a piece and her click opened its page, or another page
   // of pieces: carry on here, the piece offered straight away.
   if (pickingAsked()) {
