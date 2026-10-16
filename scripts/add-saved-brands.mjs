@@ -39,10 +39,24 @@ const BRANDS = [
   { name: 'Edward Meller', url: 'https://www.edwardmeller.com.au', ig: 'edwardmellershoes' },
   { name: 'Carla Zampatti', url: 'https://www.carlazampatti.com.au', ig: 'carlazampatti' },
   { name: 'Scanlan Theodore', url: 'https://www.scanlantheodore.com', ig: 'scanlantheodore' },
+  // Second batch of saves.
+  { name: 'Les Archives', url: 'https://www.lesarchivesparis.com', ig: 'les_____archives' },
+  { name: 'Comptoir Vintage', url: 'https://comptoirvintage.com', ig: 'comptoir.vintage.paris' },
+  { name: 'AMLUL', url: 'https://shop.amlul.com', ig: 'amlul' },
+  { name: 'Nomasei', url: 'https://nomasei.com', ig: 'nomasei_official' },
+  { name: 'Kulakovsky', url: 'https://kulakovsky.ua', ig: 'kulakovsky' },
+  { name: 'Maria McManus', url: 'https://mariamcmanus.com', ig: 'maria_mcmanus_' },
+  { name: 'Advene', url: 'https://advenedesign.com', ig: 'advene_design' },
+  { name: 'EENK', url: 'https://eenkshop.com', ig: 'eenk_official' },
+  { name: 'Linnea Lund', url: 'https://linnealund.com', ig: 'linnealund_official' },
+  { name: 'Front Row Shop', url: 'https://www.frontrowshop.com', ig: 'frontrowshop' },
+  { name: 'Deux Amis', url: 'https://deuxamis.co', ig: 'deuxamis.co' },
+  { name: 'HAI', url: 'https://homeofhai.com', ig: 'homeofhai' },
 ]
-// Saved too, but with no shop a server can read: The Favorite Vintage and
-// Les Archives sell from Instagram / a Paris shop floor; "albausart" was only a
-// caption fragment. Add them by hand once they have a storefront.
+// Saved too, but with no shop a server can read: The Favorite Vintage sells
+// from Instagram; Cardón (cardon_mx) is a multi-brand concept store in Mexico
+// City with no web shop found; "albausart" was only a caption fragment. Add
+// them by hand once they have a storefront.
 
 const args = process.argv.slice(2)
 const dryRun = args.includes('--dry-run')
