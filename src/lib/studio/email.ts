@@ -30,6 +30,8 @@ export type EmailKind =
   | 'shopper_ways_digest'
   // New options for the events she has coming up (weekly, after the Monday upload).
   | 'shopper_event_picks'
+  // Her welcome: the three steps, sent as MYRA when she is let in.
+  | 'shopper_welcome'
 
 /** Shopper-facing kinds go out as MYRA, with replies to Chloe; the studio kinds stay MYRA Studio. */
 const isMemberKind = (kind: EmailKind) => kind.startsWith('shopper_')
