@@ -510,6 +510,7 @@
     // still building carries on in the worker and lights the dot when done.
     void send({ type: 'styleClose' })
     maybePicksBadge()
+    badgeIdle()
   }
   function ensurePanelEl() {
     hideTopBanner()
@@ -1128,27 +1129,75 @@
   // She taps a piece, the styling goes to the worker, and the page she is on
   // may be a different one by the time it lands — the panel she watched it
   // start in is gone with the page she left. The one thing always in the same
-  // place is the badge, so the badge speaks for the styling: "MYRA is styling
-  // this — tap to watch" while it builds, "your looks are ready — tap to see"
-  // once it has landed. Tapping the words is tapping the badge. It says
-  // nothing while the panel is open, and nothing about a styling she closed.
-  let badgeSayEl = null
-  function badgeSay(text, building = false) {
+  // place is the badge. While it builds the mirror wiggles and nothing is
+  // said; when the looks land the badge says so once, in one short line with
+  // an × — "Looks ready for “…”" — and the line goes on its own after a few
+  // seconds (the dot on the badge keeps the looks a tap away). Closed or gone,
+  // it does not come back for that styling on the next page. It says nothing
+  // while the panel is open, and nothing about a styling she closed.
+  let badgeSayEl = null, badgeSayTimer = null, saidJobId = null
+  const SAY_FOR_MS = 10_000
+  const saidAlready = (id) => { try { return !!id && localStorage.getItem(`myra:mirror:said:${id}`) === '1' } catch { return false } }
+  const rememberSaid = (id) => { try { if (id) localStorage.setItem(`myra:mirror:said:${id}`, '1') } catch {} }
+  const TROUBLE_KEY = `myra:mirror:trouble-closed:${location.host}`
+  const troubleClosed = (kind) => { try { return sessionStorage.getItem(TROUBLE_KEY) === kind } catch { return false } }
+  const rememberTroubleClosed = (kind) => { try { sessionStorage.setItem(TROUBLE_KEY, kind) } catch {} }
+  function badgeSay(text, building = false, trouble = null) {
+    clearTimeout(badgeSayTimer)
     if (!text) { badgeSayEl?.remove(); badgeSayEl = null; return }
     if (!badge) return
     if (!badgeSayEl) {
-      badgeSayEl = document.createElement('button')
-      badgeSayEl.type = 'button'
+      badgeSayEl = document.createElement('div')
       badgeSayEl.className = 'myra-mirror-badge-say'
-      badgeSayEl.style.cssText = `position:fixed;z-index:2147483645;right:46px;top:50%;transform:translateY(-50%);max-width:min(330px,calc(100vw - 70px));border:0;background:#141414;color:#F7F6F3;border-radius:999px;padding:11px 15px 11px 14px;font:500 13px/1.3 ${FONT};text-align:left;box-shadow:0 12px 32px rgba(0,0,0,.28);cursor:pointer;display:flex;gap:9px;align-items:center;opacity:0;transition:opacity .25s ease;`
-      badgeSayEl.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); badgeClick() })
+      badgeSayEl.style.cssText = `position:fixed;z-index:2147483645;right:46px;top:50%;transform:translateY(-50%);max-width:min(270px,calc(100vw - 90px));background:#141414;color:#F7F6F3;border-radius:999px;padding:0 4px 0 0;font:500 13px/1.2 ${FONT};text-transform:none;letter-spacing:normal;box-shadow:0 10px 26px rgba(0,0,0,.26);display:flex;align-items:center;opacity:0;transition:opacity .25s ease;`
       document.body.appendChild(badgeSayEl)
       requestAnimationFrame(() => { if (badgeSayEl) badgeSayEl.style.opacity = '1' })
     }
-    const dot = `<span style="width:8px;height:8px;border-radius:50%;background:#F7F6F3;flex:0 0 auto;${building ? 'animation:myraPulse 1.2s infinite' : ''}"></span>`
-    badgeSayEl.innerHTML = `${dot}<span style="flex:1;min-width:0">${esc(text)}</span><span aria-hidden="true" style="opacity:.65;flex:0 0 auto">→</span>`
+    badgeSayEl.dataset.myraTrouble = trouble || ''
+    badgeSayEl.innerHTML = `<button type="button" data-myra="say" style="flex:1 1 auto;min-width:0;border:0;background:transparent;color:inherit;font:inherit;text-transform:none;letter-spacing:normal;text-align:left;padding:8px 4px 8px 13px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(text)} <span aria-hidden="true" style="opacity:.65">→</span></button><button type="button" data-myra="x" aria-label="Close" style="flex:0 0 auto;width:26px;height:26px;border:0;border-radius:50%;background:rgba(255,255,255,.14);color:inherit;font:400 16px/26px ${FONT};cursor:pointer;padding:0;text-align:center">×</button>`
+    badgeSayEl.querySelector('[data-myra="say"]').addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); badgeSayClick() })
+    badgeSayEl.querySelector('[data-myra="x"]').addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); badgeSayClose() })
+    // A finished styling's line goes on its own; a trouble line waits for her.
+    if (!trouble) badgeSayTimer = setTimeout(() => badgeSay(null), SAY_FOR_MS)
   }
-  const shortName = (t) => { const s = String(t || '').trim(); return s.length > 34 ? `${s.slice(0, 32).trim()}…` : s }
+  /** The ×: this line is not shown again — for this styling anywhere, or for this trouble on this shop this session. */
+  function badgeSayClose() {
+    const k = badgeSayEl?.dataset.myraTrouble
+    if (k) rememberTroubleClosed(k)
+    else rememberSaid(saidJobId)
+    badgeSay(null)
+  }
+
+  // ── WHEN MYRA CANNOT BE REACHED ───────────────────────────────────────────
+  // 0.4.6: a rank that failed used to fail in silence — no marks, no line,
+  // and nothing to say why. Now, on a page with a grid, the badge says so:
+  // "can't be reached — tap to reconnect" when the worker got no answer or
+  // its token was turned away (the tap opens the live connect page, which
+  // sends a fresh token and address), or "having trouble ranking this page"
+  // when MYRA answered but not with a ranking. It is the badge's idle line:
+  // a styling in flight still speaks over it, and the next good rank clears it.
+  let rankTrouble = null // { kind: 'offline' | 'auth' | 'server', text }
+  function troubleLine(kind) {
+    return kind === 'server' ? 'MYRA is having trouble ranking this page' : 'MYRA can\u2019t be reached \u2014 tap to reconnect'
+  }
+  /** What the badge says when no styling is speaking: the trouble line, or nothing. */
+  function badgeIdle() {
+    if (rankTrouble && !panel && !troubleClosed(rankTrouble.kind)) badgeSay(rankTrouble.text, false, rankTrouble.kind)
+    else badgeSay(null)
+  }
+  /** The rank's answer, good or bad: sets or clears the line. */
+  function noteRank(res) {
+    const kind = res?.error && (res.kind === 'offline' || res.kind === 'auth' || res.kind === 'server') ? res.kind : null
+    if ((rankTrouble?.kind || null) === kind) return
+    rankTrouble = kind ? { kind, text: troubleLine(kind) } : null
+    if (!jobBuilding && !jobWaiting) badgeIdle()
+  }
+  function badgeSayClick() {
+    const k = badgeSayEl?.dataset.myraTrouble
+    if (k === 'offline' || k === 'auth') { void send({ type: 'openConnect' }); return }
+    badgeClick()
+  }
+  const shortName = (t) => { const s = String(t || '').trim(); return s.length > 26 ? `${s.slice(0, 24).trim()}…` : s }
 
   /**
    * The styling's state, as the badge should show it: called with the job
@@ -1157,7 +1206,7 @@
    */
   function noteJob(job) {
     noteBuilding(job)
-    if (!job) { jobWaiting = false; jobBuilding = false; badgeMark(); badgeSay(null); return }
+    if (!job) { jobWaiting = false; jobBuilding = false; badgeMark(); badgeIdle(); return }
     if (panel) { jobBuilding = false; badgeMark(); badgeSay(null); return }
     const building = (job.status === 'loading' || job.status === 'partial') && !job.dismissed
     const landed = job.status !== 'loading' && job.status !== 'partial' && !job.dismissed
@@ -1169,10 +1218,13 @@
     // and the dot stays on until she opens it.
     if (landed && wasBuilding) { const icon = badge?.querySelector('.myra-mirror-badge-icon'); if (icon) icon.style.animation = 'myraWiggle 1.6s ease-in-out 2' }
     const name = job.product?.title ? `“${shortName(job.product.title)}”` : 'this piece'
-    if (building) badgeSay(`MYRA is styling ${name} — tap to watch`, true)
-    else if (landed && job.status === 'error') badgeSay(`MYRA could not style ${name} — tap to see why`)
-    else if (landed) badgeSay(`Your looks for ${name} are ready — tap to see`)
-    else badgeSay(null)
+    // Building: the wiggle says it, no words. Landed: one short line, once.
+    if (building) badgeSay(null)
+    else if (landed && !saidAlready(job.id)) {
+      saidJobId = job.id || null
+      rememberSaid(job.id)
+      badgeSay(job.status === 'error' ? `Couldn’t style ${name} — see why` : `Looks ready for ${name}`)
+    } else badgeIdle()
   }
 
   function makeBadge() {
@@ -1663,7 +1715,7 @@
       const grids = vinted ? M.vintedGrids() : shopify ? M.findGrids() : M.genericGrids()
       // It speaks this shop but found nothing to re-order — a layout it has not
       // learned. Worth passing on too.
-      if (!grids.length) { if (!pagePiece && /shop|collection|catalog|category|products|browse|women/i.test(location.pathname)) offerSite(generic ? 'unsupported' : 'no_grid'); return }
+      if (!grids.length) { noteRank(null); if (!pagePiece && /shop|collection|catalog|category|products|browse|women/i.test(location.pathname)) offerSite(generic ? 'unsupported' : 'no_grid'); return }
       const tiles = grids.flatMap((g) => g.tiles)
       const sig = tiles.map((t) => t.key).join(',')
       if (sig === lastSig) return
@@ -1680,7 +1732,8 @@
       }
       const t0 = performance.now()
       const res = await send({ type: 'rank', host: location.host, products, scan: !!scan })
-      if (!res || res.error || !Array.isArray(res.products)) return
+      if (!res || res.error || !Array.isArray(res.products)) { if (res) noteRank(res); return }
+      noteRank(null)
       noteScanned(products, res)
       const scores = new Map(res.products.map((p) => [p.key, p]))
       lastLifted = grids.reduce((n, g) => n + apply(g, scores), 0)
@@ -1728,7 +1781,7 @@
     timer = setTimeout(run, Date.now() - lastRunAt > MAX_WAIT ? 0 : 500)
   }
   onMessage((msg) => {
-    if (msg?.type === 'restore') { observer.disconnect(); closeMenu(); closePicks(); hidePiece(); stopPicking(); hidePanel(); restore() }
+    if (msg?.type === 'restore') { observer.disconnect(); closeMenu(); closePicks(); hidePiece(); stopPicking(); hidePanel(); restore(); noteRank(null) }
     // A panel she already opened keeps being written into as the job builds.
     // One she has not opened stays shut — a finished job lights the badge's
     // dot instead, and on a page that is not a shop it simply waits in the

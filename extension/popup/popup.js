@@ -13,7 +13,15 @@ async function render() {
   $('apiBase').value = state?.apiBase || ''
   $('disconnected').hidden = !!state?.connected
   $('connected').hidden = !state?.connected
-  if (!state?.connected) return
+  // 0.4.6: the worker's last failure against this address. A token the site
+  // turned away leaves her disconnected — say why, rather than "connect once".
+  const failure = state?.failure || null
+  if (!state?.connected) {
+    const lapsed = failure?.kind === 'auth' || failure?.kind === 'offline'
+    $('discBig').textContent = lapsed ? 'MYRA can\u2019t be reached' : 'Connect your MYRA'
+    $('discSmall').textContent = lapsed ? 'Your connection has lapsed. Connect again and every shop you browse puts your picks at the top.' : 'Do it once. After that, every shop you browse puts your picks at the top.'
+    return
+  }
 
   const first = (state.member || '').split(' ')[0]
   $('title').textContent = first ? `Hi ${first}` : 'Shops, in your taste'
@@ -21,6 +29,7 @@ async function render() {
   $('hostLabel').textContent = site || 'This page'
   $('toggle').checked = !!state.enabled
   $('sizesLink').href = `${base}/me/profile`
+  $('savedLink').href = `${base}/me/dressing-room?tab=saved`
 
   // What she's taught MYRA, as plain chips (no jargon, no "similar brands").
   send({ type: 'me' }).then((me) => {
@@ -51,7 +60,11 @@ async function render() {
 
   const stats = tab?.id != null ? await send({ type: 'getStats', tabId: tab.id }) : null
   const picks = $('picks'); picks.innerHTML = ''
-  if (!state.enabled) {
+  $('reconnect').hidden = !(failure && failure.kind !== 'server')
+  if (failure) {
+    $('statusBig').textContent = failure.kind === 'server' ? 'MYRA is having trouble ranking this page' : 'MYRA can\u2019t be reached'
+    $('statusSmall').textContent = failure.kind === 'server' ? 'It answered, but not with your order. Try the page again in a moment.' : 'Reconnect and this page sorts itself again.'
+  } else if (!state.enabled) {
     $('statusBig').textContent = 'Paused on this shop'
     $('statusSmall').textContent = 'Turn it on below to see this page in your order.'
   } else if (stats && stats.host === host) {
@@ -109,6 +122,13 @@ $('connect').addEventListener('click', async (e) => {
   e.preventDefault()
   const state = await send({ type: 'state', host: '' })
   await ext.tabs.create({ url: `${(state?.apiBase || 'https://www.myraassistant.co.uk').replace(/\/+$/, '')}/mirror/connect` })
+})
+// Reconnect always goes to the live site: the connect page sends a fresh
+// token AND its own address, which is what a dead address needs.
+$('reconnect').addEventListener('click', async (e) => {
+  if (isSafari) return
+  e.preventDefault()
+  await send({ type: 'openConnect' })
 })
 $('vinted').addEventListener('click', async () => {
   const [tab] = await ext.tabs.query({ active: true, currentWindow: true })
