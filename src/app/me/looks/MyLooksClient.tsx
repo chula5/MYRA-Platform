@@ -29,6 +29,7 @@ import OutfitDetailClient from '@/app/outfit/[id]/OutfitDetailClient'
 import WaysToWear from '@/components/me/WaysToWear'
 import { noticePieces } from '@/app/me/ways/actions'
 import StyleOutfit from '@/components/me/StyleOutfit'
+import ShareWithFriend from '@/components/me/ShareWithFriend'
 import type { OutfitWithItems } from '@/types/database'
 import { previewAskForMember, rescoreAskLook, type AskPreviewResult } from '@/app/admin/private-stylist/confidence-actions'
 import { keepAskPreview, askPreviewAlternates } from '@/app/admin/private-stylist/actions.gated'
@@ -658,9 +659,17 @@ function LookCard({
       </div>
 
       <div className="px-5 py-5">
-        {total_gbp > 0 && (
-          <p className="text-[20px] text-[#55534E] mb-3">{look.items.length} pieces · £{Math.round(total_gbp)}</p>
-        )}
+        <div className="flex items-baseline justify-between gap-3 mb-3">
+          <p className="text-[20px] text-[#55534E]">{total_gbp > 0 ? `${look.items.length} pieces · £${Math.round(total_gbp)}` : `${look.items.length} pieces`}</p>
+          {/* Pass this look to a friend on MYRA — it lands in their chat. */}
+          <ShareWithFriend
+            variant="quiet"
+            attachment={{
+              kind: 'look', look_id: look.look_id, image_url: look.image_url, occasion_label: look.occasion_label,
+              items: look.items.map((it) => ({ brand: it.brand, product_name: it.product_name, image_url: it.image_url, url: it.url, price_gbp: it.price_gbp, item_id: it.item_id })),
+            }}
+          />
+        </div>
         {readOnly ? (
           <p className="text-[20px] text-[#55534E]">
             {look.response === 'yes' ? 'She said she would wear this'

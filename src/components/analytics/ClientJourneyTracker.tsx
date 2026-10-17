@@ -70,6 +70,7 @@ const ROOM_BY_PREFIX: [string, string][] = [
   ['/me/magazine', 'magazine'],
   ['/me/threads', 'threads'],
   ['/me/profile', 'profile'],
+  ['/me/sharing', 'sharing'],
   ['/me/looks', 'all_looks'],
   ['/me/wardrobe', 'dressing_room'],
   ['/me/welcome', 'for_you'],

@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { ROOMS, ROW_ROOMS, RoomIcon, RoomSearch, type RoomId } from '@/components/me/RoomNav'
 import YouButton from '@/components/me/YouButton'
+import ShareButton from '@/components/me/ShareButton'
 import MobileTabBar from '@/components/me/MobileTabBar'
 import StylingBadge from '@/components/me/StylingBadge'
 
@@ -22,6 +23,8 @@ export default function MeChrome() {
   // the clock on every page, and only the page scrolls beneath them.
   return (
     <>
+      {/* YOU and SHARING sit together in the top corner of every page (Chloe
+          asked for the person icon at the top only, 2026-10-17). */}
       {/* A desktop keeps the six rooms down the left, the way Instagram keeps
           its own: icon over word, the room she is in drawn in ink. The phone
           carries the same six in the tab bar at the foot instead. */}
@@ -53,7 +56,8 @@ export default function MeChrome() {
                 <Link href="/me" className="shrink-0">
                   <img src="/myra-logo-black.png" alt="MYRA" className="h-12 w-auto" />
                 </Link>
-                <div className="flex items-center justify-end">
+                <div className="flex items-center justify-end gap-6">
+                  <ShareButton />
                   <YouButton />
                 </div>
               </div>
@@ -65,7 +69,10 @@ export default function MeChrome() {
                 <Link href="/me" aria-label="MYRA — For You">
                   <img src="/myra-logo-black.png" alt="MYRA" className="h-8 w-auto" />
                 </Link>
-                <YouButton active={active === 'profile'} showLabel={false} />
+                <div className="flex items-center gap-4">
+                  <ShareButton showLabel={false} />
+                  <YouButton showLabel={false} />
+                </div>
               </div>
             </div>
           </>
@@ -79,7 +86,10 @@ export default function MeChrome() {
                 {/* BROWSE has its own search in the middle of the room — a second pill in the bar was one too many. */}
                 {active !== 'browse' && <RoomSearch variant="header" />}
               </div>
-              <YouButton active={active === 'profile'} />
+              <div className="flex items-center gap-6">
+                <ShareButton active={active === 'sharing'} />
+                <YouButton active={active === 'profile'} />
+              </div>
             </div>
             {/* Phone inside a room: the way home and her profile. The rooms
                 themselves are always available in the tab bar. */}
@@ -87,7 +97,10 @@ export default function MeChrome() {
               <Link href="/me" aria-label="MYRA — For You">
                 <img src="/myra-logo-black.png" alt="MYRA" className="h-8 w-auto" />
               </Link>
-              <YouButton active={active === 'profile'} showLabel={false} />
+              <div className="flex items-center gap-4">
+                <ShareButton active={active === 'sharing'} showLabel={false} />
+                <YouButton active={active === 'profile'} showLabel={false} />
+              </div>
             </div>
           </>
         )}

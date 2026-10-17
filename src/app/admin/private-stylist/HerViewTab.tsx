@@ -17,6 +17,8 @@ import PieceClient from '@/app/me/dressing-room/PieceClient'
 import MagazineClient from '@/app/me/magazine/MagazineClient'
 import RoomNav, { ROOMS, type RoomId } from '@/components/me/RoomNav'
 import YouButton from '@/components/me/YouButton'
+import ShareButton from '@/components/me/ShareButton'
+import SharingClient from '@/app/me/sharing/SharingClient'
 import MirrorCurtain from '@/components/me/MirrorCurtain'
 import YouSettings from '@/app/me/YouSettings'
 import EventsClient from '@/app/me/events/EventsClient'
@@ -119,7 +121,8 @@ export default function HerViewTab({
         <div className="myra-pearl border-b border-[rgba(43,43,43,0.18)]">
           {room === 'for_you' ? (
             <>
-              <div className="flex items-start justify-end px-6 sm:px-10 pt-4">
+              <div className="flex items-start justify-end gap-6 px-6 sm:px-10 pt-4">
+                <ShareButton testMemberId={memberId} onClick={() => { setRoom('sharing'); setPiece(null) }} />
                 <YouButton onClick={() => { setRoom('profile'); setPiece(null) }} />
               </div>
               <img src="/myra-logo-black.png" alt="MYRA" className="mx-auto h-[110px] sm:h-[150px] w-auto -mt-12" />
@@ -143,6 +146,7 @@ export default function HerViewTab({
                   onSearch={(q) => { setRoom('all_looks'); setSearch(q) }}
                 />
               </div>
+              <ShareButton testMemberId={memberId} active={room === 'sharing'} onClick={() => { setRoom('sharing'); setPiece(null) }} />
               <YouButton active={room === 'profile'} onClick={() => { setRoom('profile'); setPiece(null) }} />
             </div>
           )}
@@ -176,6 +180,13 @@ export default function HerViewTab({
             </p>
           </div>
         )
+      )}
+
+      {/* SHARING: her friends and chats, read as her — nothing is sent from here. */}
+      {!loading && room === 'sharing' && (
+        <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen px-6 sm:px-10 py-10">
+          <SharingClient key={memberId} testMemberId={memberId} />
+        </div>
       )}
 
       {/* YOU: her three sub-pages, loaded as her — Settings, Inspiration and

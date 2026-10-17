@@ -12,7 +12,7 @@ import Link from 'next/link'
 import { useState } from 'react'
 import MicButton from './MicButton'
 
-export type RoomId = 'for_you' | 'browse' | 'all_looks' | 'dressing_room' | 'events' | 'magazine' | 'profile'
+export type RoomId = 'for_you' | 'browse' | 'all_looks' | 'dressing_room' | 'events' | 'magazine' | 'profile' | 'sharing'
 
 export interface Room {
   id: RoomId
@@ -30,6 +30,7 @@ export const ROOMS: Room[] = [
   { id: 'events', label: 'Events', short: 'Events', href: '/me/events' },
   { id: 'magazine', label: 'MYRA Magazine', short: 'Magazine', href: '/me/magazine' },
   { id: 'profile', label: 'You', short: 'You', href: '/me/profile' },
+  { id: 'sharing', label: 'Sharing', short: 'Sharing', href: '/me/sharing' },
 ]
 
 /**
@@ -43,8 +44,11 @@ export const HIDDEN_ROOMS: RoomId[] = ['magazine']
 /** What she is actually offered. */
 export const VISIBLE_ROOMS = ROOMS.filter((r) => !HIDDEN_ROOMS.includes(r.id))
 
-/** The rooms that sit in the row. YOU stands on its own, in the corner. */
-export const ROW_ROOMS = VISIBLE_ROOMS.filter((r) => r.id !== 'profile')
+/** YOU and SHARING stand on their own, in the top corner of every page — never in the row or the tab bar. */
+export const CORNER_ROOMS: RoomId[] = ['profile', 'sharing']
+
+/** The rooms that sit in the row. */
+export const ROW_ROOMS = VISIBLE_ROOMS.filter((r) => !CORNER_ROOMS.includes(r.id))
 
 /** Written out in full so Tailwind keeps them — a room hidden changes the count. */
 const ROOM_COLUMNS: Record<number, string> = {
@@ -136,6 +140,17 @@ export function RoomIcon({ id }: { id: RoomId }) {
         <svg {...common}>
           <circle cx="32" cy="23" r="10" {...S} />
           <path d="M14 52c2-10 9.5-15 18-15s16 5 18 15" {...S} />
+        </svg>
+      )
+    case 'sharing': // two speech bubbles, one over the other: a conversation between friends
+      return (
+        <svg {...common}>
+          <path d="M26 12h28a4 4 0 014 4v18a4 4 0 01-4 4h-6v8l-9-8h-5" {...S} />
+          <path d="M34 22h16M34 28h12" {...S} opacity="0.55" />
+          <path d="M8 26h26a4 4 0 014 4v14a4 4 0 01-4 4H22l-9 8v-8H8a4 4 0 01-4-4V30a4 4 0 014-4z" {...S} />
+          <circle cx="14" cy="37" r="1.6" fill="currentColor" stroke="none" />
+          <circle cx="21" cy="37" r="1.6" fill="currentColor" stroke="none" />
+          <circle cx="28" cy="37" r="1.6" fill="currentColor" stroke="none" />
         </svg>
       )
   }
@@ -230,7 +245,7 @@ export default function RoomNav({
   /** HER VIEW shows the rooms she cannot see yet, so they can be worked on. */
   showHidden?: boolean
 }) {
-  const rooms = showHidden ? ROOMS.filter((r) => r.id !== 'profile') : ROW_ROOMS
+  const rooms = showHidden ? ROOMS.filter((r) => !CORNER_ROOMS.includes(r.id)) : ROW_ROOMS
   const room = (r: Room) => {
     const on = r.id === active
     const inner = (

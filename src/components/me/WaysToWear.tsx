@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import BuiltOutfit from '@/app/me/dressing-room/BuiltOutfit'
 import SaveOutfit from '@/components/me/SaveOutfit'
+import ShareWithFriend from '@/components/me/ShareWithFriend'
 import type { LookItem } from '@/lib/pilot-stylist'
 import { openWaysToWear, pollWaysToWear, reactToWay, type WaysPiece, type WaysStatus } from '@/app/me/ways/actions'
 import { WAYS, type StyledWayLook, type WayMode } from '@/lib/styled-ways-core'
@@ -28,6 +29,14 @@ const T_SMALL = 'text-[17px] xl:text-[20px] 2xl:text-[23px]'
 // asks less often as the wait grows, and after five minutes says so in a
 // calmer voice — the mark in the corner carries on when she leaves.
 const POLL_MS = 1_500
+
+/** The outfit as a friend receives it: the pieces, their links and prices, MYRA's picture if there is one. */
+function lookAttachment(items: LookItem[], imageUrl: string | null | undefined, occasion: string | null | undefined) {
+  return {
+    kind: 'look' as const, image_url: imageUrl ?? null, occasion_label: occasion ?? null,
+    items: items.map((it) => ({ brand: it.brand, product_name: it.product_name, image_url: it.image_url ?? null, url: it.url ?? null, price_gbp: it.price_gbp ?? null, item_id: it.item_id ?? null })),
+  }
+}
 const SLOW_AFTER_MS = 60_000
 const SLOW_POLL_MS = 3_000
 const PATIENT_AFTER_MS = 5 * 60_000
@@ -210,7 +219,11 @@ export default function WaysToWear({
                     >
                       Not for me
                     </button>
+                    <ShareWithFriend variant="quiet" testMemberId={testMemberId} attachment={lookAttachment(edited[l.styled_way_id] ?? l.items, l.image_url, l.occasion_label)} />
                   </div>
+                )}
+                {savedLook && (
+                  <ShareWithFriend variant="quiet" testMemberId={testMemberId} attachment={lookAttachment(edited[l.styled_way_id] ?? l.items, l.image_url, l.occasion_label)} />
                 )}
                 <SaveOutfit
                   key={savedLook ? `saved-${savedLook}` : 'unsaved'}
