@@ -28,6 +28,8 @@ interface Step {
   path?: string
   target?: string
   fallback?: string
+  /** The Dressing Room shelf this step is about — opened before the target is looked for. */
+  tab?: 'wardrobe' | 'saved' | 'email'
   title: string
   body: string
   /** Something to do from the step itself, not only read about. */
@@ -49,12 +51,13 @@ const STEPS: Step[] = [
   { path: '/me/looks', target: '[data-tour="look-similar"]', fallback: '[data-tour="look-open"]', title: 'SIMILAR LOOKS', body: 'More looks like this one.' },
   { path: '/me/looks', target: '[data-tour="look-explore"]', fallback: '[data-tour="look-open"]', title: 'EXPLORE STYLES', body: 'The same kind of piece, styled a different way.' },
   { path: '/me/looks', target: '[data-tour="look-open"] button[aria-label^="Style "]', fallback: '[data-tour="look-open"]', title: 'STYLE ITEM', body: 'The see-through circles on a look. Tap one to see that piece in other outfits.' },
-  { path: DRESSING, target: '[data-tour="wardrobe"]', title: 'YOUR WARDROBE', body: 'Your own pieces. Tap one to see it styled.' },
-  { path: DRESSING, target: '[data-tour="styling-pane"]', title: 'STYLED FOR YOU', body: 'Outfits around the piece you tapped. Build new ones here.' },
+  { path: DRESSING, tab: 'wardrobe', target: '[data-tour="wardrobe"]', fallback: '[data-tour="tab-wardrobe"]', title: 'YOUR WARDROBE', body: 'Your own pieces. Tap one to see it styled.' },
+  { path: DRESSING, tab: 'wardrobe', target: '[data-tour="styling-pane"]', fallback: '[data-tour="tab-wardrobe"]', title: 'STYLED FOR YOU', body: 'Outfits around the piece you tapped. Build new ones here.' },
+  { path: DRESSING, tab: 'saved', target: '[data-tour="tab-saved"]', title: 'SAVED FROM THE SHOPS', body: 'Pieces you kept with the MYRA Mirror while shopping, each styled three ways.' },
   { path: DRESSING, target: '[data-tour="builder"]', title: 'BUILD AN OUTFIT', body: 'Your own pieces and the ones you saved. Put them together and MYRA says what it thinks.' },
-  { path: DRESSING, target: '[data-tour="email-sync"]', fallback: '#email-finds', title: 'UPDATE EMAIL SYNC', body: 'Finds what you have bought from your order emails.' },
+  { path: DRESSING, tab: 'email', target: '[data-tour="email-sync"]', fallback: '#email-finds', title: 'UPDATE EMAIL SYNC', body: 'Finds what you have bought from your order emails.' },
   { path: DRESSING, target: '#coming-up', title: 'COMING UP', body: 'Your calendar. Tap Plan an outfit for anything you want dressed.' },
-  { path: DRESSING, target: '#email-finds', title: 'FIND WHAT YOU\u2019VE BOUGHT', body: 'Pieces from your order emails. Add the ones you kept.' },
+  { path: DRESSING, tab: 'email', target: '#email-finds', title: 'FIND WHAT YOU\u2019VE BOUGHT', body: 'Pieces from your order emails. Add the ones you kept.' },
   { target: '[data-tour="room-inspiration"]', title: 'INSPIRATION', body: 'Save outfits you love. MYRA learns your taste from them.' },
   { path: '/me/inspiration', target: '#archival-looks', title: 'ARCHIVAL LOOKS', body: 'Photos of what you already wear. The pieces you still own go to your Dressing Room.' },
   { target: '[data-tour="room-threads"]', title: 'THREADS', body: 'Everything MYRA knows about your style, and why.' },
@@ -138,6 +141,8 @@ export default function MeTour() {
       return
     }
     if (!s.target) { setReady(true); return }
+    // A Dressing Room step: open its shelf first (DressingRoomClient listens).
+    if (s.tab) window.dispatchEvent(new CustomEvent('myra:dressing-tab', { detail: s.tab }))
     let live = true
     let tries = 0
     const find = () => {

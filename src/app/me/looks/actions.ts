@@ -76,7 +76,7 @@ async function loadLooksFor(memberId: string): Promise<ClientView> {
     const admin = createAdminClient() as any
     const { data: member } = await admin.from('pilot_member').select('member_id, name, occasions').eq('member_id', memberId).maybeSingle()
     if (!member) return empty
-    const me = { memberId: member.member_id as string, name: member.name as string }
+    const me = { memberId: member.member_id as string, name: ((member.name as string | null) ?? '') }
 
     const { data: dels } = await admin
       .from('pilot_delivery').select('delivery_id, occasion, request_text').eq('member_id', me.memberId)
@@ -310,7 +310,7 @@ export async function savedWhileBrowsing(limit = 14): Promise<BrowsedPiece[]> {
   if (error) return []
   return (data ?? []).filter((r: any) => r.item).map((r: any) => ({
     item_id: r.item.item_id,
-    product_name: r.item.product_name,
+    product_name: r.item.product_name ?? '',
     brand: r.item.brand?.name ?? null,
     image_url: r.item.image_url ?? null,
     price_gbp: r.item.price_gbp != null ? Number(r.item.price_gbp) : null,
