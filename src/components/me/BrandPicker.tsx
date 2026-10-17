@@ -1,43 +1,51 @@
 'use client'
 
-// YOUR BRANDS.
+// YOUR BRANDS — the grouped picker.
 //
-// The one screen in the client area that shows her what MYRA thinks it knows
-// about her taste and lets her argue with it. Three things, in this order,
-// because that is the order she cares about them:
+// Chloe's brief (2026-10-17): asking someone to think of brands on the spot is
+// hard. So she is never asked to think of one. The brands MYRA knows are laid
+// out in groups she will recognise — "Quiet luxury", "The houses", "Parisian",
+// "Second-hand & vintage" — and she taps the ones she knows, or takes a whole
+// group with LOVE ALL and drops the odd one with ×. The same screen has a
+// second side, "✕ Not for me", for anything she would never wear.
 //
-//   1. THE BRANDS SHE LOVES     hers, oldest first, each removable.
-//   2. WHAT MYRA FOUND FROM THEM each with the reason it came — "core family
-//                               'Quiet luxury' via Totême". This is the part
-//                               that earns trust: it shows the naming did
-//                               something, rather than filling a text field.
-//   3. SOMEWHERE TO ADD MORE    type a name, or browse by aesthetic.
+// Two modes, one tap. In LOVE mode a tap loves a brand (black chip) and × on
+// a loved chip drops it. In NOT FOR ME mode a tap marks a brand red; × clears
+// it. A brand is in exactly one of the three states: loved, not for me, or
+// neither. LOVE ALL / NONE OF THESE acts on the brands showing in that group.
 //
-// Saving is immediate, not batched behind the page's Save button. Adding a
-// brand re-seeds her whole brand model server-side, which takes a second or
-// two — so it needs its own busy state, and batching it into a Save that also
-// writes her sizes would make that Save feel broken.
+// Every tap is saved at once — optimistically in the UI, then re-read from the
+// server. A whole group is one server call, because each save re-seeds her
+// brand model and twelve of them would take half a minute.
 //
 // Naming a brand MYRA does not stock is not an error and is never refused. It
-// is filed as a request her stylist sees, and she is told plainly that it is
-// noted but cannot be shopped yet — because the alternative is a brand sitting
-// in her list doing nothing while she believes it is working.
+// is filed as a request her stylist sees, marked with a small · on the chip,
+// and she is told plainly that it is noted but cannot be shopped yet.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   loadMyBrands,
-  addMyBrand,
-  removeMyBrand,
+  addMyBrands,
+  removeMyBrands,
+  setMyBrandsNever,
   setMyBrandInputOnly,
   type MyBrandsView,
+  type PickerBrand,
 } from '@/app/me/brand-actions'
 
 const card = 'rounded-[28px] bg-white/80 shadow-[0_18px_40px_-24px_rgba(43,43,43,0.35)] p-6 sm:p-9'
 const heading = 'text-[clamp(26px,1.7vw,40px)] text-[#2B2B2B]'
-const label = 'text-[clamp(20px,1.1vw,28px)] text-[#55534E]'
-const field = 'w-full rounded-full bg-white px-6 py-4 text-[clamp(20px,1.1vw,28px)] text-[#2B2B2B] shadow-[0_10px_18px_-12px_rgba(120,120,120,0.6)] outline-none border-2 border-transparent focus:border-[#C9C9C9]'
-const chipBase = 'rounded-full px-5 py-2.5 text-[clamp(18px,1vw,24px)] transition-colors'
-const quiet = `${chipBase} bg-white text-[#55534E] shadow-[0_8px_16px_-12px_rgba(120,120,120,0.7)]`
+const label = 'text-[clamp(18px,1.05vw,26px)] text-[#55534E]'
+const field = 'w-full rounded-full bg-white px-6 py-4 text-[clamp(18px,1.1vw,26px)] text-[#2B2B2B] shadow-[0_10px_18px_-12px_rgba(120,120,120,0.6)] outline-none border-2 border-transparent focus:border-[#C9C9C9]'
+const chipBase = 'inline-flex items-center gap-2.5 rounded-full px-[18px] py-[11px] text-[clamp(16px,1.02vw,23px)] leading-[1.1] transition-colors text-left'
+const chipNone = `${chipBase} bg-white text-[#55534E] shadow-[0_8px_16px_-12px_rgba(120,120,120,0.7)]`
+const chipLove = `${chipBase} bg-[#2B2B2B] text-white`
+const chipNever = `${chipBase} bg-[#F3E3E3] text-[#9B3A3A] line-through decoration-1`
+const groupBtn = 'shrink-0 rounded-full px-4 py-2.5 text-[clamp(15px,0.95vw,20px)] tracking-[0.08em] whitespace-nowrap transition-colors'
+
+type Mode = 'love' | 'never'
+
+const fold = (s: string) => s.trim().toLowerCase()
 
 export default function BrandPicker({
   testMemberId,
@@ -50,61 +58,115 @@ export default function BrandPicker({
   onChange?: (count: number) => void
 }) {
   const [view, setView] = useState<MyBrandsView | null | undefined>(undefined)
+  const [mode, setMode] = useState<Mode>('love')
   const [typed, setTyped] = useState('')
-  const [busy, setBusy] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<string | null>(null)
-  const [browsing, setBrowsing] = useState(false)
+  const [open, setOpen] = useState<Set<string>>(new Set())
+  // Optimistic state: what she has tapped, shown at once, reconciled from the
+  // server after every save. Keys are folded names.
+  const [loved, setLoved] = useState<Map<string, string>>(new Map())
+  const [never, setNever] = useState<Map<string, string>>(new Map())
+  const queue = useRef<Promise<unknown>>(Promise.resolve())
 
-  const refresh = async () => {
-    const v = await loadMyBrands(testMemberId)
+  const adopt = (v: MyBrandsView | null) => {
     setView(v)
-    if (v) onChange?.(v.favourites.length)
-    return v
+    if (!v) return
+    setLoved(new Map(v.favourites.map((b) => [fold(b.name), b.name])))
+    setNever(new Map(v.never.map((n) => [fold(n), n])))
+    onChange?.(v.favourites.length)
   }
 
   useEffect(() => {
     let alive = true
-    void loadMyBrands(testMemberId).then((v) => {
-      if (!alive) return
-      setView(v)
-      if (v) onChange?.(v.favourites.length)
-    })
+    void loadMyBrands(testMemberId).then((v) => { if (alive) adopt(v) })
     return () => { alive = false }
     // onChange is a parent callback; re-running on its identity would reload
     // her brands on every parent render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [testMemberId])
 
-  /** Every write goes through here so exactly one thing is busy at a time and
-   *  the list is always re-read from the server afterwards. */
-  async function run(key: string, fn: () => Promise<any>) {
-    setBusy(key)
+  /** Saves run one after another in the order she tapped, and the list is
+   *  re-read from the server after each — so a quick double tap never races. */
+  function save(fn: () => Promise<any>) {
+    setBusy(true)
     setNote(null)
-    try {
-      const r = await fn()
-      if (r?.error) setNote(r.error)
-      else if (r?.requested) setNote(`MYRA doesn’t have ${r.requested} yet — your stylist has been told you want it.`)
-      // Fast fashion is real taste signal and MYRA keeps it, but it is never
-      // sent — saying so here is the only place she would find that out.
-      else if (r?.signalOnly) setNote(`MYRA will learn from ${r.signalOnly}, but won’t send it to you. It’s below.`)
-      else if (r?.already) setNote(`${r.already} is already on your list.`)
-      await refresh()
-    } catch {
-      setNote('Something went wrong — try again.')
-    } finally {
-      setBusy(null)
+    queue.current = queue.current.then(async () => {
+      try {
+        const r = await fn()
+        if (r?.error) setNote(r.error)
+        else if (r?.requested) setNote(`MYRA doesn’t have ${r.requested} yet — your stylist has been told you want it.`)
+        else if (r?.signalOnly) setNote(`MYRA will learn from ${r.signalOnly}, but won’t send it to you.`)
+        else if (r?.already) setNote(`${r.already} is already on your list.`)
+        adopt(await loadMyBrands(testMemberId))
+      } catch {
+        setNote('Something went wrong — try again.')
+      } finally {
+        setBusy(false)
+      }
+    })
+  }
+
+  const isLoved = (n: string) => loved.has(fold(n))
+  const isNever = (n: string) => never.has(fold(n))
+
+  /** One tap on a chip. What it does depends on the chip's state and the mode. */
+  function tap(name: string) {
+    const k = fold(name)
+    if (isLoved(name)) {
+      // × on a loved chip. In NOT FOR ME mode the tap also marks it.
+      setLoved((m) => { const n = new Map(m); n.delete(k); return n })
+      if (mode === 'never') { setNever((m) => new Map(m).set(k, name)); save(() => setMyBrandsNever([name], true, testMemberId)) }
+      else save(() => removeMyBrands([name], testMemberId))
+      return
+    }
+    if (isNever(name)) {
+      setNever((m) => { const n = new Map(m); n.delete(k); return n })
+      if (mode === 'love') { setLoved((m) => new Map(m).set(k, name)); save(() => addMyBrands([name], testMemberId)) }
+      else save(() => setMyBrandsNever([name], false, testMemberId))
+      return
+    }
+    if (mode === 'love') { setLoved((m) => new Map(m).set(k, name)); save(() => addMyBrands([name], testMemberId)) }
+    else { setNever((m) => new Map(m).set(k, name)); save(() => setMyBrandsNever([name], true, testMemberId)) }
+  }
+
+  /** LOVE ALL / NONE OF THESE on the brands showing in a group — one save. */
+  function takeGroup(names: string[]) {
+    const target = mode === 'love' ? isLoved : isNever
+    const every = names.every(target)
+    if (every) {
+      // Second press undoes it.
+      if (mode === 'love') { setLoved((m) => { const n = new Map(m); names.forEach((x) => n.delete(fold(x))); return n }); save(() => removeMyBrands(names, testMemberId)) }
+      else { setNever((m) => { const n = new Map(m); names.forEach((x) => n.delete(fold(x))); return n }); save(() => setMyBrandsNever(names, false, testMemberId)) }
+      return
+    }
+    const rest = names.filter((x) => !target(x))
+    if (mode === 'love') {
+      setLoved((m) => { const n = new Map(m); rest.forEach((x) => n.set(fold(x), x)); return n })
+      setNever((m) => { const n = new Map(m); rest.forEach((x) => n.delete(fold(x))); return n })
+      save(() => addMyBrands(rest, testMemberId))
+    } else {
+      setNever((m) => { const n = new Map(m); rest.forEach((x) => n.set(fold(x), x)); return n })
+      setLoved((m) => { const n = new Map(m); rest.forEach((x) => n.delete(fold(x))); return n })
+      save(() => setMyBrandsNever(rest, true, testMemberId))
     }
   }
 
-  const add = (name: string) => {
-    const clean = name.trim()
-    if (!clean) return
+  function addTyped() {
+    const name = typed.trim()
+    if (!name) return
     setTyped('')
-    void run(`add:${clean.toLowerCase()}`, () => addMyBrand(clean, testMemberId))
+    if (mode === 'love') { setLoved((m) => new Map(m).set(fold(name), name)); save(() => addMyBrands([name], testMemberId)) }
+    else { setNever((m) => new Map(m).set(fold(name), name)); save(() => setMyBrandsNever([name], true, testMemberId)) }
   }
 
-  // A brand already hers shouldn't sit in the browse list offering to be added.
   const groups = useMemo(() => view?.groups ?? [], [view])
+  const stockedByKey = useMemo(() => {
+    const m = new Map<string, boolean>()
+    for (const g of groups) for (const b of [...g.brands, ...g.more]) m.set(fold(b.name), b.stocked)
+    for (const f of view?.favourites ?? []) m.set(fold(f.name), f.stocked)
+    return m
+  }, [groups, view])
 
   if (view === undefined) {
     return <p className={`${label} ${bare ? '' : 'p-6'}`}>Opening your brands…</p>
@@ -112,6 +174,30 @@ export default function BrandPicker({
   if (view === null) {
     return <p className={`${label} ${bare ? '' : 'p-6'}`}>Sign in to see your brands.</p>
   }
+
+  const chip = (b: PickerBrand | { name: string }) => {
+    const on = isLoved(b.name), off = isNever(b.name)
+    const stocked = stockedByKey.get(fold(b.name)) ?? true
+    return (
+      <button
+        key={b.name}
+        type="button"
+        onClick={() => tap(b.name)}
+        aria-pressed={on || off}
+        className={on ? chipLove : off ? chipNever : chipNone}
+        title={!stocked && !on && !off ? 'MYRA doesn’t stock this one yet — naming it tells your stylist' : on && !stocked ? 'MYRA can’t shop this one yet — your stylist knows' : undefined}
+      >
+        {on && <span className="opacity-85">♥</span>}
+        {off && <span className="opacity-85">✕</span>}
+        <span>{b.name}</span>
+        {(on || off) && <span className="text-[1.1em] leading-none opacity-60" aria-hidden>×</span>}
+        {!on && !off && !stocked && <span className="text-[#A8A8A4] -ml-1" aria-hidden>·</span>}
+      </button>
+    )
+  }
+
+  const lovedList = Array.from(loved.values())
+  const neverList = Array.from(never.values())
 
   const body = (
     <>
@@ -122,76 +208,99 @@ export default function BrandPicker({
         </div>
       )}
 
-      {/* ── Add ────────────────────────────────────────────────────────────── */}
-      <div className="mt-6 flex gap-3 flex-wrap sm:flex-nowrap">
+      {/* ── Mode ─────────────────────────────────────────────────────────── */}
+      <div className={`${bare ? '' : 'mt-6'} flex flex-col items-center gap-3`}>
+        <div className="inline-flex rounded-full bg-white/75 p-[5px] shadow-[0_10px_24px_-16px_rgba(43,43,43,0.5)]" role="tablist" aria-label="Love or not for me">
+          <button type="button" role="tab" aria-selected={mode === 'love'} onClick={() => setMode('love')}
+            className={`rounded-full px-5 py-3 text-[clamp(17px,1.05vw,24px)] transition-colors ${mode === 'love' ? 'bg-[#2B2B2B] text-white' : 'text-[#55534E]'}`}>
+            ♥&nbsp; I love these
+          </button>
+          <button type="button" role="tab" aria-selected={mode === 'never'} onClick={() => setMode('never')}
+            className={`rounded-full px-5 py-3 text-[clamp(17px,1.05vw,24px)] transition-colors ${mode === 'never' ? 'bg-[#9B3A3A] text-white' : 'text-[#55534E]'}`}>
+            ✕&nbsp; Not for me
+          </button>
+        </div>
+        <p className={`${label} myra-guide-text text-center`}>
+          {mode === 'love' ? 'Tap a brand to love it, or take a whole group. Tap × to drop one.' : 'Tap anything you’d never wear. MYRA won’t send it.'}
+        </p>
+      </div>
+
+      {/* ── Type one ─────────────────────────────────────────────────────── */}
+      <div className="mt-5 flex gap-3">
         <input
           className={field}
           value={typed}
           onChange={(e) => setTyped(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(typed) } }}
-          placeholder="Add a brand you love"
-          aria-label="Add a brand you love"
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTyped() } }}
+          placeholder="Looking for one that isn’t here? Type it"
+          aria-label="Add a brand"
         />
         <button
           type="button"
-          onClick={() => add(typed)}
-          disabled={!typed.trim() || !!busy}
-          className={`shrink-0 rounded-full px-9 py-4 text-[clamp(20px,1.1vw,28px)] transition-all ${
-            typed.trim() && !busy ? 'bg-[#2B2B2B] text-white hover:scale-[1.03]' : 'bg-white/70 text-[#A8A8A4]'
+          onClick={addTyped}
+          disabled={!typed.trim()}
+          className={`shrink-0 rounded-full px-7 py-4 text-[clamp(18px,1.1vw,26px)] transition-all ${
+            typed.trim() ? (mode === 'love' ? 'bg-[#2B2B2B]' : 'bg-[#9B3A3A]') + ' text-white hover:scale-[1.03]' : 'bg-white/70 text-[#A8A8A4]'
           }`}
         >
-          {busy?.startsWith('add:') ? 'Adding…' : 'Add'}
+          Add
         </button>
       </div>
 
       {note && <p className={`${label} myra-guide-text mt-4`}>{note}</p>}
 
-      {/* ── Hers ───────────────────────────────────────────────────────────── */}
-      <div className="mt-7">
-        {view.favourites.length ? (
-          <div className="flex flex-wrap gap-2.5">
-            {view.favourites.map((b) => {
-              const working = busy === `rm:${b.name.toLowerCase()}` || busy === `io:${b.name.toLowerCase()}`
-              return (
-                <span
-                  key={b.name}
-                  className={`${chipBase} inline-flex items-center gap-3 bg-[#2B2B2B] text-white ${working ? 'opacity-50' : ''}`}
-                  title={b.why ?? undefined}
-                >
-                  <span>♥ {b.name}</span>
-                  {/* A brand MYRA has no row for cannot reach her looks. Saying
-                      so on the chip is the only honest place: everywhere else
-                      it looks identical to one that works. */}
-                  {!b.stocked && (
-                    <span className="text-[clamp(15px,0.8vw,19px)] text-[#D9D9D6]" title="MYRA can’t shop this one yet — your stylist knows">
-                      not stocked yet
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    disabled={!!busy}
-                    onClick={() => void run(`io:${b.name.toLowerCase()}`, () => setMyBrandInputOnly(b.name, true, testMemberId))}
-                    className="text-[clamp(15px,0.8vw,19px)] text-[#D9D9D6] hover:text-white"
-                    title={`I wear ${b.name}, but don’t send it to me`}
-                  >
-                    don’t send
+      {/* ── Groups ───────────────────────────────────────────────────────── */}
+      <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {groups.map((g) => {
+          const showMore = open.has(g.key)
+          const showing = showMore ? [...g.brands, ...g.more] : g.brands
+          const names = showing.map((b) => b.name)
+          const target = mode === 'love' ? isLoved : isNever
+          const every = names.length > 0 && names.every(target)
+          const groupLabel = mode === 'love' ? (every ? '✓ ALL LOVED' : 'LOVE ALL') : (every ? '✓ NONE OF THESE' : 'NONE OF THESE')
+          return (
+            <section key={g.key} className="rounded-[24px] bg-white/80 shadow-[0_18px_40px_-28px_rgba(43,43,43,0.35)] p-5 sm:p-6">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-[clamp(22px,1.45vw,32px)] leading-[1.15] text-[#2B2B2B]">{g.name}</h3>
+                  <p className={`${label} myra-guide-text mt-1`}>{g.blurb}</p>
+                </div>
+                <button type="button" onClick={() => takeGroup(names)}
+                  className={`${groupBtn} ${every ? 'bg-[#EFEFF1] text-[#7C838B]' : 'bg-white text-[#2B2B2B] shadow-[0_8px_16px_-12px_rgba(120,120,120,0.8)]'}`}>
+                  {groupLabel}
+                </button>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2.5">
+                {showing.map(chip)}
+                {g.more.length > 0 && (
+                  <button type="button" onClick={() => setOpen((s) => { const n = new Set(s); showMore ? n.delete(g.key) : n.add(g.key); return n })}
+                    className={`${chipBase} bg-transparent text-[#7C838B] underline underline-offset-4 decoration-[#C9C9C9]`}>
+                    {showMore ? 'fewer' : `+ ${g.more.length} more`}
                   </button>
-                  <button
-                    type="button"
-                    disabled={!!busy}
-                    onClick={() => void run(`rm:${b.name.toLowerCase()}`, () => removeMyBrand(b.name, testMemberId))}
-                    className="text-[clamp(18px,1vw,24px)] leading-none hover:opacity-60"
-                    aria-label={`Remove ${b.name}`}
-                  >
-                    ×
-                  </button>
-                </span>
-              )
-            })}
+                )}
+              </div>
+            </section>
+          )
+        })}
+      </div>
+
+      {/* ── Hers ─────────────────────────────────────────────────────────── */}
+      <div className="mt-7 rounded-[24px] bg-white/80 p-5 sm:p-6">
+        <div className="flex items-baseline justify-between gap-4 flex-wrap">
+          <h3 className="text-[clamp(22px,1.45vw,32px)] text-[#2B2B2B]">Yours</h3>
+          <p className={`${label} myra-guide-text`}>{busy ? 'Saving…' : 'Saved as you go. Change them any time in YOU.'}</p>
+        </div>
+        {lovedList.length || neverList.length ? (
+          <div className="mt-4 flex flex-wrap gap-2.5">
+            {lovedList.map((n) => chip({ name: n }))}
+            {neverList.map((n) => chip({ name: n }))}
           </div>
         ) : (
-          <p className={`${label} myra-guide-text`}>
-            No brands yet. Add the ones you already love — MYRA works out the rest from them.
+          <p className={`${label} myra-guide-text mt-3`}>Nothing yet. Tap the brands you recognise above.</p>
+        )}
+        {lovedList.some((n) => stockedByKey.get(fold(n)) === false) && (
+          <p className={`${label} myra-guide-text mt-3 text-[#8A8F95]`}>
+            A brand with a · is one MYRA can’t shop yet. Your stylist has it on her list.
           </p>
         )}
       </div>
@@ -202,26 +311,14 @@ export default function BrandPicker({
           <p className={`${label} myra-guide-text`}>You wear these, but don’t want them sent to you.</p>
           <div className="mt-3 flex flex-wrap gap-2.5">
             {view.inputOnly.map((n) => (
-              <span key={n} className={`${chipBase} inline-flex items-center gap-3 bg-[#F3E3E3] text-[#9B3A3A]`}>
+              <span key={n} className={`${chipBase} bg-[#F3E3E3] text-[#9B3A3A]`}>
                 <span>{n}</span>
-                <button
-                  type="button"
-                  disabled={!!busy}
-                  onClick={() => void run(`io:${n.toLowerCase()}`, () => setMyBrandInputOnly(n, false, testMemberId))}
-                  className="text-[clamp(15px,0.8vw,19px)] hover:opacity-60"
-                  title={`Send me ${n} after all`}
-                >
+                <button type="button" onClick={() => save(() => setMyBrandInputOnly(n, false, testMemberId))}
+                  className="text-[clamp(15px,0.8vw,19px)] hover:opacity-60" title={`Send me ${n} after all`}>
                   send it after all
                 </button>
-                <button
-                  type="button"
-                  disabled={!!busy}
-                  onClick={() => void run(`rm:${n.toLowerCase()}`, () => removeMyBrand(n, testMemberId))}
-                  className="text-[clamp(18px,1vw,24px)] leading-none hover:opacity-60"
-                  aria-label={`Remove ${n}`}
-                >
-                  ×
-                </button>
+                <button type="button" onClick={() => save(() => removeMyBrands([n], testMemberId))}
+                  className="text-[1.1em] leading-none hover:opacity-60" aria-label={`Remove ${n}`}>×</button>
               </span>
             ))}
           </div>
@@ -235,15 +332,8 @@ export default function BrandPicker({
             From those, MYRA also looks at these for you. Tap one to make it a favourite too.
           </p>
           <div className="mt-3 flex flex-wrap gap-2.5">
-            {view.suggested.map((s) => (
-              <button
-                key={s.name}
-                type="button"
-                disabled={!!busy}
-                onClick={() => add(s.name)}
-                className={quiet}
-                title={s.trace ?? undefined}
-              >
+            {view.suggested.filter((s) => !isLoved(s.name) && !isNever(s.name)).map((s) => (
+              <button key={s.name} type="button" onClick={() => tap(s.name)} className={chipNone} title={s.trace ?? undefined}>
                 + {s.name}
               </button>
             ))}
@@ -264,43 +354,6 @@ export default function BrandPicker({
           </div>
         </div>
       )}
-
-      {/* ── Browse ────────────────────────────────────────────────────────── */}
-      <div className="mt-8">
-        <button
-          type="button"
-          onClick={() => setBrowsing((b) => !b)}
-          className={quiet}
-        >
-          {browsing ? 'Close' : 'Not sure? Browse by look'}
-        </button>
-
-        {browsing && (
-          <div className="mt-6 space-y-7">
-            {groups.map((g) => (
-              <div key={g.key}>
-                <p className="text-[clamp(22px,1.2vw,30px)] text-[#2B2B2B]">{g.name}</p>
-                <p className={`${label} myra-guide-text`}>{g.blurb}</p>
-                <div className="mt-3 flex flex-wrap gap-2.5">
-                  {g.brands.map((b) => (
-                    <button
-                      key={b.name}
-                      type="button"
-                      disabled={b.mine || !!busy}
-                      onClick={() => add(b.name)}
-                      className={b.mine ? `${chipBase} bg-[#2B2B2B] text-white opacity-60` : quiet}
-                      title={b.stocked ? undefined : 'MYRA doesn’t stock this one yet — adding it tells your stylist'}
-                    >
-                      {b.mine ? '♥ ' : '+ '}{b.name}
-                      {!b.stocked && !b.mine && <span className="text-[clamp(14px,0.75vw,18px)] text-[#A8A8A4]"> ·</span>}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
     </>
   )
 

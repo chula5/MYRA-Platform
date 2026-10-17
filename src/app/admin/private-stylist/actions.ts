@@ -1691,14 +1691,16 @@ async function loadMemberRules(
 
 export async function loadMemberTaste(
   admin: any,
-  member: { member_id: string; brands: RankedBrand[]; brands_input_only: string[] } & Partial<StylePrefs>,
+  member: { member_id: string; brands: RankedBrand[]; brands_input_only: string[]; brands_never?: string[] | null } & Partial<StylePrefs>,
   opts: { personaId?: string | null } = {},
 ): Promise<MemberTaste> {
   const t: MemberTaste = {
     affinity: new Map(),
     families: new Map(),
     excludedPairs: new Set(),
-    inputOnlyBrands: new Set((member.brands_input_only ?? []).map((b) => b.toLowerCase())),
+    // "Not for me" (brands_never) is excluded exactly like the Zara rule — the
+    // difference between the two lists is only that never-brands do not seed.
+    inputOnlyBrands: new Set([...(member.brands_input_only ?? []), ...(member.brands_never ?? [])].map((b) => b.toLowerCase())),
     hiddenBrandIds: new Set(),
     itemSwapOut: new Map(),
     brandSwapOut: new Map(),
