@@ -14,7 +14,7 @@ import { resolveClientMember } from '@/lib/client-member'
 import { getStyledWays, type StyledWayLook, type WayMode } from '@/lib/styled-ways'
 import { WAYS } from '@/lib/styled-ways-core'
 import {
-  requestStyledWays, enqueueWarmups, openJobFor, lastJobFor, kickStyledWaysDrain, type JobReason,
+  requestStyledWays, enqueueWarmups, openJobFor, lastJobFor, kickStyledWaysDrain, RUNNING_STALE_MS, type JobReason,
 } from '@/lib/styled-ways-queue'
 import { recordTap } from '@/lib/styled-ways-demand'
 
@@ -55,8 +55,11 @@ async function statusFor(admin: any, memberId: string, itemId: string, mode: Way
   const open = await openJobFor(admin, memberId, itemId, mode)
   if (open) {
     // A job sitting queued is one nobody is draining (a crashed kick, a cold
-    // cron); the poll that finds it starts one.
-    if (open.status === 'queued') kickStyledWaysDrain()
+    // cron), and one running longer than any compose takes is one whose
+    // function died: the poll that finds either starts a drain, which gives
+    // the dead one back to the queue and picks it up.
+    const stale = open.status === 'running' && !!open.started_at && Date.now() - Date.parse(open.started_at) > RUNNING_STALE_MS
+    if (open.status === 'queued' || stale) kickStyledWaysDrain()
     return { status: 'working' }
   }
   if (looks.length) return { status: 'ready' }
@@ -146,15 +149,15 @@ export async function noticePieces(
 }
 
 /** Several pieces at once — FOR YOU's styled door polls its whole shelf in one call. */
-export async function pollWaysMany(itemIds: string[], asMemberId?: string): Promise<Record<string, { looks: StyledWayLook[]; status: WaysStatus; error?: string }>> {
+export async function pollWaysMany(itemIds: string[], asMemberId?: string, mode: WayMode = 'blend'): Promise<Record<string, { looks: StyledWayLook[]; status: WaysStatus; error?: string }>> {
   const me = await resolveClientMember(asMemberId)
   if (!me) return {}
   const admin = createAdminClient() as any
   const out: Record<string, { looks: StyledWayLook[]; status: WaysStatus; error?: string }> = {}
   await Promise.all(Array.from(new Set(itemIds)).slice(0, 24).map(async (id) => {
     try {
-      const looks = await getStyledWays(admin, me.memberId, id, 'blend')
-      const s = await statusFor(admin, me.memberId, id, 'blend', looks)
+      const looks = await getStyledWays(admin, me.memberId, id, mode)
+      const s = await statusFor(admin, me.memberId, id, mode, looks)
       out[id] = { looks, ...s }
     } catch (err) {
       out[id] = { looks: [], status: 'failed', error: err instanceof Error ? err.message : 'Could not read this piece' }

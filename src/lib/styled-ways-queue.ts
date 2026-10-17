@@ -18,6 +18,7 @@
 import 'server-only'
 import { waitUntil } from '@vercel/functions'
 import { createAdminClient } from '@/lib/supabase-server'
+import { siteUrl } from '@/lib/studio/email'
 import { composeStyledWays } from '@/lib/styled-ways-compose'
 import { countFreshWays } from '@/lib/styled-ways'
 import { noticeDemand, type DemandSource } from '@/lib/styled-ways-demand'
@@ -26,7 +27,14 @@ import { WAYS, WARMUP_CAP_DEFAULT, NIGHTLY_CAP_DEFAULT, judgedCost, warmupAllowe
 export type JobReason = 'tap' | 'more' | 'save' | 'view' | 'feed' | 'wardrobe' | 'browse' | 'pick' | 'look' | 'nightly'
 export type JobStatus = 'queued' | 'running' | 'done' | 'failed'
 
-const STALE_MS = 4 * 60 * 1000
+/**
+ * A job still `running` this long after it was claimed is one whose function
+ * Vercel killed (a tap from a 60s page, before the drain had its own
+ * function): the next drain, or the next poll, gives it back to the queue.
+ * One compose is 20–50s on the nano database; the second time it goes stale
+ * it is failed rather than tried again.
+ */
+export const RUNNING_STALE_MS = 90_000
 const MAX_ATTEMPTS = 2
 /** Jobs one drain runs side by side. */
 const CONCURRENCY = 3
@@ -46,8 +54,8 @@ const migrationHint = (msg: string) => (/styled_way_job/.test(msg) ? 'Run migrat
 
 /** The open job for a piece, if any. */
 export async function openJobFor(admin: any, memberId: string, heroId: string, mode: WayMode = 'blend'):
-  Promise<{ job_id: string; status: JobStatus; error: string | null; created_at: string } | null> {
-  const { data } = await admin.from('styled_way_job').select('job_id, status, error, created_at')
+  Promise<{ job_id: string; status: JobStatus; error: string | null; created_at: string; started_at: string | null; attempts: number } | null> {
+  const { data } = await admin.from('styled_way_job').select('job_id, status, error, created_at, started_at, attempts')
     .eq('member_id', memberId).eq('hero_item_id', heroId).eq('mode', mode)
     .in('status', ['queued', 'running']).limit(1)
   return (data ?? [])[0] ?? null
@@ -188,16 +196,27 @@ export async function drainStyledWaysQueue(budgetMs = 50_000): Promise<{ done: n
   let done = 0
   let failed = 0
 
-  const staleBefore = new Date(Date.now() - STALE_MS).toISOString()
-  const { error: staleErr } = await a.from('styled_way_job').update({ status: 'queued' }).eq('status', 'running').lt('started_at', staleBefore)
+  // Jobs whose function died under them: a first time goes back to the
+  // queue, a second time is a failure she is told about.
+  const staleBefore = new Date(Date.now() - RUNNING_STALE_MS).toISOString()
+  const { error: failErr } = await a.from('styled_way_job')
+    .update({ status: 'failed', finished_at: new Date().toISOString(), error: 'MYRA ran out of time styling this piece — try it again' })
+    .eq('status', 'running').lt('started_at', staleBefore).gte('attempts', MAX_ATTEMPTS)
+  if (failErr) return { done: 0, failed: 0, remaining: 0, skipped: migrationHint(failErr.message) }
+  const { error: staleErr } = await a.from('styled_way_job').update({ status: 'queued' })
+    .eq('status', 'running').lt('started_at', staleBefore).lt('attempts', MAX_ATTEMPTS)
   if (staleErr) return { done: 0, failed: 0, remaining: 0, skipped: migrationHint(staleErr.message) }
 
   while (Date.now() - startedAt < budgetMs) {
     const { data: nextRows } = await a.from('styled_way_job')
       .select('job_id, member_id, hero_item_id, mode, priority, reason, shuffle, attempts')
       .eq('status', 'queued').order('priority', { ascending: true }).order('created_at', { ascending: true }).limit(CONCURRENCY)
-    const candidates = (nextRows ?? []) as Job[]
-    if (!candidates.length) break
+    const all = (nextRows ?? []) as Job[]
+    if (!all.length) break
+    // She is waiting on a tap: taps run on their own this round, so the one
+    // she asked for is never held until two warm-ups beside it finish too.
+    const taps = all.filter((j) => j.priority <= 1)
+    const candidates = taps.length ? taps : all
 
     const { count: runningCount } = await a.from('styled_way_job').select('job_id', { count: 'exact', head: true }).eq('status', 'running')
     let running = runningCount ?? 0
@@ -237,8 +256,28 @@ export function kickStyledWaysRender(memberId: string, limit = 3): void {
   try { waitUntil(work) } catch { /* local dev: the promise simply runs */ }
 }
 
-/** Start a drain without waiting for it — after a tap or a page load. */
+/**
+ * Start a drain without waiting for it — after a tap or a page load.
+ *
+ * On Vercel the drain gets a function of its own (the cron route, 300s)
+ * rather than the seconds left in whichever server action asked: a tap from
+ * a 60s page used to be killed mid-compose and sit `running` for minutes.
+ * Locally, or without the cron secret, it runs here as before.
+ */
 export function kickStyledWaysDrain(budgetMs = 50_000): void {
+  const secret = process.env.CRON_SECRET
+  if (secret && process.env.VERCEL) {
+    const budget = Math.min(240_000, Math.max(budgetMs, 120_000))
+    const req = fetch(siteUrl(`/api/cron/styled-ways?kick=1&budget=${budget}`), {
+      headers: { authorization: `Bearer ${secret}` }, cache: 'no-store',
+    })
+      .then((r) => { if (!r.ok) console.error('[styled-ways] kick', r.status) })
+      .catch((e) => console.error('[styled-ways] kick', e))
+    // This invocation only has to live long enough for the request to leave;
+    // the drain carries on in its own.
+    try { waitUntil(Promise.race([req, new Promise((r) => setTimeout(r, 3_000))])) } catch { /* local */ }
+    return
+  }
   const work = drainStyledWaysQueue(budgetMs).catch((e) => console.error('[styled-ways] drain', e))
   try { waitUntil(work) } catch { /* local dev: the promise simply runs */ }
 }

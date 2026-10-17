@@ -30,6 +30,11 @@ export async function GET(req: NextRequest) {
       .select('job_id')
     requeued = (data ?? []).length
   }
-  const result = await drainStyledWaysQueue(240_000)
-  return NextResponse.json({ ...(requeued != null ? { requeued } : {}), ...result })
+  // ?kick=1 is a tap (kickStyledWaysDrain) borrowing this function's 300s;
+  // ?budget= caps the run. The cron itself takes the full four minutes.
+  const kicked = req.nextUrl.searchParams.get('kick') === '1'
+  const budget = Math.min(240_000, Math.max(10_000, Number(req.nextUrl.searchParams.get('budget')) || 240_000))
+  const result = await drainStyledWaysQueue(budget)
+  if (kicked) console.log('[styled-ways] kicked drain', JSON.stringify(result))
+  return NextResponse.json({ ...(requeued != null ? { requeued } : {}), kicked, ...result })
 }
