@@ -10,6 +10,7 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
+import MicButton from './MicButton'
 
 export type RoomId = 'for_you' | 'browse' | 'all_looks' | 'dressing_room' | 'events' | 'magazine' | 'profile'
 
@@ -158,12 +159,15 @@ export function RoomSearch({
   const [query, setQuery] = useState('')
   const compact = variant === 'header'
 
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault()
-    const q = query.trim()
+  const run = (raw: string) => {
+    const q = raw.trim()
     if (!q) return
     if (onSearch) onSearch(q)
     else window.location.href = `/me/looks?q=${encodeURIComponent(q)}`
+  }
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    run(query)
   }
 
   const iconSize = compact
@@ -189,11 +193,17 @@ export function RoomSearch({
         aria-label="Search"
         type="text"
         className={`w-full rounded-full bg-white border-2 border-transparent shadow-md transition-all duration-300 focus:outline-none focus:border-[#2B2B2B] text-[#2B2B2B] placeholder:text-[#8C8A85] ${compact
-          ? 'text-[clamp(19px,1.15vw,40px)] pl-[clamp(44px,2.8vw,88px)] pr-[clamp(40px,2.6vw,80px)] py-[clamp(8px,0.6vw,22px)]'
-          : 'text-[16px] sm:text-[clamp(21px,1.3vw,44px)] pl-12 sm:pl-[clamp(64px,4.2vw,140px)] pr-10 sm:pr-[clamp(60px,4vw,130px)] py-3 sm:py-[clamp(16px,1vw,36px)]'}`}
+          ? 'text-[clamp(19px,1.15vw,40px)] pl-[clamp(44px,2.8vw,88px)] pr-[clamp(88px,5vw,150px)] py-[clamp(8px,0.6vw,22px)]'
+          : 'text-[16px] sm:text-[clamp(21px,1.3vw,44px)] pl-12 sm:pl-[clamp(64px,4.2vw,140px)] pr-24 sm:pr-[clamp(110px,7vw,220px)] py-3 sm:py-[clamp(16px,1vw,36px)]'}`}
+      />
+      {/* Speak the search: the words fill the pill as she says them and run when she stops. */}
+      <MicButton
+        size="sm"
+        onText={(t, final) => { setQuery(t); if (final) run(t) }}
+        className={`absolute top-1/2 -translate-y-1/2 ${compact ? 'right-1.5' : 'right-1.5 sm:right-[clamp(10px,0.8vw,30px)]'}`}
       />
       {query && (
-        <button type="reset" aria-label="Clear search" className={`absolute top-1/2 -translate-y-1/2 p-1 text-[#55534E] hover:text-[#2B2B2B] ${compact ? 'right-3' : 'right-3 sm:right-[clamp(20px,1.3vw,44px)]'}`}>
+        <button type="reset" aria-label="Clear search" className={`absolute top-1/2 -translate-y-1/2 p-1 text-[#55534E] hover:text-[#2B2B2B] ${compact ? 'right-12' : 'right-12 sm:right-[clamp(56px,3.6vw,96px)]'}`}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className={iconSize} aria-hidden>
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" d="M6 18L18 6M6 6l12 12" />
           </svg>

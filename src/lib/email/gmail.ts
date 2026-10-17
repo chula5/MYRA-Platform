@@ -29,6 +29,22 @@ export function googleAuthUrl(state: string): string {
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
 }
 
+/**
+ * What Google's token endpoint said, in words. `invalid_grant` ("Bad Request")
+ * means the refresh token no longer works: she revoked MYRA, changed her
+ * password, or — the usual one — the Google Cloud app is still in Testing,
+ * where every refresh token expires after seven days. Nothing is bought or
+ * paid for here: a "token" is only the key Google hands MYRA to read the
+ * inbox. The word invalid_grant is kept in the message on purpose — the
+ * scanner reads it as permanent and stops retrying.
+ */
+export function googleTokenError(data: any, status: number): string {
+  const code = String(data?.error ?? status)
+  const detail = data?.error_description ? String(data.error_description) : ''
+  if (code === 'invalid_grant') return 'invalid_grant: Google has signed MYRA out of this account — connect it again'
+  return `Google token request failed: ${code}${detail && detail !== code ? ` (${detail})` : ''}`
+}
+
 async function tokenRequest(body: Record<string, string>): Promise<any> {
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
@@ -40,7 +56,7 @@ async function tokenRequest(body: Record<string, string>): Promise<any> {
     }).toString(),
   })
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(`Google token request failed: ${data?.error_description ?? data?.error ?? res.status}`)
+  if (!res.ok) throw new Error(googleTokenError(data, res.status))
   return data
 }
 
