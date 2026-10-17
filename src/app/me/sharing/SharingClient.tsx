@@ -58,10 +58,10 @@ export default function SharingClient({ initial, testMemberId, openChatId }: { i
     <div className="-mx-6 sm:-mx-10 -my-10 min-h-[calc(100vh-80px)] flex flex-col">
       {/* The top of the room. On a phone it steps aside while a chat is open. */}
       <header className={`px-6 sm:px-10 pt-8 sm:pt-10 pb-6 ${pane === 'chat' ? 'hidden md:block' : ''}`}>
-        <p className="text-[18px] xl:text-[21px] 2xl:text-[25px] tracking-[0.18em] text-[#6E6B65]">SHARING</p>
-        <h1 className="text-[clamp(30px,3.6vw,52px)] 2xl:text-[clamp(46px,3.6vw,76px)] tracking-[0.03em] text-[#2B2B2B] leading-[1.05] mt-2">SHARING IS CARING</h1>
+        {/* Just the one line up top (Chloe, 2026-10-17): no small SHARING label over it. */}
+        <h1 className="text-[clamp(30px,3.6vw,52px)] 2xl:text-[clamp(46px,3.6vw,76px)] tracking-[0.03em] text-[#2B2B2B] leading-[1.05]">SHARING IS CARING</h1>
         <p className={`myra-guide-text normal-case ${T} text-[#55534E] mt-3 max-w-3xl`}>
-          Pass an outfit, a piece you found, or a word of advice to a friend on MYRA. Friends find you by your email{view?.handle ? <> or <span className="text-[#2B2B2B]">@{view.handle}</span></> : ''}.
+          Friends find you by your email{view?.handle ? <> or <span className="text-[#2B2B2B]">@{view.handle}</span></> : ''}.
           {view && !view.test && <> <HandleEditor handle={view.handle} onSaved={(h) => setView((v) => (v ? { ...v, handle: h } : v))} /></>}
         </p>
         {view?.test && <p className="text-[14px] sm:text-[15px] tracking-[0.1em] text-[#7C838B] mt-3">TESTING AS {first.toUpperCase()} — NOTHING IS SENT</p>}
