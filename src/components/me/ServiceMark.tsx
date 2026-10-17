@@ -9,8 +9,9 @@ const LOGOS = {
 
 export type ServiceName = keyof typeof LOGOS
 
-export default function ServiceMark({ service, size = 'md' }: { service: ServiceName; size?: 'sm' | 'md' }) {
-  const box = size === 'sm' ? 'h-7 w-7 p-1.5 rounded-lg' : 'h-11 w-11 p-2 rounded-xl'
+export default function ServiceMark({ service, size = 'md' }: { service: ServiceName; size?: 'sm' | 'md' | 'circle' }) {
+  // 'circle' is the mark on its own as a round button face, nothing written beside it.
+  const box = size === 'sm' ? 'h-7 w-7 p-1.5 rounded-lg' : size === 'circle' ? 'h-12 w-12 p-3 rounded-full' : 'h-11 w-11 p-2 rounded-xl'
   return (
     <span className={`grid shrink-0 place-items-center bg-white shadow-[0_2px_8px_rgba(43,43,43,0.12)] ${box}`}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
