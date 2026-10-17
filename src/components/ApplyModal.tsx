@@ -109,10 +109,14 @@ export default function ApplyModal() {
 
         {done ? (
           <div className="text-center py-8">
-            <p className="text-[16px] tracking-[0.14em] text-[#0A0A0A] mb-3">THANK YOU</p>
-            <p className="text-[14px] text-[#4A4E57] leading-[1.75] max-w-[420px] mx-auto">
-              We&rsquo;ve got your application. If MYRA is right for your taste, we&rsquo;ll be in
-              touch to set up your own personal edit — refined to you.
+            <p className="text-[19px] sm:text-[22px] tracking-[0.14em] text-[#0A0A0A] mb-4">THANK YOU</p>
+            <p className="text-[17px] sm:text-[19px] text-[#2B2B2B] leading-[1.7] max-w-[460px] mx-auto">
+              Your application is with us, and we&rsquo;re so pleased you&rsquo;d like MYRA to dress you.
+            </p>
+            <p className="mt-4 text-[17px] sm:text-[19px] text-[#4A4E57] leading-[1.7] max-w-[460px] mx-auto">
+              We&rsquo;re reviewing applications now. Each one is read properly, by a person, so it can
+              take a little time. We&rsquo;ll come back to you as soon as we possibly can, and if MYRA is
+              right for your taste, your own personal edit will be waiting.
             </p>
             <button
               onClick={() => setOpen(false)}

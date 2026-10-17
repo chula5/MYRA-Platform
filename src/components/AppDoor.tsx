@@ -76,9 +76,11 @@ export default function AppDoor({
 
         {state === 'waiting' ? (
           <div className="mt-10 w-full max-w-[360px] text-center">
-            <p className="text-[22px] leading-snug text-[#2B2B2B]">Thank you — your application is being looked at.</p>
+            <p className="text-[22px] leading-snug text-[#2B2B2B]">Thank you — your application is with us.</p>
             <p className="mt-4 text-[17px] leading-relaxed text-[#4A4E57]">
-              If MYRA is right for your taste, Chloe will be in touch to set up your own personal edit.
+              We&rsquo;re reviewing applications now, each one read properly, so it can take a little
+              time. Chloe will come back to you as soon as she possibly can, and if MYRA is right for
+              your taste, your own personal edit will be waiting.
             </p>
             <form action={earlyAccessSignOut} className="mt-10">
               <button type="submit" className="myra-silver-button text-[17px] tracking-[0.14em]">SIGN OUT</button>
