@@ -28,7 +28,9 @@ export default function MicButton({
   onText, size = 'md', className = '', lang,
 }: {
   onText: (text: string, final: boolean) => void
-  size?: 'sm' | 'md'
+  /** 'bar' is small on a phone and full size from sm up, for a search bar that grows. */
+  size?: 'sm' | 'md' | 'bar'
+  /** May place the button (`absolute right-2 …`); the wrapper then sits where it is told. */
   className?: string
   /** Defaults to the browser's own language. */
   lang?: string
@@ -157,11 +159,15 @@ export default function MicButton({
   }
 
   if (!supported) return null
-  const box = size === 'sm' ? 'w-10 h-10' : 'w-14 h-14'
-  const icon = size === 'sm' ? 'w-5 h-5' : 'w-6 h-6'
+  const box = size === 'sm' ? 'w-10 h-10' : size === 'bar' ? 'w-10 h-10 sm:w-14 sm:h-14' : 'w-14 h-14'
+  const icon = size === 'sm' ? 'w-5 h-5' : size === 'bar' ? 'w-5 h-5 sm:w-6 sm:h-6' : 'w-6 h-6'
   const listening = mode === 'listening'
+  // The wrapper is only `relative` when nothing else positions it: Tailwind
+  // emits `.relative` after `.absolute`, so saying both left the mic in flow,
+  // sitting under the search pill instead of inside it (Chloe, 2026-10-17).
+  const placed = /\b(absolute|fixed|sticky)\b/.test(className)
   return (
-    <span className={`relative inline-flex ${className}`}>
+    <span className={`inline-flex ${placed ? '' : 'relative'} ${className}`}>
       <button
         type="button"
         onClick={() => (listening ? stop() : void start())}

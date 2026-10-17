@@ -15,6 +15,7 @@
 
 import { Fragment, useEffect, useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
+import MicButton from '@/components/me/MicButton'
 import WaysToWear from '@/components/me/WaysToWear'
 import { WAYS_READY_EVENT } from '@/components/me/ways-watch'
 import { noticePieces } from '@/app/me/ways/actions'
@@ -390,10 +391,16 @@ export default function BrowseClient() {
             aria-label="Search through MYRA"
             data-tour="browse-search"
             type="text"
-            className="w-full rounded-full bg-white border-2 border-transparent shadow-md transition-all duration-300 focus:outline-none focus:border-[#2B2B2B] text-[#2B2B2B] placeholder:text-[#8C8A85] text-[18px] sm:text-[clamp(22px,1.5vw,32px)] pl-16 sm:pl-20 pr-14 sm:pr-20 py-4 sm:py-6"
+            className="w-full rounded-full bg-white border-2 border-transparent shadow-md transition-all duration-300 focus:outline-none focus:border-[#2B2B2B] text-[#2B2B2B] placeholder:text-[#8C8A85] text-[18px] sm:text-[clamp(22px,1.5vw,32px)] pl-16 sm:pl-20 pr-24 sm:pr-36 py-4 sm:py-6"
+          />
+          {/* Speak the search: at the end of the bar, the words filling it as she says them. */}
+          <MicButton
+            size="bar"
+            onText={(t, final) => { setDraft(t); if (final) void ask(t) }}
+            className="absolute right-3 sm:right-[18px] top-1/2 -translate-y-1/2"
           />
           {draft && (
-            <button type="button" onClick={() => setDraft('')} aria-label="Clear search" className="absolute right-6 sm:right-8 top-1/2 -translate-y-1/2 p-1 text-[#55534E] hover:text-[#2B2B2B]">
+            <button type="button" onClick={() => setDraft('')} aria-label="Clear search" className="absolute right-14 sm:right-[84px] top-1/2 -translate-y-1/2 p-1 text-[#55534E] hover:text-[#2B2B2B]">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-6 h-6 sm:w-8 sm:h-8" aria-hidden>
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" d="M6 18L18 6M6 6l12 12" />
               </svg>
