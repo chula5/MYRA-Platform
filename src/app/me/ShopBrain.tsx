@@ -15,10 +15,12 @@
 // worse than no promise.
 
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
+import Link from 'next/link'
 import FallbackImage from '@/components/FallbackImage'
 import ShopLink from '@/components/ShopLink'
 import ComposedLookCard from '@/components/me/ComposedLookCard'
-import Mannequin from '@/components/me/Mannequin'
+import StylingBadge from '@/components/me/StylingBadge'
+import { STYLING_OPEN_EVENT, clearStylingReady, getStylingProgress, keepWatchingStyling, publishStyling, stopWatchingStyling } from '@/components/me/styling-progress'
 import { WAYS } from '@/lib/styled-ways-core'
 import { useScrollTo } from '@/lib/smooth-scroll'
 import { loadShopBrain, type ShopBrainView, type ShopPiece } from './shop-brain-actions'
@@ -57,6 +59,16 @@ function Piece({ piece }: { piece: ShopPiece }) {
 }
 
 const PIECE_GRID = 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-x-6 gap-y-10'
+
+// Once a door is open the three fold into a row of pills at the top and what
+// is behind the open one sits straight beneath — on a phone the doors stack
+// full height, and a section drawn under all three was a long way down
+// (Chloe, 2026-10-16). CLOSE stands the doors back up.
+const DOOR_TABS: { id: Door; label: string; short: string }[] = [
+  { id: 'similar', label: 'MORE OF THE SAME', short: 'SAME' },
+  { id: 'brands', label: 'MORE FROM YOUR BRANDS', short: 'BRANDS' },
+  { id: 'styled', label: 'STYLED FOR YOU', short: 'STYLED' },
+]
 
 // ONE OUTFIT, small — her picture when the look has one, otherwise its
 // pieces two by two on white, the piece it was built around first.
@@ -227,13 +239,17 @@ export default function ShopBrain({ testMemberId, initialView, onReady }: {
   const [failed, setFailed] = useState<Record<string, string>>({})
   const queued = useRef(false)
   const openRef = useRef<HTMLDivElement>(null)
+  const tabsRef = useRef<HTMLDivElement>(null)
   const outfitsRef = useRef<HTMLDivElement>(null)
   const scrollTo = useScrollTo()
   // Pieces MYRA is styling on this visit (the pill at the top counts them),
   // the ones she tapped herself, and the last of those to come back ready.
   const [track, setTrack] = useState<string[]>([])
+  const trackRef = useRef<string[]>([])
+  trackRef.current = track
   const tapped = useRef<Set<string>>(new Set())
-  const [ready, setReady] = useState<string | null>(null)
+  // A piece that came back ready while she was in another room is still READY here.
+  const [ready, setReady] = useState<string | null>(() => getStylingProgress().ready)
   const [hintGone, setHintGone] = useState(false)
   // A phone gets her outfits as a sheet in from the right; a wider screen
   // opens them in the grid, straight under the piece she tapped.
@@ -249,6 +265,20 @@ export default function ShopBrain({ testMemberId, initialView, onReady }: {
   const [, bump] = useState(0)
   const pageLive = useRef(true)
   useEffect(() => { pageLive.current = true; return () => { pageLive.current = false } }, [])
+
+  // The mark in the corner is shared with every room (components/me/
+  // styling-progress): this page counts while it is open, and hands the
+  // count on when she leaves with pieces still being styled.
+  useEffect(() => {
+    stopWatchingStyling('/me')
+    return () => {
+      const pending = trackRef.current.filter((id) => !done.current.has(id))
+      if (pending.length) keepWatchingStyling(pending, Array.from(tapped.current), testMemberId)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [testMemberId])
+  // Tapped in another room: the mark brings her here with ?styled=1.
+  const wantOpen = useRef(typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('styled') === '1')
 
   // The section draws nothing until the view arrives, and on a phone the call
   // can be dropped with the page — a suspended tab, a flaky network — so it
@@ -375,6 +405,7 @@ export default function ShopBrain({ testMemberId, initialView, onReady }: {
     setDoor('styled')
     if (ready) setAnchor(ready)
     setReady(null)
+    clearStylingReady()
     setSheet(true)
     if (!phone) setTimeout(() => { if (outfitsRef.current) scrollTo(outfitsRef.current, { offset: -220 }) }, 80)
   }
@@ -382,8 +413,26 @@ export default function ShopBrain({ testMemberId, initialView, onReady }: {
   function toggle(d: Door) {
     const next = door === d ? null : d
     setDoor(next)
-    if (next) setTimeout(() => { if (openRef.current) scrollTo(openRef.current, { offset: -24 }) }, 50)
+    // Land on the row of pills, with the open section right under it.
+    if (next) setTimeout(() => { const el = tabsRef.current ?? openRef.current; if (el) scrollTo(el, { offset: -24 }) }, 50)
   }
+
+  // Tell the corner (it ignores a repeat of the same numbers).
+  useEffect(() => { publishStyling({ total: track.length, finished: track.filter((id) => done.current.has(id)).length, ready, origin: '/me?styled=1', mode: 'blend' }) })
+  // The mark was tapped on this page, or brought her here from another room.
+  useEffect(() => {
+    const onOpen = () => goToReady()
+    window.addEventListener(STYLING_OPEN_EVENT, onOpen)
+    return () => window.removeEventListener(STYLING_OPEN_EVENT, onOpen)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, phone])
+  useEffect(() => {
+    if (!wantOpen.current || !view) return
+    wantOpen.current = false
+    try { window.history.replaceState(null, '', window.location.pathname) } catch { /* fine */ }
+    setTimeout(goToReady, 120)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view])
 
   if (!view || (!view.saved.length && !view.similar.length && !view.fromBrands.length)) return null
   const doors = view.saved.length ? 3 : 2
@@ -451,22 +500,10 @@ export default function ShopBrain({ testMemberId, initialView, onReady }: {
         {view.fromLooking && <p className="myra-section-note mt-3">FROM WHAT YOU LOOKED AT{view.searches.length ? ' AND SEARCHED FOR' : ''}</p>}
       </div>
 
-      {/* The mark at the top of the page: the dress form wiggles while MYRA
-          styles, and says READY when a piece she tapped is done — tap it to
-          come back to the outfits from anywhere on the page. */}
-      {(stillWorking.length > 0 || ready) && (
-        <button
-          type="button"
-          onClick={goToReady}
-          className="fixed top-[150px] right-5 sm:right-8 z-[60] flex items-center gap-3 rounded-full bg-white/95 shadow-[0_10px_30px_-12px_rgba(43,43,43,0.6)] pl-3 pr-5 py-2"
-          aria-live="polite"
-        >
-          <Mannequin working={!ready} />
-          <span className="text-[16px] xl:text-[18px] tracking-[0.14em] text-[#2B2B2B]">
-            {ready ? 'READY · SEE IT' : `STYLING ${Math.min(finishedCount + 1, track.length)} OF ${track.length}`}
-          </span>
-        </button>
-      )}
+      {/* The dress form that says what MYRA is styling lives in the member
+          chrome now, so it follows her into every room. HER VIEW has no
+          chrome, so it stands here for Chloe. */}
+      {testMemberId && <StylingBadge onOpen={goToReady} />}
 
       {/* The three doors. A phone stacks them down the page, one at a time,
           so each picture is read at its own size; a desktop stands them in a
@@ -474,6 +511,26 @@ export default function ShopBrain({ testMemberId, initialView, onReady }: {
           desktop rather than a tablet: three doors across a narrow screen
           leave each picture too small to read and the label too narrow to
           sit in. */}
+      {door ? (
+        <div ref={tabsRef} role="tablist" aria-label="MYRA worked while you shopped" className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap sm:gap-3 px-2 sm:px-4 lg:px-8 scroll-mt-24">
+          {DOOR_TABS.filter((t) => t.id !== 'styled' || view.saved.length > 0).map((t) => {
+            const on = door === t.id
+            return (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={on}
+                onClick={() => toggle(t.id)}
+                className={`rounded-full px-3 sm:px-6 py-3 sm:py-3.5 text-[15px] sm:text-[19px] xl:text-[22px] 2xl:text-[25px] tracking-[0.08em] uppercase text-center transition-colors ${on ? 'bg-[#2B2B2B] text-white' : 'bg-white/85 text-[#55534E] shadow-[0_2px_14px_rgba(43,43,43,0.08)] hover:text-[#2B2B2B]'}`}
+              >
+                <span className="sm:hidden">{t.short}</span>
+                <span className="hidden sm:inline">{t.id === 'brands' ? brandsTitle : t.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      ) : (
       <div className={`grid ${doors === 3 ? 'grid-cols-1 lg:grid-cols-3' : 'grid-cols-1 lg:grid-cols-2'} gap-5 sm:gap-8 lg:gap-12 2xl:gap-16 w-full px-2 sm:px-4 lg:px-8`}>
         <Door
           title="MORE OF THE SAME"
@@ -501,10 +558,11 @@ export default function ShopBrain({ testMemberId, initialView, onReady }: {
           open={door === 'styled'} onOpen={() => toggle('styled')}
         />}
       </div>
+      )}
 
-      {/* The open door: the whole section as a grid. */}
+      {/* The open door: the whole section as a grid, straight under the pills. */}
       {door && (
-        <div ref={openRef} className="mt-14 mx-2 sm:mx-4 lg:mx-8 rounded-[24px] bg-white/85 shadow-[0_2px_18px_rgba(43,43,43,0.07)] px-6 md:px-10 py-9 scroll-mt-6">
+        <div ref={openRef} className="mt-5 mx-2 sm:mx-4 lg:mx-8 rounded-[24px] bg-white/85 shadow-[0_2px_18px_rgba(43,43,43,0.07)] px-6 md:px-10 py-9 scroll-mt-6">
           <div className="flex items-start justify-between gap-6 mb-6">
             <div>
               <p className={HEAD}>{door === 'similar' ? 'MORE OF THE SAME' : door === 'brands' ? brandsTitle : 'STYLED FOR YOU'}</p>
@@ -512,9 +570,17 @@ export default function ShopBrain({ testMemberId, initialView, onReady }: {
                 {door === 'similar' ? 'CLOSE TO WHAT YOU KEPT' : door === 'brands' ? brandsNote : 'TAP A PIECE TO STYLE IT'}
               </p>
             </div>
-            <button type="button" onClick={() => setDoor(null)} aria-label="Close" className="text-[21px] xl:text-[24px] tracking-[0.14em] text-[#4A4E57] underline underline-offset-4 whitespace-nowrap">
-              CLOSE
-            </button>
+            <div className="flex flex-col items-end gap-2 shrink-0">
+              <button type="button" onClick={() => setDoor(null)} aria-label="Close" className="text-[21px] xl:text-[24px] tracking-[0.14em] text-[#4A4E57] underline underline-offset-4 whitespace-nowrap">
+                CLOSE
+              </button>
+              {door === 'styled' && !testMemberId && (
+                // Where the saved pieces live for good: the SAVED shelf of her Dressing Room.
+                <Link href="/me/dressing-room?tab=saved" className="text-[17px] xl:text-[20px] tracking-[0.1em] text-[#2B2B2B] underline underline-offset-4 whitespace-nowrap">
+                  ALL YOUR SAVED PIECES →
+                </Link>
+              )}
+            </div>
           </div>
 
           {door === 'similar' && (
@@ -575,7 +641,7 @@ export default function ShopBrain({ testMemberId, initialView, onReady }: {
               {phone && sheet && current && (
                 <div className="fixed inset-0 z-[90]">
                   <div className="absolute inset-0 bg-black/30" onClick={() => setSheet(false)} />
-                  <div data-lenis-prevent className="myra-sheet-in-right absolute inset-y-0 right-0 w-full bg-[#F7F7F5] overflow-y-auto overscroll-contain px-5 pt-6 pb-16">
+                  <div data-lenis-prevent className="myra-sheet-in-right absolute inset-y-0 right-0 w-full bg-[#F7F7F5] overflow-y-auto overscroll-contain px-5 pt-[calc(24px+env(safe-area-inset-top,0px))] pb-16">
                     <button type="button" onClick={() => setSheet(false)} className="text-[19px] tracking-[0.12em] text-[#4A4E57] underline underline-offset-4 mb-4">
                       ← YOUR PIECES
                     </button>

@@ -7,8 +7,9 @@
 // the app, the way the overnight note tells her about her styled pieces.
 //
 //   Monday 10:00 UTC   mode=compose  this week's picks for every real member, then the note
-//   Thursday 09:00 UTC mode=notify   picks she has not been told about yet (a brief set midweek,
-//                                    a pick Chloe released) — composes only for events with none
+//   (mode=notify is no longer on the calendar — the note is weekly, Monday only,
+//    Chloe 2026-10-15 — but can be opened by hand: picks she has not been told
+//    about yet, composing only for events with none)
 //
 //     curl -H "Authorization: Bearer $CRON_SECRET" "http://localhost:3000/api/cron/event-picks?mode=compose"
 //
@@ -17,7 +18,7 @@
 //   ?hold=1        a TRIAL: compose for real but hold the picks from her (Chloe reviews them in admin)
 //   ?to=a@b.c      send the note to this address instead of hers (no app note, nothing marked told)
 //   ?preview=1     return the note as HTML, send nothing
-//   ?perEvent=3    options per event (default 2)
+//   ?perEvent=3    options per event (default 3)
 //   ?force=1       add picks even when this week already has them
 //   ?site=http://localhost:3000   links open here (pictures stay on the live site)
 
@@ -49,13 +50,21 @@ const pictureFor = (url: string) => { const t = thumbUrl(url, 256); return t.sta
 /** Her piece's ways. A note sent to Chloe instead carries ?member= so the link opens AS HER (her kept outfits, not Chloe's). */
 const waysLink = (p: EventPickView, b?: string, asMember?: string) => `${base(b)}/me/ways/${encodeURIComponent(p.item_id)}${asMember ? `?member=${encodeURIComponent(asMember)}` : ''}`
 
-/** One pick: the piece, then each kept outfit as a row of its pieces. */
+/**
+ * One pick: the piece, then each kept outfit — MYRA's picture of it where
+ * one has been made (Chloe, 2026-10-15: show the render), and always the
+ * row of its pieces.
+ */
 function pickHtml(p: EventPickView, b?: string, asMember?: string): string {
   const link = waysLink(p, b, asMember)
   const outfits = p.ways.slice(0, 3).map((w) => {
     const pieces = w.items.filter((it) => it.image_url && it.item_id !== p.item_id).slice(0, 4)
-    if (!pieces.length) return ''
-    return `<tr><td style="padding:6px 0 0 0;"><table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>
+    if (!pieces.length && !w.image_url) return ''
+    const picture = w.image_url
+      ? `<td style="padding:0 10px 0 0;vertical-align:middle;"><a href="${link}"><img src="${pictureFor(w.image_url)}" width="112" style="display:block;width:112px;height:auto;border-radius:8px;border:1px solid #e2e0db;" alt="The outfit, as MYRA pictures it" /></a></td>`
+      : ''
+    return `<tr><td style="padding:8px 0 0 0;"><table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>
+      ${picture}
       <td style="padding:0 6px 0 0;vertical-align:middle;"><a href="${link}" style="font-size:11px;letter-spacing:0.08em;color:#7c838b;text-decoration:none;">WITH</a></td>
       ${pieces.map((it) => `<td style="padding:0 6px 0 0;"><a href="${link}"><img src="${pictureFor(it.image_url!)}" width="56" style="display:block;width:56px;height:auto;border-radius:6px;border:1px solid #e2e0db;" alt="${esc(it.product_name)}" /></a></td>`).join('')}
     </tr></table></td></tr>`

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { readEventBrief, describeBrief } from '@/lib/events/brief'
+import { readEventBrief, describeBrief, readPlace, climateOf } from '@/lib/events/brief'
 
 describe('readEventBrief', () => {
   it('reads a long cocktail dress for New Year’s Eve', () => {
@@ -44,5 +44,39 @@ describe('readEventBrief', () => {
 
   it('says the brief back in one line', () => {
     expect(describeBrief(readEventBrief('new Years eve', 'a cocktail dress, probably long, in black'))).toBe('a long dressed-up dress, in black')
+  })
+})
+
+
+describe('a trip, read from its place and month', () => {
+  it('knows Edinburgh in December is cold and leads with layers', () => {
+    const b = readEventBrief('Edinburgh', null, '2026-12')
+    expect(b.place).toBe('edinburgh')
+    expect(b.climate).toBe('cold')
+    expect(b.itemTypes[0]).toBe('knitwear')
+    expect(b.itemTypes).toContain('coat')
+    expect(describeBrief(b)).toContain('Edinburgh in December, cold')
+  })
+
+  it('reads Florence in November as cool and still offers a dress first', () => {
+    const b = readEventBrief('Florence', null, '2026-11-14')
+    expect(b.climate).toBe('cool')
+    expect(b.itemTypes[0]).toBe('midi_dress')
+    expect(b.itemTypes).toContain('knitwear')
+  })
+
+  it('reads a place inside a longer name, and leaves the brief in charge', () => {
+    expect(readPlace('a wedding in Ibiza')).toBe('ibiza')
+    const b = readEventBrief('a wedding in Ibiza', 'a long silk dress', '2027-06-20')
+    expect(b.climate).toBe('warm')
+    expect(b.itemTypes[0]).toBe('maxi_dress')
+    expect(b.dressy).toBe(true)
+  })
+
+  it('has no climate for an event that is not a place', () => {
+    const b = readEventBrief('new Years eve', 'a cocktail dress', '2026-12-31')
+    expect(b.place).toBeNull()
+    expect(b.climate).toBeNull()
+    expect(climateOf(null, 12)).toBeNull()
   })
 })

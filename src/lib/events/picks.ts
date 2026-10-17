@@ -24,13 +24,13 @@ import { composeStyledWays } from '@/lib/styled-ways-compose'
 import { getStyledWays } from '@/lib/styled-ways'
 import type { StyledWayLook } from '@/lib/styled-ways-core'
 import type { ItemWithBrand } from '@/lib/admin-queries'
-import { readEventBrief, describeBrief, type EventBrief } from './brief'
+import { readEventBrief, describeBrief, sayPlace, MONTH_NAMES, type EventBrief } from './brief'
 
 export const EVENT_PICKS_MIGRATION_HINT = 'Run migration 0099_event_picks.sql first (npm run migrate)'
 const missing = (m: string) => /event_pick|schema cache|does not exist|column .*brief/i.test(m)
 
-/** Options per event per week, Chloe's ask: "two or three". */
-export const PICKS_PER_EVENT = 2
+/** Options per event per week — three (Chloe, 2026-10-15; it was two). */
+export const PICKS_PER_EVENT = 3
 /** How many heroes may be tried to land the picks — a hero whose outfits all fail is skipped, not shown. */
 const TRIES_PER_PICK = 3
 /** The occasions an event hero is styled for. */
@@ -177,6 +177,19 @@ export function rankHeroes(
       else if (f > 0 && f <= 2) score -= 0.4
       if (i.sheen === 'high' || /satin|silk|lace|organza|velvet|sequin|beaded/i.test(String(i.product_name ?? ''))) score += 0.2
     }
+    if (brief.climate) {
+      // Edinburgh in December wants sleeves and weight; Ibiza in July wants
+      // none of that. Read from the name, the cloth and the type.
+      const text = `${i.product_name ?? ''} ${i.material_primary ?? ''} ${String(i.item_type ?? '').replace(/_/g, ' ')}`.toLowerCase()
+      const warm = /\b(wool|cashmere|merino|knit|knitted|knitwear|tweed|velvet|boucl[eé]|shearling|leather|corduroy|flannel|long[- ]sleeve|roll[- ]neck|turtleneck|coat|jumper|sweater|cardigan|quilted|puffer|boot)\b/.test(text)
+      const light = /\b(linen|cotton voile|chiffon|organza|crochet|slip|cami|camisole|strappy|strapless|halter|sleeveless|bandeau|cut[- ]out|sarong|kaftan|swim|bikini|sandal|short sleeve|shorts)\b/.test(text)
+      const cold = brief.climate === 'cold' || brief.climate === 'cool'
+      const hot = brief.climate === 'hot' || brief.climate === 'warm'
+      if (cold && warm) { score += brief.climate === 'cold' ? 0.5 : 0.3; reasons.push('made for the cold') }
+      if (cold && light) score -= brief.climate === 'cold' ? 0.8 : 0.4
+      if (hot && light) { score += brief.climate === 'hot' ? 0.5 : 0.3; reasons.push('made for the heat') }
+      if (hot && warm) score -= brief.climate === 'hot' ? 0.8 : 0.4
+    }
     score += 0.3 * memberItemScore(taste, it)
     seenFamily.add(fam)
     out.push({ item: it, score, reasons })
@@ -203,7 +216,11 @@ function whyPick(c: HeroCandidate, brief: EventBrief, label: string): string {
     ? `From ${brand}, one of your brands`
     : c.reasons.includes('a brand near hers') ? `${brand}, close to the brands you love` : brand
   const fit = brief.dressy && Number(it.material_formality ?? 0) >= 4 ? ', dressed enough for the night' : ''
-  return `${lead} — ${article} ${what}${fit}, for ${label.trim()}.`
+  // "for Edinburgh in December, with the cold in mind" when the event is a place MYRA knows.
+  const where = brief.place
+    ? `${sayPlace(brief.place)}${brief.month ? ` in ${MONTH_NAMES[brief.month - 1]}` : ''}${brief.climate === 'cold' || brief.climate === 'cool' ? ', with the cold in mind' : brief.climate === 'hot' || brief.climate === 'warm' ? ', with the heat in mind' : ''}`
+    : label.trim()
+  return `${lead} — ${article} ${what}${fit}, for ${where}.`
 }
 
 // ── Composing picks ──────────────────────────────────────────────────────────
@@ -253,34 +270,41 @@ export async function composeEventPicks(memberId: string, opts: ComposePicksOpts
   if (!taste.prefs) taste.prefs = readStylePrefs(member)
   const reports: ComposedEventReport[] = []
 
+  // Every pick she has ever had, for any event: the same dress is never the
+  // option for Florence AND for Edinburgh (Chloe, 2026-10-15). Picks made
+  // earlier in this run count too.
+  const { data: allPrior, error: allErr } = await admin.from('event_pick').select('item_id, known_event_id, week_key, dismissed_at').eq('member_id', memberId)
+  if (allErr) return { week, events: [], error: missing(allErr.message) ? EVENT_PICKS_MIGRATION_HINT : allErr.message }
+  const allRows = (allPrior ?? []) as { item_id: string; known_event_id: string; week_key: string; dismissed_at: string | null }[]
+  const usedItems = new Set(allRows.map((p) => p.item_id))
+  const usedFamilies = new Set(library.filter((i) => usedItems.has(i.item_id)).map((i) => familyKey(i)))
+
   for (const event of events) {
     const briefText = await briefFor(admin, event)
-    const brief = readEventBrief(event.label, briefText)
+    const brief = readEventBrief(event.label, briefText, event.event_date)
     const report: ComposedEventReport = { event_id: event.event_id, label: event.label, brief: briefText, reading: describeBrief(brief), candidates: 0, tried: [], picked: [] }
     reports.push(report)
 
-    const { data: prior, error: perr } = await admin.from('event_pick').select('item_id, week_key, dismissed_at').eq('known_event_id', event.event_id)
-    if (perr) { report.skipped = missing(perr.message) ? EVENT_PICKS_MIGRATION_HINT : perr.message; continue }
-    const priorRows = (prior ?? []) as { item_id: string; week_key: string; dismissed_at: string | null }[]
+    const priorRows = allRows.filter((p) => p.known_event_id === event.event_id)
     if (!opts.force && priorRows.some((p) => p.week_key === week && !p.dismissed_at)) { report.skipped = 'already has picks this week'; continue }
 
-    const exclude = new Set(priorRows.map((p) => p.item_id))
-    const priorItems = library.filter((i) => exclude.has(i.item_id))
-    const excludeFamilies = new Set(priorItems.map((i) => familyKey(i)))
-    const ranked = rankHeroes(taste, library, brief, { exclude, excludeFamilies })
+    const ranked = rankHeroes(taste, library, brief, { exclude: usedItems, excludeFamilies: usedFamilies })
     report.candidates = ranked.length
 
-    // Breadth: the first pass takes at most one piece per brand AND per colour
-    // (when she named no colour), so two options are two brands and two
-    // colours when the library allows it — not two ivory minis side by side.
+    // Breadth: the first pass takes at most one piece per brand, per colour
+    // (when she named no colour) AND per type (when the brief allows more
+    // than one), so three options are three brands, three colours and — for
+    // a trip — a dress, a knit and a coat rather than three ivory minis.
     const usedBrands = new Set<string>()
     const usedColours = new Set<string>()
+    const usedTypes = new Set<string>()
     const queue: HeroCandidate[] = []
     for (const c of ranked) {
       const b = (c.item as any).brand_id ?? ''
       const col = brief.colours.length ? '' : String((c.item as any).colour_family ?? '')
-      if (usedBrands.has(b) || (col && usedColours.has(col))) continue
-      usedBrands.add(b); if (col) usedColours.add(col); queue.push(c)
+      const type = brief.itemTypes.length > 1 ? String((c.item as any).item_type ?? '') : ''
+      if (usedBrands.has(b) || (col && usedColours.has(col)) || (type && usedTypes.has(type))) continue
+      usedBrands.add(b); if (col) usedColours.add(col); if (type) usedTypes.add(type); queue.push(c)
     }
     for (const c of ranked) if (!queue.includes(c)) queue.push(c)
 
@@ -307,6 +331,8 @@ export async function composeEventPicks(memberId: string, opts: ComposePicksOpts
       }, { onConflict: 'known_event_id,item_id' })
       if (error) { report.skipped = missing(error.message) ? EVENT_PICKS_MIGRATION_HINT : error.message; break }
       if (col) pickedColours.add(col)
+      usedItems.add(c.item.item_id)
+      usedFamilies.add(familyKey(c.item))
       report.picked.push({ item_id: c.item.item_id, name: c.item.product_name, brand: (c.item as any).brand?.name ?? null, price: priceOf(c.item), ways, why })
     }
   }
@@ -339,7 +365,7 @@ export async function eventsWithPicks(memberId: string, opts: { includeHeld?: bo
   const out: EventWithPicks[] = []
   for (const e of events) {
     const briefText = e.brief?.trim() || (await briefFor(admin, e))
-    const reading = describeBrief(readEventBrief(e.label, briefText))
+    const reading = describeBrief(readEventBrief(e.label, briefText, e.event_date))
     const ps = rows.filter((p) => p.known_event_id === e.event_id).map((p): EventPickView | null => {
       const it = byId.get(p.item_id)
       if (!it || it.status === 'archived') return null

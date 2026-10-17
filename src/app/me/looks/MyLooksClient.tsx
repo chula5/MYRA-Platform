@@ -235,7 +235,7 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
         const back = () => { const prev = trail[trail.length - 1]; if (!prev) { close(); return } setTrail(trail.slice(0, -1)); setOpenMode(null); setOpenLook(prev) }
         const goTo = (id: string, mode?: 'similar' | 'explore') => { const next = browsable.find((l) => l.look_id === id); if (!next) return; noteViewed(id); setTrail([...trail, openLook]); setOpenMode(mode ?? null); setOpenLook(next) }
         return (
-          <div ref={overlayRef} data-lenis-prevent className="fixed inset-0 z-[120] overflow-y-auto myra-pearl">
+          <div ref={overlayRef} data-lenis-prevent className="fixed inset-0 z-[120] overflow-y-auto myra-pearl pt-[env(safe-area-inset-top,0px)]">
             <div style={{ zoom }}>
               <OutfitDetailClient
                 key={`${openLook.look_id}-${openMode ?? ''}`}
@@ -801,8 +801,14 @@ function SavedWhileBrowsing({
   const [pieces, setPieces] = useState<BrowsedPiece[] | null>(null)
   const [open, setOpen] = useState<string | null>(null)
   const dwell = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Resting on a piece shows what MYRA keeps for it (nothing is spent); a
+  // click asks for its ways. The sheet does the waiting (lib/styled-ways),
+  // and nothing unchecked is shown. Every hook stands above the early
+  // return: one below it crashed the room for anyone with a saved piece
+  // (React: rendered more hooks than the render before).
+  const [asked, setAsked] = useState<string | null>(null)
 
-  useEffect(() => { savedWhileBrowsing().then(setPieces) }, [])
+  useEffect(() => { savedWhileBrowsing().then(setPieces).catch(() => setPieces([])) }, [])
   useEffect(() => () => { if (dwell.current) clearTimeout(dwell.current) }, [])
 
   if (!pieces || pieces.length === 0) return null
@@ -810,10 +816,6 @@ function SavedWhileBrowsing({
   const piece = pieces.find((p) => p.item_id === open) ?? null
   const wearing = piece ? looksWearing(piece.item_id, looks) : []
 
-  // Resting on a piece shows what MYRA keeps for it (nothing is spent); a
-  // click asks for its ways. The sheet does the waiting (lib/styled-ways),
-  // and nothing unchecked is shown.
-  const [asked, setAsked] = useState<string | null>(null)
   function rest(p: BrowsedPiece) {
     if (dwell.current) clearTimeout(dwell.current)
     dwell.current = setTimeout(() => setOpen(p.item_id), 400)
@@ -850,8 +852,8 @@ function SavedWhileBrowsing({
         <div className="mt-6">
           <p className="myra-section-note mb-4">
             {wearing.length
-              ? `YOUR LOOKS WEARING THE ${(piece.brand ?? piece.product_name).toUpperCase()}`
-              : `WHAT TO WEAR WITH THE ${(piece.brand ?? piece.product_name).toUpperCase()}`}
+              ? `YOUR LOOKS WEARING THE ${String(piece.brand ?? piece.product_name ?? 'piece').toUpperCase()}`
+              : `WHAT TO WEAR WITH THE ${String(piece.brand ?? piece.product_name ?? 'piece').toUpperCase()}`}
           </p>
           {wearing.length > 0 ? (
             <div className={LOOK_GRID}>

@@ -9,7 +9,7 @@
 // it has been styled, STYLE THIS by occasion, the finders) is one tap further in.
 
 import Link from 'next/link'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import type { DressingRoomPiece, DressingRoomView, StyledLook } from '@/app/admin/private-stylist/actions'
 import { keepStyledLook, myLooksWithPiece, styleMyPiece } from './actions'
@@ -17,6 +17,7 @@ import BuiltOutfit from './BuiltOutfit'
 import SavedPieces from './SavedPieces'
 import DressingRoomScene from '@/components/me/DressingRoomScene'
 import ServiceMark from '@/components/me/ServiceMark'
+import MicButton from '@/components/me/MicButton'
 import EmailFinds from './EmailFinds'
 import { loadEmailPanel } from './email-actions'
 import { useScrollTo } from '@/lib/smooth-scroll'
@@ -33,6 +34,29 @@ const TYPES: { id: string; label: string; slots: string[] }[] = [
 ]
 
 const CARD = 'bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] rounded-[18px]'
+
+// The room is three shelves, one open at a time (Chloe, 2026-10-15: the
+// pieces she saved out shopping sat under the wardrobe where nobody would
+// look): her own pieces, what she saved from the shops, and what her order
+// emails turned up. A link can open a shelf — /me/dressing-room?tab=saved,
+// or the old #saved-pieces / #email-finds / ?piece= — and the tour asks for
+// one with the DRESSING_TAB_EVENT.
+export type DressingTab = 'wardrobe' | 'saved' | 'email'
+export const DRESSING_TAB_EVENT = 'myra:dressing-tab'
+const TABS: { id: DressingTab; label: string }[] = [
+  { id: 'wardrobe', label: 'Your wardrobe' },
+  { id: 'saved', label: 'Saved from the shops' },
+  { id: 'email', label: 'Found in email' },
+]
+function tabFromUrl(): DressingTab {
+  if (typeof window === 'undefined') return 'wardrobe'
+  const q = new URLSearchParams(window.location.search)
+  const t = q.get('tab')
+  if (t === 'saved' || t === 'email' || t === 'wardrobe') return t
+  if (q.get('piece') || window.location.hash === '#saved-pieces') return 'saved'
+  if (window.location.hash === '#email-finds') return 'email'
+  return 'wardrobe'
+}
 // The buttons at the top of the room: a mark and one word each.
 const ROOM_BTN = 'inline-flex items-center gap-2.5 rounded-full pl-2 pr-5 py-2 text-[18px] xl:text-[21px] 2xl:text-[25px] tracking-[0.08em] transition-opacity hover:opacity-85'
 function PhotoIcon() {
@@ -52,6 +76,21 @@ export default function DressingRoomClient({
   onOpenPiece?: (itemId: string) => void
 }) {
   const [typeFilter, setTypeFilter] = useState('all')
+  // Which shelf is open, and how much is on the other two.
+  const [tab, setTab] = useState<DressingTab>('wardrobe')
+  const [savedCount, setSavedCount] = useState<number | null>(null)
+  const [emailCount, setEmailCount] = useState<number | null>(null)
+  const onSavedCount = useCallback((n: number) => setSavedCount(n), [])
+  const onEmailCount = useCallback((n: number) => setEmailCount(n), [])
+  useEffect(() => {
+    setTab(tabFromUrl())
+    const onAsk = (e: Event) => {
+      const t = (e as CustomEvent).detail
+      if (t === 'wardrobe' || t === 'saved' || t === 'email') setTab(t)
+    }
+    window.addEventListener(DRESSING_TAB_EVENT, onAsk)
+    return () => window.removeEventListener(DRESSING_TAB_EVENT, onAsk)
+  }, [])
   // Is an inbox connected? Decides what the button in the room says.
   const [inboxes, setInboxes] = useState<number | null>(null)
   const scrollTo = useScrollTo()
@@ -61,8 +100,8 @@ export default function DressingRoomClient({
     return () => { live = false }
   }, [testMemberId])
   const emailSync = () => {
-    const el = document.getElementById('email-finds')
-    if (el) scrollTo(el, { offset: -24 })
+    setTab('email')
+    setTimeout(() => { const el = document.getElementById('email-finds'); if (el) scrollTo(el, { offset: -24 }) }, 60)
     if (inboxes) window.dispatchEvent(new CustomEvent('myra:email-sync'))
   }
   const [picked, setPicked] = useState<DressingRoomPiece | null>(null)
@@ -194,8 +233,30 @@ export default function DressingRoomClient({
 
         {view.error && <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#B83A3A] text-center">{view.error}</p>}
 
+        {/* The three shelves. Big enough to read on a phone, the count beside each. */}
+        <div data-lenis-prevent role="tablist" aria-label="Your dressing room" className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-1">
+          {TABS.map((t) => {
+            const on = tab === t.id
+            const count = t.id === 'wardrobe' ? view.pieces.length : t.id === 'saved' ? savedCount : emailCount
+            return (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={on}
+                data-tour={`tab-${t.id}`}
+                onClick={() => setTab(t.id)}
+                className={`shrink-0 inline-flex items-center gap-2.5 rounded-full px-5 py-3 text-[17px] sm:text-[19px] xl:text-[22px] 2xl:text-[25px] tracking-[0.08em] uppercase transition-colors ${on ? 'bg-[#2B2B2B] text-white' : 'bg-white/85 text-[#55534E] shadow-[0_2px_14px_rgba(43,43,43,0.08)] hover:text-[#2B2B2B]'}`}
+              >
+                {t.label}
+                {count != null && <span className={`rounded-full px-2.5 py-0.5 text-[15px] sm:text-[16px] xl:text-[18px] tracking-normal ${on ? 'bg-white/20 text-white' : 'bg-[#F3F2F0] text-[#55534E]'}`}>{count}</span>}
+              </button>
+            )
+          })}
+        </div>
+
         {/* Her rail, and MYRA working down the right */}
-        {view.pieces.length > 0 && (
+        {tab === 'wardrobe' && view.pieces.length > 0 && (
           <section className={`${CARD} px-6 sm:px-8 py-8`}>
             <div className="grid xl:grid-cols-[minmax(0,1fr)_minmax(460px,36%)] 2xl:grid-cols-[minmax(0,1fr)_42%] gap-8">
               <div className="min-w-0">
@@ -293,6 +354,7 @@ export default function DressingRoomClient({
                         placeholder="Find a black top to go with these bottoms…"
                         className="myra-guide-text flex-1 min-w-[240px] rounded-full bg-white px-6 py-3 text-[19px] xl:text-[22px] 2xl:text-[26px] outline-none border-2 border-transparent focus:border-[#C9C9C9]"
                       />
+                      <MicButton size="sm" onText={(t, final) => { setAsk(t); if (final && t.trim() && !styling) void styleNow(picked, { shuffle, query: t }) }} />
                       <button type="submit" disabled={styling || !ask.trim()} className="text-[19px] xl:text-[22px] 2xl:text-[26px] px-5 py-2.5 rounded-full bg-[#2B2B2B] text-white disabled:opacity-40">
                         Find it
                       </button>
@@ -383,13 +445,30 @@ export default function DressingRoomClient({
           </section>
         )}
 
-        {/* What she kept with the mirror while she was out shopping. */}
-        <SavedPieces testMemberId={testMemberId} />
+        {tab === 'wardrobe' && !view.pieces.length && (
+          <section className={`${CARD} px-6 sm:px-8 py-10 text-center`}>
+            <p className="text-[21px] xl:text-[24px] 2xl:text-[28px] text-[#4A4E57]">Nothing in your wardrobe yet. Add your pieces, or let MYRA find them in your order emails.</p>
+          </section>
+        )}
+
+        {/* What she kept with the mirror while she was out shopping. The
+            section keeps loading and watching behind the other tabs, so its
+            count is right and a styling she left carries on. */}
+        <div className={tab === 'saved' ? 'space-y-6' : 'hidden'}>
+          <SavedPieces testMemberId={testMemberId} onCount={onSavedCount} />
+          {savedCount === 0 && (
+            <section className={`${CARD} px-6 sm:px-8 py-10 text-center`}>
+              <p className="text-[21px] xl:text-[24px] 2xl:text-[28px] text-[#4A4E57]">Nothing saved yet. Tap the heart in the MYRA Mirror while you shop, and the piece lands here — styled three ways.</p>
+            </section>
+          )}
+        </div>
 
         {/* Fill the dressing room from her order emails. */}
-        <EmailFinds testMemberId={testMemberId} />
+        <div className={tab === 'email' ? '' : 'hidden'}>
+          <EmailFinds testMemberId={testMemberId} onCount={onEmailCount} />
+        </div>
 
-        {!testMemberId && (
+        {!testMemberId && tab === 'wardrobe' && (
           <p className="text-center">
             <Link href="/me/wardrobe" className={view.pieces.length ? 'text-[22px] xl:text-[25px] 2xl:text-[29px] text-[#2B2B2B] underline underline-offset-4' : 'inline-block text-[22px] xl:text-[25px] 2xl:text-[29px] px-7 py-4 bg-[#2B2B2B] text-white rounded-full'}>
               {view.pieces.length ? 'Add more pieces →' : 'Add your pieces'}

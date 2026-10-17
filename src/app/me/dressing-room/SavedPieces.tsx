@@ -16,8 +16,10 @@ const T = 'text-[20px] xl:text-[23px] 2xl:text-[27px]'
 const T_SMALL = 'text-[18px] xl:text-[21px] 2xl:text-[25px]'
 const CARD = 'rounded-[18px] bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)]'
 
-export default function SavedPieces({ testMemberId }: { testMemberId?: string }) {
+export default function SavedPieces({ testMemberId, onCount }: { testMemberId?: string; onCount?: (n: number) => void }) {
   const [pieces, setPieces] = useState<SavedPieceView[] | null>(null)
+  // The room's SAVED tab shows the count.
+  useEffect(() => { if (pieces) onCount?.(pieces.length) }, [pieces, onCount])
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState<string | null>(null)
 
@@ -86,7 +88,7 @@ export default function SavedPieces({ testMemberId }: { testMemberId?: string })
 function SavedTile({ piece: p, open, gone, onOpen }: { piece: SavedPieceView; open: boolean; gone: boolean; onOpen: () => void }) {
   const ready = useWaysReady(p.item_id)
   return (
-            <button type="button" onClick={onOpen} className={`text-left bg-white rounded-[16px] overflow-hidden shadow-[0_1px_8px_rgba(43,43,43,0.06)] ${open ? 'ring-2 ring-[#2B2B2B]' : ''}`}>
+            <button type="button" onClick={onOpen} className={`block w-full text-left bg-white rounded-[16px] overflow-hidden shadow-[0_1px_8px_rgba(43,43,43,0.06)] ${open ? 'ring-2 ring-[#2B2B2B]' : ''}`}>
               <div className="relative aspect-[3/4] bg-[#F3F2F0] overflow-hidden">
                 {p.image_url && <FallbackImage src={p.image_url} thumbWidth={600} alt={p.product_name} className="absolute inset-0 w-full h-full object-cover" />}
                 {gone && (

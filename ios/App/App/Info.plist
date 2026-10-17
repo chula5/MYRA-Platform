@@ -28,6 +28,8 @@
 	<string>MYRA reads what is coming up so it can plan outfits for the days worth dressing for. Nothing is written to your calendar.</string>
 	<key>NSCalendarsUsageDescription</key>
 	<string>MYRA reads what is coming up so it can plan outfits for the days worth dressing for. Nothing is written to your calendar.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>MYRA listens while you speak to your stylist, so you can talk instead of type. Nothing is recorded or kept.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

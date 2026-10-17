@@ -23,8 +23,15 @@ import { watchWays, clearWaysReady } from './ways-watch'
 
 const T = 'text-[19px] xl:text-[22px] 2xl:text-[26px]'
 const T_SMALL = 'text-[17px] xl:text-[20px] 2xl:text-[23px]'
+// The sheet never gives up on its own: MYRA finishes or says it cannot, and
+// the queue (lib/styled-ways-queue) fails a job whose function died. It only
+// asks less often as the wait grows, and after five minutes says so in a
+// calmer voice — the mark in the corner carries on when she leaves.
 const POLL_MS = 1_500
-const MAX_POLLS = 90
+const SLOW_AFTER_MS = 60_000
+const SLOW_POLL_MS = 3_000
+const PATIENT_AFTER_MS = 5 * 60_000
+const PATIENT_POLL_MS = 10_000
 
 export default function WaysToWear({
   itemId, piece, mode = 'blend', testMemberId, onClose, inline = false, heading, autoStart = true, onStatus,
@@ -65,13 +72,13 @@ export default function WaysToWear({
       if (r.error) setError(r.error)
     } finally { if (live.current) setReacting(null) }
   }
-  const polls = useRef(0)
+  const startedAt = useRef(0)
+  const [slow, setSlow] = useState(false)
   const live = useRef(true)
   const working = useRef(false)
 
   async function poll() {
     if (!live.current) return
-    polls.current++
     let next: Awaited<ReturnType<typeof pollWaysToWear>> | null = null
     try { next = await pollWaysToWear(itemId, mode, testMemberId) } catch { /* try again */ }
     if (!live.current) return
@@ -84,14 +91,16 @@ export default function WaysToWear({
         return
       }
     }
-    if (polls.current < MAX_POLLS) setTimeout(poll, POLL_MS)
-    else { working.current = false; setStatus(looks.length ? 'ready' : 'failed'); setError('MYRA is taking longer than usual. Come back in a moment.') }
+    const elapsed = Date.now() - startedAt.current
+    if (elapsed >= PATIENT_AFTER_MS) setSlow(true)
+    setTimeout(poll, elapsed >= PATIENT_AFTER_MS ? PATIENT_POLL_MS : elapsed >= SLOW_AFTER_MS ? SLOW_POLL_MS : POLL_MS)
   }
 
   async function open(more: boolean, passive = false) {
     setError(null)
     setStatus(more ? 'working' : 'opening')
-    polls.current = 0
+    startedAt.current = Date.now()
+    setSlow(false)
     const v = await openWaysToWear(itemId, { mode, more, passive }, testMemberId)
     if (!live.current) return
     if (v.piece) setShown(v.piece)
@@ -125,7 +134,7 @@ export default function WaysToWear({
   const name = (p.brand ? `${p.brand} ` : '') + (p.product_name ?? '')
 
   const body = (
-    <div className={`w-full ${inline ? '' : 'px-6 sm:px-10 py-10 max-w-[1700px] mx-auto'} space-y-8`}>
+    <div className={`w-full ${inline ? '' : 'px-6 sm:px-10 pt-[calc(40px+env(safe-area-inset-top,0px))] pb-10 max-w-[1700px] mx-auto'} space-y-8`}>
       <div className="flex items-center gap-5 flex-wrap">
         <div className="relative w-[72px] sm:w-[96px] flex-none aspect-[3/4] bg-white rounded-[12px] overflow-hidden shadow-[0_1px_8px_rgba(43,43,43,0.06)]">
           {p.image_url && <FallbackImage src={p.image_url} thumbWidth={300} alt={p.product_name ?? ''} className="absolute inset-0 w-full h-full object-contain" />}
@@ -153,7 +162,9 @@ export default function WaysToWear({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/myra-mirror-transparent.png" alt="" className="myra-mirror-wiggle h-14 w-auto" />
           <p className={`${T} text-[#4A4E57]`}>
-            {status === 'opening' ? 'Looking at what MYRA has for it…' : looks.length ? 'MYRA is checking the rest before you see them' : 'MYRA is checking them before you see them'}
+            {status === 'opening' ? 'Looking at what MYRA has for it…'
+              : slow ? 'MYRA is still working on it — the mark in the corner will say when it is ready, wherever you are.'
+              : looks.length ? 'MYRA is checking the rest before you see them' : 'MYRA is checking them before you see them'}
           </p>
         </div>
       )}

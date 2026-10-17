@@ -83,7 +83,8 @@ const PK: Record<string, string> = {
 }
 
 describe.skipIf(!CONNECTED)('learning projections — connected proof (test partition)', () => {
-  const admin: any = createAdminClient()
+  // A skipped suite is still collected: no client where there is no database (CI).
+  const admin: any = CONNECTED ? createAdminClient() : null
   const protectedCounts: Record<string, number> = {}
   // Rows created before this timestamp are pre-existing; connected suites run
   // in parallel against the live project, so global counts must exclude rows

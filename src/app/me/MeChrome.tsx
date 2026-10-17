@@ -8,6 +8,7 @@ import { usePathname } from 'next/navigation'
 import { ROOMS, ROW_ROOMS, RoomIcon, RoomSearch, type RoomId } from '@/components/me/RoomNav'
 import YouButton from '@/components/me/YouButton'
 import MobileTabBar from '@/components/me/MobileTabBar'
+import StylingBadge from '@/components/me/StylingBadge'
 
 export default function MeChrome() {
   const path = usePathname() ?? '/me'
@@ -16,8 +17,9 @@ export default function MeChrome() {
     .find((r) => path === r.href || path.startsWith(`${r.href}/`))?.id) ?? 'for_you'
   const home = active === 'for_you'
 
-  // On a phone the header is not sticky and never holds the rooms: it scrolls
-  // away with the page, and the tab bar at the foot carries the rooms instead.
+  // On a phone the header never holds the rooms (the tab bar at the foot
+  // carries them) but it does stay put: MYRA and her profile are pinned under
+  // the clock on every page, and only the page scrolls beneath them.
   return (
     <>
       {/* A desktop keeps the six rooms down the left, the way Instagram keeps
@@ -36,7 +38,7 @@ export default function MeChrome() {
           )
         })}
       </nav>
-      <header className="sm:sticky sm:top-0 z-30 myra-pearl border-b border-[rgba(43,43,43,0.18)]">
+      <header className="sticky top-[env(safe-area-inset-top,0px)] z-30 myra-pearl border-b border-[rgba(43,43,43,0.18)]">
         {/* Her front door keeps the search under the logo. Inside a room the
             same pill sits in the bar beside MYRA — the rooms themselves now
             stand down the left, so they never take the room's width. */}
@@ -91,6 +93,8 @@ export default function MeChrome() {
         )}
       </header>
       <MobileTabBar active={active} />
+      {/* The dress form that says what MYRA is styling: it follows her from room to room. */}
+      <StylingBadge />
     </>
   )
 }

@@ -58,17 +58,61 @@ function hashKeys(products) {
   return String(h)
 }
 
+// ── WHEN MYRA CANNOT BE REACHED ─────────────────────────────────────────────
+// 0.4.6: a fetch that threw (the address is wrong, the dev server is off, she
+// is offline) used to surface as a bare "Failed to fetch" and a rank that
+// quietly did nothing; a token the site had stopped accepting cleared itself
+// just as quietly. The last failure is kept per address so the badge and the
+// popup can say so, and it is forgotten the moment a call to that address
+// comes back 200. `kind` is 'offline' (no answer at all) or 'auth' (401).
+let apiFailures = null // { [apiBase]: { kind, at, message } }
+async function loadFailures() {
+  if (apiFailures) return apiFailures
+  const stored = await ext.storage.local.get('apiFailures')
+  apiFailures = stored?.apiFailures && typeof stored.apiFailures === 'object' ? stored.apiFailures : {}
+  return apiFailures
+}
+async function noteFailure(apiBase, kind, message) {
+  const all = await loadFailures()
+  const was = all[apiBase]
+  all[apiBase] = { kind, at: Date.now(), message: String(message || '').slice(0, 200) }
+  if (!was || was.kind !== kind) { try { await ext.storage.local.set({ apiFailures: all }) } catch {} }
+}
+async function clearFailure(apiBase) {
+  const all = await loadFailures()
+  if (!all[apiBase]) return
+  delete all[apiBase]
+  try { await ext.storage.local.set({ apiFailures: all }) } catch {}
+}
+/** The failure standing against the address in use, or null. */
+async function currentFailure(c) {
+  const all = await loadFailures()
+  return all[c.apiBase] || null
+}
+
 async function api(path, init = {}) {
   const c = await cfg()
-  if (!c.token) return { status: 401, json: { error: 'not connected' } }
-  const res = await fetch(`${c.apiBase.replace(/\/+$/, '')}${path}`, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${c.token}`, ...(init.headers || {}) },
-  })
-  if (res.status === 401) await ext.storage.local.set({ token: null, member: null })
+  if (!c.token) return { status: 401, json: { error: 'not connected' }, kind: 'auth' }
+  let res
+  try {
+    res = await fetch(`${c.apiBase.replace(/\/+$/, '')}${path}`, {
+      ...init,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${c.token}`, ...(init.headers || {}) },
+    })
+  } catch (e) {
+    const message = String(e?.message || e)
+    await noteFailure(c.apiBase, 'offline', message)
+    return { status: 0, json: { error: message }, kind: 'offline' }
+  }
+  if (res.status === 401) {
+    await ext.storage.local.set({ token: null, member: null })
+    await noteFailure(c.apiBase, 'auth', 'token rejected')
+  } else if (res.status === 200) {
+    await clearFailure(c.apiBase)
+  }
   let json = null
   try { json = await res.json() } catch {}
-  return { status: res.status, json }
+  return { status: res.status, json, kind: res.status === 401 ? 'auth' : res.status === 200 ? null : 'server' }
 }
 
 // Chrome puts an idle service worker to sleep after ~30s, and a pending fetch
@@ -109,15 +153,19 @@ function shareTokenWithApp(token, apiBase) {
 const handlers = {
   async state({ host }) {
     const c = await cfg()
-    return { enabled: !c.disabledHosts.includes(host), connected: !!c.token, member: c.member, apiBase: c.apiBase }
+    return { enabled: !c.disabledHosts.includes(host), connected: !!c.token, member: c.member, apiBase: c.apiBase, failure: await currentFailure(c) }
   },
 
   async rank({ host, products, scan }) {
     const key = `${host}|${hashKeys(products)}`
     const hit = rankCache.get(key)
     if (hit && Date.now() - hit.at < RANK_TTL_MS) return { ...hit.data, cached: true }
-    const { status, json } = await api('/api/mirror/rank', { method: 'POST', body: JSON.stringify({ host, products, scan: scan === true }) })
-    if (status !== 200 || !json) return { error: json?.error || `rank failed (${status})` }
+    const { status, json, kind } = await api('/api/mirror/rank', { method: 'POST', body: JSON.stringify({ host, products, scan: scan === true }) })
+    // Never connected at all: quiet, as before — the popup says "Connect".
+    // A token the site turned away, or an address that does not answer, is
+    // named so the page can say "tap to reconnect".
+    if (status === 401 && !(await currentFailure(await cfg()))) return { error: 'not connected' }
+    if (status !== 200 || !json) return { error: json?.error || `rank failed (${status})`, kind: kind || 'server' }
     rankCache.set(key, { at: Date.now(), data: json })
     return json
   },
@@ -148,6 +196,12 @@ const handlers = {
     await ext.storage.local.set({ member: json.name })
     rankCache.clear()
     shareTokenWithApp(token, apiBase)
+    // Every shop page already open ranks itself again, so a "can't be
+    // reached" line clears without her reloading the page.
+    try {
+      const tabs = await ext.tabs.query({})
+      for (const t of tabs) { if (t.id != null) Promise.resolve(ext.tabs.sendMessage(t.id, { type: 'rerun' })).catch(() => {}) }
+    } catch {}
     return { ok: true, member: json.name }
   },
 
@@ -170,6 +224,7 @@ const handlers = {
 
   async disconnect() {
     await ext.storage.local.set({ token: null, member: null })
+    await clearFailure((await cfg()).apiBase)
     rankCache.clear()
     shareTokenWithApp(null, null)
     return { ok: true }
@@ -360,6 +415,12 @@ const handlers = {
   async openTab({ url }, sender) {
     if (typeof url !== 'string' || !/^https?:\/\//.test(url)) return { error: 'bad url' }
     const tab = await ext.tabs.create({ url, active: false, ...(sender?.tab?.index != null ? { index: sender.tab.index + 1 } : {}) })
+    return { tabId: tab?.id ?? null }
+  },
+
+  /** The badge's "tap to reconnect": the live connect page, in front of her. */
+  async openConnect() {
+    const tab = await ext.tabs.create({ url: `${DEFAULTS.apiBase}/mirror/connect`, active: true })
     return { tabId: tab?.id ?? null }
   },
 

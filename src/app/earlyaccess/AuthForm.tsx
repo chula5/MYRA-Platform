@@ -32,7 +32,10 @@ function EnterButton({ pending }: { pending: boolean }) {
   )
 }
 
-export default function AuthForm({ initialMode = 'signin', error, next }: { initialMode?: 'signin' | 'signup'; error?: string; next?: string }) {
+// appDoor: inside the iPhone app's front door the logo is already above the
+// form and there is no account to create from here (a login without an
+// invite has nowhere to go) — so no mirror and no sign-up tab.
+export default function AuthForm({ initialMode = 'signin', error, next, appDoor = false }: { initialMode?: 'signin' | 'signup'; error?: string; next?: string; appDoor?: boolean }) {
   const [mode, setMode] = useState<'signin' | 'signup' | 'reset'>(initialMode)
   const isSignup = mode === 'signup'
   // From ENTER until her page arrives: the server action runs and redirects,
@@ -70,8 +73,10 @@ export default function AuthForm({ initialMode = 'signin', error, next }: { init
   return (
     <div className="w-full max-w-[360px]">
       <div className="text-center mb-8">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/myra-mirror-transparent.png" alt="MYRA" className="h-14 w-auto mx-auto mb-4" />
+        {!appDoor && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src="/myra-mirror-transparent.png" alt="MYRA" className="h-14 w-auto mx-auto mb-4" />
+        )}
         <h1 className="text-[clamp(20px,4vw,28px)] tracking-[0.05em] text-[#4A4E57]">
           {mode === 'reset' ? 'RESET PASSWORD' : isSignup ? 'CREATE YOUR LOGIN' : 'WELCOME BACK'}
         </h1>
@@ -121,7 +126,7 @@ export default function AuthForm({ initialMode = 'signin', error, next }: { init
       ) : (
         <>
           {/* Tabs */}
-          <div className="flex gap-1 p-1 bg-[#F2F2F2] rounded-full mb-5">
+          {!appDoor && <div className="flex gap-1 p-1 bg-[#F2F2F2] rounded-full mb-5">
             {(['signin', 'signup'] as const).map((m) => (
               <button
                 key={m}
@@ -134,7 +139,7 @@ export default function AuthForm({ initialMode = 'signin', error, next }: { init
                 {m === 'signin' ? 'SIGN IN' : 'CREATE ACCOUNT'}
               </button>
             ))}
-          </div>
+          </div>}
 
           {isSignup ? (
             <form action={publicSignUp} className="flex flex-col gap-3">

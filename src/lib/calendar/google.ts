@@ -5,6 +5,7 @@
 // Google Cloud beyond enabling the Calendar API and adding the scope.
 
 import 'server-only'
+import { googleTokenError } from '@/lib/email/gmail'
 
 const SCOPES = 'https://www.googleapis.com/auth/calendar.events.readonly https://www.googleapis.com/auth/userinfo.email'
 
@@ -32,7 +33,7 @@ async function tokenRequest(body: Record<string, string>): Promise<any> {
     body: new URLSearchParams({ client_id: process.env.GOOGLE_CLIENT_ID ?? '', client_secret: process.env.GOOGLE_CLIENT_SECRET ?? '', ...body }).toString(),
   })
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(`Google token request failed: ${data?.error_description ?? data?.error ?? res.status}`)
+  if (!res.ok) throw new Error(googleTokenError(data, res.status))
   return data
 }
 

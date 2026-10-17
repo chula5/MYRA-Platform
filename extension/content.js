@@ -428,6 +428,7 @@
 
   async function startStyling(product, mode) {
     openPanel({ status: 'loading', product, mode })
+    noteBuilding({ status: 'loading', product, mode })
     const r = await send({ type: 'styleStart', product, mode })
     if (!r?.error) { if (r?.job) renderPanel(r.job) ; return }
     // An extension whose background is older than this page does not know
@@ -509,6 +510,7 @@
     // still building carries on in the worker and lights the dot when done.
     void send({ type: 'styleClose' })
     maybePicksBadge()
+    badgeIdle()
   }
   function ensurePanelEl() {
     hideTopBanner()
@@ -1099,38 +1101,103 @@
   // away, and a second click puts it away again.
   let badge = null, badgeDot = null, jobWaiting = false, jobBuilding = false, picksWorth = false
 
+  function ensureCss() {
+    if (document.getElementById('myra-mirror-css')) return
+    const css = document.createElement('style')
+    css.id = 'myra-mirror-css'
+    css.textContent = '@keyframes myraBadgeBreathe{0%,100%{box-shadow:-3px 4px 18px rgba(0,0,0,.18)}50%{box-shadow:-3px 4px 18px rgba(0,0,0,.18),0 0 0 7px rgba(20,20,20,.16)}}'
+      + '@keyframes myraPulse{0%,100%{opacity:1}50%{opacity:.3}}'
+      // A wiggle, then a rest: the mirror rocks on its feet for the first
+      // half of each cycle and stands still for the second.
+      + '@keyframes myraWiggle{0%,46%,100%{transform:rotate(0)}8%{transform:rotate(-14deg)}16%{transform:rotate(12deg)}24%{transform:rotate(-9deg)}32%{transform:rotate(6deg)}40%{transform:rotate(-3deg)}}'
+      // The app's own dress-form wiggle (globals.css .myra-mirror-wiggle).
+      + '@keyframes myraFormWiggle{0%,100%{transform:rotate(0)}20%{transform:rotate(-7deg)}40%{transform:rotate(6deg)}60%{transform:rotate(-4deg)}80%{transform:rotate(3deg)}}'
+    document.documentElement.appendChild(css)
+  }
+
   function badgeMark() {
     if (!badgeDot) return
     badgeDot.style.display = jobWaiting || picksWorth ? 'block' : 'none'
-    // While MYRA builds, the badge breathes: that is where the answer lands.
+    // While MYRA builds, the badge breathes and its mirror wiggles: that is
+    // where the answer lands, whatever page she is on by then.
     if (badge) badge.style.animation = jobBuilding ? 'myraBadgeBreathe 1.6s ease-in-out infinite' : ''
+    const icon = badge?.querySelector('.myra-mirror-badge-icon')
+    if (icon) icon.style.animation = jobBuilding ? 'myraWiggle 1.6s ease-in-out infinite' : ''
   }
 
   // ── WHAT THE BADGE SAYS ───────────────────────────────────────────────────
   // She taps a piece, the styling goes to the worker, and the page she is on
   // may be a different one by the time it lands — the panel she watched it
   // start in is gone with the page she left. The one thing always in the same
-  // place is the badge, so the badge speaks for the styling: "MYRA is styling
-  // this — tap to watch" while it builds, "your looks are ready — tap to see"
-  // once it has landed. Tapping the words is tapping the badge. It says
-  // nothing while the panel is open, and nothing about a styling she closed.
-  let badgeSayEl = null
-  function badgeSay(text, building = false) {
+  // place is the badge. While it builds the mirror wiggles and nothing is
+  // said; when the looks land the badge says so once, in one short line with
+  // an × — "Looks ready for “…”" — and the line goes on its own after a few
+  // seconds (the dot on the badge keeps the looks a tap away). Closed or gone,
+  // it does not come back for that styling on the next page. It says nothing
+  // while the panel is open, and nothing about a styling she closed.
+  let badgeSayEl = null, badgeSayTimer = null, saidJobId = null
+  const SAY_FOR_MS = 10_000
+  const saidAlready = (id) => { try { return !!id && localStorage.getItem(`myra:mirror:said:${id}`) === '1' } catch { return false } }
+  const rememberSaid = (id) => { try { if (id) localStorage.setItem(`myra:mirror:said:${id}`, '1') } catch {} }
+  const TROUBLE_KEY = `myra:mirror:trouble-closed:${location.host}`
+  const troubleClosed = (kind) => { try { return sessionStorage.getItem(TROUBLE_KEY) === kind } catch { return false } }
+  const rememberTroubleClosed = (kind) => { try { sessionStorage.setItem(TROUBLE_KEY, kind) } catch {} }
+  function badgeSay(text, building = false, trouble = null) {
+    clearTimeout(badgeSayTimer)
     if (!text) { badgeSayEl?.remove(); badgeSayEl = null; return }
     if (!badge) return
     if (!badgeSayEl) {
-      badgeSayEl = document.createElement('button')
-      badgeSayEl.type = 'button'
+      badgeSayEl = document.createElement('div')
       badgeSayEl.className = 'myra-mirror-badge-say'
-      badgeSayEl.style.cssText = `position:fixed;z-index:2147483645;right:46px;top:50%;transform:translateY(-50%);max-width:min(330px,calc(100vw - 70px));border:0;background:#141414;color:#F7F6F3;border-radius:999px;padding:11px 15px 11px 14px;font:500 13px/1.3 ${FONT};text-align:left;box-shadow:0 12px 32px rgba(0,0,0,.28);cursor:pointer;display:flex;gap:9px;align-items:center;opacity:0;transition:opacity .25s ease;`
-      badgeSayEl.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); badgeClick() })
+      badgeSayEl.style.cssText = `position:fixed;z-index:2147483645;right:46px;top:50%;transform:translateY(-50%);max-width:min(270px,calc(100vw - 90px));background:#141414;color:#F7F6F3;border-radius:999px;padding:0 4px 0 0;font:500 13px/1.2 ${FONT};text-transform:none;letter-spacing:normal;box-shadow:0 10px 26px rgba(0,0,0,.26);display:flex;align-items:center;opacity:0;transition:opacity .25s ease;`
       document.body.appendChild(badgeSayEl)
       requestAnimationFrame(() => { if (badgeSayEl) badgeSayEl.style.opacity = '1' })
     }
-    const dot = `<span style="width:8px;height:8px;border-radius:50%;background:#F7F6F3;flex:0 0 auto;${building ? 'animation:myraPulse 1.2s infinite' : ''}"></span>`
-    badgeSayEl.innerHTML = `${dot}<span style="flex:1;min-width:0">${esc(text)}</span><span aria-hidden="true" style="opacity:.65;flex:0 0 auto">→</span>`
+    badgeSayEl.dataset.myraTrouble = trouble || ''
+    badgeSayEl.innerHTML = `<button type="button" data-myra="say" style="flex:1 1 auto;min-width:0;border:0;background:transparent;color:inherit;font:inherit;text-transform:none;letter-spacing:normal;text-align:left;padding:8px 4px 8px 13px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(text)} <span aria-hidden="true" style="opacity:.65">→</span></button><button type="button" data-myra="x" aria-label="Close" style="flex:0 0 auto;width:26px;height:26px;border:0;border-radius:50%;background:rgba(255,255,255,.14);color:inherit;font:400 16px/26px ${FONT};cursor:pointer;padding:0;text-align:center">×</button>`
+    badgeSayEl.querySelector('[data-myra="say"]').addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); badgeSayClick() })
+    badgeSayEl.querySelector('[data-myra="x"]').addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); badgeSayClose() })
+    // A finished styling's line goes on its own; a trouble line waits for her.
+    if (!trouble) badgeSayTimer = setTimeout(() => badgeSay(null), SAY_FOR_MS)
   }
-  const shortName = (t) => { const s = String(t || '').trim(); return s.length > 34 ? `${s.slice(0, 32).trim()}…` : s }
+  /** The ×: this line is not shown again — for this styling anywhere, or for this trouble on this shop this session. */
+  function badgeSayClose() {
+    const k = badgeSayEl?.dataset.myraTrouble
+    if (k) rememberTroubleClosed(k)
+    else rememberSaid(saidJobId)
+    badgeSay(null)
+  }
+
+  // ── WHEN MYRA CANNOT BE REACHED ───────────────────────────────────────────
+  // 0.4.6: a rank that failed used to fail in silence — no marks, no line,
+  // and nothing to say why. Now, on a page with a grid, the badge says so:
+  // "can't be reached — tap to reconnect" when the worker got no answer or
+  // its token was turned away (the tap opens the live connect page, which
+  // sends a fresh token and address), or "having trouble ranking this page"
+  // when MYRA answered but not with a ranking. It is the badge's idle line:
+  // a styling in flight still speaks over it, and the next good rank clears it.
+  let rankTrouble = null // { kind: 'offline' | 'auth' | 'server', text }
+  function troubleLine(kind) {
+    return kind === 'server' ? 'MYRA is having trouble ranking this page' : 'MYRA can\u2019t be reached \u2014 tap to reconnect'
+  }
+  /** What the badge says when no styling is speaking: the trouble line, or nothing. */
+  function badgeIdle() {
+    if (rankTrouble && !panel && !troubleClosed(rankTrouble.kind)) badgeSay(rankTrouble.text, false, rankTrouble.kind)
+    else badgeSay(null)
+  }
+  /** The rank's answer, good or bad: sets or clears the line. */
+  function noteRank(res) {
+    const kind = res?.error && (res.kind === 'offline' || res.kind === 'auth' || res.kind === 'server') ? res.kind : null
+    if ((rankTrouble?.kind || null) === kind) return
+    rankTrouble = kind ? { kind, text: troubleLine(kind) } : null
+    if (!jobBuilding && !jobWaiting) badgeIdle()
+  }
+  function badgeSayClick() {
+    const k = badgeSayEl?.dataset.myraTrouble
+    if (k === 'offline' || k === 'auth') { void send({ type: 'openConnect' }); return }
+    badgeClick()
+  }
+  const shortName = (t) => { const s = String(t || '').trim(); return s.length > 26 ? `${s.slice(0, 24).trim()}…` : s }
 
   /**
    * The styling's state, as the badge should show it: called with the job
@@ -1138,18 +1205,26 @@
    * is hers to forget until it lands — the worker lifts `dismissed` then.
    */
   function noteJob(job) {
-    if (!job) { jobWaiting = false; jobBuilding = false; badgeMark(); badgeSay(null); return }
+    noteBuilding(job)
+    if (!job) { jobWaiting = false; jobBuilding = false; badgeMark(); badgeIdle(); return }
     if (panel) { jobBuilding = false; badgeMark(); badgeSay(null); return }
     const building = (job.status === 'loading' || job.status === 'partial') && !job.dismissed
     const landed = job.status !== 'loading' && job.status !== 'partial' && !job.dismissed
+    const wasBuilding = jobBuilding
     jobBuilding = building
     if (landed) jobWaiting = true
     badgeMark()
+    // It has just landed in front of her: the mirror gives two last wiggles
+    // and the dot stays on until she opens it.
+    if (landed && wasBuilding) { const icon = badge?.querySelector('.myra-mirror-badge-icon'); if (icon) icon.style.animation = 'myraWiggle 1.6s ease-in-out 2' }
     const name = job.product?.title ? `“${shortName(job.product.title)}”` : 'this piece'
-    if (building) badgeSay(`MYRA is styling ${name} — tap to watch`, true)
-    else if (landed && job.status === 'error') badgeSay(`MYRA could not style ${name} — tap to see why`)
-    else if (landed) badgeSay(`Your looks for ${name} are ready — tap to see`)
-    else badgeSay(null)
+    // Building: the wiggle says it, no words. Landed: one short line, once.
+    if (building) badgeSay(null)
+    else if (landed && !saidAlready(job.id)) {
+      saidJobId = job.id || null
+      rememberSaid(job.id)
+      badgeSay(job.status === 'error' ? `Couldn’t style ${name} — see why` : `Looks ready for ${name}`)
+    } else badgeIdle()
   }
 
   function makeBadge() {
@@ -1160,16 +1235,11 @@
     badge.title = 'MYRA — open what is waiting here'
     badge.setAttribute('aria-label', 'Open MYRA')
     badge.style.cssText = `position:fixed;z-index:2147483645;right:0;top:50%;transform:translateY(-50%);width:38px;height:38px;border:0;border-radius:19px 0 0 19px;background:rgba(255,255,255,.96);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0 6px 0 10px;box-shadow:-3px 4px 18px rgba(0,0,0,.18);font:400 14px/1.4 ${FONT};color:#2B2B2B;`
-    badge.innerHTML = `<img src="${ext.runtime.getURL('icons/mirror.png')}" alt="" style="width:20px;height:20px;object-fit:contain"><span class="myra-mirror-badge-dot" style="position:absolute;top:4px;left:6px;width:8px;height:8px;border-radius:50%;background:#141414;box-shadow:0 0 0 2px rgba(255,255,255,.9);display:none"></span>`
+    badge.innerHTML = `<img class="myra-mirror-badge-icon" src="${ext.runtime.getURL('icons/mirror.png')}" alt="" style="width:20px;height:20px;object-fit:contain;transform-origin:50% 90%"><span class="myra-mirror-badge-dot" style="position:absolute;top:4px;left:6px;width:8px;height:8px;border-radius:50%;background:#141414;box-shadow:0 0 0 2px rgba(255,255,255,.9);display:none"></span>`
     badgeDot = badge.querySelector('.myra-mirror-badge-dot')
     badge.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); badgeClick() })
     document.body.appendChild(badge)
-    if (!document.getElementById('myra-mirror-badge-css')) {
-      const css = document.createElement('style')
-      css.id = 'myra-mirror-badge-css'
-      css.textContent = '@keyframes myraBadgeBreathe{0%,100%{box-shadow:-3px 4px 18px rgba(0,0,0,.18)}50%{box-shadow:-3px 4px 18px rgba(0,0,0,.18),0 0 0 7px rgba(20,20,20,.16)}}@keyframes myraPulse{0%,100%{opacity:1}50%{opacity:.3}}'
-      document.documentElement.appendChild(css)
-    }
+    ensureCss()
     badgeMark()
   }
 
@@ -1353,34 +1423,79 @@
    * The buttons sit over the PICTURE, never over the words. A tile often
    * carries its name and price under the photo (Maygel Coronel, most Shopify
    * themes), and buttons pinned to the tile's bottom edge covered them. So the
-   * bottom inset is measured from the picture's bottom edge — again on hover
-   * and when the picture finishes loading, since a lazy tile is one line of
-   * text tall until then.
+   * bottom inset is measured from the picture's bottom edge — again on hover,
+   * whenever a picture inside the tile finishes loading, and whenever the
+   * tile changes size (a lazy tile is one line of text tall until its photo
+   * arrives, and a phone never hovers to trigger a re-measure).
    */
   function placeActions(tile, wrap) {
     const img = tileImageEl(tile)
-    let inset = 10
+    let inset = 8
     if (img) {
       const t = tile.getBoundingClientRect()
       const r = img.getBoundingClientRect()
-      if (r.height > 40 && r.bottom > t.top) inset = Math.max(10, Math.round(t.bottom - r.bottom) + 10)
+      if (r.height > 40 && r.bottom > t.top) inset = Math.max(8, Math.round(t.bottom - r.bottom) + 8)
     }
     wrap.style.bottom = `${inset}px`
   }
+  const tileWatch = typeof ResizeObserver === 'function'
+    ? new ResizeObserver((entries) => {
+        for (const en of entries) {
+          const w = en.target.querySelector(':scope > .myra-mirror-actions')
+          if (w) placeActions(en.target, w)
+        }
+      })
+    : null
 
-  /** The two things a piece offers on hover: MYRA's answer, and somewhere to keep it. */
+  // ── THE MIRROR WIGGLES ────────────────────────────────────────────────────
+  // While MYRA styles a piece, the mirror on that piece's tile wiggles, and
+  // so does the mirror on the edge — which is on every page of every shop, so
+  // the wiggle follows her as she walks on, and stops when the looks land.
+  let buildingKey = null
+  const jobKey = (job) => job?.product?.url || job?.product?.key || null
+  const isBuilding = (job) => !!job && (job.status === 'loading' || job.status === 'partial') && !job.dismissed
+  function noteBuilding(job) {
+    const next = isBuilding(job) ? jobKey(job) : null
+    if (next === buildingKey) return
+    buildingKey = next
+    for (const [tile, product] of productOf) wiggleTile(tile, product)
+  }
+  function wiggleTile(tile, product) {
+    const icon = tile.querySelector(':scope > .myra-mirror-actions .myra-mirror-ask-icon')
+    if (!icon) return
+    const mine = !!buildingKey && (product.url === buildingKey || product.key === buildingKey)
+    icon.style.animation = mine ? 'myraFormWiggle 1.1s ease-in-out infinite' : ''
+  }
+
+  /**
+   * The two things a piece offers: MYRA's answer to "what do I wear with
+   * this?" behind a dress form, and a heart to keep it. Two small discs
+   * in the picture's bottom-right corner — never a strip across the tile, so
+   * the brand's name and price under the photo stay readable on a phone, where
+   * the discs are always showing. Tapping the form asks: with her wardrobe,
+   * or with new pieces. The form wiggles while MYRA is styling this piece —
+   * the mirror stays on the edge badge, where the answer lands.
+   */
+  const DISC = 'flex:0 0 auto;width:34px;height:34px;border-radius:50%;border:0;padding:0;margin:0;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.95);color:#2B2B2B;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.18);line-height:1;'
+  // The dress form on its stand — the same one the app draws while MYRA is
+  // styling (src/components/me/Mannequin.tsx). It wiggles on its stand here
+  // too, so the tile says "styling" the way the app does.
+  const MANNEQUIN = '<svg class="myra-mirror-ask-icon" viewBox="0 0 64 120" width="13" height="24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:block;transform-origin:50% 100%"><path d="M32 4v8"/><circle cx="32" cy="4" r="2.5"/><path d="M22 14c0 8-3 12-6 18-3 7-2 16 4 20h24c6-4 7-13 4-20-3-6-6-10-6-18"/><path d="M20 52c-6 6-8 16-6 26 1 5 6 8 18 8s17-3 18-8c2-10 0-20-6-26"/><path d="M32 86v24"/><path d="M18 114c4-3 24-3 28 0"/></svg>'
   function styleButton(tile, product) {
     if (tile.querySelector(':scope > .myra-mirror-actions')) return
+    ensureCss()
     if (getComputedStyle(tile).position === 'static') { tile.dataset.myraPos = '1'; tile.style.position = 'relative' }
     const wrap = document.createElement('div')
     wrap.className = 'myra-mirror-actions'
-    wrap.style.cssText = `position:absolute;left:10px;right:10px;bottom:10px;display:flex;gap:6px;align-items:center;justify-content:space-between;z-index:6;opacity:${TOUCH_DEVICE ? 1 : 0};transition:opacity .15s;font:500 13px/1 ${FONT};`
+    wrap.style.cssText = `position:absolute;right:8px;bottom:8px;display:flex;gap:6px;align-items:center;z-index:6;opacity:${TOUCH_DEVICE ? 1 : 0};transition:opacity .15s;font:500 13px/1 ${FONT};`
 
     const ask = document.createElement('button')
     ask.type = 'button'
     ask.className = 'myra-mirror-ask'
-    ask.innerHTML = `<img src="${ext.runtime.getURL('icons/mirror.png')}" alt="" style="width:18px;height:18px;object-fit:contain;filter:invert(1)"><span>What do I wear with this?</span>`
-    ask.style.cssText = 'flex:1 1 auto;min-width:0;display:flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:999px;background:rgba(20,20,20,.92);color:#F7F6F3;padding:9px 12px;cursor:pointer;font:500 12.5px/1 ' + FONT + ';letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;overflow:hidden;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);'
+    ask.title = 'What do I wear with this?'
+    ask.setAttribute('aria-label', 'What do I wear with this?')
+    ask.innerHTML = MANNEQUIN
+    ask.style.cssText = DISC
     ask.addEventListener('click', (e) => {
       e.preventDefault(); e.stopPropagation()
       openMenu(ask, { ...product, image: product.image || tileImage(tile) })
@@ -1392,7 +1507,7 @@
     fav.title = 'Add to Mirror favourites'
     fav.setAttribute('aria-label', 'Add to Mirror favourites')
     fav.textContent = '♥'
-    fav.style.cssText = 'flex:0 0 auto;width:34px;height:34px;border-radius:50%;border:0;background:rgba(255,255,255,.95);color:#2B2B2B;font-size:15px;line-height:34px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.18);'
+    fav.style.cssText = DISC + 'font-size:15px;'
     fav.addEventListener('click', async (e) => {
       e.preventDefault(); e.stopPropagation()
       fav.disabled = true
@@ -1416,8 +1531,12 @@
     tile.addEventListener('mouseleave', () => { if (!menu) wrap.style.opacity = '0'; revertPiece(pagePiece) })
     tile.appendChild(wrap)
     placeActions(tile, wrap)
-    const img = tileImageEl(tile)
-    if (img && !img.complete) img.addEventListener('load', () => placeActions(tile, wrap), { once: true })
+    // A picture that loads after the discs do (load does not bubble, but it
+    // is seen on the way down), and a tile that changes size, both put the
+    // discs back on the picture's bottom edge.
+    tile.addEventListener('load', () => placeActions(tile, wrap), true)
+    tileWatch?.observe(tile)
+    wiggleTile(tile, product)
     touched.add(tile)
   }
 
@@ -1596,7 +1715,7 @@
       const grids = vinted ? M.vintedGrids() : shopify ? M.findGrids() : M.genericGrids()
       // It speaks this shop but found nothing to re-order — a layout it has not
       // learned. Worth passing on too.
-      if (!grids.length) { if (!pagePiece && /shop|collection|catalog|category|products|browse|women/i.test(location.pathname)) offerSite(generic ? 'unsupported' : 'no_grid'); return }
+      if (!grids.length) { noteRank(null); if (!pagePiece && /shop|collection|catalog|category|products|browse|women/i.test(location.pathname)) offerSite(generic ? 'unsupported' : 'no_grid'); return }
       const tiles = grids.flatMap((g) => g.tiles)
       const sig = tiles.map((t) => t.key).join(',')
       if (sig === lastSig) return
@@ -1613,7 +1732,8 @@
       }
       const t0 = performance.now()
       const res = await send({ type: 'rank', host: location.host, products, scan: !!scan })
-      if (!res || res.error || !Array.isArray(res.products)) return
+      if (!res || res.error || !Array.isArray(res.products)) { if (res) noteRank(res); return }
+      noteRank(null)
       noteScanned(products, res)
       const scores = new Map(res.products.map((p) => [p.key, p]))
       lastLifted = grids.reduce((n, g) => n + apply(g, scores), 0)
@@ -1640,6 +1760,7 @@
 
   function restore() {
     for (const el of touched) {
+      tileWatch?.unobserve(el)
       if (el.dataset.myraOrder != null) { el.style.order = el.dataset.myraOrder; delete el.dataset.myraOrder }
       if (el.dataset.myraPos) { el.style.position = ''; delete el.dataset.myraPos }
       el.querySelectorAll(':scope > .myra-mirror-mark, :scope > .myra-mirror-actions').forEach((d) => d.remove())
@@ -1660,15 +1781,16 @@
     timer = setTimeout(run, Date.now() - lastRunAt > MAX_WAIT ? 0 : 500)
   }
   onMessage((msg) => {
-    if (msg?.type === 'restore') { observer.disconnect(); closeMenu(); closePicks(); hidePiece(); stopPicking(); hidePanel(); restore() }
+    if (msg?.type === 'restore') { observer.disconnect(); closeMenu(); closePicks(); hidePiece(); stopPicking(); hidePanel(); restore(); noteRank(null) }
     // A panel she already opened keeps being written into as the job builds.
     // One she has not opened stays shut — a finished job lights the badge's
     // dot instead, and on a page that is not a shop it simply waits in the
     // worker for the next shop page.
     if (msg?.type === 'styleUpdate') {
+      noteBuilding(msg.job || null)
       if (panel && panelView === 'home') { if (msg.job?.status !== 'loading') openHome() }
       else if (panel) renderPanel(msg.job)
-      else if (pagePiece || productOf.size) noteJob(msg.job || null)
+      else noteJob(msg.job || null)
     }
     if (msg?.type === 'rerun') { lastSig = ''; observer.observe(document.body, { childList: true, subtree: true }); schedule() }
   })
@@ -1689,12 +1811,13 @@
       else { scanBadge(scanStatus()); await scanLoop() }
     })()
   }
-  // A panel that was building when she left the last page still belongs to
-  // her — if here is a shop, the badge's dot says it is ready and she opens
-  // it. Anywhere else it waits in the worker rather than interrupting, and
-  // the next shop page picks it up.
+  // A styling that was building when she left the last page still belongs to
+  // her — the badge is on every page of a shop, so its mirror keeps wiggling
+  // here until the looks land, and then its dot says they are ready. (On a
+  // site that is not a shop at all there is no badge; the styling waits in
+  // the worker for the next shop page.)
   const inFlight = await send({ type: 'styleJob' })
-  if (panel || pagePiece || productOf.size) noteJob(inFlight?.job || null)
+  noteJob(inFlight?.job || null)
   // She was picking a piece and her click opened its page, or another page
   // of pieces: carry on here, the piece offered straight away.
   if (pickingAsked()) {

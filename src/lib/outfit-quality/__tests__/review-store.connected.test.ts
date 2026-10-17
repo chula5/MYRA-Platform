@@ -81,7 +81,8 @@ const CLEANUP_ORDER = [
 const DIRECT_DELETE_TABLES = new Set(['outfit_item', 'outfit'])
 
 describe.skipIf(!CONNECTED)('review store — connected proof (test partition)', () => {
-  const admin: any = createAdminClient()
+  // A skipped suite is still collected: no client where there is no database (CI).
+  const admin: any = CONNECTED ? createAdminClient() : null
   let batchId: string
   let batch: any
   let realItem: any

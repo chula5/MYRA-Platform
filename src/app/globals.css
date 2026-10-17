@@ -693,3 +693,20 @@ html {
 @keyframes myra-sheet-in-right { from { transform: translateX(100%); } to { transform: translateX(0); } }
 .myra-sheet-in-right { animation: myra-sheet-in-right 420ms cubic-bezier(0.22, 1, 0.36, 1); }
 @media (prefers-reduced-motion: reduce) { .myra-sheet-in-right { animation: none; } }
+
+/* The microphone while it listens: a slow breath, so she can see it hears. */
+.myra-mic-live { animation: myra-mic-live 1.4s ease-in-out infinite; }
+@keyframes myra-mic-live {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(184, 58, 58, 0.45); }
+  50% { box-shadow: 0 0 0 10px rgba(184, 58, 58, 0); }
+}
+@media (prefers-reduced-motion: reduce) { .myra-mic-live { animation: none; } }
+
+/* ── The iPhone app's front door ─────────────────────────────── */
+/* The sign-in form inside the door is the website's, drawn at phone sizes:
+   nothing under 15px on a phone. */
+.myra-app-door h1 { font-size: 24px !important; }
+.myra-app-door p { font-size: 15px !important; line-height: 1.5; }
+.myra-app-door input { font-size: 17px !important; padding-block: 15px !important; }
+.myra-app-door button[type="submit"] { font-size: 16px !important; padding-block: 15px !important; }
+.myra-app-door button[type="button"] { font-size: 14px !important; }

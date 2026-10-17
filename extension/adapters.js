@@ -97,8 +97,14 @@
   // with one picture, one link and a price. Nothing is invented — a tile that
   // carries no price or no picture is not a product.
   const CURRENCY = /(?:[£€$]|GBP|EUR|USD)\s?\d[\d.,]*/i
+  // What a tile says. innerText is the text as laid out — but a grid that
+  // keeps its off-screen rows cheap with content-visibility: auto (ME+EM) has
+  // laid nothing out below the fold, and innerText comes back empty for
+  // every tile she has not scrolled to. The words are still in the DOM:
+  // textContent has them, just without the line breaks.
+  const textOf = (el) => el.innerText || el.textContent || ''
   const priceIn = (el) => {
-    const m = (el.innerText || '').match(CURRENCY)
+    const m = textOf(el).match(CURRENCY)
     if (!m) return null
     const n = Number(m[0].replace(/[^\d.,]/g, '').replace(/,(\d{2})$/, '.$1').replace(/,/g, ''))
     return Number.isFinite(n) && n > 0 ? n : null
@@ -312,7 +318,7 @@
           .map(({ i }) => ({ i, area: (i.naturalWidth || i.width || 0) * (i.naturalHeight || i.height || 0) }))
           .sort((x, y) => y.area - x.area)[0]?.i || imgs[0]?.i
         const heading = el.querySelector('h1, h2, h3, h4, [class*="title"], [class*="name"]')
-        const lines = (el.innerText || '').split('\n').map((x) => x.trim()).filter(Boolean)
+        const lines = textOf(el).split('\n').map((x) => x.trim()).filter(Boolean)
         // A heading that wraps the price too — "Calista High Pump ⏎ £ 298.00",
         // or the sale and full price both — is the name on its first line.
         const title = cleanTileTitle(heading?.textContent || img?.getAttribute('alt') || lines.find((l) => !CURRENCY.test(l)) || 'Piece')
@@ -324,7 +330,7 @@
           type: null,
           price: f.price ?? priceIn(el),
           url: t.key,
-          available: f.available ?? !/sold out|out of stock/i.test(el.innerText || ''),
+          available: f.available ?? !/sold out|out of stock/i.test(textOf(el)),
           sizes: [],
           image: f.image || (img ? TILE_IMG_SRC(img) : null),
         })

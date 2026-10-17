@@ -142,7 +142,12 @@ export async function listFinds(memberId: string, status: 'pending' | 'approved'
     .select('find_id, retailer, order_date, product_name, brand_name, colour, size, price, currency, image_url, product_url, status, error')
     .eq('member_id', memberId).eq('status', status)
     .order('order_date', { ascending: false, nullsFirst: false }).limit(300)
-  return ((data ?? []) as any[]).map((r) => ({ ...r, price: r.price != null ? Number(r.price) : null }))
+  return ((data ?? []) as any[])
+    // A find with neither a picture nor a real name is not a piece she can
+    // recognise — it stays in the table (a later email may complete it) but
+    // never on the page (Chloe, 2026-10-15).
+    .filter((r) => status !== 'pending' || r.image_url || !isGenericName(r.product_name))
+    .map((r) => ({ ...r, price: r.price != null ? Number(r.price) : null }))
 }
 
 // ── Scanning ────────────────────────────────────────────────────────────────
@@ -293,7 +298,8 @@ export async function processEmailScans(budgetMs = 240_000): Promise<{ read: num
         permanent ? { status: 'failed', error: msg, finished_at: new Date().toISOString() } : { status: 'queued', error: msg },
       ).eq('job_id', job.job_id)
       if (permanentAuthError(msg)) {
-        await a.from('member_email_connection').update({ status: 'error', error: 'The inbox refused MYRA — connect it again.' }).eq('connection_id', c.connection_id)
+        const why = /invalid_grant/.test(msg) ? 'Google has signed MYRA out of this inbox — tap Gmail below to connect it again.' : 'The inbox refused MYRA — connect it again.'
+        await a.from('member_email_connection').update({ status: 'error', error: why }).eq('connection_id', c.connection_id)
       }
     }
   }

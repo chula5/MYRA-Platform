@@ -27,7 +27,7 @@ export default function StyleOutfit({
   const [items, setItems] = useState<LookItem[]>(initial)
   return (
     <div data-lenis-prevent className="fixed inset-0 z-[140] overflow-y-auto myra-pearl" role="dialog" aria-label="Style this outfit">
-      <div className="w-full px-6 sm:px-10 py-10 max-w-[1700px] mx-auto space-y-8">
+      <div className="w-full px-6 sm:px-10 pt-[calc(40px+env(safe-area-inset-top,0px))] pb-10 max-w-[1700px] mx-auto space-y-8">
         <div className="flex items-center gap-5 flex-wrap">
           <div className="flex-1 min-w-[200px]">
             <p className={`${T_SMALL} tracking-[0.12em] text-[#6E6B65]`}>STYLE IT</p>

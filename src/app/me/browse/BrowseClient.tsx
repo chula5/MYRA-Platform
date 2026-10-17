@@ -20,22 +20,14 @@ import { WAYS_READY_EVENT } from '@/components/me/ways-watch'
 import { noticePieces } from '@/app/me/ways/actions'
 import { WAYS } from '@/lib/styled-ways-core'
 import { useScrollTo } from '@/lib/smooth-scroll'
-
-// A dress form on its stand — the mark at the top of the page that wiggles
-// while MYRA is styling a piece and goes still when the outfits are ready.
-function Mannequin({ working }: { working: boolean }) {
-  return (
-    <svg viewBox="0 0 64 120" className={`h-16 w-auto text-[#2B2B2B] ${working ? 'myra-mirror-wiggle' : ''}`} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M32 4v8" />
-      <circle cx="32" cy="4" r="2.5" />
-      <path d="M22 14c0 8-3 12-6 18-3 7-2 16 4 20h24c6-4 7-13 4-20-3-6-6-10-6-18" />
-      <path d="M20 52c-6 6-8 16-6 26 1 5 6 8 18 8s17-3 18-8c2-10 0-20-6-26" />
-      <path d="M32 86v24" />
-      <path d="M18 114c4-3 24-3 28 0" />
-    </svg>
-  )
-}
+import {
+  STYLING_OPEN_EVENT, clearStylingReady, getStylingProgress, keepWatchingStyling, publishStyling, stopWatchingStyling,
+} from '@/components/me/styling-progress'
 import ShopLink, { type ShopLinkItem } from '@/components/ShopLink'
+
+/** The piece being styled, kept so the badge can bring her back to it after a new search. */
+const STYLED_KEY = 'myra:browse-styled'
+const wayModeOf = (styling: 'wardrobe' | 'new'): 'wardrobe' | 'inspiration' => (styling === 'wardrobe' ? 'wardrobe' : 'inspiration')
 import {
   browseSearch, saveBrowsedPiece,
   type BrowsePiece, type BrowseFacets, type BrowseSizes, type BrowseFilters,
@@ -160,6 +152,88 @@ export default function BrowseClient() {
   const chosen = pieces?.find((p) => p.item_id === picked) ?? similar.find((p) => p.item_id === picked) ?? null
   const activeCount = fBrands.length + fColours.length + fTypes.length + fClothing.length + fShoes.length
 
+  // ── The mark in the corner (components/me/styling-progress) ──────────────
+  // The dress form in the member chrome says STYLING while MYRA works on the
+  // piece she chose, and READY when it lands — in this room and every other.
+  // She can close the panel, tap away, come back by the mark, and the piece
+  // is reopened here (Chloe, 2026-10-16).
+  const styledNow = useRef<{ id: string; mode: 'wardrobe' | 'new'; phase: typeof phase } | null>(null)
+  styledNow.current = chosen && styling ? { id: chosen.item_id, mode: styling, phase } : null
+  const handOff = (s: { id: string; mode: 'wardrobe' | 'new'; phase: string } | null) => {
+    if (s && s.phase === 'working') keepWatchingStyling([s.id], [s.id], undefined, wayModeOf(s.mode))
+  }
+  useEffect(() => {
+    stopWatchingStyling('/me/browse')
+    return () => handOff(styledNow.current)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  // The panel closed, or another piece was picked, while MYRA was still on it: keep counting.
+  const lastStyled = useRef<{ id: string; mode: 'wardrobe' | 'new'; phase: string } | null>(null)
+  useEffect(() => {
+    const now = styledNow.current
+    const was = lastStyled.current
+    if (was && (!now || now.id !== was.id || now.mode !== was.mode)) handOff(was)
+    lastStyled.current = now ? { ...now } : null
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chosen?.item_id, styling, phase])
+  useEffect(() => {
+    if (!chosen || !styling) return
+    const origin = `/me/browse?styled=${encodeURIComponent(chosen.item_id)}&mode=${styling}&q=${encodeURIComponent(asked ?? '')}`
+    try { sessionStorage.setItem(STYLED_KEY, JSON.stringify(chosen)) } catch { /* no storage, no memory */ }
+    publishStyling({ total: 1, finished: phase === 'working' ? 0 : 1, ready: null, origin, mode: wayModeOf(styling) })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chosen?.item_id, styling, phase, asked])
+
+  // Back to the piece: from the address the badge opens (?styled=&mode=&q=),
+  // or the mark tapped while already here.
+  const restore = useRef<{ id: string; mode: 'wardrobe' | 'new'; piece: BrowsePiece | null } | null>(null)
+  const stashedPiece = (id: string): BrowsePiece | null => {
+    try { const s = sessionStorage.getItem(STYLED_KEY); const p = s ? JSON.parse(s) : null; return p?.item_id === id ? p : null } catch { return null }
+  }
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search)
+    const id = q.get('styled')
+    if (!id) return
+    const mode = q.get('mode') === 'wardrobe' ? 'wardrobe' : 'new'
+    const query = q.get('q') ?? ''
+    const piece = stashedPiece(id)
+    restore.current = { id, mode, piece }
+    try { window.history.replaceState(null, '', window.location.pathname) } catch { /* fine */ }
+    if (query) void ask(query)
+    else if (piece) { setAsked(piece.product_name); setPieces([piece]) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useEffect(() => {
+    const r0 = restore.current
+    if (!r0 || pieces === null) return
+    restore.current = null
+    const inPieces = pieces.some((p) => p.item_id === r0.id)
+    const inSimilar = similar.some((p) => p.item_id === r0.id)
+    if (!inPieces && !inSimilar) {
+      if (!r0.piece) return
+      setPieces([r0.piece, ...pieces])
+    } else if (inSimilar && !inPieces) setShowSimilar(true)
+    setPicked(r0.id); setStyling(r0.mode); clearStylingReady()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pieces, similar])
+  useEffect(() => {
+    const onOpen = () => {
+      const origin = getStylingProgress().origin ?? ''
+      const q = new URLSearchParams(origin.split('?')[1] ?? '')
+      const id = q.get('styled')
+      clearStylingReady()
+      if (id && picked === id && styling) { if (waysRef.current) scrollTo(waysRef.current, { offset: -96 }); return }
+      if (!id) return
+      restore.current = { id, mode: q.get('mode') === 'wardrobe' ? 'wardrobe' : 'new', piece: stashedPiece(id) }
+      // Already searched: the effect above reopens it in place. Not yet: run her search.
+      if (pieces !== null) setPieces((cur) => (cur ? [...cur] : cur))
+      else if (q.get('q')) void ask(q.get('q')!)
+    }
+    window.addEventListener(STYLING_OPEN_EVENT, onOpen)
+    return () => window.removeEventListener(STYLING_OPEN_EVENT, onOpen)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picked, styling, pieces])
+
   async function run(query: string, filters: BrowseFilters = currentFilters()) {
     const q = query.trim()
     if (!q) return
@@ -256,7 +330,7 @@ export default function BrowseClient() {
         {chosen.url && (
           <ShopLink
             item={shopItem(chosen)}
-            className="text-[16px] tracking-[0.06em] rounded-full bg-[#B48A5A] text-white px-6 py-3"
+            className="text-[16px] tracking-[0.06em] rounded-full bg-[#2B2B2B] text-white px-6 py-3"
           >
             VIEW ON SITE
           </ShopLink>
@@ -478,19 +552,9 @@ export default function BrowseClient() {
         </div>
       )}
 
-      {/* The mark at the top of the page: the dress form wiggles while MYRA
-          styles, then stands still and says DONE — tap it to come to the outfits. */}
-      {chosen && styling && (phase === 'working' || phase === 'ready') && (
-        <button
-          type="button"
-          onClick={() => { if (waysRef.current) scrollTo(waysRef.current, { offset: -96 }) }}
-          className="fixed top-[210px] right-5 sm:right-8 z-[60] flex items-center gap-3 rounded-full bg-white/95 shadow-[0_10px_30px_-12px_rgba(43,43,43,0.6)] pl-3 pr-5 py-2"
-          aria-live="polite"
-        >
-          <Mannequin working={phase === 'working'} />
-          <span className="text-[16px] xl:text-[18px] tracking-[0.14em] text-[#2B2B2B]">{phase === 'working' ? progress : 'DONE · SEE IT'}</span>
-        </button>
-      )}
+      {/* The dress form that says STYLING / READY is the member chrome's
+          (components/me/StylingBadge): it follows her out of this room and
+          brings her back to the piece. */}
       {note && !styling && <p className="myra-guide-text normal-case text-[18px] text-[#4A4E57] mt-6">{note}</p>}
     </div>
   )

@@ -20,6 +20,8 @@ import {
   type BrandRow,
 } from '@/lib/taste-profile'
 import { getOurPicks } from '@/lib/our-picks'
+import { resolveClientMember } from '@/lib/client-member'
+import AppDoor from '@/components/AppDoor'
 import type { OutfitWithItems } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -33,6 +35,13 @@ export default async function LandingPage({
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
 
+  // Inside the iPhone app the website is never shown: the door takes over the
+  // page (AppDoor draws nothing in Safari or on the desktop). A signed-in
+  // login with no member record is one whose application is still being
+  // looked at — the client area sends her here — and is told so.
+  const isAdmin = !!user && user.id === process.env.ADMIN_USER_ID
+  const doorState = !user ? 'out' : isAdmin || (await resolveClientMember()) ? 'member' : 'waiting'
+
   // The landing is now a sign-up page for the private-stylist model: the scatter
   // hero, the mirror, the manifesto and APPLY. The feed (search + occasions +
   // recommendations) is no longer shown here — it lives in /me for accepted
@@ -43,6 +52,7 @@ export default async function LandingPage({
       {/* The nav is no longer transparent: it was only see-through so it could
           sit over the silver arrival screen, which has been removed. */}
       <Navigation authed={!!user} showAuth={false} />
+      <AppDoor state={doorState} withApplyModal={false} />
 
       {/* ── Scatter hero — images stack then spread, headline in the middle ── */}
       <ScatterHero />

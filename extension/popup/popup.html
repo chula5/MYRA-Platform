@@ -55,8 +55,8 @@
 <div class="body">
   <div id="disconnected" hidden>
     <div class="card">
-      <div class="big">Connect your MYRA</div>
-      <div class="small">Do it once. After that, every shop you browse puts your picks at the top.</div>
+      <div class="big" id="discBig">Connect your MYRA</div>
+      <div class="small" id="discSmall">Do it once. After that, every shop you browse puts your picks at the top.</div>
     </div>
     <a class="pill" id="connect" target="_blank" rel="noopener noreferrer" href="">Connect to MYRA</a>
   </div>
@@ -67,6 +67,7 @@
       <div class="big" id="statusBig">Open a shop to start</div>
       <div class="small" id="statusSmall"></div>
       <ol id="picks"></ol>
+      <a class="pill soft" id="reconnect" target="_blank" rel="noopener noreferrer" href="https://www.myraassistant.co.uk/mirror/connect" style="margin-top:10px" hidden>Reconnect to MYRA</a>
     </div>
 
     <!-- On/off for this site -->
@@ -98,6 +99,13 @@
       <a class="pill soft" id="sizesLink" target="_blank" style="margin-top:10px">Add sizes in MYRA</a>
     </div>
     <div class="small" id="sizesLine" style="padding:0 6px 10px" hidden></div>
+
+    <!-- The pieces she hearted, where they live in MYRA -->
+    <div class="card" id="savedCard">
+      <div style="font-weight:600">Your saved pieces</div>
+      <div class="small">Everything you kept with the Mirror, styled three ways, on the SAVED shelf of your Dressing Room.</div>
+      <a class="pill soft" id="savedLink" target="_blank" rel="noopener noreferrer" style="margin-top:10px">Open in MYRA</a>
+    </div>
 
     <!-- Vinted: send her purchases -->
     <div class="card" id="vintedBox" hidden>
