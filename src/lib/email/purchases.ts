@@ -135,13 +135,18 @@ const TRIAGE_SCHEMA = {
 /**
  * Sort a year of order-looking emails by sender and subject alone, ~150 per
  * call: which could be about clothes, shoes, bags, jewellery or wearable
- * accessories she bought or sent back. Only those are opened and read. When a
- * call fails, its emails are kept — better a read too many than a purchase missed.
+ * accessories she bought or sent back. Only those are opened and read.
+ *
+ * Fails CLOSED: when the sorter cannot run (no key, a failed call) it throws,
+ * so nothing is opened without it — the scan goes back in the queue and tries
+ * again. An inbox is private; a batch of unsorted emails is never read just
+ * because the sorter was down (Chloe, 2026-10-17).
  */
 export async function triageBySubject(rows: { id: string; from: string; subject: string }[]): Promise<Set<string>> {
   const keep = new Set<string>()
+  if (!rows.length) return keep
   const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) { rows.forEach((r) => keep.add(r.id)); return keep }
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured — emails are not opened without the fashion sorter')
   const client = new Anthropic({ apiKey })
   for (let i = 0; i < rows.length; i += 150) {
     const batch = rows.slice(i, i + 150)
@@ -164,8 +169,8 @@ ${list}`,
       const block = res.content.find((b): b is Anthropic.TextBlock => b.type === 'text')
       const nums: number[] = block ? (JSON.parse(block.text).keep ?? []) : []
       for (const n of nums) if (batch[n]) keep.add(batch[n].id)
-    } catch {
-      batch.forEach((r) => keep.add(r.id))
+    } catch (err) {
+      throw new Error(`Could not sort the emails by subject: ${err instanceof Error ? err.message : 'sorter failed'}`)
     }
   }
   return keep

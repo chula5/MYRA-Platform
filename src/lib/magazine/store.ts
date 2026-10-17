@@ -97,7 +97,13 @@ export async function refreshMagazine(
       return { read, issues, picks, error: err instanceof Error ? err.message : 'Could not read the inbox' }
     }
     const fresh = headers.filter((h) => !already.has(h.id) && looksLikeNewsletter(h, c.email))
-    const keep = await triageNewsletters(fresh)
+    let keep: Set<string>
+    try {
+      keep = await triageNewsletters(fresh)
+    } catch (err) {
+      // No sorter, no reading: nothing is marked seen, so the next refresh tries again.
+      return { read, issues, picks, error: err instanceof Error ? err.message : 'Could not sort the newsletters' }
+    }
     const toRead = fresh.filter((h) => keep.has(h.id)).slice(0, maxRead)
 
     for (const h of toRead) {

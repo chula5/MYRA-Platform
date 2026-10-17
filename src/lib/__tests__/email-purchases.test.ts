@@ -54,6 +54,19 @@ describe('parseExtraction', () => {
     expect(e.items.map((i) => i.product_name)).toEqual(['Leather Loafers'])
   })
 
+  it('drops a piece with no category, and one with no name, however the reader answered', () => {
+    const e = parseExtraction({
+      kind: 'purchase',
+      items: [
+        { product_name: 'Something', category: null },
+        { product_name: 'Something else' },
+        { product_name: '', category: 'clothing', image_url: 'https://shop.example/a.jpg' },
+        { product_name: 'Silk Shirt', category: 'clothing' },
+      ],
+    })
+    expect(e.items.map((i) => i.product_name)).toEqual(['Silk Shirt'])
+  })
+
   it('is not a purchase when nothing wearable is left', () => {
     expect(parseExtraction({ is_purchase: true, items: [{ product_name: 'Kettle', category: 'homeware' }] }).is_purchase).toBe(false)
     expect(parseExtraction(null).is_purchase).toBe(false)

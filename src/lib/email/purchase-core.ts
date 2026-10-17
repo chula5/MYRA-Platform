@@ -162,7 +162,7 @@ const isoDate = (v: unknown): string | null => {
   return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10)
 }
 
-/** Whatever the model returned, as a safe extraction — non-wardrobe pieces dropped. */
+/** Whatever the model returned, as a safe extraction — unnamed, uncategorised and non-wardrobe pieces dropped. */
 export function parseExtraction(raw: unknown): PurchaseExtraction {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
   const items = (Array.isArray(r.items) ? r.items : [])
@@ -178,7 +178,9 @@ export function parseExtraction(raw: unknown): PurchaseExtraction {
       product_url: url(x.product_url),
       category: str(x.category)?.toLowerCase() ?? null,
     }))
-    .filter((x) => x.product_name && (!x.category || WARDROBE_CATEGORIES.has(x.category)))
+    // A piece needs a name AND a wardrobe category: nothing unnamed or
+    // uncategorised gets through, however the reader answered.
+    .filter((x) => x.product_name && !!x.category && WARDROBE_CATEGORIES.has(x.category))
   const kind: PurchaseExtraction['kind'] = r.kind === 'purchase' || r.kind === 'return' ? r.kind
     : r.is_purchase === true ? 'purchase' : 'other'
   const wholeOrder = kind === 'return' && r.whole_order === true && !!str(r.order_id)
