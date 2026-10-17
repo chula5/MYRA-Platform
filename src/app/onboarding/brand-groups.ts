@@ -33,7 +33,7 @@ export const BRAND_GROUPS: BrandGroup[] = [
     name: 'Quiet luxury',
     blurb: 'Clean lines, beautiful fabric, no logos',
     brands: ['The Row', 'Khaite', 'Totême', 'Phoebe Philo', 'Lemaire', 'Jil Sander', 'Róhe', 'Fforme', 'St. Agni', 'Max Mara', 'Gabriela Hearst', 'Tibi'],
-    more: ['6397', 'Nili Lotan', 'Kallmeyer', 'Malknstudio', 'NiiHAi', 'Diotima', 'Heirlome', 'Colleen Allen', 'CO Core', 'Bevza', 'Liffner', 'Métier', 'Attega', 'Almada Label', 'Cmmn Swdn', 'The Label Edition', 'Scarlet & Sam'],
+    more: ['Horton New York', 'Iris von Arnim', 'Soft Goat', '6397', 'Nili Lotan', 'Kallmeyer', 'Malknstudio', 'NiiHAi', 'Diotima', 'Heirlome', 'Colleen Allen', 'CO Core', 'Bevza', 'Liffner', 'Métier', 'Attega', 'Almada Label', 'Cmmn Swdn', 'The Label Edition', 'Scarlet & Sam'],
   },
   {
     key: 'tailoring',
@@ -47,7 +47,7 @@ export const BRAND_GROUPS: BrandGroup[] = [
     name: 'Romance & occasion',
     blurb: 'Florals, volume, somewhere to be',
     brands: ['Zimmermann', 'Erdem', 'Emilia Wickstead', 'Self-Portrait', 'Ulla Johnson', 'Roland Mouret', 'Oscar de la Renta', 'Markarian', 'Taller Marmo', 'Victoria Beckham', 'Sea New York', 'Simone Rocha'],
-    more: ['Caroline Constas', 'Cinq à Sept', 'CAMI NYC', 'Silvia Tcherassi', 'Maygel Coronel', 'Maria de la Orden', 'Leo Lin', 'Wiederhoeft', 'Conner Ives', 'Andreeva', 'Ashlyn', 'Dé Rococo', 'Jude', 'Julietta', 'Mélisse', 'Rejina Pyo'],
+    more: ['Alexandra Grecco', 'Camilla and Marc', 'Caroline Constas', 'Cinq à Sept', 'CAMI NYC', 'Silvia Tcherassi', 'Maygel Coronel', 'Maria de la Orden', 'Leo Lin', 'Wiederhoeft', 'Conner Ives', 'Andreeva', 'Ashlyn', 'Dé Rococo', 'Jude', 'Julietta', 'Mélisse', 'Rejina Pyo'],
   },
   {
     key: 'contemporary',
@@ -61,28 +61,28 @@ export const BRAND_GROUPS: BrandGroup[] = [
     name: 'The houses',
     blurb: 'The names on the bags',
     brands: ['Chanel', 'Dior', 'Saint Laurent', 'Chloé', 'Bottega Veneta', 'Loewe', 'Prada', 'Miu Miu', 'Celine', 'Alaïa', 'Lanvin', 'Ferragamo'],
-    more: ['Brunello Cucinelli', 'Altuzarra', 'Yves Salomon', 'Diesel', 'Bode', 'Ami'],
+    more: ['Stella McCartney', 'Missoni', 'Brunello Cucinelli', 'Altuzarra', 'Yves Salomon', 'Diesel', 'Bode', 'Ami'],
   },
   {
     key: 'directional',
     name: 'The directional',
     blurb: 'Artful, architectural, a little strange',
     brands: ['Dries Van Noten', 'Marni', 'JW Anderson', 'Proenza Schouler', 'Issey Miyake', 'Roksanda', 'Christopher Esber', 'A.W.A.K.E. Mode', 'Comme des Garçons', 'Toga', 'Rachel Comey', 'Jacques Wei'],
-    more: ['Pleats Please Issey Miyake', 'Forte Forte', 'Dunst', 'Darkpark', 'Georgia Hardinge', 'Insomnia Studio', 'No Emotions', 'Nocturne', 'Halfboy', 'Destree', 'Elleme', 'Déhanche', 'Hunting Season', 'Macabla', 'Pointe Milou', 'Rise & Fall'],
+    more: ['Acne Studios', 'Shushu/Tong', 'Pleats Please Issey Miyake', 'Forte Forte', 'Dunst', 'Darkpark', 'Georgia Hardinge', 'Insomnia Studio', 'No Emotions', 'Nocturne', 'Halfboy', 'Destree', 'Elleme', 'Déhanche', 'Hunting Season', 'Macabla', 'Pointe Milou', 'Rise & Fall'],
   },
   {
     key: 'scandi',
     name: 'Scandi',
     blurb: 'Pared back, easy, a bit of edge',
     brands: ['By Malene Birger', 'Skall Studio', 'Baum und Pferdgarten', 'Munthe', 'Rabens Saloner', 'Stella Nova', 'House of Dagmar', 'Mos Mosh', 'TOVE', 'OpéraSPORT', 'Rhúne', 'Djerf Avenue'],
-    more: ['Anonymous Copenhagen', 'Caro Editions', 'Freja', 'MKDT Studio', 'Stand Studio', 'Holzweiler'],
+    more: ['Our Legacy', 'Tivioli', 'Anonymous Copenhagen', 'Caro Editions', 'Freja', 'MKDT Studio', 'Stand Studio', 'Holzweiler'],
   },
   {
     key: 'denim',
     name: 'Denim & ease',
     blurb: 'LA, good jeans, a white tee',
     brands: ['Agolde', 'Frame', 'Reformation', 'Anine Bing', 'Dôen', 'Free People', 'Varley', 'R13', 'Simon Miller', 'Mother', 'Citizens of Humanity', 'Éterne'],
-    more: ['Apparis', 'L’Académie', 'DISSH', 'Posse', 'Acler', 'VRG GRL'],
+    more: ['SIR.', 'Estella', 'Apparis', 'L’Académie', 'DISSH', 'Posse', 'Acler', 'VRG GRL'],
   },
   {
     key: 'night',
@@ -96,7 +96,7 @@ export const BRAND_GROUPS: BrandGroup[] = [
     name: 'Bags, shoes & jewels',
     blurb: 'The finishing touches',
     brands: ['Polène', 'DeMellier', 'Strathberry', 'Mansur Gavriel', 'Anya Hindmarch', 'Aeyde', 'Manolo Blahnik', 'Aquazzura', 'Roger Vivier', 'Amina Muaddi', 'Le Monde Béryl', 'Completedworks'],
-    more: ['Herbert Levine', 'Giaborghini', 'Emme Parsons', 'Loeffler Randall', 'Carel', 'Jonak', 'Bobbies', 'Furla', 'JW Pei', 'Chylak', 'A.Emery', 'Chan Luu', 'éliou', 'JUJU VERA', 'Rachel Trevor-Morgan', 'Jane Taylor London', 'Jess Collett Milliner', 'Awon Golding Millinery', 'Alexandra Harper Millinery'],
+    more: ['Herbert Levine', 'Giaborghini', 'Mon Collier BCN', 'Baudesson', 'Emme Parsons', 'Loeffler Randall', 'Carel', 'Jonak', 'Bobbies', 'Furla', 'JW Pei', 'Chylak', 'A.Emery', 'Chan Luu', 'éliou', 'JUJU VERA', 'Rachel Trevor-Morgan', 'Jane Taylor London', 'Jess Collett Milliner', 'Awon Golding Millinery', 'Alexandra Harper Millinery'],
   },
   {
     key: 'preloved',
@@ -108,7 +108,7 @@ export const BRAND_GROUPS: BrandGroup[] = [
     key: 'rental',
     name: 'Rental',
     blurb: 'Borrow it for the weekend',
-    brands: ['By Rotation', 'Hurr', 'Rites', 'Rotaro', 'My Wardrobe HQ', 'Cocoon', 'Loanhood', 'Front Row'],
+    brands: ['By Rotation', 'Hurr', 'Rites', 'Rotaro', 'My Wardrobe HQ', 'Cocoon', 'Loan the Look', 'Front Row'],
   },
 ]
 
