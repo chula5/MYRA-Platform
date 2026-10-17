@@ -679,6 +679,8 @@ html {
   opacity: 1;
 }
 .myra-action:active { scale: 0.95; }
+/* The tour's ring: the one button, circle or card a step is about. */
+.myra-tour-lit { box-shadow: 0 0 0 3px #FFFFFF, 0 0 0 7px rgba(255, 255, 255, 0.35) !important; }
 .myra-action:focus-visible { outline: none; box-shadow: 0 0 0 4px rgba(220, 220, 218, 0.7); }
 
 /* The mirror's wiggle while MYRA is building — the same one the Dressing Room

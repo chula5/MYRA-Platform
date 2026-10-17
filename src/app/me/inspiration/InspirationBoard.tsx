@@ -64,7 +64,7 @@ export default function InspirationBoard({ view: initial, testMemberId }: { view
 
   return (
     <div className={`myra-pearl relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen min-h-screen ${testMemberId ? '' : '-my-10'}`}>
-      <div className="w-full px-6 sm:px-10 pb-16">
+      <div data-tour="inspiration" className="w-full px-6 sm:px-10 pb-16">
         <ArchiveCard
           className="w-full"
           intro="settle"

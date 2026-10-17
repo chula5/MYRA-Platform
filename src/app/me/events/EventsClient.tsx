@@ -250,7 +250,7 @@ export default function EventsClient({ testMemberId }: { testMemberId?: string }
       <section className={CARD}>
         <div className="space-y-6">
           <div className="flex flex-wrap items-baseline justify-between gap-x-8 gap-y-2">
-            <h1 className="text-[clamp(28px,1.8vw,52px)] tracking-[0.06em] text-[#2B2B2B]">EVENTS</h1>
+            <h1 data-tour="events" className="text-[clamp(28px,1.8vw,52px)] tracking-[0.06em] text-[#2B2B2B]">EVENTS</h1>
             {connected.map((c) => (
               <p key={c.connection_id} className={`${SMALL} text-[#6E6B65]`}>
                 {c.email}{c.status === 'error' && c.error ? <span className="text-[#B83A3A]"> · {c.error}</span> : null}
@@ -285,7 +285,7 @@ export default function EventsClient({ testMemberId }: { testMemberId?: string }
       {connected.length > 0 && (
         <section className={`${CARD} space-y-4`}>
           <div className="flex items-center justify-between gap-4">
-            <h2 className={`${HEADING} flex items-center gap-3`}><ClockIcon />COMING UP</h2>
+            <h2 data-tour="coming-up" className={`${HEADING} flex items-center gap-3`}><ClockIcon />COMING UP</h2>
             <button type="button" onClick={() => setAdding(true)} className={`${SMALL} rounded-full bg-[#2B2B2B] px-4 py-2 text-white`}>Add one</button>
           </div>
           {!calendar.events.length && <p className={`${T} text-[#4A4E57]`}>Nothing to dress for in the next three months.</p>}
@@ -371,7 +371,7 @@ export default function EventsClient({ testMemberId }: { testMemberId?: string }
       {area.knownEvents.length > 0 && (
         <section className={`${CARD} space-y-3`}>
           <div className="flex items-center justify-between gap-4">
-            <h2 className={`${HEADING} flex items-center gap-3`}><ClockIcon />COMING UP</h2>
+            <h2 data-tour="coming-up" className={`${HEADING} flex items-center gap-3`}><ClockIcon />COMING UP</h2>
             <button type="button" onClick={() => setAdding(true)} className={`${SMALL} rounded-full bg-[#2B2B2B] px-4 py-2 text-white`}>Add one</button>
           </div>
           <div className="space-y-3">
