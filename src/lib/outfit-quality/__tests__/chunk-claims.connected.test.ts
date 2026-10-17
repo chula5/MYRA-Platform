@@ -77,7 +77,8 @@ async function cleanup(admin: any) {
 }
 
 describe.skipIf(!CONNECTED)('chunk claims + persistence errors — connected proof (test partition)', () => {
-  const admin: any = createAdminClient()
+  // A skipped suite is still collected: no client where there is no database (CI).
+  const admin: any = CONNECTED ? createAdminClient() : null
 
   afterAll(async () => {
     await cleanup(admin)

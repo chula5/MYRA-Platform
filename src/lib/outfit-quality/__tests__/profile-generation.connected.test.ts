@@ -85,7 +85,8 @@ async function cleanup(admin: any) {
 }
 
 describe.skipIf(!CONNECTED)('evaluation-profile target-1 batch → awaiting_human (connected, test partition)', () => {
-  const admin: any = createAdminClient()
+  // A skipped suite is still collected: no client where there is no database (CI).
+  const admin: any = CONNECTED ? createAdminClient() : null
 
   afterAll(async () => {
     await cleanup(admin)

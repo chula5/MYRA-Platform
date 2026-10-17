@@ -129,7 +129,8 @@ function fakeAdapters(behaviour: {
 }
 
 describe.skipIf(!CONNECTED)('render flow — connected proof (test partition, deterministic adapters)', () => {
-  const admin: any = createAdminClient()
+  // A skipped suite is still collected: no client where there is no database (CI).
+  const admin: any = CONNECTED ? createAdminClient() : null
   let batch: any
   let realItems: any[]
 
