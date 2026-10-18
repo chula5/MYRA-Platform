@@ -58,10 +58,10 @@ const PROFILE = '/me/profile'
 // of her own yet to show them on.
 const STEPS: Step[] = [
   { path: '/me', target: '[data-tour="rooms"]', title: 'YOUR ROOMS', body: 'Everything lives in these rooms. A one minute look around.' },
-  { path: '/me', target: '[data-tour="room-for_you"]', title: 'FOR YOU', body: 'Outfits made for you. Say yes or no and MYRA learns.' },
+  { path: '/me', target: '[data-tour="room-for_you"]', title: 'FOR YOU', body: 'What MYRA did while you shopped: more of the same, more from your brands, and your saved pieces styled.' },
   { path: '/me', target: '[data-tour="room-browse"]', title: 'BROWSE', body: 'Ask for anything in your own words.' },
   { path: '/me/browse', target: '[data-tour="browse-search"]', title: 'SEARCH THROUGH MYRA', body: 'Try \u201ca wedding in June\u201d, typed or spoken. Then style what you find with your wardrobe or with something new.' },
-  { path: '/me', target: '[data-tour="room-all_looks"]', title: 'YOUR LOOKS', body: 'Every outfit you said yes to, sorted by occasion.' },
+  { path: '/me', target: '[data-tour="room-all_looks"]', title: 'LOOKS', body: 'Every outfit MYRA made for you. Thumbs up or down and MYRA learns; the ones you loved, sorted by occasion.' },
   { path: '/me/looks', demo: 'open', title: 'A LOOK', body: 'Every outfit is a card like this one. Tap the picture to open it and flick through each piece.' },
   { path: '/me/looks', demo: 'source', title: 'SOURCE ITEMS', body: 'Every piece in the look, and where to buy it in your size.' },
   { path: '/me/looks', demo: 'similar', title: 'SIMILAR LOOKS', body: 'More looks like this one.' },

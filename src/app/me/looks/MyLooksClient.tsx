@@ -432,16 +432,19 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
         {/* ── At rest ─────────────────────────────────────────────────────── */}
         {!related && !searched && !occasion && (
           <>
-            {!readOnly && <SavedWhileBrowsing looks={view.looks} cardProps={cardProps} />}
-
+            {/* Her newest looks first, every unanswered one, with the thumbs.
+                They moved here from FOR YOU, which is now only what MYRA did
+                while she shopped (Chloe, 2026-10-18). */}
             {waiting.length > 0 && (
               <section className="mb-16">
-                <SectionHead label="Waiting for you" note={`${waiting.length} look${waiting.length === 1 ? '' : 's'} to tell us about`} />
+                <SectionHead label="New for you" note={`${waiting.length} look${waiting.length === 1 ? '' : 's'}. Thumbs up or down, and MYRA learns`} />
                 <div className={LOOK_GRID}>
-                  {waiting.slice(0, 3).map((l) => <LookCard key={l.look_id} {...cardProps(l)} />)}
+                  {waiting.map((l) => <LookCard key={l.look_id} {...cardProps(l)} />)}
                 </div>
               </section>
             )}
+
+            {!readOnly && <SavedWhileBrowsing looks={view.looks} cardProps={cardProps} />}
 
             {becauseYouLoved.length > 0 && (
               <section className="mb-16">

@@ -15,7 +15,7 @@
  *  has to import the client component that draws them. */
 export const ROOM_LABEL: Record<string, string> = {
   for_you: 'FOR YOU',
-  all_looks: 'YOUR LOOKS',
+  all_looks: 'LOOKS',
   dressing_room: 'DRESSING ROOM',
   inspiration: 'INSPIRATION',
   magazine: 'MYRA MAGAZINE',
