@@ -2,16 +2,21 @@
 
 // Self-serve wardrobe — the front-end surface, so type sizes are the PUBLIC
 // floors (15px+ labels, 17px+ body), not the admin's tracked caps.
+//
+// Few words on purpose (Chloe, 2026-10-18: the page read like a manual). One
+// line says what to do, the button does it, and the pieces MYRA finds are
+// answered in the Dressing Room, where she is sent once her photos are in.
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import type { WardrobeExtraction } from '@/lib/wardrobe/types'
+import { WARDROBE_CONFIG } from '@/lib/wardrobe/config'
 import {
-  approveMine, deleteMyItem, deleteMyPhoto, discardMine, nudgeMyQueue, regenerateMine, startMyBatch,
-  updateMine, uploadMyPhoto, type MyWardrobe,
+  deleteMyItem, deleteMyPhoto, nudgeMyQueue, startMyBatch, updateMine, uploadMyPhoto, type MyWardrobe,
 } from './actions'
+import ReviewCard from './ReviewCard'
 
 const SLOT_LABEL: Record<string, string> = { outerwear: 'Outerwear', top: 'Tops', bottom: 'Bottoms', dress: 'Dresses', shoe: 'Shoes', bag: 'Bags', jewellery: 'Jewellery', accessory: 'Accessories' }
+const MAX = WARDROBE_CONFIG.maxPhotosPerUpload
 
 export default function WardrobeSelfServe({ data }: { data: MyWardrobe }) {
   const router = useRouter()
@@ -50,8 +55,10 @@ export default function WardrobeSelfServe({ data }: { data: MyWardrobe }) {
   async function handleFiles(files: FileList | null) {
     if (!files?.length) return
     setBusy('upload'); setError(null)
-    const list = Array.from(files).slice(0, 24)
+    const list = Array.from(files).slice(0, MAX)
+    if (files.length > MAX) setError(`${MAX} at a time — the first ${MAX} are going in.`)
     const b = await startMyBatch()
+    let sent = 0
     for (let i = 0; i < list.length; i++) {
       setProgress(list.length > 1 ? `UPLOADING ${i + 1} OF ${list.length}…` : 'UPLOADING…')
       const fd = new FormData()
@@ -59,10 +66,13 @@ export default function WardrobeSelfServe({ data }: { data: MyWardrobe }) {
       if (b.batchId) fd.append('batch_id', b.batchId)
       const r = await uploadMyPhoto(fd)
       if (r.error) setError(`${list[i].name}: ${r.error}`)
+      else sent++
     }
     setBusy(null); setProgress(null)
     if (inputRef.current) inputRef.current.value = ''
-    router.refresh()
+    // Her pieces are answered in the Dressing Room, so that is where she goes.
+    if (sent > 0 && data.ready) router.push('/me/dressing-room')
+    else router.refresh()
   }
 
   const review = data.queue.filter((q) => q.status === 'review' || q.status === 'failed')
@@ -75,14 +85,11 @@ export default function WardrobeSelfServe({ data }: { data: MyWardrobe }) {
       <div>
         <p className="text-[15px] tracking-[0.12em] text-[#A8A8A4] mb-2">YOUR WARDROBE</p>
         <h1 className="text-[clamp(24px,5vw,34px)] tracking-[0.04em] text-[#4A4E57] leading-tight mb-3">
-          ADD WHAT YOU ALREADY OWN
+          ADD WHAT YOU OWN
         </h1>
         <p className="text-[17px] text-[#6B6B6B] leading-relaxed">
-          Photograph pieces on their own or a whole outfit on you. We find each garment, cut it out, and you tell us which ones to keep &mdash; then your stylist builds new looks around them.
+          A piece on its own, or an outfit on you. Up to {MAX} photos at a time.
         </p>
-        {!data.linkedToStylist && (
-          <p className="text-[15px] text-[#A8A8A4] leading-relaxed mt-2">Your account isn&rsquo;t linked to a stylist yet &mdash; your pieces are saved and ready for when it is.</p>
-        )}
       </div>
 
       <input ref={inputRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
@@ -93,23 +100,23 @@ export default function WardrobeSelfServe({ data }: { data: MyWardrobe }) {
       >
         {busy === 'upload' ? (progress ?? 'WORKING…') : '+ ADD PHOTOS'}
       </button>
-      {!data.ready && <p className="text-[15px] text-[#7C838B] leading-relaxed">Photos are saved, but extraction isn&rsquo;t switched on yet &mdash; we&rsquo;ll work through them as soon as it is.</p>}
+      {!data.ready && <p className="text-[15px] text-[#7C838B] leading-relaxed">Photos are kept. Finding pieces is switched off for now.</p>}
       {error && <p className="text-[15px] text-[#B83A3A] leading-relaxed">{error}</p>}
       {(working > 0 || data.processing) && (
-        <p className="text-[15px] text-[#7C838B] tracking-[0.04em]">Working through your photos… {working > 0 ? `${working} piece${working === 1 ? '' : 's'} in progress` : `${data.queued} in the queue`}. Pieces appear below as they are ready.</p>
+        <p className="text-[15px] text-[#7C838B] tracking-[0.04em]">Finding your pieces… {working > 0 ? `${working} to go.` : `${data.queued} photo${data.queued === 1 ? '' : 's'} to go.`}</p>
       )}
 
       {/* Review */}
       {review.length > 0 && (
         <section className="space-y-4">
-          <p className="text-[15px] tracking-[0.12em] text-[#A8A8A4]">WHAT WE FOUND &mdash; KEEP THE ONES THAT ARE RIGHT</p>
+          <p className="text-[15px] tracking-[0.12em] text-[#A8A8A4]">FOUND IN YOUR PHOTOS</p>
           {review.map((x) => <ReviewCard key={x.extraction_id} x={x} busy={busy} act={act} />)}
         </section>
       )}
 
       {/* Wardrobe */}
       <section className="space-y-4">
-        <p className="text-[15px] tracking-[0.12em] text-[#A8A8A4]">IN YOUR WARDROBE &mdash; {data.items.length} PIECE{data.items.length === 1 ? '' : 'S'}</p>
+        <p className="text-[15px] tracking-[0.12em] text-[#A8A8A4]">IN YOUR WARDROBE &middot; {data.items.length}</p>
         {data.items.length > 0 && (
           <div className="flex flex-wrap gap-2">
             <button onClick={() => setSlot('')} className={`text-[15px] tracking-[0.06em] rounded-full px-4 py-2 border ${!slot ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'border-[#E2E0DB] text-[#6B6B6B]'}`}>All</button>
@@ -119,7 +126,7 @@ export default function WardrobeSelfServe({ data }: { data: MyWardrobe }) {
           </div>
         )}
         {data.items.length === 0 ? (
-          <p className="text-[17px] text-[#A8A8A4] leading-relaxed">Nothing yet. Add a few photos to start.</p>
+          <p className="text-[17px] text-[#A8A8A4] leading-relaxed">Nothing yet.</p>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {shown.map((it) => (
@@ -144,8 +151,7 @@ export default function WardrobeSelfServe({ data }: { data: MyWardrobe }) {
       {/* Photos */}
       {data.photos.length > 0 && (
         <section className="space-y-3">
-          <p className="text-[15px] tracking-[0.12em] text-[#A8A8A4]">YOUR PHOTOS &mdash; PRIVATE TO YOU</p>
-          <p className="text-[15px] text-[#6B6B6B] leading-relaxed">Only you and your stylist can see these. Delete a photo and every piece we took from it goes too.</p>
+          <p className="text-[15px] tracking-[0.12em] text-[#A8A8A4]">YOUR PHOTOS &middot; PRIVATE</p>
           <div className="grid grid-cols-3 gap-2">
             {data.photos.map((p) => (
               <div key={p.photo_id} className="relative">
@@ -185,54 +191,4 @@ function ValueField({ itemId, value, act }: { itemId: string; value: number | nu
       />
     </label>
   )
-}
-
-function ReviewCard({ x, busy, act }: { x: WardrobeExtraction; busy: string | null; act: (k: string, fn: () => Promise<any>) => Promise<void> }) {
-  const d = x.detected
-  const [brand, setBrand] = useState(x.edits?.brand_name ?? d.brand_hint ?? '')
-  const [name, setName] = useState(x.edits?.product_name ?? titleCase(d.name))
-  const [direction, setDirection] = useState('')
-  const ready = x.status === 'review' && !!x.cutout_url && !!x.scores
-  return (
-    <div className="border border-[#E2E0DB] rounded-[12px] overflow-hidden">
-      <div className="flex gap-3 p-3">
-        {x.crop_url && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={x.crop_url} alt="" className="w-24 aspect-[3/4] object-cover bg-[#F8F8F6] rounded-[8px] shrink-0" />
-        )}
-        {x.cutout_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={x.cutout_url} alt="" className="w-28 aspect-[3/4] object-contain bg-white border border-[#F0EEE9] rounded-[8px] shrink-0" />
-        ) : (
-          <div className="w-28 aspect-[3/4] bg-[#F8F8F6] rounded-[8px] shrink-0 flex items-center justify-center text-center px-2">
-            <span className="text-[15px] text-[#A8A8A4]">{x.status === 'failed' ? 'Didn’t work' : 'Cutting out…'}</span>
-          </div>
-        )}
-        <div className="min-w-0 flex-1 space-y-2">
-          <input className="w-full border border-[#E2E0DB] rounded-[8px] px-3 py-2 text-[17px] text-[#0A0A0A]" value={name} onChange={(e) => setName(e.target.value)} />
-          <p className="text-[15px] text-[#6B6B6B] leading-relaxed">{d.description}</p>
-          <input className="w-full border border-[#E2E0DB] rounded-[8px] px-3 py-2 text-[15px] text-[#0A0A0A]" placeholder="Brand, if you know it (e.g. Sézane)" value={brand} onChange={(e) => setBrand(e.target.value)} />
-          {x.error && <p className="text-[15px] text-[#B83A3A]">{x.error}</p>}
-        </div>
-      </div>
-      <div className="border-t border-[#E2E0DB] px-3 py-3 flex flex-wrap items-center gap-3 bg-[#FAFAF8]">
-        <button
-          className="bg-[#0A0A0A] text-white rounded-[10px] px-5 py-3 text-[15px] tracking-[0.08em] disabled:opacity-40"
-          disabled={!ready || busy === `ap-${x.extraction_id}`}
-          onClick={() => act(`ap-${x.extraction_id}`, () => approveMine(x.extraction_id, { product_name: name || null, brand_name: brand || null }))}
-        >
-          KEEP IT
-        </button>
-        <button className="text-[15px] text-[#6B6B6B] underline" onClick={() => act(`dc-${x.extraction_id}`, () => discardMine(x.extraction_id))}>Not this one</button>
-        <div className="flex items-center gap-2 ml-auto">
-          <input className="w-44 border border-[#E2E0DB] rounded-[8px] px-3 py-2 text-[15px]" placeholder="What’s wrong with it?" value={direction} onChange={(e) => setDirection(e.target.value)} />
-          <button className="text-[15px] text-[#0A0A0A] underline" disabled={busy === `rg-${x.extraction_id}`} onClick={() => act(`rg-${x.extraction_id}`, () => regenerateMine(x.extraction_id, direction || null))}>Try again</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function titleCase(s: string): string {
-  return s.split(/\s+/).map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ')
 }

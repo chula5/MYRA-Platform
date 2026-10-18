@@ -19,6 +19,7 @@ import DressingRoomScene from '@/components/me/DressingRoomScene'
 import ServiceMark from '@/components/me/ServiceMark'
 import MicButton from '@/components/me/MicButton'
 import EmailFinds from './EmailFinds'
+import FoundPieces from './FoundPieces'
 import { loadEmailPanel } from './email-actions'
 import { useScrollTo } from '@/lib/smooth-scroll'
 
@@ -247,6 +248,9 @@ export default function DressingRoomClient({
           })}
         </div>
 
+        {/* The pieces MYRA found in her photos, waiting for her yes. */}
+        {!testMemberId && tab === 'wardrobe' && <FoundPieces />}
+
         {/* Her rail, and MYRA working down the right */}
         {tab === 'wardrobe' && view.pieces.length > 0 && (
           <section className={`${CARD} px-6 sm:px-8 py-8`}>
@@ -436,7 +440,7 @@ export default function DressingRoomClient({
 
         {tab === 'wardrobe' && !view.pieces.length && (
           <section className={`${CARD} px-6 sm:px-8 py-10 text-center`}>
-            <p className="text-[21px] xl:text-[24px] 2xl:text-[28px] text-[#4A4E57]">Nothing in your wardrobe yet. Add your pieces, or let MYRA find them in your order emails.</p>
+            <p className="text-[21px] xl:text-[24px] 2xl:text-[28px] text-[#4A4E57]">Nothing in your wardrobe yet.</p>
           </section>
         )}
 

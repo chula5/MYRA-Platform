@@ -28,6 +28,9 @@ export const WARDROBE_CONFIG = {
   imageSize: '1024x1536' as const, // portrait — matches the 3:4 item cards
   apiBase: (process.env.OPENAI_API_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, ''),
   maxGarmentsPerPhoto: 8,
+  // Ten photos an ADD PHOTOS press on her own page (Chloe, 2026-10-18): every
+  // photo is looked at and cut out for real, so a batch stays small.
+  maxPhotosPerUpload: 10,
   maxPhotoBytes: 12 * 1024 * 1024,
   cutoutAttemptsCap: 4,
   cloudinaryFolder: 'wardrobe',

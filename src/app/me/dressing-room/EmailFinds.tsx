@@ -132,7 +132,7 @@ export default function EmailFinds({ testMemberId, onAdded, onCount }: { testMem
       <div>
         <h2 className="myra-section-label">FIND WHAT YOU&rsquo;VE BOUGHT</h2>
         <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#2B2B2B] mt-3 max-w-3xl">
-          MYRA reads your order emails from the past year and finds what you bought. Only order emails are read.
+          MYRA reads your order emails and finds what you bought &mdash; the past year first, then every week.
         </p>
         {view.test && (
           <p className="text-[18px] xl:text-[21px] 2xl:text-[25px] tracking-[0.08em] text-[#7C838B] mt-3">
@@ -157,7 +157,12 @@ export default function EmailFinds({ testMemberId, onAdded, onCount }: { testMem
                     : c.scan?.status === 'failed' ? <span className="text-[#B83A3A]">Stopped: {plain(c.scan.error)}</span>
                       : c.last_scanned_at ? `Last read ${new Date(c.last_scanned_at).toLocaleDateString('en-GB')}` : 'Not read yet'}
               </p>
-              <button disabled={working(`scan-${c.connection_id}`)} onClick={() => act(`scan-${c.connection_id}`, () => scanAgain(c.connection_id, testMemberId), 'Reading new order emails…')} className="text-[18px] xl:text-[21px] 2xl:text-[25px] underline underline-offset-4 text-[#2B2B2B] disabled:opacity-40">Read again</button>
+              {/* An inbox Google has signed MYRA out of cannot be read again — only connected again. */}
+              {c.status === 'error' && c.provider === 'gmail' && view.gmailReady ? (
+                <a href={gmailHref} className="text-[18px] xl:text-[21px] 2xl:text-[25px] underline underline-offset-4 text-[#2B2B2B]">Connect again</a>
+              ) : (
+                <button disabled={working(`scan-${c.connection_id}`)} onClick={() => act(`scan-${c.connection_id}`, () => scanAgain(c.connection_id, testMemberId), 'Reading new order emails…')} className="text-[18px] xl:text-[21px] 2xl:text-[25px] underline underline-offset-4 text-[#2B2B2B] disabled:opacity-40">Read again</button>
+              )}
               <button disabled={working(`disc-${c.connection_id}`)} onClick={() => { if (confirm(`Disconnect ${c.email}? MYRA forgets the connection; pieces already found stay here.`)) void act(`disc-${c.connection_id}`, () => disconnectInbox(c.connection_id, testMemberId), 'Disconnected.') }} className="text-[18px] xl:text-[21px] 2xl:text-[25px] underline underline-offset-4 text-[#B83A3A] disabled:opacity-40">Disconnect</button>
             </div>
           ))}

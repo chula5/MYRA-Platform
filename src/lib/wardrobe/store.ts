@@ -214,6 +214,30 @@ export async function requestRescore(extractionId: string): Promise<{ error?: st
   return error ? { error: error.message } : {}
 }
 
+/**
+ * SCORING THAT FAILED FOR A REASON OUTSIDE THE PHOTO — an API balance, a
+ * timeout — is tried again on its own, with a gap, so a piece is never left
+ * unscoreable (and so unapprovable) because of one bad minute. Pieces still
+ * waiting with no scores and a "Scoring failed" note, untouched for `gapMs`,
+ * are queued to rescore once more; nothing is queued twice.
+ */
+export async function requeueUnscored(owners: OwnerRef[] | null, gapMs = 10 * 60_000): Promise<number> {
+  const a = admin()
+  let q = a.from('wardrobe_extraction').select('extraction_id')
+    .eq('status', 'review').is('scores', null).not('cutout_url', 'is', null).ilike('error', 'Scoring failed%')
+    .lt('updated_at', new Date(Date.now() - gapMs).toISOString()).limit(50)
+  if (owners) q = q.in('owner_user_id', ownerIds(owners))
+  const { data } = await q
+  let queued = 0
+  for (const x of (data ?? []) as { extraction_id: string }[]) {
+    const { data: busy } = await a.from('wardrobe_job').select('job_id').eq('extraction_id', x.extraction_id).in('status', ['queued', 'running']).limit(1)
+    if ((busy ?? []).length) continue
+    const r = await requestRescore(x.extraction_id)
+    if (!r.error) queued++
+  }
+  return queued
+}
+
 // ── Brands (manual brand entry at review) ───────────────────────────────────
 
 const fold = (n: string) => n.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()

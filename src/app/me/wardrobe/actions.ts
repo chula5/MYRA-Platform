@@ -10,11 +10,11 @@ import { revalidatePath } from 'next/cache'
 import { waitUntil } from '@vercel/functions'
 import { createServerClient } from '@/lib/supabase-server'
 import { slotForItemType } from '@/lib/composer'
-import { openAiConfigured } from '@/lib/wardrobe/config'
+import { WARDROBE_CONFIG, openAiConfigured } from '@/lib/wardrobe/config'
 import { processWardrobeQueue } from '@/lib/wardrobe/queue'
 import {
   addPhotoToBatch, approveExtraction, createBatch, deleteOwnedItem, deletePhoto, discardExtraction,
-  listOwnedItems, listPhotos, listReviewQueue, queueSummary, requestRegenerate, updateOwnedItem,
+  listOwnedItems, listPhotos, listReviewQueue, queueSummary, requeueUnscored, requestRegenerate, updateOwnedItem,
 } from '@/lib/wardrobe/store'
 import { styledInCounts } from '@/lib/wardrobe/owned-items'
 import type { ExtractionEdits, OwnerRef, WardrobeExtraction, WardrobePhoto } from '@/lib/wardrobe/types'
@@ -22,6 +22,7 @@ import { rebuildLooksWithoutItems } from '@/app/admin/private-stylist/actions'
 import { createAdminClient } from '@/lib/supabase-server'
 
 const PATH = '/me/wardrobe'
+const MAX_PHOTOS_PER_UPLOAD = WARDROBE_CONFIG.maxPhotosPerUpload
 
 async function requireClient(): Promise<{ owner?: OwnerRef; error?: string }> {
   const supabase = await createServerClient()
@@ -92,6 +93,22 @@ export async function loadMyWardrobe(): Promise<MyWardrobe | { error: string }> 
   }
 }
 
+export interface MyFoundPieces {
+  ready: boolean
+  processing: boolean
+  queued: number
+  queue: WardrobeExtraction[]
+}
+
+/** Only what the Dressing Room needs: the pieces waiting for her answer, and whether more are coming. */
+export async function loadMyFoundPieces(): Promise<MyFoundPieces> {
+  const c = await requireClient()
+  if (!c.owner) return { ready: false, processing: false, queued: 0, queue: [] }
+  const owners = [c.owner]
+  const [queue, jobs] = await Promise.all([listReviewQueue(owners), queueSummary(owners)])
+  return { ready: openAiConfigured(), processing: jobs.queued + jobs.running > 0, queued: jobs.queued + jobs.running, queue }
+}
+
 export async function uploadMyPhoto(formData: FormData): Promise<{ photoId?: string; error?: string }> {
   const c = await requireClient()
   if (!c.owner) return { error: c.error! }
@@ -102,6 +119,12 @@ export async function uploadMyPhoto(formData: FormData): Promise<{ photoId?: str
   let batchId: string | null = String(formData.get('batch_id') ?? '') || null
   if (!batchId) {
     try { batchId = (await createBatch(c.owner, 'client', null)).batch_id } catch { batchId = null }
+  }
+  // Ten photos an upload (Chloe, 2026-10-18): each one is looked at and cut
+  // out for real, so a batch is kept small enough to finish and to pay for.
+  if (batchId) {
+    const { count } = await createAdminClient().from('wardrobe_photo').select('photo_id', { count: 'exact', head: true }).eq('batch_id', batchId)
+    if ((count ?? 0) >= MAX_PHOTOS_PER_UPLOAD) return { error: `${MAX_PHOTOS_PER_UPLOAD} photos at a time — add the rest once these are done` }
   }
   const r = await addPhotoToBatch(batchId, c.owner, { bytes, name: file.name, mime: file.type })
   if (r.error || !r.photo) return { error: r.error ?? 'Upload failed' }
@@ -120,6 +143,8 @@ export async function startMyBatch(): Promise<{ batchId?: string; error?: string
 export async function nudgeMyQueue(): Promise<{ remaining: number }> {
   const c = await requireClient()
   if (!c.owner) return { remaining: 0 }
+  // A piece whose scoring fell over is scored again, with a gap between tries.
+  await requeueUnscored([c.owner]).catch(() => 0)
   const r = await processWardrobeQueue(40_000)
   revalidatePath(PATH)
   return { remaining: r.remaining }
