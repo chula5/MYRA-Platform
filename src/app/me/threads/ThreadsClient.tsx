@@ -58,7 +58,7 @@ export default function ThreadsClient({ testMemberId }: { testMemberId?: string 
       <div className="w-full px-6 sm:px-10 py-8 pb-16 space-y-6">
 
         {/* What MYRA knows, in one line */}
-        <section className="rounded-[18px] bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] px-8 md:px-12 py-10 space-y-7">
+        <section data-tour="threads" className="rounded-[18px] bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] px-8 md:px-12 py-10 space-y-7">
           <div className="flex flex-wrap items-end justify-between gap-6">
             <div>
               <p className="text-[clamp(19px,1.2vw,28px)] tracking-[0.18em] text-[#6E6B65]">THREADS</p>

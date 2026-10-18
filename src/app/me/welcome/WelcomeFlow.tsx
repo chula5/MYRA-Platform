@@ -141,7 +141,7 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
             {firstName ? `${firstName}, which brands do you love?` : 'Which brands do you love?'}
           </h1>
           <p className={`${BODY} myra-guide-text text-[#4A4E57]`}>
-            Three or four is plenty. MYRA works out the rest from them.
+            You don’t have to think of them. Tap the ones you recognise, or take a whole group. MYRA works out the rest.
           </p>
           {/* The way past, above the work: nothing here is required, and she
               should never feel stuck on the first screen she is ever shown. */}

@@ -109,10 +109,12 @@ export async function fetchImapHeaders(cfg: ImapConfig, uids: string[]): Promise
 }
 
 /** Messages whose subject or body mentions this text, newest first. */
-export async function searchImapUids(cfg: ImapConfig, text: string, max = 8): Promise<string[]> {
+export async function searchImapUids(cfg: ImapConfig, text: string, max = 8, from?: string | null): Promise<string[]> {
   return withImap(cfg, async (c) => {
     await c.mailboxOpen('INBOX', { readOnly: true })
-    const uids = await c.search({ or: [{ subject: text }, { body: text }] }, { uid: true })
+    const query: Record<string, unknown> = { or: [{ subject: text }, { body: text }] }
+    if (from) query.from = from
+    const uids = await c.search(query, { uid: true })
     return (uids || []).sort((a, b) => b - a).slice(0, max).map(String)
   })
 }

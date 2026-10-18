@@ -27,12 +27,15 @@ const TRIAGE_SCHEMA = {
 
 /**
  * Which of these are fashion newsletters worth opening — one call per ~150
- * senders and subjects. Fails open: a failed call keeps its batch.
+ * senders and subjects. Fails CLOSED: when the sorter cannot run (no key, a
+ * failed call) it throws and nothing is opened — the next refresh tries again.
+ * Her inbox is private; unsorted mail is never read (Chloe, 2026-10-17).
  */
 export async function triageNewsletters(rows: { id: string; from: string; subject: string }[]): Promise<Set<string>> {
   const keep = new Set<string>()
+  if (!rows.length) return keep
   const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey || !rows.length) { rows.forEach((r) => keep.add(r.id)); return keep }
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured — newsletters are not opened without the fashion sorter')
   const client = new Anthropic({ apiKey })
   for (let i = 0; i < rows.length; i += 150) {
     const batch = rows.slice(i, i + 150)
@@ -54,8 +57,8 @@ ${list}`,
       const block = res.content.find((b): b is Anthropic.TextBlock => b.type === 'text')
       const nums: number[] = block ? (JSON.parse(block.text).keep ?? []) : []
       for (const n of nums) if (batch[n]) keep.add(batch[n].id)
-    } catch {
-      batch.forEach((r) => keep.add(r.id))
+    } catch (err) {
+      throw new Error(`Could not sort the newsletters: ${err instanceof Error ? err.message : 'sorter failed'}`)
     }
   }
   return keep

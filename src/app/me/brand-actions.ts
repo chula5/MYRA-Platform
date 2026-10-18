@@ -18,9 +18,18 @@
 // writes the declaration, retires expansions whose source brand is gone, and
 // re-seeds the affinities from the result.
 //
+// THREE LISTS, NOT TWO. brands = send me these. brands_input_only = the Zara
+// rule: I wear it, don't send it (still taste signal, still seeds). brands_never
+// = NOT FOR ME: never send, never seed — the picker's "✕ Not for me" side
+// (0101). The composer excludes both of the last two at pick time.
+//
 // A brand she adds goes to the END of the ranking. Rank is live signal —
 // loadMemberTaste floors affinity by it — and her stylist's rank 1 should not
 // be displaced by whatever she typed most recently.
+//
+// The picker's LOVE ALL takes a whole group in one call. Every write re-seeds
+// her brand model, which takes a second or two — so a group is one commit,
+// never twelve.
 //
 // Every action resolves the member on the server: her session, or the member
 // Chloe names from HER VIEW, which resolveClientMember honours for the admin
@@ -53,6 +62,13 @@ export interface MyBrand {
   stocked: boolean
 }
 
+export interface PickerBrand {
+  name: string
+  stocked: boolean
+  mine: boolean
+  never: boolean
+}
+
 export interface MyBrandsView {
   /** True when Chloe is looking at this as a member from HER VIEW. */
   test: boolean
@@ -60,16 +76,19 @@ export interface MyBrandsView {
   favourites: MyBrand[]
   /** Brands she wears but has asked never to be sent — the Zara rule. */
   inputOnly: string[]
+  /** Brands she said are not for her. Never sent, never learned from. */
+  never: string[]
   /** What MYRA reached for from her brands, strongest first, with the reason. */
   suggested: { name: string; trace: string | null }[]
   /** Names she asked for that MYRA has no brand for yet. */
   requested: string[]
-  /** The picker: curated aesthetics, each brand flagged if it is already hers. */
+  /** The picker: curated groups, the recognisable names first, the nicher ones behind "more". */
   groups: {
     key: string
     name: string
     blurb: string
-    brands: { name: string; stocked: boolean; mine: boolean }[]
+    brands: PickerBrand[]
+    more: PickerBrand[]
   }[]
   /** False until 0032_brand_affinity.sql has been run. */
   available: boolean
@@ -87,7 +106,7 @@ export interface BrandSaveResult {
 
 /** She is shown MYRA's strongest reads of her, not the catalogue. */
 const SUGGESTED_SHOWN = 18
-const MAX_FAVOURITES = 60
+const MAX_FAVOURITES = 80
 
 // ── Reads ───────────────────────────────────────────────────────────────────
 
@@ -98,7 +117,7 @@ export async function loadMyBrands(asMemberId?: string): Promise<MyBrandsView | 
   const admin = createAdminClient() as any
   const { data: member } = await admin
     .from('pilot_member')
-    .select('brands, brands_input_only')
+    .select('brands, brands_input_only, brands_never')
     .eq('member_id', me.memberId)
     .maybeSingle()
 
@@ -106,17 +125,18 @@ export async function loadMyBrands(asMemberId?: string): Promise<MyBrandsView | 
     .filter((b) => b?.name)
     .sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0))
   const inputOnly = ((member?.brands_input_only ?? []) as string[]).filter(Boolean)
+  const never = ((member?.brands_never ?? []) as string[]).filter(Boolean)
+  const mineKeys = new Set(declared.map((b) => brandKey(b.name)))
+  const neverKeys = new Set(never.map((n) => brandKey(n)))
 
   const base: MyBrandsView = {
     test: me.test,
     favourites: declared.map((b) => ({ name: b.name, why: b.inferred_why ?? null, stocked: false })),
     inputOnly,
+    never,
     suggested: [],
     requested: [],
-    groups: BRAND_GROUPS.map((g) => ({
-      key: g.key, name: g.name, blurb: g.blurb,
-      brands: g.brands.map((name) => ({ name, stocked: false, mine: false })),
-    })),
+    groups: buildGroups(new Set(), mineKeys, neverKeys),
     available: false,
   }
 
@@ -137,7 +157,6 @@ export async function loadMyBrands(asMemberId?: string): Promise<MyBrandsView | 
     if (!graph.brands.length) return base
 
     const stocked = stockedKeys(graph)
-    const mineKeys = new Set(declared.map((b) => brandKey(b.name)))
 
     // MYRA's read of her: what it expanded to, minus the baseline, which is
     // simply every brand it stocks. Showing baseline as a suggestion would
@@ -145,7 +164,7 @@ export async function loadMyBrands(asMemberId?: string): Promise<MyBrandsView | 
     const suggested = Array.from(affinities.values())
       .filter((r) => !r.hidden && r.source !== 'onboarded' && Number(r.affinity) > SEED.baseline)
       .map((r) => ({ brand: graph.byId.get(r.brand_id), row: r }))
-      .filter((x) => x.brand && !mineKeys.has(brandKey(x.brand!.name)))
+      .filter((x) => x.brand && !mineKeys.has(brandKey(x.brand!.name)) && !neverKeys.has(brandKey(x.brand!.name)))
       .sort((a, b) => Number(b.row.affinity) - Number(a.row.affinity))
       .slice(0, SUGGESTED_SHOWN)
       .map((x) => ({
@@ -162,7 +181,7 @@ export async function loadMyBrands(asMemberId?: string): Promise<MyBrandsView | 
       })),
       suggested,
       requested: dedupeNames(((requests ?? []) as any[]).map((r) => String(r.raw_name))),
-      groups: buildGroups(stocked, mineKeys),
+      groups: buildGroups(stocked, mineKeys, neverKeys),
       available: true,
     }
   } catch (err) {
@@ -187,16 +206,19 @@ function stockedKeys(graph: BrandGraph): Set<string> {
 /** The picker. A brand MYRA does not stock is still offered — naming it makes
  *  a request Chloe sees — but it is marked, so the list never implies MYRA can
  *  shop something it cannot. */
-function buildGroups(stocked: Set<string>, mine: Set<string>): MyBrandsView['groups'] {
+function buildGroups(stocked: Set<string>, mine: Set<string>, never: Set<string>): MyBrandsView['groups'] {
+  const one = (name: string): PickerBrand => ({
+    name,
+    stocked: stocked.has(brandKey(name)),
+    mine: mine.has(brandKey(name)),
+    never: never.has(brandKey(name)),
+  })
   return BRAND_GROUPS.map((g) => ({
     key: g.key,
     name: g.name,
     blurb: g.blurb,
-    brands: g.brands.map((name) => ({
-      name,
-      stocked: stocked.has(brandKey(name)),
-      mine: mine.has(brandKey(name)),
-    })),
+    brands: g.brands.map(one),
+    more: (g.more ?? []).map(one),
   }))
 }
 
@@ -213,14 +235,28 @@ function dedupeNames(names: string[]): string[] {
   return out
 }
 
+/** Clean a list of typed names: trimmed, keyed, deduped, empties dropped. */
+function cleanNames(raw: string[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const r of raw ?? []) {
+    const name = String(r ?? '').trim().replace(/\s+/g, ' ').slice(0, 80)
+    const key = brandKey(name)
+    if (!name || !key || seen.has(key)) continue
+    seen.add(key)
+    out.push(name)
+  }
+  return out
+}
+
 // ── Writes ──────────────────────────────────────────────────────────────────
 
 /** Her record as it stands, for a read-modify-write. */
-async function currentLists(memberId: string): Promise<{ brands: RankedBrand[]; inputOnly: string[] }> {
+async function currentLists(memberId: string): Promise<{ brands: RankedBrand[]; inputOnly: string[]; never: string[] }> {
   const admin = createAdminClient() as any
   const { data } = await admin
     .from('pilot_member')
-    .select('brands, brands_input_only')
+    .select('brands, brands_input_only, brands_never')
     .eq('member_id', memberId)
     .maybeSingle()
   return {
@@ -228,6 +264,7 @@ async function currentLists(memberId: string): Promise<{ brands: RankedBrand[]; 
       .filter((b) => b?.name)
       .sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0)),
     inputOnly: ((data?.brands_input_only ?? []) as string[]).filter(Boolean),
+    never: ((data?.brands_never ?? []) as string[]).filter(Boolean),
   }
 }
 
@@ -251,74 +288,162 @@ async function commitFor(
   return result
 }
 
+/** The not-for-me list is its own column and never goes near the seeder. */
+async function writeNever(memberId: string, never: string[]): Promise<{ error?: string }> {
+  const admin = createAdminClient() as any
+  const { error } = await admin
+    .from('pilot_member')
+    .update({ brands_never: cleanNames(never), updated_at: new Date().toISOString() })
+    .eq('member_id', memberId)
+  if (error) return { error: error.message }
+  revalidatePath('/me/profile')
+  revalidatePath('/me')
+  return {}
+}
+
 export async function addMyBrand(rawName: string, asMemberId?: string): Promise<BrandSaveResult> {
+  return addMyBrands([rawName], asMemberId)
+}
+
+/**
+ * Love one brand or a whole group in one commit. Fast fashion in the list is
+ * filed as input-only (taste signal, never a recommendation) rather than
+ * refused. Anything she had marked not-for-me is un-marked: naming it is the
+ * later, truer word.
+ */
+export async function addMyBrands(rawNames: string[], asMemberId?: string): Promise<BrandSaveResult> {
   const me = await resolveClientMember(asMemberId)
   if (!me) return { error: 'Not signed in' }
 
-  const name = String(rawName ?? '').trim().replace(/\s+/g, ' ').slice(0, 80)
-  if (!name) return { error: 'Type a brand name first' }
-  if (!brandKey(name)) return { error: 'That doesn’t look like a brand name' }
+  const names = cleanNames(rawNames)
+  if (!names.length) return { error: 'Type a brand name first' }
 
   try {
-    const { brands, inputOnly } = await currentLists(me.memberId)
-    const key = brandKey(name)
-    if (brands.some((b) => brandKey(b.name) === key)) return { already: name }
+    const { brands, inputOnly, never } = await currentLists(me.memberId)
+    const had = new Set(brands.map((b) => brandKey(b.name)))
+    const hadInputOnly = new Set(inputOnly.map((n) => brandKey(n)))
 
-    if (brands.length >= MAX_FAVOURITES) {
-      return { error: `That is as many brands as MYRA can hold for you — remove one first` }
+    const toLove = names.filter((n) => !isFastFashion(n) && !had.has(brandKey(n)))
+    const toSignal = names.filter((n) => isFastFashion(n) && !hadInputOnly.has(brandKey(n)))
+    if (!toLove.length && !toSignal.length) return { already: names[0] }
+
+    if (brands.length + toLove.length > MAX_FAVOURITES) {
+      return { error: `That is as many brands as MYRA can hold for you — remove some first` }
     }
 
-    // Fast fashion is taste signal, never a recommendation: a look containing
-    // it fails validateDelivery outright. Naming it here files it where it
-    // belongs rather than refusing her, so MYRA still learns from it.
-    if (isFastFashion(name)) {
-      if (inputOnly.some((n) => brandKey(n) === key)) return { already: name }
-      const r = await commitFor(me.memberId, brands, [...inputOnly, name])
-      return r.error ? { error: r.error } : { signalOnly: name }
+    const keys = new Set(names.map((n) => brandKey(n)))
+    const nextNever = never.filter((n) => !keys.has(brandKey(n)))
+    if (nextNever.length !== never.length) {
+      const w = await writeNever(me.memberId, nextNever)
+      if (w.error) return { error: w.error }
     }
 
-    const nextInputOnly = inputOnly.filter((n) => brandKey(n) !== key)
-    const next: RankedBrand[] = [...brands, { name, rank: brands.length + 1 }]
+    const next: RankedBrand[] = [...brands, ...toLove.map((name, i) => ({ name, rank: brands.length + i + 1 }))]
+    const nextInputOnly = [...inputOnly.filter((n) => !keys.has(brandKey(n)) || isFastFashion(n)), ...toSignal]
 
-    // If she had previously taken this brand out, the affinity row is still
-    // hidden and floored. Naming it again is the later, truer word — clear it
-    // before re-seeding, which writes the affinity but not the hidden flag.
-    await unhide(me.memberId, name)
+    // If she had previously taken a brand out, its affinity row is still
+    // hidden and floored. Naming it again clears that before re-seeding, which
+    // writes the affinity but not the hidden flag.
+    await setHidden(me.memberId, [...toLove, ...toSignal], false, me.test)
 
     const r = await commitFor(me.memberId, next, nextInputOnly)
     if (r.error) return { error: r.error }
-    if (r.unmatched?.some((u) => brandKey(u) === key)) return { requested: name }
+    const asked = (r.unmatched ?? []).filter((u) => keys.has(brandKey(u)))
+    if (asked.length) return { requested: asked.join(', ') }
+    if (!toLove.length && toSignal.length) return { signalOnly: toSignal.join(', ') }
     return {}
   } catch (err) {
-    console.error('[addMyBrand]', err)
+    console.error('[addMyBrands]', err)
     return { error: 'Could not add that brand — try again' }
   }
 }
 
 export async function removeMyBrand(rawName: string, asMemberId?: string): Promise<BrandSaveResult> {
+  return removeMyBrands([rawName], asMemberId)
+}
+
+/** Take one brand, or a whole group, off every list in one commit. */
+export async function removeMyBrands(rawNames: string[], asMemberId?: string): Promise<BrandSaveResult> {
   const me = await resolveClientMember(asMemberId)
   if (!me) return { error: 'Not signed in' }
-  const key = brandKey(String(rawName ?? ''))
-  if (!key) return { error: 'No brand' }
+  const names = cleanNames(rawNames)
+  if (!names.length) return { error: 'No brand' }
+  const keys = new Set(names.map((n) => brandKey(n)))
 
   try {
-    const { brands, inputOnly } = await currentLists(me.memberId)
-    const next = brands.filter((b) => brandKey(b.name) !== key)
-    const nextInputOnly = inputOnly.filter((n) => brandKey(n) !== key)
+    const { brands, inputOnly, never } = await currentLists(me.memberId)
+    const next = brands.filter((b) => !keys.has(brandKey(b.name)))
+    const nextInputOnly = inputOnly.filter((n) => !keys.has(brandKey(n)))
+    const nextNever = never.filter((n) => !keys.has(brandKey(n)))
+
+    if (nextNever.length !== never.length) {
+      const w = await writeNever(me.memberId, nextNever)
+      if (w.error) return { error: w.error }
+      // Dropping it from not-for-me is a retraction, not a judgement: the
+      // affinity row comes back to neutral rather than staying floored.
+      await setHidden(me.memberId, never.filter((n) => keys.has(brandKey(n))), false, me.test)
+    }
     if (next.length === brands.length && nextInputOnly.length === inputOnly.length) return {}
 
     const r = await commitFor(me.memberId, next, nextInputOnly)
     if (r.error) return { error: r.error }
 
-    // Taking a brand out is a judgement, so the affinity row is hidden and
-    // floored rather than deleted — the same rule the admin follows. Without
-    // this the brand would keep its 1.0 from the last seeding and go on being
-    // ranked for her after she has said it is not her.
-    await hide(me.memberId, rawName, me.test)
+    // Taking a loved brand out is a judgement, so the affinity row is hidden
+    // and floored rather than deleted — the same rule the admin follows.
+    // Without this the brand would keep its 1.0 from the last seeding and go
+    // on being ranked for her after she has said it is not her.
+    await setHidden(me.memberId, brands.filter((b) => keys.has(brandKey(b.name))).map((b) => b.name), true, me.test)
     return {}
   } catch (err) {
-    console.error('[removeMyBrand]', err)
+    console.error('[removeMyBrands]', err)
     return { error: 'Could not remove that brand — try again' }
+  }
+}
+
+export async function setMyBrandNever(rawName: string, neverWanted: boolean, asMemberId?: string): Promise<BrandSaveResult> {
+  return setMyBrandsNever([rawName], neverWanted, asMemberId)
+}
+
+/**
+ * "Not for me": one brand or a whole group. A never-brand leaves the loved and
+ * input-only lists, its affinity is hidden and floored (the one hard filter in
+ * the recommender), and it is never passed to the seeder. Un-marking only
+ * clears it — she can love it again with a tap.
+ */
+export async function setMyBrandsNever(rawNames: string[], neverWanted: boolean, asMemberId?: string): Promise<BrandSaveResult> {
+  const me = await resolveClientMember(asMemberId)
+  if (!me) return { error: 'Not signed in' }
+  const names = cleanNames(rawNames)
+  if (!names.length) return { error: 'No brand' }
+  const keys = new Set(names.map((n) => brandKey(n)))
+
+  try {
+    const { brands, inputOnly, never } = await currentLists(me.memberId)
+    if (!neverWanted) {
+      const nextNever = never.filter((n) => !keys.has(brandKey(n)))
+      if (nextNever.length === never.length) return {}
+      const w = await writeNever(me.memberId, nextNever)
+      if (w.error) return { error: w.error }
+      await setHidden(me.memberId, names, false, me.test)
+      return {}
+    }
+
+    const hadNever = new Set(never.map((n) => brandKey(n)))
+    const nextNever = [...never, ...names.filter((n) => !hadNever.has(brandKey(n)))]
+    const w = await writeNever(me.memberId, nextNever)
+    if (w.error) return { error: w.error }
+
+    const next = brands.filter((b) => !keys.has(brandKey(b.name)))
+    const nextInputOnly = inputOnly.filter((n) => !keys.has(brandKey(n)))
+    if (next.length !== brands.length || nextInputOnly.length !== inputOnly.length) {
+      const r = await commitFor(me.memberId, next, nextInputOnly)
+      if (r.error) return { error: r.error }
+    }
+    await setHidden(me.memberId, names, true, me.test)
+    return {}
+  } catch (err) {
+    console.error('[setMyBrandsNever]', err)
+    return { error: 'Could not save that — try again' }
   }
 }
 
@@ -368,38 +493,40 @@ export async function setMyBrandInputOnly(
 
 // ── Affinity side-effects ───────────────────────────────────────────────────
 
-async function hide(memberId: string, name: string, test: boolean): Promise<void> {
+/**
+ * Hide (floor) or un-hide the affinity rows for these names. Hidden is the one
+ * hard filter the recommender applies, so this is what actually keeps a
+ * removed or not-for-me brand out of her looks between seedings. Best-effort:
+ * the declaration is already written by the time this runs.
+ */
+async function setHidden(memberId: string, names: string[], hidden: boolean, test: boolean): Promise<void> {
+  if (!names.length) return
   try {
     const admin = createAdminClient() as any
     const graph = await loadBrandGraph(admin)
-    const key = brandKey(name)
-    const brand = graph.brands.find(
-      (b) => brandKey(b.name) === key || b.aliases.some((a) => brandKey(a) === key),
-    )
-    if (!brand) return
-    await admin.from('user_brand_affinity')
-      .update({ hidden: true, affinity: AFFINITY_FLOOR, updated_at: new Date().toISOString() })
-      .eq('user_id', memberId)
-      .eq('brand_id', brand.brand_id)
-    await admin.from('brand_affinity_event').insert({
-      user_id: memberId, brand_id: brand.brand_id, new_value: AFFINITY_FLOOR, source: 'hidden',
-      reason: test ? 'removed by her stylist in her settings' : 'removed by her in the app',
-    })
+    const ids: string[] = []
+    for (const name of names) {
+      const key = brandKey(name)
+      const brand = graph.brands.find(
+        (b) => brandKey(b.name) === key || b.aliases.some((a) => brandKey(a) === key),
+      )
+      if (brand) ids.push(brand.brand_id)
+    }
+    if (!ids.length) return
+    if (hidden) {
+      await admin.from('user_brand_affinity')
+        .update({ hidden: true, affinity: AFFINITY_FLOOR, updated_at: new Date().toISOString() })
+        .eq('user_id', memberId)
+        .in('brand_id', ids)
+      await admin.from('brand_affinity_event').insert(ids.map((brand_id) => ({
+        user_id: memberId, brand_id, new_value: AFFINITY_FLOOR, source: 'hidden',
+        reason: test ? 'removed by her stylist in her settings' : 'removed by her in the app',
+      })))
+    } else {
+      await admin.from('user_brand_affinity')
+        .update({ hidden: false })
+        .eq('user_id', memberId)
+        .in('brand_id', ids)
+    }
   } catch { /* the declaration is already written; this is the tidy-up */ }
-}
-
-async function unhide(memberId: string, name: string): Promise<void> {
-  try {
-    const admin = createAdminClient() as any
-    const graph = await loadBrandGraph(admin)
-    const key = brandKey(name)
-    const brand = graph.brands.find(
-      (b) => brandKey(b.name) === key || b.aliases.some((a) => brandKey(a) === key),
-    )
-    if (!brand) return
-    await admin.from('user_brand_affinity')
-      .update({ hidden: false })
-      .eq('user_id', memberId)
-      .eq('brand_id', brand.brand_id)
-  } catch { /* re-seeding will still raise the affinity */ }
 }

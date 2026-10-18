@@ -21,6 +21,7 @@ export const ROOM_LABEL: Record<string, string> = {
   magazine: 'MYRA MAGAZINE',
   threads: 'THREADS',
   profile: 'YOU',
+  sharing: 'SHARING',
 }
 
 // ── Events ──────────────────────────────────────────────────────────────────

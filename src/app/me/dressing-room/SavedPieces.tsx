@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import WaysToWear from '@/components/me/WaysToWear'
+import ShareWithFriend from '@/components/me/ShareWithFriend'
 import { useWaysReady } from '@/components/me/ways-watch'
 import { forgetMySavedPiece, loadMySavedPieces } from './actions'
 import type { SavedPieceView } from '@/app/admin/private-stylist/actions'
@@ -62,8 +63,15 @@ export default function SavedPieces({ testMemberId, onCount }: { testMemberId?: 
         {pieces.map((p) => {
           const gone = p.stock_status === 'out_of_stock'
           return (
-            <div key={p.item_id} id={`saved-${p.item_id}`}>
+            <div key={p.item_id} id={`saved-${p.item_id}`} className="relative">
               <SavedTile piece={p} open={open === p.item_id} gone={gone} onOpen={() => setOpen(p.item_id)} />
+              {/* Pass the piece to a friend on MYRA. */}
+              <ShareWithFriend
+                variant="icon"
+                testMemberId={testMemberId}
+                className="absolute bottom-[52px] right-3"
+                attachment={{ kind: 'piece', item_id: p.item_id, brand: p.brand, product_name: p.product_name, image_url: p.image_url, url: p.retailer_url, price_gbp: p.price_gbp }}
+              />
             </div>
           )
         })}

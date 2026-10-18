@@ -584,20 +584,24 @@ html {
 }
 .myra-silver-input::placeholder { color: #a6a9ad; }
 .myra-silver-input:focus { outline: none; border-inline: 2px solid #9aa1a9; }
+/* White, not silver: Chloe asked for white buttons on the door (2026-10-17).
+   A white bar with near-black lettering and a soft silver shadow so it lifts
+   off the pearl behind it. The class keeps its name; every silver button
+   (door, invite login, Dressing Room) follows. */
 .myra-silver-button {
   display: block;
   width: 100%;
   text-align: center;
-  color: #ffffff;
-  background: linear-gradient(45deg, #6c7279 0%, #a9afb6 100%);
-  border: none;
+  color: #1F2226;
+  background: #ffffff;
+  border: 1px solid rgba(124, 131, 139, 0.18);
   border-radius: 20px;
   padding-block: 18px;
-  box-shadow: rgba(150, 156, 164, 0.85) 0px 20px 10px -15px;
+  box-shadow: rgba(150, 156, 164, 0.55) 0px 20px 14px -16px;
   transition: all 0.2s ease-in-out;
 }
-.myra-silver-button:hover { transform: scale(1.03); box-shadow: rgba(150, 156, 164, 0.85) 0px 23px 10px -20px; }
-.myra-silver-button:active { transform: scale(0.95); box-shadow: rgba(150, 156, 164, 0.85) 0px 15px 10px -10px; }
+.myra-silver-button:hover { transform: scale(1.03); box-shadow: rgba(150, 156, 164, 0.55) 0px 23px 14px -20px; }
+.myra-silver-button:active { transform: scale(0.95); box-shadow: rgba(150, 156, 164, 0.55) 0px 15px 14px -10px; }
 
 /* Connect-your-accounts icons: round white buttons that fill with the app's colour
    from below on hover, with a tooltip saying what MYRA does with it. */
@@ -675,6 +679,8 @@ html {
   opacity: 1;
 }
 .myra-action:active { scale: 0.95; }
+/* The tour's ring: the one button, circle or card a step is about. */
+.myra-tour-lit { box-shadow: 0 0 0 3px #FFFFFF, 0 0 0 7px rgba(255, 255, 255, 0.35) !important; }
 .myra-action:focus-visible { outline: none; box-shadow: 0 0 0 4px rgba(220, 220, 218, 0.7); }
 
 /* The mirror's wiggle while MYRA is building — the same one the Dressing Room

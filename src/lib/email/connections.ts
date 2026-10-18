@@ -447,31 +447,36 @@ async function insertFind(
   return row
 }
 
-async function searchInbox(c: any, text: string, max = 8): Promise<string[]> {
+/** Emails that name a piece — only from the shop it came from, never the rest of her inbox. */
+async function searchInbox(c: any, text: string, from: string, max = 8): Promise<string[]> {
   const secret = decryptSecret(c.secret_enc)
-  if (c.provider === 'gmail') return searchGmailIds(await googleAccessToken(secret), text, max)
-  return searchImapUids({ host: c.imap_host, email: c.email, password: secret }, text.replace(/["]/g, ''), max)
+  const sender = from.replace(/["()]/g, '').trim()
+  if (c.provider === 'gmail') return searchGmailIds(await googleAccessToken(secret), `from:(${sender}) ${text}`, max)
+  return searchImapUids({ host: c.imap_host, email: c.email, password: secret }, text.replace(/["]/g, ''), max, sender)
 }
 
 /**
  * A photo for a piece whose order email had none. Vinted's order emails carry
  * no picture, but its "New message about <listing>" emails do — so look through
- * every email that names this piece and take the first product photo. Free: a
- * search and a few message reads, no AI.
+ * the emails FROM THAT SHOP that name this piece and take the first product
+ * photo. Only the shop's own mail is opened: a friend's email that happens to
+ * mention a "black jacket" is never read for a picture. Free: a search and a
+ * few message reads, no AI.
  */
 export async function huntPhotoForFind(memberId: string, findId: string): Promise<{ imageUrl?: string; error?: string }> {
   const a = db()
-  const { data: f } = await a.from('email_purchase_find').select('find_id, connection_id, product_name, brand_name, image_url')
+  const { data: f } = await a.from('email_purchase_find').select('find_id, connection_id, product_name, brand_name, image_url, retailer')
     .eq('find_id', findId).eq('member_id', memberId).maybeSingle()
   if (!f) return { error: 'Not found' }
   if (f.image_url) return { imageUrl: f.image_url }
+  if (!f.retailer) return { error: 'No shop to look in for a photo — add one of your own' }
   const { data: c } = await a.from('member_email_connection').select('*').eq('connection_id', f.connection_id).maybeSingle()
   if (!c) return { error: 'That inbox is no longer connected' }
 
   const words = pieceWords(f.product_name, null)
   if (words.length < 2) return { error: 'Not enough of a name to search for' }
   try {
-    const ids = await searchInbox(c, `"${f.product_name.replace(/["]/g, '')}"`)
+    const ids = await searchInbox(c, `"${f.product_name.replace(/["]/g, '')}"`, f.retailer)
     for (const id of ids) {
       const m = await fetchMessages(c, [id])
       const { images } = emailForExtraction(m[0] ?? { id, subject: '', from: '', date: null, html: null, text: null })

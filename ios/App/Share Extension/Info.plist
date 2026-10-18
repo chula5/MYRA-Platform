@@ -8,13 +8,16 @@
 		<string>com.apple.share-services</string>
 		<key>NSExtensionPrincipalClass</key>
 		<string>$(PRODUCT_MODULE_NAME).ShareViewController</string>
-		<!-- Offered when what she is sharing is a web address (Safari, a shop's
-		     own share button) or text that contains one (Instagram's "Copy
-		     link", some apps' share of a caption). The predicate is used rather
-		     than the dictionary form because a dictionary requires EVERY key to
-		     be satisfied, which would ask for a URL and text at once. -->
-		<key>NSExtensionActivationRule</key>
-		<string>SUBQUERY (extensionItems, $extensionItem, SUBQUERY ($extensionItem.attachments, $attachment, ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.url" OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.plain-text").@count &gt;= 1).@count &gt;= 1</string>
+		<key>NSExtensionAttributes</key>
+		<dict>
+			<!-- Offered when what she is sharing is a web address (Safari, a shop's
+			     own share button) or text that contains one (Instagram's "Copy
+			     link", some apps' share of a caption). The predicate is used rather
+			     than the dictionary form because a dictionary requires EVERY key to
+			     be satisfied, which would ask for a URL and text at once. -->
+			<key>NSExtensionActivationRule</key>
+			<string>SUBQUERY (extensionItems, $extensionItem, SUBQUERY ($extensionItem.attachments, $attachment, ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.url" OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.plain-text").@count &gt;= 1).@count &gt;= 1</string>
+		</dict>
 	</dict>
 </dict>
 </plist>

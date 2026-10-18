@@ -46,7 +46,7 @@ function normalizeBrandName(name: string): string {
 /** Normalised brand name → the controlled group keys whose list contains it. */
 const BRAND_GROUP_MEMBERSHIP = new Map<string, string[]>()
 for (const group of BRAND_GROUPS) {
-  for (const brand of group.brands) {
+  for (const brand of [...group.brands, ...(group.more ?? [])]) {
     const key = normalizeBrandName(brand)
     const list = BRAND_GROUP_MEMBERSHIP.get(key) ?? []
     list.push(group.key)
