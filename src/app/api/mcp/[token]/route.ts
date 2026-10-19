@@ -3,10 +3,11 @@ import { resolveMirrorToken } from '@/lib/mirror/auth'
 import { createAdminClient } from '@/lib/supabase-server'
 import { hashAssistantToken } from '@/lib/mcp/link'
 import {
-  brandsFor, outfitsAroundPiece, outfitsFor, savedFor, styleFor, wardrobeFor, type OutfitAnswer,
+  brandsFor, outfitsAroundPiece, outfitsFor, savedFor, savedPiecesFor, styleFor, wardrobeFor, type OutfitAnswer,
 } from '@/lib/mcp/myra-tools'
 import { SHOW_PICTURES, outfitToText, picturesOf } from '@/lib/mcp/outfit-text'
 import { pictureBlocks } from '@/lib/mcp/pictures'
+import { APP_HTML, APP_MIME, APP_RESOURCE, APP_TOOL_META, APP_URI, appPiece, type AppLooks, type AppPieces } from '@/lib/mcp/app'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -25,7 +26,11 @@ export const maxDuration = 120
 // An outfit is pictures, not a list. Every tool that returns pieces sends each
 // piece's picture twice: as a markdown image line under the piece, for the
 // assistant to copy into its reply, and as an image block beside the text, so
-// the tool result itself shows the look and the assistant can see it.
+// the tool result itself shows the look and the assistant can see it. And
+// since 2026-10-18 a third way, the one that looks like a shop's own app: the
+// result carries structuredContent and names the MYRA app (lib/mcp/app), so a
+// host that draws MCP Apps — Claude, ChatGPT — shows each piece as a card with
+// its picture, brand and price.
 
 const PROTOCOL = '2025-06-18'
 
@@ -42,6 +47,7 @@ const TOOLS = [
       },
       required: ['occasion'],
     },
+    _meta: APP_TOOL_META,
   },
   {
     name: 'style_a_piece',
@@ -51,6 +57,7 @@ const TOOLS = [
       properties: { piece: { type: 'string', description: 'The piece, in her words.' } },
       required: ['piece'],
     },
+    _meta: APP_TOOL_META,
   },
   {
     name: 'my_style',
@@ -59,7 +66,7 @@ const TOOLS = [
   },
   { name: 'my_wardrobe', description: 'The pieces she owns, as MYRA has them.', inputSchema: { type: 'object', properties: {} } },
   { name: 'my_brands', description: 'The brands she wears, in her order, and the ones MYRA never recommends back.', inputSchema: { type: 'object', properties: {} } },
-  { name: 'my_saved_pieces', description: 'Pieces she saved while shopping, with pictures, prices, links and whether they have gone.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'my_saved_pieces', description: 'Pieces she saved while shopping, with pictures, prices, links and whether they have gone.', inputSchema: { type: 'object', properties: {} }, _meta: APP_TOOL_META },
 ] as const
 
 const CORS = {
@@ -86,7 +93,18 @@ async function looksAnswer(intro: string, looks: OutfitAnswer[]) {
   const pieces = picturesOf(looks)
   const blocks = await pictureBlocks(pieces.map((p) => p.url))
   const pictures = pieces.flatMap((p, i) => (blocks[i] ? [{ type: 'text', text: p.caption }, blocks[i]] : []))
-  return { content: [{ type: 'text', text: body }, ...pictures] }
+  const structuredContent: AppLooks = { kind: 'looks', title: intro.replace(/ — ◈.*$/, ''), looks: looks.map((l) => ({ pieces: l.pieces.map(appPiece), why: l.why })) }
+  return { content: [{ type: 'text', text: body }, ...pictures], structuredContent }
+}
+
+/** Her saved pieces: the text as before, and the cards for a host that draws them. */
+async function savedAnswer(memberId: string) {
+  const [text, rows] = await Promise.all([savedFor(memberId), savedPiecesFor(memberId).catch(() => [])])
+  const structuredContent: AppPieces = {
+    kind: 'pieces', title: rows.length ? `${rows.length} saved from the shops` : 'Nothing saved yet',
+    pieces: rows.map((r) => appPiece({ ...r, name: r.gone ? `${r.name} (gone)` : r.name })),
+  }
+  return { content: [{ type: 'text', text }], structuredContent }
 }
 
 export async function OPTIONS() { return new Response(null, { status: 204, headers: CORS }) }
@@ -142,7 +160,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
           id,
           result: {
             protocolVersion: PROTOCOL,
-            capabilities: { tools: { listChanged: false } },
+            capabilities: { tools: { listChanged: false }, resources: { listChanged: false } },
             serverInfo: { name: 'MYRA', version: '1.0.0' },
             instructions:
               'MYRA is her private stylist. Ask find_outfits for an occasion, style_a_piece to wear something she owns, or my_style to know her taste before advising. Outfits are composed from pieces MYRA can actually source in her size; a piece marked ◈ is already hers. Every piece comes with its picture as a markdown image line — copy those lines into your reply so she sees each piece. Never answer with names and links alone.',
@@ -156,8 +174,17 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
         answers.push({ jsonrpc: '2.0', id, result: { tools: TOOLS } })
         break
       case 'resources/list':
-        answers.push({ jsonrpc: '2.0', id, result: { resources: [] } })
+        answers.push({ jsonrpc: '2.0', id, result: { resources: [APP_RESOURCE] } })
         break
+      case 'resources/templates/list':
+        answers.push({ jsonrpc: '2.0', id, result: { resourceTemplates: [] } })
+        break
+      case 'resources/read': {
+        const uri = m?.params?.uri
+        if (uri !== APP_URI) { answers.push({ jsonrpc: '2.0', id, error: { code: -32002, message: `Resource not found: ${uri}` } }); break }
+        answers.push({ jsonrpc: '2.0', id, result: { contents: [{ uri: APP_URI, mimeType: APP_MIME, text: APP_HTML, _meta: APP_RESOURCE._meta }] } })
+        break
+      }
       case 'prompts/list':
         answers.push({ jsonrpc: '2.0', id, result: { prompts: [] } })
         break
@@ -196,7 +223,7 @@ async function callTool(memberId: string, name: string, args: any) {
     case 'my_style': return text(await styleFor(memberId))
     case 'my_wardrobe': return text(await wardrobeFor(memberId))
     case 'my_brands': return text(await brandsFor(memberId))
-    case 'my_saved_pieces': return text(await savedFor(memberId))
+    case 'my_saved_pieces': return savedAnswer(memberId)
     default: return { ...text(`MYRA has no tool called ${name}.`), isError: true }
   }
 }

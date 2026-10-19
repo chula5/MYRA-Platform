@@ -105,6 +105,23 @@ export async function queueScan(memberId: string, connectionId: string): Promise
   return error ? { error: error.message } : {}
 }
 
+/**
+ * THE WEEKLY READ (Chloe, 2026-10-18): every inbox still connected is read
+ * again once a week, so what she ordered lands in her dressing room without
+ * her asking. An inbox Google has signed MYRA out of is left alone — it says
+ * so on her page, and only she can connect it again.
+ */
+export async function queueWeeklyScans(): Promise<{ queued: number }> {
+  const a = db()
+  const { data } = await a.from('member_email_connection').select('connection_id, member_id').eq('status', 'connected').limit(2000)
+  let queued = 0
+  for (const c of (data ?? []) as any[]) {
+    const r = await queueScan(c.member_id, c.connection_id)
+    if (!r.error) queued++
+  }
+  return { queued }
+}
+
 export async function disconnect(memberId: string, connectionId: string): Promise<{ error?: string }> {
   const a = db()
   const { data: c } = await a.from('member_email_connection').select('*')

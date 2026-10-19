@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { processWardrobeQueue } from '@/lib/wardrobe/queue'
-import { admin } from '@/lib/wardrobe/store'
+import { admin, requeueUnscored } from '@/lib/wardrobe/store'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -30,6 +30,8 @@ export async function GET(req: NextRequest) {
       .select('job_id')
     requeued = (data ?? []).length
   }
+  // Pieces whose scoring fell over (an API balance, a timeout) get another go.
+  const rescored = await requeueUnscored(null).catch(() => 0)
   const result = await processWardrobeQueue(240_000)
-  return NextResponse.json({ ...(requeued != null ? { requeued } : {}), ...result })
+  return NextResponse.json({ ...(requeued != null ? { requeued } : {}), rescored, ...result })
 }

@@ -170,7 +170,7 @@ describe('what an event reads as in the replay', () => {
 
   it('turns scroll depth into a percentage of the page', () => {
     expect(describeEvent(event({ type: 'scroll', room: 'all_looks', meta: { depth: 0.62 } })))
-      .toBe('SCROLLED 62% OF YOUR LOOKS')
+      .toBe('SCROLLED 62% OF LOOKS')
   })
 
   it('quotes what she searched for', () => {

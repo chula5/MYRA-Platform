@@ -14,6 +14,7 @@
 // client browsing should not have to wait for a stylist.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import ClientWardrobe from './ClientWardrobe'
 import { myRequests, reactToLook, requestLooks, savedWhileBrowsing, type ClientView, type ClientLook, type ClientLookItem, type BrowsedPiece } from './actions'
@@ -79,14 +80,26 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
   // What she has asked for that has not come back yet — kept under the ask
   // button, so a sent request never feels like it vanished into a spinner.
   const [pendingAsks, setPendingAsks] = useState<{ when: string; occasion_label: string }[]>([])
+  const router = useRouter()
   useEffect(() => {
     if (readOnly) return
     let live = true
-    myRequests()
-      .then((r) => { if (live) setPendingAsks(r.filter((a) => !a.answered).map(({ when, occasion_label }) => ({ when, occasion_label }))) })
+    let had = -1
+    const look = () => myRequests()
+      .then((r) => {
+        if (!live) return
+        const open = r.filter((a) => !a.answered).map(({ when, occasion_label }) => ({ when, occasion_label }))
+        setPendingAsks(open)
+        // An ask that has just come back: the looks are hers now, so redraw the room.
+        if (had > 0 && open.length < had) router.refresh()
+        had = open.length
+      })
       .catch(() => {})
-    return () => { live = false }
-  }, [readOnly, asking])
+    void look()
+    // While something is on its way, look again every so often (composing takes a minute or two).
+    const id = setInterval(() => { if (had > 0) void look() }, 15_000)
+    return () => { live = false; clearInterval(id) }
+  }, [readOnly, asking, router])
   // Tapping a look opens it — the feed's own detail view, hosted over this page.
   const [openLook, setOpenLook] = useState<ClientLook | null>(null)
   // STYLE IT on an open look: her editor over the look view.
@@ -332,7 +345,7 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
                 </button>
               )}
               {/* What she has asked for and not yet received: one small card each,
-                  the occasion and nothing else. The looks arrive when they are checked. */}
+                  the occasion and nothing else. The looks arrive once MYRA has checked them. */}
               {!asking && pendingAsks.length > 0 && (
                 <div className="mt-5 flex flex-wrap justify-center gap-[6px]">
                   {pendingAsks.map((a, i) => (
@@ -341,7 +354,7 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
                         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#2B2B2B] opacity-30" />
                         <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#2B2B2B]" />
                       </span>
-                      <span className="text-[13px] tracking-[0.18em] text-[#7C838B]">IN REVIEW</span>
+                      <span className="text-[13px] tracking-[0.18em] text-[#7C838B]">ON ITS WAY</span>
                       <span className="rounded-full border border-[#2B2B2B] px-3 py-1 text-[13px] tracking-[0.12em] text-[#2B2B2B]">{a.occasion_label.toUpperCase()}</span>
                     </div>
                   ))}
@@ -432,16 +445,19 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
         {/* ── At rest ─────────────────────────────────────────────────────── */}
         {!related && !searched && !occasion && (
           <>
-            {!readOnly && <SavedWhileBrowsing looks={view.looks} cardProps={cardProps} />}
-
+            {/* Her newest looks first, every unanswered one, with the thumbs.
+                They moved here from FOR YOU, which is now only what MYRA did
+                while she shopped (Chloe, 2026-10-18). */}
             {waiting.length > 0 && (
               <section className="mb-16">
-                <SectionHead label="Waiting for you" note={`${waiting.length} look${waiting.length === 1 ? '' : 's'} to tell us about`} />
+                <SectionHead label="New for you" note={`${waiting.length} look${waiting.length === 1 ? '' : 's'}. Thumbs up or down, and MYRA learns`} />
                 <div className={LOOK_GRID}>
-                  {waiting.slice(0, 3).map((l) => <LookCard key={l.look_id} {...cardProps(l)} />)}
+                  {waiting.map((l) => <LookCard key={l.look_id} {...cardProps(l)} />)}
                 </div>
               </section>
             )}
+
+            {!readOnly && <SavedWhileBrowsing looks={view.looks} cardProps={cardProps} />}
 
             {becauseYouLoved.length > 0 && (
               <section className="mb-16">
@@ -1162,7 +1178,7 @@ function AskPanel({
     return (
       <div className="rounded-[18px] bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] px-6 py-6 text-center">
         <p className="text-[20px] text-[#2B2B2B]">
-          MYRA is putting some looks together. Your stylist checks them before they land here.
+          MYRA is putting some looks together and checking each one. They land here in a minute or two.
         </p>
       </div>
     )

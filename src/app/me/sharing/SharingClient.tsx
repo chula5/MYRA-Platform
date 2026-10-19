@@ -164,7 +164,7 @@ export default function SharingClient({ initial, testMemberId, openChatId }: { i
               <p className={`myra-guide-text normal-case ${T} text-[#7C838B] max-w-md`}>
                 {view?.friends.length ? 'Pick a chat, or share something from your looks and it will land here.' : 'Add a friend by her email or @handle. Once she accepts, you can share outfits with each other here.'}
               </p>
-              {!!view?.friends.length && <Link href="/me/looks" className={`${T_SMALL} mt-6 inline-block px-5 py-2.5 rounded-full border border-[#2B2B2B] text-[#2B2B2B]`}>Your looks</Link>}
+              {!!view?.friends.length && <Link href="/me/looks" className={`${T_SMALL} mt-6 inline-block px-5 py-2.5 rounded-full border border-[#2B2B2B] text-[#2B2B2B]`}>Looks</Link>}
             </div>
           )}
         </section>
@@ -431,7 +431,7 @@ function ChatPane({ chat, test, testMemberId, onBack, onSent }: { chat: ChatSumm
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6"><path d="M4 12h15M13 6l6 6-6 6" /></svg>
           </button>
         </div>
-        <p className="text-[13px] sm:text-[14px] tracking-[0.1em] text-[#A8A8A4] mt-3">TO SHARE AN OUTFIT OR A PIECE, USE SHARE ON IT IN YOUR LOOKS OR YOUR DRESSING ROOM</p>
+        <p className="text-[13px] sm:text-[14px] tracking-[0.1em] text-[#A8A8A4] mt-3">TO SHARE AN OUTFIT OR A PIECE, USE SHARE ON IT IN LOOKS OR YOUR DRESSING ROOM</p>
       </form>
     </>
   )

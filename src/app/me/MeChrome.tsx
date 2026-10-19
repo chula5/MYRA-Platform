@@ -14,7 +14,12 @@ import StylingBadge from '@/components/me/StylingBadge'
 export default function MeChrome() {
   const path = usePathname() ?? '/me'
   // The longest matching room wins, so /me/dressing-room/123 stays lit.
-  const active: RoomId = ([...ROOMS].sort((a, b) => b.href.length - a.href.length)
+  // Pages that live inside a room without sharing its address: adding to her
+  // wardrobe is Dressing Room work, so the Dressing Room stays lit (Chloe,
+  // 2026-10-18: it lit For You instead).
+  const ALIASES: Record<string, RoomId> = { '/me/wardrobe': 'dressing_room' }
+  const aliased = Object.entries(ALIASES).find(([p]) => path === p || path.startsWith(`${p}/`))?.[1]
+  const active: RoomId = aliased ?? ([...ROOMS].sort((a, b) => b.href.length - a.href.length)
     .find((r) => path === r.href || path.startsWith(`${r.href}/`))?.id) ?? 'for_you'
   const home = active === 'for_you'
 

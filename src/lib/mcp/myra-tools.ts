@@ -266,6 +266,19 @@ export async function brandsFor(memberId: string): Promise<string> {
   ].filter(Boolean).join('\n')
 }
 
+/** The pieces she saved while shopping, as rows — for a surface that draws them. */
+export async function savedPiecesFor(memberId: string): Promise<(OutfitPiece & { gone: boolean })[]> {
+  const admin = createAdminClient() as any
+  const { data } = await admin.from('member_saved_item')
+    .select('saved_at, source_host, item:item_id(product_name, price_gbp, retailer_url, stock_status, image_url, brand:brand_id(name))')
+    .eq('member_id', memberId).order('saved_at', { ascending: false }).limit(40)
+  return ((data ?? []) as any[]).filter((r) => r.item).map((r) => ({
+    name: r.item.product_name, brand: r.item.brand?.name ?? r.source_host ?? '',
+    price_gbp: r.item.price_gbp != null ? Number(r.item.price_gbp) : null, owned: false,
+    url: r.item.retailer_url ?? null, image_url: r.item.image_url ?? null, gone: r.item.stock_status === 'out_of_stock',
+  }))
+}
+
 /** The pieces she saved while shopping. */
 export async function savedFor(memberId: string): Promise<string> {
   const admin = createAdminClient() as any

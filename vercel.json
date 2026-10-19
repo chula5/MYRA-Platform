@@ -68,6 +68,10 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "path": "/api/cron/email-scan?mode=weekly",
+      "schedule": "0 6 * * 1"
+    },
+    {
       "path": "/api/cron/styled-ways",
       "schedule": "*/5 * * * *"
     },

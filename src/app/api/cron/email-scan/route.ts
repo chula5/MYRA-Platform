@@ -2,9 +2,10 @@
 // where the last run stopped. Safe from Vercel cron or by hand:
 //
 //     open http://localhost:3000/api/cron/email-scan
+//     open http://localhost:3000/api/cron/email-scan?mode=weekly   (queue every connected inbox first)
 
 import { NextRequest, NextResponse } from 'next/server'
-import { processEmailScans } from '@/lib/email/connections'
+import { processEmailScans, queueWeeklyScans } from '@/lib/email/connections'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -17,5 +18,8 @@ function authorised(req: NextRequest): boolean {
 
 export async function GET(req: NextRequest) {
   if (!authorised(req)) return new NextResponse('Unauthorized', { status: 401 })
-  return NextResponse.json(await processEmailScans(240_000))
+  // ?mode=weekly (Mondays, vercel.json): read every connected inbox again, then drain.
+  const weekly = req.nextUrl.searchParams.get('mode') === 'weekly' ? await queueWeeklyScans() : null
+  const r = await processEmailScans(240_000)
+  return NextResponse.json(weekly ? { ...weekly, ...r } : r)
 }

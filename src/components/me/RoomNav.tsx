@@ -25,7 +25,7 @@ export interface Room {
 export const ROOMS: Room[] = [
   { id: 'for_you', label: 'For You', short: 'For You', href: '/me' },
   { id: 'browse', label: 'Browse', short: 'Browse', href: '/me/browse' },
-  { id: 'all_looks', label: 'Your Looks', short: 'Looks', href: '/me/looks' },
+  { id: 'all_looks', label: 'Looks', short: 'Looks', href: '/me/looks' },
   { id: 'dressing_room', label: 'Dressing Room', short: 'Dressing', href: '/me/dressing-room' },
   { id: 'events', label: 'Events', short: 'Events', href: '/me/events' },
   { id: 'magazine', label: 'MYRA Magazine', short: 'Magazine', href: '/me/magazine' },
