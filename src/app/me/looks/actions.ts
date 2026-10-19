@@ -195,12 +195,31 @@ export async function markNotificationsRead(): Promise<void> {
 /**
  * She asks; MYRA composes.
  *
- * The looks do NOT go straight to her. The confidence score is better than
- * chance on her history but not yet on enough looks to publish unwatched, so
- * what she gets back is "I'm working on these" and the looks land in the
- * stylist's queue. She is told the truth about that rather than shown a
- * spinner that implies something else.
+ * Since 2026-10-19 (Chloe: "stop the outfits being held back for review — I
+ * want to see how it is working now") the looks go straight to her once
+ * composed: every look has already been through MYRA's eye and the size check
+ * inside composeDeliveryLooks, and what clashes never reaches the draft. Set
+ * ASKS_LAND_AT_ONCE to false to go back to the stylist's queue, where the
+ * looks wait unseen until they are sent by hand.
  */
+const ASKS_LAND_AT_ONCE = true
+
+/** Everything composed into this ask that she cannot see yet, shown to her now, with a note. */
+async function publishRequestedLooks(admin: any, deliveryId: string, memberId: string): Promise<number> {
+  const { data: looks } = await admin.from('pilot_look').select('look_id').eq('delivery_id', deliveryId).eq('visible_to_client', false)
+  const ids = ((looks ?? []) as any[]).map((l) => l.look_id)
+  if (!ids.length) return 0
+  const now = new Date().toISOString()
+  await admin.from('pilot_look').update({ visible_to_client: true, published_at: now }).in('look_id', ids)
+  await admin.from('pilot_delivery').update({ status: 'sent', sent_at: now }).eq('delivery_id', deliveryId)
+  await admin.from('pilot_notification').insert({
+    member_id: memberId, kind: 'looks_ready',
+    body: ids.length === 1 ? 'A new look is waiting for you.' : `${ids.length} looks are waiting for you.`,
+    look_ids: ids,
+  })
+  return ids.length
+}
+
 export async function requestLooks(
   occasion: string,
   climate: string | null,
@@ -240,8 +259,13 @@ export async function requestLooks(
     // response lands, and her delivery sits empty until the stylist composes
     // it by hand.
     const { composeDeliveryLooks } = await import('@/app/admin/private-stylist/actions')
-    const work = composeDeliveryLooks(created.delivery_id).catch((e) =>
-      console.error('[requestLooks] compose', e))
+    const memberId = me.memberId
+    const work = composeDeliveryLooks(created.delivery_id)
+      .then(async (r) => {
+        if (r.error) { console.error('[requestLooks] compose', r.error); return }
+        if (ASKS_LAND_AT_ONCE) await publishRequestedLooks(admin, created.delivery_id, memberId)
+      })
+      .catch((e) => console.error('[requestLooks] compose', e))
     try { waitUntil(work) } catch { /* local dev: the promise simply runs */ }
 
     revalidatePath('/me/looks')
