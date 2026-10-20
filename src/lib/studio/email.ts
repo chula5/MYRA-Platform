@@ -23,6 +23,8 @@ export function siteUrl(path: string): string {
 
 export type EmailKind =
   | 'review_digest' | 'stock_report' | 'calibration_report'
+  // Someone pressed APPLY NOW on the landing page: a note to Chloe with what she wrote.
+  | 'application_received'
   // Shopper-facing sends (stock alerts on saved pieces). Same transport, and
   // logged in the same ledger, but never subject to the studio digest caps.
   | 'shopper_stock_digest' | 'shopper_stock_urgent'
