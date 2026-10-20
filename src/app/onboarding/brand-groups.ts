@@ -34,8 +34,9 @@ export const BRAND_GROUPS: BrandGroup[] = [
     more: ['Vanessa Bruno', 'Agnès b.', 'Tara Jarmon', 'Gerard Darel', 'Antik Batik', 'Loulou de Saison', 'Alfie Paris', 'La Veste', 'Mes Demoiselles', 'Maison Magdalena', 'Louise Misha', 'J’amemme', 'Posse'],
   },
   {
+    // Shown as The minimalists since 2026-10-20 (Chloe: "quiet luxury is very cringe"); the key stays.
     key: 'quiet_luxury',
-    name: 'Quiet luxury',
+    name: 'The minimalists',
     blurb: 'Clean lines, beautiful fabric, no logos',
     brands: ['The Row', 'Khaite', 'Totême', 'Phoebe Philo', 'Lemaire', 'Jil Sander', 'Róhe', 'Fforme', 'St. Agni', 'Max Mara', 'Gabriela Hearst', 'Brunello Cucinelli', 'Victoria Beckham'],
     more: ['Tibi', 'Altuzarra', 'Nili Lotan', 'Horton New York', 'Maria McManus', 'Linnea Lund', 'Conor O’Brien Studio', 'ARMA', 'N.A Studio', 'Iris von Arnim', 'Soft Goat', '6397', 'Kallmeyer', 'Malknstudio', 'NiiHAi', 'Heirlome', 'Colleen Allen', 'CO Core', 'Bevza', 'Almada Label', 'Cmmn Swdn', 'The Label Edition', 'Aflalo', 'Kulakovsky', 'Tae Park'],

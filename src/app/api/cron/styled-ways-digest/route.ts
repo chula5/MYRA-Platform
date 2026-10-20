@@ -23,6 +23,7 @@ import { createAdminClient } from '@/lib/supabase-server'
 import { sendStudioEmail, emailShell, emailButton, siteUrl } from '@/lib/studio/email'
 import { WAYS } from '@/lib/styled-ways-core'
 import { thumbUrl } from '@/lib/image-utils'
+import { keepEmailedLooks, forgetEmailedLooks, type EmailedWay, type KeptEmail } from '@/lib/emailed-looks'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -35,12 +36,22 @@ function authorised(req: NextRequest): boolean {
   return req.headers.get('authorization') === `Bearer ${secret}`
 }
 
-interface StyledPiece { item_id: string; name: string; brand: string | null; image_url: string | null; ways: number; saved: boolean; pictures: string[] }
+/** `outfits` are exactly the outfits this email shows for the piece — the ones kept as her looks when it goes. */
+interface StyledPiece { item_id: string; name: string; brand: string | null; image_url: string | null; ways: number; saved: boolean; outfits: EmailedWay[] }
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
-/** Where a piece's ways open for her: the piece's own ways page, the same sheet every surface uses. */
-const linkFor = (p: StyledPiece, base?: string) => (base ? `${base.replace(/\/$/, '')}` : siteUrl('')) + `/me/ways/${encodeURIComponent(p.item_id)}`
+const root = (base?: string) => (base ? base.replace(/\/$/, '') : siteUrl(''))
+/**
+ * Where a piece's outfits open for her. Kept as her looks (a real send): the
+ * outfits this email showed, in Looks — never a fresh styling. Not kept (a
+ * dry run, a sample to someone else): the piece's own ways page, as before.
+ */
+const linkFor = (p: StyledPiece, base?: string, kept?: KeptEmail | null) => kept
+  ? `${root(base)}/me/looks?emailed=${encodeURIComponent(kept.deliveryId)}&piece=${encodeURIComponent(p.item_id)}`
+  : `${root(base)}/me/ways/${encodeURIComponent(p.item_id)}`
+const lookLink = (lookId: string, base?: string) => `${root(base)}/me/looks?look=${encodeURIComponent(lookId)}`
+const saveLink = (lookId: string, base?: string) => `${root(base)}/me/looks/save/${encodeURIComponent(lookId)}`
 /** The picture through the site's own image route, sized for email — a retailer's CDN may refuse a hotlink; ours does not. */
 const pictureFor = (url: string) => { const t = thumbUrl(url, 256); return t.startsWith('/') ? siteUrl(t) : t }
 
@@ -62,36 +73,48 @@ async function styledOvernight(admin: any, memberId: string, since: string, samp
   if (!heroes.length) return []
   const [{ data: items }, { data: ways }, { data: saved }] = await Promise.all([
     admin.from('item').select('item_id, product_name, image_url, status, brand:brand_id(name)').in('item_id', heroes).neq('status', 'archived'),
-    admin.from('styled_way').select('hero_item_id, image_url, judged_at').eq('member_id', memberId).eq('stale', false).in('hero_item_id', heroes).order('judged_at', { ascending: false }),
+    admin.from('styled_way').select('styled_way_id, hero_item_id, items, why, image_url, judged_at').eq('member_id', memberId).eq('stale', false).in('hero_item_id', heroes).order('judged_at', { ascending: false }),
     admin.from('member_saved_item').select('item_id').eq('member_id', memberId).in('item_id', heroes),
   ])
-  const count = new Map<string, number>()
-  const pictures = new Map<string, string[]>()
+  // Per piece, the outfits the email will show: pictured ones first (the
+  // email draws them), then the newest.
+  const byHero = new Map<string, EmailedWay[]>()
   for (const w of (ways ?? []) as any[]) {
-    count.set(w.hero_item_id, (count.get(w.hero_item_id) ?? 0) + 1)
-    if (w.image_url) pictures.set(w.hero_item_id, [...(pictures.get(w.hero_item_id) ?? []), w.image_url])
+    byHero.set(w.hero_item_id, [...(byHero.get(w.hero_item_id) ?? []), {
+      styled_way_id: w.styled_way_id, hero_item_id: w.hero_item_id, items: w.items ?? [], why: w.why ?? null, image_url: w.image_url ?? null,
+    }])
   }
+  const pick = (list: EmailedWay[]) => [...list].sort((a, b) => Number(!!b.image_url) - Number(!!a.image_url)).slice(0, WAYS)
   const savedIds = new Set(((saved ?? []) as any[]).map((s) => s.item_id))
   return ((items ?? []) as any[])
     .map((i) => ({
       item_id: i.item_id, name: i.product_name, brand: i.brand?.name ?? null, image_url: i.image_url ?? null,
-      ways: Math.min(WAYS, count.get(i.item_id) ?? 0), saved: savedIds.has(i.item_id), pictures: (pictures.get(i.item_id) ?? []).slice(0, WAYS),
+      ways: Math.min(WAYS, byHero.get(i.item_id)?.length ?? 0), saved: savedIds.has(i.item_id), outfits: pick(byHero.get(i.item_id) ?? []),
     }))
     // Only pieces with all three ways kept: a link in the note opens on outfits, never on a wait (Chloe, 2026-10-11).
     .filter((p) => p.ways >= WAYS)
     .sort((a, b) => Number(b.saved) - Number(a.saved))
 }
 
-function digestHtml(firstName: string, pieces: StyledPiece[], base?: string): string {
+function digestHtml(firstName: string, pieces: StyledPiece[], base?: string, kept?: KeptEmail | null): string {
   const shown = pieces.slice(0, MAX_PIECES_SHOWN)
-  const home = base ? `${base.replace(/\/$/, '')}/me` : siteUrl('/me')
+  const home = kept ? `${root(base)}/me/looks?emailed=${encodeURIComponent(kept.deliveryId)}` : `${root(base)}/me`
   // One block per piece: the piece, then MYRA's pictures of its outfits where
   // they have been made (three across), else the piece alone.
   const rows = shown.map((p) => {
-    const link = linkFor(p, base)
-    const outfits = p.pictures.length
-      ? `<tr><td colspan="2" style="padding:0 0 10px 0;"><table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>${p.pictures.map((u) =>
-          `<td style="padding:0 6px 0 0;"><a href="${link}"><img src="${pictureFor(u)}" width="160" style="display:block;width:160px;height:auto;border-radius:8px;border:1px solid #e2e0db;" alt="" /></a></td>`).join('')}</tr></table></td></tr>`
+    const link = linkFor(p, base, kept)
+    // Each picture opens that outfit in her Looks, and SAVE under it keeps it
+    // (Chloe, 2026-10-20: "allow me to save an image from the email").
+    const pictured = p.outfits.filter((o) => o.image_url)
+    const outfits = pictured.length
+      ? `<tr><td colspan="2" style="padding:0 0 10px 0;"><table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>${pictured.map((o) => {
+          const lookId = kept?.lookByWay.get(o.styled_way_id)
+          const open = lookId ? lookLink(lookId, base) : link
+          const save = lookId
+            ? `<a href="${saveLink(lookId, base)}" style="display:block;margin:7px 0 0 0;font-size:12px;letter-spacing:0.12em;color:#2b2b2b;text-decoration:underline;text-align:center;">SAVE</a>`
+            : ''
+          return `<td style="padding:0 6px 0 0;vertical-align:top;"><a href="${open}"><img src="${pictureFor(o.image_url as string)}" width="160" style="display:block;width:160px;height:auto;border-radius:8px;border:1px solid #e2e0db;" alt="" /></a>${save}</td>`
+        }).join('')}</tr></table></td></tr>`
       : ''
     return `
     <tr>
@@ -154,14 +177,21 @@ export async function GET(req: NextRequest) {
       report.push({ member: m.name ?? m.member_id, pieces: pieces.length, sent: false, email: email ? 'found' : 'none', subject, items: pieces.map((p) => `${p.brand ?? ''} ${p.name} ×${p.ways}${p.saved ? ' (saved)' : ''}`.trim()) })
       continue
     }
+    // What this email shows becomes her looks first, so every link in it opens
+    // those outfits — never a fresh styling. Only for her own inbox: a sample
+    // sent to another address keeps nothing.
+    const kept = toOverride ? null : await keepEmailedLooks(admin, m.member_id,
+      `Styled overnight · ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'Europe/London' })}`,
+      pieces.slice(0, MAX_PIECES_SHOWN).flatMap((p) => p.outfits))
     const res = await sendStudioEmail({
       kind: 'shopper_ways_digest',
       subject,
-      html: digestHtml(firstName, pieces, base),
+      html: digestHtml(firstName, pieces, base, kept),
       to: email,
-      meta: { memberId: m.member_id, pieces: pieces.length, hours, sample, site: base ?? null },
+      meta: { memberId: m.member_id, pieces: pieces.length, hours, sample, site: base ?? null, deliveryId: kept?.deliveryId ?? null },
     })
     if (res.sent) sent++
+    else if (kept) await forgetEmailedLooks(admin, kept.deliveryId)
     report.push({ member: m.name ?? m.member_id, pieces: pieces.length, sent: res.sent, error: res.error })
   }
   if (preview) return new NextResponse('<p style="font-family:Helvetica,Arial,sans-serif">Nothing styled yet for this member — no example to show.</p>', { headers: { 'Content-Type': 'text/html; charset=utf-8' } })

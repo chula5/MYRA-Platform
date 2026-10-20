@@ -506,4 +506,117 @@
     save(cache)
     return new Map(handles.map((h) => [h, cache[h] || { brand: null }]))
   }
+
+  // ── FASHION ONLY ──────────────────────────────────────────────────────────
+  // Chloe, 2026-10-20, on a flower shop: the mirror is for fashion and for
+  // nothing else. A heart on a bouquet is how it gets switched off. So nothing
+  // appears and nothing is sent home — no badge, no discs, no banner — until
+  // the page itself shows that it sells clothes, shoes, bags or jewellery.
+  // The proof is read from the pieces' own names, types and addresses and
+  // from what the page calls itself; anything that reads as flowers, food,
+  // home, beauty or gadgets vetoes it. Not sure is no.
+  const words = (list) => new RegExp(`(?:^|[^a-z])(?:${list.join('|')})(?=$|[^a-z])`, 'i')
+  const FASHION = words([
+    'dress(?:es)?', 'gowns?', 'skirts?', 'trousers?', 'pants', 'jeans?', 'denim', 'shorts', 'leggings?', 'joggers?',
+    'jumpsuits?', 'playsuits?', 'rompers?', 'dungarees', 'overalls', 'culottes', 'chinos?',
+    'tops?', 'blouses?', 'shirts?', 'tees?', 't ?shirts?', 'tanks?', 'camis?', 'camisoles?', 'bodysuits?', 'corsets?', 'bustiers?',
+    'sweaters?', 'jumpers?', 'knits?', 'knitwear', 'cardigans?', 'hoodies?', 'sweatshirts?', 'pullovers?', 'vests?', 'waistcoats?', 'gilets?',
+    'jackets?', 'blazers?', 'coats?', 'trench(?:es)?', 'parkas?', 'puffers?', 'anoraks?', 'bombers?', 'overshirts?', 'shackets?',
+    'capes?', 'ponchos?', 'kimonos?', 'kaftans?', 'caftans?', 'tunics?', 'suits?', 'tuxedos?', 'polos?',
+    'lingerie', 'bras?', 'briefs', 'knickers', 'swimsuits?', 'bikinis?', 'swimwear', 'tights', 'socks?',
+    'pyjamas?', 'pajamas?', 'nightdress(?:es)?', 'nightgowns?', 'sleepwear', 'loungewear',
+    'scarf', 'scarves', 'shawls?', 'gloves?', 'hats?', 'beanies?', 'berets?', 'belts?',
+    'bags?', 'handbags?', 'totes?', 'clutch(?:es)?', 'crossbody', 'backpacks?', 'purses?', 'wallets?',
+    'shoes?', 'boots?', 'booties?', 'sandals?', 'heels?', 'pumps', 'loafers?', 'mules?', 'sneakers?', 'trainers?',
+    'espadrilles?', 'slippers?', 'clogs?', 'slingbacks?', 'ballerinas?',
+    'earrings?', 'necklaces?', 'bracelets?', 'bangles?', 'pendants?', 'brooch(?:es)?', 'anklets?', 'jewellery', 'jewelry',
+    'sunglasses', 'eyewear', 'cashmere', 'midi', 'maxi',
+    'womenswear', 'menswear', 'clothing', 'clothes', 'apparel', 'fashion', 'outerwear', 'footwear', 'ready to wear', 'pre owned designer',
+  ])
+  const NOT_FASHION = words([
+    'flowers?', 'florists?', 'floristry', 'bouquets?', 'posy', 'posies', 'bunch(?:es)?', 'stems', 'wreaths?',
+    'plants?', 'houseplants?', 'succulents?', 'cact(?:us|i)', 'bonsai', 'seeds?', 'bulbs?', 'gardening', 'garden centre', 'compost',
+    'hampers?', 'chocolates?', 'cakes?', 'cookies', 'biscuits?', 'sweets', 'wines?', 'champagne', 'prosecco', 'gin', 'whisk(?:e)?y', 'beers?',
+    'coffee', 'food', 'groceries', 'grocery', 'recipes?', 'snacks?', 'gift cards?',
+    'candles?', 'diffusers?', 'vases?', 'planters?', 'furniture', 'sofas?', 'armchairs?', 'chairs?', 'tables?', 'lamps?', 'lighting',
+    'rugs?', 'cushions?', 'bedding', 'duvets?', 'pillows?', 'mattress(?:es)?', 'curtains?', 'wallpaper', 'paint', 'kitchen', 'cookware',
+    'tableware', 'mugs?', 'crockery', 'glassware', 'homeware', 'home ?decor', 'interiors?',
+    'toys?', 'lego', 'puzzles?', 'board games?', 'books?', 'novels?', 'stationery',
+    'laptops?', 'phones?', 'iphone', 'ipad', 'tablets?', 'tvs?', 'televisions?', 'headphones?', 'earbuds?', 'chargers?', 'cables?',
+    'speakers?', 'printers?', 'gaming', 'consoles?', 'tools?', 'drills?', 'tyres?', 'tires?', 'car parts',
+    'pets?', 'dogs?', 'cats?', 'puppy', 'kitten', 'aquariums?',
+    'supplements?', 'vitamins?', 'protein', 'skincare', 'serums?', 'moisturi[sz]ers?', 'cleansers?', 'shampoos?', 'conditioners?',
+    'lipsticks?', 'mascaras?', 'makeup', 'make up', 'fragrances?', 'perfumes?', 'colognes?',
+    'tickets?', 'hotels?', 'flights?', 'holidays?', 'insurance', 'mortgages?', 'property',
+  ])
+  // Flower names are also what designers call their pieces ("the Lily"), so
+  // on their own they only count against a page that does not call itself
+  // fashion — never against a tile on a shop that does.
+  const FLOWER_NAMES = words(['roses', 'peon(?:y|ies)', 'tulips?', 'lil(?:y|ies)', 'orchids?', 'hydrangeas?', 'sunflowers?', 'carnations?', 'eucalyptus', 'daffodils?', 'gerberas?'])
+  const plain = (s) => String(s || '').toLowerCase().replace(/[-_/+.,|:()]+/g, ' ')
+  const pathOf = (url) => { try { return new URL(url, location.href).pathname } catch { return '' } }
+  /** What a piece says it is: its name, its type, and its own address. */
+  const pieceText = (p) => plain(`${p?.title || ''} ${p?.type || ''} ${pathOf(p?.url || '')}`)
+  /** What the page says it is: its title, description, heading, breadcrumbs and address — never its menus. */
+  M.pageContext = () => {
+    const meta = (k) => document.querySelector(`meta[property="${k}"], meta[name="${k}"]`)?.getAttribute('content') || ''
+    const crumbs = [...document.querySelectorAll('nav[aria-label*="breadcrumb" i], [class*="breadcrumb" i]')].slice(0, 2).map((el) => (el.textContent || '').slice(0, 200))
+    const ldCrumbs = []
+    for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
+      const t = s.textContent || ''
+      if (/BreadcrumbList/.test(t)) ldCrumbs.push(...[...t.matchAll(/"name"\s*:\s*"([^"]{1,60})"/g)].map((m) => m[1]).slice(0, 8))
+      for (const m of t.matchAll(/"category"\s*:\s*"([^"]{1,80})"/g)) ldCrumbs.push(m[1])
+    }
+    return plain([document.title, meta('description'), meta('og:site_name'), meta('og:title'), meta('og:description'),
+      document.querySelector('h1')?.textContent?.slice(0, 160) || '', ...crumbs, ...ldCrumbs, location.pathname].join(' '))
+  }
+  // A shop that has already shown a page of clothes is trusted with a piece
+  // whose name says nothing ("The Ines"), for a month. A flower shop never
+  // earns this: its pages are vetoed before they are counted.
+  const HOST_KEY = 'myra:mirror:fashion-host'
+  const trustedHost = () => { try { return Date.now() - Number(localStorage.getItem(HOST_KEY) || 0) < 30 * 864e5 } catch { return false } }
+  const trustHost = () => { try { localStorage.setItem(HOST_KEY, String(Date.now())) } catch {} }
+
+  /**
+   * Is this fashion? → { grid, piece, any, offer }
+   *   grid  — the tiles on this page may be ranked and get their discs
+   *   piece — this page's own piece may be kept, styled and noted
+   *   offer — the page calls itself fashion (worth "MYRA can't read this shop yet")
+   * Pure apart from reading the page; `context` can be handed in to test it.
+   */
+  M.fashionVerdict = ({ products = [], piece = null, context = null, trusted = null } = {}) => {
+    const ctx = context ?? M.pageContext()
+    const hostOk = trusted ?? trustedHost()
+    const ctxFashion = FASHION.test(ctx), ctxFlowers = !ctxFashion && FLOWER_NAMES.test(ctx)
+    const ctxNot = NOT_FASHION.test(ctx) || (ctxFlowers && !hostOk)
+    let grid = false
+    const n = products.length
+    if (n) {
+      let yes = 0, no = 0
+      for (const p of products) {
+        const t = pieceText(p)
+        // A garment named is a garment, whatever its print ("floral dress").
+        if (FASHION.test(t)) yes++
+        else if (NOT_FASHION.test(t) || (FLOWER_NAMES.test(t) && !ctxFashion && !hostOk)) no++
+      }
+      const f = yes / n, x = no / n
+      if (x >= 0.15) grid = false
+      else if (ctxNot && !ctxFashion && f < 0.6) grid = false
+      else if (f >= 0.5) grid = true
+      else if (f >= 0.25 && ((ctxFashion && !ctxNot) || hostOk)) grid = true
+      // A page that calls itself fashion, with not one piece on it that is not.
+      else if (f >= 0.2 && no === 0 && n >= 4 && ctxFashion && !ctxNot) grid = true
+      if (grid && f >= 0.5 && n >= 4 && no === 0 && context == null) trustHost()
+    }
+    let pieceOk = false
+    if (piece) {
+      const t = pieceText(piece)
+      if (FASHION.test(t)) pieceOk = true
+      else if (NOT_FASHION.test(t)) pieceOk = false
+      else if (FLOWER_NAMES.test(t) && !ctxFashion && !hostOk) pieceOk = false
+      else if (ctxNot && !ctxFashion) pieceOk = false
+      else pieceOk = (ctxFashion && !ctxNot) || hostOk
+    }
+    return { grid, piece: pieceOk, any: grid || pieceOk, offer: ctxFashion && !ctxNot && !ctxFlowers }
+  }
 })()

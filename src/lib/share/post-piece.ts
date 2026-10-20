@@ -8,6 +8,10 @@
 // then points at the one that is the same garment — or at none, in which
 // case the post is filed as the brand, as before.
 //
+// A post that shows a whole look names up to three pieces, and each is
+// looked for on the rail in its own vision call, side by side. Whatever is
+// pinned is kept; one pinned piece reads exactly as it did before.
+//
 // Nothing here throws. No candidate, no key, a wall — each is a null the
 // resolver turns into the brand-only answer.
 
@@ -114,14 +118,15 @@ const TYPE_FAMILY: Record<string, string> = {
   tote: 'bag', shoulder_bag: 'bag', clutch: 'bag', crossbody: 'bag', structured_bag: 'bag',
 }
 const familyOf = (t: string | null): string | null => (t ? TYPE_FAMILY[t] ?? t : null)
+// A slip skirt under a top and a slip dress look alike from the waist down,
+// and the eye calls the same one either on different days — so a skirt and a
+// dress are each other's match on the rail, and the eye decides between them.
+const slipAlike = (a: string, b: string): boolean => (a === 'skirt' && familyOf(b) === 'dress') || (b === 'skirt' && familyOf(a) === 'dress')
 
 const STOP = new Set(['the', 'a', 'an', 'and', 'with', 'in', 'of', 'on', 'for', 'to', 'our', 'new', 'this', 'that', 'is', 'it', 'at', 'by', 'from', 'piece', 'look', 'style', 'wear', 'season', 'collection', 'shop', 'now', 'link', 'bio'])
 
-export function parseGarmentRead(text: string): GarmentRead | null {
-  const first = text.indexOf('{'); const last = text.lastIndexOf('}')
-  if (first === -1 || last <= first) return null
-  let p: any
-  try { p = JSON.parse(text.slice(first, last + 1)) } catch { return null }
+/** One garment as the eye's JSON object describes it, kept to the vocabularies; null when it says nothing usable. */
+function garmentReadFrom(p: any): GarmentRead | null {
   const type = typeof p?.type === 'string' && (GARMENT_TYPES as readonly string[]).includes(p.type) ? p.type : null
   const colour = typeof p?.colour === 'string' && (GARMENT_COLOURS as readonly string[]).includes(p.colour) ? p.colour : null
   const words = String(p?.words ?? '').toLowerCase().split(/[^a-z0-9+-]+/).filter((w) => w.length > 2 && !STOP.has(w)).slice(0, 8)
@@ -129,13 +134,60 @@ export function parseGarmentRead(text: string): GarmentRead | null {
   return { type, colour, words }
 }
 
-const DESCRIBE_PROMPT = `This is a fashion brand's Instagram picture. Name the ONE garment, shoe or bag for sale that the picture is mainly about. Reply with JSON only: {"type": one of ${GARMENT_TYPES.join('|')} or null, "colour": one of ${GARMENT_COLOURS.join('|')} or null, "words": "three to six plain words a shop would use in its name for it, e.g. wool wide leg trouser"}`
+export function parseGarmentRead(text: string): GarmentRead | null {
+  const first = text.indexOf('{'); const last = text.lastIndexOf('}')
+  if (first === -1 || last <= first) return null
+  let p: any
+  try { p = JSON.parse(text.slice(first, last + 1)) } catch { return null }
+  return garmentReadFrom(p)
+}
 
-/** What the eye makes of the post's picture: a type, a colour, a shop's words. */
+/** How many pieces one post is read for: the look, not the lookbook. */
+export const MAX_GARMENTS = 3
+
+/**
+ * Every garment the eye named, in the order it named them (the main one
+ * first). Reads a JSON array, a single object as the earlier read answered,
+ * or — when the array came back cut short — each whole object it can find.
+ * The same type in the same colour said twice is one garment.
+ */
+export function parseGarmentReads(text: string): GarmentRead[] {
+  let items: any[] | null = null
+  const a = text.indexOf('['); const o = text.indexOf('{')
+  if (a !== -1 && (o === -1 || a < o)) {
+    const last = text.lastIndexOf(']')
+    if (last > a) { try { const p = JSON.parse(text.slice(a, last + 1)); if (Array.isArray(p)) items = p } catch { /* cut short: read the objects */ } }
+  }
+  if (!items) {
+    // The objects are flat, so each balanced pair of braces is one of them.
+    items = []
+    for (const m of Array.from(text.matchAll(/\{[^{}]*\}/g))) { try { items.push(JSON.parse(m[0])) } catch { /* not this one */ } }
+  }
+  const out: GarmentRead[] = []
+  for (const it of items) {
+    const g = garmentReadFrom(it)
+    if (!g) continue
+    if (out.some((x) => x.type === g.type && x.colour === g.colour)) continue
+    out.push(g)
+    if (out.length >= MAX_GARMENTS) break
+  }
+  return out
+}
+
+const DESCRIBE_PROMPT = `This is a fashion brand's Instagram picture. Name every garment, shoe or bag for sale that can be seen — up to ${MAX_GARMENTS}, the one the picture is mainly about first. A piece layered underneath counts when its collar, cuffs or hem show. Reply with a JSON array only, one object per piece: [{"type": one of ${GARMENT_TYPES.join('|')} or null (the cut, not the fabric: a woven satin or silk top is a blouse; a slip worn under a separate top whose hem sits over it is a skirt, not a dress), "colour": one of ${GARMENT_COLOURS.join('|')} or null, "words": "three to six plain words a shop would use in its name for it, e.g. wool wide leg trouser"}]`
+
+/** What the eye makes of the post's picture: each piece shown, as a type, a colour and a shop's words. */
+export async function describeGarments(imageUrl: string): Promise<GarmentRead[]> {
+  // One read per post, so the detail is worth paying for: layered pieces
+  // show only at a collar, a cuff, a hem.
+  const r = await readWordFromImage(imageUrl, DESCRIBE_PROMPT, { maxTokens: 80 * MAX_GARMENTS, detail: 'high' })
+  if (r.error || !r.word) { if (r.error) console.error('[share/post-piece] describe', r.error); return [] }
+  return parseGarmentReads(r.word)
+}
+
+/** The main piece alone, for a caller that wants one read. */
 export async function describeGarment(imageUrl: string): Promise<GarmentRead | null> {
-  const r = await readWordFromImage(imageUrl, DESCRIBE_PROMPT, { maxTokens: 80, detail: 'low' })
-  if (r.error || !r.word) { if (r.error) console.error('[share/post-piece] describe', r.error); return null }
-  return parseGarmentRead(r.word)
+  return (await describeGarments(imageUrl))[0] ?? null
 }
 
 // ── THE RAIL ─────────────────────────────────────────────────────────────────
@@ -151,12 +203,17 @@ export function captionNameWords(caption: string | null): string[] {
 /** Order a rail by how much each piece agrees with the picture's read; ties keep rail order. */
 export function rankCandidates(rail: Candidate[], read: GarmentRead, caption: string | null = null, limit = 10): Candidate[] {
   const capWords = new Set(captionNameWords(caption))
+  // The eye's own words can name the type more surely than its type field
+  // ("black lace hem midi skirt" typed as a dress): a type word there counts.
+  const wordType = read.words.find((w) => (GARMENT_TYPES as readonly string[]).includes(w)) ?? null
+  const types = [read.type, wordType].filter((t): t is string => !!t)
   const scored = rail.map((c, i) => {
     const name = c.title.toLowerCase()
     let s = 0
-    if (read.type && c.type) {
-      if (c.type === read.type) s += 3
-      else if (familyOf(c.type) === familyOf(read.type)) s += 1.5
+    if (types.length && c.type) {
+      if (types.includes(c.type)) s += 3
+      else if (types.some((t) => slipAlike(c.type!, t))) s += 2.5
+      else if (types.some((t) => familyOf(c.type) === familyOf(t))) s += 1.5
       else s -= 2
     }
     if (read.colour && c.colour) s += c.colour === read.colour ? 2 : -1
@@ -214,14 +271,25 @@ export function parsePick(text: string, count: number): number | null {
   return n - 1
 }
 
-async function pickSamePiece(postImage: string, shortlist: Candidate[]): Promise<number | null> {
+/** The piece the eye is asked to match, in the words it used: "the blue shirt (sheer evening shirt)". */
+export function garmentPhrase(read: GarmentRead | null): string {
+  if (!read) return 'the main one worn or shown'
+  const name = [read.colour, read.type?.replace(/_/g, ' ')].filter(Boolean).join(' ')
+  const words = read.words.join(' ')
+  if (name && words) return `the ${name} (${words})`
+  return `the ${name || words}`
+}
+
+async function pickSamePiece(post: VisionImage, shortlist: Candidate[], read: GarmentRead | null, caption: string | null = null): Promise<number | null> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey || !shortlist.length) return null
-  const [post, ...rail] = await Promise.all([fetchImageForVision(postImage, 600), ...shortlist.map((c) => fetchImageForVision(c.image, 400))])
-  if (!post.image) return null
-  const content: any[] = [{ type: 'text', text: `The first picture is a brand's Instagram post. The pictures after it are numbered 1 to ${shortlist.length}: pieces from that brand's shop. Which numbered picture shows the SAME garment, shoe or bag as the main one worn or shown in the first picture — same cut and same colour, not merely similar? Reply with the number alone, or 0 if none of them is it.` }]
+  const rail = await Promise.all(shortlist.map((c) => fetchImageForVision(c.image, 400)))
+  // The brand's own caption often names the piece ("wears the Pub Jacket"):
+  // the eye is told, and still has to see it, worn open or buttoned up.
+  const said = caption ? ` The post's caption, which may name the piece: "${caption.replace(/\s+/g, ' ').slice(0, 240)}".` : ''
+  const content: any[] = [{ type: 'text', text: `The first picture is a brand's Instagram post. The pictures after it are numbered 1 to ${shortlist.length}: pieces from that brand's shop. Which numbered picture shows the SAME garment, shoe or bag as ${garmentPhrase(read)} in the first picture — same cut, same fabric and same colour, whether worn open or closed, not merely similar? Look only at that piece, not the rest of the outfit.${said} Reply with the number alone, or 0 if none of them is it.` }]
   const part = (img: VisionImage) => ({ type: 'image_url', image_url: { url: `data:${img.mediaType};base64,${img.data}`, detail: 'low' } })
-  content.push(part(post.image))
+  content.push(part(post))
   const kept: number[] = []
   rail.forEach((r, i) => { if (r.image) { kept.push(i); content.push({ type: 'text', text: `${kept.length}.` }); content.push(part(r.image)) } })
   if (!kept.length) return null
@@ -229,7 +297,8 @@ async function pickSamePiece(postImage: string, shortlist: Candidate[]): Promise
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: VISION_WORD_MODEL, max_completion_tokens: 8, reasoning_effort: 'none', messages: [{ role: 'user', content }] }),
+      // Greedy, so the same post and rail give the same answer each time.
+      body: JSON.stringify({ model: VISION_WORD_MODEL, max_completion_tokens: 8, reasoning_effort: 'none', temperature: 0, messages: [{ role: 'user', content }] }),
       signal: AbortSignal.timeout(25000),
     })
     const j: any = await res.json().catch(() => ({}))
@@ -246,29 +315,66 @@ export interface PostPieceAsk {
   brandName: string | null
   caption: string | null
   image: string
-  /** The eye's read, when the caller started it early (it needs only the picture, not the brand). */
-  read?: Promise<GarmentRead | null>
+  /** The eye's reads, when the caller started them early (they need only the picture, not the brand). */
+  reads?: Promise<GarmentRead[]>
 }
 
-/** The piece in the post, as a product MYRA can keep — or null when it cannot be pinned. */
-export async function findPieceInPost(ask: PostPieceAsk): Promise<ResolvedProduct | null> {
-  const read = await (ask.read ?? describeGarment(ask.image))
-  if (!read) return null
-  const query = read.words.length ? read.words.join(' ') : [read.colour, read.type?.replace(/_/g, ' ')].filter(Boolean).join(' ')
-  const [library, shop] = await Promise.all([libraryRail(ask.site), query ? shopifyRail(ask.site, query) : Promise.resolve([])])
-  // The library is ranked by what MYRA knows of each piece; the shop's own
-  // search already matched the words, so its answers ride along unranked.
+const pageKey = (url: string): string => url.split(/[?#]/)[0]
+
+/** The words the shop's own search is asked for. */
+const queryFor = (read: GarmentRead): string =>
+  read.words.length ? read.words.join(' ') : [read.colour, read.type?.replace(/_/g, ' ')].filter(Boolean).join(' ')
+
+/** The shortlist for one garment: the library ranked by what MYRA knows of each piece, then the shop's own answers, which already matched the words and ride along unranked. */
+export function shortlistFor(library: Candidate[], shop: Candidate[], read: GarmentRead, caption: string | null, limit = 10): Candidate[] {
   const seen = new Set<string>()
   const shortlist: Candidate[] = []
-  for (const c of [...rankCandidates(library, read, ask.caption, 8), ...shop.slice(0, 4)]) {
-    const key = c.url.split(/[?#]/)[0]
+  // The shop's answers take up to four places; the library fills the rest.
+  const fromShop = shop.slice(0, 4)
+  for (const c of [...rankCandidates(library, read, caption, limit - fromShop.length), ...fromShop]) {
+    const key = pageKey(c.url)
     if (seen.has(key)) continue
     seen.add(key); shortlist.push(c)
   }
-  if (!shortlist.length) { console.info('[share/post-piece] no rail for', ask.site, JSON.stringify(read)); return null }
-  const idx = await pickSamePiece(ask.image, shortlist.slice(0, 10))
-  console.info('[share/post-piece]', JSON.stringify(read), 'rail:', shortlist.slice(0, 10).map((c) => c.title).join(' | '), '→', idx == null ? 'none' : shortlist[idx].title)
-  if (idx == null) return null
-  const c = shortlist[idx]
-  return { url: c.url, title: c.title, brand: c.brand ?? ask.brandName, image: c.image, price: c.price, host: hostOf(c.url) ?? '' }
+  return shortlist.slice(0, limit)
+}
+
+/** The picks, one per garment, with misses dropped and the same page kept once — in the order the eye named the garments. */
+export function dedupePicks(picks: (Candidate | null | undefined)[]): Candidate[] {
+  const seen = new Set<string>()
+  const out: Candidate[] = []
+  for (const c of picks) {
+    if (!c) continue
+    const key = pageKey(c.url)
+    if (seen.has(key)) continue
+    seen.add(key); out.push(c)
+  }
+  return out
+}
+
+/** Every piece in the post MYRA can pin, as products it can keep — the main one first; empty when none can be. */
+export async function findPiecesInPost(ask: PostPieceAsk): Promise<ResolvedProduct[]> {
+  const reads = await (ask.reads ?? describeGarments(ask.image))
+  if (!reads.length) return []
+  // One library read and one post picture serve every garment; the shop is
+  // searched once per garment, all at the same time.
+  const [library, post, ...shops] = await Promise.all([
+    libraryRail(ask.site),
+    fetchImageForVision(ask.image, 600),
+    ...reads.map((read) => { const q = queryFor(read); return q ? shopifyRail(ask.site, q) : Promise.resolve([] as Candidate[]) }),
+  ])
+  if (!post.image) { console.error('[share/post-piece] post picture', post.error); return [] }
+  const picks = await Promise.all(reads.map(async (read, i) => {
+    const shortlist = shortlistFor(library, shops[i], read, ask.caption)
+    if (!shortlist.length) { console.info('[share/post-piece] no rail for', ask.site, JSON.stringify(read)); return null }
+    const idx = await pickSamePiece(post.image!, shortlist, read, ask.caption)
+    console.info('[share/post-piece]', JSON.stringify(read), 'rail:', shortlist.map((c) => c.title).join(' | '), '→', idx == null ? 'none' : shortlist[idx].title)
+    return idx == null ? null : shortlist[idx]
+  }))
+  return dedupePicks(picks).map((c) => ({ url: c.url, title: c.title, brand: c.brand ?? ask.brandName, image: c.image, price: c.price, host: hostOf(c.url) ?? '' }))
+}
+
+/** The main piece in the post, as a product MYRA can keep — or null when it cannot be pinned. */
+export async function findPieceInPost(ask: PostPieceAsk): Promise<ResolvedProduct | null> {
+  return (await findPiecesInPost(ask))[0] ?? null
 }

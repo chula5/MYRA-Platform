@@ -252,6 +252,8 @@ export function kickStyledWaysRender(memberId: string, limit = 3): void {
   const work = import('@/lib/styled-ways-shoot')
     .then(({ renderStyledWays }) => renderStyledWays({ memberId, limit }))
     .then((r) => { if (!r.skipped && (r.made || r.failed)) console.log('[styled-ways] pictures', JSON.stringify(r)) })
+    // Then her looks that were never shot (lib/look-shoot) — same CLI, one at a time.
+    .then(() => import('@/lib/look-shoot')).then(({ renderMemberLooks }) => renderMemberLooks({ memberId, limit: 2 }))
     .catch((e) => console.error('[styled-ways] render', e))
   try { waitUntil(work) } catch { /* local dev: the promise simply runs */ }
 }

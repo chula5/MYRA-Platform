@@ -1266,8 +1266,17 @@
     openHome()
   }
 
-  if (document.body) makeBadge()
-  else document.addEventListener('DOMContentLoaded', makeBadge, { once: true })
+  // The badge is only ever on a fashion page: run() puts it up once the page
+  // has shown it sells clothes (M.fashionVerdict) and takes it down on a page
+  // that does not — a flower shop never sees it at all.
+  function showBadge() { if (document.body) makeBadge() }
+  function hideBadge() { badgeSay(null); badge?.remove(); badge = null; badgeDot = null }
+  /** Not fashion: everything the mirror drew here goes, bar a panel she opened herself. */
+  function notFashion() {
+    hidePiece(); hideTopBanner()
+    pageHasPicks = false; pageProducts = []; maybePicksBadge()
+    if (!panel && !picksPanel && !picking) hideBadge()
+  }
 
 
   // ── A SHOP MYRA CANNOT READ ───────────────────────────────────────────────
@@ -1682,8 +1691,10 @@
     // soon as this piece exists — and give up quietly if it never arrives.
     let tries = 0
     navSettle = setInterval(() => {
-      const p = M.pageProduct?.() ?? null
+      const raw = M.pageProduct?.() ?? null
+      const p = raw && M.fashionVerdict({ piece: raw }).piece ? raw : null
       if (p) {
+        showBadge()
         pagePiece = p
         noteView(p)
         autoStyle(p)
@@ -1691,7 +1702,7 @@
         // unless she was picking a piece, and this is the one she opened.
         if (pickingAsked()) startPicking(HERE_IT_IS)
       }
-      if (p || ++tries >= 20) clearInterval(navSettle)
+      if (raw || ++tries >= 20) clearInterval(navSettle)
     }, 150)
     schedule()
   }
@@ -1703,11 +1714,13 @@
       // A shop that changes the page without reloading it is a new page to
       // her: everything starts again, including anything she had closed.
       if (location.href !== lastHref) { lastHref = location.href; lastSig = ''; pillOff = false; hidePiece() }
-      // One piece on its own page: keep it or style it, whatever the shop.
-      pagePiece = M.pageProduct?.() ?? null
+      // One piece on its own page: keep it or style it, whatever the shop —
+      // as long as it is fashion. A bouquet is never noted, styled or kept.
+      const piece = M.pageProduct?.() ?? null
+      pagePiece = piece && M.fashionVerdict({ piece }).piece ? piece : null
+      if (pagePiece) { showBadge(); noteSearch() }
       noteView(pagePiece)
       autoStyle(pagePiece)
-      noteSearch()
       // The page's piece is only ever recorded here — its card waits behind
       // the badge now, for the click that asks for it.
       if (!pagePiece && pillFrom === 'page') hidePiece()
@@ -1715,7 +1728,15 @@
       const grids = vinted ? M.vintedGrids() : shopify ? M.findGrids() : M.genericGrids()
       // It speaks this shop but found nothing to re-order — a layout it has not
       // learned. Worth passing on too.
-      if (!grids.length) { noteRank(null); if (!pagePiece && /shop|collection|catalog|category|products|browse|women/i.test(location.pathname)) offerSite(generic ? 'unsupported' : 'no_grid'); return }
+      if (!grids.length) {
+        noteRank(null)
+        if (!pagePiece) {
+          notFashion()
+          // Only a shop that calls itself fashion is worth asking MYRA to learn.
+          if (/shop|collection|catalog|category|products|browse|women/i.test(location.pathname) && M.fashionVerdict({}).offer) offerSite(generic ? 'unsupported' : 'no_grid')
+        }
+        return
+      }
       const tiles = grids.flatMap((g) => g.tiles)
       const sig = tiles.map((t) => t.key).join(',')
       if (sig === lastSig) return
@@ -1724,6 +1745,16 @@
         ? M.vintedDetails(tiles.map((t) => t.key))
         : shopify ? await M.details(tiles.map((t) => t.key)) : M.genericDetails(tiles.map((t) => t.key))
       const products = tiles.map((t) => ({ key: t.key, ...(details.get(t.key) || {}) }))
+      // FASHION ONLY. A grid of anything else gets nothing: no discs, no
+      // order, no badge, and not one of its pieces is sent to MYRA.
+      if (!M.fashionVerdict({ products }).grid) {
+        for (const t of tiles) productOf.delete(t.el)
+        if (touched.size) { restore(); lastSig = sig }
+        if (!pagePiece) notFashion()
+        return
+      }
+      showBadge()
+      noteSearch()
       for (const t of tiles) {
         const d = details.get(t.key) || {}
         const product = { key: t.key, url: d.url || (generic ? t.key : `${location.origin}/products/${t.key}`), title: d.title || t.key, brand: d.brand || null, type: d.type || null, price: d.price ?? null, available: d.available !== false, image: d.image ?? null }

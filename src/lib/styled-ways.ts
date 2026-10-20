@@ -65,6 +65,38 @@ export async function getStyledWays(
   return orderWays(keep).slice(0, opts.limit ?? WAYS).map(toStyledLook)
 }
 
+/** Can the piece itself still be bought? Read the way a kept way is judged (sellableWays). */
+export async function heroSoldOut(admin: any, heroId: string): Promise<boolean> {
+  const { data } = await admin.from('item').select('item_id, stock_status, status').eq('item_id', heroId).maybeSingle()
+  if (!data) return true
+  const stock = new Map([[heroId, { stock_status: data.stock_status ?? null, status: data.status ?? null }]])
+  return sellableWays([{ item_ids: [heroId], items: [] }], stock).keep.length === 0
+}
+
+/**
+ * The piece itself has sold out. Every way around it was retired for that
+ * alone, and styling it again only spends MYRA's eye on something she cannot
+ * buy (Chloe, 2026-10-20: tapping the sold-out Twinset belt started a fresh
+ * styling). What she was last shown is still worth seeing: the ways whose
+ * only fault is the hero, as long as everything else in them can be bought.
+ */
+export async function waysForSoldOutHero(admin: any, memberId: string, heroId: string, mode: WayMode = 'blend'): Promise<StyledWayLook[]> {
+  const { data } = await admin.from('styled_way').select(COLS)
+    .eq('member_id', memberId).eq('hero_item_id', heroId).eq('mode', mode).eq('stale', true)
+    .like('stale_reason', `%:${heroId}`)
+    .order('judged_at', { ascending: false }).limit(24)
+  const rows = ((data ?? []) as StyledWayRow[]).filter((r) => r.reaction !== 'dislike')
+  if (!rows.length) return []
+  const ids = Array.from(new Set(rows.flatMap((r) => r.item_ids)))
+  const { data: items } = await admin.from('item').select('item_id, stock_status, status').in('item_id', ids)
+  const stock = new Map<string, { stock_status: string | null; status: string | null }>(
+    ((items ?? []) as any[]).map((i) => [i.item_id, { stock_status: i.stock_status ?? null, status: i.status ?? null }]),
+  )
+  // The hero is forgiven — it is the reason these were retired, not a fault in them.
+  stock.set(heroId, { stock_status: 'in_stock', status: 'live' })
+  return orderWays(sellableWays(rows, stock).keep).slice(0, WAYS).map(toStyledLook)
+}
+
 /** How many fresh ways a piece already has — the cheap question warm-ups ask first. */
 export async function countFreshWays(admin: any, memberId: string, heroIds: string[], mode: WayMode = 'blend'): Promise<Map<string, number>> {
   const out = new Map<string, number>()

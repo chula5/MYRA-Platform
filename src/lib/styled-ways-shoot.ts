@@ -125,7 +125,7 @@ export async function shootStyledWay(admin: any, styledWayId: string, poseKey = 
 }
 
 /** Which members get pictures made ahead: Chloe's own, or everyone when STYLED_WAYS_RENDER_MEMBERS=all. */
-async function renderMembers(admin: any, memberId?: string): Promise<string[]> {
+export async function renderMembers(admin: any, memberId?: string): Promise<string[]> {
   if (memberId) return [memberId]
   if (process.env.STYLED_WAYS_RENDER_MEMBERS === 'all') {
     const { data } = await admin.from('pilot_member').select('member_id').eq('is_synthetic', false).not('auth_user_id', 'is', null)

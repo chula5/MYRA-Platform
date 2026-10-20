@@ -37,6 +37,7 @@ import { keepAskPreview, askPreviewAlternates } from '@/app/admin/private-stylis
 import type { AskSwapOption, AskLookEdits } from '@/app/admin/private-stylist/actions'
 import { PICKER_COLOURS, PICKER_TYPES } from '@/components/admin/ItemPickerModal'
 import { loadCalendarPanel, syncMyCalendar, planMyEvent, type CalendarPanelView } from '@/app/me/dressing-room/calendar-actions'
+import { useScrollTo } from '@/lib/smooth-scroll'
 
 // The feed's section heading pair, so her page reads at the feed's scale.
 function SectionHead({ label, note, heart = false }: { label: string; note?: string; heart?: boolean }) {
@@ -65,11 +66,40 @@ const REASONS = [
 
 const RECENT_KEY = 'myra:me:recent'
 
+/** How many looks a shelf shows at rest before SEE ALL. */
+const SHELF_AT_REST = 6
+
+/**
+ * The shelves of her Looks room (Chloe, 2026-10-20: "the looks area should be
+ * building out") — where each look came from, one row each:
+ *   emailed  EMAILED TO YOU — exactly what a MYRA note showed her
+ *   asked    YOU ASKED FOR — her occasions
+ *   new      NEW FOR INSPIRATION — MYRA's own, unanswered
+ *   saved    SAVED OUTFITS — what she saved or said yes to
+ */
+type ShelfKey = 'emailed' | 'asked' | 'new' | 'saved'
+const SHELVES: Record<ShelfKey, { label: string; note: (n: number) => string }> = {
+  emailed: { label: 'Emailed to you', note: (n) => `${n} outfit${n === 1 ? '' : 's'} from MYRA's notes, styled around pieces you liked` },
+  asked: { label: 'You asked for', note: (n) => `${n} look${n === 1 ? '' : 's'} for your occasions` },
+  new: { label: 'New for inspiration', note: (n) => `${n} look${n === 1 ? '' : 's'}. Thumbs up or down, and MYRA learns` },
+  saved: { label: 'Saved outfits', note: (n) => `${n} outfit${n === 1 ? '' : 's'} you kept · shaping what comes next` },
+}
+
+/** Where a link put her: one look open, or one shelf (an email's, narrowed to one piece). */
+export interface LooksLanding { look?: string; emailed?: string; piece?: string; shelf?: ShelfKey; saved?: boolean }
+
 const ACTION = 'pointer-events-auto text-[11px] sm:text-[clamp(15px,1.05vw,32px)] tracking-[0.1em] uppercase font-light myra-action'
 
-export default function MyLooksClient({ view, readOnly = false, initialQuery = '' }: { view: ClientView; readOnly?: boolean; initialQuery?: string }) {
+export default function MyLooksClient({ view, readOnly = false, initialQuery = '', landing }: { view: ClientView; readOnly?: boolean; initialQuery?: string; landing?: LooksLanding }) {
   const [query, setQuery] = useState(initialQuery)
   const [occasion, setOccasion] = useState<string | null>(null)
+  // One shelf opened in full — SEE ALL, or the email's link to one piece's outfits.
+  const [shelf, setShelf] = useState<{ key: ShelfKey; deliveryId?: string; piece?: string } | null>(
+    landing?.emailed ? { key: 'emailed', deliveryId: landing.emailed, piece: landing.piece } : landing?.shelf ? { key: landing.shelf } : null,
+  )
+  const [notice, setNotice] = useState<string | null>(landing?.saved ? 'Saved to your outfits' : null)
+  const shelfRef = useRef<HTMLDivElement>(null)
+  const scrollTo = useScrollTo()
   // One "related" view drives Similar Looks, Explore Styles and Style Item —
   // the three actions differ only in how the row is chosen.
   const [related, setRelated] = useState<
@@ -132,6 +162,22 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
   }, [openLook?.look_id])
   const [recent, setRecent] = useState<string[]>([])
 
+  // A link from an email lands here: the outfit opens at once, or the shelf it
+  // named is scrolled to — never a fresh styling. The address is tidied
+  // afterwards so a refresh is just her Looks.
+  useEffect(() => {
+    if (!landing) return
+    if (landing.look) {
+      const l = view.looks.find((x) => x.look_id === landing.look)
+      if (l) setOpenLook(l)
+    } else if (shelf) {
+      requestAnimationFrame(() => { if (shelfRef.current) scrollTo(shelfRef.current, { offset: -24 }) })
+    }
+    if (landing.saved) setTimeout(() => setNotice(null), 4000)
+    try { window.history.replaceState(null, '', '/me/looks') } catch { /* fine */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Which pieces are already hung in her wardrobe — the hearts in Shop the Look.
   useEffect(() => {
     if (readOnly) return
@@ -183,7 +229,32 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
   }, [browsable, query])
 
   const loved = view.looks.filter((l) => l.response === 'yes')
-  const waiting = view.looks.filter((l) => !l.response)
+  // The shelves. A look sits on the one its source names; SAVED OUTFITS also
+  // holds anything she said yes to, wherever it came from.
+  const shelfLooks: Record<ShelfKey, ClientLook[]> = useMemo(() => ({
+    emailed: browsable.filter((l) => l.source === 'emailed'),
+    asked: browsable.filter((l) => l.source === 'asked'),
+    new: browsable.filter((l) => !l.response && (l.source ?? 'for_you') === 'for_you'),
+    saved: browsable.filter((l) => l.source === 'saved' || l.response === 'yes'),
+  }), [browsable])
+  // One shelf opened: an email's link narrows it to that email, then to the
+  // piece the link was for — and widens again rather than show nothing.
+  const shelfOpen = useMemo(() => {
+    if (!shelf) return null
+    let looks = shelfLooks[shelf.key]
+    let note = SHELVES[shelf.key].note(looks.length)
+    if (shelf.key === 'emailed' && (shelf.deliveryId || shelf.piece)) {
+      const fromEmail = shelf.deliveryId ? looks.filter((l) => l.delivery_id === shelf.deliveryId) : looks
+      const pool = fromEmail.length ? fromEmail : looks
+      const wearing = shelf.piece ? pool.filter((l) => l.items.some((i) => i.item_id === shelf.piece)) : pool
+      looks = wearing.length ? wearing : pool
+      const piece = shelf.piece ? looks.flatMap((l) => l.items).find((i) => i.item_id === shelf.piece) : null
+      note = piece && wearing.length
+        ? `${[piece.brand, piece.product_name].filter(Boolean).join(' ')} · ${looks.length} way${looks.length === 1 ? '' : 's'} to wear it`
+        : `${looks.length} outfit${looks.length === 1 ? '' : 's'} from this note`
+    }
+    return { label: SHELVES[shelf.key].label, note, looks }
+  }, [shelf, shelfLooks])
 
   const relatedResults = useMemo(() => {
     if (!related) return []
@@ -219,6 +290,7 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
 
   function showRelated(next: NonNullable<typeof related>) {
     setRelated(next)
+    setShelf(null)
     setOccasion(null)
     setQuery('')
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -291,6 +363,11 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
       )}
       <ClientWardrobe readOnly={readOnly} loved={loved} onOpenLook={(l) => { setRelated(null); setQuery(''); setOccasion(l.occasion_label) }} />
 
+      {notice && (
+        <div role="status" className="fixed left-1/2 -translate-x-1/2 bottom-[calc(env(safe-area-inset-bottom,0px)+96px)] z-[130] rounded-full bg-[#141414] text-[#F7F6F3] px-6 py-3.5 text-[15px] md:text-[19px] tracking-[0.12em] shadow-[0_10px_26px_rgba(0,0,0,0.26)]">
+          {notice.toUpperCase()}
+        </div>
+      )}
       <div className="w-full px-6 sm:px-10 pb-16 flex flex-col">
         {/* The mirror — the original home page's opening: it arrives huge and
             docks above the headline, with the search and occasions beneath. */}
@@ -314,7 +391,7 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
               <div className="flex-1 min-w-0 rounded-full bg-white/70 border border-[rgba(43,43,43,0.15)] flex items-center">
                 <input
                   value={query}
-                  onChange={(e) => { setQuery(e.target.value); setOccasion(null); setRelated(null) }}
+                  onChange={(e) => { setQuery(e.target.value); setOccasion(null); setRelated(null); setShelf(null) }}
                   placeholder="TROUSERS FOR DINNER"
                   className="myra-field flex-1 min-w-0 bg-transparent border-0 px-4 md:px-6 py-3.5 md:py-4 placeholder:text-[#6E6B65] focus:outline-none"
                 />
@@ -364,7 +441,7 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
 
             {/* Occasion grid — the feed's 3-across contact grid, each occasion
                 through one of her own looks, name in white at the centre. */}
-            {!related && !searched && !occasion && occasions.length > 0 && (
+            {!related && !searched && !occasion && !shelf && occasions.length > 0 && (
               <div className="grid grid-cols-3 gap-[6px]">
                 {occasions.slice(0, 6).map(([label, looks]) => (
                   <button
@@ -432,7 +509,7 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
         )}
 
         {/* ── One occasion, opened ────────────────────────────────────────── */}
-        {!related && !searched && occasion && (
+        {!related && !searched && !shelf && occasion && (
           <Results
             label={occasion}
             note={`${occasions.find(([o]) => o === occasion)?.[1].length ?? 0} looks`}
@@ -442,22 +519,32 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
           />
         )}
 
+        {/* ── One shelf, opened ──────────────────────────────────────────── */}
+        {!related && !searched && shelfOpen && (
+          <div ref={shelfRef}>
+            <Results
+              label={shelfOpen.label}
+              note={shelfOpen.note}
+              onBack={() => setShelf(null)}
+              looks={shelfOpen.looks}
+              cardProps={cardProps}
+            />
+          </div>
+        )}
+
         {/* ── At rest ─────────────────────────────────────────────────────── */}
-        {!related && !searched && !occasion && (
+        {!related && !searched && !occasion && !shelf && (
           <>
-            {/* Her newest looks first, every unanswered one, with the thumbs.
-                They moved here from FOR YOU, which is now only what MYRA did
-                while she shopped (Chloe, 2026-10-18). */}
-            {waiting.length > 0 && (
-              <section className="mb-16">
-                <SectionHead label="New for you" note={`${waiting.length} look${waiting.length === 1 ? '' : 's'}. Thumbs up or down, and MYRA learns`} />
-                <div className={LOOK_GRID}>
-                  {waiting.map((l) => <LookCard key={l.look_id} {...cardProps(l)} />)}
-                </div>
-              </section>
-            )}
+            {/* Where each look came from, one shelf each, newest first — what
+                MYRA emailed, what she asked for, what is new to her. The
+                thumbs moved here from FOR YOU (Chloe, 2026-10-18). */}
+            {(['emailed', 'asked', 'new'] as const).map((key) => (
+              <Shelf key={key} shelfKey={key} looks={shelfLooks[key]} cardProps={cardProps} onSeeAll={() => setShelf({ key })} />
+            ))}
 
             {!readOnly && <SavedWhileBrowsing looks={view.looks} cardProps={cardProps} />}
+
+            <Shelf shelfKey="saved" looks={shelfLooks.saved} cardProps={cardProps} onSeeAll={() => setShelf({ key: 'saved' })} heart />
 
             {becauseYouLoved.length > 0 && (
               <section className="mb-16">
@@ -488,15 +575,6 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
               </section>
             )}
 
-            {loved.length > 0 && (
-              <section className="mb-16">
-                <SectionHead label="Looks you loved" note="Shaping what comes next" heart />
-                <div className={LOOK_GRID}>
-                  {loved.slice(0, 6).map((l) => <LookCard key={l.look_id} {...cardProps(l)} />)}
-                </div>
-              </section>
-            )}
-
             {view.looks.length === 0 && (
               <p className="text-center myra-section-note py-12">
                 YOUR FIRST LOOKS ARE ON THEIR WAY.
@@ -507,6 +585,31 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
 
       </div>
     </div>
+  )
+}
+
+/** One shelf at rest: its newest looks, and SEE ALL when there are more. */
+function Shelf({ shelfKey, looks, cardProps, onSeeAll, heart = false }: {
+  shelfKey: ShelfKey
+  looks: ClientLook[]
+  cardProps: (l: ClientLook) => Record<string, unknown>
+  onSeeAll: () => void
+  heart?: boolean
+}) {
+  if (!looks.length) return null
+  const { label, note } = SHELVES[shelfKey]
+  return (
+    <section className="mb-16">
+      <SectionHead label={label} note={note(looks.length)} heart={heart} />
+      <div className={LOOK_GRID}>
+        {looks.slice(0, SHELF_AT_REST).map((l) => <LookCard key={l.look_id} {...(cardProps(l) as any)} />)}
+      </div>
+      {looks.length > SHELF_AT_REST && (
+        <div className="mt-6 flex justify-center">
+          <button onClick={onSeeAll} className="myra-field underline underline-offset-[6px]">{`SEE ALL ${looks.length}`}</button>
+        </div>
+      )}
+    </section>
   )
 }
 
@@ -555,9 +658,8 @@ function LookCard({
   onToggleItem: (itemId: string) => void
 }) {
   const [sourcePanelOpen, setSourcePanelOpen] = useState(false)
-  const [slideIdx, setSlideIdx] = useState(0)
-  const touchStartX = useRef<number | null>(null)
-  const didSwipe = useRef(false)
+  // The piece popped out of the strip under the picture, if any.
+  const [peek, setPeek] = useState<number | null>(null)
 
   const [verdict, setVerdict] = useState<'yes' | 'no' | null>(look.response)
   const [reason, setReason] = useState<string | null>(null)
@@ -565,26 +667,11 @@ function LookCard({
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
-  // Same slide list as the feed card: the shoot first, then each piece.
-  const slides = [
-    ...(look.image_url ? [{ src: look.image_url, alt: look.occasion_label }] : []),
-    ...look.items.filter((i) => i.image_url).map((i) => ({ src: i.image_url as string, alt: i.product_name })),
-  ]
-  const total = slides.length
-  const current = total > 0 ? slideIdx % total : 0
-  const next = () => setSlideIdx((i) => (i + 1) % total)
-  const prev = () => setSlideIdx((i) => (i - 1 + total) % total)
-
-  function onTouchStart(e: React.TouchEvent) {
-    touchStartX.current = e.touches[0].clientX
-    didSwipe.current = false
-  }
-  function onTouchEnd(e: React.TouchEvent) {
-    if (touchStartX.current === null) return
-    const delta = e.changedTouches[0].clientX - touchStartX.current
-    touchStartX.current = null
-    if (Math.abs(delta) > 38) { didSwipe.current = true; delta < 0 ? next() : prev() }
-  }
+  // The picture is MYRA's shoot of the whole outfit (Chloe, 2026-10-20: not a
+  // close-up of one earring). The pieces live in a small strip underneath,
+  // swiped along, each popping out on a tap. Until the shoot lands the frame
+  // lays the pieces out together, so it is still the outfit, not one piece.
+  const pieces = look.items.filter((i) => i.image_url)
 
   async function send(v: 'yes' | 'no') {
     setVerdict(v)
@@ -602,34 +689,33 @@ function LookCard({
       <div
         data-tour="look-open"
         className="group relative aspect-[3/4] w-full overflow-hidden rounded-[14px] cursor-pointer"
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
-        onClick={() => { if (didSwipe.current || sourcePanelOpen) return; onEnter?.() }}
+        onClick={() => { if (sourcePanelOpen) return; onEnter?.() }}
       >
-        {slides.length === 0 ? (
-          <div className="absolute inset-0 bg-[#EDEDED]" />
+        {look.image_url ? (
+          <FallbackImage
+            src={look.image_url}
+            thumbWidth={900}
+            alt={look.occasion_label}
+            loading="eager"
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        ) : pieces.length ? (
+          // No shoot yet: the whole outfit, pieces laid side by side on stone.
+          <div className={`absolute inset-0 grid ${pieces.length > 4 ? 'grid-cols-3' : 'grid-cols-2'} auto-rows-fr gap-[4px] p-[4px] pb-[120px] bg-[#E4E2DD]`}>
+            {pieces.slice(0, 6).map((it, i) => (
+              <div key={i} className="relative bg-white overflow-hidden rounded-[8px]">
+                <FallbackImage src={it.image_url as string} thumbWidth={360} alt={it.product_name} className="absolute inset-0 w-full h-full object-contain p-2" />
+              </div>
+            ))}
+          </div>
         ) : (
-          slides.map((sl, i) => (
-            <FallbackImage
-              key={i}
-              src={sl.src}
-              thumbWidth={640}
-              alt={sl.alt}
-              loading={i === 0 ? 'eager' : 'lazy'}
-              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${i === current ? 'opacity-100' : 'opacity-0'}`}
-            />
-          ))
-        )}
-
-        {/* Right third flicks to the next image, exactly as on the feed card. */}
-        {total > 1 && (
-          <button aria-label="Next image" className="absolute right-0 top-0 h-full w-1/3 z-10" onClick={(e) => { e.stopPropagation(); next() }} />
+          <div className="absolute inset-0 bg-[#EDEDED]" />
         )}
 
         {/* Style Item hotspots — see-through circles on the shoot itself. They
             show in the mirror too: they only ever navigate within her looks,
             and Chloe cannot check what she has not been shown. */}
-        {current === 0 && look.items.filter((i) => i.item_id).map((it, i) => {
+        {look.image_url && look.items.filter((i) => i.item_id).map((it, i) => {
           const pos = slotPosition(it.slot ?? it.item_type ?? '')
           return (
             <Hotspot
@@ -673,6 +759,48 @@ function LookCard({
           </div>
         </div>
       </div>
+
+      {/* The pieces, small, swiped along under the picture; a tap pops one out. */}
+      {pieces.length > 0 && (
+        <div className="relative px-3 pt-3">
+          {peek != null && pieces[peek] && (
+            <div
+              role="dialog"
+              aria-label={pieces[peek].product_name}
+              className="absolute left-3 bottom-[calc(100%-4px)] z-50 w-[min(62%,260px)] rounded-[16px] bg-white shadow-[0_14px_34px_rgba(0,0,0,0.22)] overflow-hidden"
+            >
+              <div className="relative aspect-[3/4] bg-white">
+                <FallbackImage src={pieces[peek].image_url as string} thumbWidth={520} alt={pieces[peek].product_name} className="absolute inset-0 w-full h-full object-contain p-3" />
+                <button type="button" aria-label="Close" onClick={() => setPeek(null)}
+                  className="absolute top-2 right-2 w-9 h-9 rounded-full bg-[#141414]/80 text-white text-[20px] leading-none">×</button>
+              </div>
+              <div className="px-4 py-3">
+                {pieces[peek].brand && <p className="text-[13px] tracking-[0.14em] text-[#7C838B]">{pieces[peek].brand.toUpperCase()}</p>}
+                <p className="text-[16px] text-[#2B2B2B] leading-snug">{pieces[peek].product_name}</p>
+                <p className="text-[15px] text-[#55534E] mt-1">
+                  {pieces[peek].owned ? 'Yours' : pieces[peek].price_gbp != null ? `£${Math.round(pieces[peek].price_gbp as number)}` : ''}
+                  {!pieces[peek].owned && pieces[peek].url && (
+                    <a href={pieces[peek].url as string} target="_blank" rel="noreferrer" className="ml-3 underline underline-offset-4">SHOP</a>
+                  )}
+                </p>
+              </div>
+            </div>
+          )}
+          <div data-lenis-prevent className="flex gap-[6px] overflow-x-auto snap-x snap-mandatory pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {pieces.map((it, i) => (
+              <button
+                key={`${it.item_id ?? it.product_name}-${i}`}
+                type="button"
+                aria-label={`${it.brand} ${it.product_name}`}
+                onClick={() => setPeek(peek === i ? null : i)}
+                className={`relative shrink-0 snap-start w-[58px] h-[77px] rounded-[10px] bg-white overflow-hidden border ${peek === i ? 'border-[#2B2B2B]' : 'border-transparent'}`}
+              >
+                <FallbackImage src={it.image_url as string} thumbWidth={160} alt="" className="absolute inset-0 w-full h-full object-contain p-1" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="px-5 py-5">
         <div className="flex items-baseline justify-between gap-3 mb-3">
