@@ -12,13 +12,15 @@
 
 import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
-import { describeGarment, findPieceInPost, readInstagramPost } from './post-piece'
+import { describeGarments, findPiecesInPost, readInstagramPost } from './post-piece'
 
 export interface ResolvedProduct { url: string; title: string; brand: string | null; image: string | null; price: number | null; host: string }
 export interface ResolvedBrand { handle: string; name: string | null; website: string; via: string }
 export type ShareResolution =
   /** `post` is set when the piece was found inside an Instagram post rather than read off its own page. */
   | { kind: 'product'; product: ResolvedProduct; post?: { author: string; brand: ResolvedBrand } }
+  /** Two or more pieces pinned in one Instagram post, the main one first; a single pinned piece is still `product`. */
+  | { kind: 'products'; products: ResolvedProduct[]; post: { author: string; brand: ResolvedBrand } }
   /** `post` is set when a post's piece could not be pinned, so the brand stands in for it. */
   | { kind: 'brand'; brand: ResolvedBrand; post?: { author: string; pieceNotFound: true } }
   | { kind: 'unknown'; reason: string }
@@ -459,9 +461,9 @@ export async function resolveShare(rawUrl: string): Promise<ShareResolution> {
   if (c.kind === 'invalid') return { kind: 'unknown', reason: c.reason }
   if (c.kind === 'instagram-profile') return brandResolution(await resolveInstagramBrand(c.handle))
   if (c.kind === 'instagram-post') {
-    // A post is a brand showing a piece. The author names the brand; the
-    // picture, held against that brand's rail, names the piece — and when it
-    // cannot be pinned, the brand is what is kept, as before.
+    // A post is a brand showing a piece, or a whole look. The author names
+    // the brand; the picture, held against that brand's rail, names each
+    // piece — and when none can be pinned, the brand is what is kept, as before.
     const post = await readInstagramPost(c.url)
     let author = post.author
     if (!author) {
@@ -470,11 +472,12 @@ export async function resolveShare(rawUrl: string): Promise<ShareResolution> {
     }
     if (!author) return { kind: 'unknown', reason: 'Instagram hid who posted that — share their profile instead' }
     // The eye reads the picture while the brand's site is being found.
-    const read = post.image ? describeGarment(post.image) : null
+    const reads = post.image ? describeGarments(post.image) : null
     const brand = await resolveInstagramBrand(author)
     if (!brand) return brandResolution(null)
-    const piece = post.image && read ? await findPieceInPost({ site: brand.website, brandName: brand.name, caption: post.caption, image: post.image, read }) : null
-    if (piece) return { kind: 'product', product: piece, post: { author, brand } }
+    const pieces = post.image && reads ? await findPiecesInPost({ site: brand.website, brandName: brand.name, caption: post.caption, image: post.image, reads }) : []
+    if (pieces.length > 1) return { kind: 'products', products: pieces, post: { author, brand } }
+    if (pieces.length === 1) return { kind: 'product', product: pieces[0], post: { author, brand } }
     return { kind: 'brand', brand, post: { author, pieceNotFound: true } }
   }
   const page = await fetchText(c.url)

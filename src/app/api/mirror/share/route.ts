@@ -11,6 +11,10 @@ export const dynamic = 'force-dynamic'
 // An Instagram post is read, its brand found and its piece looked for in turn.
 export const maxDuration = 60
 
+/** "the A", "the A and the B", "the A, the B and the C". */
+const listOf = (names: string[]): string =>
+  names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+
 // POST { url } — the iOS share sheet's door: work out what was shared and file it.
 export async function OPTIONS() { return mirrorOptions() }
 
@@ -33,6 +37,21 @@ export async function POST(req: NextRequest) {
     const from = r.product.brand ? ` from ${r.product.brand}` : ` from ${r.product.host}`
     const where = r.post ? ` — the piece in @${r.post.author}’s post` : ''
     return mirrorJson({ kind: 'product', saved: true, title: r.product.title, brand: r.product.brand, image: r.product.image, message: `Kept “${r.product.title}”${from}${where}.` })
+  }
+
+  if (r.kind === 'products') {
+    // A whole look: every piece pinned is kept, side by side, and the
+    // sentence names them all. Pieces that would not save are left out of it.
+    const products = r.products.map((p) => productFrom({ url: p.url, title: p.title, brand: p.brand, image: p.image, price: p.price })).filter((p): p is NonNullable<typeof p> => !!p)
+    const results = await Promise.all(products.map((p) => saveForMember(member, p)))
+    const kept = products.filter((_, i) => !results[i].error)
+    if (!kept.length) return mirrorJson({ error: results.find((x) => x.error)?.error ?? 'I couldn’t keep the pieces in that post' }, { status: 400 })
+    const brand = kept[0].brand ?? r.products[0].host
+    const titles = kept.map((p) => p.title)
+    const message = kept.length === 1
+      ? `Kept “${titles[0]}” from ${brand} — the piece in @${r.post.author}’s post.`
+      : `Kept ${listOf(titles.map((t) => `the ${t}`))} from ${brand} — the pieces in @${r.post.author}’s post.`
+    return mirrorJson({ kind: 'products', saved: true, count: kept.length, titles, brand, image: kept[0].image, message })
   }
 
   // Brand watch is Chloe's own list. assertAdmin reads a Supabase session the
