@@ -658,9 +658,8 @@ function LookCard({
   onToggleItem: (itemId: string) => void
 }) {
   const [sourcePanelOpen, setSourcePanelOpen] = useState(false)
-  const [slideIdx, setSlideIdx] = useState(0)
-  const touchStartX = useRef<number | null>(null)
-  const didSwipe = useRef(false)
+  // The piece popped out of the strip under the picture, if any.
+  const [peek, setPeek] = useState<number | null>(null)
 
   const [verdict, setVerdict] = useState<'yes' | 'no' | null>(look.response)
   const [reason, setReason] = useState<string | null>(null)
@@ -668,26 +667,11 @@ function LookCard({
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
-  // Same slide list as the feed card: the shoot first, then each piece.
-  const slides = [
-    ...(look.image_url ? [{ src: look.image_url, alt: look.occasion_label }] : []),
-    ...look.items.filter((i) => i.image_url).map((i) => ({ src: i.image_url as string, alt: i.product_name })),
-  ]
-  const total = slides.length
-  const current = total > 0 ? slideIdx % total : 0
-  const next = () => setSlideIdx((i) => (i + 1) % total)
-  const prev = () => setSlideIdx((i) => (i - 1 + total) % total)
-
-  function onTouchStart(e: React.TouchEvent) {
-    touchStartX.current = e.touches[0].clientX
-    didSwipe.current = false
-  }
-  function onTouchEnd(e: React.TouchEvent) {
-    if (touchStartX.current === null) return
-    const delta = e.changedTouches[0].clientX - touchStartX.current
-    touchStartX.current = null
-    if (Math.abs(delta) > 38) { didSwipe.current = true; delta < 0 ? next() : prev() }
-  }
+  // The picture is MYRA's shoot of the whole outfit (Chloe, 2026-10-20: not a
+  // close-up of one earring). The pieces live in a small strip underneath,
+  // swiped along, each popping out on a tap. Until the shoot lands the frame
+  // lays the pieces out together, so it is still the outfit, not one piece.
+  const pieces = look.items.filter((i) => i.image_url)
 
   async function send(v: 'yes' | 'no') {
     setVerdict(v)
@@ -705,34 +689,33 @@ function LookCard({
       <div
         data-tour="look-open"
         className="group relative aspect-[3/4] w-full overflow-hidden rounded-[14px] cursor-pointer"
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
-        onClick={() => { if (didSwipe.current || sourcePanelOpen) return; onEnter?.() }}
+        onClick={() => { if (sourcePanelOpen) return; onEnter?.() }}
       >
-        {slides.length === 0 ? (
-          <div className="absolute inset-0 bg-[#EDEDED]" />
+        {look.image_url ? (
+          <FallbackImage
+            src={look.image_url}
+            thumbWidth={900}
+            alt={look.occasion_label}
+            loading="eager"
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        ) : pieces.length ? (
+          // No shoot yet: the whole outfit, pieces laid side by side on stone.
+          <div className={`absolute inset-0 grid ${pieces.length > 4 ? 'grid-cols-3' : 'grid-cols-2'} auto-rows-fr gap-[4px] p-[4px] pb-[120px] bg-[#E4E2DD]`}>
+            {pieces.slice(0, 6).map((it, i) => (
+              <div key={i} className="relative bg-white overflow-hidden rounded-[8px]">
+                <FallbackImage src={it.image_url as string} thumbWidth={360} alt={it.product_name} className="absolute inset-0 w-full h-full object-contain p-2" />
+              </div>
+            ))}
+          </div>
         ) : (
-          slides.map((sl, i) => (
-            <FallbackImage
-              key={i}
-              src={sl.src}
-              thumbWidth={640}
-              alt={sl.alt}
-              loading={i === 0 ? 'eager' : 'lazy'}
-              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${i === current ? 'opacity-100' : 'opacity-0'}`}
-            />
-          ))
-        )}
-
-        {/* Right third flicks to the next image, exactly as on the feed card. */}
-        {total > 1 && (
-          <button aria-label="Next image" className="absolute right-0 top-0 h-full w-1/3 z-10" onClick={(e) => { e.stopPropagation(); next() }} />
+          <div className="absolute inset-0 bg-[#EDEDED]" />
         )}
 
         {/* Style Item hotspots — see-through circles on the shoot itself. They
             show in the mirror too: they only ever navigate within her looks,
             and Chloe cannot check what she has not been shown. */}
-        {current === 0 && look.items.filter((i) => i.item_id).map((it, i) => {
+        {look.image_url && look.items.filter((i) => i.item_id).map((it, i) => {
           const pos = slotPosition(it.slot ?? it.item_type ?? '')
           return (
             <Hotspot
@@ -776,6 +759,48 @@ function LookCard({
           </div>
         </div>
       </div>
+
+      {/* The pieces, small, swiped along under the picture; a tap pops one out. */}
+      {pieces.length > 0 && (
+        <div className="relative px-3 pt-3">
+          {peek != null && pieces[peek] && (
+            <div
+              role="dialog"
+              aria-label={pieces[peek].product_name}
+              className="absolute left-3 bottom-[calc(100%-4px)] z-50 w-[min(62%,260px)] rounded-[16px] bg-white shadow-[0_14px_34px_rgba(0,0,0,0.22)] overflow-hidden"
+            >
+              <div className="relative aspect-[3/4] bg-white">
+                <FallbackImage src={pieces[peek].image_url as string} thumbWidth={520} alt={pieces[peek].product_name} className="absolute inset-0 w-full h-full object-contain p-3" />
+                <button type="button" aria-label="Close" onClick={() => setPeek(null)}
+                  className="absolute top-2 right-2 w-9 h-9 rounded-full bg-[#141414]/80 text-white text-[20px] leading-none">×</button>
+              </div>
+              <div className="px-4 py-3">
+                {pieces[peek].brand && <p className="text-[13px] tracking-[0.14em] text-[#7C838B]">{pieces[peek].brand.toUpperCase()}</p>}
+                <p className="text-[16px] text-[#2B2B2B] leading-snug">{pieces[peek].product_name}</p>
+                <p className="text-[15px] text-[#55534E] mt-1">
+                  {pieces[peek].owned ? 'Yours' : pieces[peek].price_gbp != null ? `£${Math.round(pieces[peek].price_gbp as number)}` : ''}
+                  {!pieces[peek].owned && pieces[peek].url && (
+                    <a href={pieces[peek].url as string} target="_blank" rel="noreferrer" className="ml-3 underline underline-offset-4">SHOP</a>
+                  )}
+                </p>
+              </div>
+            </div>
+          )}
+          <div data-lenis-prevent className="flex gap-[6px] overflow-x-auto snap-x snap-mandatory pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {pieces.map((it, i) => (
+              <button
+                key={`${it.item_id ?? it.product_name}-${i}`}
+                type="button"
+                aria-label={`${it.brand} ${it.product_name}`}
+                onClick={() => setPeek(peek === i ? null : i)}
+                className={`relative shrink-0 snap-start w-[58px] h-[77px] rounded-[10px] bg-white overflow-hidden border ${peek === i ? 'border-[#2B2B2B]' : 'border-transparent'}`}
+              >
+                <FallbackImage src={it.image_url as string} thumbWidth={160} alt="" className="absolute inset-0 w-full h-full object-contain p-1" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="px-5 py-5">
         <div className="flex items-baseline justify-between gap-3 mb-3">

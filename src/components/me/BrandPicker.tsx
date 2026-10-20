@@ -4,7 +4,7 @@
 //
 // Chloe's brief (2026-10-17): asking someone to think of brands on the spot is
 // hard. So she is never asked to think of one. The brands MYRA knows are laid
-// out in groups she will recognise — "Quiet luxury", "The houses", "Parisian",
+// out in groups she will recognise — "The minimalists", "The houses", "Parisian",
 // "Second-hand & vintage" — and she taps the ones she knows, or takes a whole
 // group with LOVE ALL and drops the odd one with ×. The same screen has a
 // second side, "✕ Not for me", for anything she would never wear.
