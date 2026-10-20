@@ -47,10 +47,12 @@ const pill = (on: boolean) =>
 
 function ServiceMark({ service }: { service: 'safari' | 'chrome' | 'claude' | 'chatgpt' | 'gmail' | 'calendar' | 'instagram' | 'email' }) {
   const logos: Record<typeof service, string> = {
-    safari: 'https://cdn.simpleicons.org/safari/0F7DC2',
-    chrome: 'https://cdn.simpleicons.org/googlechrome',
-    claude: 'https://cdn.simpleicons.org/anthropic/D97757',
-    chatgpt: 'https://cdn.simpleicons.org/openai',
+    // Kept in /public/logos: Simple Icons dropped OpenAI, and its Anthropic
+    // mark is the company's, not Claude's.
+    safari: '/logos/safari.svg',
+    chrome: '/logos/chrome.svg',
+    claude: '/logos/claude.svg',
+    chatgpt: '/logos/chatgpt.svg',
     gmail: 'https://cdn.simpleicons.org/gmail/EA4335',
     calendar: 'https://cdn.simpleicons.org/googlecalendar/4285F4',
     instagram: 'https://cdn.simpleicons.org/instagram/E4405F',

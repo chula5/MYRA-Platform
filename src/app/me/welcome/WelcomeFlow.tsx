@@ -41,6 +41,8 @@ const BODY = 'text-[clamp(22px,1.35vw,40px)]'
 const PILL = 'text-[clamp(21px,1.2vw,32px)] inline-block px-[1.3em] py-[0.6em] bg-white text-[#2B2B2B] rounded-full shadow-[0_8px_18px_-12px_rgba(43,43,43,0.5)] hover:bg-[#2B2B2B] hover:text-white transition-colors'
 
 const DARK = 'text-[clamp(21px,1.2vw,32px)] inline-block px-[1.3em] py-[0.6em] bg-[#2B2B2B] text-white rounded-full hover:opacity-85 transition-opacity'
+// The way on to the next phase: clear, but not the loudest thing on the page.
+const NEXT = 'text-[clamp(17px,1.1vw,30px)] tracking-[0.08em] px-[1.5em] py-[0.75em] bg-[#2B2B2B] text-white rounded-full hover:opacity-85 transition-opacity'
 
 type Phase = 'brands' | 'connect' | 'mirror'
 
@@ -74,7 +76,8 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
     const err = q.get('email_error') || q.get('instagram_error') || q.get('calendar_error')
     if (err) setMsg(err)
     const app = inNativeApp()
-    setNative(app)
+    // ?app=1 shows Chloe's preview what the iPhone app says (Safari, not Chrome).
+    setNative(app || (!!previewMemberId && q.get('app') === '1'))
     setIphone(/iPhone|iPad/.test(navigator.userAgent))
     // The app's first open brought her here: noted on her login and in the
     // app, so For You opens as itself from now on. Not for a preview.
@@ -119,7 +122,7 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
   const connectPath = `/mirror/connect${previewMemberId ? `?as=${previewMemberId}` : ''}`
   const connectHref = `${SITE}${connectPath}`
   function connectMirror() {
-    if (native) { window.location.href = `x-safari-${connectHref}`; return }
+    if (inNativeApp()) { window.location.href = `x-safari-${connectHref}`; return }
     window.open(connectPath, '_blank', 'noopener')
   }
   async function copyConnectLink() {
@@ -145,10 +148,7 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
           </p>
           {/* The way past, above the work: nothing here is required, and she
               should never feel stuck on the first screen she is ever shown. */}
-          <button
-            onClick={() => setPhase('connect')}
-            className="text-[clamp(24px,1.5vw,44px)] tracking-[0.1em] px-[1.6em] py-[0.6em] bg-[#2B2B2B] text-white rounded-full hover:opacity-85 transition-opacity"
-          >
+          <button onClick={() => setPhase('connect')} className={NEXT}>
             {brandCount ? 'NEXT: CONNECT YOUR ACCOUNTS →' : 'SKIP FOR NOW →'}
           </button>
         </header>
@@ -194,7 +194,7 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
                 : 'Add MYRA Mirror to Chrome and every brand site you open is in your order — keep a piece, or ask what to wear with it, without leaving the shop. It is how MYRA gets to know you.'}
           </p>
           {/* The way past, above the steps: she can do all of this later from YOU. */}
-          <button onClick={tour} className="text-[clamp(24px,1.5vw,44px)] tracking-[0.1em] px-[1.6em] py-[0.6em] bg-[#2B2B2B] text-white rounded-full hover:opacity-85 transition-opacity">
+          <button onClick={tour} className={NEXT}>
             NEXT: SHOW ME AROUND →
           </button>
         </header>
@@ -223,23 +223,21 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
                 {step(3, <>Come back and tap <strong>CONNECT MYRA</strong> — once, and MYRA knows it is you.</>)}
               </ol>
               <div className="flex flex-wrap items-center gap-4">
-                {MIRROR_IOS_URL
-                  ? <a href={MIRROR_IOS_URL} target="_blank" rel="noopener noreferrer" className={DARK}>GET THE MYRA APP</a>
-                  : <span className={`${PILL} opacity-60`}>iPhone app link coming soon</span>}
+                {MIRROR_IOS_URL && <a href={MIRROR_IOS_URL} target="_blank" rel="noopener noreferrer" className={DARK}>GET THE MYRA APP</a>}
                 <button type="button" onClick={connectMirror} className={PILL}>Connect MYRA</button>
               </div>
             </>
           ) : (
             <>
               <ol className="space-y-5">
-                {step(1, <>Add <strong>MYRA Mirror</strong> to Chrome.</>)}
+                {step(1, MIRROR_STORE_URL
+                  ? <>Add <strong>MYRA Mirror</strong> to Chrome.</>
+                  : <>Add <strong>MYRA Mirror</strong> to Chrome. It is nearly ready, and the link will be waiting in YOU.</>)}
                 {step(2, <>Tap <strong>CONNECT MYRA</strong> — once, and MYRA knows it is you.</>)}
-                {step(3, <>Open any brand site. The pieces you would wear come first; tap one to style it.</>)}
+                {step(3, <>Open any brand site. The pieces you would wear come first; save one to MYRA for later, or tap it to style it.</>)}
               </ol>
               <div className="flex flex-wrap items-center gap-4">
-                {MIRROR_STORE_URL
-                  ? <a href={MIRROR_STORE_URL} target="_blank" rel="noopener noreferrer" className={DARK}>ADD MYRA TO CHROME</a>
-                  : <span className={`${PILL} opacity-60`}>Chrome link coming soon</span>}
+                {MIRROR_STORE_URL && <a href={MIRROR_STORE_URL} target="_blank" rel="noopener noreferrer" className={DARK}>ADD MYRA TO CHROME</a>}
                 <button type="button" onClick={connectMirror} className={PILL}>Connect MYRA</button>
               </div>
               <p className="text-[clamp(18px,1.05vw,30px)] myra-guide-text text-[#6E6B65]">On your iPhone, MYRA Mirror comes inside the MYRA app — Settings → Apps → Safari → Extensions.</p>
@@ -265,7 +263,7 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
         <h1 className="text-[clamp(34px,3.6vw,76px)] leading-[1.08] text-[#2B2B2B]">{firstName ? `${firstName}, connect your accounts` : 'Connect your accounts'}</h1>
         <p className={`${BODY} text-[#4A4E57]`}>Tap one. Hover to see what it does.</p>
         {/* The way past, above the cards: both are optional and she should never feel stuck. */}
-        <button onClick={() => setPhase('mirror')} className="text-[clamp(24px,1.5vw,44px)] tracking-[0.1em] px-[1.6em] py-[0.6em] bg-[#2B2B2B] text-white rounded-full hover:opacity-85 transition-opacity">
+        <button onClick={() => setPhase('mirror')} className={NEXT}>
           {anything ? 'NEXT: MYRA WHERE YOU SHOP →' : 'SKIP FOR NOW →'}
         </button>
       </header>
@@ -338,12 +336,13 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
           <button type="button" data-app="mirror" data-on={mirrorOpen} className="btn" aria-label="MYRA Mirror for Chrome or Safari" onClick={() => setMirrorOpen((v) => !v)}>
             <span className="filled" />
             <svg viewBox="0 0 64 64" aria-hidden>
-              <circle cx="32" cy="32" r="22" {...S} strokeWidth={4} />
-              <circle cx="32" cy="32" r="8.5" {...S} strokeWidth={4} />
-              <path d="M32 23.5h21M24.6 36.3L14 18M39.4 36.3L28.8 54.6" {...S} strokeWidth={4} />
+              {/* MYRA's standing mirror (the For You room's drawing), not a browser's mark. */}
+              <rect x="21" y="8" width="22" height="38" rx="2" {...S} strokeWidth={3.5} />
+              <path d="M26 14l-2 9M31 14l-2 9" {...S} strokeWidth={3.5} opacity="0.55" />
+              <path d="M43 46l6 8M21 46l-6 8M26 46v10M38 46v10" {...S} strokeWidth={3.5} />
             </svg>
           </button>
-          <span className="tip">MYRA Mirror puts the pieces you would wear first on brand sites in Chrome or Safari</span>
+          <span className="tip">{native || iphone ? 'MYRA Mirror puts the pieces you would wear first on brand sites in Safari' : 'MYRA Mirror puts the pieces you would wear first on brand sites in Chrome'}</span>
           <span className="label">Mirror</span>
         </li>
       </ul>
@@ -355,12 +354,8 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
             On a laptop in Chrome, or on an iPhone in Safari, add MYRA Mirror and connect it to you. After that, every brand site you visit shows the pieces you would actually wear first. The site itself stays the same.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
-            {MIRROR_STORE_URL
-              ? <a href={MIRROR_STORE_URL} target="_blank" rel="noopener noreferrer" className={PILL}>Chrome extension</a>
-              : <span className={`${PILL} opacity-60`}>Chrome extension link coming soon</span>}
-            {MIRROR_IOS_URL
-              ? <a href={MIRROR_IOS_URL} target="_blank" rel="noopener noreferrer" className={PILL}>iPhone TestFlight</a>
-              : <span className={`${PILL} opacity-60`}>iPhone TestFlight link coming soon</span>}
+            {MIRROR_STORE_URL && <a href={MIRROR_STORE_URL} target="_blank" rel="noopener noreferrer" className={PILL}>Chrome extension</a>}
+            {MIRROR_IOS_URL && <a href={MIRROR_IOS_URL} target="_blank" rel="noopener noreferrer" className={PILL}>iPhone TestFlight</a>}
             <a href={`/mirror/connect${previewMemberId ? `?as=${previewMemberId}` : ''}`} target="_blank" rel="noopener noreferrer" className={PILL}>Connect MYRA</a>
           </div>
           <p className="text-[clamp(18px,1vw,26px)] text-[#6E6B65]">On iPhone, install MYRA from TestFlight, enable MYRA Mirror in Safari, and then connect it once.</p>

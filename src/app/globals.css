@@ -637,6 +637,8 @@ html {
 .myra-connect [data-app="email"] .filled, .myra-connect [data-app="email"] ~ .tip { background: #d44638; }
 .myra-connect [data-app="calendar"] .filled, .myra-connect [data-app="calendar"] ~ .tip { background: #4285f4; }
 .myra-connect [data-app="photos"] .filled, .myra-connect [data-app="photos"] ~ .tip { background: linear-gradient(45deg, #6c7279, #a9afb6); }
+/* The Mirror: silver, so its white words can be read and its icon does not vanish white-on-white. */
+.myra-connect [data-app="mirror"] .filled, .myra-connect [data-app="mirror"] ~ .tip { background: #7C838B; }
 
 /* ── Look actions (Source Items · Similar Looks · Explore Styles) ──────────
    A pill with a faint ring; on hover a silver disc blooms out from the centre

@@ -41,6 +41,7 @@ export default function MobileTabBar({ active }: { active: RoomId }) {
   return (
     <nav
       aria-label="Your rooms"
+      data-tour="rooms"
       className="fixed bottom-0 inset-x-0 z-40 sm:hidden bg-[rgba(230,230,233,0.92)] backdrop-blur-md border-t border-[rgba(43,43,43,0.18)]"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
@@ -50,6 +51,7 @@ export default function MobileTabBar({ active }: { active: RoomId }) {
           return (
             <Link
               key={r.id}
+              data-tour={`room-${r.id}`}
               href={r.href}
               prefetch
               onClick={(e) => {

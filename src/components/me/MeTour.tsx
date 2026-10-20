@@ -15,6 +15,9 @@ import { markTourDone } from '@/app/me/welcome/actions'
 import { scanNow } from '@/app/me/dressing-room/email-actions'
 import { nudgeArchival } from '@/app/me/dressing-room/archival-actions'
 import { inNativeApp } from '@/components/me/AppFirstOpen'
+import { RoomIcon, type RoomId } from '@/components/me/RoomNav'
+import ShopTheLookOverlay from '@/components/source-panel/ShopTheLookOverlay'
+import type { Item, Brand } from '@/types/database'
 
 const KEY = 'myra:tour'
 
@@ -27,7 +30,13 @@ export function startTour() {
 /** Which part of the example look a step is about. */
 type DemoPart = 'open' | 'source' | 'similar' | 'explore' | 'style'
 
+/** The apps a step sends her to, shown by their marks beside the title. */
+type Logo = 'safari' | 'chrome' | 'claude' | 'chatgpt'
+
 interface Step {
+  /** The room the step is about — its icon sits beside the title, as in the tab bar. */
+  room?: RoomId
+  logos?: Logo[]
   /** The page the step is on (matched against the pathname). */
   path?: string
   /** Where to send her when it is a tab of that page (`/me/profile?tab=threads`). */
@@ -42,51 +51,51 @@ interface Step {
   body: string
   /** Something to do from the step itself, not only read about. */
   cta?: { label: string; href: string }
-  /** Said differently inside the iPhone app, where the Mirror came with the app. */
-  app?: { body: string; cta?: { label: string; href: string } }
+  /** Said differently on a phone — the iPhone app, where the Mirror is Safari's. */
+  app?: { body: string; cta?: { label: string; href: string }; logos?: Logo[] }
 }
 
-/** The mirror's listing, once it is published; until then, her connect page. */
-const MIRROR_HREF = process.env.NEXT_PUBLIC_MIRROR_STORE_URL || '/me/welcome'
+/** The mirror's Chrome listing, once it is published. */
+const MIRROR_HREF = process.env.NEXT_PUBLIC_MIRROR_STORE_URL || ''
 
 const DRESSING = '/me/dressing-room'
 const PROFILE = '/me/profile'
-// In the order of the rooms across her screen. Checked against the pages on
-// 2026-10-17: Inspiration and Threads live under YOU now, Coming Up is in
-// EVENTS, the shelves are Your wardrobe / Saved pieces / Email finds, and the
-// look buttons are shown on an example look, since a new member has no looks
-// of her own yet to show them on.
+const LOOKS = '/me/looks'
+// In the order of the rooms across her screen, and each room's step opens
+// that room behind the card, its icon beside the title. Rewritten with Chloe
+// on 2026-10-20: Browse and Events say it once, not twice; STYLED FOR YOU
+// went (nothing to show until she has tapped a piece); YOU and Sharing open
+// their own pages; the end leaves her on Looks, at the search.
 const STEPS: Step[] = [
   { path: '/me', target: '[data-tour="rooms"]', title: 'YOUR ROOMS', body: 'Everything lives in these rooms. A one minute look around.' },
-  { path: '/me', target: '[data-tour="room-for_you"]', title: 'FOR YOU', body: 'What MYRA did while you shopped: more of the same, more from your brands, and your saved pieces styled.' },
-  { path: '/me', target: '[data-tour="room-browse"]', title: 'BROWSE', body: 'Ask for anything in your own words.' },
-  { path: '/me/browse', target: '[data-tour="browse-search"]', title: 'SEARCH THROUGH MYRA', body: 'Try \u201ca wedding in June\u201d, typed or spoken. Then style what you find with your wardrobe or with something new.' },
-  { path: '/me', target: '[data-tour="room-all_looks"]', title: 'LOOKS', body: 'Every outfit MYRA made for you. Thumbs up or down and MYRA learns; the ones you loved, sorted by occasion.' },
-  { path: '/me/looks', demo: 'open', title: 'A LOOK', body: 'Every outfit is a card like this one. Tap the picture to open it and flick through each piece.' },
-  { path: '/me/looks', demo: 'source', title: 'SOURCE ITEMS', body: 'Every piece in the look, and where to buy it in your size.' },
-  { path: '/me/looks', demo: 'similar', title: 'SIMILAR LOOKS', body: 'More looks like this one.' },
-  { path: '/me/looks', demo: 'explore', title: 'EXPLORE STYLES', body: 'The same kind of pieces, styled a different way.' },
-  { path: '/me/looks', demo: 'style', title: 'STYLE ITEM', body: 'The see-through circles on the photo. Tap one to see that piece in other outfits.' },
-  { path: '/me', target: '[data-tour="room-dressing_room"]', title: 'DRESSING ROOM', body: 'Your own pieces, the ones you saved while shopping, and what your order emails turned up.' },
-  { path: DRESSING, tab: 'wardrobe', target: '[data-tour="wardrobe"]', fallback: '[data-tour="tab-wardrobe"]', title: 'YOUR WARDROBE', body: 'Your own pieces. Tap one to see it styled.' },
-  { path: DRESSING, tab: 'wardrobe', target: '[data-tour="styling-pane"]', fallback: '[data-tour="tab-wardrobe"]', title: 'STYLED FOR YOU', body: 'Outfits around the piece you tapped. Build new ones here.' },
+  { path: '/me', room: 'for_you', target: '[data-tour="room-for_you"]', title: 'FOR YOU', body: 'What MYRA did while you shopped: more of the same, more from your brands, and your saved pieces styled.' },
+  { path: '/me/browse', room: 'browse', target: '[data-tour="browse-search"]', fallback: '[data-tour="room-browse"]', title: 'BROWSE', body: 'Search for anything in your own words. Try “a wedding in June”, typed or spoken, then style what you find with your wardrobe or with something new.' },
+  { path: LOOKS, room: 'all_looks', target: '[data-tour="room-all_looks"]', title: 'LOOKS', body: 'Every outfit MYRA made for you. Thumbs up or down and MYRA learns; the ones you loved are sorted by occasion.' },
+  { path: LOOKS, demo: 'open', title: 'A LOOK', body: 'Every outfit is a card like this one. Tap the picture to open it and flick through each piece.' },
+  { path: LOOKS, demo: 'source', title: 'SOURCE ITEMS', body: 'Every piece in the look, and where to buy it in your size.' },
+  { path: LOOKS, demo: 'similar', title: 'SIMILAR LOOKS', body: 'More looks like this one.' },
+  { path: LOOKS, demo: 'explore', title: 'EXPLORE STYLES', body: 'Other ways to dress for the same occasion: the same moment, in a different style.' },
+  { path: LOOKS, demo: 'style', title: 'STYLE ITEM', body: 'The see-through circles on the photo. Tap one to style that piece in other outfits.' },
+  { path: DRESSING, room: 'dressing_room', target: '[data-tour="room-dressing_room"]', title: 'DRESSING ROOM', body: 'Your own pieces, the ones you saved while shopping, and your latest orders.' },
+  { path: DRESSING, tab: 'wardrobe', target: '[data-tour="wardrobe"]', fallback: '[data-tour="tab-wardrobe"]', title: 'YOUR WARDROBE', body: 'Your own pieces. Tap one and MYRA styles it into outfits.' },
   { path: DRESSING, tab: 'saved', target: '[data-tour="tab-saved"]', title: 'SAVED PIECES', body: 'Pieces you kept with the MYRA Mirror while shopping, each styled three ways.' },
-  { path: DRESSING, tab: 'email', target: '[data-tour="email-sync"]', fallback: '[data-tour="tab-email"]', title: 'SYNC YOUR EMAIL', body: 'The Gmail circle. MYRA reads your order emails and finds what you have bought. Instagram and Photos beside it bring in what you already wear.' },
+  { path: DRESSING, tab: 'email', target: '[data-tour="email-sync"]', fallback: '[data-tour="tab-email"]', title: 'BRING IN YOUR PIECES', body: 'Gmail: MYRA brings your latest orders into your wardrobe by itself. Instagram and Photos: MYRA finds the pieces in your photos to add to your wardrobe.' },
   { path: DRESSING, tab: 'email', target: '#email-finds', fallback: '[data-tour="tab-email"]', title: 'EMAIL FINDS', body: 'Pieces from your order emails. Add the ones you kept.' },
-  { path: '/me', target: '[data-tour="room-events"]', title: 'EVENTS', body: 'Your calendar. Three outfits for each day worth dressing for, every Monday.' },
-  { path: '/me/events', target: '[data-tour="coming-up"]', fallback: '[data-tour="events"]', title: 'COMING UP', body: 'What is in your diary. Add anything you want dressed and MYRA has options ready.' },
-  { target: '[data-tour="you"]', title: 'YOU', body: 'Your sizes, your brands, your inspiration and what MYRA has learned.' },
+  { path: '/me/events', room: 'events', target: '[data-tour="coming-up"]', fallback: '[data-tour="events"]', title: 'EVENTS', body: 'MYRA styles outfits ahead of everything in your diary, so there is no last-minute scramble for something to wear.' },
+  { path: PROFILE, href: PROFILE, room: 'profile', target: '[data-tour="you"]', title: 'YOU', body: 'Your sizes, your brands, your inspiration and what MYRA has learned.' },
   { path: PROFILE, href: PROFILE, target: '[data-tour="brands"]', title: 'YOUR BRANDS', body: 'The brands you love, and what MYRA found from them. Add one any time.' },
   { path: PROFILE, href: `${PROFILE}?tab=inspiration`, target: '[data-tour="inspiration"]', title: 'INSPIRATION', body: 'Save outfits you love. MYRA learns your taste from them.' },
   { path: PROFILE, href: `${PROFILE}?tab=inspiration`, target: '#archival-looks', fallback: '[data-tour="inspiration"]', title: 'ARCHIVAL LOOKS', body: 'Photos of what you already wear. The pieces you still own go to your Dressing Room.' },
   { path: PROFILE, href: `${PROFILE}?tab=threads`, target: '[data-tour="threads"]', title: 'THREADS', body: 'Everything MYRA knows about your style, and why.' },
-  { target: '[data-tour="sharing"]', title: 'SHARING', body: 'Friends on MYRA. Send them a look or a piece and talk it over.' },
+  { path: '/me/sharing', room: 'sharing', target: '[data-tour="sharing"]', title: 'SHARING', body: 'Friends on MYRA. Send them a look or a piece and talk it over.' },
   {
     title: 'MYRA WHERE YOU SHOP',
-    body: 'Add MYRA to your browser and every shop you open is in your order — keep a piece, or ask what to wear with it, without leaving the shop.',
-    cta: { label: 'Add MYRA to my browser', href: MIRROR_HREF },
+    logos: ['chrome'],
+    body: 'Shop in Chrome with MYRA. Add MYRA Mirror to Chrome, then save a piece you love to MYRA to come back to later, or style it there and then.',
+    cta: MIRROR_HREF ? { label: 'Add MYRA to Chrome', href: MIRROR_HREF } : undefined,
     app: {
-      body: 'MYRA Mirror came with this app. Turn it on in Settings → Apps → Safari → Extensions, connect it once from YOU, and every shop you open in Safari is in your order — keep a piece, or ask what to wear with it, without leaving the shop.',
+      logos: ['safari'],
+      body: 'Shop in Safari with MYRA. Turn it on in Settings → Apps → Safari → Extensions → MYRA Mirror, and allow All Websites. Then save a piece you love to MYRA to come back to later, or style it there and then.',
       cta: { label: 'Show me where', href: '/me/profile#mirror' },
     },
   },
@@ -94,36 +103,50 @@ const STEPS: Step[] = [
     path: PROFILE,
     href: PROFILE,
     target: '#assistant',
-    title: 'MYRA IN CLAUDE',
-    body: 'Want to ask MYRA for outfits inside Claude or ChatGPT? Make your link here and paste it in as a connector. It lives under YOU, so you can do it whenever you like.',
+    logos: ['claude', 'chatgpt'],
+    title: 'MYRA IN CLAUDE & CHATGPT',
+    body: 'Ask MYRA for outfits inside Claude or ChatGPT. Make your link here, then add it in Claude or ChatGPT as a connector.',
     cta: { label: 'Take me to it', href: '/me/profile#assistant' },
   },
-  { title: 'THAT\u2019S EVERYTHING', body: 'Your wardrobe is still filling in. Start on your For You page.' },
+  { path: LOOKS, room: 'all_looks', target: '[data-tour="looks-search"]', title: 'START HERE', body: 'Search for an occasion, like “dinner on Friday” or “a wedding in June”, or ask MYRA for something new. Your first looks arrive here.' },
 ]
+
+/** The marks of the apps a step sends her to. */
+const LOGO_SRC: Record<Logo, string> = { safari: '/logos/safari.svg', chrome: '/logos/chrome.svg', claude: '/logos/claude.svg', chatgpt: '/logos/chatgpt.svg' }
+const LOGO_NAME: Record<Logo, string> = { safari: 'Safari', chrome: 'Chrome', claude: 'Claude', chatgpt: 'ChatGPT' }
 
 /**
  * The example look the tour talks over: one of MYRA's own outfits, with every
  * button a look card has. Nothing here does anything; the ring says which part
- * the step is about. The classes are the Looks page card's, so it is the real
- * thing she will see.
+ * the step is about. The classes are the Looks page card's, and Source Items
+ * opens the real Shop the Look panel, so it is the real thing she will see.
  */
-const DEMO_ACTION = 'pointer-events-none text-[13px] sm:text-[clamp(15px,1.05vw,32px)] tracking-[0.1em] uppercase font-light myra-action'
+const DEMO_ACTION = 'pointer-events-none whitespace-nowrap text-[13px] sm:text-[clamp(15px,1.05vw,32px)] tracking-[0.1em] uppercase font-light myra-action'
+// Placed on the pieces in the photo, clear of the buttons along the bottom.
 const DEMO_SPOTS = [
-  { label: 'BLAZER', x: 58, y: 38 },
-  { label: 'TROUSERS', x: 55, y: 70 },
-  { label: 'BAG', x: 72, y: 71 },
+  { label: 'BLAZER', x: 46, y: 40 },
+  { label: 'TROUSERS', x: 50, y: 66 },
+  { label: 'BAG', x: 72, y: 70 },
 ]
+// Pieces MYRA stocks that make this look: what Source Items lists for it.
+const DEMO_ITEMS = [
+  { item_id: 'tour-blazer', item_type: 'jacket', product_name: 'Cath x WYSE Jackie Jacket - Chocolate Check', price: 265, currency: 'GBP', image_url: 'https://cdn.shopify.com/s/files/1/0803/0613/files/CathxWYSEJackieJacket-ChocolateCheck_184.jpg?v=1785338256', retailer_url: 'https://www.wyselondon.com/products/cath-x-wyse-jackie-jacket-chocolate-check', brand: { name: 'WYSE London' } },
+  { item_id: 'tour-trousers', item_type: 'trousers', product_name: 'AM-PM Wide-Leg Trouser', price: 150, currency: 'GBP', image_url: 'https://meandem.centracdn.net/client/dynamic/images/28498_666be48a79-01oct_2_23c_m036_aw26wt171000027_aw26tj107000004_aw26sh030000004_ss26acc043000004_aw26acc058001161_0033-original.jpg', retailer_url: 'https://www.meandem.com/int/fluid-velour-wide-leg-trouser-black', brand: { name: 'ME+EM' } },
+  { item_id: 'tour-bag', item_type: 'tote', product_name: 'Abilso leather tote bag', price: 350, currency: 'GBP', image_url: 'https://www.bymalenebirger.com/dw/image/v2/BDCM_PRD/on/demandware.static/-/Sites-sfra-bmb-master-catalog/default/dw7219c017/images/103688_050_main.jpg?sw=1500&sh=2000&sm=fit&sfrm=jpg', retailer_url: 'https://www.bymalenebirger.com/gb/en/abilso-leather-tote-bag/103688050.html', brand: { name: 'By Malene Birger' } },
+  { item_id: 'tour-shoes', item_type: 'heel', product_name: 'Luciana Slingback Heel', price: 395, currency: 'USD', image_url: 'https://cdn.shopify.com/s/files/1/0089/4432/0612/files/2609_K0979L1202_02.jpg?v=1788359361', retailer_url: 'https://veronicabeard.com/products/luciana-slingback-heel-espresso', brand: { name: 'Veronica Beard' } },
+] as unknown as (Item & { brand: Brand })[]
 function DemoLook({ part }: { part: DemoPart }) {
   const lit = (p: DemoPart) => (part === p ? ' myra-tour-lit' : '')
   return (
-    <div className={`relative aspect-[3/4] h-full overflow-hidden rounded-[14px] bg-[#EDEDED] shadow-[0_18px_60px_rgba(0,0,0,0.35)]${lit('open')}`} aria-hidden>
+    <div className={`relative aspect-[3/4] w-full md:w-auto md:h-full overflow-hidden rounded-[14px] bg-[#EDEDED] shadow-[0_18px_60px_rgba(0,0,0,0.35)]${lit('open')}`} aria-hidden>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/tour/example-look.jpg" alt="" className="absolute inset-0 h-full w-full object-cover" />
       {DEMO_SPOTS.map((h, i) => (
         <div key={h.label} className="absolute" style={{ left: `${h.x}%`, top: `${h.y}%`, transform: 'translate(-50%, -50%)' }}>
           <span className={`block w-7 h-7 rounded-full bg-white/40 backdrop-blur-sm border border-white/70 shadow-[0_1px_4px_rgba(0,0,0,0.15)] transition-opacity duration-500 ${part === 'style' ? 'opacity-100' : 'opacity-0'}${i === 0 ? lit('style') : ''}`} />
           {part === 'style' && i === 0 && (
-            <span className="absolute top-1/2 -translate-y-1/2 right-full mr-3 flex items-center bg-[#9B9B9B]/30 backdrop-blur-md border border-white/40 rounded-full px-2.5 py-1 whitespace-nowrap">
+            // The real Hotspot's rule: the label sits on the side with room.
+            <span className={`absolute top-1/2 -translate-y-1/2 ${h.x > 60 ? 'right-full mr-3' : 'left-full ml-3'} flex items-center bg-[#9B9B9B]/30 backdrop-blur-md border border-white/40 rounded-full px-2.5 py-1 whitespace-nowrap`}>
               <span className="text-[13px] sm:text-[15px] tracking-[0.068em] text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.35)]">
                 STYLE {h.label}{' '}
                 <svg viewBox="0 0 12 12" className="inline-block w-2.5 h-2.5 -mt-px" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 8.5 8.5 3.5M4.7 3.5h3.8v3.8" /></svg>
@@ -132,7 +155,14 @@ function DemoLook({ part }: { part: DemoPart }) {
           )}
         </div>
       ))}
-      <div className="absolute inset-x-0 bottom-0 pt-10 pb-3.5 px-3 bg-gradient-to-t from-black/55 via-black/20 to-transparent">
+      {part === 'source' && (
+        // The panel sizes itself as a share of the card; on a phone the example
+        // is narrower than a real card, so it is measured against a wider box.
+        <div className="absolute inset-y-0 left-0 w-[110%] md:w-full z-30 pointer-events-none">
+          <ShopTheLookOverlay items={DEMO_ITEMS} onClose={() => undefined} size="large" />
+        </div>
+      )}
+      <div className="absolute inset-x-0 bottom-0 z-40 pt-10 pb-3.5 px-3 bg-gradient-to-t from-black/55 via-black/20 to-transparent">
         <div className="flex flex-nowrap items-center justify-center gap-x-2 sm:gap-x-3 gap-y-2">
           <span className={DEMO_ACTION + lit('source')}>Source Items</span>
           <span className={DEMO_ACTION + lit('similar')}>Similar Looks</span>
@@ -154,8 +184,16 @@ export default function MeTour() {
   const [step, setStep] = useState<number | null>(null)
   const [box, setBox] = useState<Box | null>(null)
   const [ready, setReady] = useState(false)
-  const [native, setNative] = useState(false)
-  useEffect(() => { setNative(inNativeApp()) }, [])
+  // On a phone the Mirror is Safari's (the iPhone app); on a computer, Chrome's.
+  const [phone, setPhone] = useState(false)
+  useEffect(() => { setPhone(inNativeApp() || /iPhone|iPad/.test(navigator.userAgent) || window.innerWidth < 768) }, [])
+  // The card is sized from the window: keep it in step when the window changes.
+  const [, setViewport] = useState(0)
+  useEffect(() => {
+    const onResize = () => setViewport((n) => n + 1)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
   const el = useRef<Element | null>(null)
   /** The last step the tour moved her for, so a redirected route cannot loop. */
   const moved = useRef<number | null>(null)
@@ -230,14 +268,18 @@ export default function MeTour() {
             // Lenis sometimes leaves a long page where it was (MYRA IN CLAUDE sits
             // 6,000px down YOU), and it also holds back a native smooth scroll;
             // a moment later, if the thing is still out of sight, jump to it the
-            // plain way — Lenis follows an instant native scroll.
-            setTimeout(() => {
-              if (!live || el.current !== found) return
-              const r2 = found.getBoundingClientRect()
-              if (r2.top < headerH || r2.top > window.innerHeight * 0.6) {
-                window.scrollTo({ top: r2.top + window.scrollY - (headerH + 32), behavior: 'auto' })
-              }
-            }, 700)
+            // plain way — Lenis follows an instant native scroll. Checked again
+            // while YOU is still growing underneath (on a phone the Claude
+            // section is 17,000px down, below pictures still loading).
+            for (const wait of [700, 1600, 3000, 6000, 10000]) {
+              setTimeout(() => {
+                if (el.current !== found) return
+                const r2 = found.getBoundingClientRect()
+                if (r2.top < headerH || r2.top > window.innerHeight * 0.6) {
+                  window.scrollTo({ top: r2.top + window.scrollY - (headerH + 32), behavior: 'auto' })
+                }
+              }, wait)
+            }
           }
         }
         setReady(true)
@@ -286,8 +328,9 @@ export default function MeTour() {
 
   if (step == null) return null
   const s = STEPS[step]
-  const body = native && s.app ? s.app.body : s.body
-  const cta = native && s.app ? s.app.cta : s.cta
+  const body = phone && s.app ? s.app.body : s.body
+  const cta = phone && s.app ? s.app.cta : s.cta
+  const logos = (phone && s.app?.logos) || s.logos
   const last = step === STEPS.length - 1
   const lit = ready && box && box.height > 4
 
@@ -305,30 +348,52 @@ export default function MeTour() {
 
   const card = (
       <div className={`bg-[#F7F6F3] rounded-[22px] shadow-[0_18px_60px_rgba(0,0,0,0.35)] px-[clamp(28px,1.8vw,56px)] py-[clamp(24px,1.5vw,48px)] ${s.demo ? 'relative shrink-0' : 'absolute'}`} style={s.demo ? { width: cardW } : cardStyle}>
-        <div className="flex items-baseline justify-between gap-4">
-          <p className="text-[clamp(22px,1.25vw,38px)] tracking-[0.16em] text-[#2B2B2B]">{s.title}</p>
+        {/* The apps the step sends her to, on their own row so the title keeps its width. */}
+        {logos && (
+          <div className="mb-[0.7em] flex items-center gap-3">
+            {logos.map((l) => (
+              <span key={l} className="grid w-[48px] h-[48px] sm:w-[clamp(48px,2.6vw,72px)] sm:h-[clamp(48px,2.6vw,72px)] shrink-0 place-items-center rounded-[12px] bg-white p-[9px] shadow-[0_2px_8px_rgba(43,43,43,0.12)]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={LOGO_SRC[l]} alt={LOGO_NAME[l]} className="h-full w-full object-contain" />
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="flex items-center justify-between gap-4">
+          <p className="flex items-center gap-[0.6em] text-[clamp(22px,1.25vw,38px)] tracking-[0.16em] text-[#2B2B2B]">
+            {/* The room's own icon, as on the tab bar, so she knows where it lives. */}
+            {s.room && <span className="block w-[1.8em] h-[1.8em] shrink-0"><RoomIcon id={s.room} /></span>}
+            <span>{s.title}</span>
+          </p>
           <p className="text-[clamp(18px,1vw,30px)] text-[#6E6B65] shrink-0">{step + 1} of {STEPS.length}</p>
         </div>
-        <p className="mt-[0.5em] text-[clamp(27px,1.6vw,48px)] leading-snug text-[#2B2B2B]">{body}</p>
+        <p className="mt-[0.5em] text-[23px] sm:text-[clamp(27px,1.6vw,48px)] leading-snug text-[#2B2B2B]">{body}</p>
         {cta && (
           <a
             href={cta.href}
             target={cta.href.startsWith('http') ? '_blank' : undefined}
             rel={cta.href.startsWith('http') ? 'noopener noreferrer' : undefined}
-            className="mt-[0.9em] inline-block text-[clamp(22px,1.2vw,36px)] tracking-[0.06em] px-[1.3em] py-[0.55em] rounded-full bg-white text-[#2B2B2B] shadow-[0_10px_24px_-16px_rgba(43,43,43,0.7)]"
+            className="mt-[0.9em] inline-block whitespace-nowrap text-[18px] sm:text-[clamp(22px,1.2vw,36px)] tracking-[0.06em] px-[1.3em] py-[0.55em] rounded-full bg-white text-[#2B2B2B] shadow-[0_10px_24px_-16px_rgba(43,43,43,0.7)]"
           >
             {cta.label} →
           </a>
         )}
-        <div className="mt-[1em] flex items-center justify-between gap-4 text-[clamp(22px,1.2vw,36px)]">
-          <button onClick={finish} className="text-[clamp(20px,1.1vw,32px)] underline underline-offset-4 text-[#6E6B65]">{last ? 'Close' : 'Skip the tour'}</button>
-          <div className="flex items-center gap-3">
-            {step > 0 && <button onClick={() => go(step - 1)} className="text-[clamp(22px,1.2vw,36px)] px-[1.2em] py-[0.55em] border border-[#2B2B2B] text-[#2B2B2B] rounded-full">Back</button>}
+        {/* One line on a phone: Skip, Back and Next never wrap into stacks. */}
+        <div className="mt-[1em] flex items-center justify-between gap-3 sm:gap-4 whitespace-nowrap">
+          <button onClick={finish} className="text-[17px] sm:text-[clamp(20px,1.1vw,32px)] underline underline-offset-4 text-[#6E6B65]">{last ? 'Close' : 'Skip tour'}</button>
+          <div className="flex items-center gap-2 sm:gap-3">
+            {step > 0 && <button onClick={() => go(step - 1)} className="text-[18px] sm:text-[clamp(22px,1.2vw,36px)] px-[1em] sm:px-[1.2em] py-[0.55em] border border-[#2B2B2B] text-[#2B2B2B] rounded-full">Back</button>}
             <button
-              onClick={() => { if (last) { finish(); router.push('/me') } else go(step + 1) }}
-              className="text-[clamp(22px,1.2vw,36px)] tracking-[0.06em] px-[1.3em] py-[0.55em] bg-[#2B2B2B] text-white rounded-full"
+              onClick={() => {
+                if (!last) { go(step + 1); return }
+                // She ends on Looks, at the search, ready to type her first occasion.
+                finish()
+                if (pathname !== LOOKS) router.push(LOOKS)
+                else (document.querySelector('[data-tour="looks-search"] input') as HTMLInputElement | null)?.focus()
+              }}
+              className="text-[18px] sm:text-[clamp(22px,1.2vw,36px)] tracking-[0.06em] px-[1em] sm:px-[1.3em] py-[0.55em] bg-[#2B2B2B] text-white rounded-full"
             >
-              {last ? 'Take me to For You →' : 'Next →'}
+              {last ? 'Start →' : 'Next →'}
             </button>
           </div>
         </div>
@@ -348,7 +413,8 @@ export default function MeTour() {
       {s.demo ? (
         // The example look stands beside the sentence (above it on a phone).
         <div className="absolute inset-0 flex flex-col md:flex-row items-center justify-center gap-4 md:gap-8 p-4 overflow-y-auto">
-          <div className="h-[min(42vh,520px)] md:h-[min(72vh,820px)] shrink-0"><DemoLook part={s.demo} /></div>
+          {/* Sized by width on a phone, so the buttons along the bottom keep a card's proportions. */}
+          <div className="w-[min(86vw,420px)] md:w-auto md:h-[min(72vh,820px)] shrink-0"><DemoLook part={s.demo} /></div>
           {card}
         </div>
       ) : card}

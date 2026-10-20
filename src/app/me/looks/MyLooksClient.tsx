@@ -309,7 +309,7 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
               </div>
             }
           >
-            <div className="mx-auto w-full max-w-[900px] flex items-center justify-center gap-3 mb-5 md:mb-7">
+            <div className="mx-auto w-full max-w-[900px] flex items-center justify-center gap-3 mb-5 md:mb-7" data-tour="looks-search">
               <span className="myra-field shrink-0 text-[#55524C]">SEARCH A LOOK</span>
               <div className="flex-1 min-w-0 rounded-full bg-white/70 border border-[rgba(43,43,43,0.15)] flex items-center">
                 <input

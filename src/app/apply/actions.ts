@@ -1,6 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase-server'
+import { sendApplicationReceivedEmail } from '@/lib/studio/application-received-email'
 
 export interface ApplicationInput {
   name: string
@@ -31,6 +32,20 @@ export async function submitApplication(
       note: input.note?.trim() || null,
     })
     if (error) return { error: error.message }
+    // Tell Chloe at once. Her thank-you never waits on this, and a failed
+    // send is only logged: the application is already saved.
+    try {
+      await sendApplicationReceivedEmail({
+        name: input.name?.trim() || null,
+        email,
+        brands: input.brands?.trim() || null,
+        priceRange: input.priceRange?.trim() || null,
+        inspiration: input.inspiration?.trim() || null,
+        note: input.note?.trim() || null,
+      })
+    } catch (err) {
+      console.error('[submitApplication] notification email failed', err)
+    }
     return { ok: true }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Could not submit your application.' }

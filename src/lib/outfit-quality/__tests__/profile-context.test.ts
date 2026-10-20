@@ -97,7 +97,8 @@ describe('controlled brand groups', () => {
     expect(CONTROLLED_BRAND_GROUP_KEYS).toEqual(BRAND_GROUPS.map((g) => g.key))
     expect(CONTROLLED_BRAND_GROUP_KEYS).toEqual([
       'parisian', 'quiet_luxury', 'tailoring', 'romantic', 'contemporary', 'designer', 'directional',
-      'scandi', 'denim', 'night', 'finish', 'preloved', 'rental',
+      'scandi', 'denim', 'california', 'australian', 'night', 'finish', 'shoes', 'jewellery',
+      'hats', 'preloved', 'rental',
     ])
   })
   it('resolves brand membership by actual brand list, normalised', () => {
@@ -105,7 +106,7 @@ describe('controlled brand groups', () => {
     expect(brandGroupsForBrand('Khaite')).toEqual(['quiet_luxury'])
     // Normalisation: case, accents, and "&" spellings all resolve.
     expect(brandGroupsForBrand('RIXO')).toEqual(['contemporary'])
-    expect(brandGroupsForBrand('Bec + Bridge')).toEqual(['night'])
+    expect(brandGroupsForBrand('Bec + Bridge')).toEqual(['australian'])
     expect(brandGroupsForBrand('Sezane')).toEqual(['parisian'])
     // A brand in no controlled list has no membership.
     expect(brandGroupsForBrand('Some Unknown Label')).toEqual([])
