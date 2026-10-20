@@ -8,7 +8,8 @@ import { createWatchedBrandAndScan } from '@/lib/brand-onboarding'
 import { createAdminClient } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 30
+// An Instagram post is read, its brand found and its piece looked for in turn.
+export const maxDuration = 60
 
 // POST { url } — the iOS share sheet's door: work out what was shared and file it.
 export async function OPTIONS() { return mirrorOptions() }
@@ -30,20 +31,28 @@ export async function POST(req: NextRequest) {
     const res = await saveForMember(member, product)
     if (res.error) return mirrorJson({ error: res.error }, { status: 400 })
     const from = r.product.brand ? ` from ${r.product.brand}` : ` from ${r.product.host}`
-    return mirrorJson({ kind: 'product', saved: true, title: r.product.title, brand: r.product.brand, image: r.product.image, message: `Kept “${r.product.title}”${from}.` })
+    const where = r.post ? ` — the piece in @${r.post.author}’s post` : ''
+    return mirrorJson({ kind: 'product', saved: true, title: r.product.title, brand: r.product.brand, image: r.product.image, message: `Kept “${r.product.title}”${from}${where}.` })
   }
 
   // Brand watch is Chloe's own list. assertAdmin reads a Supabase session the
   // share sheet does not have, so the token answers instead (isAdminMember)
   // and the same scan the admin action runs is called directly.
-  if (!isAdminMember(member)) return mirrorJson({ error: 'Brand watch is Chloe’s for now' }, { status: 403 })
+  if (!isAdminMember(member)) {
+    if (r.post) {
+      const who = r.brand.name ?? r.brand.handle
+      return mirrorJson({ kind: 'unknown', message: `That’s ${who}’s post, but I couldn’t pin the piece in it — open it on their site and share it from there.` })
+    }
+    return mirrorJson({ error: 'Brand watch is Chloe’s for now' }, { status: 403 })
+  }
   const added = await createWatchedBrandAndScan(createAdminClient() as any, r.brand.website, 'watch')
   if (added.error && !added.watchedBrandId) return mirrorJson({ error: added.error }, { status: 400 })
   const name = added.name ?? r.brand.name ?? r.brand.handle
   let host = r.brand.website
   try { host = new URL(r.brand.website).host.replace(/^www\./, '') } catch { /* keep the raw url */ }
+  const missed = r.post ? ' I couldn’t pin the piece in that post — share it from their site to keep it.' : ''
   const message = added.error === 'Already on the watchlist'
-    ? `Already watching ${name} at ${host}.`
-    : `Watching ${name} at ${host} — found from ${r.brand.via}.`
+    ? `Already watching ${name} at ${host}.${missed}`
+    : `Watching ${name} at ${host} — found from ${r.brand.via}.${missed}`
   return mirrorJson({ kind: 'brand', name, website: r.brand.website, message })
 }

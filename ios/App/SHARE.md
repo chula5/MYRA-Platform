@@ -2,8 +2,11 @@
 
 Holding on a piece in Safari (or sharing a brand's Instagram) and choosing
 **MYRA** in the share sheet hands the link to MYRA. A piece goes to her saved
-items; an Instagram brand is followed back to its website and added to brand
-watch. The sheet answers in one sentence — kept, or why not.
+items; an Instagram profile is followed back to its website and added to brand
+watch; an Instagram post is read for the piece in its picture (held against
+that brand's pieces in MYRA's library and, on Shopify shops, the shop's own
+search) and that piece is saved — or, when it cannot be pinned, the brand is
+kept instead. The sheet answers in one sentence — kept, or why not.
 
 ## How it fits together
 
