@@ -11,7 +11,7 @@
 
 import { createAdminClient } from '@/lib/supabase-server'
 import { resolveClientMember } from '@/lib/client-member'
-import { getStyledWays, type StyledWayLook, type WayMode } from '@/lib/styled-ways'
+import { getStyledWays, heroSoldOut, waysForSoldOutHero, type StyledWayLook, type WayMode } from '@/lib/styled-ways'
 import { WAYS } from '@/lib/styled-ways-core'
 import {
   requestStyledWays, enqueueWarmups, openJobFor, lastJobFor, kickStyledWaysDrain, RUNNING_STALE_MS, type JobReason,
@@ -89,6 +89,15 @@ export async function openWaysToWear(
     // A tap is counted on the ledger with whether the memory answered it whole.
     if (!opts.passive && !opts.more) after(recordTap(admin, me.memberId, itemId, mode, looks.length >= WAYS))
     if (!opts.more && looks.length >= WAYS) return { looks, status: 'ready', piece, test: me.test }
+    // The piece has sold out: never style it again. Show the last outfits MYRA
+    // made with it instead of a wait that can only end in nothing.
+    if (await heroSoldOut(admin, itemId)) {
+      const last = await waysForSoldOutHero(admin, me.memberId, itemId, mode)
+      const all = [...looks, ...last.filter((l) => !looks.some((k) => k.styled_way_id === l.styled_way_id))].slice(0, WAYS)
+      return all.length
+        ? { looks: all, status: 'ready', piece, error: 'This piece has sold out. These are the last outfits MYRA made with it.', test: me.test }
+        : { looks: [], status: 'none', piece, error: 'This piece has sold out, so MYRA won’t style it again.', test: me.test }
+    }
     // Passive (a rest, not a tap): show what is kept, and whether MYRA is
     // already on it, without spending the judge on a piece she only passed.
     if (opts.passive) {
@@ -221,6 +230,7 @@ import type { LookItem } from '@/lib/pilot-stylist'
 import { lookVectorFromItems } from '@/lib/taste-vector'
 import { CLIENT_OCCASIONS } from '@/lib/client-occasions'
 import { higgsfieldShootForLook } from '@/app/admin/private-stylist/actions'
+import { SAVED_REQUEST_TEXT } from '@/lib/emailed-looks'
 
 export async function saveMyOutfit(
   items: LookItem[],
@@ -241,7 +251,7 @@ export async function saveMyOutfit(
     const { data: delivery, error: derr } = await admin.from('pilot_delivery').insert({
       member_id: me.memberId,
       trigger: 'request',
-      request_text: 'Saved from WAYS TO WEAR IT',
+      request_text: SAVED_REQUEST_TEXT,
       occasion: occ,
       status: 'sent',
       sent_at: now,

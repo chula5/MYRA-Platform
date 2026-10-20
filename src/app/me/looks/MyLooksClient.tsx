@@ -37,6 +37,7 @@ import { keepAskPreview, askPreviewAlternates } from '@/app/admin/private-stylis
 import type { AskSwapOption, AskLookEdits } from '@/app/admin/private-stylist/actions'
 import { PICKER_COLOURS, PICKER_TYPES } from '@/components/admin/ItemPickerModal'
 import { loadCalendarPanel, syncMyCalendar, planMyEvent, type CalendarPanelView } from '@/app/me/dressing-room/calendar-actions'
+import { useScrollTo } from '@/lib/smooth-scroll'
 
 // The feed's section heading pair, so her page reads at the feed's scale.
 function SectionHead({ label, note, heart = false }: { label: string; note?: string; heart?: boolean }) {
@@ -65,11 +66,40 @@ const REASONS = [
 
 const RECENT_KEY = 'myra:me:recent'
 
+/** How many looks a shelf shows at rest before SEE ALL. */
+const SHELF_AT_REST = 6
+
+/**
+ * The shelves of her Looks room (Chloe, 2026-10-20: "the looks area should be
+ * building out") — where each look came from, one row each:
+ *   emailed  EMAILED TO YOU — exactly what a MYRA note showed her
+ *   asked    YOU ASKED FOR — her occasions
+ *   new      NEW FOR INSPIRATION — MYRA's own, unanswered
+ *   saved    SAVED OUTFITS — what she saved or said yes to
+ */
+type ShelfKey = 'emailed' | 'asked' | 'new' | 'saved'
+const SHELVES: Record<ShelfKey, { label: string; note: (n: number) => string }> = {
+  emailed: { label: 'Emailed to you', note: (n) => `${n} outfit${n === 1 ? '' : 's'} from MYRA's notes, styled around pieces you liked` },
+  asked: { label: 'You asked for', note: (n) => `${n} look${n === 1 ? '' : 's'} for your occasions` },
+  new: { label: 'New for inspiration', note: (n) => `${n} look${n === 1 ? '' : 's'}. Thumbs up or down, and MYRA learns` },
+  saved: { label: 'Saved outfits', note: (n) => `${n} outfit${n === 1 ? '' : 's'} you kept · shaping what comes next` },
+}
+
+/** Where a link put her: one look open, or one shelf (an email's, narrowed to one piece). */
+export interface LooksLanding { look?: string; emailed?: string; piece?: string; shelf?: ShelfKey; saved?: boolean }
+
 const ACTION = 'pointer-events-auto text-[11px] sm:text-[clamp(15px,1.05vw,32px)] tracking-[0.1em] uppercase font-light myra-action'
 
-export default function MyLooksClient({ view, readOnly = false, initialQuery = '' }: { view: ClientView; readOnly?: boolean; initialQuery?: string }) {
+export default function MyLooksClient({ view, readOnly = false, initialQuery = '', landing }: { view: ClientView; readOnly?: boolean; initialQuery?: string; landing?: LooksLanding }) {
   const [query, setQuery] = useState(initialQuery)
   const [occasion, setOccasion] = useState<string | null>(null)
+  // One shelf opened in full — SEE ALL, or the email's link to one piece's outfits.
+  const [shelf, setShelf] = useState<{ key: ShelfKey; deliveryId?: string; piece?: string } | null>(
+    landing?.emailed ? { key: 'emailed', deliveryId: landing.emailed, piece: landing.piece } : landing?.shelf ? { key: landing.shelf } : null,
+  )
+  const [notice, setNotice] = useState<string | null>(landing?.saved ? 'Saved to your outfits' : null)
+  const shelfRef = useRef<HTMLDivElement>(null)
+  const scrollTo = useScrollTo()
   // One "related" view drives Similar Looks, Explore Styles and Style Item —
   // the three actions differ only in how the row is chosen.
   const [related, setRelated] = useState<
@@ -132,6 +162,22 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
   }, [openLook?.look_id])
   const [recent, setRecent] = useState<string[]>([])
 
+  // A link from an email lands here: the outfit opens at once, or the shelf it
+  // named is scrolled to — never a fresh styling. The address is tidied
+  // afterwards so a refresh is just her Looks.
+  useEffect(() => {
+    if (!landing) return
+    if (landing.look) {
+      const l = view.looks.find((x) => x.look_id === landing.look)
+      if (l) setOpenLook(l)
+    } else if (shelf) {
+      requestAnimationFrame(() => { if (shelfRef.current) scrollTo(shelfRef.current, { offset: -24 }) })
+    }
+    if (landing.saved) setTimeout(() => setNotice(null), 4000)
+    try { window.history.replaceState(null, '', '/me/looks') } catch { /* fine */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Which pieces are already hung in her wardrobe — the hearts in Shop the Look.
   useEffect(() => {
     if (readOnly) return
@@ -183,7 +229,32 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
   }, [browsable, query])
 
   const loved = view.looks.filter((l) => l.response === 'yes')
-  const waiting = view.looks.filter((l) => !l.response)
+  // The shelves. A look sits on the one its source names; SAVED OUTFITS also
+  // holds anything she said yes to, wherever it came from.
+  const shelfLooks: Record<ShelfKey, ClientLook[]> = useMemo(() => ({
+    emailed: browsable.filter((l) => l.source === 'emailed'),
+    asked: browsable.filter((l) => l.source === 'asked'),
+    new: browsable.filter((l) => !l.response && (l.source ?? 'for_you') === 'for_you'),
+    saved: browsable.filter((l) => l.source === 'saved' || l.response === 'yes'),
+  }), [browsable])
+  // One shelf opened: an email's link narrows it to that email, then to the
+  // piece the link was for — and widens again rather than show nothing.
+  const shelfOpen = useMemo(() => {
+    if (!shelf) return null
+    let looks = shelfLooks[shelf.key]
+    let note = SHELVES[shelf.key].note(looks.length)
+    if (shelf.key === 'emailed' && (shelf.deliveryId || shelf.piece)) {
+      const fromEmail = shelf.deliveryId ? looks.filter((l) => l.delivery_id === shelf.deliveryId) : looks
+      const pool = fromEmail.length ? fromEmail : looks
+      const wearing = shelf.piece ? pool.filter((l) => l.items.some((i) => i.item_id === shelf.piece)) : pool
+      looks = wearing.length ? wearing : pool
+      const piece = shelf.piece ? looks.flatMap((l) => l.items).find((i) => i.item_id === shelf.piece) : null
+      note = piece && wearing.length
+        ? `${[piece.brand, piece.product_name].filter(Boolean).join(' ')} · ${looks.length} way${looks.length === 1 ? '' : 's'} to wear it`
+        : `${looks.length} outfit${looks.length === 1 ? '' : 's'} from this note`
+    }
+    return { label: SHELVES[shelf.key].label, note, looks }
+  }, [shelf, shelfLooks])
 
   const relatedResults = useMemo(() => {
     if (!related) return []
@@ -219,6 +290,7 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
 
   function showRelated(next: NonNullable<typeof related>) {
     setRelated(next)
+    setShelf(null)
     setOccasion(null)
     setQuery('')
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -291,6 +363,11 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
       )}
       <ClientWardrobe readOnly={readOnly} loved={loved} onOpenLook={(l) => { setRelated(null); setQuery(''); setOccasion(l.occasion_label) }} />
 
+      {notice && (
+        <div role="status" className="fixed left-1/2 -translate-x-1/2 bottom-[calc(env(safe-area-inset-bottom,0px)+96px)] z-[130] rounded-full bg-[#141414] text-[#F7F6F3] px-6 py-3.5 text-[15px] md:text-[19px] tracking-[0.12em] shadow-[0_10px_26px_rgba(0,0,0,0.26)]">
+          {notice.toUpperCase()}
+        </div>
+      )}
       <div className="w-full px-6 sm:px-10 pb-16 flex flex-col">
         {/* The mirror — the original home page's opening: it arrives huge and
             docks above the headline, with the search and occasions beneath. */}
@@ -314,7 +391,7 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
               <div className="flex-1 min-w-0 rounded-full bg-white/70 border border-[rgba(43,43,43,0.15)] flex items-center">
                 <input
                   value={query}
-                  onChange={(e) => { setQuery(e.target.value); setOccasion(null); setRelated(null) }}
+                  onChange={(e) => { setQuery(e.target.value); setOccasion(null); setRelated(null); setShelf(null) }}
                   placeholder="TROUSERS FOR DINNER"
                   className="myra-field flex-1 min-w-0 bg-transparent border-0 px-4 md:px-6 py-3.5 md:py-4 placeholder:text-[#6E6B65] focus:outline-none"
                 />
@@ -364,7 +441,7 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
 
             {/* Occasion grid — the feed's 3-across contact grid, each occasion
                 through one of her own looks, name in white at the centre. */}
-            {!related && !searched && !occasion && occasions.length > 0 && (
+            {!related && !searched && !occasion && !shelf && occasions.length > 0 && (
               <div className="grid grid-cols-3 gap-[6px]">
                 {occasions.slice(0, 6).map(([label, looks]) => (
                   <button
@@ -432,7 +509,7 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
         )}
 
         {/* ── One occasion, opened ────────────────────────────────────────── */}
-        {!related && !searched && occasion && (
+        {!related && !searched && !shelf && occasion && (
           <Results
             label={occasion}
             note={`${occasions.find(([o]) => o === occasion)?.[1].length ?? 0} looks`}
@@ -442,22 +519,32 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
           />
         )}
 
+        {/* ── One shelf, opened ──────────────────────────────────────────── */}
+        {!related && !searched && shelfOpen && (
+          <div ref={shelfRef}>
+            <Results
+              label={shelfOpen.label}
+              note={shelfOpen.note}
+              onBack={() => setShelf(null)}
+              looks={shelfOpen.looks}
+              cardProps={cardProps}
+            />
+          </div>
+        )}
+
         {/* ── At rest ─────────────────────────────────────────────────────── */}
-        {!related && !searched && !occasion && (
+        {!related && !searched && !occasion && !shelf && (
           <>
-            {/* Her newest looks first, every unanswered one, with the thumbs.
-                They moved here from FOR YOU, which is now only what MYRA did
-                while she shopped (Chloe, 2026-10-18). */}
-            {waiting.length > 0 && (
-              <section className="mb-16">
-                <SectionHead label="New for you" note={`${waiting.length} look${waiting.length === 1 ? '' : 's'}. Thumbs up or down, and MYRA learns`} />
-                <div className={LOOK_GRID}>
-                  {waiting.map((l) => <LookCard key={l.look_id} {...cardProps(l)} />)}
-                </div>
-              </section>
-            )}
+            {/* Where each look came from, one shelf each, newest first — what
+                MYRA emailed, what she asked for, what is new to her. The
+                thumbs moved here from FOR YOU (Chloe, 2026-10-18). */}
+            {(['emailed', 'asked', 'new'] as const).map((key) => (
+              <Shelf key={key} shelfKey={key} looks={shelfLooks[key]} cardProps={cardProps} onSeeAll={() => setShelf({ key })} />
+            ))}
 
             {!readOnly && <SavedWhileBrowsing looks={view.looks} cardProps={cardProps} />}
+
+            <Shelf shelfKey="saved" looks={shelfLooks.saved} cardProps={cardProps} onSeeAll={() => setShelf({ key: 'saved' })} heart />
 
             {becauseYouLoved.length > 0 && (
               <section className="mb-16">
@@ -488,15 +575,6 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
               </section>
             )}
 
-            {loved.length > 0 && (
-              <section className="mb-16">
-                <SectionHead label="Looks you loved" note="Shaping what comes next" heart />
-                <div className={LOOK_GRID}>
-                  {loved.slice(0, 6).map((l) => <LookCard key={l.look_id} {...cardProps(l)} />)}
-                </div>
-              </section>
-            )}
-
             {view.looks.length === 0 && (
               <p className="text-center myra-section-note py-12">
                 YOUR FIRST LOOKS ARE ON THEIR WAY.
@@ -507,6 +585,31 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
 
       </div>
     </div>
+  )
+}
+
+/** One shelf at rest: its newest looks, and SEE ALL when there are more. */
+function Shelf({ shelfKey, looks, cardProps, onSeeAll, heart = false }: {
+  shelfKey: ShelfKey
+  looks: ClientLook[]
+  cardProps: (l: ClientLook) => Record<string, unknown>
+  onSeeAll: () => void
+  heart?: boolean
+}) {
+  if (!looks.length) return null
+  const { label, note } = SHELVES[shelfKey]
+  return (
+    <section className="mb-16">
+      <SectionHead label={label} note={note(looks.length)} heart={heart} />
+      <div className={LOOK_GRID}>
+        {looks.slice(0, SHELF_AT_REST).map((l) => <LookCard key={l.look_id} {...(cardProps(l) as any)} />)}
+      </div>
+      {looks.length > SHELF_AT_REST && (
+        <div className="mt-6 flex justify-center">
+          <button onClick={onSeeAll} className="myra-field underline underline-offset-[6px]">{`SEE ALL ${looks.length}`}</button>
+        </div>
+      )}
+    </section>
   )
 }
 

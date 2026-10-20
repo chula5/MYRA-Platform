@@ -20,6 +20,7 @@ import { CLIENT_OCCASIONS, OCCASION_LABEL, occasionsForMember } from '@/lib/clie
 import { styleExternalPiece } from '@/lib/mirror/style'
 import type { MirrorMember } from '@/lib/mirror/auth'
 import type { StyledLook } from '@/app/admin/private-stylist/actions'
+import { lookSourceOf, type LookSource } from '@/lib/emailed-looks'
 
 export interface ClientLookItem {
   item_id: string | null
@@ -34,8 +35,12 @@ export interface ClientLookItem {
   owned: boolean
 }
 
+export type { LookSource } from '@/lib/emailed-looks'
+
 export interface ClientLook {
   look_id: string
+  delivery_id?: string
+  source?: LookSource
   position: number
   image_url: string | null
   occasion_id: string | null
@@ -79,7 +84,7 @@ async function loadLooksFor(memberId: string): Promise<ClientView> {
     const me = { memberId: member.member_id as string, name: ((member.name as string | null) ?? '') }
 
     const { data: dels } = await admin
-      .from('pilot_delivery').select('delivery_id, occasion, request_text').eq('member_id', me.memberId)
+      .from('pilot_delivery').select('delivery_id, occasion, request_text, trigger').eq('member_id', me.memberId)
     const byDelivery = new Map((dels ?? []).map((d: any) => [d.delivery_id, d]))
     const ids = Array.from(byDelivery.keys())
     if (!ids.length) return { ...empty, memberId: me.memberId, name: me.name }
@@ -104,6 +109,8 @@ async function loadLooksFor(memberId: string): Promise<ClientView> {
         const d: any = byDelivery.get(l.delivery_id)
         return {
           look_id: l.look_id,
+          delivery_id: l.delivery_id,
+          source: lookSourceOf(d),
           position: l.position,
           image_url: l.image_url,
           occasion_id: d?.occasion ?? null,
