@@ -180,6 +180,12 @@ export default async function AdminLayout({
             RUNWAY SEARCH
           </a>
           <a
+            href="/admin/applications"
+            className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
+          >
+            APPLICATIONS
+          </a>
+          <a
             href="/admin/signups"
             className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
           >
@@ -246,10 +252,10 @@ export default async function AdminLayout({
             WEBHOOK LOG
           </a>
           <a
-            href="/admin/applications"
+            href="/admin/applications/brands"
             className="text-[11px] tracking-[0.09em] text-[#C4A882] hover:text-white transition-colors duration-300"
           >
-            APPLICATIONS
+            BRAND APPLICATIONS
           </a>
           <a
             href="/"
