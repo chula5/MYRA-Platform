@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { earlyAccessSignIn, publicSignUp } from './actions'
 import { getStoredRef } from '@/lib/ref'
 import { createClient } from '@/lib/supabase'
+import CodeSignIn from '@/app/signin/CodeSignIn'
 
 const INPUT =
   'w-full border border-[#E2E0DB] bg-white rounded-[14px] px-4 py-3 text-[12px] tracking-[0.054em] text-[#4A4E57] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A] transition-colors'
@@ -38,6 +39,11 @@ function EnterButton({ pending }: { pending: boolean }) {
 export default function AuthForm({ initialMode = 'signin', error, next, appDoor = false }: { initialMode?: 'signin' | 'signup'; error?: string; next?: string; appDoor?: boolean }) {
   const [mode, setMode] = useState<'signin' | 'signup' | 'reset'>(initialMode)
   const isSignup = mode === 'signup'
+  // Email first, then a code: the app's door opens on it (a member Chloe has
+  // written down needs no password yet); the website offers it under the
+  // password form. A password error sent back by the server reopens the
+  // password form, where it belongs.
+  const [codeMode, setCodeMode] = useState(appDoor && !error)
   // From ENTER until her page arrives: the server action runs and redirects,
   // so this is only ever reset by the page that comes back (an error returns
   // a fresh form).
@@ -78,14 +84,16 @@ export default function AuthForm({ initialMode = 'signin', error, next, appDoor 
           <img src="/myra-mirror-transparent.png" alt="MYRA" className="h-14 w-auto mx-auto mb-4" />
         )}
         <h1 className="text-[clamp(20px,4vw,28px)] tracking-[0.05em] text-[#4A4E57]">
-          {mode === 'reset' ? 'RESET PASSWORD' : isSignup ? 'CREATE YOUR LOGIN' : 'WELCOME BACK'}
+          {mode === 'reset' ? 'RESET PASSWORD' : isSignup ? 'CREATE YOUR LOGIN' : codeMode ? 'SIGN IN' : 'WELCOME BACK'}
         </h1>
         <p className="mt-3 text-[11px] tracking-[0.081em] text-[#6B6B6B] leading-relaxed">
           {mode === 'reset'
             ? 'Enter your email and we’ll send you a link to reset your password.'
             : isSignup
               ? 'Save outfits and we’ll learn your taste to recommend looks made for you.'
-              : 'Sign in to your wardrobe and personalised edit.'}
+              : codeMode
+                ? 'Enter the email MYRA has for you and we’ll send you a code.'
+                : 'Sign in to your wardrobe and personalised edit.'}
         </p>
       </div>
 
@@ -153,6 +161,8 @@ export default function AuthForm({ initialMode = 'signin', error, next, appDoor 
                 CREATE ACCOUNT
               </button>
             </form>
+          ) : codeMode ? (
+            <CodeSignIn next={next} onPassword={() => setCodeMode(false)} />
           ) : (
             <form action={earlyAccessSignIn} onSubmit={() => setEntering(true)} className="flex flex-col gap-3">
               <input type="hidden" name="next" value={next ?? ''} readOnly />
@@ -166,6 +176,13 @@ export default function AuthForm({ initialMode = 'signin', error, next, appDoor 
                 className="mt-1 text-center text-[10px] tracking-[0.09em] text-[#A8A8A4] hover:text-[#4A4E57]"
               >
                 FORGOT PASSWORD?
+              </button>
+              <button
+                type="button"
+                onClick={() => setCodeMode(true)}
+                className="mt-1 text-center text-[15px] tracking-[0.1em] text-[#7C838B] hover:text-[#4A4E57]"
+              >
+                EMAIL ME A CODE INSTEAD
               </button>
             </form>
           )}

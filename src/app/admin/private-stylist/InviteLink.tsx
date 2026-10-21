@@ -4,6 +4,7 @@
 
 import { useState } from 'react'
 import { createMemberInvite } from './invite-actions'
+import MemberAccess from './MemberAccess'
 
 export default function InviteLink({ memberId, name }: { memberId: string; name: string }) {
   const [state, setState] = useState<{ url?: string; note?: string; busy?: boolean }>({})
@@ -20,6 +21,8 @@ export default function InviteLink({ memberId, name }: { memberId: string; name:
 
   return (
     <div className="px-1 pb-4 space-y-2">
+      {/* The email she types on the app's door — the code goes there. */}
+      <MemberAccess memberId={memberId} name={name} />
       <div className="flex flex-wrap gap-3">
         <button onClick={make} disabled={state.busy} className="text-[13px] tracking-[0.14em] px-4 py-2.5 border border-[#2B2B2B] text-[#2B2B2B] disabled:opacity-40">
           {state.busy ? 'MAKING…' : `COPY ${first.toUpperCase()}'S INVITE LINK`}

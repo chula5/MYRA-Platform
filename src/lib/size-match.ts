@@ -91,6 +91,16 @@ export function resolveAvailability(
     outOfHerSize: false,
   }
 
+  // Jeans sold by waist ("27", "W27") carry no UK value. When she gave her
+  // waist, those rows are matched on it directly, exact or her neighbour.
+  if (category === 'bottoms' && usable.length === 0 && profile?.waist?.value != null) {
+    const waistRows = rows.flatMap((r) => {
+      const n = r.size_system === 'waist' || /^W\s?\d{2}\b/i.test(r.size_label) ? Number(r.size_label.match(/\d{2}/)?.[0]) : NaN
+      return Number.isFinite(n) ? [{ ...r, canonical_value: n, canonical_values: [n] }] : []
+    })
+    if (waistRows.length) return resolveAvailability(item, waistRows, { bottoms: profile.waist })
+  }
+
   if (!category || usable.length === 0) return base
 
   // Best row for her: AVAILABILITY OUTRANKS EXACTNESS.

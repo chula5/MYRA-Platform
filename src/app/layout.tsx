@@ -43,8 +43,23 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
+  // suppressHydrationWarning on <html>: the script in <head> adds .myra-app
+  // before React hydrates, which is intended, not a mismatch.
   return (
-    <html lang="en" className={manrope.variable}>
+    <html lang="en" className={manrope.variable} suppressHydrationWarning>
+      <head>
+        {/* THE APP NEVER SHOWS THE WEBSITE. Capacitor's bridge is in the page
+            before its first byte, so this one line marks <html> as the app at
+            document start; anything wrapped in <WebOnly> is then invisible from
+            the first paint, long before the door hydrates over it. Safari and
+            the desktop never carry the class and render exactly as before. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{var c=window.Capacitor;if(c&&typeof c.isNativePlatform==='function'&&c.isNativePlatform())document.documentElement.classList.add('myra-app')}catch(e){}",
+          }}
+        />
+      </head>
       <body className="bg-background text-primary-text antialiased">
         {/* Paper grain over the whole page — above the background, below every
             piece of content, and inert to the pointer. */}

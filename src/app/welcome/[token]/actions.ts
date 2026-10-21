@@ -49,7 +49,7 @@ export async function acceptInvite(formData: FormData) {
   } else await back('Could not create your login — please try again')
 
   // Point the login at her member record — only if nobody got there first.
-  const { data: linked } = await admin.from('pilot_member').update({ auth_user_id: userId }).eq('member_id', member.member_id).is('auth_user_id', null).select('member_id')
+  const { data: linked } = await admin.from('pilot_member').update({ auth_user_id: userId, email }).eq('member_id', member.member_id).is('auth_user_id', null).select('member_id')
   if (!linked?.length) redirect(`/signin?error=${encodeURIComponent('You already have a login — sign in below')}`)
   try { await admin.from('client_profile').upsert({ user_id: userId, name: member.name, email }, { onConflict: 'user_id' }) } catch { /* optional table */ }
 

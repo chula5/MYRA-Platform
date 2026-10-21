@@ -19,11 +19,13 @@ export default async function WelcomePage({ params, searchParams }: { params: { 
   const invite = preview ? { memberId: preview.memberId, exp: 0 } : readInvite(params.token)
   let name: string | null = null
   let hasLogin = false
+  let inviteEmail = ''
   if (invite) {
     const admin = createAdminClient() as any
-    const { data } = await admin.from('pilot_member').select('name, auth_user_id').eq('member_id', invite.memberId).maybeSingle()
+    const { data } = await admin.from('pilot_member').select('*').eq('member_id', invite.memberId).maybeSingle()
     name = data?.name ?? null
     hasLogin = preview ? false : !!data?.auth_user_id
+    inviteEmail = (data?.invite_email as string | null) ?? ''
   }
   // The first step at the door. Chloe's preview is not her opening it.
   if (!preview) {
@@ -65,7 +67,7 @@ export default async function WelcomePage({ params, searchParams }: { params: { 
             {searchParams.error && <p className="mt-6 text-[clamp(20px,1.3vw,34px)] text-[#B83A3A]">{searchParams.error}</p>}
             <form action={preview ? undefined : acceptInvite} className="mt-[clamp(32px,2.6vw,64px)] space-y-[clamp(20px,1.4vw,34px)] text-left">
               <input type="hidden" name="token" value={decodeURIComponent(params.token)} />
-              <input name="email" type="email" required autoComplete="email" placeholder="Your email" className={field} />
+              <input name="email" type="email" required autoComplete="email" placeholder="Your email" defaultValue={inviteEmail} className={field} />
               <input name="password" type="password" required minLength={8} autoComplete="new-password" placeholder="Choose a password (8+ characters)" className={field} />
               <input name="confirm" type="password" required minLength={8} autoComplete="new-password" placeholder="Type it once more" className={field} />
               {preview ? (

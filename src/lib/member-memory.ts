@@ -102,6 +102,8 @@ export async function memberMemory(memberId: string): Promise<MemberMemory> {
   if (sizeCtx?.hasProfile) {
     const sizes = SIZE_CATEGORIES.filter((c) => sizeCtx.profile[c]?.value != null)
       .map((c) => `${CATEGORY_LABEL[c].toLowerCase()} UK ${sizeCtx.profile[c]!.value}${sizeCtx.profile[c]!.adjacent ? ` (or ${sizeCtx.profile[c]!.adjacent})` : ''}`)
+    const w = sizeCtx.profile.waist
+    if (w?.value != null) sizes.push(`jeans waist ${w.value}${w.adjacent ? ` (or ${w.adjacent})` : ''}`)
     add('Her sizes', sizes.length ? `${sizes.join(', ')}.${sizeCtx.acceptsSecondHand ? ' Happy with pre-loved pieces.' : ''}` : '')
   }
 

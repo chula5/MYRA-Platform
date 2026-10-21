@@ -4,6 +4,7 @@ import { createServerClient } from '@/lib/supabase-server'
 import AuthForm from '@/app/earlyaccess/AuthForm'
 import { resolveClientMember } from '@/lib/client-member'
 import AppDoor from '@/components/AppDoor'
+import WebOnly from '@/components/WebOnly'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,13 +30,19 @@ export default async function SignInPage({
   }
 
   return (
-    <main className="min-h-screen bg-white flex flex-col items-center justify-center px-6">
+    <>
       {/* Inside the iPhone app this page is the front door: logo, SIGN IN, APPLY — never the website. */}
       <AppDoor state="out" error={error} />
-      <AuthForm initialMode={mode === 'signup' ? 'signup' : 'signin'} error={error} next={back} />
-      <Link href="/" className="mt-10 text-[9px] tracking-[0.12em] text-[#A8A8A4] hover:text-[#4A4E57] transition-colors">
-        ← BACK TO MYRA
-      </Link>
-    </main>
+      {/* The website's page — white ground and form — is invisible in the app
+          from the first paint (WebOnly), so the wait is the door's pearl. */}
+      <WebOnly>
+        <main className="min-h-screen bg-white flex flex-col items-center justify-center px-6">
+          <AuthForm initialMode={mode === 'signup' ? 'signup' : 'signin'} error={error} next={back} />
+          <Link href="/" className="mt-10 text-[9px] tracking-[0.12em] text-[#A8A8A4] hover:text-[#4A4E57] transition-colors">
+            ← BACK TO MYRA
+          </Link>
+        </main>
+      </WebOnly>
+    </>
   )
 }
