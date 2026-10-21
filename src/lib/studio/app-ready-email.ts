@@ -25,7 +25,7 @@ export function appReadyEmailHtml(name: string, tf: string): string {
   const body = `
   <p style="margin:0 0 14px 0;font-size:15px;line-height:1.6;">Dear ${who},</p>
   <p style="margin:0 0 14px 0;font-size:15px;line-height:1.6;">Your MYRA account is set up and ready for you. All that is left is to get MYRA onto your iPhone.</p>
-  <p style="margin:0;font-size:15px;line-height:1.6;">MYRA is still in its private, early version, so it comes through <strong>TestFlight</strong>, Apple’s own app for trying new apps before they reach the App Store. It takes about two minutes. Please do these on your iPhone.</p>
+  <p style="margin:0;font-size:15px;line-height:1.6;">MYRA is still in its private, early version, so it comes through <strong>TestFlight</strong>, Apple&rsquo;s own app for trying new apps before they reach the App Store. It takes about two minutes. Please do these on your iPhone.</p>
 
   ${step(1, 'Download TestFlight', p('Open the App Store and search for <strong>TestFlight</strong> (the blue icon, made by Apple, free), then press <strong>Get</strong>. Or press the button below.') +
     `<p style="margin:14px 0 0 0;">${emailButton(TESTFLIGHT_STORE, 'Get TestFlight')}</p>`)}
@@ -36,10 +36,10 @@ export function appReadyEmailHtml(name: string, tf: string): string {
 
   ${step(3, 'Open MYRA and sign in', p('MYRA is now on your home screen, like any other app. Open it and sign in with your email and the password you chose. Everything is already there waiting for you.'))}
 
-  ${p(`Optional, for later: MYRA can also tidy every shop you visit in Safari. Go to <strong>Settings › Apps › Safari › Extensions</strong>, turn on <strong>MYRA Mirror</strong> and choose <strong>All Websites</strong>. It works on your computer too, at <a href="${siteUrl('/signin')}" style="color:#0a0a0a;">www.myraassistant.co.uk</a>.`, '24px 0 0 0')}
+  ${p(`Optional, for later: MYRA can also tidy every shop you visit in Safari. Go to <strong>Settings &rsaquo; Apps &rsaquo; Safari &rsaquo; Extensions</strong>, turn on <strong>MYRA Mirror</strong> and choose <strong>All Websites</strong>. It works on your computer too, at <a href="${siteUrl('/signin')}" style="color:#0a0a0a;">www.myraassistant.co.uk</a>.`, '24px 0 0 0')}
   ${p('If anything is unclear, just reply to this email or ring me. I would much rather talk you through it than have you stuck.', '24px 0 0 0')}
   ${p('With love,<br>Chloe', '24px 0 0 0')}`
-  return emailShell('YOUR ACCOUNT IS READY', body, 'MYRA · YOUR STYLIST')
+  return emailShell('YOUR ACCOUNT IS READY', body, 'MYRA &middot; YOUR STYLIST')
 }
 
 export const APP_READY_SUBJECT = 'Your MYRA account is ready: getting the app on your iPhone'
