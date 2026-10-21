@@ -23,7 +23,7 @@ const OCCASIONS: Occasion[] = [
     label: 'BLACK TIE',
     looks: [
       { src: '/occasions/black-tie-lace.webp', name: 'LACE, ANKLE LENGTH', dots: [[41, 30], [55, 58]] },
-      { src: '/occasions/black-tie-strapless.webp', name: 'STRAPLESS & SHARP', dots: [[48, 51], [62, 68]] },
+      { src: '/occasions/black-tie-strapless.webp', name: 'STRAPLESS & SHARP', dots: [[39, 51], [54, 68]] },
       { src: '/occasions/black-tie-column.webp', name: 'THE WHITE COLUMN', dots: [[50, 34], [50, 66]] },
     ],
   },

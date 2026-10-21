@@ -4,6 +4,7 @@ import ScatterHero from '@/components/ScatterHero'
 import { ArchiveCard } from '@/components/ArchiveCard'
 import ManifestoReveal from '@/components/ManifestoReveal'
 import StylesFor from '@/components/StylesFor'
+import StyledPiece from '@/components/StyledPiece'
 import OccasionsSection from '@/components/OccasionsSection'
 import StylingAssistant from '@/components/StylingAssistant'
 import ApplyModal from '@/components/ApplyModal'
@@ -61,6 +62,8 @@ export default async function LandingPage({
       <main className="myra-texture">
         {/* MYRA STYLES FOR … occasions flipping in, above the mirror */}
         <StylesFor />
+        {/* One piece, three ways to wear it */}
+        <StyledPiece />
         <ArchiveCard>
           <></>
         </ArchiveCard>
