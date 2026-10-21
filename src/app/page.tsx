@@ -4,6 +4,7 @@ import ScatterHero from '@/components/ScatterHero'
 import { ArchiveCard } from '@/components/ArchiveCard'
 import ManifestoReveal from '@/components/ManifestoReveal'
 import StylesFor from '@/components/StylesFor'
+import StyledPiece from '@/components/StyledPiece'
 import OccasionsSection from '@/components/OccasionsSection'
 import StylingAssistant from '@/components/StylingAssistant'
 import ApplyModal from '@/components/ApplyModal'
@@ -22,6 +23,7 @@ import {
 import { getOurPicks } from '@/lib/our-picks'
 import { resolveClientMember } from '@/lib/client-member'
 import AppDoor from '@/components/AppDoor'
+import WebOnly from '@/components/WebOnly'
 import type { OutfitWithItems } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -49,28 +51,36 @@ export default async function LandingPage({
 
   return (
     <>
-      {/* The nav is no longer transparent: it was only see-through so it could
-          sit over the silver arrival screen, which has been removed. */}
-      <Navigation authed={!!user} showAuth={false} />
       <AppDoor state={doorState} withApplyModal={false} />
 
-      {/* ── Scatter hero — images stack then spread, headline in the middle ── */}
-      <ScatterHero />
+      {/* The website — nav to footer — is invisible in the app from the first
+          paint (WebOnly); the door's APPLY still opens the ApplyModal below,
+          which stays outside the wrapper. */}
+      <WebOnly>
+        {/* The nav is no longer transparent: it was only see-through so it could
+            sit over the silver arrival screen, which has been removed. */}
+        <Navigation authed={!!user} showAuth={false} />
 
-      {/* ── Mirror glides into place, the manifesto + APPLY sit beneath it ── */}
-      <main className="myra-texture">
-        {/* MYRA STYLES FOR … occasions flipping in, above the mirror */}
-        <StylesFor />
-        <ArchiveCard>
-          <></>
-        </ArchiveCard>
-        <ManifestoReveal />
-        {/* Occasions — copy left, pick-an-occasion look cards right */}
-        <OccasionsSection />
-      </main>
+        {/* ── Scatter hero — images stack then spread, headline in the middle ── */}
+        <ScatterHero />
 
-      {/* ── Your Styling Assistant — the three ideas, stacking on scroll ── */}
-      <StylingAssistant />
+        {/* ── Mirror glides into place, the manifesto + APPLY sit beneath it ── */}
+        <main className="myra-texture">
+          {/* MYRA STYLES FOR … occasions flipping in, above the mirror */}
+          <StylesFor />
+          {/* One piece, three ways to wear it */}
+          <StyledPiece />
+          <ArchiveCard>
+            <></>
+          </ArchiveCard>
+          <ManifestoReveal />
+          {/* Occasions — copy left, pick-an-occasion look cards right */}
+          <OccasionsSection />
+        </main>
+
+        {/* ── Your Styling Assistant — the three ideas, stacking on scroll ── */}
+        <StylingAssistant />
+      </WebOnly>
 
       {/* The pop-out questionnaire every APPLY NOW opens. */}
       <ApplyModal />
@@ -79,6 +89,7 @@ export default async function LandingPage({
       <LandingTracker initialRef={ref ?? null} />
 
       {/* ── Footer — full width, wordmark centred, links to the right ──── */}
+      <WebOnly>
       <footer className="myra-texture pt-16 pb-24 px-6 lg:px-16">
         <div className="w-full flex items-center justify-between gap-6">
           <Link href="/" className="tracking-[0.11em] text-[#4A4E57] hover:opacity-60 transition-opacity duration-300 text-[clamp(15px,1.4vw,22px)]">
@@ -94,6 +105,7 @@ export default async function LandingPage({
           </div>
         </div>
       </footer>
+      </WebOnly>
     </>
   )
 }
