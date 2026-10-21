@@ -185,7 +185,15 @@ interface GenerateOpts {
   // to the best statement pieces in that slot — the constitution wants exactly
   // one, and a shortlist of perfectly compatible plain pieces can't provide it.
   statementReserve?: { count: number; isStatement: (item: ItemWithBrand, slot: Slot) => boolean }
+  // The clothes make the outfit: the same top + trousers with other shoes, a
+  // bag or earrings is the same look. When set, no two picks share all their
+  // garments (shoes, bag, jewellery and accessories are finishes).
+  distinctClothes?: boolean
+  // No piece in more than this many picks while others are available.
+  maxUsesPerItem?: number
 }
+
+const FINISH_SLOTS = new Set<Slot>(['shoe', 'bag', 'jewellery', 'accessory'])
 
 export function generateCandidates(opts: GenerateOpts): ComposerCandidate[] {
   const {
@@ -202,6 +210,8 @@ export function generateCandidates(opts: GenerateOpts): ComposerCandidate[] {
     optionalPerSlotPool = perSlotPool,
     shortlistFilter,
     statementReserve,
+    distinctClothes = false,
+    maxUsesPerItem,
   } = opts
 
   const anchorSlot = slotForItemType(anchor.item_type)
@@ -294,16 +304,31 @@ export function generateCandidates(opts: GenerateOpts): ComposerCandidate[] {
   scored.sort((a, b) => b.score - a.score)
 
   // Diversity filter — avoid near-duplicates (combos that share too many items).
+  const clothesKey = (c: ComposerCandidate) =>
+    c.items.filter(({ slot }) => !FINISH_SLOTS.has(slot)).map(({ item }) => item.item_id).sort().join('|')
+  const use = new Map<string, number>()
   const picked: ComposerCandidate[] = []
-  for (const c of scored) {
-    if (picked.length >= maxCandidates) break
+  const tooSimilar = (c: ComposerCandidate) => {
     const cIds = new Set(c.items.map(x => x.item.item_id))
-    const tooSimilar = picked.some(p => {
+    return picked.some(p => {
       const pIds = new Set(p.items.map(x => x.item.item_id))
       const shared = Array.from(cIds).filter(id => pIds.has(id)).length
-      return shared >= cIds.size - 1 && cIds.size >= 3
+      if (shared >= cIds.size - 1 && cIds.size >= 3) return true
+      return distinctClothes && clothesKey(c) !== '' && clothesKey(c) === clothesKey(p)
     })
-    if (!tooSimilar) picked.push(c)
+  }
+  // With a per-piece cap, fill under it first and only then without it — the
+  // twin rule is never loosened.
+  const passes: ((c: ComposerCandidate) => boolean)[] = maxUsesPerItem
+    ? [(c) => !c.items.some(({ item }) => (use.get(item.item_id) ?? 0) >= maxUsesPerItem), () => true]
+    : [() => true]
+  for (const ok of passes) {
+    for (const c of scored) {
+      if (picked.length >= maxCandidates) break
+      if (picked.includes(c) || !ok(c) || tooSimilar(c)) continue
+      c.items.forEach(({ item }) => use.set(item.item_id, (use.get(item.item_id) ?? 0) + 1))
+      picked.push(c)
+    }
   }
 
   return picked

@@ -91,11 +91,17 @@ export interface HouseRejectionSummary {
 
 // How wide each garment slot's shortlist goes, pass by pass. The first pass is
 // the composer as it always was; the later ones run only when the house rules
-// refused every combination. Optional slots stay at 4, so the third pass is
+// left fewer than ENOUGH_LOOKS different looks. Optional slots stay at 4, so the third pass is
 // 12³ × 5² ≈ 43k combinations at most.
 const COMPOSE_POOLS = [4, 8, 12]
 const OPTIONAL_POOL = 4
 const STATEMENT_RESERVE = 2
+// Keep widening until this many DIFFERENT looks come back. All ten looks for a
+// Phoebe Philo anorak were the same bolero + jumpsuit with other shoes and bags
+// (2026-10-21): the same clothes are one look, and no piece goes in more than
+// MAX_USES_PER_PIECE picks while others will do.
+const ENOUGH_LOOKS = 6
+const MAX_USES_PER_PIECE = 2
 
 export interface SlotPlanPayload {
   anchorSlot: Slot
@@ -208,12 +214,14 @@ export async function composeForAnchor(
     for (let i = 0; i < COMPOSE_POOLS.length; i++) {
       const size = COMPOSE_POOLS[i]
       widestPool = size
-      raw = generateCandidates({
+      const looks = generateCandidates({
         anchor,
         library: pool,
         learnedBlend: blendStrength(model),
         learnedBonus: (items) => learnedBonus(model, [toFeature(anchor), ...items.map((x) => toFeature(x.item))]),
         houseGate,
+        distinctClothes: true,
+        maxUsesPerItem: MAX_USES_PER_PIECE,
         ...(i === 0 ? {} : {
           perSlotPool: size,
           optionalPerSlotPool: OPTIONAL_POOL,
@@ -224,7 +232,8 @@ export async function composeForAnchor(
           },
         }),
       })
-      if (raw.length > 0) break
+      if (looks.length > raw.length) raw = looks
+      if (raw.length >= ENOUGH_LOOKS) break
     }
     const allowed = raw
 
