@@ -3,7 +3,7 @@
 import { useState, useTransition, useEffect, useRef } from 'react'
 import { thumbUrl } from '@/lib/image-utils'
 import { composeForAnchor, searchAnchorItems, approveCandidate, getSwapOptions, rescoreCandidate, recordSwap } from './actions.gated'
-import type { ComposedCandidatePayload, SlotPlanPayload, SwapOption } from './actions'
+import type { ComposedCandidatePayload, HouseRejectionSummary, SlotPlanPayload, SwapOption } from './actions'
 
 type Slot = 'outerwear' | 'top' | 'bottom' | 'dress' | 'shoe' | 'bag' | 'jewellery' | 'accessory'
 
@@ -94,12 +94,16 @@ export default function ComposerClient({
   const [brandFilter, setBrandFilter] = useState('')
   const [searchResults, setSearchResults] = useState<AnchorItem[]>(initialItems)
   const [searching, startSearch] = useTransition()
-  const [composing, startCompose] = useTransition()
+  // A plain flag, not useTransition: on React 18 an async transition stops
+  // pending at its first await, so the page read "no compatible compositions"
+  // while the composer was still working.
+  const [composing, setComposing] = useState(false)
   const [candidates, setCandidates] = useState<ComposedCandidatePayload[]>([])
   const [error, setError] = useState<string | null>(null)
   const [approvalState, setApprovalState] = useState<Record<number, { approving: boolean; approved: boolean; outfitId?: string; projectId?: string }>>({})
   const [dismissed, setDismissed] = useState<Set<number>>(new Set())
   const [slotPlan, setSlotPlan] = useState<SlotPlanPayload | null>(null)
+  const [rejections, setRejections] = useState<HouseRejectionSummary | null>(null)
   // Per-candidate edits — if present, these override the original server items/score
   const [edits, setEdits] = useState<Record<number, CandidateItem[]>>({})
   const [editScores, setEditScores] = useState<Record<number, number>>({})
@@ -121,21 +125,27 @@ export default function ComposerClient({
 
   function compose(anchorId: string) {
     setError(null)
-    startCompose(async () => {
-      const res = await composeForAnchor(anchorId)
+    setComposing(true)
+    void (async () => {
+      const res = await composeForAnchor(anchorId).catch((e: unknown) => ({
+        error: e instanceof Error ? e.message : 'Compose failed',
+      } as Awaited<ReturnType<typeof composeForAnchor>>))
+      setComposing(false)
       if (res.error) {
         setError(res.error)
         setCandidates([])
         setSlotPlan(null)
+        setRejections(null)
         return
       }
       setCandidates(res.candidates ?? [])
       setSlotPlan(res.slotPlan ?? null)
+      setRejections(res.houseRejections ?? null)
       setApprovalState({})
       setDismissed(new Set())
       setEdits({})
       setEditScores({})
-    })
+    })()
   }
 
   function itemsFor(idx: number, candidate: ComposedCandidatePayload): CandidateItem[] {
@@ -455,9 +465,41 @@ export default function ComposerClient({
           <p className="text-[11px] tracking-[0.113em] text-[#A8A8A4]">
             NO COMPATIBLE COMPOSITIONS FOUND IN THE CURRENT LIBRARY.
           </p>
-          <p className="text-[10px] tracking-[0.09em] text-[#A8A8A4] mt-2">
-            ADD MORE READY/LIVE ITEMS OR PICK A DIFFERENT ANCHOR.
-          </p>
+          {rejections && rejections.tried > 0 ? (
+            <div className="mt-6 mx-auto max-w-2xl text-left border border-[#E5E5E0] bg-white p-6">
+              <p className="text-[11px] tracking-[0.113em] text-[#4A4E57]">
+                {rejections.tried.toLocaleString()} LOOKS TRIED
+                {rejections.widestPool > 4 ? ` · SHORTLIST WIDENED TO ${rejections.widestPool} PIECES PER SLOT` : ''}
+              </p>
+              <p className="text-[10px] tracking-[0.09em] text-[#6B6B6B] mt-2">
+                {rejections.passed > 0
+                  ? `${rejections.passed.toLocaleString()} PASSED THE HOUSE RULES BUT SCORED BELOW THE COHERENCE FLOOR. THE REST WERE REFUSED BY:`
+                  : 'THE HOUSE RULES REFUSED EVERY ONE. WHY:'}
+              </p>
+              {rejections.byCode.length > 0 && (
+                <ul className="mt-4 space-y-3">
+                  {rejections.byCode.slice(0, 6).map((r) => (
+                    <li key={r.code} className="flex items-baseline gap-4">
+                      <span className="text-[11px] tracking-[0.09em] text-[#4A4E57] w-16 shrink-0 text-right tabular-nums">
+                        {r.count.toLocaleString()}
+                      </span>
+                      <span>
+                        <span className="block text-[10px] tracking-[0.113em] text-[#4A4E57]">{r.rule.toUpperCase()}</span>
+                        <span className="block text-[12px] text-[#6B6B6B] mt-0.5">e.g. {r.message}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="text-[10px] tracking-[0.09em] text-[#A8A8A4] mt-5">
+                COUNTS ARE RULE BREAKS — ONE LOOK CAN BREAK SEVERAL. PICK A DIFFERENT ANCHOR OR ADD PIECES THAT FIX THE TOP REASON.
+              </p>
+            </div>
+          ) : (
+            <p className="text-[10px] tracking-[0.09em] text-[#A8A8A4] mt-2">
+              ADD MORE READY/LIVE ITEMS OR PICK A DIFFERENT ANCHOR.
+            </p>
+          )}
         </div>
       )}
 

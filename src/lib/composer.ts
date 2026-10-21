@@ -174,6 +174,17 @@ interface GenerateOpts {
   // every time, and nothing scored later can bring a different bag into play —
   // one Isadora clutch was in 7 of Alison's 99 looks. Omitted = unchanged.
   shortlistAdjust?: (item: ItemWithBrand) => number
+  // Shortlist width for the OPTIONAL slots (bag, jewellery…). Defaults to
+  // perSlotPool; a widening pass keeps these narrow so the combinations grow
+  // with the garments, not with every accessory.
+  optionalPerSlotPool?: number
+  // Drop a piece before it takes a shortlist place — for pieces that could
+  // never pass beside this anchor (a £48 tee beside a £4,700 jacket).
+  shortlistFilter?: (item: ItemWithBrand, slot: Slot) => boolean
+  // When a slot's shortlist has no statement piece, its last `count` places go
+  // to the best statement pieces in that slot — the constitution wants exactly
+  // one, and a shortlist of perfectly compatible plain pieces can't provide it.
+  statementReserve?: { count: number; isStatement: (item: ItemWithBrand, slot: Slot) => boolean }
 }
 
 export function generateCandidates(opts: GenerateOpts): ComposerCandidate[] {
@@ -188,13 +199,17 @@ export function generateCandidates(opts: GenerateOpts): ComposerCandidate[] {
     learnedBlend = 0,
     houseGate,
     shortlistAdjust,
+    optionalPerSlotPool = perSlotPool,
+    shortlistFilter,
+    statementReserve,
   } = opts
 
   const anchorSlot = slotForItemType(anchor.item_type)
   const plan = slotPlanForAnchor(anchorSlot)
 
   const excluded = new Set([anchor.item_id, ...excludeItemIds])
-  const eligible = library.filter(i => !excluded.has(i.item_id))
+  const eligible = library.filter(i =>
+    !excluded.has(i.item_id) && (!shortlistFilter || shortlistFilter(i, slotForItemType(i.item_type))))
 
   // Bucket eligible items by slot, pre-ranked by pairwise compat with the anchor.
   const buckets: Record<Slot, Array<{ item: ItemWithBrand; compat: number; rank: number }>> = {
@@ -208,7 +223,16 @@ export function generateCandidates(opts: GenerateOpts): ComposerCandidate[] {
   }
   for (const slot of Object.keys(buckets) as Slot[]) {
     buckets[slot].sort((a, b) => b.rank - a.rank)
-    buckets[slot] = buckets[slot].slice(0, perSlotPool)
+    const size = plan.optional.includes(slot) ? optionalPerSlotPool : perSlotPool
+    const top = buckets[slot].slice(0, size)
+    if (statementReserve && !top.some((b) => statementReserve.isStatement(b.item, slot))) {
+      const statements = buckets[slot]
+        .filter((b) => statementReserve.isStatement(b.item, slot))
+        .slice(0, statementReserve.count)
+      buckets[slot] = [...top.slice(0, Math.max(0, size - statements.length)), ...statements]
+    } else {
+      buckets[slot] = top
+    }
   }
 
   // Build the slot order to fill. Required first, then optional.
