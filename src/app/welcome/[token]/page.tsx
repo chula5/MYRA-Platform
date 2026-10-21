@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { createAdminClient, createServerClient } from '@/lib/supabase-server'
-import { readInvite } from '@/lib/member-invite'
+import { inviteOwner, readInvite } from '@/lib/member-invite'
+import { recordSignOn } from '@/lib/sign-on'
 import { acceptInvite } from './actions'
 
 export const dynamic = 'force-dynamic'
@@ -23,6 +24,15 @@ export default async function WelcomePage({ params, searchParams }: { params: { 
     const { data } = await admin.from('pilot_member').select('name, auth_user_id').eq('member_id', invite.memberId).maybeSingle()
     name = data?.name ?? null
     hasLogin = preview ? false : !!data?.auth_user_id
+  }
+  // The first step at the door. Chloe's preview is not her opening it.
+  if (!preview) {
+    if (invite && name) {
+      await recordSignOn({ step: 'invite_opened', memberId: invite.memberId, detail: hasLogin ? 'already has a login' : null })
+    } else if (params.token !== 'expired') {
+      const owner = inviteOwner(params.token)
+      if (owner) await recordSignOn({ step: 'invite_failed', ok: false, memberId: owner, detail: 'opened an expired invite link' })
+    }
   }
   const first = (name ?? '').trim().split(/\s+/)[0] || null
   const field = 'myra-silver-input text-[clamp(22px,1.5vw,40px)] !py-[clamp(18px,1.3vw,34px)] !px-[clamp(24px,1.8vw,44px)] !rounded-[clamp(20px,1.4vw,36px)]'

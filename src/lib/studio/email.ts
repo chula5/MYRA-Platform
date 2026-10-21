@@ -8,6 +8,7 @@
 
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase-server'
+import { memberForEmail, trackEmailLinks } from '@/lib/email-click'
 
 const TO = process.env.STUDIO_EMAIL_TO ?? 'chloe@myraassistant.co.uk'
 const FROM = process.env.STUDIO_EMAIL_FROM ?? 'MYRA Studio <studio@myraassistant.co.uk>'
@@ -72,11 +73,19 @@ export async function sendStudioEmail(opts: {
     console.error('[sendStudioEmail] RESEND_API_KEY not set — skipping:', opts.subject)
     return { sent: false, error: 'RESEND_API_KEY not set' }
   }
+  // A member email's links go through /e, so the JOURNEY tab can tell which
+  // email brought her back. Trial and sample sends go to Chloe and would
+  // count as the member's clicks, so they are left as they are.
+  let html = opts.html
+  if (isMemberKind(opts.kind) && !opts.meta?.trial && !opts.meta?.sample) {
+    const memberId = await memberForEmail(opts.meta)
+    if (memberId) html = trackEmailLinks(html, { memberId, kind: opts.kind, site: siteUrl('') })
+  }
   try {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from, to: [to], subject: opts.subject, html: opts.html, ...(replyTo ? { reply_to: replyTo } : {}) }),
+      body: JSON.stringify({ from, to: [to], subject: opts.subject, html, ...(replyTo ? { reply_to: replyTo } : {}) }),
     })
     const raw = await res.text()
     if (!res.ok) {

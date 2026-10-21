@@ -15,7 +15,7 @@
 //
 // EVERY ZERO ON THIS PAGE MEANS ONE OF THREE THINGS, and they are not the same:
 //   · the migration has not been run          → the banner says so
-//   · she has no login yet                    → the member row says so
+//   · she has not got through the door yet    → SIGNING ON says where she stopped
 //   · she has a login and has not come back   → that is the finding
 // A dashboard that renders all three as "0" is worse than no dashboard, so each
 // is spelled out where it applies.
@@ -23,6 +23,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { loadJourney } from './journey-actions'
 import JourneyReplay from './JourneyReplay'
+import SignOnPanel from './SignOnPanel'
+import UsagePanels from './UsagePanels'
 import { fmtDuration, type JourneyOverview, type JourneySessionSummary } from '@/lib/journey'
 import { INK, SERIES, STATUS } from '@/components/admin/charts/palette'
 import { fmtNumber, fmtPct } from '@/components/admin/charts/format'
@@ -57,7 +59,6 @@ export default function JourneyTab({
 
   const everyone = !memberId
   const selected = members.find((m) => m.member_id === memberId)
-  const memberRow = data?.members.find((m) => m.memberId === memberId)
 
   return (
     <div className="space-y-8">
@@ -80,6 +81,10 @@ export default function JourneyTab({
           ))}
         </div>
       </div>
+
+      {/* The door first: every number after it starts once she is inside, and
+          a member stuck at sign-in reads as zeros everywhere below. */}
+      <SignOnPanel memberId={memberId} onPick={setMemberId} />
 
       {error && (
         <p className="text-[20px] tracking-[0.1em] text-[#B83A3A]">
@@ -105,36 +110,21 @@ export default function JourneyTab({
 
       {data?.available && (
         <>
-          {/* A member with no login has nothing to measure, and saying "0 visits"
-              about her would read as disinterest rather than as plumbing. */}
-          {memberRow && !memberRow.hasLogin && (
-            <div className="border border-[#C4A882] px-5 py-4">
-              <p className="text-[20px] tracking-[0.1em] text-[#C4A882]">
-                {memberRow.name.toUpperCase()} HAS NO LOGIN YET — THERE IS NOTHING FOR HER TO OPEN.
-              </p>
-              <p className="text-[20px] tracking-[0.06em] text-[#6B6B6B] mt-2">
-                SEND HER AN INVITE FROM HER VIEW, AND THIS PAGE STARTS FILLING FROM HER FIRST VISIT.
-              </p>
-            </div>
-          )}
-
           <Headline data={data} everyone={everyone} name={selected?.name} />
           <VisitChart daily={data.daily} />
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Panel title="ROOMS SHE WALKED INTO" note="EVERY OPEN, NOT EVERY MINUTE">
               <Bars rows={data.rooms} colour={SERIES[0]} empty="SHE HAS NOT OPENED A ROOM YET" />
             </Panel>
             <Panel title="WHAT SHE TAPPED" note="HER OWN WORDS FOR IT, WHERE THE PAGE GIVES ONE">
               <Bars rows={data.taps} colour={SERIES[1]} empty="NOTHING TAPPED YET" />
             </Panel>
-            <Panel
-              title="CLICKED THROUGH TO"
-              note={`${fmtNumber(data.totals.retailerClicks)} IN THE OUTBOUND LOG`}
-            >
-              <Bars rows={data.clickOuts} colour={SERIES[2]} empty="SHE HAS NOT LEFT FOR A RETAILER YET" />
-            </Panel>
           </div>
+
+          {/* Brands, pieces, searches, emails and retention — by name. Click-
+              throughs there come from the outbound log, not the tracker. */}
+          <UsagePanels memberId={memberId} days={days} onPick={setMemberId} />
 
           {everyone && data.perMember.length > 1 && <MemberTable rows={data.perMember} onPick={setMemberId} />}
 
@@ -193,12 +183,13 @@ function Headline({ data, everyone, name }: { data: JourneyOverview; everyone: b
           value={fmtNumber(t.actions)}
           sub={`${t.roomsPerSession} ROOMS A VISIT`}
         />
+        {/* The outbound log, not the tracker: every retailer link writes to it,
+            and it reaches back before the JOURNEY existed. */}
         <Stat
           label="CLICKED THROUGH"
-          value={fmtNumber(t.clickOuts)}
+          value={fmtNumber(Math.max(t.clickOuts, t.retailerClicks))}
           sub="LEFT FOR A RETAILER"
-          delta={data.deltas.clickOuts}
-          tone={t.clickOuts > 0 ? 'good' : undefined}
+          tone={Math.max(t.clickOuts, t.retailerClicks) > 0 ? 'good' : undefined}
         />
       </div>
 
@@ -393,7 +384,7 @@ function MemberTable({
               <td className="py-3">
                 <button
                   onClick={() => onPick(r.memberId)}
-                  className="text-[20px] tracking-[0.06em] text-[#0A0A0A] hover:text-[#C4A882] transition-colors"
+                  className="text-[20px] tracking-[0.06em] text-[#0A0A0A] hover:text-[#7C838B] transition-colors"
                 >
                   {r.name.toUpperCase()}
                 </button>
@@ -454,11 +445,11 @@ function Visits({
           >
             <div className="min-w-0">
               <p className="text-[20px] tracking-[0.06em] text-[#0A0A0A]">
-                {everyone && <span className="text-[#C4A882]">{s.memberName.toUpperCase()} · </span>}
+                {everyone && <span className="text-[#7C838B]">{s.memberName.toUpperCase()} · </span>}
                 {new Date(s.startedAt).toLocaleString('en-GB', {
                   weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
                 })}
-                {!s.isReturning && <span className="text-[#C4A882]"> · FIRST EVER VISIT</span>}
+                {!s.isReturning && <span className="text-[#7C838B]"> · FIRST EVER VISIT</span>}
               </p>
               <p className="text-[20px] tracking-[0.05em] text-[#6B6B6B] mt-1">
                 {fmtDuration(s.activeMs)} ON THE APP · {s.actions} TAP{s.actions === 1 ? '' : 'S'} ·{' '}

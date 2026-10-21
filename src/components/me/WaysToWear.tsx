@@ -21,6 +21,7 @@ import type { LookItem } from '@/lib/pilot-stylist'
 import { openWaysToWear, pollWaysToWear, reactToWay, type WaysPiece, type WaysStatus } from '@/app/me/ways/actions'
 import { WAYS, type StyledWayLook, type WayMode } from '@/lib/styled-ways-core'
 import { watchWays, clearWaysReady } from './ways-watch'
+import { journeySignal } from '@/lib/journey'
 
 const T = 'text-[19px] xl:text-[22px] 2xl:text-[26px]'
 const T_SMALL = 'text-[17px] xl:text-[20px] 2xl:text-[23px]'
@@ -85,6 +86,20 @@ export default function WaysToWear({
   const [slow, setSlow] = useState(false)
   const live = useRef(true)
   const working = useRef(false)
+
+  // Every way into a piece — saved, dressing room, browse, a link — ends here,
+  // so this is where the JOURNEY learns which piece she opened.
+  useEffect(() => {
+    if (testMemberId) return
+    journeySignal({
+      type: 'item_open',
+      target_kind: 'item',
+      target_id: itemId,
+      label: [piece?.brand, piece?.product_name].filter(Boolean).join(' — ') || null,
+      meta: { brand: piece?.brand ?? null, mode },
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemId])
 
   async function poll() {
     if (!live.current) return

@@ -495,7 +495,10 @@ async function loadAuthIds(memberId: string | null): Promise<string[]> {
     let q = admin.from('pilot_member').select('auth_user_id')
     if (memberId) q = q.eq('member_id', memberId) as any
     const { data } = await q
-    return ((data ?? []) as any[]).map((r) => r.auth_user_id).filter(Boolean)
+    // Chloe's own login clicks through constantly while testing; in the
+    // pilot's totals that would be most of the number.
+    const adminId = process.env.ADMIN_USER_ID
+    return ((data ?? []) as any[]).map((r) => r.auth_user_id).filter((id) => id && (memberId || id !== adminId))
   } catch {
     return []
   }

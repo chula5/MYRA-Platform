@@ -188,7 +188,7 @@ export async function GET(req: NextRequest) {
       subject,
       html: digestHtml(firstName, pieces, base, kept),
       to: email,
-      meta: { memberId: m.member_id, pieces: pieces.length, hours, sample, site: base ?? null, deliveryId: kept?.deliveryId ?? null },
+      meta: { memberId: m.member_id, pieces: pieces.length, hours, sample, trial: !!toOverride, site: base ?? null, deliveryId: kept?.deliveryId ?? null },
     })
     if (res.sent) sent++
     else if (kept) await forgetEmailedLooks(admin, kept.deliveryId)
