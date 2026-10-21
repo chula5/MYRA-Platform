@@ -36,6 +36,8 @@ export type EmailKind =
   | 'shopper_welcome'
   // Her invitation: ACCEPT on /admin/applications made her a member; this carries her /join link.
   | 'shopper_invitation'
+  // Her account is set up: TestFlight, then the MYRA app on her iPhone.
+  | 'shopper_app_ready'
 
 /** Shopper-facing kinds go out as MYRA, with replies to Chloe; the studio kinds stay MYRA Studio. */
 const isMemberKind = (kind: EmailKind) => kind.startsWith('shopper_')
