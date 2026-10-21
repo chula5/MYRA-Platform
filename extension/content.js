@@ -563,6 +563,54 @@
   }
   const modeLabelOf = (mode) => (mode === 'wardrobe' ? 'with your wardrobe' : 'with new pieces')
 
+  // HOME has two tabs: STYLED (her recent stylings) and MORE OF THE SAME (the
+  // library pieces closest to what she kept or looked at — the same door FOR
+  // YOU shows in the app). The one she chose is kept for the session. Each
+  // tab ends in a way into MYRA itself, straight to that door.
+  const MYRA_SITE = 'https://www.myraassistant.co.uk'
+  const HOME_TAB_KEY = 'myra-mirror-home-tab'
+  let homeTab = 'styled'
+  try { if (sessionStorage.getItem(HOME_TAB_KEY) === 'similar') homeTab = 'similar' } catch {}
+  const rememberHomeTab = (t) => { homeTab = t; try { sessionStorage.setItem(HOME_TAB_KEY, t) } catch {} }
+  let homeState = null // the last thing renderHome drew, so a tab switch redraws without asking again
+  let similarData = null // { pieces } | { error } once the worker has answered
+  let similarAsking = false
+  async function loadSimilar() {
+    if (similarAsking) return
+    similarAsking = true
+    const r = await send({ type: 'similar' })
+    similarAsking = false
+    similarData = r || { error: 'unknown message' }
+    if (panel && panelView === 'home') renderHome(homeState || { loading: true })
+  }
+  const seeMore = (path) => `<div style="padding:14px 18px 18px">
+        <a href="${esc(MYRA_SITE + path)}" target="_blank" rel="noopener noreferrer" style="${BTN_DARK};display:inline-block;text-decoration:none">See more in MYRA</a>
+      </div>`
+  const SHIMMER = `background:linear-gradient(90deg,#EFEFED,#F7F7F5,#EFEFED);background-size:200% 100%;animation:myraShimmer 1.4s infinite`
+  function renderSimilar() {
+    if (!similarData) {
+      return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:0 14px">
+          ${[0, 1, 2, 3, 4, 5].map(() => `<div><div style="aspect-ratio:3/4;border-radius:10px;${SHIMMER}"></div><div style="height:12px;margin-top:8px;border-radius:6px;width:70%;${SHIMMER}"></div></div>`).join('')}
+        </div>
+        <div style="padding:10px 18px 0;font-size:13px;opacity:.6">Finding more like what you kept…</div>
+        <style>@keyframes myraShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}</style>`
+    }
+    if (similarData.error) return `<div style="padding:6px 18px 8px;font-size:14px;opacity:.7">${esc(friendly(similarData.error))}</div>`
+    const pieces = similarData.pieces || []
+    if (!pieces.length) return `<div style="padding:6px 18px 8px;font-size:14px;opacity:.7">Nothing close yet — save or look at a few pieces and MYRA will find more like them.</div>`
+    const tiles = pieces.map((p) => `
+        <a href="${esc(p.url || '#')}" ${p.url ? 'target="_blank" rel="noopener noreferrer"' : ''} style="display:block;min-width:0;text-decoration:none;color:inherit">
+          <span style="display:block;aspect-ratio:3/4;background:#fff;border-radius:10px;overflow:hidden">
+            ${p.image_url ? `<img src="${esc(p.image_url)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:contain;display:block">` : ''}
+          </span>
+          <span style="display:block;font-size:12.5px;font-weight:600;margin-top:7px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.brand || p.product_name)}</span>
+          <span style="display:block;font-size:12px;opacity:.6;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.product_name)}</span>
+          ${p.price_gbp != null ? `<span style="display:block;font-size:12px;opacity:.6;margin-top:1px">£${Math.round(Number(p.price_gbp))}</span>` : ''}
+        </a>`).join('')
+    const because = pieces[0]?.because ? `<div style="padding:12px 18px 0;font-size:12.5px;opacity:.6">${esc(pieces[0].because)}.</div>` : ''
+    return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:0 14px">${tiles}</div>${because}`
+  }
+
   /** HOME — her history, and the way to style something new. */
   async function openHome() {
     jobWaiting = false
@@ -573,10 +621,12 @@
     const [hist, cur] = await Promise.all([send({ type: 'styleHistory' }), send({ type: 'styleJob' })])
     if (panelView !== 'home' || !panel) return
     renderHome({ items: hist?.items || [], error: hist?.error || (hist == null ? 'unknown message' : null), job: cur?.job || null })
+    if (homeTab === 'similar' && !similarData) loadSimilar()
   }
 
   function renderHome(h) {
     if (!panel || panelView !== 'home') return
+    homeState = h
     const head = panelHead('Styled for you', 'Everything MYRA has put together for you — and a way to start again')
     const piece = pagePiece
     const actions = `<div style="padding:4px 18px 14px;display:flex;gap:8px;flex-wrap:wrap">
@@ -621,10 +671,20 @@
       const empty = !building && !items.length
         ? `<div style="padding:6px 18px 20px;font-size:14px;opacity:.7">${h.error ? esc(friendly(h.error)) : 'Nothing styled yet. Pick a piece on this page and ask what to wear with it.'}</div>`
         : ''
-      list = `${building || items.length ? `<div style="font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;opacity:.5;padding:4px 18px 10px">Styled</div>` : ''}${building}${rows}${empty}<div style="height:12px"></div>`
+      list = `${building}${rows}${empty}`
     }
-    panel.innerHTML = head + actions + here + list
+    const tab = (id, label) => `<button type="button" role="tab" data-myra-tab="${id}" aria-selected="${homeTab === id}" style="${homeTab === id ? BTN_DARK : BTN_LIGHT}">${label}</button>`
+    const tabs = `<div role="tablist" style="display:flex;gap:8px;flex-wrap:wrap;padding:2px 18px 14px">${tab('styled', 'Styled')}${tab('similar', 'More of the same')}</div>`
+    const body = homeTab === 'similar'
+      ? renderSimilar() + seeMore('/me?door=similar')
+      : list + seeMore('/me?styled=1')
+    panel.innerHTML = head + actions + here + tabs + body
     panel.querySelector('[data-myra="close"]')?.addEventListener('click', closePanel)
+    panel.querySelectorAll('[data-myra-tab]').forEach((b) => b.addEventListener('click', () => {
+      rememberHomeTab(b.dataset.myraTab === 'similar' ? 'similar' : 'styled')
+      renderHome(homeState || h)
+      if (homeTab === 'similar' && !similarData) loadSimilar()
+    }))
     panel.querySelector('[data-myra="pick"]')?.addEventListener('click', startPicking)
     panel.querySelector('[data-myra="picks"]')?.addEventListener('click', () => { hidePanel(); openPicks() })
     panel.querySelector('[data-myra="open-job"]')?.addEventListener('click', async () => {

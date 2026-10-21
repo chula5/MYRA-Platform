@@ -11,6 +11,9 @@ const DEFAULTS = { apiBase: 'https://www.myraassistant.co.uk', token: null, memb
 const RANK_TTL_MS = 10 * 60_000
 const rankCache = new Map() // `${host}|${hash}` → { at, data }
 const picksCache = new Map() // same key → { at, data } — the panel reopens instantly
+// MORE OF THE SAME is one answer per member, not per page: the pieces in
+// MYRA's library closest to what she kept or looked at through the Mirror.
+let similarCache = null // { at, data } — the panel's second tab opens instantly
 // The styling job runs HERE, not in the page: she can walk on to the next
 // product, or the next site, and the panel keeps building on the right.
 let styleJob = null // { id, product, mode, status, looks, hero, error, startedAt }
@@ -188,6 +191,22 @@ const handlers = {
     return json
   },
 
+  /**
+   * MORE OF THE SAME for the panel's HOME view — the same list her FOR YOU
+   * door shows, each piece's shop url already tracked. One answer per member,
+   * cached like a ranking so the tab reopens instantly; `fresh` asks the site
+   * to rebuild it.
+   */
+  async similar({ fresh } = {}) {
+    const c = await cfg()
+    if (!c.token) return { error: 'Connect MYRA first' }
+    if (!fresh && similarCache && Date.now() - similarCache.at < RANK_TTL_MS) return similarCache.data
+    const { status, json } = await api(fresh ? '/api/mirror/similar?fresh=1' : '/api/mirror/similar')
+    if (status !== 200 || !json) return { error: json?.error || `similar failed (${status})` }
+    similarCache = { at: Date.now(), data: json }
+    return json
+  },
+
   async setToken({ token, member, apiBase }) {
     if (apiBase) await ext.storage.local.set({ apiBase })
     await ext.storage.local.set({ token, member: member || null })
@@ -195,6 +214,7 @@ const handlers = {
     if (status !== 200) return { ok: false, error: 'token rejected' }
     await ext.storage.local.set({ member: json.name })
     rankCache.clear()
+    similarCache = null
     shareTokenWithApp(token, apiBase)
     // Every shop page already open ranks itself again, so a "can't be
     // reached" line clears without her reloading the page.
@@ -226,6 +246,7 @@ const handlers = {
     await ext.storage.local.set({ token: null, member: null })
     await clearFailure((await cfg()).apiBase)
     rankCache.clear()
+    similarCache = null
     shareTokenWithApp(null, null)
     return { ok: true }
   },
@@ -233,6 +254,7 @@ const handlers = {
   async setApiBase({ apiBase }) {
     await ext.storage.local.set({ apiBase })
     rankCache.clear()
+    similarCache = null
     return { ok: true }
   },
 
