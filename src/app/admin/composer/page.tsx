@@ -1,6 +1,8 @@
 import { getItem, getReadyAndLiveItems, getAllBrands } from '@/lib/admin-queries'
 import ComposerClient from './ComposerClient'
 
+const ANCHOR_PICKER_LIMIT = 60
+
 interface PageProps {
   searchParams: Promise<{ anchor?: string }>
 }
@@ -20,7 +22,10 @@ export default async function ComposerPage({ searchParams }: PageProps) {
     .filter((b) => brandIdsWithItems.has(b.brand_id))
     .map((b) => ({ brand_id: b.brand_id, name: b.name }))
 
-  const initialItems = library.map((i) => ({
+  // The picker opens on the first 60, like a search does. Handing it the whole
+  // library (16k+) rendered every piece as an image and the dev server's image
+  // optimiser queued them all, so the candidates' pictures waited minutes.
+  const initialItems = library.slice(0, ANCHOR_PICKER_LIMIT).map((i) => ({
     item_id: i.item_id,
     product_name: i.product_name,
     image_url: i.image_url,
