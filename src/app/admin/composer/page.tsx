@@ -4,11 +4,11 @@ import ComposerClient from './ComposerClient'
 const ANCHOR_PICKER_LIMIT = 60
 
 interface PageProps {
-  searchParams: Promise<{ anchor?: string }>
+  searchParams: Promise<{ anchor?: string; ask?: string }>
 }
 
 export default async function ComposerPage({ searchParams }: PageProps) {
-  const { anchor: anchorId } = await searchParams
+  const { anchor: anchorId, ask } = await searchParams
 
   const [initialAnchor, library, allBrands] = await Promise.all([
     anchorId ? getItem(anchorId) : Promise.resolve(null),
@@ -62,6 +62,7 @@ export default async function ComposerPage({ searchParams }: PageProps) {
         initialItems={initialItems}
         libraryCount={library.length}
         brands={brands}
+        initialAsk={ask?.trim() ?? ''}
       />
     </div>
   )
