@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { usePathname } from 'next/navigation'
+import { useEffect, useRef, useState } from 'react'
 import { trackLandingClick } from '@/components/analytics/LandingTracker'
 
 export default function Navigation({ transparent = false, authed = false, showAuth = true }: { transparent?: boolean; authed?: boolean; showAuth?: boolean }) {
@@ -34,8 +35,10 @@ export default function Navigation({ transparent = false, authed = false, showAu
     >
       <div className="w-full px-3 md:px-10 h-[72px] md:h-28 lg:h-32 flex items-center justify-between gap-2 md:gap-4">
 
-        {/* Left — kept as a flex spacer so the wordmark stays centred. */}
-        <div className="flex flex-1 min-w-0 items-center justify-start gap-3 sm:gap-5 md:gap-6" />
+        {/* Left — the site menu (HOME / PRESS); flex-1 keeps the wordmark centred. */}
+        <div className="flex flex-1 min-w-0 items-center justify-start gap-3 sm:gap-5 md:gap-6">
+          <SiteMenu textColor={textColor} />
+        </div>
 
         {/* Centre — logo wordmark (white over the hero, black on the white nav) */}
         <div className="flex justify-center shrink-0">
@@ -89,6 +92,91 @@ export default function Navigation({ transparent = false, authed = false, showAu
         </div>
       </div>
     </nav>
+  )
+}
+
+// The site's pages. PRESS lists every article written about MYRA (lib/press.ts).
+const SITE_PAGES = [
+  { href: '/', label: 'HOME' },
+  { href: '/press', label: 'PRESS' },
+]
+
+function SiteMenu({ textColor }: { textColor: string }) {
+  const [open, setOpen] = useState(false)
+  const pathname = usePathname()
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => setOpen(false), [pathname])
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  const isCurrent = (href: string) => (href === '/' ? pathname === '/' : pathname?.startsWith(href))
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className={`flex items-center gap-2 sm:gap-3 whitespace-nowrap text-[15px] sm:text-[17px] lg:text-[20px] leading-none tracking-[0.12em] hover:opacity-60 transition-colors duration-500 ${textColor}`}
+      >
+        <MenuIcon open={open} />
+        <span className="hidden sm:inline">MENU</span>
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute left-0 top-full mt-4 md:mt-6 min-w-[220px] sm:min-w-[260px] bg-white border border-[#E2E0DB] shadow-[0_12px_40px_rgba(0,0,0,0.08)] py-2"
+        >
+          {SITE_PAGES.map((p) => (
+            <Link
+              key={p.href}
+              href={p.href}
+              role="menuitem"
+              className={`flex items-center justify-between gap-6 px-6 py-4 text-[17px] sm:text-[19px] lg:text-[20px] tracking-[0.14em] transition-colors duration-300 hover:bg-[#F4F3F0] ${
+                isCurrent(p.href) ? 'text-[#4A4E57]' : 'text-[#7C838B]'
+              }`}
+            >
+              {p.label}
+              {isCurrent(p.href) && <span aria-hidden className="w-1.5 h-1.5 rounded-full bg-[#4A4E57]" />}
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MenuIcon({ open }: { open: boolean }) {
+  return (
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      {open ? (
+        <>
+          <line x1="5" y1="5" x2="19" y2="19" />
+          <line x1="19" y1="5" x2="5" y2="19" />
+        </>
+      ) : (
+        <>
+          <line x1="3" y1="7" x2="21" y2="7" />
+          <line x1="3" y1="12" x2="21" y2="12" />
+          <line x1="3" y1="17" x2="21" y2="17" />
+        </>
+      )}
+    </svg>
   )
 }
 

@@ -3,7 +3,9 @@
 import { useState, useTransition, useEffect, useRef } from 'react'
 import { thumbUrl } from '@/lib/image-utils'
 import { composeForAnchor, searchAnchorItems, approveCandidate, getSwapOptions, rescoreCandidate, recordSwap } from './actions.gated'
-import type { ComposedCandidatePayload, SlotPlanPayload, SwapOption } from './actions'
+import { composeFromAsk } from './ask-actions.gated'
+import type { ComposedCandidatePayload, HouseRejectionSummary, SlotPlanPayload, SwapOption } from './actions'
+import type { AskPiece, AskResult } from './ask-actions'
 
 type Slot = 'outerwear' | 'top' | 'bottom' | 'dress' | 'shoe' | 'bag' | 'jewellery' | 'accessory'
 
@@ -28,6 +30,8 @@ interface ComposerClientProps {
   initialItems: AnchorItem[]
   libraryCount: number
   brands?: BrandOption[]
+  /** A sentence handed over from the item library (?ask=) — composed on arrival. */
+  initialAsk?: string
 }
 
 const SLOT_LABEL: Record<string, string> = {
@@ -87,19 +91,28 @@ export default function ComposerClient({
   initialItems,
   libraryCount,
   brands = [],
+  initialAsk = '',
 }: ComposerClientProps) {
   const [anchor, setAnchor] = useState<AnchorItem | null>(initialAnchor)
-  const [searchOpen, setSearchOpen] = useState(initialAnchor === null)
+  const [searchOpen, setSearchOpen] = useState(initialAnchor === null && !initialAsk)
+  // BUILD FROM WORDS — the sentence, how it was read, and the other pieces
+  // that fit its lead piece (tap one to rebuild around it).
+  const [askText, setAskText] = useState(initialAsk)
+  const [asked, setAsked] = useState<{ text: string; pieces: NonNullable<AskResult['pieces']>; notes: string[]; alternatives: AskPiece[] } | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [brandFilter, setBrandFilter] = useState('')
   const [searchResults, setSearchResults] = useState<AnchorItem[]>(initialItems)
   const [searching, startSearch] = useTransition()
-  const [composing, startCompose] = useTransition()
+  // A plain flag, not useTransition: on React 18 an async transition stops
+  // pending at its first await, so the page read "no compatible compositions"
+  // while the composer was still working.
+  const [composing, setComposing] = useState(false)
   const [candidates, setCandidates] = useState<ComposedCandidatePayload[]>([])
   const [error, setError] = useState<string | null>(null)
   const [approvalState, setApprovalState] = useState<Record<number, { approving: boolean; approved: boolean; outfitId?: string; projectId?: string }>>({})
   const [dismissed, setDismissed] = useState<Set<number>>(new Set())
   const [slotPlan, setSlotPlan] = useState<SlotPlanPayload | null>(null)
+  const [rejections, setRejections] = useState<HouseRejectionSummary | null>(null)
   // Per-candidate edits — if present, these override the original server items/score
   const [edits, setEdits] = useState<Record<number, CandidateItem[]>>({})
   const [editScores, setEditScores] = useState<Record<number, number>>({})
@@ -111,31 +124,80 @@ export default function ComposerClient({
   const [swapQuery, setSwapQuery] = useState('')
   const swapDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Auto-compose if landed with an anchor in the URL
+  // Auto-compose if landed with an anchor (or a sentence) in the URL
   useEffect(() => {
-    if (initialAnchor && candidates.length === 0) {
+    if (initialAsk.trim()) runAsk(initialAsk, initialAnchor?.item_id ?? null)
+    else if (initialAnchor && candidates.length === 0) {
       compose(initialAnchor.item_id)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  function compose(anchorId: string) {
+  // Compose from her words — around the current anchor when there is one,
+  // else around the piece the words lead with.
+  function runAsk(text: string, anchorId: string | null, fromAlternatives = false) {
+    const q = text.trim()
+    if (!q) return
     setError(null)
-    startCompose(async () => {
-      const res = await composeForAnchor(anchorId)
+    setComposing(true)
+    setSearchOpen(false)
+    void (async () => {
+      const res = await composeFromAsk(q, anchorId, { surface: 'composer', anchorFromAsk: fromAlternatives }).catch((e: unknown) => ({
+        error: e instanceof Error ? e.message : 'Compose failed',
+      } as AskResult))
+      setComposing(false)
+      if (res.anchor) {
+        const a = res.anchor
+        setAnchor({ item_id: a.item_id, product_name: a.product_name, image_url: a.image_url, item_type: a.item_type, brand_name: a.brand_name })
+      }
+      // A fresh build brings its alternatives; a rebuild around one of them
+      // keeps that list, with the anchor it replaced swapped in.
+      const previous = anchor && anchor.item_id !== anchorId ? [{ ...anchor, colour_family: null, price: '' }] : []
+      const alternatives = fromAlternatives
+        ? [...previous, ...(asked?.alternatives ?? []).filter((x) => x.item_id !== anchorId)]
+        : res.anchorAlternatives ?? []
+      setAsked({ text: q, pieces: res.pieces ?? [], notes: res.notes ?? [], alternatives })
       if (res.error) {
         setError(res.error)
         setCandidates([])
         setSlotPlan(null)
+        setRejections(null)
         return
       }
-      setCandidates(res.candidates ?? [])
-      setSlotPlan(res.slotPlan ?? null)
+      setCandidates((res.candidates ?? []) as unknown as ComposedCandidatePayload[])
+      setSlotPlan(null)
+      setRejections(null)
       setApprovalState({})
       setDismissed(new Set())
       setEdits({})
       setEditScores({})
-    })
+    })()
+  }
+
+  function compose(anchorId: string) {
+    setError(null)
+    setAsked(null)
+    setComposing(true)
+    void (async () => {
+      const res = await composeForAnchor(anchorId).catch((e: unknown) => ({
+        error: e instanceof Error ? e.message : 'Compose failed',
+      } as Awaited<ReturnType<typeof composeForAnchor>>))
+      setComposing(false)
+      if (res.error) {
+        setError(res.error)
+        setCandidates([])
+        setSlotPlan(null)
+        setRejections(null)
+        return
+      }
+      setCandidates(res.candidates ?? [])
+      setSlotPlan(res.slotPlan ?? null)
+      setRejections(res.houseRejections ?? null)
+      setApprovalState({})
+      setDismissed(new Set())
+      setEdits({})
+      setEditScores({})
+    })()
   }
 
   function itemsFor(idx: number, candidate: ComposedCandidatePayload): CandidateItem[] {
@@ -322,11 +384,91 @@ export default function ComposerClient({
 
   return (
     <div>
+      {/* BUILD FROM WORDS — around the anchor when there is one */}
+      <form
+        onSubmit={(e) => { e.preventDefault(); runAsk(askText, anchor?.item_id ?? null) }}
+        className="mb-4 flex flex-col sm:flex-row gap-2"
+      >
+        <div className="relative flex-1">
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] text-[#7C838B]">✦</span>
+          <input
+            value={askText}
+            onChange={(e) => setAskText(e.target.value)}
+            placeholder={anchor
+              ? 'ASK AROUND THIS ANCHOR — E.G. FIND A LONG DRESS AND BROWN BOOTS TO GO WITH IT'
+              : 'DESCRIBE THE OUTFIT — E.G. A BLUE SILK DRESS, BROWN ISABEL MARANT HEELS AND A LEATHER JACKET'}
+            aria-label="Describe the outfit"
+            className="w-full border border-[#0A0A0A] bg-white pl-9 pr-4 py-3 text-[13px] tracking-[0.04em] text-[#4A4E57] placeholder:text-[11px] placeholder:tracking-[0.09em] placeholder:text-[#A8A8A4] focus:outline-none"
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={composing || !askText.trim()}
+          className="bg-[#0A0A0A] text-white px-6 py-3 text-[10px] tracking-[0.09em] hover:bg-[#333] transition-colors duration-300 disabled:opacity-50"
+        >
+          {composing ? 'COMPOSING…' : anchor ? 'COMPOSE AROUND ANCHOR →' : 'COMPOSE →'}
+        </button>
+        {anchor && (
+          <button
+            type="button"
+            onClick={() => { setAnchor(null); setCandidates([]); runAsk(askText, null) }}
+            disabled={composing || !askText.trim()}
+            title="Ignore the anchor and build the whole look from the words"
+            className="border border-[#E2E0DB] text-[#6B6B6B] px-4 py-3 text-[10px] tracking-[0.09em] hover:border-[#0A0A0A] hover:text-[#4A4E57] transition-colors disabled:opacity-50"
+          >
+            NEW LOOK FROM WORDS
+          </button>
+        )}
+      </form>
+
+      {asked && (
+        <div className="mb-6">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[9px] tracking-[0.113em] text-[#A8A8A4]">READ AS</span>
+            {asked.pieces.map((p, i) => (
+              <span
+                key={i}
+                title={p.relaxed ?? undefined}
+                className={`px-2.5 py-1 text-[9px] tracking-[0.09em] border ${p.found === 0 ? 'border-[#E8B4B4] text-[#B83A3A]' : 'border-[#E2E0DB] text-[#4A4E57]'}`}
+              >
+                {p.label.toUpperCase()}
+                <span className="text-[#A8A8A4]"> · {p.byAnchor ? 'ANCHOR' : p.found === 0 ? 'NONE' : `${p.found} FOUND`}{p.relaxed ? ' ▲' : ''}</span>
+              </span>
+            ))}
+          </div>
+          {asked.notes.map((n, i) => (
+            <p key={i} className="mt-2 text-[9px] tracking-[0.08em] text-[#7C838B]">▲ {n.toUpperCase()}</p>
+          ))}
+          {asked.alternatives.length > 0 && (
+            <div className="mt-3">
+              <p className="text-[9px] tracking-[0.113em] text-[#A8A8A4] mb-2">ALSO FITS YOUR WORDS — TAP ONE TO BUILD AROUND IT</p>
+              <div data-lenis-prevent className="flex gap-2 overflow-x-auto pb-1">
+                {asked.alternatives.map((alt) => (
+                  <button
+                    key={alt.item_id}
+                    type="button"
+                    onClick={() => runAsk(asked.text, alt.item_id, true)}
+                    disabled={composing}
+                    title={[alt.brand_name, alt.product_name].filter(Boolean).join(' — ')}
+                    className="flex-shrink-0 w-20 text-left group disabled:opacity-50"
+                  >
+                    <div className="aspect-[3/4] bg-[#F2F2F0] overflow-hidden group-hover:opacity-85 transition-opacity">
+                      <img src={thumbUrl(alt.image_url, 240)} alt={alt.product_name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
+                    </div>
+                    <p className="text-[8px] tracking-[0.068em] text-[#A8A8A4] mt-1 truncate">{(alt.brand_name ?? '—').toUpperCase()}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Anchor strip */}
       <div className="bg-white border border-[#E2E0DB] mb-8 p-6 flex items-start gap-6">
         <div className="w-32 h-40 flex-shrink-0 bg-[#F2F2F0] overflow-hidden">
           {anchor ? (
-            <img src={thumbUrl(anchor.image_url, 600)} alt={anchor.product_name} className="w-full h-full object-cover" />
+            <img src={thumbUrl(anchor.image_url, 600)} alt={anchor.product_name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
               <span className="text-[9px] tracking-[0.09em] text-[#A8A8A4]">NO ANCHOR</span>
@@ -417,7 +559,7 @@ export default function ComposerClient({
               >
                 <div className="aspect-[3/4] bg-[#F2F2F0] overflow-hidden mb-2 group-hover:opacity-85 transition-opacity">
                   {item.image_url ? (
-                    <img src={thumbUrl(item.image_url, 600)} alt={item.product_name} className="w-full h-full object-cover" />
+                    <img src={thumbUrl(item.image_url, 384)} alt={item.product_name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       <span className="text-[9px] tracking-[0.068em] text-[#A8A8A4]">NO IMAGE</span>
@@ -455,9 +597,41 @@ export default function ComposerClient({
           <p className="text-[11px] tracking-[0.113em] text-[#A8A8A4]">
             NO COMPATIBLE COMPOSITIONS FOUND IN THE CURRENT LIBRARY.
           </p>
-          <p className="text-[10px] tracking-[0.09em] text-[#A8A8A4] mt-2">
-            ADD MORE READY/LIVE ITEMS OR PICK A DIFFERENT ANCHOR.
-          </p>
+          {rejections && rejections.tried > 0 ? (
+            <div className="mt-6 mx-auto max-w-2xl text-left border border-[#E5E5E0] bg-white p-6">
+              <p className="text-[11px] tracking-[0.113em] text-[#4A4E57]">
+                {rejections.tried.toLocaleString()} LOOKS TRIED
+                {rejections.widestPool > 4 ? ` · SHORTLIST WIDENED TO ${rejections.widestPool} PIECES PER SLOT` : ''}
+              </p>
+              <p className="text-[10px] tracking-[0.09em] text-[#6B6B6B] mt-2">
+                {rejections.passed > 0
+                  ? `${rejections.passed.toLocaleString()} PASSED THE HOUSE RULES BUT SCORED BELOW THE COHERENCE FLOOR. THE REST WERE REFUSED BY:`
+                  : 'THE HOUSE RULES REFUSED EVERY ONE. WHY:'}
+              </p>
+              {rejections.byCode.length > 0 && (
+                <ul className="mt-4 space-y-3">
+                  {rejections.byCode.slice(0, 6).map((r) => (
+                    <li key={r.code} className="flex items-baseline gap-4">
+                      <span className="text-[11px] tracking-[0.09em] text-[#4A4E57] w-16 shrink-0 text-right tabular-nums">
+                        {r.count.toLocaleString()}
+                      </span>
+                      <span>
+                        <span className="block text-[10px] tracking-[0.113em] text-[#4A4E57]">{r.rule.toUpperCase()}</span>
+                        <span className="block text-[12px] text-[#6B6B6B] mt-0.5">e.g. {r.message}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="text-[10px] tracking-[0.09em] text-[#A8A8A4] mt-5">
+                COUNTS ARE RULE BREAKS — ONE LOOK CAN BREAK SEVERAL. PICK A DIFFERENT ANCHOR OR ADD PIECES THAT FIX THE TOP REASON.
+              </p>
+            </div>
+          ) : (
+            <p className="text-[10px] tracking-[0.09em] text-[#A8A8A4] mt-2">
+              ADD MORE READY/LIVE ITEMS OR PICK A DIFFERENT ANCHOR.
+            </p>
+          )}
         </div>
       )}
 
@@ -521,7 +695,7 @@ export default function ComposerClient({
                     {anchor && (
                       <div className="relative">
                         <div className="aspect-[3/4] bg-[#F2F2F0] overflow-hidden">
-                          <img src={thumbUrl(anchor.image_url, 600)} alt={anchor.product_name} className="w-full h-full object-cover" />
+                          <img src={thumbUrl(anchor.image_url, 600)} alt={anchor.product_name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
                         </div>
                         <div className="absolute top-1 left-1 bg-[#0A0A0A] text-white px-1.5 py-0.5 text-[8px] tracking-[0.068em]">
                           ANCHOR
@@ -537,7 +711,7 @@ export default function ComposerClient({
                         <div key={`${item.item_id}-${itemIdx}`} className="relative group">
                           <div className="aspect-[3/4] bg-[#F2F2F0] overflow-hidden">
                             {item.image_url ? (
-                              <img src={thumbUrl(item.image_url, 600)} alt={item.product_name} className="w-full h-full object-cover" />
+                              <img src={thumbUrl(item.image_url, 384)} alt={item.product_name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
                             ) : (
                               <div className="w-full h-full" />
                             )}
@@ -702,7 +876,7 @@ export default function ComposerClient({
                   >
                     <div className="aspect-[3/4] bg-[#F2F2F0] overflow-hidden mb-2 group-hover:opacity-85 transition-opacity">
                       {opt.image_url ? (
-                        <img src={thumbUrl(opt.image_url, 600)} alt={opt.product_name} className="w-full h-full object-cover" />
+                        <img src={thumbUrl(opt.image_url, 384)} alt={opt.product_name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
                       ) : (
                         <div className="w-full h-full" />
                       )}

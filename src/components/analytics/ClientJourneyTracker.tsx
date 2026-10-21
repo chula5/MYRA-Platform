@@ -25,6 +25,7 @@
 
 import { useEffect, useRef } from 'react'
 import { usePathname } from 'next/navigation'
+import { EVENT_TYPE_SET, JOURNEY_SIGNAL, type JourneySignal } from '@/lib/journey'
 
 const ENDPOINT = '/api/me/journey'
 const SESSION_KEY = 'myra_journey_sid'
@@ -33,6 +34,12 @@ const SESSION_KEY = 'myra_journey_sid'
  *  zero — replaying the second half of a visit on top of the first. */
 const STARTED_KEY = 'myra_journey_start'
 const SEEN_KEY = 'myra_journey_seen'
+/** The last sign of her in this tab. The iPhone app never closes its page, so
+ *  without this, opening the app tomorrow would carry on today's visit. */
+const LAST_KEY = 'myra_journey_last'
+/** Away longer than this and coming back is a new visit — the usual analytics
+ *  rule, and the one SessionTracker and recordEarlyAccessVisit already use. */
+const NEW_VISIT_AFTER_MS = 30 * 60_000
 const ADMIN_FLAG = 'myra_is_admin'
 
 const FLUSH_MS = 8_000
@@ -73,6 +80,9 @@ const ROOM_BY_PREFIX: [string, string][] = [
   ['/me/sharing', 'sharing'],
   ['/me/looks', 'all_looks'],
   ['/me/wardrobe', 'dressing_room'],
+  ['/me/ways', 'dressing_room'],
+  ['/me/browse', 'browse'],
+  ['/me/events', 'events'],
   ['/me/welcome', 'for_you'],
   ['/me', 'for_you'],
 ]
@@ -95,6 +105,9 @@ function uuid(): string {
 }
 
 function deviceOf(width: number): string {
+  // The iPhone app is its own door; telling it apart from her phone's browser
+  // is half of what "did she install it" means.
+  try { if ((window as any).Capacitor?.isNativePlatform?.()) return 'iphone app' } catch { /* ignore */ }
   if (width < 640) return 'mobile'
   if (width < 1024) return 'tablet'
   return 'desktop'
@@ -152,6 +165,7 @@ export default function ClientJourneyTracker() {
     try { if (localStorage.getItem(ADMIN_FLAG) === '1') return } catch { /* ignore */ }
 
     let stopRecording: (() => void) | null = null
+    let takeSnapshot: (() => void) | null = null
     let recordingBuffer: any[] = []
     let flushTimer: ReturnType<typeof setInterval> | null = null
     let pingTimer: ReturnType<typeof setInterval> | null = null
@@ -164,6 +178,10 @@ export default function ClientJourneyTracker() {
     try {
       sessionId.current = sessionStorage.getItem(SESSION_KEY) || ''
       restoredStart = Number(sessionStorage.getItem(STARTED_KEY) ?? 0)
+      // A tab (or the app) left for half an hour and reopened is a new visit,
+      // not the far end of the old one.
+      const lastSeen = Number(sessionStorage.getItem(LAST_KEY) ?? 0)
+      if (sessionId.current && lastSeen && Date.now() - lastSeen > NEW_VISIT_AFTER_MS) sessionId.current = ''
       if (!sessionId.current) {
         sessionId.current = uuid()
         sessionStorage.setItem(SESSION_KEY, sessionId.current)
@@ -194,22 +212,29 @@ export default function ClientJourneyTracker() {
     // opening one rather than racing it.
     let opened: Promise<unknown> = Promise.resolve()
 
-    const send = (payload: Json, keepalive: boolean) =>
+    const send = (sid: string, payload: Json, keepalive: boolean) =>
       fetch(ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: sessionId.current, ...payload }),
+        body: JSON.stringify({ sessionId: sid, ...payload }),
         keepalive,
       }).catch(() => { /* analytics must never surface an error to her */ })
 
+    // The visit id is taken when the payload is made, not when it leaves: a
+    // queued flush from before a new visit began still belongs to the old one.
     const post = (payload: Json, keepalive = false, first = false) => {
       try {
-        if (first) { opened = send(payload, keepalive); return }
+        const sid = sessionId.current
+        if (first) { opened = send(sid, payload, keepalive); return }
         // A keepalive send is the tab on its way out; there is no later to
         // wait for, and by then the opening request has long since landed.
-        if (keepalive) { void send(payload, true); return }
-        void opened.then(() => send(payload, false)).catch(() => { /* ignore */ })
+        if (keepalive) { void send(sid, payload, true); return }
+        void opened.then(() => send(sid, payload, false)).catch(() => { /* ignore */ })
       } catch { /* ignore */ }
+    }
+
+    const touch = () => {
+      try { sessionStorage.setItem(LAST_KEY, String(Date.now())) } catch { /* ignore */ }
     }
 
     /** Active time so far, including the stretch in progress. */
@@ -218,6 +243,7 @@ export default function ClientJourneyTracker() {
 
     const push = (type: string, fields: Partial<Buffered> = {}) => {
       if (!live.current) return
+      touch()
       buffer.current.push({
         type,
         ms_offset: Math.max(0, Date.now() - startedAt.current),
@@ -243,19 +269,53 @@ export default function ClientJourneyTracker() {
     // keepalive, so a visit that is opened and abandoned in the same second is
     // still recorded as a visit — that she opened it and left immediately is
     // itself worth knowing.
-    post({
-      kind: 'start',
-      entryPath: pathname,
-      // A reload re-announces the same visit. Sending when it actually began
-      // keeps the upsert from restamping it as starting now.
-      startedAtMs: restoredStart,
-      isReturning,
-      device: deviceOf(window.innerWidth),
-      viewportW: window.innerWidth,
-      viewportH: window.innerHeight,
-      referrer: document.referrer || null,
-    }, true, true)
-    push('session_start', { meta: { fresh, returning: isReturning, device: deviceOf(window.innerWidth) } })
+    const openVisit = (entryPath: string, isFresh: boolean) => {
+      post({
+        kind: 'start',
+        entryPath,
+        // A reload re-announces the same visit. Sending when it actually began
+        // keeps the upsert from restamping it as starting now.
+        startedAtMs: startedAt.current,
+        isReturning,
+        device: deviceOf(window.innerWidth),
+        viewportW: window.innerWidth,
+        viewportH: window.innerHeight,
+        referrer: document.referrer || null,
+      }, true, true)
+      push('session_start', { meta: { fresh: isFresh, returning: isReturning, device: deviceOf(window.innerWidth) } })
+    }
+    openVisit(pathname, fresh)
+
+    /**
+     * She came back after half an hour away: close the old visit where she
+     * left it and open a new one on the room in front of her. Without this the
+     * iPhone app — which keeps its page alive in the background — counted a
+     * week of opening it as one long visit.
+     */
+    const startNewVisit = () => {
+      push('session_end', { meta: { reason: 'away' } })
+      flush(true, true)
+      flushRecording(true)
+
+      const now = Date.now()
+      sessionId.current = uuid()
+      startedAt.current = now
+      try {
+        sessionStorage.setItem(SESSION_KEY, sessionId.current)
+        sessionStorage.setItem(STARTED_KEY, String(now))
+      } catch { /* ignore */ }
+      seq.current = 0
+      activeMs.current = 0
+      visibleSince.current = now
+      chunkIndex.current = 0
+      maxScroll.current = 0
+      isReturning = true
+
+      openVisit(currentPath.current, true)
+      push('page_view', { target_kind: 'nav', meta: { entry: true } })
+      // The recording of the new visit needs its own first frame to replay from.
+      try { takeSnapshot?.() } catch { /* ignore */ }
+    }
 
     // ── Taps ────────────────────────────────────────────────────────────────
     // Capture phase, so a tap is recorded even when the handler under it stops
@@ -275,9 +335,26 @@ export default function ClientJourneyTracker() {
 
       const href = (el as HTMLAnchorElement).href || ''
       let external = false
+      let viaGo = false
       try {
-        external = Boolean(href) && new URL(href, window.location.href).host !== window.location.host
+        const url = new URL(href, window.location.href)
+        external = Boolean(href) && url.host !== window.location.host
+        // Retailer links leave through our own /go/ redirect, so they share
+        // our host — without this every click-through read as an inside tap.
+        viaGo = Boolean(href) && url.pathname.startsWith('/go/')
       } catch { /* a non-URL href is simply not external */ }
+
+      if (targetKind === 'shop' || viaGo) {
+        const brand = el.closest<HTMLElement>('[data-journey-brand]')?.dataset.journeyBrand ?? null
+        push('click_out', {
+          label,
+          target_kind: 'item',
+          target_id: targetId,
+          meta: { ...meta, brand, via: viaGo ? 'go' : 'beacon' },
+        })
+        flush(true)
+        return
+      }
 
       if (external) {
         let host = ''
@@ -305,6 +382,8 @@ export default function ClientJourneyTracker() {
     const onSubmit = (e: Event) => {
       const form = e.target as HTMLFormElement | null
       if (!form || typeof form.querySelector !== 'function') return
+      // What she writes to a friend is hers, not the pilot's.
+      if (form.closest('[data-journey-form="private"]')) return
       const field = form.querySelector<HTMLInputElement | HTMLTextAreaElement>(
         'input[type="search"],input[type="text"],textarea',
       )
@@ -314,6 +393,22 @@ export default function ClientJourneyTracker() {
         || Boolean(form.closest('[data-journey-form="chat"]'))
       push(isChat ? 'chat_send' : 'search', { label: value.slice(0, 160) })
       flush()
+    }
+
+    // ── Told directly ───────────────────────────────────────────────────────
+    // Components announce what a tap cannot show: a shop opened by script, a
+    // save the server accepted, a verdict. Unknown types are dropped here as
+    // the server would drop them anyway.
+    const onSignal = (e: Event) => {
+      const s = (e as CustomEvent<JourneySignal>).detail
+      if (!s || !EVENT_TYPE_SET.has(s.type)) return
+      push(s.type, {
+        label: s.label ? String(s.label).slice(0, 160) : null,
+        target_kind: s.target_kind ?? null,
+        target_id: s.target_id ?? null,
+        meta: (s.meta ?? {}) as Json,
+      })
+      if (s.type === 'click_out') flush(true)
     }
 
     // ── Scroll depth ────────────────────────────────────────────────────────
@@ -337,8 +432,11 @@ export default function ClientJourneyTracker() {
     }
 
     // ── Attention ───────────────────────────────────────────────────────────
+    let hiddenAt = 0
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now()
+        touch()
         if (visibleSince.current) {
           const stretch = Date.now() - visibleSince.current
           // A tab left open overnight is not four hours of styling. Anything
@@ -349,6 +447,9 @@ export default function ClientJourneyTracker() {
         push('idle')
         flush(true)
       } else {
+        const away = hiddenAt ? Date.now() - hiddenAt : 0
+        hiddenAt = 0
+        if (away > NEW_VISIT_AFTER_MS) { startNewVisit(); return }
         visibleSince.current = Date.now()
         push('resume')
       }
@@ -429,6 +530,7 @@ export default function ClientJourneyTracker() {
           // rrweb the error is handled and to carry on.
           errorHandler: () => true,
         }) ?? null
+        takeSnapshot = () => record.takeFullSnapshot(true)
         recordingTimer = setInterval(() => flushRecording(), RECORDING_FLUSH_MS)
       })
       .catch(() => { /* no video for this visit; the timeline still works */ })
@@ -436,6 +538,7 @@ export default function ClientJourneyTracker() {
     // ── Wiring ──────────────────────────────────────────────────────────────
     document.addEventListener('click', onClick, true)
     document.addEventListener('submit', onSubmit, true)
+    window.addEventListener(JOURNEY_SIGNAL, onSignal)
     window.addEventListener('scroll', onScroll, { passive: true })
     document.addEventListener('visibilitychange', onVisibility)
     window.addEventListener('pagehide', onPageHide)
@@ -452,6 +555,7 @@ export default function ClientJourneyTracker() {
       onPageHide()
       document.removeEventListener('click', onClick, true)
       document.removeEventListener('submit', onSubmit, true)
+      window.removeEventListener(JOURNEY_SIGNAL, onSignal)
       window.removeEventListener('scroll', onScroll)
       document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('pagehide', onPageHide)

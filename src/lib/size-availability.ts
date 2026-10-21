@@ -16,6 +16,7 @@ import {
   type ItemAvailability, type SizeRow, type StockLevel,
 } from '@/lib/size-match'
 import { isSecondHand, isUnique, type SourceBearing } from '@/lib/second-hand'
+import { parseIntakeSize, parseWaist } from '@/lib/member-intake'
 
 export interface ShopperSizeContext {
   profile: SizeProfile
@@ -119,8 +120,9 @@ export async function loadMemberSizeProfile(memberId: string): Promise<ShopperSi
       if (s && s.value != null) profile[c] = { value: Number(s.value), adjacent: s.adjacent != null ? Number(s.adjacent) : null }
     }
 
+    const raw = ((data as any).sizes ?? {}) as Record<string, string>
     if (!SIZE_CATEGORIES.some((c) => profile[c])) {
-      const raw = ((data as any).sizes ?? {}) as Record<string, string>
+      // Her words, ranges included: "10-12" is a 10 who also wears a 12.
       const legacy: [SizeCategory, string | undefined][] = [
         ['tops', raw.dress ?? raw.top],
         ['bottoms', raw.bottom],
@@ -128,16 +130,19 @@ export async function loadMemberSizeProfile(memberId: string): Promise<ShopperSi
         ['shoes', raw.shoe],
       ]
       for (const [cat, label] of legacy) {
-        if (!label) continue
-        const c = canonicalise(String(label), cat)
-        if (c.value != null) profile[cat] = { value: c.value, adjacent: null }
+        const s = parseIntakeSize(label, cat)
+        if (s) profile[cat] = s
       }
     }
+    const waist = structured.waist?.value != null
+      ? { value: Number(structured.waist.value), adjacent: structured.waist.adjacent != null ? Number(structured.waist.adjacent) : null }
+      : parseWaist(raw.waist)
+    if (waist) profile.waist = waist
 
     return {
       profile,
       acceptsSecondHand: !!(data as any).accepts_second_hand,
-      hasProfile: SIZE_CATEGORIES.some((c) => profile[c]?.value != null),
+      hasProfile: SIZE_CATEGORIES.some((c) => profile[c]?.value != null) || profile.waist != null,
     }
   } catch (err) {
     console.error('[loadMemberSizeProfile]', err)

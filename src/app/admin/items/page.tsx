@@ -1,19 +1,24 @@
 import Link from 'next/link'
 import { getItemsPage } from '@/lib/admin-queries'
 import ItemsGrid from './ItemsGrid'
+import AskOutfit, { AskBar } from './AskOutfit'
+import { getAskGroups } from './ask'
 
 const STATUS_TABS = ['all', 'draft', 'ready', 'live', 'archived'] as const
 
 interface PageProps {
-  searchParams: Promise<{ status?: string; stock?: string; q?: string; brand?: string; type?: string; colour?: string; month?: string; page?: string }>
+  searchParams: Promise<{ status?: string; stock?: string; q?: string; brand?: string; type?: string; colour?: string; month?: string; page?: string; ask?: string }>
 }
 
 export default async function ItemsPage({ searchParams }: PageProps) {
-  const { status, stock, q, brand, type, colour, month, page } = await searchParams
+  const { status, stock, q, brand, type, colour, month, page, ask: askParam } = await searchParams
   const activeTab = status || 'all'
   const stockFilter =
     stock === 'flagged' || stock === 'out_of_stock' || stock === 'low_stock' ? stock : undefined
-  const data = await getItemsPage({
+  // BUILD AN OUTFIT: a sentence in ?ask= shows one row per piece instead of the grid.
+  const ask = askParam?.trim() ?? ''
+  const asked = ask ? await getAskGroups(ask, activeTab === 'all' ? undefined : activeTab) : null
+  const data = asked ? null : await getItemsPage({
     status: activeTab === 'all' ? undefined : activeTab,
     stockFilter,
     search: q?.trim() || undefined,
@@ -57,7 +62,7 @@ export default async function ItemsPage({ searchParams }: PageProps) {
         {STATUS_TABS.map((tab) => (
           <Link
             key={tab}
-            href={tab === 'all' ? '/admin/items' : `/admin/items?status=${tab}`}
+            href={`/admin/items${(() => { const sp = new URLSearchParams(); if (tab !== 'all') sp.set('status', tab); if (ask) sp.set('ask', ask); return sp.toString() ? `?${sp}` : '' })()}`}
             className={`px-4 py-2 text-[10px] tracking-[0.09em] transition-all duration-300 rounded-[10px] ${
               activeTab === tab
                 ? 'bg-[#0A0A0A] text-white'
@@ -69,8 +74,10 @@ export default async function ItemsPage({ searchParams }: PageProps) {
         ))}
       </div>
 
+      <AskBar ask={ask} />
+
       {/* Grid */}
-      <ItemsGrid {...data} />
+      {asked ? <AskOutfit ask={ask} groups={asked.groups} error={asked.error} /> : data && <ItemsGrid {...data} />}
     </div>
   )
 }

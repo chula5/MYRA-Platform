@@ -238,7 +238,10 @@ export interface CategorySizes {
   adjacent: number | null
 }
 
-export type SizeProfile = Partial<Record<SizeCategory, CategorySizes>>
+export type SizeProfile = Partial<Record<SizeCategory, CategorySizes>> & {
+  /** Jeans waist (27, not a UK size). Matched only against bottoms sold by waist. */
+  waist?: CategorySizes
+}
 
 /**
  * How well a set of canonical values (one item size, or every in-stock size on

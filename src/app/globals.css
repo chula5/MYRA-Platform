@@ -718,3 +718,16 @@ html {
 .myra-app-door input { font-size: 17px !important; padding-block: 15px !important; }
 .myra-app-door button[type="submit"] { font-size: 16px !important; padding-block: 15px !important; }
 .myra-app-door button[type="button"] { font-size: 14px !important; }
+
+/* ── The iPhone app never shows the website ──────────────────── */
+/* <html> carries .myra-app from document start inside the Capacitor shell
+   (the inline script in the root layout). Everything the website shows that
+   the app must not — the sign-in form, the landing page — sits in <WebOnly>,
+   which is invisible from the first paint until the door (AppDoor) has drawn
+   over it. Layout is kept (visibility, not display) so nothing underneath
+   re-measures. Safari and the desktop never carry the class. */
+html.myra-app .myra-web-only,
+html.myra-app .myra-web-only * { visibility: hidden !important; }
+/* While the door is still hydrating, the wait is the door's own pearl rather
+   than a white page. */
+html.myra-app body:has(.myra-web-only) { background-color: #E6E6E9; }

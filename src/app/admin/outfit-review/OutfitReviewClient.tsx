@@ -7,6 +7,8 @@ import type { QueueFacet, ReviewAnchor, ReviewCandidate, ReviewItem } from './ac
 import { PICKER_COLOURS, PICKER_TYPES } from '@/components/admin/ItemPickerModal'
 import { approveCandidate, rescoreCandidate, recordSkipDecision, recordSwap, recordFastLaneOutcome, recordReviewOutcome } from '@/app/admin/composer/actions.gated'
 import { generateHiggsfieldShootForOutfit } from '@/app/admin/projects/higgsfield-actions.gated'
+import { composeFromAsk } from '@/app/admin/composer/ask-actions.gated'
+import type { AskResult } from '@/app/admin/composer/ask-actions'
 import type { Slot } from '@/lib/composer'
 
 // Swap/add item search via a ROUTE HANDLER rather than a server action. Server
@@ -98,6 +100,33 @@ function typeLabel(value: string): string {
 
 type QueueQuery = { brand: string | null; type: string | null; colour: string | null; q: string }
 
+// A look asked for in words, before or around an anchor's card.
+type AskedLooks = { candidates: ReviewCandidate[]; notes: string[]; pieces: NonNullable<AskResult['pieces']> }
+
+// How the sentence was read — one chip per piece, and anything that had to give.
+function AskReadout({ asked }: { asked: AskedLooks }) {
+  return (
+    <div className="mb-3">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[8px] tracking-[0.18em] text-[#A8A8A4]">READ AS</span>
+        {asked.pieces.map((p, i) => (
+          <span
+            key={i}
+            title={p.relaxed ?? undefined}
+            className={`px-2 py-1 text-[8px] tracking-[0.1em] rounded-full border ${p.found === 0 ? 'border-[#E8B4B4] text-[#B83A3A]' : 'border-[#E2E0DB] text-[#4A4E57]'}`}
+          >
+            {p.label.toUpperCase()}
+            <span className="text-[#A8A8A4]"> · {p.byAnchor ? 'ANCHOR' : p.found === 0 ? 'NONE' : `${p.found}`}{p.relaxed ? ' ▲' : ''}</span>
+          </span>
+        ))}
+      </div>
+      {asked.notes.map((n, i) => (
+        <p key={i} className="mt-1.5 text-[8px] tracking-[0.08em] text-[#7C838B]">▲ {n.toUpperCase()}</p>
+      ))}
+    </div>
+  )
+}
+
 export default function OutfitReviewClient({
   anchors,
   brands = [],
@@ -121,7 +150,30 @@ export default function OutfitReviewClient({
   const [filter, setFilter] = useState<QueueQuery>({ brand: null, type: null, colour: null, q: '' })
   const [searchInput, setSearchInput] = useState('')
   const [loading, setLoading] = useState(false)
+  // BUILD FROM WORDS — each sentence becomes a card of its own above the queue.
+  const [askText, setAskText] = useState('')
+  const [askBusy, setAskBusy] = useState(false)
+  const [askError, setAskError] = useState<string | null>(null)
+  const [askCards, setAskCards] = useState<{ key: number; anchor: ReviewAnchor; asked: AskedLooks }[]>([])
   const reqRef = useRef(0) // drop stale responses when filters change quickly
+
+  async function buildFromWords() {
+    const q = askText.trim()
+    if (!q) return
+    setAskBusy(true)
+    setAskError(null)
+    const res = await composeFromAsk(q, null, { surface: 'review' }).catch((e: unknown) => ({
+      error: e instanceof Error ? e.message : 'Could not build that look',
+    } as AskResult))
+    setAskBusy(false)
+    if (res.error || !res.anchor) { setAskError(res.error ?? 'Could not build that look'); return }
+    const a = res.anchor
+    setAskCards((cards) => [{
+      key: Date.now(),
+      anchor: { ...a, existingCount: a.existingCount },
+      asked: { candidates: (res.candidates ?? []) as ReviewCandidate[], notes: res.notes ?? [], pieces: res.pieces ?? [] },
+    }, ...cards])
+  }
   const filtered = !!(filter.brand || filter.type || filter.colour || filter.q.trim())
 
   async function loadQueue(next: QueueQuery, shuffle = false) {
@@ -189,6 +241,32 @@ export default function OutfitReviewClient({
           {refreshing ? 'SHUFFLING…' : '↻ REFRESH ANCHORS'}
         </button>
       </div>
+
+      {/* BUILD FROM WORDS — the whole look said in a sentence; it gets its own card */}
+      <form onSubmit={(e) => { e.preventDefault(); void buildFromWords() }} className="flex flex-col sm:flex-row gap-2">
+        <input
+          value={askText}
+          onChange={(e) => setAskText(e.target.value)}
+          placeholder="✦ BUILD FROM WORDS — E.G. A BLUE SILK DRESS, BROWN ISABEL MARANT HEELS AND A LEATHER JACKET"
+          aria-label="Describe an outfit"
+          className="flex-1 border border-[#0A0A0A] rounded-[10px] px-4 py-3 text-[12px] tracking-[0.05em] text-[#4A4E57] placeholder:text-[11px] placeholder:tracking-[0.08em] placeholder:text-[#A8A8A4] focus:outline-none"
+        />
+        <button
+          type="submit"
+          disabled={askBusy || !askText.trim()}
+          className="bg-[#0A0A0A] text-white px-6 py-3 text-[10px] tracking-[0.16em] rounded-full hover:opacity-85 transition-opacity disabled:opacity-50"
+        >
+          {askBusy ? 'COMPOSING…' : 'COMPOSE →'}
+        </button>
+      </form>
+      {askError && <p className="text-[10px] tracking-[0.12em] text-[#B83A3A]">{askError.toUpperCase()}</p>}
+      {askCards.length > 0 && (
+        <div className="space-y-12">
+          {askCards.map((c) => (
+            <AnchorReview key={c.key} anchor={c.anchor} initial={c.asked} />
+          ))}
+        </div>
+      )}
 
       {/* Search — "fur", "leopard", "silk", "wide leg": name, brand, type, colour or material */}
       <div className="flex flex-col sm:flex-row gap-2">
@@ -296,11 +374,14 @@ export default function OutfitReviewClient({
 
 type SwapTarget = { candIdx: number; itemIdx: number; slot: string; mode: 'swap' | 'add' }
 
-function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
-  const [loading, setLoading] = useState(true)
+function AnchorReview({ anchor, initial }: { anchor: ReviewAnchor; initial?: AskedLooks }) {
+  const [loading, setLoading] = useState(!initial)
   const [error, setError] = useState<string | null>(null)
-  const [cands, setCands] = useState<ReviewCandidate[]>([])
+  const [cands, setCands] = useState<ReviewCandidate[]>(initial?.candidates ?? [])
   const [states, setStates] = useState<Record<number, CandState>>({})
+  // ASK AROUND THIS ANCHOR — "find a long dress to go with this".
+  const [asked, setAsked] = useState<AskedLooks | null>(initial ?? null)
+  const [askText, setAskText] = useState('')
   // Outfits approved this session, added on top of the saved count.
   const [built, setBuilt] = useState(0)
 
@@ -315,6 +396,7 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
   const [swapLoading, setSwapLoading] = useState(false)
 
   useEffect(() => {
+    if (initial) return // composed from words already
     let alive = true
     ;(async () => {
       const res = await composeForReview(anchor.item_id)
@@ -324,7 +406,24 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
       setCands(res.candidates ?? [])
     })()
     return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anchor.item_id])
+
+  // New looks for this anchor from her words; the anchor stays.
+  async function askAround() {
+    const q = askText.trim()
+    if (!q) return
+    setLoading(true)
+    setError(null)
+    const res = await composeFromAsk(q, anchor.item_id, { surface: 'review', keepAnchor: true }).catch((e: unknown) => ({
+      error: e instanceof Error ? e.message : 'Could not build that look',
+    } as AskResult))
+    setLoading(false)
+    setAsked({ candidates: [], notes: res.notes ?? [], pieces: res.pieces ?? [] })
+    if (res.error) { setError(res.error); return }
+    setCands((res.candidates ?? []) as ReviewCandidate[])
+    setStates({})
+  }
 
   async function approve(idx: number) {
     const c = cands[idx]
@@ -504,6 +603,23 @@ function AnchorReview({ anchor }: { anchor: ReviewAnchor }) {
 
       {/* Candidates */}
       <div className="p-4">
+        <form onSubmit={(e) => { e.preventDefault(); void askAround() }} className="flex gap-2 mb-3">
+          <input
+            value={askText}
+            onChange={(e) => setAskText(e.target.value)}
+            placeholder="✦ ASK AROUND THIS ANCHOR — E.G. FIND A LONG DRESS TO GO WITH THIS"
+            aria-label="Ask for pieces to go with this anchor"
+            className="flex-1 border border-[#E2E0DB] rounded-[10px] px-3 py-2 text-[11px] tracking-[0.05em] text-[#4A4E57] placeholder:text-[10px] placeholder:tracking-[0.08em] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#0A0A0A]"
+          />
+          <button
+            type="submit"
+            disabled={loading || !askText.trim()}
+            className="px-4 py-2 text-[9px] tracking-[0.14em] border border-[#0A0A0A] text-[#4A4E57] rounded-full hover:bg-[#0A0A0A] hover:text-white transition-colors disabled:opacity-40"
+          >
+            ASK →
+          </button>
+        </form>
+        {asked && !loading && <AskReadout asked={asked} />}
         {loading && <p className="text-[11px] tracking-[0.16em] text-[#A8A8A4] py-8 text-center">COMPOSING POTENTIAL OUTFITS…</p>}
         {!loading && error && <p className="text-[10px] tracking-[0.12em] text-[#B83A3A] py-6 text-center">{error.toUpperCase()}</p>}
         {!loading && !error && cands.every((_, i) => states[i]?.discarded) && cands.length > 0 && (

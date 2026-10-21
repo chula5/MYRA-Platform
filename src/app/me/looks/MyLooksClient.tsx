@@ -38,6 +38,7 @@ import type { AskSwapOption, AskLookEdits } from '@/app/admin/private-stylist/ac
 import { PICKER_COLOURS, PICKER_TYPES } from '@/components/admin/ItemPickerModal'
 import { loadCalendarPanel, syncMyCalendar, planMyEvent, type CalendarPanelView } from '@/app/me/dressing-room/calendar-actions'
 import { useScrollTo } from '@/lib/smooth-scroll'
+import { journeySignal } from '@/lib/journey'
 
 // The feed's section heading pair, so her page reads at the feed's scale.
 function SectionHead({ label, note, heart = false }: { label: string; note?: string; heart?: boolean }) {
@@ -199,6 +200,21 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
   useEffect(() => {
     try { setRecent(JSON.parse(localStorage.getItem(RECENT_KEY) || '[]')) } catch { /* fine */ }
   }, [])
+  // Which look she opened, for the JOURNEY — every route into a look (tap,
+  // swipe to the next, a deep link) lands on this state.
+  useEffect(() => {
+    // Chloe testing as her never reaches the tracker — it is not mounted for admin.
+    if (!openLook) return
+    journeySignal({
+      type: 'look_open',
+      target_kind: 'look',
+      target_id: openLook.look_id,
+      label: openLook.occasion_label || null,
+      meta: { source: openLook.source ?? null, pieces: openLook.items.length },
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openLook?.look_id])
+
   function noteViewed(id: string) {
     setRecent((prev) => {
       const next = [id, ...prev.filter((x) => x !== id)].slice(0, 8)

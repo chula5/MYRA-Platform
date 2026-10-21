@@ -32,6 +32,21 @@ export function readInvite(token: string | null | undefined): { memberId: string
   return { memberId, exp }
 }
 
+/** Whose link this was, even after it ran out — for the sign-on log only, so
+ *  "she opened an old link" can be told apart from "she never opened it".
+ *  The signature is still checked; only the expiry is not. Never grants entry. */
+export function inviteOwner(token: string | null | undefined): string | null {
+  if (!token) return null
+  const parts = decodeURIComponent(token).split('~')
+  if (parts.length !== 4 || parts[0] !== 'i1') return null
+  const [, memberId, expStr, sig] = parts
+  if (!/^[0-9a-f-]{36}$/i.test(memberId)) return null
+  try {
+    if (!crypto.timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(sign(`i1~${memberId}~${expStr}`), 'hex'))) return null
+  } catch { return null }
+  return memberId
+}
+
 // ── The short form she is sent: /join/alison-g3k9f2a1c07b ────────────────────
 // Her first name, the day it runs out (base 36) and a 10-character signature.
 // Still stateless: the name narrows the members to check, the signature

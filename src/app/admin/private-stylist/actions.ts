@@ -140,6 +140,9 @@ export interface PilotMember {
   // Wardrobe import (migration 0046): her login, if linked, and how many owned
   // pieces are approved and composable.
   auth_user_id: string | null
+  /** The email her login uses (0100) and the one Chloe wrote down for the door (0102). */
+  email?: string | null
+  invite_email?: string | null
   owned_count: number
   events: { event_id: string; label: string; event_date: string; done: boolean; brief?: string | null }[]
   wardrobe: {
@@ -377,6 +380,8 @@ export async function createMember(input: {
   work_dress_code: WorkDressCode | null
   sizes?: Record<string, string>
   budget_ceiling?: Record<string, number>
+  /** What she spends per kind of piece — the composer never goes over a max. */
+  price_bands?: PriceBands
   never_wears?: string
   notes?: string
 }): Promise<{ member_id?: string; error?: string }> {
@@ -399,6 +404,7 @@ export async function createMember(input: {
       work_dress_code: input.work_dress_code,
       sizes: input.sizes ?? {},
       budget_ceiling: input.budget_ceiling ?? {},
+      ...(input.price_bands && Object.keys(input.price_bands).length ? { price_bands: input.price_bands } : {}),
       never_wears: input.never_wears ?? null,
       notes: input.notes ?? null,
     })

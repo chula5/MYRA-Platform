@@ -4,6 +4,7 @@
 // login (user_metadata), so it needs no table and follows her between devices.
 
 import { createAdminClient, createServerClient } from '@/lib/supabase-server'
+import { recordSignOn } from '@/lib/sign-on'
 
 /**
  * She has been shown her welcome — connect your accounts, MYRA where you shop.
@@ -22,6 +23,9 @@ export async function markWelcomed(opts?: { app?: boolean }): Promise<{ ok: bool
   if (meta.welcomed_at === user.user_metadata?.welcomed_at && meta.app_welcomed_at === user.user_metadata?.app_welcomed_at) return { ok: true }
   const admin = createAdminClient()
   await admin.auth.admin.updateUserById(user.id, { user_metadata: meta })
+  // Only the first time each is stamped — the early return above is a repeat.
+  if (meta.welcomed_at !== user.user_metadata?.welcomed_at) await recordSignOn({ step: 'welcomed', authUserId: user.id, email: user.email })
+  if (meta.app_welcomed_at !== user.user_metadata?.app_welcomed_at) await recordSignOn({ step: 'app_first_open', authUserId: user.id, email: user.email })
   return { ok: true }
 }
 
@@ -31,5 +35,6 @@ export async function markTourDone(): Promise<{ ok: boolean }> {
   if (!user) return { ok: false }
   const admin = createAdminClient()
   await admin.auth.admin.updateUserById(user.id, { user_metadata: { ...(user.user_metadata ?? {}), toured_at: new Date().toISOString() } })
+  await recordSignOn({ step: 'tour_done', authUserId: user.id, email: user.email })
   return { ok: true }
 }

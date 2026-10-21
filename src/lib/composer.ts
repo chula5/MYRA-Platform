@@ -174,7 +174,26 @@ interface GenerateOpts {
   // every time, and nothing scored later can bring a different bag into play —
   // one Isadora clutch was in 7 of Alison's 99 looks. Omitted = unchanged.
   shortlistAdjust?: (item: ItemWithBrand) => number
+  // Shortlist width for the OPTIONAL slots (bag, jewellery…). Defaults to
+  // perSlotPool; a widening pass keeps these narrow so the combinations grow
+  // with the garments, not with every accessory.
+  optionalPerSlotPool?: number
+  // Drop a piece before it takes a shortlist place — for pieces that could
+  // never pass beside this anchor (a £48 tee beside a £4,700 jacket).
+  shortlistFilter?: (item: ItemWithBrand, slot: Slot) => boolean
+  // When a slot's shortlist has no statement piece, its last `count` places go
+  // to the best statement pieces in that slot — the constitution wants exactly
+  // one, and a shortlist of perfectly compatible plain pieces can't provide it.
+  statementReserve?: { count: number; isStatement: (item: ItemWithBrand, slot: Slot) => boolean }
+  // The clothes make the outfit: the same top + trousers with other shoes, a
+  // bag or earrings is the same look. When set, no two picks share all their
+  // garments (shoes, bag, jewellery and accessories are finishes).
+  distinctClothes?: boolean
+  // No piece in more than this many picks while others are available.
+  maxUsesPerItem?: number
 }
+
+const FINISH_SLOTS = new Set<Slot>(['shoe', 'bag', 'jewellery', 'accessory'])
 
 export function generateCandidates(opts: GenerateOpts): ComposerCandidate[] {
   const {
@@ -188,13 +207,19 @@ export function generateCandidates(opts: GenerateOpts): ComposerCandidate[] {
     learnedBlend = 0,
     houseGate,
     shortlistAdjust,
+    optionalPerSlotPool = perSlotPool,
+    shortlistFilter,
+    statementReserve,
+    distinctClothes = false,
+    maxUsesPerItem,
   } = opts
 
   const anchorSlot = slotForItemType(anchor.item_type)
   const plan = slotPlanForAnchor(anchorSlot)
 
   const excluded = new Set([anchor.item_id, ...excludeItemIds])
-  const eligible = library.filter(i => !excluded.has(i.item_id))
+  const eligible = library.filter(i =>
+    !excluded.has(i.item_id) && (!shortlistFilter || shortlistFilter(i, slotForItemType(i.item_type))))
 
   // Bucket eligible items by slot, pre-ranked by pairwise compat with the anchor.
   const buckets: Record<Slot, Array<{ item: ItemWithBrand; compat: number; rank: number }>> = {
@@ -208,7 +233,16 @@ export function generateCandidates(opts: GenerateOpts): ComposerCandidate[] {
   }
   for (const slot of Object.keys(buckets) as Slot[]) {
     buckets[slot].sort((a, b) => b.rank - a.rank)
-    buckets[slot] = buckets[slot].slice(0, perSlotPool)
+    const size = plan.optional.includes(slot) ? optionalPerSlotPool : perSlotPool
+    const top = buckets[slot].slice(0, size)
+    if (statementReserve && !top.some((b) => statementReserve.isStatement(b.item, slot))) {
+      const statements = buckets[slot]
+        .filter((b) => statementReserve.isStatement(b.item, slot))
+        .slice(0, statementReserve.count)
+      buckets[slot] = [...top.slice(0, Math.max(0, size - statements.length)), ...statements]
+    } else {
+      buckets[slot] = top
+    }
   }
 
   // Build the slot order to fill. Required first, then optional.
@@ -270,16 +304,31 @@ export function generateCandidates(opts: GenerateOpts): ComposerCandidate[] {
   scored.sort((a, b) => b.score - a.score)
 
   // Diversity filter — avoid near-duplicates (combos that share too many items).
+  const clothesKey = (c: ComposerCandidate) =>
+    c.items.filter(({ slot }) => !FINISH_SLOTS.has(slot)).map(({ item }) => item.item_id).sort().join('|')
+  const use = new Map<string, number>()
   const picked: ComposerCandidate[] = []
-  for (const c of scored) {
-    if (picked.length >= maxCandidates) break
+  const tooSimilar = (c: ComposerCandidate) => {
     const cIds = new Set(c.items.map(x => x.item.item_id))
-    const tooSimilar = picked.some(p => {
+    return picked.some(p => {
       const pIds = new Set(p.items.map(x => x.item.item_id))
       const shared = Array.from(cIds).filter(id => pIds.has(id)).length
-      return shared >= cIds.size - 1 && cIds.size >= 3
+      if (shared >= cIds.size - 1 && cIds.size >= 3) return true
+      return distinctClothes && clothesKey(c) !== '' && clothesKey(c) === clothesKey(p)
     })
-    if (!tooSimilar) picked.push(c)
+  }
+  // With a per-piece cap, fill under it first and only then without it — the
+  // twin rule is never loosened.
+  const passes: ((c: ComposerCandidate) => boolean)[] = maxUsesPerItem
+    ? [(c) => !c.items.some(({ item }) => (use.get(item.item_id) ?? 0) >= maxUsesPerItem), () => true]
+    : [() => true]
+  for (const ok of passes) {
+    for (const c of scored) {
+      if (picked.length >= maxCandidates) break
+      if (picked.includes(c) || !ok(c) || tooSimilar(c)) continue
+      c.items.forEach(({ item }) => use.set(item.item_id, (use.get(item.item_id) ?? 0) + 1))
+      picked.push(c)
+    }
   }
 
   return picked

@@ -5,6 +5,7 @@ import { createServerClient, createAdminClient } from '@/lib/supabase-server'
 import { recordEarlyAccessLogin } from './activity'
 import { recordLandingEvent } from '@/app/actions/landing-analytics'
 import { EARLY_ACCESS_INVITE_CODE } from './invite'
+import { recordSignOn } from '@/lib/sign-on'
 
 const ROLE = 'early_access'
 
@@ -20,10 +21,14 @@ export async function earlyAccessSignIn(formData: FormData) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
   if (error) {
+    await recordSignOn({ step: 'sign_in_failed', ok: false, email, detail: 'password' })
     redirect(`/signin?error=${encodeURIComponent('Incorrect email or password')}`)
   }
 
-  if (data.user) await recordEarlyAccessLogin(data.user.id)
+  if (data.user) {
+    await recordEarlyAccessLogin(data.user.id)
+    await recordSignOn({ step: 'signed_in', authUserId: data.user.id, email, detail: 'password' })
+  }
 
   // Where she was on her way to — the Mirror connect flow, for one — wins
   // over the member home. Only a same-origin path is honoured.
@@ -115,6 +120,8 @@ export async function publicSignUp(formData: FormData) {
 
 export async function earlyAccessSignOut() {
   const supabase = await createServerClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (user) await recordSignOn({ step: 'signed_out', authUserId: user.id, email: user.email })
   await supabase.auth.signOut()
   redirect('/signin')
 }

@@ -422,7 +422,7 @@ function ChatPane({ chat, test, testMemberId, onBack, onSent }: { chat: ChatSumm
         {error && <p className={`myra-guide-text normal-case ${T} text-[#B83A3A] mt-4`}>{error}</p>}
       </div>
 
-      <form onSubmit={(e) => { e.preventDefault(); void send(draft) }} className="border-t border-[rgba(43,43,43,0.14)] px-6 sm:px-8 pt-4 pb-6 myra-pearl">
+      <form data-journey-form="private" onSubmit={(e) => { e.preventDefault(); void send(draft) }} className="border-t border-[rgba(43,43,43,0.14)] px-6 sm:px-8 pt-4 pb-6 myra-pearl">
         <div className="flex items-center gap-2">
           <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={test ? 'Testing as her — nothing is sent' : `Say something to ${chat.is_group ? 'the group' : chat.title.split(' ')[0]}…`} disabled={test}
             className={`myra-guide-text normal-case flex-1 min-w-0 bg-white border border-[rgba(43,43,43,0.25)] rounded-full px-6 py-4 ${T} text-[#2B2B2B] placeholder:text-[#A8A8A4] focus:outline-none focus:border-[#2B2B2B] disabled:opacity-60`} />

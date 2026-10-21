@@ -8,6 +8,7 @@ import BrandRequests from './BrandRequests'
 import OutfitQualityTab from './quality/OutfitQualityTab'
 import { listMemberReferencePictures, addMemberReferencePictures, removeMemberReferencePicture, type ReferencePicture } from './reference-actions'
 import { loadMemberConfidence, sendLookToClient, unsendLook, sendAllShotLooks, createClientLogin, type MemberConfidence } from './confidence-actions'
+import MemberAccess from './MemberAccess'
 import { loadClientAttribution, loadTransferSeries, tagLookScope, loadInheritanceReport, runPromotionPass, alignStylistLayers, type ClientAttribution, type InheritanceReport } from './attribution-actions'
 import { SCOPE_LABEL, type Scope } from '@/lib/learning-scope'
 import type { TransferPoint } from '@/lib/learning-scope'
@@ -37,6 +38,7 @@ import {
   PRICE_BUCKETS,
   type StylePrefs,
   type PriceBands, PIECE_PREFERENCES } from '@/lib/pilot-stylist'
+import { INTAKE_SIZE_FIELDS, parseIntakeSize, parseWaist, parseBudgetText } from '@/lib/member-intake'
 import { createMember, updateMember, deleteMember, seedSyntheticPersonas, addKnownEvent, removeKnownEvent, setKnownEventBriefAdmin, loadEventPicksAdmin, composeEventPicksNow, setEventPickShownAdmin, removeEventPickAdmin, addWardrobeItem, removeWardrobeItem, createDelivery, deleteDelivery, reopenDelivery, deleteDeliveryAndMemory, updateDelivery, saveLook, deleteLook, clearLook, clearDeliveryLooks, markStockChecked, sendDelivery, recordResponse, logActivity, assignMemberPersona, composeDeliveryLooks, lookAlternates, swapComposedLookItem, removeComposedLookItem, lookAddOptions, addComposedLookItem, approveComposedLook, skipComposedLook, composeLookVariants, restoreLookShoot, deleteLookShoot, loadMemberTrust, recordMemberLookFeedback, setMemberBrands, addMemberBrands, removeMemberBrand, restoreMemberBrand, loadMemberBrandMap } from './actions.gated'
 import type { MemberTrust, MemberBrandMap, MemberBrandDot, SwapOption, PilotData, PilotMember, PilotDelivery, PilotLook, PilotActivity } from './actions'
 
@@ -365,8 +367,8 @@ function NewMemberForm({ run, busy, done }: { run: Run; busy: string | null; don
   const [inputOnly, setInputOnly] = useState('Zara')
   const [occasions, setOccasions] = useState<Partial<Record<OccasionId, Frequency>>>({})
   const [dressCode, setDressCode] = useState<WorkDressCode | null>(null)
-  const [sizes, setSizes] = useState({ top: '', bottom: '', shoe: '', dress: '' })
-  const [budgets, setBudgets] = useState({ coat: '', dress: '', top: '' })
+  const [sizes, setSizes] = useState<Record<string, string>>({})
+  const [budgets, setBudgets] = useState<Record<string, string>>({})
   const [neverWears, setNeverWears] = useState('')
   const [notes, setNotes] = useState('')
 
@@ -398,34 +400,60 @@ function NewMemberForm({ run, busy, done }: { run: Run; busy: string | null; don
         <p className={`${label} mb-2`}>OCCASION DEMAND — CLICKABLE, NOT FREE TEXT</p>
         <OccasionPicker value={occasions} dressCode={dressCode} onChange={setOccasions} onDressCode={setDressCode} />
       </div>
-      <div className="grid grid-cols-2 gap-5">
-        <div>
-          <p className={`${label} mb-1.5`}>SIZES</p>
-          <div className="grid grid-cols-4 gap-2">
-            {(['top', 'bottom', 'shoe', 'dress'] as const).map((k) => (
-              <input
-                key={k}
-                className={input}
-                placeholder={k.toUpperCase()}
-                value={sizes[k]}
-                onChange={(e) => setSizes({ ...sizes, [k]: e.target.value })}
-              />
-            ))}
-          </div>
+      <div>
+        <p className={`${label} mb-1.5`}>SIZES — UK, A RANGE LIKE 10-12 MEANS SHE WEARS BOTH</p>
+        <div className="grid grid-cols-5 gap-2">
+          {INTAKE_SIZE_FIELDS.map((f) => {
+            const v = sizes[f.key] ?? ''
+            const read =
+              f.key === 'waist' ? parseWaist(v)
+              : parseIntakeSize(v, f.key === 'shoe' ? 'shoes' : f.key === 'bottom' ? 'bottoms' : 'tops')
+            return (
+              <div key={f.key}>
+                <p className="text-[13px] tracking-[0.14em] text-[#6B6B6B] mb-1">{f.label}</p>
+                <input
+                  className={input}
+                  placeholder={f.hint}
+                  value={v}
+                  onChange={(e) => setSizes({ ...sizes, [f.key]: e.target.value })}
+                />
+                {v.trim() && (
+                  <p className={`text-[13px] tracking-[0.1em] mt-1 ${read ? 'text-[#6B6B6B]' : 'text-[#B83A3A]'}`}>
+                    {read
+                      ? `READ AS ${f.key === 'waist' ? 'W' : 'UK '}${read.value}${read.adjacent != null ? ` + ${read.adjacent}` : ''}`
+                      : 'NOT READ — TRY 10 OR 10-12'}
+                  </p>
+                )}
+              </div>
+            )
+          })}
         </div>
-        <div>
-          <p className={`${label} mb-1.5`}>BUDGET CEILING £ (COAT / DRESS / TOP)</p>
-          <div className="grid grid-cols-3 gap-2">
-            {(['coat', 'dress', 'top'] as const).map((k) => (
-              <input
-                key={k}
-                className={input}
-                placeholder={k.toUpperCase()}
-                value={budgets[k]}
-                onChange={(e) => setBudgets({ ...budgets, [k]: e.target.value })}
-              />
-            ))}
-          </div>
+      </div>
+      <div>
+        <p className={`${label} mb-1.5`}>WHAT SHE SPENDS £ — 200 = UP TO 200 · 100-300 = A RANGE · OVER THE MAX IS NEVER COMPOSED</p>
+        <div className="grid grid-cols-4 gap-2">
+          {PRICE_BUCKETS.map((b) => {
+            const v = budgets[b.id] ?? ''
+            const read = parseBudgetText(v)
+            return (
+              <div key={b.id}>
+                <p className="text-[13px] tracking-[0.14em] text-[#6B6B6B] mb-1">{b.label}</p>
+                <input
+                  className={input}
+                  placeholder="100-300"
+                  value={v}
+                  onChange={(e) => setBudgets({ ...budgets, [b.id]: e.target.value })}
+                />
+                {v.trim() && (
+                  <p className={`text-[13px] tracking-[0.1em] mt-1 ${read ? 'text-[#6B6B6B]' : 'text-[#B83A3A]'}`}>
+                    {!read ? 'NOT READ — TRY 200 OR 100-300'
+                      : read.min != null && read.max != null ? `£${read.min} TO £${read.max}`
+                      : read.max != null ? `UP TO £${read.max}` : `FROM £${read.min}`}
+                  </p>
+                )}
+              </div>
+            )
+          })}
         </div>
       </div>
       <div className="grid grid-cols-2 gap-5">
@@ -442,10 +470,13 @@ function NewMemberForm({ run, busy, done }: { run: Run; busy: string | null; don
         className={btnDark}
         disabled={!name || brands.length === 0 || busy === 'newMember'}
         onClick={async () => {
-          const budget_ceiling: Record<string, number> = {}
-          for (const [k, v] of Object.entries(budgets)) if (v) budget_ceiling[k] = Number(v)
+          const price_bands: PriceBands = {}
+          for (const [k, v] of Object.entries(budgets)) {
+            const band = parseBudgetText(v)
+            if (band) price_bands[k] = band
+          }
           const sizesClean: Record<string, string> = {}
-          for (const [k, v] of Object.entries(sizes)) if (v) sizesClean[k] = v
+          for (const [k, v] of Object.entries(sizes)) if (v.trim()) sizesClean[k] = v.trim()
           const r = await run(
             'newMember',
             () =>
@@ -456,7 +487,7 @@ function NewMemberForm({ run, busy, done }: { run: Run; busy: string | null; don
                 occasions,
                 work_dress_code: dressCode,
                 sizes: sizesClean,
-                budget_ceiling,
+                price_bands,
                 never_wears: neverWears || undefined,
                 notes: notes || undefined,
               }),
@@ -1993,8 +2024,8 @@ function MemberCard({
               {Object.keys(m.sizes).length > 0 && (
                 <p>SIZES: {Object.entries(m.sizes).map(([k, v]) => `${k.toUpperCase()} ${v}`).join(' · ')}</p>
               )}
-              {Object.keys(m.budget_ceiling).length > 0 && (
-                <p>BUDGET: {Object.entries(m.budget_ceiling).map(([k, v]) => `${k.toUpperCase()} £${v}`).join(' · ')}</p>
+              {Object.values(m.budget_ceiling).some((v) => v != null) && (
+                <p>BUDGET: {Object.entries(m.budget_ceiling).filter(([, v]) => v != null).map(([k, v]) => `${k.toUpperCase()} £${v}`).join(' · ')}</p>
               )}
               {m.never_wears && <p>NEVER WEARS: {m.never_wears.toUpperCase()}</p>}
               {m.notes && <p className="max-w-xl">NOTES: {m.notes.toUpperCase()}</p>}
@@ -2305,6 +2336,9 @@ function ClientAccess({ memberId, memberName, run, busy }: { memberId: string; m
   return (
     <div className="border border-[#DCDEE1] bg-[#F4F5F6] p-4 space-y-3">
       <p className="text-[20px] tracking-[0.16em] text-[#7C838B]">HER ACCESS</p>
+
+      {/* The email she types on the app's door; the code goes there. */}
+      <MemberAccess memberId={memberId} name={memberName} />
 
       {made?.password ? (
         <div className="space-y-1">

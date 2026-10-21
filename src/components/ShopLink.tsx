@@ -19,6 +19,7 @@ import { affiliateUrl } from '@/lib/affiliate'
 import { isBeaconMerchant, goHref } from '@/lib/outbound'
 import { getStoredRef } from '@/lib/ref'
 import { recordOutboundBeacon } from '@/app/actions/outbound-click'
+import { journeySignal } from '@/lib/journey'
 
 export interface ShopLinkItem {
   item_id: string
@@ -44,6 +45,14 @@ const label = (item: ShopLinkItem) => [item.brand?.name, item.product_name].filt
 export function openShop(item: ShopLinkItem, outfitId?: string | null): void {
   if (!item?.retailer_url) return
   const clickId = uuid()
+  // No anchor for the journey tracker to see, so it is told directly.
+  journeySignal({
+    type: 'click_out',
+    label: label(item) || null,
+    target_kind: 'item',
+    target_id: item.item_id,
+    meta: { brand: item.brand?.name ?? null, outfit: outfitId ?? null },
+  })
   if (isBeaconMerchant(item.brand?.name, item.retailer_url)) {
     void recordOutboundBeacon({
       clickId,
@@ -119,6 +128,12 @@ export default function ShopLink({
       rel="noopener noreferrer"
       onClick={handleClick}
       className={className}
+      // Read by the journey tracker: this tap is her leaving for a retailer,
+      // and which piece — even though a /go/ link looks like one of ours.
+      data-journey-kind="shop"
+      data-journey-id={item.item_id}
+      data-journey={label(item) || undefined}
+      data-journey-brand={item.brand?.name || undefined}
     >
       {children}
     </a>

@@ -27,7 +27,7 @@ import {
   isExcluded,
   confidenceGate,
 } from '@/lib/pipeline'
-import { evaluateHouseStyle, type RuleHit } from '@/lib/house-style'
+import { evaluateHouseStyle, statementKind, priceOf, PRICE_FLOOR, PRICE_CEILING, type RuleHit } from '@/lib/house-style'
 import {
   toHouseItem,
   loadLearnedMaterialPairs,
@@ -84,7 +84,24 @@ export interface ComposedCandidatePayload {
 export interface HouseRejectionSummary {
   total: number
   byCode: { code: string; rule: string; count: number; message: string }[]
+  tried: number         // distinct combinations put to the house rules
+  passed: number        // of those, how many the rules let through
+  widestPool: number    // widest per-slot shortlist reached (4 = no widening)
 }
+
+// How wide each garment slot's shortlist goes, pass by pass. The first pass is
+// the composer as it always was; the later ones run only when the house rules
+// left fewer than ENOUGH_LOOKS different looks. Optional slots stay at 4, so the third pass is
+// 12³ × 5² ≈ 43k combinations at most.
+const COMPOSE_POOLS = [4, 8, 12]
+const OPTIONAL_POOL = 4
+const STATEMENT_RESERVE = 2
+// Keep widening until this many DIFFERENT looks come back. All ten looks for a
+// Phoebe Philo anorak were the same bolero + jumpsuit with other shoes and bags
+// (2026-10-21): the same clothes are one look, and no piece goes in more than
+// MAX_USES_PER_PIECE picks while others will do.
+const ENOUGH_LOOKS = 6
+const MAX_USES_PER_PIECE = 2
 
 export interface SlotPlanPayload {
   anchorSlot: Slot
@@ -141,8 +158,10 @@ export async function composeForAnchor(
     const anchorSlot0 = slotForItemType(anchor.item_type)
     const rejectionHits: RuleHit[] = []
     const houseVerdicts = new Map<string, ReturnType<typeof evaluateHouseStyle>>()
+    const comboKey = (items: { item: ItemWithBrand; slot: Slot }[]) =>
+      items.map((x) => x.item.item_id).sort().join('|')
     const verdictFor = (items: { item: ItemWithBrand; slot: Slot }[]) => {
-      const key = items.map((x) => x.item.item_id).sort().join('|')
+      const key = comboKey(items)
       let v = houseVerdicts.get(key)
       if (!v) {
         v = evaluateHouseStyle(
@@ -154,17 +173,68 @@ export async function composeForAnchor(
       return v
     }
 
-    const raw = generateCandidates({
-      anchor,
-      library: pool,
-      learnedBlend: blendStrength(model),
-      learnedBonus: (items) => learnedBonus(model, [toFeature(anchor), ...items.map((x) => toFeature(x.item))]),
-      houseGate: (items) => {
-        const v = verdictFor(items)
-        if (!v.pass) rejectionHits.push(...v.violations)
-        return v.pass
-      },
-    })
+    // Rejections are counted once per distinct combination, so a look a wider
+    // pass meets again isn't counted twice.
+    const counted = new Set<string>()
+    let passed = 0
+    const houseGate = (items: { item: ItemWithBrand; slot: Slot }[]) => {
+      const v = verdictFor(items)
+      const key = comboKey(items)
+      if (!counted.has(key)) {
+        counted.add(key)
+        if (v.pass) passed++
+        else rejectionHits.push(...v.violations)
+      }
+      return v.pass
+    }
+
+    // For the widening passes: pieces that could never pass beside this
+    // anchor (price spread, brand tiers more than one apart) give up their
+    // shortlist place, and a plain anchor gets statement pieces reserved —
+    // the same fix the Outfit Review recipe uses. A dark-emerald leather
+    // aviator with The Row knits and trousers had 1,600 combinations and the
+    // rules refused every one (2026-10-21).
+    const anchorHouse = toHouseItem(anchor, anchorSlot0)
+    const anchorPrice = priceOf(anchorHouse)
+    const anchorTier = anchorHouse.price_tier != null ? Number(anchorHouse.price_tier) : null
+    const neverPasses = (item: ItemWithBrand, slot: Slot) => {
+      const h = toHouseItem(item, slot)
+      const price = priceOf(h)
+      if (anchorPrice != null && price != null) {
+        const lo = Math.min(anchorPrice, price), hi = Math.max(anchorPrice, price)
+        if (lo < PRICE_FLOOR && hi > PRICE_CEILING) return true
+      }
+      const tier = h.price_tier != null ? Number(h.price_tier) : null
+      return anchorTier != null && tier != null && Math.abs(anchorTier - tier) > 1
+    }
+    const anchorIsStatement = statementKind(anchorHouse) != null
+
+    let raw: ReturnType<typeof generateCandidates> = []
+    let widestPool = COMPOSE_POOLS[0]
+    for (let i = 0; i < COMPOSE_POOLS.length; i++) {
+      const size = COMPOSE_POOLS[i]
+      widestPool = size
+      const looks = generateCandidates({
+        anchor,
+        library: pool,
+        learnedBlend: blendStrength(model),
+        learnedBonus: (items) => learnedBonus(model, [toFeature(anchor), ...items.map((x) => toFeature(x.item))]),
+        houseGate,
+        distinctClothes: true,
+        maxUsesPerItem: MAX_USES_PER_PIECE,
+        ...(i === 0 ? {} : {
+          perSlotPool: size,
+          optionalPerSlotPool: OPTIONAL_POOL,
+          shortlistFilter: (item: ItemWithBrand, slot: Slot) => !neverPasses(item, slot),
+          statementReserve: anchorIsStatement ? undefined : {
+            count: STATEMENT_RESERVE,
+            isStatement: (item: ItemWithBrand, slot: Slot) => statementKind(toHouseItem(item, slot)) != null,
+          },
+        }),
+      })
+      if (looks.length > raw.length) raw = looks
+      if (raw.length >= ENOUGH_LOOKS) break
+    }
     const allowed = raw
 
     // Log why candidates never made it, and summarise for the UI.
@@ -177,6 +247,9 @@ export async function composeForAnchor(
     }
     const houseRejections: HouseRejectionSummary = {
       total: rejectionHits.length,
+      tried: counted.size,
+      passed,
+      widestPool,
       byCode: [...rejByCode.entries()]
         .map(([code, v]) => ({ code, ...v }))
         .sort((a, b) => b.count - a.count),

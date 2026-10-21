@@ -277,8 +277,15 @@ export default function ShopBrain({ testMemberId, initialView, onReady }: {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [testMemberId])
-  // Tapped in another room: the mark brings her here with ?styled=1.
-  const wantOpen = useRef(typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('styled') === '1')
+  // Tapped in another room: the mark brings her here with ?styled=1. The
+  // Mirror's panel sends her to a door by name: ?door=similar.
+  const wantDoor = useRef<Door | null>((() => {
+    if (typeof window === 'undefined') return null
+    const sp = new URLSearchParams(window.location.search)
+    if (sp.get('styled') === '1') return 'styled'
+    const d = sp.get('door')
+    return d === 'similar' || d === 'brands' || d === 'styled' ? d : null
+  })())
 
   // The section draws nothing until the view arrives, and on a phone the call
   // can be dropped with the page — a suspended tab, a flaky network — so it
@@ -427,10 +434,12 @@ export default function ShopBrain({ testMemberId, initialView, onReady }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, phone])
   useEffect(() => {
-    if (!wantOpen.current || !view) return
-    wantOpen.current = false
+    const want = wantDoor.current
+    if (!want || !view) return
+    wantDoor.current = null
     try { window.history.replaceState(null, '', window.location.pathname) } catch { /* fine */ }
-    setTimeout(goToReady, 120)
+    // STYLED lands on her outfits; any other door opens as a tap on its pill would.
+    setTimeout(want === 'styled' ? goToReady : () => toggle(want), 120)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view])
 

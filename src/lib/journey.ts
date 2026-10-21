@@ -22,6 +22,8 @@ export const ROOM_LABEL: Record<string, string> = {
   threads: 'THREADS',
   profile: 'YOU',
   sharing: 'SHARING',
+  browse: 'BROWSE',
+  events: 'EVENTS',
 }
 
 // ── Events ──────────────────────────────────────────────────────────────────
@@ -62,6 +64,30 @@ export const EVENT_LABEL: Record<JourneyEventType, string> = {
 export const DELIBERATE: ReadonlySet<string> = new Set([
   'click', 'look_open', 'item_open', 'click_out', 'search', 'chat_send', 'save', 'upload', 'verdict',
 ])
+
+// ── Signals from components ────────────────────────────────────────────────
+
+/** The DOM event the tracker listens for. Most of her actions are read off the
+ *  tap itself, but some never touch a tagged element — a shop opened with
+ *  window.open, a save confirmed by the server — so the component says so. */
+export const JOURNEY_SIGNAL = 'myra:journey'
+
+export interface JourneySignal {
+  type: JourneyEventType
+  label?: string | null
+  target_kind?: string | null
+  target_id?: string | null
+  meta?: Record<string, unknown>
+}
+
+/** Tell the tracker about something she did. A no-op outside her rooms (the
+ *  tracker is not mounted there) and never throws. */
+export function journeySignal(signal: JourneySignal): void {
+  try {
+    if (typeof window === 'undefined') return
+    window.dispatchEvent(new CustomEvent<JourneySignal>(JOURNEY_SIGNAL, { detail: signal }))
+  } catch { /* analytics never breaks her page */ }
+}
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
 

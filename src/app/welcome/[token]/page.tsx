@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { createAdminClient, createServerClient } from '@/lib/supabase-server'
-import { readInvite } from '@/lib/member-invite'
+import { inviteOwner, readInvite } from '@/lib/member-invite'
+import { recordSignOn } from '@/lib/sign-on'
 import { acceptInvite } from './actions'
 
 export const dynamic = 'force-dynamic'
@@ -18,11 +19,22 @@ export default async function WelcomePage({ params, searchParams }: { params: { 
   const invite = preview ? { memberId: preview.memberId, exp: 0 } : readInvite(params.token)
   let name: string | null = null
   let hasLogin = false
+  let inviteEmail = ''
   if (invite) {
     const admin = createAdminClient() as any
-    const { data } = await admin.from('pilot_member').select('name, auth_user_id').eq('member_id', invite.memberId).maybeSingle()
+    const { data } = await admin.from('pilot_member').select('*').eq('member_id', invite.memberId).maybeSingle()
     name = data?.name ?? null
     hasLogin = preview ? false : !!data?.auth_user_id
+    inviteEmail = (data?.invite_email as string | null) ?? ''
+  }
+  // The first step at the door. Chloe's preview is not her opening it.
+  if (!preview) {
+    if (invite && name) {
+      await recordSignOn({ step: 'invite_opened', memberId: invite.memberId, detail: hasLogin ? 'already has a login' : null })
+    } else if (params.token !== 'expired') {
+      const owner = inviteOwner(params.token)
+      if (owner) await recordSignOn({ step: 'invite_failed', ok: false, memberId: owner, detail: 'opened an expired invite link' })
+    }
   }
   const first = (name ?? '').trim().split(/\s+/)[0] || null
   const field = 'myra-silver-input text-[clamp(22px,1.5vw,40px)] !py-[clamp(18px,1.3vw,34px)] !px-[clamp(24px,1.8vw,44px)] !rounded-[clamp(20px,1.4vw,36px)]'
@@ -55,7 +67,7 @@ export default async function WelcomePage({ params, searchParams }: { params: { 
             {searchParams.error && <p className="mt-6 text-[clamp(20px,1.3vw,34px)] text-[#B83A3A]">{searchParams.error}</p>}
             <form action={preview ? undefined : acceptInvite} className="mt-[clamp(32px,2.6vw,64px)] space-y-[clamp(20px,1.4vw,34px)] text-left">
               <input type="hidden" name="token" value={decodeURIComponent(params.token)} />
-              <input name="email" type="email" required autoComplete="email" placeholder="Your email" className={field} />
+              <input name="email" type="email" required autoComplete="email" placeholder="Your email" defaultValue={inviteEmail} className={field} />
               <input name="password" type="password" required minLength={8} autoComplete="new-password" placeholder="Choose a password (8+ characters)" className={field} />
               <input name="confirm" type="password" required minLength={8} autoComplete="new-password" placeholder="Type it once more" className={field} />
               {preview ? (
