@@ -211,23 +211,58 @@ export async function loadQueuePage(offset: number, brandName?: string | null, f
   return queuePage(offset, brandName, filters)
 }
 
-// The learning behind the ranking reads every keep and skip ever made (14,000
-// rows, 1-5s). Brand clicks come in quick runs, so one read serves them for a
-// short while; her own keeps and skips here drop it, so the next load still
-// re-trains on them at once.
+// The learning behind the ranking reads every keep and skip ever made (24,000
+// rows, 2.5s on a quiet database and 15-20s on a busy one). A brand click
+// never waits for that read on a clock: past a minute it ranks with the copy
+// in hand and refreshes it behind. Her own keeps and skips here must show in
+// the very next ranking, so they start the re-read at once — by the time she
+// clicks the next brand it is usually done — and that click waits for it.
 // Held on globalThis: the queue route and these actions can be bundled
-// separately, and a keep here must clear the copy the route reads.
+// separately, and a keep here must reach the copy the route reads.
 const TRUST_TTL_MS = 60_000
-const trustSlot = globalThis as unknown as { __bwTrust?: { at: number; p: Promise<QueueTrustData> } | null }
-function cachedQueueTrust(admin: any): Promise<QueueTrustData> {
-  const hit = trustSlot.__bwTrust
-  if (hit && Date.now() - hit.at < TRUST_TTL_MS) return hit.p
-  const p = loadQueueTrust(admin)
-  trustSlot.__bwTrust = { at: Date.now(), p }
-  p.catch(() => { if (trustSlot.__bwTrust?.p === p) trustSlot.__bwTrust = null })
-  return p
+type TrustSlot = {
+  ready: QueueTrustData | null
+  at: number
+  /** Bumped by each of her keeps and skips. */
+  gen: number
+  /** The gen the ready copy was read at. */
+  readyGen: number
+  inflight: Promise<void> | null
 }
-function dropTrustCache() { trustSlot.__bwTrust = null }
+const trustHolder = globalThis as unknown as { __bwTrustSlot?: TrustSlot }
+const trustSlot = (): TrustSlot => (trustHolder.__bwTrustSlot ??= { ready: null, at: 0, gen: 0, readyGen: -1, inflight: null })
+
+// One read at a time: a run of keeps waits for the read under way, then reads
+// once more for whatever landed during it, rather than starting one per keep.
+function refreshTrust(admin: any): Promise<void> {
+  const s = trustSlot()
+  if (s.inflight) return s.inflight
+  const startGen = s.gen
+  let ok = false
+  const run = loadQueueTrust(admin)
+    .then((d) => { s.ready = d; s.at = Date.now(); s.readyGen = startGen; ok = true })
+    .finally(() => {
+      s.inflight = null
+      if (ok && s.readyGen < s.gen) void refreshTrust(admin).catch(() => {})
+    })
+  s.inflight = run
+  return run
+}
+
+async function cachedQueueTrust(admin: any): Promise<QueueTrustData> {
+  const s = trustSlot()
+  while (!s.ready || s.readyGen < s.gen) await refreshTrust(admin)
+  return s.ready
+}
+// Called once a page is built: the 24,000-row re-read started alongside a
+// click's own reads held them up on the small database (5s instead of 0.5s).
+function refreshStaleTrust(admin: any) {
+  if (Date.now() - trustSlot().at > TRUST_TTL_MS) void refreshTrust(admin).catch(() => {})
+}
+function dropTrustCache() {
+  trustSlot().gen++
+  void refreshTrust(createAdminClient()).catch(() => {})
+}
 
 // trustIn lets the page load share one read of the trust models with the brand
 // cards. A selected-brand click builds the queue-only trust itself, overlapped
@@ -263,7 +298,9 @@ async function queuePage(offset: number, brandName?: string | null, filters: Que
       const ids = brands.map((b) => b.brand_id)
       const [light, scoped, wb] = await Promise.all([
         filters.brandCountsKnown ? Promise.resolve(null) : fetchBrandWatchRows(admin, ['queued'], LIGHT_FIELDS),
-        ids.length ? fetchBrandWatchRows(admin, ['queued'], RANK_FIELDS, (q) => q.in('brand_id', ids)) : Promise.resolve([] as any[]),
+        // One brand is at most ~900 rows, so its display fields come in this
+        // same read and the page needs no second round trip to hydrate them.
+        ids.length ? fetchBrandWatchRows(admin, ['queued'], QUEUE_FIELDS, (q) => q.in('brand_id', ids)) : Promise.resolve([] as any[]),
         admin.from('watched_brand').select('name, min_score'),
       ])
       chipRows = light
@@ -414,7 +451,10 @@ async function queuePage(offset: number, brandName?: string | null, filters: Que
 
   // Only now, with the page decided, are the display fields worth reading.
   const pageRows = filtered.slice(offset, offset + QUEUE_PAGE)
-  const full = await hydrateRows(admin, pageRows.map((q) => q.queue_id))
+  const full = brandName
+    ? new Map<string, any>(drafts.map((r) => [r.queue_id as string, r]))
+    : await hydrateRows(admin, pageRows.map((q) => q.queue_id))
+  refreshStaleTrust(admin)
   const queue: QueueItemRow[] = pageRows.flatMap((q) => {
     const row = full.get(q.queue_id)
     // A piece decided in another tab between the ranking and this read is gone
