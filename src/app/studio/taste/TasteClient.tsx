@@ -11,6 +11,7 @@ import {
 import type { HealthReport } from '@/lib/brand-affinity'
 import { fitFrame } from '@/lib/brand-map-frame'
 import { AGE_RANGES } from '@/app/onboarding/brand-groups'
+import BrandGroupAdder from './BrandGroupAdder'
 import { saveAffinityConfig } from './actions'
 
 // Display copy of lib BAND_NAMES — brand-affinity.ts is server-only (it pulls
@@ -608,6 +609,8 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                     <p className="mt-1.5 text-[16px] tracking-[0.1em] text-[#A8A8A4]">FREE-TEXT LOGGED FOR STOCKING INTEL: {inspection.unmatched.join(' · ').toUpperCase()}</p>
                   )}
                 </div>
+
+                <BrandGroupAdder memberId={inspection.member.member_id} onSaved={() => selectMember(inspection.member.member_id)} />
 
                 <MemberScatter
                   inspection={inspection}
