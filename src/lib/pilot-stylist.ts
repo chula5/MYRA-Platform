@@ -340,6 +340,41 @@ export const PIECE_PREFERENCES: { value: string; label: string }[] = [
   { value: 'sandal', label: 'SANDALS' },
 ]
 
+// What her age pre-ticks on the WON'T WEAR side when Chloe sets it. A starting
+// point, not a rule: the ticks land in her own avoids, where any can be lifted
+// for the client who does wear minis. Keyed by the youngest age of the band
+// (onboarding's AGE_RANGES: '50-60', '60-70', '70+'); every step adds to the
+// one below.
+export const AGE_AVOIDS: { from: number; shapes: string[]; types: string[] }[] = [
+  { from: 50, shapes: ['mini_length'], types: ['mini_dress', 'slip_dress'] },
+  { from: 60, shapes: ['bare_shoulder'], types: ['shorts'] },
+]
+
+export function ageAvoids(range: string | null | undefined): { shapes: string[]; types: string[] } {
+  const lo = Number(String(range ?? '').match(/^\s*(\d{2})/)?.[1])
+  const steps = Number.isFinite(lo) ? AGE_AVOIDS.filter((s) => lo >= s.from) : []
+  return { shapes: steps.flatMap((s) => s.shapes), types: steps.flatMap((s) => s.types) }
+}
+
+// Picking an age in the studio: lift what the last age pick ticked (never a
+// hand-made tick), then tick the new age's avoids — except a piece she is down
+// as wearing, which stays where Chloe put it. Returns the ticks this pick owns.
+export function applyAgeTicks(
+  prefs: StylePrefs,
+  ticked: { shapes: string[]; types: string[] },
+  range: string | null | undefined,
+): { prefs: StylePrefs; ticked: { shapes: string[]; types: string[] } } {
+  const want = ageAvoids(range)
+  const step = (avoided: string[], loved: string[], mine: string[], wanted: string[]) => {
+    const kept = avoided.filter((v) => !mine.includes(v) || wanted.includes(v))
+    const added = wanted.filter((v) => !kept.includes(v) && !loved.includes(v))
+    return { list: [...kept, ...added], ticked: [...mine.filter((v) => wanted.includes(v) && kept.includes(v)), ...added] }
+  }
+  const s = step(prefs.shapes_avoided, prefs.shapes_loved, ticked.shapes, want.shapes)
+  const t = step(prefs.types_avoided, prefs.types_loved, ticked.types, want.types)
+  return { prefs: { ...prefs, shapes_avoided: s.list, types_avoided: t.list }, ticked: { shapes: s.ticked, types: t.ticked } }
+}
+
 export const COLOUR_FAMILY_IDS = [
   'white', 'cream', 'black', 'grey', 'navy', 'blue', 'green', 'brown',
   'camel', 'burgundy', 'red', 'pink', 'yellow', 'orange', 'purple', 'multicolour',

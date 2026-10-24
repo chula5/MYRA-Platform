@@ -128,6 +128,8 @@ export interface PilotMember {
   types_avoided: string[]
   /** What she actually spends, per bucket (migration 0049). */
   price_bands: PriceBands
+  /** Her age band, onboarding's AGE_RANGES (migration 0107). */
+  age_range?: string | null
   created_at: string
   // Σ signal_weight × look vector across her taste events — the 34-dim view
   taste_vector: number[] | null
@@ -733,6 +735,7 @@ export async function updateMember(
     types_loved: string[]
     types_avoided: string[]
     price_bands: PriceBands
+    age_range: string | null
   }>,
 ): Promise<{ error?: string }> {
   const admin = createAdminClient()
