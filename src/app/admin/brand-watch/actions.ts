@@ -259,6 +259,16 @@ async function cachedQueueTrust(admin: any): Promise<QueueTrustData> {
 function refreshStaleTrust(admin: any) {
   if (Date.now() - trustSlot().at > TRUST_TTL_MS) void refreshTrust(admin).catch(() => {})
 }
+// The page load reads the same models in full for the brand cards; holding them
+// here spares the first brand click a second 24,000-row read. Only a read at
+// least as new as the copy held replaces it.
+function seedQueueTrust(data: QueueTrustData, readGen: number) {
+  const s = trustSlot()
+  if (readGen < s.readyGen) return
+  s.ready = data
+  s.at = Date.now()
+  s.readyGen = readGen
+}
 function dropTrustCache() {
   trustSlot().gen++
   void refreshTrust(createAdminClient()).catch(() => {})
@@ -267,11 +277,11 @@ function dropTrustCache() {
 // trustIn lets the page load share one read of the trust models with the brand
 // cards. A selected-brand click builds the queue-only trust itself, overlapped
 // with the queue reads below.
-async function queuePage(offset: number, brandName?: string | null, filters: QueueFilters = {}, trustIn?: QueueTrustData): Promise<QueuePage> {
+async function queuePage(offset: number, brandName?: string | null, filters: QueueFilters = {}, trustIn?: Promise<QueueTrustData>): Promise<QueuePage> {
   const admin = createAdminClient() as any
   // Started first, so the trust read overlaps the queue reads instead of
   // queueing behind them.
-  const trust = trustIn ? Promise.resolve(trustIn) : cachedQueueTrust(admin)
+  const trust = trustIn ?? cachedQueueTrust(admin)
   let drafts: any[]
   let chipRows: any[] | null = null
   let wbs: any[] = []
@@ -480,18 +490,23 @@ async function queuePage(offset: number, brandName?: string | null, filters: Que
 export async function loadBrandWatch(): Promise<BrandWatchData> {
   await assertAdmin()
   const admin = createAdminClient()
-  const { data: watched, error: werr } = await (admin as any)
-    .from('watched_brand')
-    .select('*')
-    .order('name')
+  // The watchlist, the trust models and the queue are read side by side: one
+  // after another they were three waits on the small database.
+  const readGen = trustSlot().gen
+  const trustRead = loadBrandTrust(admin as any)
+  trustRead.catch(() => {}) // awaited below; an early return must not leave it unhandled
+  const [{ data: watched, error: werr }, page] = await Promise.all([
+    (admin as any).from('watched_brand').select('*').order('name'),
+    queuePage(0, null, {}, trustRead),
+  ])
   if (werr) {
     // Table missing → migration 0031 hasn't been run yet.
     const migrationNeeded = /watched_brand/.test(werr.message) || werr.code === '42P01'
     return { watched: [], queue: [], queueTotal: 0, predictedSkipTotal: 0, decidedCount: 0, brandCounts: {}, migrationNeeded, error: werr.message }
   }
 
-  const trustData = await loadBrandTrust(admin as any)
-  const page = await queuePage(0, null, {}, trustData)
+  const trustData = await trustRead
+  seedQueueTrust(trustData, readGen)
   if (page.error && (/brand_watch_queue/.test(page.error) || /42P01/.test(page.error))) {
     // Queue table missing → migration 0033 hasn't been run yet.
     return { watched: (watched ?? []) as unknown as WatchedBrandRow[], ...page, migrationNeeded: true }

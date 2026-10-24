@@ -14,7 +14,7 @@
 // Broraonline 15/15, Skall Studio 21/22 right — but ME+EM 6/11 and Sessùn 7/9,
 // where the learning is no better than her keep rate. Pure; no database.
 
-import { buildLearning, type DecidedRow } from './brand-watch-learning'
+import { growingLearning, type DecidedRow } from './brand-watch-learning'
 
 /**
  * Learned lift a piece needs before it may be kept automatically — log-odds
@@ -141,13 +141,32 @@ export function measureBrandTrust(decisions: TrustDecision[], chunk = 50): Map<s
   for (const d of ordered) perSecond.set(d.at.slice(0, 19), (perSecond.get(d.at.slice(0, 19)) ?? 0) + 1)
   const careful = (d: TrustDecision) => !d.autoKept && (perSecond.get(d.at.slice(0, 19)) ?? 0) <= BULK_PER_SECOND
 
-  // brand → [would auto-keep, kept] for each careful decision, oldest first
+  // Only each brand's last TRUST_WINDOW careful decisions reach its verdict, so
+  // only the chunks holding one are scored — about a third of them.
+  const lastByBrand = new Map<string, number[]>()
+  ordered.forEach((d, i) => {
+    if (!careful(d)) return
+    const list = lastByBrand.get(d.brandName ?? '') ?? []
+    list.push(i)
+    if (list.length > TRUST_WINDOW) list.shift()
+    lastByBrand.set(d.brandName ?? '', list)
+  })
+  const counted = new Set<number>()
+  lastByBrand.forEach((list) => list.forEach((i) => counted.add(i)))
+
+  // brand → [would auto-keep, kept] for each counted decision, oldest first
   const outcomes = new Map<string, [boolean, boolean][]>()
+  // Grown as the walk goes rather than rebuilt per chunk: rebuilding was 11s
+  // of a 24s Brand Watch load (24,000 decisions, 2026-10-24).
+  const learning = growingLearning()
+  let learned = 0
   for (let i = 0; i < ordered.length; i += chunk) {
+    const wanted = ordered.slice(i, i + chunk).filter((_, j) => counted.has(i + j))
+    if (!wanted.length) continue
     // The machine's own keeps never train the verdict that judges it.
-    const learn = buildLearning(ordered.slice(0, i).filter((d) => !d.autoKept))
-    for (const d of ordered.slice(i, i + chunk)) {
-      if (!careful(d)) continue
+    for (; learned < i; learned++) if (!ordered[learned].autoKept) learning.add(ordered[learned])
+    const learn = learning.verdict()
+    for (const d of wanted) {
       const brand = d.brandName ?? ''
       const list = outcomes.get(brand) ?? []
       list.push([wouldAutoKeep(learn(d).delta, d.score, d.minScore), d.kept])
