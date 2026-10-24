@@ -7,9 +7,9 @@ import { createAdminClient, createServerClient } from '@/lib/supabase-server'
 import { analyseOutfit } from '@/app/admin/ai/analyse-outfit'
 import { buildOutfitVector } from '@/lib/taste-vector'
 import {
-  brandCosine, brandKey, centroidOf, codesComplete, codesVector, computeSimilarBrands,
+  ageProximity, applyMemberAgeGate, brandCosine, brandKey, centroidOf, codesComplete, codesVector, computeSimilarBrands,
   expansionSeeds, getSimilarBrands, ghostCodes, pairIdentitySimilarity,
-  invalidateSimilarityCache, isThinBrand, loadAffinities, loadBrandGraph, pcaProject1D,
+  invalidateSimilarityCache, isThinBrand, loadAffinities, loadBrandGraph, loadMemberAgeRanges, pcaProject1D,
   positioningBand, priceProximity, rankFeedForUser, recomputeBrandVectors, resolveBrandNames,
   runHealthChecks, seedUserAffinities, SEED,
   type AffinityConfig, type BrandGraph, type FeedRow, type HealthReport, type SimilarBrand,
@@ -130,7 +130,7 @@ export async function loadTasteInspector(): Promise<InspectorData> {
 
 export interface BrandDetail {
   thin: boolean // no identity yet (no complete codes, no trustworthy centroid) — lists suppressed
-  neighbours: Array<{ brand_id: string; name: string; aesthetic: number; priceFactor: number; combined: number; basis: 'codes' | 'vector' }>
+  neighbours: Array<{ brand_id: string; name: string; aesthetic: number; priceFactor: number; ageFactor: number; combined: number; basis: 'codes' | 'vector' }>
   similar: SimilarBrand[]
   error?: string
 }
@@ -154,9 +154,11 @@ export async function loadBrandDetail(brandId: string): Promise<BrandDetail> {
       if (!id) return null
       const pp = priceProximity(self, b, graph.config.priceK)
       const priceFactor = pp?.factor ?? 1
+      const ageFactor = ageProximity(self, b)?.factor ?? 1
       return {
         brand_id: b.brand_id, name: b.name, aesthetic: id.sim, priceFactor: +priceFactor.toFixed(3),
-        combined: +(id.sim * priceFactor).toFixed(3), basis: id.basis,
+        ageFactor: +ageFactor.toFixed(3),
+        combined: +(id.sim * priceFactor * ageFactor).toFixed(3), basis: id.basis,
       }
     })
     .filter(Boolean)
@@ -304,7 +306,7 @@ export async function seedStarterFamily(): Promise<{ error?: string }> {
 // ── member inspector ────────────────────────────────────────────────────────
 
 export interface MemberInspection {
-  member: { member_id: string; name: string; occasions: string[]; taste_vector: number[] | null }
+  member: { member_id: string; name: string; occasions: string[]; taste_vector: number[] | null; age_range: string | null }
   onboarded: Array<{ name: string; rank?: number; matched: boolean; brand_id?: string }>
   unmatched: string[]
   affinities: Array<{
@@ -405,7 +407,10 @@ export async function loadMemberInspection(memberId: string, logPreview = false)
   })
 
   return {
-    member: { member_id: member.member_id, name: member.name, occasions: memberOccasions(member.occasions), taste_vector: member.taste_vector },
+    member: {
+      member_id: member.member_id, name: member.name, occasions: memberOccasions(member.occasions), taste_vector: member.taste_vector,
+      age_range: (await loadMemberAgeRanges(admin, [memberId])).get(memberId) ?? null,
+    },
     onboarded, unmatched, affinities, discoveries, feed: feedRowsForUi(feedRows),
   }
 }
@@ -415,14 +420,24 @@ export async function seedMemberFromIntake(memberId: string): Promise<{ named?: 
   const admin = createAdminClient() as any
   const { data: member } = await admin.from('pilot_member').select('brands, brands_input_only').eq('member_id', memberId).single()
   if (!member) return { error: 'Member not found' }
-  const names = [
-    ...((member.brands ?? []) as any[]).map((b: any) => String(b.name)),
-    ...((member.brands_input_only ?? []) as string[]),
-  ]
-  if (!names.length) return { error: 'Member has no onboarded brands' }
-  const result = await seedUserAffinities(admin, memberId, names)
+  const names = ((member.brands ?? []) as any[]).map((b: any) => String(b.name))
+  const inputOnly = (member.brands_input_only ?? []) as string[]
+  if (!names.length && !inputOnly.length) return { error: 'Member has no onboarded brands' }
+  const result = await seedUserAffinities(admin, memberId, names, { inputOnly })
   revalidatePath(PATH)
   return result
+}
+
+// Her age range gates which brands may be suggested to her (customer age).
+// Setting it also resets suggestions already in her world that skew younger.
+export async function setMemberAgeRange(memberId: string, ageRange: string | null): Promise<{ reset?: number; error?: string }> {
+  await requireAdmin()
+  const admin = createAdminClient() as any
+  const { error } = await admin.from('pilot_member').update({ age_range: ageRange || null }).eq('member_id', memberId)
+  if (error) return { error: error.message }
+  const reset = ageRange ? await applyMemberAgeGate(admin, memberId, ageRange) : 0
+  revalidatePath(PATH)
+  return { reset }
 }
 
 // Admin overrides — every one logged to brand_affinity_event.
