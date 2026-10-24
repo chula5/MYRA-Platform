@@ -81,11 +81,12 @@ const PLACEHOLDER_IMAGE = /placeholder|swatch|logo|sprite|\bicon|spinner|loading
  * The piece's name, not the tile's text. A reader that took a heading which
  * wrapped the price too sent "Calista High Pump ⏎⏎ £ 298.00", and a sale tile
  * "Anika Two Piece £ 498.00 £ 498": the name is the first line once every
- * price is taken out of it.
+ * price is taken out of it. Claudie Pierlot's tiles add the star rating too —
+ * "Wide-cut leather jacket £779 4.9 out of 5 Customer Rating" — and that goes.
  */
 export function cleanTitle(s: string): string {
   return s.split('\n')
-    .map((x) => x.replace(/[£$€]\s?\d[\d,]*(?:\.\d{1,2})?/g, ' ').replace(/\s+/g, ' ').trim())
+    .map((x) => x.replace(/[£$€]\s?\d[\d,]*(?:\.\d{1,2})?/g, ' ').replace(/\s\d(?:[.,]\d+)?\s*out of\s*5\b.*$/i, ' ').replace(/\s+/g, ' ').trim())
     .find(Boolean) ?? ''
 }
 
