@@ -10,6 +10,11 @@ const INPUT = 'border border-[#E2E0DB] rounded-[8px] px-3 py-2 text-[10px] track
 
 const COMPARE_COLOURS = ['#0A0A0A', '#C4A882', '#6D1F2C', '#3565B0']
 
+// Customer age sits in this matrix to be scored by hand like a code, but it is
+// not one: it never counts toward FULLY CODED and never enters the codes
+// cosine (lib AGE_DIMENSION — the lib is server-only, so the key is copied).
+const AGE_DIMENSION = 'customer_age_register'
+
 // 1-5 → 0..1 along a track
 const t = (v: number) => (Math.min(5, Math.max(1, v)) - 1) / 4
 
@@ -88,7 +93,7 @@ export default function CodesClient({ dims, brands: initialBrands }: { dims: Cod
     setBrands((bs) => bs.map((b) => {
       if (b.brand_id !== brandId) return b
       const codes = { ...b.codes, [dim]: value }
-      return { ...b, codes, complete: dims.every((d) => codes[d.dimension_key] != null) }
+      return { ...b, codes, complete: dims.every((d) => d.dimension_key === AGE_DIMENSION || codes[d.dimension_key] != null) }
     }))
     start(async () => {
       const r = await setBrandCode(brandId, dim, value)
@@ -150,6 +155,9 @@ export default function CodesClient({ dims, brands: initialBrands }: { dims: Cod
                 <tr key={d.dimension_key} className="border-b border-[#EFEDE9] last:border-b-0">
                   <td className="sticky left-0 bg-white z-10 px-3 py-1.5 align-top">
                     <p className="text-[8.5px] tracking-[0.14em] text-[#4A4E57]">{d.label}</p>
+                    {d.dimension_key === AGE_DIMENSION && (
+                      <p className="text-[7px] tracking-[0.1em] text-[#A8A8A4]">NOT A CODE · AGE GATE + PAIR FACTOR</p>
+                    )}
                     <p className="text-[7px] tracking-[0.02em] text-[#A8A8A4] normal-case leading-tight">
                       1 {d.anchors['1']} → 5 {d.anchors['5']}
                     </p>

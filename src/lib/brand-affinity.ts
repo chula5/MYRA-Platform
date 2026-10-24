@@ -59,6 +59,21 @@ export const CODE_DIMENSIONS = [
 export const NON_PRICE_CODE_DIMENSIONS = CODE_DIMENSIONS.filter((d) => d !== 'price_positioning')
 // price_positioning code → representative £ when item price data is thin
 export const PRICE_CODE_PSEUDO = [130, 300, 600, 1500, 4000]
+
+// ── CUSTOMER AGE: how old a brand's customer is, authored by hand (1-5,
+// decimals: 1 under 25 · 2 25–32 · 3 30–45 or spans ages · 4 38–50 · 5 45+).
+// Stored in brand_codes under its own dimension key so it is edited and
+// logged next to the codes, but it is NOT a code: it stays out of
+// CODE_DIMENSIONS (a brand without it is still fully coded) and out of the
+// codes cosine. Applied like price — a proximity factor on brand pairs and a
+// gate on what may be suggested to a member of a given age. ──
+export const AGE_DIMENSION = 'customer_age_register'
+export const AGE_K = 1.5 // age_proximity = exp(-|Δ register| / k)
+export const AGE_FLOOR_FACTOR = 0.35 // below this (|Δ| > ~1.6), algorithmic discovery excludes the pair (curation overrides)
+// Oldest customer each whole register speaks for (5 is open-ended; 70 keeps
+// the interpolation between 4 and 5 sensible).
+export const AGE_REGISTER_UPPER_AGE = [25, 32, 45, 50, 70]
+export const EXPANSION_AGE_HEADROOM = 5 // years a brand's customer may sit below her youngest age
 export const CODE_DRIFT_THRESHOLD = 1.5
 export const DEFAULT_CONFIG: AffinityConfig = { bandBounds: [150, 350, 700, 1200, 2500], priceK: 1.8 }
 
@@ -82,6 +97,7 @@ export interface BrandLite {
   core_category: string | null
   price_position: number | null // ln(median price of core category)
   codes: Record<string, number> | null // authored brand codes (dimension_key → 1-5)
+  customer_age_register: number | null // authored 1-5, NOT a code — see AGE_DIMENSION
 }
 
 export interface FamilyRow { family_id: string; name: string; description: string | null }
@@ -105,6 +121,7 @@ export interface SimilarBrand {
   score?: number // combined = identity similarity × price factor, for vector mechanism
   aesthetic?: number // identity similarity: codes cosine, or item-centroid cosine when provisional
   priceFactor?: number // exp(-|Δ price_position| / k)
+  ageFactor?: number // exp(-|Δ customer_age_register| / AGE_K); 1 when either brand has none
   basis?: 'codes' | 'vector' // vector = provisional fallback (codes incomplete)
 }
 
@@ -286,6 +303,15 @@ export function priceProximity(a: BrandLite, b: BrandLite, k: number): { factor:
   return { factor: +Math.exp(-d / k).toFixed(3), basis }
 }
 
+// age_proximity(A,B) = exp(-|Δ register| / k). Null when either brand has no
+// customer age authored (treated as factor 1 — nothing changes for them).
+export function ageProximity(
+  a: Pick<BrandLite, 'customer_age_register'>, b: Pick<BrandLite, 'customer_age_register'>, k = AGE_K,
+): { factor: number } | null {
+  if (a.customer_age_register == null || b.customer_age_register == null) return null
+  return { factor: +Math.exp(-Math.abs(a.customer_age_register - b.customer_age_register) / k).toFixed(3) }
+}
+
 export function centroidOf(vectors: number[][]): number[] | null {
   if (!vectors.length) return null
   const c = new Array(vectors[0].length).fill(0)
@@ -347,14 +373,14 @@ export function computeSimilarBrands(
     }
   }
 
-  // 2. identity-similar, not in a shared family: combined = identity × price.
+  // 2. identity-similar, not in a shared family: combined = identity × price × age.
   // Identity = authored CODES cosine when both brands are fully coded; the
   // item-centroid cosine is only a PROVISIONAL fallback (marked as such).
-  // Pairs with price factor below the floor are out of algorithmic discovery
-  // entirely — curated families (section 1) are the only override.
+  // Pairs with price or age factor below its floor are out of algorithmic
+  // discovery entirely — curated families (section 1) are the only override.
   const k = graph.config?.priceK ?? DEFAULT_CONFIG.priceK
   {
-    const rows: Array<{ b: BrandLite; score: number; aesthetic: number; priceFactor: number; basis: 'codes' | 'vector' }> = []
+    const rows: Array<{ b: BrandLite; score: number; aesthetic: number; priceFactor: number; ageFactor: number; basis: 'codes' | 'vector' }> = []
     for (const other of graph.brands) {
       if (seen.has(other.brand_id)) continue
       if (excluded(brandId, other.brand_id, graph.exclusions)) continue
@@ -363,14 +389,16 @@ export function computeSimilarBrands(
       const pp = priceProximity(self, other, k)
       const priceFactor = pp?.factor ?? 1
       if (priceFactor < PRICE_FLOOR_FACTOR) continue
-      rows.push({ b: other, score: id.sim * priceFactor, aesthetic: id.sim, priceFactor, basis: id.basis })
+      const ageFactor = ageProximity(self, other)?.factor ?? 1
+      if (ageFactor < AGE_FLOOR_FACTOR) continue
+      rows.push({ b: other, score: id.sim * priceFactor * ageFactor, aesthetic: id.sim, priceFactor, ageFactor, basis: id.basis })
     }
     rows.sort((a, b) => b.score - a.score)
     for (const r of rows.slice(0, maxVector)) {
       out.push({
         brand_id: r.b.brand_id, name: r.b.name, mechanism: 'vector',
         score: +r.score.toFixed(3), aesthetic: +r.aesthetic.toFixed(3), priceFactor: +r.priceFactor.toFixed(3),
-        basis: r.basis,
+        ageFactor: +r.ageFactor.toFixed(3), basis: r.basis,
       })
     }
   }
@@ -444,12 +472,47 @@ export function withinMemberPriceReach(
   return median <= overallMax * EXPANSION_PRICE_HEADROOM
 }
 
+// Her age range as onboarding stores it: '30-40', '35–45', '70+'.
+export function parseAgeRange(range: string | null | undefined): { lo: number; hi: number } | null {
+  const m = String(range ?? '').match(/(\d{2})\s*(?:[-–—]\s*(\d{2})|\+)/)
+  if (!m) return null
+  const lo = Number(m[1])
+  return { lo, hi: m[2] ? Number(m[2]) : lo + 10 }
+}
+
+// The oldest customer a register speaks for, interpolated for decimals.
+export function registerUpperAge(register: number): number {
+  const r = Math.min(5, Math.max(1, register))
+  const i = Math.floor(r) - 1
+  const frac = r - Math.floor(r)
+  const lo = AGE_REGISTER_UPPER_AGE[i]
+  const hi = AGE_REGISTER_UPPER_AGE[Math.min(4, i + 1)]
+  return lo + (hi - lo) * frac
+}
+
+// Like price, one-sided: a brand whose customer is clearly YOUNGER than her
+// (its oldest customer, plus headroom, still below her youngest age) is never
+// suggested to her. A brand that skews older is left alone — register 3 also
+// holds brands that span ages, and older-skew was never the problem. No age
+// range, or no register on the brand → no opinion. Her named brands and
+// anything she has responded to are exempt (the callers only gate seeds).
+export function withinMemberAgeReach(
+  ageRange: string | null | undefined,
+  brand: Pick<BrandLite, 'customer_age_register'> | null | undefined,
+): boolean {
+  const range = parseAgeRange(ageRange)
+  const reg = brand?.customer_age_register
+  if (!range || reg == null) return true
+  return registerUpperAge(reg) + EXPANSION_AGE_HEADROOM >= range.lo
+}
+
 export function expansionSeeds(
   named: BrandLite[],
   similarByBrand: Map<string, SimilarBrand[]>,
   opts: {
     priceBands?: MemberPriceBands | null
-    brandById?: Map<string, Pick<BrandLite, 'median_price_overall' | 'median_price_by_category'>>
+    ageRange?: string | null
+    brandById?: Map<string, Pick<BrandLite, 'median_price_overall' | 'median_price_by_category' | 'customer_age_register'>>
   } = {},
 ): Map<string, ExpansionSeed> {
   const out = new Map<string, ExpansionSeed>()
@@ -465,6 +528,7 @@ export function expansionSeeds(
         if ((s.aesthetic ?? s.score ?? 0) < VECTOR_SEED_MIN_AESTHETIC) continue
       }
       if (opts.priceBands && !withinMemberPriceReach(opts.priceBands, opts.brandById?.get(s.brand_id) ?? null)) continue
+      if (opts.ageRange && !withinMemberAgeReach(opts.ageRange, opts.brandById?.get(s.brand_id) ?? null)) continue
       const value =
         s.mechanism === 'core_family' ? SEED.coreFamily :
         s.mechanism === 'adjacent_family' ? SEED.adjacentFamily : SEED.vectorOnly
@@ -606,7 +670,10 @@ export async function loadBrandGraph(adminIn?: Admin): Promise<BrandGraph> {
   ])
   const { data: codeRows } = await admin.from('brand_codes').select('brand_id, dimension_key, value').limit(10000)
   const codesByBrand = new Map<string, Record<string, number>>()
+  const ageByBrand = new Map<string, number>()
   for (const r of codeRows ?? []) {
+    // customer age shares the table, never the codes map (cosine, completeness)
+    if (r.dimension_key === AGE_DIMENSION) { ageByBrand.set(r.brand_id, Number(r.value)); continue }
     const c = codesByBrand.get(r.brand_id) ?? {}
     c[r.dimension_key] = Number(r.value)
     codesByBrand.set(r.brand_id, c)
@@ -622,6 +689,7 @@ export async function loadBrandGraph(adminIn?: Admin): Promise<BrandGraph> {
     core_category: b.core_category ?? null,
     price_position: b.price_position != null ? Number(b.price_position) : null,
     codes: codesByBrand.get(b.brand_id) ?? null,
+    customer_age_register: ageByBrand.get(b.brand_id) ?? null,
   }))
   const config: AffinityConfig = configRow
     ? { bandBounds: (configRow.band_bounds ?? DEFAULT_CONFIG.bandBounds).map(Number), priceK: Number(configRow.price_k ?? DEFAULT_CONFIG.priceK) }
@@ -772,6 +840,33 @@ async function writeAffinity(
   }
 }
 
+// Her age range: the pilot member's own (set in the Taste Inspector), else
+// what she answered at /onboarding (signup_preference, keyed by login — her
+// auth_user_id, or the id itself for an auth user). Best-effort: a missing
+// column or row means no age gate, never a failure.
+export async function loadMemberAgeRanges(adminIn: Admin | undefined, userIds: string[]): Promise<Map<string, string>> {
+  const admin = (adminIn ?? createAdminClient()) as any
+  const out = new Map<string, string>()
+  if (!userIds.length) return out
+  try {
+    const { data: pms } = await admin.from('pilot_member').select('member_id, age_range, auth_user_id').in('member_id', userIds)
+    const byLogin = new Map<string, string>(userIds.map((id) => [id, id]))
+    for (const pm of pms ?? []) {
+      if (pm.age_range) { out.set(pm.member_id, pm.age_range); byLogin.delete(pm.member_id) }
+      else if (pm.auth_user_id) byLogin.set(pm.auth_user_id, pm.member_id)
+    }
+    const logins = Array.from(byLogin.keys())
+    if (logins.length) {
+      const { data: prefs } = await admin.from('signup_preference').select('user_id, age_range').in('user_id', logins)
+      for (const p of prefs ?? []) {
+        const id = byLogin.get(p.user_id)
+        if (p.age_range && id && !out.has(id)) out.set(id, p.age_range)
+      }
+    }
+  } catch { /* no age → no gate */ }
+  return out
+}
+
 export async function loadAffinities(adminIn: Admin | undefined, userId: string): Promise<Map<string, AffinityRow>> {
   const admin = (adminIn ?? createAdminClient()) as any
   const { data } = await admin.from('user_brand_affinity').select('*').eq('user_id', userId).limit(3000)
@@ -817,8 +912,9 @@ export async function seedUserAffinities(
     const { data: pm } = await admin.from('pilot_member').select('price_bands').eq('member_id', userId).maybeSingle()
     if (pm?.price_bands) priceBands = pm.price_bands as MemberPriceBands
   } catch { /* no bands → no gate */ }
+  const ageRange = (await loadMemberAgeRanges(admin, [userId])).get(userId) ?? null
   const brandById = new Map(graph.brands.map((b: any) => [b.brand_id, b]))
-  const seeds = expansionSeeds(matched, similarByBrand, { priceBands, brandById })
+  const seeds = expansionSeeds(matched, similarByBrand, { priceBands, ageRange, brandById })
   let expanded = 0
   const seedList = Array.from(seeds.values())
   for (const s of seedList) {
@@ -857,6 +953,35 @@ export async function seedUserAffinities(
   }
 
   return { named: matched.length, expanded, baseline, unmatched }
+}
+
+// Setting her age applies the age gate to the world she already has, not just
+// to future seeds: an expanded row she never responded to, for a brand now
+// out of her age reach, goes back to baseline (logged). Named, learned and
+// responded-to rows are never touched.
+export function ageGateResets(
+  rows: Array<Pick<AffinityRow, 'brand_id' | 'affinity' | 'source' | 'positive_count'>>,
+  brandById: Map<string, Pick<BrandLite, 'customer_age_register'>>,
+  ageRange: string,
+): string[] {
+  return rows
+    .filter((r) => r.source === 'expanded' && !(r.positive_count > 0) && Number(r.affinity) > SEED.baseline)
+    .filter((r) => !withinMemberAgeReach(ageRange, brandById.get(r.brand_id)))
+    .map((r) => r.brand_id)
+}
+
+export async function applyMemberAgeGate(adminIn: Admin | undefined, userId: string, ageRange: string): Promise<number> {
+  const admin = (adminIn ?? createAdminClient()) as any
+  const graph = await loadBrandGraph(admin)
+  const existing = await loadAffinities(admin, userId)
+  const ids = ageGateResets(Array.from(existing.values()), graph.byId, ageRange)
+  for (const id of ids) {
+    await writeAffinity(admin, userId, id,
+      { affinity: SEED.baseline, expansion_trace: 'baseline' },
+      'admin_override', `age gate: ${graph.byId.get(id)?.name} customer skews younger than ${ageRange}`,
+      Number(existing.get(id)!.affinity))
+  }
+  return ids.length
 }
 
 // Learning loop. Positive: +0.05 capped at 1.0, expanded→learned on first
@@ -1224,12 +1349,15 @@ export async function runBrandAffinityWeekly(adminIn?: Admin): Promise<{ vectors
       if (pm?.price_bands) bandsByUser.set(pm.member_id, pm.price_bands as MemberPriceBands)
     }
   } catch { /* no bands → no gate */ }
+  const ageByUser = await loadMemberAgeRanges(admin, userIds)
   const userEntries = Array.from(byUser.entries())
   for (const [userId, brandIds] of userEntries) {
     const named = brandIds.map((id) => graph.byId.get(id)).filter(Boolean) as BrandLite[]
     const similarByBrand = new Map<string, SimilarBrand[]>()
     for (const b of named) similarByBrand.set(b.brand_id, await getSimilarBrands(admin, b.brand_id, graph))
-    const seeds = expansionSeeds(named, similarByBrand, { priceBands: bandsByUser.get(userId) ?? null, brandById })
+    const seeds = expansionSeeds(named, similarByBrand, {
+      priceBands: bandsByUser.get(userId) ?? null, ageRange: ageByUser.get(userId) ?? null, brandById,
+    })
     const existing = await loadAffinities(admin, userId)
     const seedRows = Array.from(seeds.values())
     for (const s of seedRows) {
