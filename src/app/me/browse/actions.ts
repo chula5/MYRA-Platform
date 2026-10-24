@@ -21,8 +21,8 @@
 
 import { createAdminClient } from '@/lib/supabase-server'
 import { resolveClientMember } from '@/lib/client-member'
-import { parseQuery, STOPWORDS, MATERIAL_TERMS, TYPE_FORMALITY, COLOUR, TYPE, MATERIAL, isTypoOf, type ParsedQuery } from '@/lib/search-taxonomy'
-import { rankPieces, facetCount, type RankContext, type Scored } from '@/lib/browse-rank'
+import { parseQuery, STOPWORDS, MATERIAL_TERMS, TYPE_FORMALITY, COLOUR, TYPE, MATERIAL, CUT_WORDS, isTypoOf, type ParsedQuery } from '@/lib/search-taxonomy'
+import { rankPieces, facetCount, mixByType, type RankContext, type Scored } from '@/lib/browse-rank'
 import { brandKey, loadBrandGraph, computeSimilarBrands } from '@/lib/brand-affinity'
 import { isOwnedItem } from '@/lib/wardrobe/owned-items'
 import { styleExternalPiece } from '@/lib/mirror/style'
@@ -31,6 +31,8 @@ import { CLOTHING_LADDER, SHOE_LADDER, sizeCategoryFor, acceptedValues } from '@
 import type { MirrorMember } from '@/lib/mirror/auth'
 import type { StyledLook } from '@/app/admin/private-stylist/actions'
 import { newInForMember, NEW_IN_DAYS } from '@/lib/new-in'
+import { SEED } from '@/lib/brand-affinity'
+import { loadTasteGraph, overHerBudget } from '@/lib/taste-graph'
 
 export interface BrowsePiece {
   item_id: string
@@ -216,6 +218,7 @@ function readOf(parsed: ParsedQuery, brandName: string | null): string[] {
   return [
     ...(brandName ? [brandName.toUpperCase()] : []),
     ...parsed.colourFamilies.map((c) => c.toUpperCase()),
+    ...parsed.cuts.map((c) => c.toUpperCase()),
     ...parsed.itemTypes.map((t) => t.replace(/_/g, ' ').toUpperCase()),
     ...parsed.materials.map((m) => m.toUpperCase()),
     ...parsed.occasionGroups.map((g) => g[0].toUpperCase()),
@@ -232,6 +235,11 @@ const orVal = (v: string) => (/[\s,()]/.test(v) ? `"%${v}%"` : `%${v}%`)
 function materialOr(materials: string[]): string {
   const terms = dedupe(materials.flatMap((m) => MATERIAL_TERMS[m] ?? [m]))
   return terms.flatMap((t) => [`material_primary.ilike.${orVal(t)}`, `product_name.ilike.${orVal(t)}`]).join(',')
+}
+
+/** Pieces whose name carries the cut she named — "pencil", "wide-leg". */
+function cutOr(cut: string): string {
+  return (CUT_WORDS[cut] ?? [cut]).map((w) => `product_name.ilike.${orVal(w)}`).join(',')
 }
 
 /** Piece types that could sit in a formality range once cloth and name are counted. */
@@ -273,34 +281,60 @@ export async function browseSearch(
   const known = await loadKnownBrands(admin)
   const read = fixBrandTypos(q, known)
   const inQuery = brandsInQuery(read, known)
-  const parsed = parseQuery(read, inQuery.names)
+  const heard = parseQuery(read, inQuery.names)
+  // An occasion with no piece named ("something for the office") is held to
+  // the pieces that occasion is dressed in.
+  const parsed: ParsedQuery = !heard.itemTypes.length && heard.occasionTypes.length
+    ? { ...heard, itemTypes: heard.occasionTypes }
+    : heard
   const brandRows = parsed.brand ? (inQuery.byKey.get(brandKey(parsed.brand)) ?? []) : []
   const brandIds = brandRows.map((b) => b.brand_id)
   const brandName = brandRows[0]?.name ?? null
   const facets = facetCount(parsed)
-  const ctx: RankContext = { brandIds: new Set(brandIds), words, needle }
+  // Where she shops and what she spends. Unless she names a label herself,
+  // Browse searches her taste graph only — an Oscar de la Renta skirt is not
+  // an answer for a woman who shops ME+EM — and never shows a piece over her
+  // ceiling for that kind of piece (Fiona: £250 tops and knits, £399 dresses
+  // and coats). A piece with no price is not judged.
+  const graph = await loadTasteGraph(admin, me.memberId, known)
+  const herBrands = brandIds.length ? new Map<string, number>() : graph.weights
+  const universe = brandIds.length ? [] : Array.from(graph.weights.keys())
+  const affordable = (it: any) => !overHerBudget(graph, it)
+  const ceiling = Math.max(0, ...Object.values(graph.bands).map((b) => b?.max ?? 0))
+  const ctx: RankContext = { brandIds: new Set(brandIds), words, needle, herBrands }
 
   // 2. Pull candidates. One strict query carries every facet at once (so the
   //    answers are not lost behind a page of near-misses), and looser pools —
   //    one per facet — supply what comes close.
-  const base = () => admin.from('item').select(CARD).in('status', SHOWABLE).not('image_url', 'is', null)
+  const base = () => {
+    let qb = admin.from('item').select(CARD).in('status', SHOWABLE).not('image_url', 'is', null)
+    if (universe.length) qb = qb.in('brand_id', universe)
+    // Her highest ceiling in the database; each kind of piece is held to its own below.
+    if (ceiling > 0) qb = qb.or(`price_gbp.is.null,price_gbp.lte.${ceiling}`)
+    return qb
+  }
   const withFacets = (qb: any, skipBrand = false) => {
     if (brandIds.length && !skipBrand) qb = qb.in('brand_id', brandIds)
     if (parsed.itemTypes.length) qb = qb.in('item_type', parsed.itemTypes)
     else if (parsed.formalityRange) qb = qb.in('item_type', typesInRange(parsed.formalityRange))
     if (parsed.colourFamilies.length) qb = qb.in('colour_family', parsed.colourFamilies)
     if (parsed.materials.length) qb = qb.or(materialOr(parsed.materials))
+    for (const cut of parsed.cuts) qb = qb.or(cutOr(cut))
     return qb
   }
 
   const pools: Promise<any>[] = []
   if (facets > 0) pools.push(withFacets(base()).limit(STRICT_POOL))
+  // The strict pool is any 160 answers; her named labels' answers are pulled on their own so they are there to lead.
+  const named = Array.from(herBrands.entries()).filter(([, w]) => w > SEED.coreFamily).map(([id]) => id)
+  if (facets > 0 && named.length) pools.push(withFacets(base().in('brand_id', named)).limit(STRICT_POOL))
   if (nameWords.length) pools.push(base().or(nameWords.map((w) => `product_name.ilike.${orVal(w)}`).join(',')).limit(POOL))
   if (facets >= 2) {
     if (brandIds.length) pools.push(base().in('brand_id', brandIds).limit(POOL))
     if (parsed.itemTypes.length) pools.push(base().in('item_type', parsed.itemTypes).limit(POOL))
     if (parsed.colourFamilies.length) pools.push(base().in('colour_family', parsed.colourFamilies).limit(POOL))
     if (parsed.materials.length) pools.push(base().or(materialOr(parsed.materials)).limit(POOL))
+    for (const cut of parsed.cuts) pools.push(base().or(cutOr(cut)).limit(POOL))
   }
   if (parsed.formalityRange && !parsed.itemTypes.length) {
     pools.push(withFacets(base()).gte('material_formality', Math.max(1, parsed.formalityRange[0] - 1)).limit(POOL))
@@ -323,16 +357,17 @@ export async function browseSearch(
 
   const [results, similarBrandIds] = await Promise.all([Promise.all(pools), likeBrands])
   const candidates: any[] = []
-  for (const r of results) for (const row of ((r?.data ?? []) as any[])) if (showable(row)) candidates.push(row)
+  for (const r of results) for (const row of ((r?.data ?? []) as any[])) if (showable(row) && affordable(row)) candidates.push(row)
 
   // 3. Rank: exact answers, then what comes close.
   const ranked = rankPieces(candidates, parsed, ctx)
+  if (parsed !== heard) ranked.exact = mixByType(ranked.exact)
   let similar: Scored<any>[] = ranked.similar
   let similarKind: BrowseView['similarKind'] = similar.length ? 'close' : null
 
   if (similarBrandIds.length) {
     const { data } = await withFacets(base().in('brand_id', similarBrandIds), true).limit(POOL)
-    const rows = ((data ?? []) as any[]).filter(showable)
+    const rows = ((data ?? []) as any[]).filter((it) => showable(it) && affordable(it))
     const fromLikeBrands = rankPieces(rows, { ...parsed, brand: null }, ctx).exact
     if (fromLikeBrands.length) {
       const taken = new Set(fromLikeBrands.map((s) => s.it.item_id))
@@ -349,7 +384,7 @@ export async function browseSearch(
   let facetSource: any[] = [...ranked.exact.map((s) => s.it), ...similar.map((s) => s.it)]
   if (!facetSource.length) {
     const { data } = await base().limit(240)
-    facetSource = ((data ?? []) as any[]).filter(showable)
+    facetSource = ((data ?? []) as any[]).filter((it) => showable(it) && affordable(it))
   }
   const brandCount = new Map<string, number>()
   for (const it of facetSource) { const n = it.brand?.name; if (n) brandCount.set(n, (brandCount.get(n) ?? 0) + 1) }
@@ -415,7 +450,7 @@ export async function browseSearch(
     similar: similarN.slice(0, MOST).map((k) => pieceOf(k.it)),
     similarKind: similarN.length ? similarKind ?? 'close' : null,
     brand: brandName,
-    read: readOf(parsed, brandName),
+    read: readOf(heard, brandName),
     facets: facetsOut,
     sizes,
   }

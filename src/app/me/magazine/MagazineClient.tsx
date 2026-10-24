@@ -70,7 +70,7 @@ export default function MagazineClient({ testMemberId }: { testMemberId?: string
     .slice(0, 8)
 
   return (
-    <div className={`myra-pearl relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen min-h-screen ${testMemberId ? '' : '-my-10'}`}>
+    <div className={`myra-pearl relative -mx-6 sm:-ml-8 sm:-mr-10 min-h-screen ${testMemberId ? '' : '-my-10'}`}>
       <div className="w-full px-6 sm:px-10 py-8 pb-16">
         <div className="grid xl:grid-cols-[300px_minmax(0,1fr)_460px] gap-6 items-start">
 

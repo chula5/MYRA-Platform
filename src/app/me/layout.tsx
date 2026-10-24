@@ -30,6 +30,9 @@ export default async function MeLayout({ children }: { children: React.ReactNode
       {asHer?.test && <HerViewBar name={asHer.name} />}
       <MeChrome />
       {/* pb-28 on a phone keeps the last of the page clear of the tab bar. */}
+      {/* The rooms run edge to edge with -mx-6 sm:-ml-8 sm:-mr-10: out to the
+          rail (250px wide, so 282 - 250 = 32px) and the right edge. Change
+          this padding and those margins change with it. */}
       <main className="w-full px-6 sm:pl-[282px] sm:pr-10 pt-10 pb-28 sm:pb-10">{children}</main>
       <MeTour />
       {/* The house of stylists, one button away on every page. */}
