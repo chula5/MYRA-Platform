@@ -27,6 +27,7 @@ import { createAdminClient } from '@/lib/supabase-server'
 import { sendStudioEmail, emailShell, emailButton, siteUrl } from '@/lib/studio/email'
 import { thumbUrl } from '@/lib/image-utils'
 import { composeEventPicks, eventsWithPicks, markPicksTold, type EventWithPicks, type EventPickView } from '@/lib/events/picks'
+import { notifyMember } from '@/lib/push/notify'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -179,7 +180,9 @@ export async function GET(req: NextRequest) {
         const body = fresh.length === 1
           ? `MYRA found ${total === 1 ? 'an option' : `${total} options`} for your ${fresh[0].label.trim()}.`
           : `MYRA found ${total} new options for your events.`
-        await admin.from('pilot_notification').insert({ member_id: m.member_id, kind: 'event_picks', body, look_ids: [] })
+        // The note in the app, and on her phone where she said yes to notifications.
+        const note = await notifyMember(admin, { memberId: m.member_id, kind: 'event_picks', body }, { title: 'For your events', url: '/me/events', collapseId: 'event-picks' })
+        entry.push = note.push
       }
     } catch (err) {
       entry.error = err instanceof Error ? err.message : String(err)

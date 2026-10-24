@@ -6,6 +6,7 @@ import ClientJourneyTracker from '@/components/analytics/ClientJourneyTracker'
 import StylistChat from './StylistChat'
 import { resolveClientMember } from '@/lib/client-member'
 import NativeShareBridge from '@/components/me/NativeShareBridge'
+import PushSetup from '@/components/me/PushSetup'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,6 +38,8 @@ export default async function MeLayout({ children }: { children: React.ReactNode
       {/* Inside the iPhone app: hand her sign-in to the share sheet, so
           "share to MYRA" from Safari works without the Safari extension. */}
       <NativeShareBridge />
+      {/* Inside the iPhone app: notifications — her yes, her token, a tap opens the page. */}
+      <PushSetup />
     </div>
   )
 }

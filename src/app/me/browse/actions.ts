@@ -30,6 +30,7 @@ import { loadMemberSizeProfile, loadSizeRowsFor } from '@/lib/size-availability'
 import { CLOTHING_LADDER, SHOE_LADDER, sizeCategoryFor, acceptedValues } from '@/lib/size-canonical'
 import type { MirrorMember } from '@/lib/mirror/auth'
 import type { StyledLook } from '@/app/admin/private-stylist/actions'
+import { newInForMember, NEW_IN_DAYS } from '@/lib/new-in'
 
 export interface BrowsePiece {
   item_id: string
@@ -490,4 +491,44 @@ export async function styleBrowsedPiece(
 
   const res = await styleExternalPiece(item, mode === 'wardrobe' ? 'wardrobe' : 'inspiration', member, admin, { check: false })
   return { looks: res.looks ?? [], error: res.error }
+}
+
+/**
+ * NEW IN FROM HER BRANDS — where the Monday push opens (/me/browse?new=<since>).
+ * The same pieces the push counted (lib/new-in): from the brands she named,
+ * since that morning's week began, buyable in her size. Shown as a Browse
+ * answer, so every card can be kept or styled like any other; her filters
+ * narrow it by brand, colour and piece.
+ */
+export async function browseNewIn(since: string, filters: BrowseFilters = {}, asMemberId?: string): Promise<BrowseView> {
+  const label = 'New in from your brands'
+  const me = await resolveClientMember(asMemberId)
+  const view = (pieces: BrowsePiece[], facets: BrowseFacets, read: string[], error?: string): BrowseView => ({
+    query: label, pieces, similar: [], similarKind: null, brand: null, read, facets, sizes: EMPTY_SIZES, error,
+  })
+  if (!me) return view([], EMPTY_FACETS, [], 'Not signed in')
+  const at = Date.parse(since)
+  // A week back from the push, at most a month: an old link still opens on something sensible.
+  const from = new Date(Number.isFinite(at) ? Math.max(at, Date.now() - 31 * 24 * 3600_000) : Date.now() - NEW_IN_DAYS * 24 * 3600_000).toISOString()
+  const admin = createAdminClient() as any
+  const { data: m } = await admin.from('pilot_member')
+    .select('member_id, brands, brands_input_only, brands_never').eq('member_id', me.memberId).maybeSingle()
+  if (!m) return view([], EMPTY_FACETS, [])
+  const found = await newInForMember(admin, m, from)
+  const all = found.items
+  const facets: BrowseFacets = {
+    brands: found.brands.map((b) => b.name),
+    colours: dedupe(all.map((it) => it.colour_family).filter(Boolean)),
+    types: dedupe(all.map((it) => it.item_type).filter(Boolean)),
+  }
+  const brandSel = new Set((filters.brands ?? []).map((b) => b.toLowerCase()))
+  const colourSel = new Set(filters.colours ?? [])
+  const typeSel = new Set(filters.types ?? [])
+  const pieces = all.filter((it) => {
+    if (brandSel.size && !brandSel.has(String(it.brand?.name ?? '').toLowerCase())) return false
+    if (colourSel.size && !colourSel.has(String(it.colour_family ?? ''))) return false
+    if (typeSel.size && !typeSel.has(String(it.item_type ?? ''))) return false
+    return true
+  })
+  return view(pieces.slice(0, 96).map(pieceOf), facets, ['NEW IN', ...found.brands.slice(0, 4).map((b) => b.name.toUpperCase())])
 }

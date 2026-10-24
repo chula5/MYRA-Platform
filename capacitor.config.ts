@@ -18,6 +18,12 @@ const config: CapacitorConfig = {
   ios: {
     contentInset: 'always',
   },
+  plugins: {
+    // A push that arrives while the app is open still shows as a banner.
+    PushNotifications: {
+      presentationOptions: ['badge', 'sound', 'alert'],
+    },
+  },
 }
 
 export default config
