@@ -18,7 +18,7 @@ import {
 } from '@/lib/brand-watch-browser'
 import { buildLearning, type DecidedRow, type LearnedVerdict } from '@/lib/brand-watch-learning'
 import { automationOn } from '@/lib/brand-watch-trust'
-import { WOMEN_RE, MEN_RE } from '@/lib/brand-watch-gender'
+import { WOMEN_RE, MEN_RE, KIDS_RE } from '@/lib/brand-watch-gender'
 
 // ---------------------------------------------------------------- types
 
@@ -157,7 +157,8 @@ const HOUSE_STYLE = {
     'sock', 'hair clip', 'hair claw', 'hairband', 'scrunchie', 'gift card', 'giftcard',
     'care kit', 'shoe care', 'cleaner', 'insole', 'shoelace', 'protector',
     'keyring', 'key ring', 'keychain', 'key chain', 'phone case', 'card holder', 'cardholder',
-    'passport holder', 'luggage tag', 'kids', 'child', 'children', 'baby', 'bib',
+    'passport holder', 'luggage tag', 'bib',
+    // Children's ranges are read by KIDS_RE, which spares baby blue and babydoll.
     // Swimwear is real fashion and MYRA does not style it into outfits. With
     // no swimwear type in the taxonomy, a bikini top fell through to the
     // untyped default and was composed as a BLOUSE.
@@ -532,13 +533,15 @@ function classifyAndScore(p: {
   // piece can mention menswear in passing.
   const genderHay = [p.product_type, p.tags.join(' '), p.title, p.handle].join(' ').toLowerCase()
   const menswear = !WOMEN_RE.test(genderHay) && MEN_RE.test(genderHay)
+  // Children's ranges are set aside the same way, a women's marker winning.
+  const kids = !WOMEN_RE.test(genderHay) && KIDS_RE.test(genderHay)
 
   return {
     shopifyProductId: String(p.id), handle: p.handle, title: p.title, vendor: p.vendor,
     productType: p.product_type, tags: p.tags, url: p.url, price: p.price,
     publishedAt: p.published_at, images: p.images,
     ...stockFromVariants(p.variants),
-    itemType, colourFamily, materialCategory, materialPrimary, score, reasons, nonFashion, menswear,
+    itemType, colourFamily, materialCategory, materialPrimary, score, reasons, nonFashion: nonFashion || kids, menswear,
     optionColours: p.optionColours ?? [],
   }
 }
