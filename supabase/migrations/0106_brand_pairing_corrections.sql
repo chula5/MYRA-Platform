@@ -100,7 +100,7 @@ begin
     select unnest(array[
       meem, wyse,
       pg_temp.brand_id_for(array['gerard darel']),
-      pg_temp.brand_id_for(array['viviere', 'vivere'])
+      pg_temp.brand_id_for(array['viviere', 'vivere', 'vivere london'])
     ]) as id
   loop
     continue when r.id is null;
