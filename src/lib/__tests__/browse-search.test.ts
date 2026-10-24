@@ -150,4 +150,46 @@ describe('rankPieces holds every facet as a requirement', () => {
     expect(p.seasons).toEqual(['summer'])
     expect(p.formalityRange).toEqual([3, 4])
   })
+
+  it('pencil skirt: only skirts sold as pencil; an A-line, a mini and a blouse are not answers', () => {
+    const pencil = { item_id: 'p', product_name: 'Tailored Pencil Skirt | Black', item_type: 'skirt' }
+    const midiPencil = { item_id: 'm', product_name: 'Tweed Midi Pencil Skirt', item_type: 'skirt' }
+    const aline = { item_id: 'a', product_name: 'Alfie skirt', item_type: 'skirt' }
+    const mini = { item_id: 'n', product_name: '2-in-1 mini skirt', item_type: 'skirt' }
+    const blouse = { item_id: 'b', product_name: 'Bow-tie blouse', item_type: 'blouse' }
+    for (const q of ['pencil skirt', 'pencil skirts', 'black pencil skirt']) {
+      expect(parseQuery(q).cuts, q).toEqual(['pencil'])
+      expect(parseQuery(q).itemTypes, q).toEqual(['skirt'])
+    }
+    const p = parseQuery('pencil skirt')
+    expect(facetCount(p)).toBe(2)
+    const r = rankPieces([aline, blouse, pencil, mini, midiPencil], p, ctx([], ['pencil', 'skirt'], 'pencil skirt'))
+    expect(r.exact.map((s) => s.it.item_id).sort()).toEqual(['m', 'p'])
+    expect(r.similar.map((s) => s.it.item_id).sort()).toEqual(['a', 'n'])
+  })
+
+  it('something for the office: office pieces, her brands first; jeans and a sequin top never', () => {
+    const p = parseQuery('something for the office')
+    expect(p.itemTypes).toEqual([])
+    expect(p.occasionTypes).toContain('blazer')
+    expect(p.formalityRange).toEqual([2, 3.5])
+    const asked = { ...p, itemTypes: p.occasionTypes }
+    const meem = { item_id: 'm', product_name: 'Tailored wool blazer', item_type: 'blazer', material_formality: 3, brand_id: 'meem' }
+    const trousers = { item_id: 't', product_name: 'Pleat front trousers', item_type: 'trousers', material_formality: 3, brand_id: 'other' }
+    const jeans = { item_id: 'j', product_name: 'Straight jeans', item_type: 'jeans', material_formality: 2, brand_id: 'meem' }
+    const sequin = { item_id: 's', product_name: 'Sequin cami', item_type: 'blouse', material_formality: 5, brand_id: 'other' }
+    const r = rankPieces([trousers, jeans, sequin, meem], asked, { ...ctx([], ['office'], 'something for the office'), herBrands: new Map([['meem', 1]]) })
+    expect(r.exact.map((s) => s.it.item_id)).toEqual(['m', 't'])
+    expect(r.exact.map((s) => s.it.item_id)).not.toContain('j')
+    expect(r.exact.map((s) => s.it.item_id)).not.toContain('s')
+  })
+
+  it('a cut however she spells it: wide-leg, a-line, a line', () => {
+    expect(parseQuery('wide-leg trousers').cuts).toEqual(['wide leg'])
+    expect(parseQuery('wide leg trousers').cuts).toEqual(['wide leg'])
+    expect(parseQuery('a-line skirt').cuts).toEqual(['a line'])
+    expect(parseQuery('a line skirt').cuts).toEqual(['a line'])
+    expect(parseQuery('a linen skirt').cuts).toEqual([])
+    expect(parseQuery('silk slip skirt').cuts).toEqual([])
+  })
 })

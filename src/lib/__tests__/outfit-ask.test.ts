@@ -74,3 +74,22 @@ describe('two garments with no joiner', () => {
     expect(parseOutfitAsk('silk slip skirt').pieces).toHaveLength(1)
   })
 })
+
+describe('build an outfit around a fur jacket and trousers', () => {
+  it('reads two pieces, the fur jacket first, with no filler words', () => {
+    const { pieces } = parseOutfitAsk('build an outfit around a fur jacket and trousers')
+    expect(pieces).toHaveLength(2)
+    expect(pieces[0].materials).toEqual(['fur'])
+    expect(pieces[0].descriptors).not.toContain('around')
+    expect(pieces[1].itemTypes).toContain('trousers')
+  })
+
+  it('a jacket with fur in its name leads one only tagged fur', () => {
+    const { pieces } = parseOutfitAsk('a fur jacket')
+    const jackets = [
+      { item_id: 'tagged', product_name: '1990s navy nylon set', item_type: 'jacket', material_primary: 'fur', created_at: '2026-10-20' },
+      { item_id: 'mink', product_name: 'Long-haired mink fur round neck jacket', item_type: 'jacket', material_primary: 'fur', created_at: '2026-01-01' },
+    ]
+    expect(rankForPiece(jackets, pieces[0]).items[0].item_id).toBe('mink')
+  })
+})

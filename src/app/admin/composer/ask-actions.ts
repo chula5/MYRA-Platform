@@ -13,7 +13,7 @@
 import { createAdminClient } from '@/lib/supabase-server'
 import { getItem, getReadyAndLiveItems, type ItemWithBrand } from '@/lib/admin-queries'
 import { pairCompat, slotForItemType, deriveSlotScores, deriveOutfitLevelScores, type Slot } from '@/lib/composer'
-import { parseOutfitAsk, rankForPiece, matchesPiece, slotOfPiece, type PieceSpec } from '@/lib/outfit-ask'
+import { parseOutfitAsk, rankForPiece, matchesPiece, slotOfPiece, descriptorScore, type PieceSpec } from '@/lib/outfit-ask'
 import { loadStyleModel, recordStyleOffers } from '@/lib/style-brain-store'
 import { formalityBand, deriveOccasionScores, confidenceGate, hardSkipPairs, isExcluded } from '@/lib/pipeline'
 import { evaluateHouseStyle } from '@/lib/house-style'
@@ -27,9 +27,38 @@ const LOOKS = 6
 const FILLERS_PER_SLOT = 3
 const MAX_COMBOS = 4000
 const MAX_USES_PER_PIECE = 2
-// Which of her pieces anchors a look built from nothing: the garment the rest
-// is worn around.
+// Which of her pieces anchors a look built from nothing: the first garment she
+// named ("a fur jacket and trousers" is a look around the fur jacket); only when
+// she named no garment does this order pick.
+const GARMENT_SLOTS = new Set<Slot>(['dress', 'top', 'bottom', 'outerwear'])
 const ANCHOR_PRIORITY: Slot[] = ['dress', 'top', 'bottom', 'outerwear', 'shoe', 'bag', 'jewellery', 'accessory']
+// A jumpsuit or playsuit is a whole look, never "trousers" or "a top" — unless
+// she asked for one by name.
+const ONE_PIECE = /\b(jumpsuit|playsuit|boilersuit|catsuit|romper|all[- ]in[- ]one|dungarees?|unitard)\b/i
+// The run of context every ask reads; kept a minute so the anchors of one
+// ask (Outfit Review builds ~20, one call each) don't each re-read it.
+const CONTEXT_TTL_MS = 60_000
+let contextCache: { at: number; ctx: Promise<AskContext> } | null = null
+type AskContext = [
+  Awaited<ReturnType<typeof loadStyleModel>>,
+  Awaited<ReturnType<typeof loadEjectionConstraints>>,
+  Awaited<ReturnType<typeof loadApprovedVectors>>,
+  Awaited<ReturnType<typeof loadPipelineConfig>>,
+  Awaited<ReturnType<typeof loadLearnedMaterialPairs>>,
+]
+function loadAskContext(): Promise<AskContext> {
+  if (contextCache && Date.now() - contextCache.at < CONTEXT_TTL_MS) return contextCache.ctx
+  const ctx = Promise.all([
+    loadStyleModel(),
+    loadEjectionConstraints(),
+    loadApprovedVectors(500),
+    loadPipelineConfig(),
+    loadLearnedMaterialPairs(),
+  ])
+  contextCache = { at: Date.now(), ctx }
+  ctx.catch(() => { contextCache = null })
+  return ctx
+}
 
 export interface AskPiece {
   item_id: string
@@ -124,7 +153,16 @@ export async function composeFromAsk(
   anchorItemId: string | null = null,
   // anchorFromAsk: the anchor was picked from this ask's own alternatives, so
   // it stands for her lead piece even where it only fits that piece loosely.
-  opts: { surface?: 'composer' | 'review'; keepAnchor?: boolean; anchorFromAsk?: boolean } = {},
+  // alternatives: how many other anchors for her lead piece to hand back.
+  // avoid: pieces already shown in this run (repeats allowed) — looks lean
+  // away from them so twenty anchors don't all wear the same trousers.
+  opts: {
+    surface?: 'composer' | 'review'
+    keepAnchor?: boolean
+    anchorFromAsk?: boolean
+    alternatives?: number
+    avoid?: string[]
+  } = {},
 ): Promise<AskResult> {
   try {
     const text = ask.trim()
@@ -139,6 +177,14 @@ export async function composeFromAsk(
       return { error: `Couldn’t find a piece in “${text}” — name a garment, a colour, a cloth or a brand` }
     }
     const pool = library.filter((i) => i.image_url && sellable(i as any))
+    // The items a piece may be: no jumpsuit for "trousers" unless she said one.
+    const poolFor = (spec: PieceSpec) => {
+      const s = slotOfPiece(spec)
+      if ((s !== 'bottom' && s !== 'top') || ONE_PIECE.test(spec.label)) return pool
+      return pool.filter((i) => !ONE_PIECE.test(i.product_name ?? ''))
+    }
+    const avoidCount = new Map<string, number>()
+    for (const id of opts.avoid ?? []) avoidCount.set(id, (avoidCount.get(id) ?? 0) + 1)
     const notes: string[] = []
 
     let anchor: ItemWithBrand | null = anchorItemId ? await getItem(anchorItemId) : null
@@ -168,17 +214,12 @@ export async function composeFromAsk(
       }
     }
 
-    const [model, constraints, approvedVectors, config, learnedPairs] = await Promise.all([
-      loadStyleModel(),
-      loadEjectionConstraints(),
-      loadApprovedVectors(500),
-      loadPipelineConfig(),
-      loadLearnedMaterialPairs(),
-    ])
+    const [model, constraints, approvedVectors, config, learnedPairs] = await loadAskContext()
 
     const compatWith = (a: ItemWithBrand | null) => (it: ItemWithBrand) => (a ? pairCompat(a, it).total : 0)
+    const altCount = opts.alternatives ?? 8
     let ranked = wanted.map((spec) =>
-      rankForPiece(pool.filter((i) => i.item_id !== anchor?.item_id), spec, { limit: 8, score: compatWith(anchor) }))
+      rankForPiece(poolFor(spec).filter((i) => i.item_id !== anchor?.item_id), spec, { limit: Math.max(8, altCount + 1), score: compatWith(anchor) }))
     // How each piece she named was read, in her order, for the UI.
     const rows = new Map<PieceSpec, { label: string; found: number; relaxed: string | null; byAnchor?: boolean }>()
     for (const p of Array.from(byAnchor)) rows.set(p, { label: p.label, found: 1, relaxed: null, byAnchor: true })
@@ -203,18 +244,21 @@ export async function composeFromAsk(
     if (!anchor) {
       if (ranked.length === 0) return { pieces: summary(), notes, error: 'Nothing in the library matches those pieces' }
       const slotOf = (r: (typeof ranked)[number]) => slotOfPiece(r.spec) ?? slotForItemType(r.items[0].item_type)
-      const lead = ranked
+      const lead = ranked.find((r) => GARMENT_SLOTS.has(slotOf(r))) ?? ranked
         .map((r, i) => ({ r, i, p: ANCHOR_PRIORITY.indexOf(slotOf(r)) }))
         .sort((a, b) => a.p - b.p || a.i - b.i)[0].r
       const others = ranked.filter((r) => r !== lead)
       const fit = (it: ItemWithBrand, idx: number) =>
         others.reduce((s, r) => s + Math.max(0, ...r.items.slice(0, 4).map((o) => pairCompat(it, o).total)), 0) - idx * 0.02
-      const choices = lead.items.slice(0, 6)
+      // Among her strongest matches only: fit with the rest never lets a loose
+      // match lead.
+      const top = descriptorScore(lead.items[0], lead.spec)
+      const choices = lead.items.filter((it) => descriptorScore(it, lead.spec) >= top).slice(0, 6)
       anchor = choices.map((it, idx) => ({ it, s: fit(it, idx) })).sort((a, b) => b.s - a.s)[0].it
-      anchorAlternatives = lead.items.filter((i) => i.item_id !== anchor!.item_id).slice(0, 8).map(piecePayload)
+      anchorAlternatives = lead.items.filter((i) => i.item_id !== anchor!.item_id).slice(0, altCount).map(piecePayload)
       rows.set(lead.spec, { ...rows.get(lead.spec)!, byAnchor: true })
       // Re-rank the rest against the anchor now there is one.
-      ranked = others.map((r) => rankForPiece(pool.filter((i) => i.item_id !== anchor!.item_id), r.spec, { limit: 8, score: compatWith(anchor) }))
+      ranked = others.map((r) => rankForPiece(poolFor(r.spec).filter((i) => i.item_id !== anchor!.item_id), r.spec, { limit: 8, score: compatWith(anchor) }))
     }
     const a = anchor!
     const aSlot = slotForItemType(a.item_type)
@@ -235,12 +279,14 @@ export async function composeFromAsk(
     for (const slot of missingSlots(present)) {
       const options = pool
         .filter((i) => i.item_id !== a.item_id && !named.has(i.item_id) && slotForItemType(i.item_type) === slot)
+        .filter((i) => (slot !== 'top' && slot !== 'bottom') || !ONE_PIECE.test(i.product_name ?? ''))
         .filter((i) => !isExcluded(constraints, i.item_id, slot, band))
         .filter((i) => !tierBandViolation([aTier, i.brand?.price_tier ?? null]))
         .map((item) => ({
           item,
           s: pairCompat(a, item).total +
-            lists.reduce((sum, l) => sum + pairCompat(l.items[0].item, item).total, 0) / Math.max(1, lists.length),
+            lists.reduce((sum, l) => sum + pairCompat(l.items[0].item, item).total, 0) / Math.max(1, lists.length) -
+            (avoidCount.get(item.item_id) ?? 0) * 0.03,
         }))
         .sort((x, y) => y.s - x.s)
         .slice(0, FILLERS_PER_SLOT)
@@ -268,7 +314,8 @@ export async function composeFromAsk(
         const coherence = weight ? sum / weight : 0
         // Her best-matching pieces first: a small nudge per place down a list.
         const fidelity = acc.reduce((s, p) => s + (lists[p.listIdx].filler ? 0 : p.rank * 0.01), 0)
-        combos.push({ picks: acc, score: coherence - fidelity })
+        const repeats = acc.reduce((s, p) => s + (avoidCount.get(p.item.item_id) ?? 0) * 0.03, 0)
+        combos.push({ picks: acc, score: coherence - fidelity - repeats })
         return
       }
       lists[i].items.forEach((x, rank) => walk(i + 1, [...acc, { ...x, listIdx: i, rank }]))

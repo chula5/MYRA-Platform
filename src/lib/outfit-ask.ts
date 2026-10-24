@@ -10,7 +10,7 @@
 // dictionaries as the Edit's search (search-taxonomy), so a word means the
 // same thing here as everywhere else — no API cost, instant.
 
-import { parseQuery, hasMaterial, isTypoOf, TYPE, COLOUR, MATERIAL, STOPWORDS } from '@/lib/search-taxonomy'
+import { parseQuery, hasMaterial, isTypoOf, TYPE, COLOUR, MATERIAL, MATERIAL_TERMS, STOPWORDS } from '@/lib/search-taxonomy'
 import { slotForItemType, type Slot } from '@/lib/composer'
 import type { ItemType } from '@/types/database'
 
@@ -37,7 +37,7 @@ export interface OutfitAsk {
 // this anchor", "style it with".
 const ASK_WORDS = new Set([
   'piece', 'together', 'put', 'make', 'build', 'create', 'compose', 'style', 'styled', 'pair', 'paired', 'match', 'matching',
-  'goes', 'go', 'going', 'anchor', 'it', 'them', 'one', 'ones', 'wearing', 'worn', 'want', 'wanted', 'need', 'add', 'also',
+  'goes', 'go', 'going', 'around', 'outfit', 'outfits', 'look', 'looks', 'anchor', 'it', 'them', 'one', 'ones', 'wearing', 'worn', 'want', 'wanted', 'need', 'add', 'also',
   'maybe', 'perhaps', 'really', 'very', 'quite', 'bit', 'little', 'new', 'nice', 'pretty', 'cute', 'chic', 'great',
   'something', 'anything', 'any', 'item', 'items', 'thing', 'things', 'pls', 'thanks', 'thank', 'you', 'we', 'us', 'her', 'she',
 ])
@@ -264,6 +264,9 @@ export function descriptorScore(item: AskItem, spec: PieceSpec): number {
   // Kept facets that only ranked at a looser level still count for something.
   if (spec.length && lengthFits(item, spec.length)) s += 0.5
   for (const m of spec.materials) if (hasMaterial(item, m)) s += 0.5
+  // The cloth in the piece's own name beats a cloth only in its tags: a "mink
+  // fur jacket" leads a fur ask before a jacket merely tagged fur.
+  for (const m of spec.materials) if ((MATERIAL_TERMS[m] ?? [m]).some((t) => hasTerm(name, fold(t)))) s += 0.5
   return s
 }
 

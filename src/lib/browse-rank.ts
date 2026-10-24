@@ -10,7 +10,7 @@
 //
 // Pure functions, so the rules can be tested without a database.
 
-import { estimateItemFormality, hasMaterial, OCCASION_LEAD_TYPES, type ParsedQuery } from './search-taxonomy'
+import { CUT_WORDS, estimateItemFormality, hasMaterial, OCCASION_LEAD_TYPES, type ParsedQuery } from './search-taxonomy'
 
 export interface RankablePiece {
   item_id: string
@@ -37,6 +37,8 @@ export interface RankContext {
   words: string[]
   /** The whole phrase, lower-cased. */
   needle: string
+  /** Her taste graph, brand_id → how strongly the label is hers (0..1). They lead when she named no label. */
+  herBrands?: Map<string, number>
 }
 
 export interface Scored<T> { it: T; score: number; hits: number; facets: number; bonus: number }
@@ -54,7 +56,12 @@ export function hasWord(hay: string | null | undefined, needle: string): boolean
 /** The facets her words carried — what a piece will be held to. */
 export function facetCount(p: ParsedQuery): number {
   return (p.brand ? 1 : 0) + (p.itemTypes.length ? 1 : 0) + (p.colourFamilies.length ? 1 : 0)
-    + (p.materials.length ? 1 : 0) + (p.formalityRange ? 1 : 0) + (p.seasons.length ? 1 : 0)
+    + (p.materials.length ? 1 : 0) + (p.formalityRange ? 1 : 0) + (p.seasons.length ? 1 : 0) + (p.cuts.length ? 1 : 0)
+}
+
+/** Is the piece sold as the cut she named? Read off its name — a pencil skirt says so. */
+export function cutFits(it: RankablePiece, cut: string): boolean {
+  return (CUT_WORDS[cut] ?? [cut]).some((w) => hasWord(it.product_name, w))
 }
 
 // ── Seasons ───────────────────────────────────────────────────────────────────
@@ -146,6 +153,7 @@ export function scorePiece(it: RankablePiece, p: ParsedQuery, ctx: RankContext):
   if (p.materials.length) part(p.materials.some((m) => hasMaterial(it, m)))
   if (p.formalityRange) part(formalityFits(it, p.formalityRange))
   if (p.seasons.length) part(p.seasons.some((season) => seasonFits(it, season)))
+  if (p.cuts.length) part(p.cuts.every((cut) => cutFits(it, cut)))
 
   let bonus = 0
   // Within the season, the most seasonal first: a velvet long sleeve over a
@@ -157,6 +165,14 @@ export function scorePiece(it: RankablePiece, p: ParsedQuery, ctx: RankContext):
   }
   if (ctx.needle && name.includes(ctx.needle)) bonus += 0.1
   if (String(it.status) === 'live') bonus += 0.05
+  // Her brands first: Fiona asking for the office sees ME+EM before its neighbours.
+  const weight = !p.brand ? ctx.herBrands?.get(String(it.brand_id ?? '')) : undefined
+  if (weight != null) bonus += 0.3 * weight
+  // An occasion's own pieces in its order: for the office, tailoring before a bag.
+  if (p.occasionTypes.length && p.itemTypes.length === p.occasionTypes.length) {
+    const lead = p.occasionTypes.indexOf(String(it.item_type ?? ''))
+    if (lead >= 0) bonus += 0.1 - lead * 0.005
+  }
   if (p.formalityRange && !p.itemTypes.length && p.formalityRange[1] >= 4) {
     const lead = OCCASION_LEAD_TYPES.indexOf(String(it.item_type ?? ''))
     if (lead >= 0) bonus += 0.2 - lead * 0.02
@@ -195,4 +211,23 @@ export function rankPieces<T extends RankablePiece>(items: T[], p: ParsedQuery, 
   exact.sort(order)
   similar.sort(order)
   return { exact, similar }
+}
+
+/**
+ * An occasion asked with no piece named is answered as a rail, not a wall:
+ * one of each kind of piece in turn (a blazer, trousers, a shirt, a knit…),
+ * each kind still in its own order, so her brands lead within it.
+ */
+export function mixByType<T extends RankablePiece>(list: Scored<T>[]): Scored<T>[] {
+  const byType = new Map<string, Scored<T>[]>()
+  for (const s of list) {
+    const k = String(s.it.item_type ?? '')
+    const q = byType.get(k) ?? []
+    q.push(s)
+    byType.set(k, q)
+  }
+  const queues = Array.from(byType.values())
+  const out: Scored<T>[] = []
+  while (out.length < list.length) for (const q of queues) { const next = q.shift(); if (next) out.push(next) }
+  return out
 }
