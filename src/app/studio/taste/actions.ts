@@ -420,12 +420,10 @@ export async function seedMemberFromIntake(memberId: string): Promise<{ named?: 
   const admin = createAdminClient() as any
   const { data: member } = await admin.from('pilot_member').select('brands, brands_input_only').eq('member_id', memberId).single()
   if (!member) return { error: 'Member not found' }
-  const names = [
-    ...((member.brands ?? []) as any[]).map((b: any) => String(b.name)),
-    ...((member.brands_input_only ?? []) as string[]),
-  ]
-  if (!names.length) return { error: 'Member has no onboarded brands' }
-  const result = await seedUserAffinities(admin, memberId, names)
+  const names = ((member.brands ?? []) as any[]).map((b: any) => String(b.name))
+  const inputOnly = (member.brands_input_only ?? []) as string[]
+  if (!names.length && !inputOnly.length) return { error: 'Member has no onboarded brands' }
+  const result = await seedUserAffinities(admin, memberId, names, { inputOnly })
   revalidatePath(PATH)
   return result
 }

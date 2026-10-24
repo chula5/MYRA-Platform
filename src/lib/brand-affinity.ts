@@ -36,10 +36,14 @@ export const MIN_VECTOR_NEIGHBOUR = 0.5 // below this an unfamilied brand is an 
 // that centroid is a hint, not a position (a 5-item Claudie Pierlot scattered
 // Scandi minimalists into a French-contemporary world) — only curated
 // families may expand from it. The 0.85 floor keeps weak provisional cosines
-// (0.72–0.80) out of her world. Codes-based similarity is exempt: authored,
-// not sampled.
+// (0.72–0.80) out of her world. Codes-based similarity is exempt from the
+// item-count bar (authored, not sampled) but not from a floor of its own:
+// with only a handful of brands coded, the top 12 "neighbours" of a coded
+// brand reached down to codes similarity 0.13 (Zara → Reformation, J.Crew,
+// Madewell). Real coded pairs sit at 0.85+ (J.Crew–Massimo Dutti).
 export const VECTOR_SEED_MIN_ITEMS = 12
 export const VECTOR_SEED_MIN_AESTHETIC = 0.85
+export const CODES_SEED_MIN_AESTHETIC = 0.7
 export const WARM_START_WEIGHT = 10 // ≈ 2-3 swipes' worth; real swipes dominate by ~20 events
 export const RE_EXPANSION_THRESHOLD = 0.8
 export const POSITIVE_EVENTS = ['yes', 'save', 'click_out', 'purchase']
@@ -513,13 +517,15 @@ export function expansionSeeds(
     priceBands?: MemberPriceBands | null
     ageRange?: string | null
     brandById?: Map<string, Pick<BrandLite, 'median_price_overall' | 'median_price_by_category' | 'customer_age_register'>>
+    /** Brands that may never be suggested — her input-only (Zara-rule) brands. */
+    never?: Set<string>
   } = {},
 ): Map<string, ExpansionSeed> {
   const out = new Map<string, ExpansionSeed>()
   const namedIds = new Set(named.map((b) => b.brand_id))
   for (const n of named) {
     for (const s of similarByBrand.get(n.brand_id) ?? []) {
-      if (namedIds.has(s.brand_id)) continue
+      if (namedIds.has(s.brand_id) || opts.never?.has(s.brand_id)) continue
       // Provisional (item-centroid) similarity may only expand from a centroid
       // worth trusting, and only when the match is strong. Curated families
       // and authored codes are exempt — a human vouched for those.
@@ -527,6 +533,7 @@ export function expansionSeeds(
         if ((n.vector_item_count ?? 0) < VECTOR_SEED_MIN_ITEMS) continue
         if ((s.aesthetic ?? s.score ?? 0) < VECTOR_SEED_MIN_AESTHETIC) continue
       }
+      if (s.mechanism === 'vector' && s.basis === 'codes' && (s.aesthetic ?? 0) < CODES_SEED_MIN_AESTHETIC) continue
       if (opts.priceBands && !withinMemberPriceReach(opts.priceBands, opts.brandById?.get(s.brand_id) ?? null)) continue
       if (opts.ageRange && !withinMemberAgeReach(opts.ageRange, opts.brandById?.get(s.brand_id) ?? null)) continue
       const value =
@@ -873,26 +880,81 @@ export async function loadAffinities(adminIn: Admin | undefined, userId: string)
   return new Map((data ?? []).map((r: any) => [r.brand_id, r as AffinityRow]))
 }
 
+// Input-only brands (the Zara rule: she wears it, don't send it) are taste
+// signal and nothing more. A re-seed repairs what older seeding did with them:
+// the brand's own row back from 'onboarded' 1.0 to baseline (it was only ever
+// 1.0 because seeding mistook it for a favourite), and every suggestion that
+// came in only "via" it back to baseline too — unless her own responses have
+// since confirmed it. Learned rows are earned and stay. Pure, so the rule is
+// testable.
+export function inputOnlyRepairs(
+  rows: Array<Pick<AffinityRow, 'brand_id' | 'affinity' | 'source' | 'expansion_trace' | 'positive_count'>>,
+  inputOnly: Array<Pick<BrandLite, 'brand_id' | 'name'>>,
+): Array<{ brand_id: string; reason: string }> {
+  const ids = new Set(inputOnly.map((b) => b.brand_id))
+  const out: Array<{ brand_id: string; reason: string }> = []
+  for (const r of rows) {
+    if (r.source === 'learned' || Number(r.affinity) <= SEED.baseline) continue
+    if (ids.has(r.brand_id)) {
+      if (r.source === 'onboarded') out.push({ brand_id: r.brand_id, reason: 'input only: taste signal, never seeded as a favourite' })
+      continue
+    }
+    if (r.source !== 'expanded' || r.positive_count > 0) continue
+    const via = inputOnly.find((b) => (r.expansion_trace ?? '').endsWith(` via ${b.name}`))
+    if (via) out.push({ brand_id: r.brand_id, reason: `input only: ${via.name} never suggests other brands` })
+  }
+  return out
+}
+
+// Her two brand lists, resolved. The Zara rule wins: a brand on both lists
+// (Zara in her favourites AND input-only, as intake often records it) is
+// input-only — the composer never sends it, so it must not seed like a
+// favourite either.
+export function seedLists(
+  graph: BrandGraph, namedNames: string[], inputOnlyNames: string[],
+): { named: BrandLite[]; inputOnly: BrandLite[]; unmatched: string[] } {
+  const n = resolveBrandNames(graph, namedNames)
+  const io = resolveBrandNames(graph, inputOnlyNames)
+  const ioIds = new Set(io.matched.map((b) => b.brand_id))
+  return {
+    named: n.matched.filter((b) => !ioIds.has(b.brand_id)),
+    inputOnly: io.matched,
+    unmatched: [...n.unmatched, ...io.unmatched],
+  }
+}
+
 // Onboarding seeding: named 1.0 · expanded 0.6/0.45/0.35 with a one-line
 // trace · every other stocked brand 0.1 (never zero). Never lowers an
-// existing value. Also warm-starts the member's 34-dim taste vector toward
-// the named-brand centroid, lightly.
+// existing value — except the input-only repairs above. Also warm-starts the
+// member's 34-dim taste vector toward the centroid of every brand she gave
+// (input-only included: that is what taste signal means), lightly.
 export async function seedUserAffinities(
   adminIn: Admin | undefined, userId: string, namedNames: string[],
   // `reason` is what the append-only event log records against each named
   // brand. It defaults to the intake wording because that is where this has
   // always been called from; a client naming a brand herself passes her own,
   // so the two are told apart later without changing what `source` means.
-  opts: { warmStartPilotVector?: boolean; reason?: string } = {},
-): Promise<{ named: number; expanded: number; baseline: number; unmatched: string[] }> {
+  // `inputOnly` = her brands_input_only: warm-start signal only — never 1.0,
+  // never a source of suggestions, never suggested.
+  opts: { warmStartPilotVector?: boolean; reason?: string; inputOnly?: string[] } = {},
+): Promise<{ named: number; expanded: number; baseline: number; unmatched: string[]; repaired: number }> {
   const admin = (adminIn ?? createAdminClient()) as any
   const reason = opts.reason ?? 'named at onboarding'
   const graph = await loadBrandGraph(admin)
-  const { matched, unmatched } = resolveBrandNames(graph, namedNames)
+  const { named: matched, inputOnly, unmatched } = seedLists(graph, namedNames, opts.inputOnly ?? [])
   for (const raw of unmatched) {
     await admin.from('unmatched_brand_log').insert({ raw_name: raw, user_id: userId })
   }
   const existing = await loadAffinities(admin, userId)
+
+  const repairs = inputOnlyRepairs(Array.from(existing.values()), inputOnly)
+  for (const r of repairs) {
+    const old = existing.get(r.brand_id)!
+    await writeAffinity(admin, userId, r.brand_id,
+      { affinity: SEED.baseline, source: 'expanded', expansion_trace: 'baseline' },
+      'admin_override', r.reason, Number(old.affinity))
+    existing.set(r.brand_id, { ...old, affinity: SEED.baseline, source: 'expanded', expansion_trace: 'baseline' })
+  }
 
   for (const b of matched) {
     const old = existing.get(b.brand_id)
@@ -914,7 +976,9 @@ export async function seedUserAffinities(
   } catch { /* no bands → no gate */ }
   const ageRange = (await loadMemberAgeRanges(admin, [userId])).get(userId) ?? null
   const brandById = new Map(graph.brands.map((b: any) => [b.brand_id, b]))
-  const seeds = expansionSeeds(matched, similarByBrand, { priceBands, ageRange, brandById })
+  const seeds = expansionSeeds(matched, similarByBrand, {
+    priceBands, ageRange, brandById, never: new Set(inputOnly.map((b) => b.brand_id)),
+  })
   let expanded = 0
   const seedList = Array.from(seeds.values())
   for (const s of seedList) {
@@ -939,7 +1003,7 @@ export async function seedUserAffinities(
   }
 
   if (opts.warmStartPilotVector !== false) {
-    const namedVectors = matched.map((b) => b.brand_vector).filter(Boolean) as number[][]
+    const namedVectors = [...matched, ...inputOnly].map((b) => b.brand_vector).filter(Boolean) as number[][]
     const c = centroidOf(namedVectors)
     if (c) {
       const { data: member } = await admin.from('pilot_member').select('taste_vector').eq('member_id', userId).maybeSingle()
@@ -952,7 +1016,7 @@ export async function seedUserAffinities(
     }
   }
 
-  return { named: matched.length, expanded, baseline, unmatched }
+  return { named: matched.length, expanded, baseline, unmatched, repaired: repairs.length }
 }
 
 // Setting her age applies the age gate to the world she already has, not just
@@ -1343,20 +1407,24 @@ export async function runBrandAffinityWeekly(adminIn?: Admin): Promise<{ vectors
   // out. Members without bands (or non-pilot users) stay ungated.
   const userIds = Array.from(byUser.keys())
   const bandsByUser = new Map<string, MemberPriceBands>()
+  const inputOnlyByUser = new Map<string, Set<string>>()
   try {
-    const { data: pms } = await admin.from('pilot_member').select('member_id, price_bands').in('member_id', userIds)
+    const { data: pms } = await admin.from('pilot_member').select('member_id, price_bands, brands_input_only').in('member_id', userIds)
     for (const pm of pms ?? []) {
       if (pm?.price_bands) bandsByUser.set(pm.member_id, pm.price_bands as MemberPriceBands)
+      const io = resolveBrandNames(graph, (pm?.brands_input_only ?? []) as string[]).matched
+      if (io.length) inputOnlyByUser.set(pm.member_id, new Set(io.map((b) => b.brand_id)))
     }
   } catch { /* no bands → no gate */ }
   const ageByUser = await loadMemberAgeRanges(admin, userIds)
   const userEntries = Array.from(byUser.entries())
   for (const [userId, brandIds] of userEntries) {
-    const named = brandIds.map((id) => graph.byId.get(id)).filter(Boolean) as BrandLite[]
+    const never = inputOnlyByUser.get(userId)
+    const named = brandIds.filter((id) => !never?.has(id)).map((id) => graph.byId.get(id)).filter(Boolean) as BrandLite[]
     const similarByBrand = new Map<string, SimilarBrand[]>()
     for (const b of named) similarByBrand.set(b.brand_id, await getSimilarBrands(admin, b.brand_id, graph))
     const seeds = expansionSeeds(named, similarByBrand, {
-      priceBands: bandsByUser.get(userId) ?? null, ageRange: ageByUser.get(userId) ?? null, brandById,
+      priceBands: bandsByUser.get(userId) ?? null, ageRange: ageByUser.get(userId) ?? null, brandById, never,
     })
     const existing = await loadAffinities(admin, userId)
     const seedRows = Array.from(seeds.values())

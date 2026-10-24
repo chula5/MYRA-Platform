@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  ageGateResets, ageProximity, applyDiscoverySlots, brandKey, centroidOf, codesComplete, codesSimilarity, combinedTaste,
+  ageGateResets, ageProximity, applyDiscoverySlots, brandKey, inputOnlyRepairs, seedLists, centroidOf, codesComplete, codesSimilarity, combinedTaste,
   computeSimilarBrands, expansionSeeds, ghostCodes, heroBrandOf, isThinBrand,
   outfitBrandAffinity, parseAgeRange, pcaProject1D, positioningBand, priceProximity, stepDecay, stepPositive,
   withinMemberAgeReach, AGE_FLOOR_FACTOR, CODE_DIMENSIONS, DEFAULT_CONFIG, SEED, type BrandLite, type FeedRow,
@@ -142,6 +142,69 @@ describe('expansionSeeds', () => {
       ['cp', [{ brand_id: 'mz', name: 'Me+Em', mechanism: 'vector' as const, score: 0.7, aesthetic: 0.88, basis: 'codes' as const }]],
     ])
     expect(expansionSeeds([thin], similar).has('mz')).toBe(true)
+  })
+
+  it('codes-based seeds still need a real match: below 0.7 codes similarity they never seed', () => {
+    // The Zara case: top-12 coded "neighbours" reached down to 0.13.
+    const named = [b('mz', 'Massimo Dutti', 2)]
+    const similar = new Map([['mz', [
+      { brand_id: 'jc', name: 'J.Crew', mechanism: 'vector' as const, score: 0.678, aesthetic: 0.85, basis: 'codes' as const },
+      { brand_id: 'doen', name: 'DÔEN', mechanism: 'vector' as const, score: 0.075, aesthetic: 0.202, basis: 'codes' as const },
+      { brand_id: 'co', name: 'CO Core', mechanism: 'vector' as const, score: 0.304, aesthetic: 0.676, basis: 'codes' as const },
+    ]]])
+    const seeds = expansionSeeds(named, similar)
+    expect(seeds.has('jc')).toBe(true)
+    expect(seeds.has('doen')).toBe(false)
+    expect(seeds.has('co')).toBe(false)
+  })
+
+  it('never suggests a brand in `never` (her input-only brands), whatever links to it', () => {
+    const named = [b('mz', 'Massimo Dutti', 2)]
+    const similar = new Map([['mz', [
+      { brand_id: 'zara', name: 'Zara', mechanism: 'core_family' as const, family_name: 'High street' },
+      { brand_id: 'jc', name: 'J.Crew', mechanism: 'core_family' as const, family_name: 'High street' },
+    ]]])
+    const seeds = expansionSeeds(named, similar, { never: new Set(['zara']) })
+    expect(seeds.has('zara')).toBe(false)
+    expect(seeds.has('jc')).toBe(true)
+  })
+})
+
+describe('input-only brands (the Zara rule)', () => {
+  const zara = { brand_id: 'zara', name: 'Zara' }
+  const row = (brand_id: string, source: 'onboarded' | 'expanded' | 'learned', affinity: number, expansion_trace: string | null, positive_count = 0) =>
+    ({ brand_id, source, affinity, expansion_trace, positive_count })
+
+  it('repairs her Zara row from 1.0 and everything that came in only via Zara', () => {
+    const repairs = inputOnlyRepairs([
+      row('zara', 'onboarded', 1, null, 2), // mistaken favourite → baseline, clicks or not
+      row('ref', 'expanded', 0.35, 'vector 0.16 via Zara'),
+      row('jc', 'expanded', 0.35, 'vector 0.088 via Zara'),
+      row('liked', 'expanded', 0.35, 'vector 0.2 via Zara', 1), // she responded → stands
+      row('earned', 'learned', 0.6, 'vector 0.2 via Zara', 4), // learned → stands
+      row('cp', 'expanded', 0.6, "core family 'French contemporary' via Sézane"), // not via Zara
+      row('base', 'expanded', 0.1, 'baseline'),
+      row('meem', 'onboarded', 1, null), // a real favourite
+    ], [zara])
+    expect(repairs.map((r) => r.brand_id)).toEqual(['zara', 'ref', 'jc'])
+    expect(repairs[1].reason).toBe('input only: Zara never suggests other brands')
+  })
+
+  it('a learned input-only brand keeps what she earned', () => {
+    expect(inputOnlyRepairs([row('zara', 'learned', 0.7, null, 9)], [zara])).toEqual([])
+  })
+
+  it('a brand on both lists is input-only: the Zara rule wins over the favourites list', () => {
+    const brands = [b('zara', 'Zara', 1), b('meem', 'ME+EM', 2)]
+    const graph = { brands, byId: new Map(brands.map((x) => [x.brand_id, x])), families: [], memberships: [], exclusions: [], config: DEFAULT_CONFIG }
+    const lists = seedLists(graph, ['ME+EM', 'Zara', 'Unknown Label'], ['zara'])
+    expect(lists.named.map((x) => x.name)).toEqual(['ME+EM'])
+    expect(lists.inputOnly.map((x) => x.name)).toEqual(['Zara'])
+    expect(lists.unmatched).toEqual(['Unknown Label'])
+  })
+
+  it('"via Zara Home" is not "via Zara"', () => {
+    expect(inputOnlyRepairs([row('x', 'expanded', 0.35, 'vector 0.9 via Zara Home')], [zara])).toEqual([])
   })
 })
 
