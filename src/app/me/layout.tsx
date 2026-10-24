@@ -7,6 +7,7 @@ import StylistChat from './StylistChat'
 import { resolveClientMember } from '@/lib/client-member'
 import NativeShareBridge from '@/components/me/NativeShareBridge'
 import PushSetup from '@/components/me/PushSetup'
+import HerViewBar from '@/components/me/HerViewBar'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,10 +21,13 @@ export default async function MeLayout({ children }: { children: React.ReactNode
 
   const isAdmin = user.id === process.env.ADMIN_USER_ID
   if (!isAdmin && !(await resolveClientMember())) redirect('/')
+  // Chloe opening these pages as a member from HER VIEW.
+  const asHer = isAdmin ? await resolveClientMember() : null
 
   return (
     <div className="min-h-screen myra-pearl myra-safe-top-pad">
       <div className="myra-safe-top" aria-hidden />
+      {asHer?.test && <HerViewBar name={asHer.name} />}
       <MeChrome />
       {/* pb-28 on a phone keeps the last of the page clear of the tab bar. */}
       <main className="w-full px-6 sm:pl-[282px] sm:pr-10 pt-10 pb-28 sm:pb-10">{children}</main>

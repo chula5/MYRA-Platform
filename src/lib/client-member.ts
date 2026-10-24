@@ -30,6 +30,9 @@ export const resolveClientMember = perRequest(async (asMemberId?: string | null)
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
   const admin = createAdminClient() as any
+  // HER VIEW frames her real pages: the member Chloe chose rides in on a
+  // cookie scoped to /me, so every room and its actions open as her, in test.
+  if (!asMemberId && user.id === process.env.ADMIN_USER_ID) asMemberId = await herViewMemberId()
   if (asMemberId) {
     if (user.id !== process.env.ADMIN_USER_ID) return null
     const { data } = await admin.from('pilot_member')
@@ -40,6 +43,16 @@ export const resolveClientMember = perRequest(async (asMemberId?: string | null)
     .select('member_id, name, auth_user_id').eq('auth_user_id', user.id).maybeSingle()
   return data ? { memberId: data.member_id, name: data.name, authUserId: data.auth_user_id ?? null, test: false } : null
 })
+
+/** The cookie HER VIEW sets for Chloe — honoured only for the admin, sent only to /me. */
+export const HER_VIEW_COOKIE = 'myra_her_view'
+
+async function herViewMemberId(): Promise<string | null> {
+  try {
+    const { cookies } = await import('next/headers')
+    return (await cookies()).get(HER_VIEW_COOKIE)?.value || null
+  } catch { return null }
+}
 
 /** Her first name, for headings. */
 export const firstNameOf = (name: string): string => (name ?? '').trim().split(/\s+/)[0] ?? ''
