@@ -37,7 +37,7 @@ export interface MarketplaceRead {
   returned: boolean
 }
 
-const MODEL = 'claude-haiku-4-5'
+const MODEL = 'claude-haiku-5-5'
 
 const SCHEMA = {
   type: 'object',
@@ -80,6 +80,7 @@ export async function readMarketplaceLines(orders: MarketplaceOrder[]): Promise<
       const res = await client.messages.create({
         model: MODEL,
         max_tokens: 4000,
+        thinking: { type: 'disabled' },
         output_config: { format: { type: 'json_schema', schema: SCHEMA } },
         messages: [{
           role: 'user',
@@ -150,7 +151,11 @@ export async function saveMarketplacePurchases(
     const match = finds.find((f) => sameFind(f, incoming, 120))
     if (match) {
       const patch: any = mergeFind(match, incoming)
-      if (o.image_url && !match.image_url) patch.image_url = await keepFindPhoto(o.image_url, memberId, match.find_id, retailer)
+      if (o.image_url && !match.image_url) {
+        const kept = await keepFindPhoto(o.image_url, memberId, match.find_id, retailer)
+        if (kept) patch.image_url = kept
+        else delete patch.image_url
+      }
       if (Object.keys(patch).length) {
         Object.assign(match, patch)
         await a.from('email_purchase_find').update(patch).eq('find_id', match.find_id)

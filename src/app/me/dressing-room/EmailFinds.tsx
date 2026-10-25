@@ -8,7 +8,7 @@ import FallbackImage from '@/components/FallbackImage'
 import VirginConnect from './VirginConnect'
 import ServiceMark from '@/components/me/ServiceMark'
 import {
-  addFindPhoto, addFoundPiece, disconnectInbox, findPhotoInEmails, keepReturned, loadEmailPanel, notMine, removeReturned,
+  addFoundPiece, disconnectInbox, keepReturned, loadEmailPanel, notMine, removeReturned,
   scanAgain, scanNow,
   type EmailPanelView,
 } from './email-actions'
@@ -16,8 +16,10 @@ import {
 
 export default function EmailFinds({ testMemberId, onAdded, onCount }: { testMemberId?: string; onAdded?: () => void; onCount?: (n: number) => void }) {
   const [view, setView] = useState<EmailPanelView | null>(null)
+  // Finds whose photo would not load in this browser — hidden, not shown grey.
+  const [broken, setBroken] = useState<string[]>([])
   // The room's FOUND IN EMAIL tab shows how many are waiting to be looked through.
-  useEffect(() => { if (view) onCount?.(view.finds.length + view.returned.length) }, [view, onCount])
+  useEffect(() => { if (view) onCount?.(view.finds.filter((f) => !broken.includes(f.find_id)).length + view.returned.length) }, [view, broken, onCount])
   const [virginStep, setVirginStep] = useState<0 | 1>(0)
   const [picked, setPicked] = useState<string[]>([])
   // One key per button in flight: adding a piece never blocks the next card.
@@ -121,9 +123,8 @@ export default function EmailFinds({ testMemberId, onAdded, onCount }: { testMem
     /EMAIL_SECRET_ENCRYPTION_KEY/.test(e ?? '') ? 'MYRA’s email key is not set on the server yet — your stylist has been told.'
       // Google's "invalid_grant / Bad Request": the key Google gave MYRA has expired or been revoked. Nothing to pay for — connect again.
       : /invalid_grant|Bad Request/i.test(e ?? '') ? 'Google has signed MYRA out of this inbox — tap Gmail below to connect it again.' : e
-  // Cards need a picture; a piece with only a name is listed below them instead.
-  const withPhoto = view.finds.filter((f) => !!f.image_url)
-  const noPhoto = view.finds.filter((f) => !f.image_url)
+  // Only pieces with a photo that loads are shown (Chloe, 2026-10-25).
+  const withPhoto = view.finds.filter((f) => !!f.image_url && !broken.includes(f.find_id))
   const returnPath = testMemberId ? '/admin/private-stylist' : '/me/dressing-room'
   const gmailHref = `/api/email/google/start?return=${encodeURIComponent(returnPath)}${testMemberId ? `&member=${testMemberId}` : ''}`
 
@@ -237,39 +238,8 @@ export default function EmailFinds({ testMemberId, onAdded, onCount }: { testMem
                     <input type="checkbox" checked={picked.includes(f.find_id)} onChange={() => togglePick(f.find_id)} className="w-5 h-5 accent-[#2B2B2B]" />
                     <span className="text-[16px] xl:text-[19px] 2xl:text-[23px] text-[#2B2B2B]">Pick</span>
                   </label>
-                  {f.image_url ? (
-                    <FallbackImage src={f.image_url} thumbWidth={500} alt={f.product_name} className="absolute inset-0 w-full h-full object-contain" />
-                  ) : (
-                    // Some shops (Vinted) leave the photo out of the order email —
-                    // look for it in her other emails about the same piece, or she adds her own.
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-4 text-center">
-                      <span className="text-[18px] xl:text-[21px] 2xl:text-[25px] text-[#6E6B65]">No photo in the order email</span>
-                      <button
-                        disabled={working(`hunt-${f.find_id}`)}
-                        onClick={() => act(`hunt-${f.find_id}`, () => findPhotoInEmails(f.find_id, testMemberId))}
-                        className="text-[18px] xl:text-[21px] 2xl:text-[25px] px-4 py-2 border border-[#2B2B2B] text-[#2B2B2B] disabled:opacity-40 rounded-full"
-                      >
-                        {working(`hunt-${f.find_id}`) ? 'Looking…' : 'Look in my emails'}
-                      </button>
-                      <label className={`text-[18px] xl:text-[21px] 2xl:text-[25px] underline underline-offset-4 text-[#55534E] cursor-pointer ${working(`photo-${f.find_id}`) ? 'pointer-events-none opacity-50' : ''}`}>
-                        {working(`photo-${f.find_id}`) ? 'Uploading…' : 'Add a photo'}
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0]
-                            if (!file) return
-                            const fd = new FormData()
-                            fd.set('find_id', f.find_id)
-                            fd.set('file', file)
-                            if (testMemberId) fd.set('as_member_id', testMemberId)
-                            void act(`photo-${f.find_id}`, () => addFindPhoto(fd))
-                          }}
-                        />
-                      </label>
-                    </div>
-                  )}
+                  {/* A photo that stops loading takes its card with it — never a grey box. */}
+                  <FallbackImage src={f.image_url} thumbWidth={500} alt={f.product_name} onExhausted={() => setBroken((x) => [...x, f.find_id])} className="absolute inset-0 w-full h-full object-contain" />
                 </div>
                 <div className="px-3 py-3 flex flex-col gap-1 flex-1">
                   <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#2B2B2B] leading-tight line-clamp-2">{f.product_name}</p>
@@ -300,57 +270,6 @@ export default function EmailFinds({ testMemberId, onAdded, onCount }: { testMem
         </div>
       )}
 
-      {/* Pieces the email names but does not picture: a line each, never an
-          empty box. She can find the picture or add her own; a piece MYRA
-          cannot name at all is not shown. */}
-      {noPhoto.length > 0 && (
-        <div className="space-y-3 border-t border-[#C3BFB8] pt-5">
-          <p className="myra-section-note 2xl:!text-[28px]">IN YOUR EMAIL, NO PICTURE YET · {noPhoto.length}</p>
-          <p className="text-[18px] xl:text-[21px] 2xl:text-[25px] text-[#55534E]">MYRA needs a picture to style a piece. Let it look in your other emails, or add a photo of your own.</p>
-          <ul className="divide-y divide-[#E4E2DD]">
-            {noPhoto.map((f) => (
-              <li key={f.find_id} className="flex flex-wrap items-center gap-x-5 gap-y-2 py-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#2B2B2B] leading-tight">{f.product_name}</p>
-                  <p className="text-[17px] xl:text-[20px] 2xl:text-[24px] text-[#6E6B65]">
-                    {[f.brand_name ?? f.retailer, f.size, f.order_date ? new Date(f.order_date).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : null, f.price != null ? `${f.currency === 'GBP' || !f.currency ? '£' : `${f.currency} `}${Math.round(f.price)}` : null].filter(Boolean).join(' · ')}
-                  </p>
-                  {f.error && f.error !== 'Return started' && <p className="text-[16px] xl:text-[19px] text-[#B83A3A]">{f.error}</p>}
-                </div>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                  <button
-                    disabled={working(`hunt-${f.find_id}`)}
-                    onClick={() => act(`hunt-${f.find_id}`, () => findPhotoInEmails(f.find_id, testMemberId))}
-                    className="text-[17px] xl:text-[20px] 2xl:text-[24px] px-4 py-2 border border-[#2B2B2B] text-[#2B2B2B] disabled:opacity-40 rounded-full"
-                  >
-                    {working(`hunt-${f.find_id}`) ? 'Looking…' : 'Look in my emails'}
-                  </button>
-                  <label className={`text-[17px] xl:text-[20px] 2xl:text-[24px] px-4 py-2 bg-[#2B2B2B] text-white rounded-full cursor-pointer ${working(`photo-${f.find_id}`) ? 'pointer-events-none opacity-50' : ''}`}>
-                    {working(`photo-${f.find_id}`) ? 'Uploading…' : 'Add a photo'}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0]
-                        if (!file) return
-                        const fd = new FormData()
-                        fd.set('find_id', f.find_id)
-                        fd.set('file', file)
-                        if (testMemberId) fd.set('as_member_id', testMemberId)
-                        void act(`photo-${f.find_id}`, () => addFindPhoto(fd))
-                      }}
-                    />
-                  </label>
-                  <button onClick={() => decide(f, () => notMine(f.find_id, testMemberId), `${f.product_name} put aside.`)} className="text-[17px] xl:text-[20px] 2xl:text-[24px] text-[#55534E] underline underline-offset-4">
-                    Not mine
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
     </section>
   )
 }
