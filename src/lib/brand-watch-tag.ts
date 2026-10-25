@@ -75,7 +75,7 @@ export const OPENAI_TAG_MODEL = process.env.BRAND_WATCH_OPENAI_MODEL || 'gpt-6-l
 export const OPENAI_TAG_DETAIL = (process.env.BRAND_WATCH_OPENAI_DETAIL as 'low' | 'high') || 'low'
 
 /** Anthropic's cheap tier, kept as the fallback reader. */
-export const TAG_MODEL = 'claude-haiku-4-5-20251001'
+export const TAG_MODEL = 'claude-haiku-5-5'
 /**
  * The same reading done by a bigger model, for the one question worth asking
  * about the cheap one: is it getting the garment right, or is it confidently
@@ -92,6 +92,7 @@ const PRICES: Record<string, [number, number]> = {
   'gpt-5.6-luna': [0.2, 1.2],
   'gpt-5.4-nano': [0.05, 0.4],
   'claude-haiku-4-5-20251001': [1, 5],
+  'claude-haiku-5-5': [0.1, 0.5],
   'claude-sonnet-5-5': [2, 10],
 }
 
@@ -319,7 +320,8 @@ export async function tagFromTextAnthropic(
   try {
     const r = await client.messages.create({
       model,
-      max_tokens: 120,
+      max_tokens: 160,
+      ...(model.startsWith('claude-haiku') ? { thinking: { type: 'disabled' as const } } : {}),
       messages: [{ role: 'user', content: buildTextPrompt(copy) }],
     })
     const text = r.content.find((b) => b.type === 'text')
@@ -415,7 +417,8 @@ export async function tagFromVisionAnthropic(
   try {
     const r = await client.messages.create({
       model: opts.model ?? TAG_MODEL,
-      max_tokens: 120,
+      max_tokens: 160,
+      ...((opts.model ?? TAG_MODEL).startsWith('claude-haiku') ? { thinking: { type: 'disabled' as const } } : {}),
       messages: [{ role: 'user', content: [
         { type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.data } },
         { type: 'text', text: VISION_PROMPT },

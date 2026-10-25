@@ -16,7 +16,7 @@ import { cleanName, looksLikeNewsletter, parseMagazineRead, type MagazinePick, t
 export { cleanName, looksLikeNewsletter, parseMagazineRead }
 export type { MagazinePick, MagazineRead }
 
-const MODEL = 'claude-haiku-4-5'
+const MODEL = 'claude-haiku-5-5'
 
 const TRIAGE_SCHEMA = {
   type: 'object',
@@ -44,6 +44,7 @@ export async function triageNewsletters(rows: { id: string; from: string; subjec
       const res = await client.messages.create({
         model: MODEL,
         max_tokens: 1500,
+        thinking: { type: 'disabled' },
         output_config: { format: { type: 'json_schema', schema: TRIAGE_SCHEMA } },
         messages: [{
           role: 'user',
@@ -129,6 +130,7 @@ export async function readNewsletter(m: MailMessage, clientDescription: string):
     const res = await client.messages.create({
       model: MODEL,
       max_tokens: 1500,
+      thinking: { type: 'disabled' },
       output_config: { format: { type: 'json_schema', schema: READ_SCHEMA } },
       messages: [{ role: 'user', content: prompt(clientDescription, text, imageAlts, links) }],
     } as any) as Anthropic.Message

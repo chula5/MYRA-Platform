@@ -7,7 +7,7 @@ import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
 import { emailForExtraction, matchImagesByAlt, nameAppearsIn, parseExtraction, type EmailImage, type MailMessage, type PurchaseExtraction } from './purchase-core'
 
-const MODEL = 'claude-haiku-4-5'
+const MODEL = 'claude-haiku-5-5'
 
 const SCHEMA = {
   type: 'object',
@@ -80,6 +80,7 @@ export async function extractPurchase(m: MailMessage): Promise<{ extraction: Pur
     const res = await client.messages.create({
       model: MODEL,
       max_tokens: 2000,
+      thinking: { type: 'disabled' },
       output_config: { format: { type: 'json_schema', schema: SCHEMA } },
       messages: [{ role: 'user', content: prompt(text, imageAlts, links) }],
     } as any) as Anthropic.Message
@@ -109,6 +110,7 @@ export async function namePieceFromPhoto(imageUrl: string): Promise<string | nul
     const res = await client.messages.create({
       model: MODEL,
       max_tokens: 40,
+      thinking: { type: 'disabled' },
       messages: [{
         role: 'user',
         content: [
@@ -155,6 +157,7 @@ export async function triageBySubject(rows: { id: string; from: string; subject:
       const res = await client.messages.create({
         model: MODEL,
         max_tokens: 1500,
+        thinking: { type: 'disabled' },
         output_config: { format: { type: 'json_schema', schema: TRIAGE_SCHEMA } },
         messages: [{
           role: 'user',

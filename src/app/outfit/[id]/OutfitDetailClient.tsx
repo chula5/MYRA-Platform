@@ -54,6 +54,8 @@ interface OutfitDetailClientProps {
   // panel and every other piece stays linked and shoppable.
   soldItemId?: string | null
   rescueId?: string | null
+  /** Open on this piece's own view rather than the look (a piece tapped in a look card). */
+  initialItemId?: string
   // HOSTED: another page (her own looks) opens this same view over itself and
   // owns where Back, Similar Looks, Explore Styles, Style Item and the look
   // arrows go. Nothing is fetched from the public outfit table when hosted.
@@ -89,6 +91,7 @@ export default function OutfitDetailClient({
   sizeInfo,
   soldItemId = null,
   rescueId = null,
+  initialItemId,
   host,
 }: OutfitDetailClientProps) {
   const router = useRouter()
@@ -143,6 +146,8 @@ export default function OutfitDetailClient({
       return next
     })
     toggleSaveItem(itemId, outfitId).then((res) => {
+      // Every heart and count on the page behind this view follows the save.
+      if (!res?.error) window.dispatchEvent(new Event('myra:item-saved'))
       if (res?.error) {
         setSavedItemSet((prev) => {
           const next = new Set(prev)
@@ -156,7 +161,10 @@ export default function OutfitDetailClient({
   const [activeStyleItemId, setActiveStyleItemId] = useState<string | null>(styleItemId ?? null)
   const [activeItemType, setActiveItemType] = useState<ItemType | null>(itemType as ItemType ?? null)
   const [loading, setLoading] = useState(!initialOutfit)
-  const [currentImageIndex, setCurrentImageIndex] = useState(0)
+  const [currentImageIndex, setCurrentImageIndex] = useState(() => {
+    const img = initialItemId ? initialOutfit?.outfit_item?.find((oi) => oi.item?.item_id === initialItemId)?.item?.image_url : null
+    return img && initialOutfit ? Math.max(0, outfitImages(initialOutfit).indexOf(img)) : 0
+  })
   // Onboarding coach-tips shown ONE AT A TIME (0=tap-to-style, 1=source,
   // 2=similar, 3=explore) so they never stack on top of each other.
   const [coachStep, setCoachStep] = useState(0)
@@ -368,17 +376,7 @@ export default function OutfitDetailClient({
     ? activeItemType.toUpperCase().replace('_', ' ')
     : null
 
-  // Build the full image list so the user can scroll through every piece:
-  // the outfit shot, any additional shots, then each item's product photo.
-  const allImages: string[] = Array.from(
-    new Set(
-      [
-        outfit.image_url,
-        ...(((outfit as unknown as { additional_images?: string[] }).additional_images) ?? []),
-        ...items.map((it) => it.image_url),
-      ].filter(Boolean) as string[],
-    ),
-  )
+  const allImages = outfitImages(outfit)
   const safeIndex = Math.min(currentImageIndex, allImages.length - 1)
   const currentImageUrl = allImages[safeIndex] ?? outfit.image_url
 
@@ -462,13 +460,17 @@ export default function OutfitDetailClient({
             total={allImages.length}
             onPrev={() => setCurrentImageIndex((i) => (i - 1 + allImages.length) % allImages.length)}
             onNext={() => setCurrentImageIndex((i) => (i + 1) % allImages.length)}
-            onBackToOutfit={() => setCurrentImageIndex(0)}
+            /* A look not shot yet has no picture of its own: index 0 is its first
+               piece, so going back means leaving the piece view altogether. */
+            onBackToOutfit={outfit.image_url ? () => setCurrentImageIndex(0) : () => (host ? host.onBack() : router.back())}
             outfitId={outfitId}
             outfitImage={outfit.image_url}
             linkBase={linkBase}
             soft={!!host}
             wearing={host?.wearing}
             onOpenLook={host?.onOpenLook}
+            saved={savedItemSet.has(currentItem.item_id)}
+            onToggleSave={canSave ? () => toggleItem(currentItem.item_id) : undefined}
           />
         ) : (
         // Single look — full-bleed on mobile, large & centred on desktop. Looks
@@ -813,6 +815,15 @@ function ImageWithHotspots({
 // the left, the image glides in to the right. Mobile: image on top, then name /
 // price / retailer button underneath.
 
+/** Every picture of a look in order: the outfit shot, any extra shots, then each piece's product photo. */
+function outfitImages(outfit: OutfitWithItems): string[] {
+  return Array.from(new Set([
+    outfit.image_url,
+    ...(((outfit as unknown as { additional_images?: string[] }).additional_images) ?? []),
+    ...(outfit.outfit_item ?? []).filter((oi) => oi.item != null).map((oi) => oi.item?.image_url),
+  ].filter(Boolean) as string[]))
+}
+
 function ItemDetailView({
   item,
   total,
@@ -825,6 +836,8 @@ function ItemDetailView({
   soft = false,
   wearing,
   onOpenLook,
+  saved,
+  onToggleSave,
 }: {
   item: SourceItemData
   total: number
@@ -838,6 +851,9 @@ function ItemDetailView({
   soft?: boolean
   wearing?: (itemId: string) => OutfitWithItems[]
   onOpenLook?: (lookId: string) => void
+  /** Shown when she can keep pieces: a heart on the photo and SAVE under the price. */
+  saved?: boolean
+  onToggleSave?: () => void
 }) {
   const router = useRouter()
   const nextImg = item.image_url ?? ''
@@ -912,6 +928,16 @@ function ItemDetailView({
           {item.product_name}
         </h2>
         {price && <p className={`mt-4 tracking-[0.04em] text-[#0A0A0A] ${soft ? 'text-[19px]' : 'text-[15px] sm:text-[16px]'}`}>{price}</p>}
+        {onToggleSave && (
+          <button
+            type="button"
+            onClick={onToggleSave}
+            aria-pressed={!!saved}
+            className={`mt-5 inline-flex items-center gap-2 rounded-full border px-6 py-3 tracking-[0.14em] ${soft ? 'text-[15px]' : 'text-[12px]'} ${saved ? 'border-[#2B2B2B] bg-[#2B2B2B] text-white' : 'border-[#2B2B2B] text-[#2B2B2B]'}`}
+          >
+            <span className={saved ? 'text-[#F2B8B5]' : ''}>{saved ? '♥' : '♡'}</span> {saved ? 'SAVED' : 'SAVE'}
+          </button>
+        )}
 
         {descriptors.length > 0 && (
           <div className="mt-6 space-y-1.5 hidden sm:block">
@@ -966,6 +992,16 @@ function ItemDetailView({
               />
             )}
 
+            {onToggleSave && (
+              <button
+                type="button"
+                onClick={onToggleSave}
+                aria-label={saved ? 'Remove from saved' : 'Save this piece'}
+                className="absolute top-3 left-3 z-20 w-10 h-10 rounded-full bg-white/90 shadow-[0_2px_8px_rgba(0,0,0,0.15)] flex items-center justify-center"
+              >
+                <span className={`text-[22px] leading-none ${saved ? 'text-[#C8302A]' : 'text-[#2B2B2B]'}`}>{saved ? '♥' : '♡'}</span>
+              </button>
+            )}
             {/* The full look, shown small at the top-right for context — tap to
                 return to the outfit. */}
             {outfitImage && (
@@ -1023,7 +1059,7 @@ function ItemDetailView({
                   aria-label="Open this look"
                 >
                   <div className="relative aspect-[3/4] overflow-hidden rounded-md bg-[#F2F2F0]">
-                    {o.image_url && (
+                    {o.image_url ? (
                       <FallbackImage
                         src={o.image_url}
                         thumbWidth={240}
@@ -1031,6 +1067,13 @@ function ItemDetailView({
                         loading="lazy"
                         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
                       />
+                    ) : (
+                      // Not shot yet: the look's pieces laid out together, so it is still the outfit.
+                      <div className="absolute inset-0 grid grid-cols-2 gap-px bg-white p-1">
+                        {(o.outfit_item ?? []).map((oi) => oi.item?.image_url).filter(Boolean).slice(0, 4).map((src, k) => (
+                          <FallbackImage key={k} src={src as string} thumbWidth={120} alt="" loading="lazy" className="w-full h-full object-contain" />
+                        ))}
+                      </div>
                     )}
                   </div>
                 </button>

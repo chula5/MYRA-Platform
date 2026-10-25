@@ -112,8 +112,9 @@ export async function searchRunwayLooks(query: string): Promise<{ data?: RunwayS
 
   try {
     const response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-haiku-5-5',
       max_tokens: 2048,
+      thinking: { type: 'disabled' },
       system: SYSTEM_PROMPT,
       messages: [{
         role: 'user',

@@ -109,6 +109,7 @@ export async function analyseProductImage(
     const response = await client.messages.create({
       model,
       max_tokens: 1024,
+      ...(model.startsWith('claude-haiku') ? { thinking: { type: 'disabled' as const } } : {}),
       messages: [
         {
           role: 'user',

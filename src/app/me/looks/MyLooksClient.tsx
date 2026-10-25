@@ -133,6 +133,8 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
   }, [readOnly, asking, router])
   // Tapping a look opens it — the feed's own detail view, hosted over this page.
   const [openLook, setOpenLook] = useState<ClientLook | null>(null)
+  // The piece to open the look on, when she tapped one in a card's strip.
+  const [openItem, setOpenItem] = useState<string | null>(null)
   // STYLE IT on an open look: her editor over the look view.
   const [styling, setStyling] = useState<ClientLook | null>(null)
   const [openMode, setOpenMode] = useState<'similar' | 'explore' | null>(null)
@@ -182,7 +184,11 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
   // Which pieces are already hung in her wardrobe — the hearts in Shop the Look.
   useEffect(() => {
     if (readOnly) return
-    getSavedItemIds().then((ids) => setSavedItems(new Set(ids))).catch(() => {})
+    const read = () => { getSavedItemIds().then((ids) => setSavedItems(new Set(ids))).catch(() => {}) }
+    read()
+    // A save made inside an open look, or on any heart, shows on the cards too.
+    window.addEventListener('myra:item-saved', read)
+    return () => window.removeEventListener('myra:item-saved', read)
   }, [readOnly])
 
   async function toggleItem(itemId: string) {
@@ -318,7 +324,8 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
     savedItems,
     onToggleItem: toggleItem,
     onOpen: () => noteViewed(l.look_id),
-    onEnter: () => { noteViewed(l.look_id); setOpenLook(l) },
+    onEnter: () => { noteViewed(l.look_id); setOpenItem(null); setOpenLook(l) },
+    onEnterPiece: (itemId: string) => { noteViewed(l.look_id); setOpenItem(itemId); setOpenLook(l) },
     onSimilar: () => { noteViewed(l.look_id); showRelated({ anchor: l, mode: 'similar' }) },
     onExplore: () => { noteViewed(l.look_id); showRelated({ anchor: l, mode: 'explore' }) },
     onStyleItem: (itemId: string) => {
@@ -333,15 +340,17 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
     <div className={`myra-pearl relative -mx-6 sm:-ml-8 sm:-mr-10 min-h-screen ${readOnly ? '' : '-my-10'}`}>
       {openLook && (() => {
         const idx = browsable.findIndex((l) => l.look_id === openLook.look_id)
-        const close = () => { setOpenLook(null); setOpenMode(null); setTrail([]) }
-        const back = () => { const prev = trail[trail.length - 1]; if (!prev) { close(); return } setTrail(trail.slice(0, -1)); setOpenMode(null); setOpenLook(prev) }
-        const goTo = (id: string, mode?: 'similar' | 'explore') => { const next = browsable.find((l) => l.look_id === id); if (!next) return; noteViewed(id); setTrail([...trail, openLook]); setOpenMode(mode ?? null); setOpenLook(next) }
+        const close = () => { setOpenLook(null); setOpenItem(null); setOpenMode(null); setTrail([]) }
+        const back = () => { const prev = trail[trail.length - 1]; if (!prev) { close(); return } setTrail(trail.slice(0, -1)); setOpenMode(null); setOpenItem(null); setOpenLook(prev) }
+        const goTo = (id: string, mode?: 'similar' | 'explore') => { const next = browsable.find((l) => l.look_id === id); if (!next) return; noteViewed(id); setTrail([...trail, openLook]); setOpenMode(mode ?? null); setOpenItem(null); setOpenLook(next) }
         return (
-          <div ref={overlayRef} data-lenis-prevent className="fixed inset-0 z-[120] overflow-y-auto myra-pearl pt-[env(safe-area-inset-top,0px)]">
+          // Stops above the phone's tab bar, so every room is still a tap away from a look.
+          <div ref={overlayRef} data-lenis-prevent className="fixed inset-x-0 top-0 bottom-[calc(68px+env(safe-area-inset-bottom))] sm:bottom-0 z-[120] overflow-y-auto myra-pearl pt-[env(safe-area-inset-top,0px)]">
             <div style={{ zoom }}>
               <OutfitDetailClient
-                key={`${openLook.look_id}-${openMode ?? ''}`}
+                key={`${openLook.look_id}-${openMode ?? ''}-${openItem ?? ''}`}
                 mode={openMode ?? undefined}
+                initialItemId={openItem ?? undefined}
                 outfitId={openLook.look_id}
                 initialOutfit={lookAsOutfit(openLook)}
                 showBrowseButtons
@@ -353,7 +362,7 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
                   wearing: (itemId) => looksWearing(itemId, browsable, openLook.look_id).map(lookAsOutfit),
                   onOpenLook: goTo,
                   onStyle: readOnly && !view.memberId ? undefined : () => setStyling(openLook),
-                  onSibling: (dir) => { const next = browsable[idx + dir]; if (next) { noteViewed(next.look_id); setOpenMode(null); setOpenLook(next) } },
+                  onSibling: (dir) => { const next = browsable[idx + dir]; if (next) { noteViewed(next.look_id); setOpenMode(null); setOpenItem(null); setOpenLook(next) } },
                   hasPrev: idx > 0,
                   hasNext: idx >= 0 && idx < browsable.length - 1,
                   prevImage: browsable[idx - 1]?.image_url ?? null,
@@ -660,7 +669,7 @@ function Results({
 }
 
 function LookCard({
-  look, readOnly, onSimilar, onExplore, onStyleItem, onOpen, onEnter, savedItems, onToggleItem,
+  look, readOnly, onSimilar, onExplore, onStyleItem, onOpen, onEnter, onEnterPiece, savedItems, onToggleItem,
 }: {
   look: ClientLook
   readOnly?: boolean
@@ -670,6 +679,8 @@ function LookCard({
   onOpen?: () => void
   /** Tap the look: open it full size, the way a feed card does. */
   onEnter?: () => void
+  /** Tap a piece's pop-out: open the look on that piece. */
+  onEnterPiece?: (itemId: string) => void
   savedItems: Set<string>
   onToggleItem: (itemId: string) => void
 }) {
@@ -786,7 +797,20 @@ function LookCard({
               className="absolute left-3 bottom-[calc(100%-4px)] z-50 w-[min(62%,260px)] rounded-[16px] bg-white shadow-[0_14px_34px_rgba(0,0,0,0.22)] overflow-hidden"
             >
               <div className="relative aspect-[3/4] bg-white">
-                <FallbackImage src={pieces[peek].image_url as string} thumbWidth={520} alt={pieces[peek].product_name} className="absolute inset-0 w-full h-full object-contain p-3" />
+                <button type="button" aria-label={`See ${pieces[peek].product_name} in MYRA`} disabled={!pieces[peek].item_id || !onEnterPiece}
+                  onClick={() => { const id = pieces[peek].item_id; if (id && onEnterPiece) { setPeek(null); onEnterPiece(id) } }}
+                  className="absolute inset-0">
+                  <FallbackImage src={pieces[peek].image_url as string} thumbWidth={520} alt={pieces[peek].product_name} className="absolute inset-0 w-full h-full object-contain p-3" />
+                </button>
+                {!readOnly && !pieces[peek].owned && pieces[peek].item_id && (
+                  <button type="button" onClick={() => onToggleItem(pieces[peek].item_id as string)}
+                    aria-label={savedItems.has(pieces[peek].item_id as string) ? 'Remove from saved' : 'Save this piece'}
+                    className="absolute top-2 left-2 w-9 h-9 rounded-full bg-white/90 shadow-[0_2px_8px_rgba(0,0,0,0.15)] flex items-center justify-center">
+                    <span className={`text-[20px] leading-none ${savedItems.has(pieces[peek].item_id as string) ? 'text-[#C8302A]' : 'text-[#2B2B2B]'}`}>
+                      {savedItems.has(pieces[peek].item_id as string) ? '♥' : '♡'}
+                    </span>
+                  </button>
+                )}
                 <button type="button" aria-label="Close" onClick={() => setPeek(null)}
                   className="absolute top-2 right-2 w-9 h-9 rounded-full bg-[#141414]/80 text-white text-[20px] leading-none">×</button>
               </div>
@@ -799,6 +823,10 @@ function LookCard({
                     <a href={pieces[peek].url as string} target="_blank" rel="noreferrer" className="ml-3 underline underline-offset-4">SHOP</a>
                   )}
                 </p>
+                {pieces[peek].item_id && onEnterPiece && (
+                  <button type="button" onClick={() => { const id = pieces[peek].item_id as string; setPeek(null); onEnterPiece(id) }}
+                    className="mt-2 text-[14px] tracking-[0.12em] text-[#2B2B2B] underline underline-offset-4">SEE IN MYRA</button>
+                )}
               </div>
             </div>
           )}

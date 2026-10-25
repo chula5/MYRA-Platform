@@ -17,7 +17,7 @@ import { scoreUpdateFor } from '@/lib/item-scoring'
 import { loadBrandGraph, resolveBrandNames } from '@/lib/brand-affinity'
 import { composeMemberVariants, tooSimilarVariant } from '@/lib/pilot-composer'
 import { slotForItemType } from '@/lib/composer'
-import { judgeLooksForMember, hasPieceOutOfSize } from '@/lib/look-check'
+import { judgeLooksForMember, lookPasses, checkDidNotRun, CHECK_DOWN_ERROR } from '@/lib/look-check'
 import { whyThisSuitsHer } from '@/lib/look-why'
 import { readStylePrefs } from '@/lib/pilot-stylist'
 import { occasionsForMember, OCCASION_LABEL } from '@/lib/client-occasions'
@@ -62,12 +62,28 @@ function baseUrl(url: string): string {
   try { const u = new URL(url); return `${u.origin}${u.pathname}` } catch { return url.split(/[?#]/)[0] }
 }
 
+// An article, a newsletter or a video is never a piece, whatever its headline
+// says: "I'm A Fashion Data Analyst, But Still Can't Get Dressed" (Substack) was
+// read as a midi dress and styled three ways (2026-10-20). The extension has its
+// own fashion check; this one holds on the server for any page that reaches it.
+const PUBLISHING_HOST_RE = /(^|\.)(substack\.com|medium\.com|beehiiv\.com|ghost\.io|wordpress\.com|blogspot\.com|tumblr\.com|youtube\.com)$/i
+const EDITORIAL_PATH_RE = /\/(blogs?|journal|editorial|news|stories|story|articles?|magazine)\//i
+
+/** True for a page that is writing, not a product: a publishing platform, or an editorial page with no price. */
+export function notAProductPage(p: Pick<SiteProduct, 'url' | 'price'>): boolean {
+  let u: URL
+  try { u = new URL(p.url) } catch { return false }
+  if (PUBLISHING_HOST_RE.test(u.hostname)) return true
+  return p.price == null && EDITORIAL_PATH_RE.test(`${u.pathname}/`)
+}
+
 /**
  * The item row for a site product — found by URL, or created and scored. A
  * mirror item is `draft` with `source = 'mirror'`: it can be composed around
  * for her, and it never enters the feed or the library.
  */
 export async function ensureMirrorItem(p: SiteProduct, member: MirrorMember, adminIn?: any, opts: { score?: boolean } = {}): Promise<{ item?: any; error?: string }> {
+  if (notAProductPage(p)) return { error: 'Not a piece MYRA styles' }
   const admin = adminIn ?? (createAdminClient() as any)
   const base = baseUrl(p.url)
   const { data: existing } = await admin.from('item').select('*, brand(*)').like('retailer_url', `${base}%`).neq('status', 'archived').limit(1)
@@ -280,7 +296,7 @@ export async function styleExternalPiece(
   const judged = await judgeLooksForMember(admin, member.member_id, composed, 'unknown')
   const rank = (i: number) => (judged[i].check?.verdict === 'works' ? 0 : judged[i].check ? 1 : 2)
   const survived = composed.map((_, i) => i)
-    .filter((i) => judged[i].check?.verdict !== 'clashes' && !hasPieceOutOfSize(judged[i]))
+    .filter((i) => lookPasses(judged[i]))
     .sort((a, b) => rank(a) - rank(b) || a - b)
   const passing = oneEach(survived)
   const dims = new Map<string, any>(pool.map((i) => [i.item_id, i]))
@@ -309,6 +325,6 @@ export async function styleExternalPiece(
     checked: true,
     hidden: composed.length - survived.length,
     looks,
-    ...(passing.length ? {} : { error: 'Nothing passed the check for this piece right now' }),
+    ...(passing.length ? {} : { error: checkDidNotRun(judged) ? CHECK_DOWN_ERROR : 'Nothing passed the check for this piece right now' }),
   }
 }
