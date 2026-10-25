@@ -9,6 +9,7 @@
 
 import FallbackImage from '@/components/FallbackImage'
 import SaveOutfit from '@/components/me/SaveOutfit'
+import SavePieceHeart from '@/components/me/SavePieceHeart'
 import type { StyledLook } from '@/app/admin/private-stylist/actions'
 
 type CardLook = StyledLook & { styled_way_id?: string; saved_look_id?: string | null }
@@ -31,6 +32,7 @@ export default function ComposedLookCard({ look, heroId, saveable, testMemberId 
           {look.items.map((it, j) => (
             <div key={j} className={`relative aspect-[3/4] bg-white overflow-hidden ${it.item_id === heroId ? 'ring-2 ring-[#2B2B2B]' : ''}`}>
               {it.image_url && <FallbackImage src={it.image_url} thumbWidth={300} alt={it.product_name} className="absolute inset-0 w-full h-full object-contain" />}
+              {!it.owned && it.item_id && <SavePieceHeart itemId={it.item_id} className="absolute top-1.5 right-1.5" />}
             </div>
           ))}
         </div>
