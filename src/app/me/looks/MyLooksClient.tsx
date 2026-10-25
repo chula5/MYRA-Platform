@@ -330,7 +330,7 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
   return (
     // Full width of the screen (design principle): breaks out of whatever
     // column holds it, on the set-wall grey texture the feed stands on.
-    <div className={`myra-pearl relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen min-h-screen ${readOnly ? '' : '-my-10'}`}>
+    <div className={`myra-pearl relative -mx-6 sm:-ml-8 sm:-mr-10 min-h-screen ${readOnly ? '' : '-my-10'}`}>
       {openLook && (() => {
         const idx = browsable.findIndex((l) => l.look_id === openLook.look_id)
         const close = () => { setOpenLook(null); setOpenMode(null); setTrail([]) }

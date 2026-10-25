@@ -102,6 +102,31 @@ type QueueQuery = { brand: string | null; type: string | null; colour: string | 
 
 // A look asked for in words, before or around an anchor's card.
 type AskedLooks = { candidates: ReviewCandidate[]; notes: string[]; pieces: NonNullable<AskResult['pieces']> }
+// One sentence builds a run of anchors — her lead piece in ~20 versions, each
+// with its own looks — so there is a real choice to say yes to.
+const ANCHORS_PER_ASK = 20
+type AskCard = { key: string; anchor: ReviewAnchor; asked: AskedLooks }
+type AskRun = { key: number; ask: string; cards: AskCard[]; total: number; tried: number; pending: boolean }
+
+function askCard(runKey: number, res: AskResult): AskCard | null {
+  if (res.error || !res.anchor) return null
+  const a = res.anchor
+  return {
+    key: `${runKey}-${a.item_id}`,
+    anchor: { ...a, existingCount: a.existingCount },
+    asked: { candidates: (res.candidates ?? []) as ReviewCandidate[], notes: res.notes ?? [], pieces: res.pieces ?? [] },
+  }
+}
+
+// MYRA at work: the mirror wiggles, as it does everywhere else in the house.
+function MirrorWorking({ label, size = 'h-20' }: { label: string; size?: string }) {
+  return (
+    <div className="py-8 text-center" aria-busy="true">
+      <img src="/myra-mirror-transparent.png" alt="" className={`myra-mirror-wiggle ${size} w-auto mx-auto`} />
+      <p className="mt-3 text-[10px] tracking-[0.16em] text-[#A8A8A4]">{label}</p>
+    </div>
+  )
+}
 
 // How the sentence was read — one chip per piece, and anything that had to give.
 function AskReadout({ asked }: { asked: AskedLooks }) {
@@ -154,25 +179,41 @@ export default function OutfitReviewClient({
   const [askText, setAskText] = useState('')
   const [askBusy, setAskBusy] = useState(false)
   const [askError, setAskError] = useState<string | null>(null)
-  const [askCards, setAskCards] = useState<{ key: number; anchor: ReviewAnchor; asked: AskedLooks }[]>([])
+  const [askRuns, setAskRuns] = useState<AskRun[]>([])
+  const runRef = useRef(0) // a new sentence stops the run before it
   const reqRef = useRef(0) // drop stale responses when filters change quickly
 
+  // The first call reads the sentence, picks the best anchor for her lead
+  // piece and hands back the other versions of it; each of those is then
+  // styled in turn and its card lands as soon as it is ready.
   async function buildFromWords() {
     const q = askText.trim()
     if (!q) return
+    const id = ++runRef.current
     setAskBusy(true)
     setAskError(null)
-    const res = await composeFromAsk(q, null, { surface: 'review' }).catch((e: unknown) => ({
-      error: e instanceof Error ? e.message : 'Could not build that look',
-    } as AskResult))
+    const fail = (e: unknown) => ({ error: e instanceof Error ? e.message : 'Could not build that look' } as AskResult)
+    const res = await composeFromAsk(q, null, { surface: 'review', alternatives: ANCHORS_PER_ASK - 1 }).catch(fail)
+    if (id !== runRef.current) return
     setAskBusy(false)
-    if (res.error || !res.anchor) { setAskError(res.error ?? 'Could not build that look'); return }
-    const a = res.anchor
-    setAskCards((cards) => [{
-      key: Date.now(),
-      anchor: { ...a, existingCount: a.existingCount },
-      asked: { candidates: (res.candidates ?? []) as ReviewCandidate[], notes: res.notes ?? [], pieces: res.pieces ?? [] },
-    }, ...cards])
+    const first = askCard(Date.now(), res)
+    if (!first) { setAskError(res.error ?? 'Could not build that look'); return }
+    const runKey = Date.now()
+    const alts = res.anchorAlternatives ?? []
+    setAskRuns((runs) => [{ key: runKey, ask: q, cards: [first], total: 1 + alts.length, tried: 1, pending: alts.length > 0 }, ...runs])
+    const patch = (fn: (r: AskRun) => AskRun) => setAskRuns((runs) => runs.map((r) => (r.key === runKey ? fn(r) : r)))
+    // Pieces already shown lean the next anchors' looks elsewhere.
+    const avoid = first.asked.candidates.flatMap((c) => c.items.map((i) => i.item_id))
+    for (const alt of alts) {
+      if (id !== runRef.current) break
+      const r = await composeFromAsk(q, alt.item_id, { surface: 'review', anchorFromAsk: true, avoid }).catch(fail)
+      if (id !== runRef.current) break
+      const card = askCard(runKey, r)
+      const keep = card && card.asked.candidates.length > 0 ? card : null
+      if (keep) avoid.push(...keep.asked.candidates.flatMap((c) => c.items.map((i) => i.item_id)))
+      patch((run) => ({ ...run, tried: run.tried + 1, cards: keep ? [...run.cards, keep] : run.cards }))
+    }
+    patch((run) => ({ ...run, pending: false }))
   }
   const filtered = !!(filter.brand || filter.type || filter.colour || filter.q.trim())
 
@@ -260,13 +301,24 @@ export default function OutfitReviewClient({
         </button>
       </form>
       {askError && <p className="text-[10px] tracking-[0.12em] text-[#B83A3A]">{askError.toUpperCase()}</p>}
-      {askCards.length > 0 && (
-        <div className="space-y-12">
-          {askCards.map((c) => (
-            <AnchorReview key={c.key} anchor={c.anchor} initial={c.asked} />
-          ))}
+      {askBusy && <MirrorWorking label="MYRA IS READING YOUR WORDS AND STYLING THE FIRST ANCHOR…" size="h-24" />}
+      {askRuns.map((run) => (
+        <div key={run.key} className="space-y-6">
+          <p className="text-[10px] tracking-[0.14em] text-[#4A4E57]">
+            “{run.ask.toUpperCase()}”
+            <span className="text-[#A8A8A4]">
+              {' '}· {run.cards.length} ANCHOR{run.cards.length === 1 ? '' : 'S'}
+              {run.pending ? ` · STYLING ${Math.min(run.tried + 1, run.total)} OF ${run.total}` : ''}
+            </span>
+          </p>
+          <div className="space-y-12">
+            {run.cards.map((c) => (
+              <AnchorReview key={c.key} anchor={c.anchor} initial={c.asked} />
+            ))}
+          </div>
+          {run.pending && <MirrorWorking label={`STYLING ANCHOR ${Math.min(run.tried + 1, run.total)} OF ${run.total}…`} />}
         </div>
-      )}
+      ))}
 
       {/* Search — "fur", "leopard", "silk", "wide leg": name, brand, type, colour or material */}
       <div className="flex flex-col sm:flex-row gap-2">
@@ -620,7 +672,7 @@ function AnchorReview({ anchor, initial }: { anchor: ReviewAnchor; initial?: Ask
           </button>
         </form>
         {asked && !loading && <AskReadout asked={asked} />}
-        {loading && <p className="text-[11px] tracking-[0.16em] text-[#A8A8A4] py-8 text-center">COMPOSING POTENTIAL OUTFITS…</p>}
+        {loading && <MirrorWorking label="COMPOSING POTENTIAL OUTFITS…" />}
         {!loading && error && <p className="text-[10px] tracking-[0.12em] text-[#B83A3A] py-6 text-center">{error.toUpperCase()}</p>}
         {!loading && !error && cands.every((_, i) => states[i]?.discarded) && cands.length > 0 && (
           <p className="text-[10px] tracking-[0.14em] text-[#A8A8A4] py-4 text-center">ALL OPTIONS REVIEWED FOR THIS ANCHOR.</p>

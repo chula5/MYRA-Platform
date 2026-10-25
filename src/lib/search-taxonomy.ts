@@ -158,6 +158,26 @@ const TYPE_PHRASES: Record<string, TypePhrase> = {
   'kitten heel': { types: ['heel'], descriptor: 'kitten' },
 }
 
+// Cuts: a shape that defines the piece, so it is a REQUIREMENT, not a hint.
+// A pencil skirt is slim and narrow from waist to knee or calf; an A-line or a
+// pleated midi is not one, however good a skirt it is. The tags carry no
+// silhouette (fit and length are unscored on most pieces, and a pencil skirt
+// scores "regular"), so the shop's own name is what says it: each cut lists
+// the words that mean it there. Lengths and "slip" stay soft — most pieces
+// that are midi never say so.
+export const CUT_WORDS: Record<string, string[]> = {
+  pencil: ['pencil'],
+  wrap: ['wrap', 'wrapped', 'wrap-over', 'wrap over'],
+  'wide leg': ['wide leg', 'wide-leg', 'palazzo'],
+  'a line': ['a line', 'a-line'],
+  kitten: ['kitten'],
+  ballet: ['ballet', 'ballerina'],
+}
+/** Every way she might type a cut, as its CUT_WORDS key. */
+const CUT_OF: Record<string, string> = Object.fromEntries(
+  Object.entries(CUT_WORDS).flatMap(([cut, words]) => [[cut, cut], ...words.map((w) => [w, cut])]),
+)
+
 // Occasion/setting/season phrase → keywords to match against the outfit's
 // occasion_tags + aesthetic label (which are human-readable free text).
 const OCCASION: Record<string, string[]> = {
@@ -199,7 +219,12 @@ const FORMALITY: Record<string, [number, number]> = {
 // These carry the real intent of a search: an outfit doesn't need a matching
 // occasion TAG — matching the implied formality + season is enough to surface
 // the right looks (e.g. "beach wedding guest" → summer, formal-ish dresses).
-interface OccasionRule { groups?: string[][]; formality?: [number, number]; seasons?: string[]; time?: number }
+interface OccasionRule { groups?: string[][]; formality?: [number, number]; seasons?: string[]; time?: number; types?: string[] }
+
+// What a working day is dressed in: tailoring, shirts, knits, skirts, a day
+// dress, a coat, shoes she can walk to a meeting in, a bag that takes a laptop.
+// Never jeans, shorts, trainers, a t-shirt or an evening piece.
+const _WORK = ['blazer', 'trousers', 'shirt', 'blouse', 'knitwear', 'skirt', 'midi_dress', 'shirt_dress', 'jacket', 'coat', 'trench', 'flat', 'boot', 'heel', 'mule', 'tote', 'structured_bag', 'shoulder_bag']
 const OCCASION_RULES: Record<string, OccasionRule> = {
   // Weddings — formal, wedding-leaning; "beach" adds summer.
   wedding: { groups: [['wedding']], formality: [3, 4] },
@@ -230,6 +255,11 @@ const OCCASION_RULES: Record<string, OccasionRule> = {
   concert: { formality: [2, 3], time: 4 },
   'airport look': { formality: [1, 2] },
   'airport outfit': { formality: [1, 2] },
+  // Work — smart casual up to tailored; a blazer belongs, a satin gown does not.
+  work: { groups: [['work', 'office']], formality: [2, 3.5], types: _WORK },
+  office: { groups: [['work', 'office']], formality: [2, 3.5], types: _WORK },
+  'work meeting': { groups: [['work', 'office']], formality: [2, 3.5], types: _WORK },
+  interview: { groups: [['work', 'office']], formality: [3, 3.5], types: _WORK },
 }
 
 // Time-of-day cue → value on the 1..5 axis (1 morning … 5 night).
@@ -310,6 +340,11 @@ export interface ParsedQuery {
   seasons: string[]
   formalityRange: [number, number] | null
   timeOfDay: number | null
+  /** Cuts she named ("pencil", "wide leg") — CUT_WORDS keys, held as a requirement. */
+  cuts: string[]
+  /** The pieces an occasion is dressed in ("the office" → tailoring, shirts,
+   *  knits…). Not itemTypes: Browse holds a piece to them only when she named none. */
+  occasionTypes: string[]
   intentTerms: string[]
   raw: string
 }
@@ -319,7 +354,7 @@ export function parseQuery(raw: string, knownBrands: string[] = []): ParsedQuery
   let text = normalise(raw)
   const p: ParsedQuery = {
     colourFamilies: [], itemTypes: [], materials: [], brand: null,
-    occasionGroups: [], seasons: [], formalityRange: null, timeOfDay: null, intentTerms: [], raw,
+    occasionGroups: [], seasons: [], formalityRange: null, timeOfDay: null, cuts: [], occasionTypes: [], intentTerms: [], raw,
   }
 
   const consume = (phrase: string) => { text = text.replace(new RegExp(`\\b${phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g'), ' ').replace(/\s+/g, ' ').trim() }
@@ -329,8 +364,8 @@ export function parseQuery(raw: string, knownBrands: string[] = []): ParsedQuery
   // 1. Multi-word phrases first (longest first), across all phrase dictionaries.
   // OCCASION_RULES go first so a full occasion ("beach wedding guest") is matched
   // and consumed before its sub-phrases ("wedding guest", "beach").
-  const phraseDicts: Array<[Record<string, any>, 'colour' | 'occasion' | 'setting' | 'formality' | 'time' | 'rule' | 'type']> = [
-    [OCCASION_RULES, 'rule'], [TYPE_PHRASES, 'type'], [COLOUR, 'colour'], [OCCASION, 'occasion'], [SETTING, 'setting'], [FORMALITY, 'formality'], [TIME, 'time'],
+  const phraseDicts: Array<[Record<string, any>, 'colour' | 'occasion' | 'setting' | 'formality' | 'time' | 'rule' | 'type' | 'cut']> = [
+    [OCCASION_RULES, 'rule'], [TYPE_PHRASES, 'type'], [COLOUR, 'colour'], [OCCASION, 'occasion'], [SETTING, 'setting'], [FORMALITY, 'formality'], [TIME, 'time'], [CUT_OF, 'cut'],
   ]
   const phrases: Array<{ phrase: string; dict: Record<string, any>; kind: string }> = []
   for (const [dict, kind] of phraseDicts) for (const key of Object.keys(dict)) if (key.includes(' ')) phrases.push({ phrase: key, dict, kind })
@@ -357,7 +392,7 @@ export function parseQuery(raw: string, knownBrands: string[] = []): ParsedQuery
   // right in any dictionary is read as that word before any typo is guessed,
   // so "boat" stays an occasion rather than becoming "boot".
   const exactAnywhere = (tok: string) =>
-    [COLOUR, TYPE, MATERIAL, OCCASION_RULES, OCCASION, SETTING, FORMALITY, TIME].some((d) => (d as Record<string, unknown>)[tok] !== undefined) || SEASON.includes(tok)
+    [COLOUR, TYPE, MATERIAL, OCCASION_RULES, OCCASION, SETTING, FORMALITY, TIME, CUT_OF].some((d) => (d as Record<string, unknown>)[tok] !== undefined) || SEASON.includes(tok)
   for (let tok of text.split(' ').filter(Boolean)) {
     if (STOPWORDS.has(tok)) continue
     if (!exactAnywhere(tok)) {
@@ -377,6 +412,8 @@ export function parseQuery(raw: string, knownBrands: string[] = []): ParsedQuery
     if (SEASON.includes(tok)) { const season = tok === 'fall' ? 'autumn' : tok; addGroup([season]); add(p.seasons, [season]); continue }
     const f = FORMALITY[tok]; if (f) { p.formalityRange = mergeRange(p.formalityRange, f); continue }
     const td = TIME[tok]; if (td != null) { p.timeOfDay = td; continue }
+    // A cut is held as a requirement, and still read as a descriptor for the ask bar.
+    if (CUT_OF[tok]) add(p.cuts, [CUT_OF[tok]])
     if (tok.length > 2) p.intentTerms.push(tok) // leftover adjective → soft signal
   }
   // A fur or shearling "jacket" or "coat" is very often a sleeveless one:
@@ -393,6 +430,11 @@ function applyHit(p: ParsedQuery, add: (a: string[], v: string[]) => void, addGr
     const tp = val as TypePhrase
     add(p.itemTypes, tp.types)
     if (tp.descriptor && !p.intentTerms.includes(tp.descriptor)) p.intentTerms.push(tp.descriptor)
+    if (tp.descriptor && CUT_OF[tp.descriptor]) add(p.cuts, [CUT_OF[tp.descriptor]])
+  }
+  else if (kind === 'cut') {
+    add(p.cuts, [val])
+    if (!p.intentTerms.includes(val)) p.intentTerms.push(val)
   }
   else if (kind === 'occasion' || kind === 'setting') addGroup(val)
   else if (kind === 'formality') p.formalityRange = mergeRange(p.formalityRange, val)
@@ -407,6 +449,7 @@ function applyRule(p: ParsedQuery, addGroup: (v: string[]) => void, rule: Occasi
   if (rule.seasons) for (const s of rule.seasons) { addGroup([s]); if (!p.seasons.includes(s)) p.seasons.push(s) }
   if (rule.formality) p.formalityRange = mergeRange(p.formalityRange, rule.formality)
   if (rule.time != null) p.timeOfDay = rule.time
+  if (rule.types) for (const t of rule.types) if (!p.occasionTypes.includes(t)) p.occasionTypes.push(t)
 }
 
 function mergeRange(a: [number, number] | null, b: [number, number]): [number, number] {

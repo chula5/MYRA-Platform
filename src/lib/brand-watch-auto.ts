@@ -33,6 +33,7 @@ import { seasonOf, inCurrentSeason, type Season } from './season'
 import { keepQueueRows } from './brand-watch-keep'
 import { classifyItemTypeFromImage } from '@/app/admin/ai/classify-item-type'
 import type { WatchedBrandRow } from './brand-watch'
+import { createHash } from 'node:crypto'
 
 const AUTO_KEEP_PER_SCAN = 200
 /** Most twins one KEEP TWINS NOW press keeps. */
@@ -189,6 +190,12 @@ export async function loadQueueTrust(admin: any): Promise<QueueTrustData> {
   return buildQueueTrust(rows, wbs)
 }
 
+// measureBoth refits a model at every step of a brand's history — seconds of
+// CPU across every brand on each Brand Watch load — yet a brand's decisions
+// rarely change between two loads. Held per brand and bar, keyed on the exact
+// decisions measured. Module-level on purpose: a code change starts it empty.
+const confidenceMemo = new Map<string, { sig: string; value: ConfidenceTrust }>()
+
 export async function loadBrandTrust(admin: any): Promise<BrandTrustData> {
   const [rows, wbs] = await Promise.all([loadDecisions(admin), readWatchedBrands(admin)])
   const t = buildQueueTrust(rows, wbs)
@@ -198,9 +205,15 @@ export async function loadBrandTrust(admin: any): Promise<BrandTrustData> {
   const perBrand = new Map<string, ConfidenceDecision[]>()
   for (const d of t.decisions) if (d.brandName) perBrand.set(d.brandName, [...(perBrand.get(d.brandName) ?? []), d])
   perBrand.forEach((list, brand) => {
+    const sig = createHash('sha1').update(JSON.stringify(list)).digest('hex')
     for (const bar of Array.from(new Set([t.barBy.get(brand) ?? DEFAULT_CONFIDENCE, DEFAULT_CONFIDENCE]))) {
+      const key = `${brand}|${bar}`
+      const held = confidenceMemo.get(key)
+      if (held?.sig === sig) { confidenceTrust.set(key, held.value); continue }
       const both = measureBoth(list, bar)
-      confidenceTrust.set(`${brand}|${bar}`, { ...both.all, trusted: both.trusted, summary: both.summary, careful: both.careful.careful })
+      const value = { ...both.all, trusted: both.trusted, summary: both.summary, careful: both.careful.careful }
+      confidenceMemo.set(key, { sig, value })
+      confidenceTrust.set(key, value)
     }
   })
 

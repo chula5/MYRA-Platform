@@ -122,11 +122,20 @@ interface Tally { k: number; s: number }
 /** A skip reason names the feature it was about; that feature counts twice. */
 const REASON_PREFIX: Record<string, string> = { colour: 'col:', type: 'type:', price: 'price:' }
 
-export function buildLearning(decided: DecidedRow[]): (row: {
+type LearnRow = {
   brandName: string | null; productName: string | null; itemType: string | null
   colourFamily: string | null; materialCategory: string | null; price: string | null
   priceGbp?: number | null
-}) => LearnedVerdict {
+}
+
+/**
+ * The learning grown one decision at a time. verdict() scores against every
+ * decision added so far — exactly what buildLearning gives for the same list —
+ * and holds until the next add(). A walk-forward measurement adds as it goes
+ * instead of rebuilding from scratch at every step: rebuilding was 11s of a 24s
+ * Brand Watch load on 24,000 decisions (2026-10-24).
+ */
+export function growingLearning(): { add: (d: DecidedRow) => void; verdict: () => (row: LearnRow) => LearnedVerdict } {
   const global = new Map<string, Tally>()
   const perBrand = new Map<string, Map<string, Tally>>()
   const bump = (map: Map<string, Tally>, f: string, kept: boolean) => {
@@ -134,7 +143,9 @@ export function buildLearning(decided: DecidedRow[]): (row: {
     if (kept) t.k++; else t.s++
     map.set(f, t)
   }
-  for (const d of decided) {
+  let added = 0
+  let keptCount = 0
+  const add = (d: DecidedRow) => {
     const brandMap = perBrand.get(d.brandName ?? '') ?? new Map<string, Tally>()
     perBrand.set(d.brandName ?? '', brandMap)
     const stressed = !d.kept && d.skipReason ? REASON_PREFIX[d.skipReason] : undefined
@@ -143,71 +154,83 @@ export function buildLearning(decided: DecidedRow[]): (row: {
       bump(brandMap, f, d.kept)
       if (stressed && f.startsWith(stressed)) bump(global, f, d.kept)
     }
-  }
-  const total = decided.length
-  // Everything is measured against this. With no decisions at all there is no
-  // prior to measure against, so nothing can be learned and delta stays 0.
-  const keeps = decided.filter((d) => d.kept).length
-  const prior = total ? Math.min(0.98, Math.max(0.02, keeps / total)) : 0.5
-  const priorLogit = logit(prior)
-
-  // How much she has decided about this kind of piece. Material is the sharper
-  // read, but 26% of queued rows never state one, and treating every one of
-  // those as "a kind never seen" put 3,792 of 10,437 queued pieces onto the
-  // same capped number with no way to rank them. Colour, then bare type, are
-  // the honest fallbacks — thinner evidence, but real evidence.
-  const kindTally = (row: { itemType: string | null; materialCategory: string | null; colourFamily: string | null }) => {
-    if (!row.itemType) return { k: 0, s: 0 }
-    const key = row.materialCategory
-      ? 'kind:' + row.itemType + '|' + row.materialCategory
-      : row.colourFamily
-        ? 'tc:' + row.itemType + '|' + row.colourFamily
-        : 'type:' + row.itemType
-    // The brand's own decisions were counted into both maps; take the global.
-    return global.get(key) ?? { k: 0, s: 0 }
+    added++
+    if (d.kept) keptCount++
   }
 
-  return (row) => {
-    const kind = kindTally(row)
-    if (total === 0) return { delta: 0, reasons: '', predictedSkip: false, kindKeeps: 0, kindSkips: 0 }
-    const brandMap = perBrand.get(row.brandName ?? '')
-    const groups = new Map<Group, number[]>()
-    const contribs: Array<[string, number]> = []
+  const verdict = (): ((row: LearnRow) => LearnedVerdict) => {
+    const total = added
+    // Everything is measured against this. With no decisions at all there is no
+    // prior to measure against, so nothing can be learned and delta stays 0.
+    const keeps = keptCount
+    const prior = total ? Math.min(0.98, Math.max(0.02, keeps / total)) : 0.5
+    const priorLogit = logit(prior)
 
-    for (const [group, f] of featuresOf(row)) {
-      const b = brandMap?.get(f) ?? { k: 0, s: 0 }
-      const g = global.get(f) ?? { k: 0, s: 0 }
-      // this brand's decisions count double
-      const k = g.k + b.k
-      const s = g.s + b.s
-      if (k + s === 0) continue
-      // Shrunk towards the base rate, then measured against it: a feature that
-      // behaves like her average contributes exactly 0.
-      const rate = (k + SHRINKAGE * prior) / (k + s + SHRINKAGE)
-      const w = logit(rate) - priorLogit
-      if (w === 0) continue
-      groups.set(group, [...(groups.get(group) ?? []), w])
-      contribs.push([f, w])
+    // How much she has decided about this kind of piece. Material is the sharper
+    // read, but 26% of queued rows never state one, and treating every one of
+    // those as "a kind never seen" put 3,792 of 10,437 queued pieces onto the
+    // same capped number with no way to rank them. Colour, then bare type, are
+    // the honest fallbacks — thinner evidence, but real evidence.
+    const kindTally = (row: { itemType: string | null; materialCategory: string | null; colourFamily: string | null }) => {
+      if (!row.itemType) return { k: 0, s: 0 }
+      const key = row.materialCategory
+        ? 'kind:' + row.itemType + '|' + row.materialCategory
+        : row.colourFamily
+          ? 'tc:' + row.itemType + '|' + row.colourFamily
+          : 'type:' + row.itemType
+      // The brand's own decisions were counted into both maps; take the global.
+      return global.get(key) ?? { k: 0, s: 0 }
     }
 
-    // Averaged within the group so one idea said four ways is still one idea.
-    let sum = 0
-    groups.forEach((ws, group) => {
-      sum += GROUP_WEIGHT[group] * (ws.reduce((a, b) => a + b, 0) / ws.length)
-    })
-    const delta = Math.round(sum * 100) / 100
+    return (row) => {
+      const kind = kindTally(row)
+      if (total === 0) return { delta: 0, reasons: '', predictedSkip: false, kindKeeps: 0, kindSkips: 0 }
+      const brandMap = perBrand.get(row.brandName ?? '')
+      const groups = new Map<Group, number[]>()
+      const contribs: Array<[string, number]> = []
 
-    contribs.sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
-    const reasons = contribs
-      .slice(0, 3)
-      .map(([f, w]) => `${f.replace(/^t:/, '')} ${w > 0 ? '+' : ''}${w.toFixed(1)}`)
-      .join(', ')
-    return {
-      delta,
-      reasons,
-      predictedSkip: total >= PREDICT_AFTER && delta <= PREDICTED_SKIP_DELTA,
-      kindKeeps: kind.k,
-      kindSkips: kind.s,
+      for (const [group, f] of featuresOf(row)) {
+        const b = brandMap?.get(f) ?? { k: 0, s: 0 }
+        const g = global.get(f) ?? { k: 0, s: 0 }
+        // this brand's decisions count double
+        const k = g.k + b.k
+        const s = g.s + b.s
+        if (k + s === 0) continue
+        // Shrunk towards the base rate, then measured against it: a feature that
+        // behaves like her average contributes exactly 0.
+        const rate = (k + SHRINKAGE * prior) / (k + s + SHRINKAGE)
+        const w = logit(rate) - priorLogit
+        if (w === 0) continue
+        groups.set(group, [...(groups.get(group) ?? []), w])
+        contribs.push([f, w])
+      }
+
+      // Averaged within the group so one idea said four ways is still one idea.
+      let sum = 0
+      groups.forEach((ws, group) => {
+        sum += GROUP_WEIGHT[group] * (ws.reduce((a, b) => a + b, 0) / ws.length)
+      })
+      const delta = Math.round(sum * 100) / 100
+
+      contribs.sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+      const reasons = contribs
+        .slice(0, 3)
+        .map(([f, w]) => `${f.replace(/^t:/, '')} ${w > 0 ? '+' : ''}${w.toFixed(1)}`)
+        .join(', ')
+      return {
+        delta,
+        reasons,
+        predictedSkip: total >= PREDICT_AFTER && delta <= PREDICTED_SKIP_DELTA,
+        kindKeeps: kind.k,
+        kindSkips: kind.s,
+      }
     }
   }
+  return { add, verdict }
+}
+
+export function buildLearning(decided: DecidedRow[]): (row: LearnRow) => LearnedVerdict {
+  const learning = growingLearning()
+  for (const d of decided) learning.add(d)
+  return learning.verdict()
 }

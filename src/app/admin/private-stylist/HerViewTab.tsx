@@ -2,38 +2,22 @@
 
 // WHAT SHE SEES.
 //
-// The same components her browser renders, with the same data shapes, loaded
-// AS her. Not a mock and not a second implementation: a mirror rebuilt
-// separately drifts, and then what Chloe checks stops being what Alison sees.
-// Each of her rooms is a tab; in all of them Chloe's taps are tests — outfits
-// are composed and checked for real, but nothing she would record is saved.
+// Her real pages — /me itself, framed — opened AS her. Not a copy of her
+// rooms: a copy drifts (a new room, a new header, a tab bar) and then what
+// Chloe checks stops being what she sees. The member rides on an admin-only
+// cookie scoped to /me, so every page and every action resolves her, in test
+// mode: outfits are composed and checked for real, but nothing she would
+// record is saved. IPHONE is the app's own width; COMPUTER is her browser.
 
 import InviteLink from './InviteLink'
-import { useEffect, useState } from 'react'
-import MyLooksClient from '@/app/me/looks/MyLooksClient'
-import ForYouClient from '@/app/me/ForYouClient'
-import DressingRoomClient from '@/app/me/dressing-room/DressingRoomClient'
-import PieceClient from '@/app/me/dressing-room/PieceClient'
-import MagazineClient from '@/app/me/magazine/MagazineClient'
-import RoomNav, { ROOMS, type RoomId } from '@/components/me/RoomNav'
-import YouButton from '@/components/me/YouButton'
-import ShareButton from '@/components/me/ShareButton'
-import SharingClient from '@/app/me/sharing/SharingClient'
-import MirrorCurtain from '@/components/me/MirrorCurtain'
-import YouSettings from '@/app/me/YouSettings'
-import EventsClient from '@/app/me/events/EventsClient'
-import InspirationBoard from '@/app/me/inspiration/InspirationBoard'
-import { loadMyInspiration, type InspirationBoardView } from '@/app/me/inspiration/board-actions'
-import ThreadsClient from '@/app/me/threads/ThreadsClient'
+import { useEffect, useRef, useState } from 'react'
+import { setHerView } from './her-view-actions'
 import { MirrorLoading } from '@/components/ArchiveCard'
-import { loadLooksForMember, type ClientView } from '@/app/me/looks/actions'
-import { loadForYou, type ForYouView } from '@/app/me/for-you-actions'
-import { loadMyDressingRoom, loadMyPiece } from '@/app/me/dressing-room/actions'
-import type { DressingRoomView, OwnedPieceView } from '@/app/admin/private-stylist/actions'
-import StylistChat from '@/app/me/StylistChat'
 
-type Room = RoomId
-type ProfileTab = 'settings' | 'inspiration' | 'threads'
+type Device = 'iphone' | 'computer'
+
+// iPhone 15/16 in points: the screen the app is drawn on.
+const PHONE = { w: 393, h: 852 }
 
 export default function HerViewTab({
   members, memberId, setMemberId,
@@ -42,213 +26,104 @@ export default function HerViewTab({
   memberId: string
   setMemberId: (id: string) => void
 }) {
-  const [room, setRoom] = useState<Room>('for_you')
-  const [search, setSearch] = useState('')
-  const [looksView, setLooksView] = useState<ClientView | null>(null)
-  const [forYou, setForYou] = useState<ForYouView | null>(null)
-  const [dressing, setDressing] = useState<DressingRoomView | null>(null)
-  const [piece, setPiece] = useState<OwnedPieceView | null>(null)
-  const [loading, setLoading] = useState(false)
-  // YOU has three sub-pages, as it does on her own screen.
-  const [profileTab, setProfileTab] = useState<ProfileTab>('settings')
-  const [insp, setInsp] = useState<InspirationBoardView | null>(null)
-
-  // A different member starts every room afresh.
-  useEffect(() => {
-    setLooksView(null); setForYou(null); setDressing(null); setPiece(null)
-    setInsp(null); setProfileTab('settings')
-  }, [memberId])
+  const [device, setDevice] = useState<Device>('iphone')
+  // The cookie must be set before her page is asked for; the frame waits on it.
+  const [readyFor, setReadyFor] = useState('')
+  const [reload, setReload] = useState(0)
+  const frame = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
     if (!memberId) return
     let live = true
-    const load = async () => {
-      if (room === 'all_looks' && !looksView) setLooksView(await loadLooksForMember(memberId))
-      if (room === 'for_you' && !forYou) setForYou(await loadForYou(memberId))
-      if (room === 'dressing_room' && !dressing) setDressing(await loadMyDressingRoom(memberId))
-    }
-    setLoading(true)
-    load().finally(() => { if (live) setLoading(false) })
+    setReadyFor('')
+    void setHerView(memberId).then(() => { if (live) setReadyFor(memberId) })
     return () => { live = false }
-  }, [memberId, room, looksView, forYou, dressing])
+  }, [memberId])
 
-  // Her inspiration loads as her, the way her other rooms do — kept off the
-  // room spinner so the YOU sub-nav stays put while the pictures arrive.
-  useEffect(() => {
-    if (!memberId || room !== 'profile' || profileTab !== 'inspiration' || insp) return
-    let live = true
-    void loadMyInspiration(memberId).then((v) => { if (live) setInsp(v) })
-    return () => { live = false }
-  }, [memberId, room, profileTab, insp])
-
-  async function openPiece(itemId: string) {
-    setLoading(true)
-    setPiece(await loadMyPiece(itemId, memberId))
-    setLoading(false)
-  }
+  // Leaving HER VIEW gives Chloe her own /me back.
+  useEffect(() => () => { void setHerView(null) }, [])
 
   const name = members.find((m) => m.member_id === memberId)?.name ?? ''
+  const first = name.split(' ')[0]
+  const ready = readyFor === memberId && !!memberId
+  const src = '/me'
+
+  function home() {
+    if (frame.current) frame.current.src = src
+  }
+
+  const btn = (on: boolean) =>
+    `text-[13px] tracking-[0.14em] px-4 py-2.5 border transition-colors ${on ? 'border-[#2B2B2B] bg-[#2B2B2B] text-white' : 'border-[#C3BFB8] text-[#2B2B2B]'}`
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex gap-1.5">
-          {members.map((m) => (
-            <button
-              key={m.member_id}
-              onClick={() => setMemberId(m.member_id)}
-              className={`text-[20px] tracking-[0.1em] px-4 py-2 border transition-colors ${memberId === m.member_id ? 'border-[#0A0A0A] text-[#0A0A0A]' : 'border-[#E2E0DB] text-[#6B6B6B]'}`}
-            >
-              {m.name}
-            </button>
-          ))}
-        </div>
-        <p className="text-[20px] tracking-[0.1em] text-[#A8A8A4]">
-          {looksView ? `${looksView.looks.length} LOOKS SENT` : ''}
-        </p>
+      <div className="flex gap-1.5 flex-wrap">
+        {members.map((m) => (
+          <button
+            key={m.member_id}
+            onClick={() => setMemberId(m.member_id)}
+            className={`text-[20px] tracking-[0.1em] px-4 py-2 border transition-colors ${memberId === m.member_id ? 'border-[#0A0A0A] text-[#0A0A0A]' : 'border-[#E2E0DB] text-[#6B6B6B]'}`}
+          >
+            {m.name}
+          </button>
+        ))}
       </div>
 
-      {/* Her rooms, as she would move between them. */}
       {/* The test label belongs to Chloe, not to her screen: it sits above it. */}
       <p className="text-[20px] tracking-[0.1em] text-[#7C838B] px-1 pb-3">
-        TESTING AS {name.toUpperCase()} — TAPS HERE ARE TESTS: NOTHING IS SENT TO HER OR SAVED
+        TESTING AS {name.toUpperCase()} — HER REAL APP. TAPS HERE ARE TESTS: NOTHING IS SENT TO HER OR SAVED
       </p>
       <InviteLink memberId={memberId} name={name} />
 
-      {/* Her own bar, full width of the screen — exactly what she taps. */}
-      <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen">
-        {/* Her front door shows the rooms full width; inside a room they move to the top right. */}
-        <div className="myra-pearl border-b border-[rgba(43,43,43,0.18)]">
-          {room === 'for_you' ? (
-            <>
-              <div className="flex items-start justify-end gap-6 px-6 sm:px-10 pt-4">
-                <ShareButton testMemberId={memberId} onClick={() => { setRoom('sharing'); setPiece(null) }} />
-                <YouButton onClick={() => { setRoom('profile'); setPiece(null) }} />
-              </div>
-              <img src="/myra-logo-black.png" alt="MYRA" className="mx-auto h-[110px] sm:h-[150px] w-auto -mt-12" />
-              <RoomNav
-                active={room}
-                showHidden
-                searchPlaceholder="What are you wearing today?"
-                onSelect={(id) => { setRoom(id); setPiece(null) }}
-                onSearch={(q) => { setRoom('all_looks'); setSearch(q) }}
-              />
-            </>
-          ) : (
-            <div className="flex items-center gap-4 px-6 sm:px-10 py-3">
-              <img src="/myra-logo-black.png" alt="MYRA" className="h-[46px] w-auto shrink-0" />
-              <div className="flex-1 min-w-0">
-                <RoomNav
-                  active={room}
-                  compact
-                  showHidden
-                  onSelect={(id) => { setRoom(id); setPiece(null) }}
-                  onSearch={(q) => { setRoom('all_looks'); setSearch(q) }}
-                />
-              </div>
-              <ShareButton testMemberId={memberId} active={room === 'sharing'} onClick={() => { setRoom('sharing'); setPiece(null) }} />
-              <YouButton active={room === 'profile'} onClick={() => { setRoom('profile'); setPiece(null) }} />
-            </div>
-          )}
-        </div>
-
+      <div className="flex flex-wrap items-center gap-3 px-1">
+        <button onClick={() => setDevice('iphone')} className={btn(device === 'iphone')}>IPHONE APP</button>
+        <button onClick={() => setDevice('computer')} className={btn(device === 'computer')}>COMPUTER</button>
+        <span className="w-4" />
+        <button onClick={home} className={btn(false)}>BACK TO FOR YOU</button>
+        <button onClick={() => setReload((n) => n + 1)} className={btn(false)}>RELOAD</button>
+        <button onClick={() => window.open(src, '_blank', 'noopener')} className={btn(false)}>
+          OPEN AS {first.toUpperCase()} IN A NEW TAB
+        </button>
       </div>
 
-      {/* Her front door is only the mirror until it is ready, as on her own screen. */}
-      {loading && room === 'for_you' && <MirrorCurtain />}
-      {loading && room !== 'for_you' && <MirrorLoading label={`LOADING ${name.toUpperCase()}'S ${ROOMS.find((r) => r.id === room)?.label ?? ''}`} />}
+      {!ready && <MirrorLoading label={`OPENING ${name.toUpperCase()}'S APP`} />}
 
-      {/* Her pages, full width of the screen — previews of front-end views, so
-          they break out of the admin's column exactly as her browser shows them.
-          No transform: that would break the wardrobe drawer's position: fixed. */}
-      {!loading && room === 'for_you' && forYou && (
-        <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen">
-          <ForYouClient view={forYou} testMemberId={memberId} />
-        </div>
-      )}
-
-      {!loading && room === 'all_looks' && looksView && (
-        looksView.looks.length ? (
-          <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen">
-            <MyLooksClient view={looksView} readOnly initialQuery={search} key={search} />
-          </div>
-        ) : (
-          <div className="border border-[#DCDEE1] bg-[#F4F5F6] p-5">
-            <p className="text-[20px] tracking-[0.08em] text-[#7C838B]">{name.toUpperCase()} HAS NOT BEEN SENT ANYTHING YET</p>
-            <p className="text-[20px] tracking-[0.06em] text-[#6B6B6B] mt-2">
-              THIS IS EXACTLY WHAT SHE WOULD SEE ON SIGNING IN. USE SEND TO HER ON A SHOT LOOK, OR SEND HER EVERY SHOT LOOK, IN DELIVERIES.
-            </p>
-          </div>
-        )
-      )}
-
-      {/* SHARING: her friends and chats, read as her — nothing is sent from here. */}
-      {!loading && room === 'sharing' && (
-        <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen px-6 sm:px-10 py-10">
-          <SharingClient key={memberId} testMemberId={memberId} />
-        </div>
-      )}
-
-      {/* YOU: her three sub-pages, loaded as her — Settings, Inspiration and
-          Threads, the same tabs her own profile shows. */}
-      {!loading && room === 'profile' && (
-        <>
-          <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen myra-pearl border-b border-[rgba(43,43,43,0.14)]">
-            <nav aria-label="You sections" className="px-6 sm:px-10 pt-4">
-              <div className="flex gap-6 sm:gap-10 overflow-x-auto">
-                {([['settings', 'Settings'], ['inspiration', 'Inspiration'], ['threads', 'Threads']] as const).map(([id, label]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => setProfileTab(id)}
-                    aria-current={profileTab === id ? 'page' : undefined}
-                    className={`shrink-0 border-b-2 px-1 pb-3 text-[15px] sm:text-[18px] tracking-[0.1em] transition-colors ${profileTab === id ? 'border-[#2B2B2B] text-[#2B2B2B]' : 'border-transparent text-[#8C8A85] hover:text-[#2B2B2B]'}`}
-                  >
-                    {label}
-                  </button>
-                ))}
+      {ready && device === 'iphone' && (
+        <div className="flex justify-center py-6">
+          {/* The phone: a bezel round the app's own width, the clock above it
+              as on her screen. Inside is exactly what the app loads. */}
+          <div className="rounded-[56px] bg-[#0A0A0A] p-[14px] shadow-[0_30px_80px_rgba(0,0,0,0.25)]">
+            <div className="overflow-hidden rounded-[44px] bg-white" style={{ width: PHONE.w }}>
+              <div className="relative flex h-[47px] items-center justify-between px-8 text-[15px] font-semibold text-[#0A0A0A] myra-pearl">
+                <span>9:41</span>
+                <span className="absolute left-1/2 top-[11px] h-[30px] w-[118px] -translate-x-1/2 rounded-full bg-[#0A0A0A]" aria-hidden />
+                <span className="tracking-[0.1em] text-[12px]">●●● ▮</span>
               </div>
-            </nav>
-          </div>
-          {profileTab === 'settings' && (
-            <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen">
-              <YouSettings key={memberId} testMemberId={memberId} />
+              <iframe
+                ref={frame}
+                key={`${memberId}-${reload}-phone`}
+                src={src}
+                title={`${name}'s app`}
+                style={{ width: PHONE.w, height: PHONE.h - 47, border: 0, display: 'block' }}
+              />
             </div>
-          )}
-          {profileTab === 'inspiration' && (insp
-            ? <InspirationBoard key={memberId} view={insp} testMemberId={memberId} />
-            : <MirrorLoading label={`LOADING ${name.toUpperCase()}'S INSPIRATION`} />)}
-          {profileTab === 'threads' && <ThreadsClient key={memberId} testMemberId={memberId} />}
-        </>
-      )}
-
-      {/* The magazine loads her newsletters itself, as it does on her screen. */}
-      {!loading && room === 'magazine' && (
-        <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen">
-          <MagazineClient key={memberId} testMemberId={memberId} />
+          </div>
         </div>
       )}
 
-      {!loading && room === 'dressing_room' && !piece && dressing && (
-        <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen">
-          <DressingRoomClient view={dressing} testMemberId={memberId} onOpenPiece={openPiece} />
+      {/* Her browser, full width of the screen — a front-end view, so it
+          breaks out of the admin's column exactly as her browser shows it. */}
+      {ready && device === 'computer' && (
+        <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen border-y border-[#DCDEE1]">
+          <iframe
+            ref={frame}
+            key={`${memberId}-${reload}-computer`}
+            src={src}
+            title={`${name}'s MYRA`}
+            style={{ width: '100%', height: '88vh', border: 0, display: 'block' }}
+          />
         </div>
       )}
-
-      {!loading && room === 'events' && (
-        <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen">
-          <EventsClient key={memberId} testMemberId={memberId} />
-        </div>
-      )}
-
-      {!loading && room === 'dressing_room' && piece && (
-        <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen">
-          <PieceClient view={piece} testMemberId={memberId} onBack={() => setPiece(null)} />
-        </div>
-      )}
-
-      {/* Her stylists, as she has them — testing as her keeps no thread. */}
-      {memberId && <StylistChat key={`chat-${memberId}`} asMemberId={memberId} />}
     </div>
   )
 }

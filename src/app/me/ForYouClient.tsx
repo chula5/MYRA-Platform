@@ -60,7 +60,7 @@ export default function ForYouClient({ view, testMemberId, shopBrain }: {
   const nothingYet = brain === 'empty' && !view.error
 
   return (
-    <div className={`myra-pearl relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen min-h-screen ${testMemberId ? '' : '-my-10'}`}>
+    <div className={`myra-pearl relative -mx-6 sm:-ml-8 sm:-mr-10 min-h-screen ${testMemberId ? '' : '-my-10'}`}>
       {curtain !== 'gone' && <MirrorCurtain leaving={curtain === 'leaving'} />}
       <div className="w-full px-6 sm:px-10 pb-16 pt-10">
         <div className="w-full">

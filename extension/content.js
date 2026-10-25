@@ -119,7 +119,9 @@
   // hundred pieces in seconds. Two readers: the tiles in the HTML (most
   // shops), and the product list a Next.js shop embeds as JSON (J.Crew, where
   // the tiles are drawn on the client and the HTML holds only a handful).
-  const PRODUCT_HREF = /\/(products?|p|item|items|shop\/product|dp)\/[^?#]+/i
+  // Reiss files every piece under /style/<code>/<id>; without it the scan
+  // fell back to scrolling and saw 10 of 329 new-in pieces (2026-10-24).
+  const PRODUCT_HREF = /\/(products?|p|item|items|shop\/product|dp|style)\/[^?#]+/i
   const JUNK_IMG = /logo|sprite|icon|placeholder|spinner|loading|\/assets\/ref_|pixel|blank\.|1x1/i
   const SCAN_FEED_CHUNK = 150
   const toPrice = (s) => { const n = Number(String(s ?? '').replace(/[^\d.,]/g, '').replace(/,(\d{2})$/, '.$1').replace(/,/g, '')); return Number.isFinite(n) && n > 0 ? n : null }

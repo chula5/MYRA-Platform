@@ -30,7 +30,7 @@ import ShopLink, { type ShopLinkItem } from '@/components/ShopLink'
 const STYLED_KEY = 'myra:browse-styled'
 const wayModeOf = (styling: 'wardrobe' | 'new'): 'wardrobe' | 'inspiration' => (styling === 'wardrobe' ? 'wardrobe' : 'inspiration')
 import {
-  browseSearch, saveBrowsedPiece,
+  browseSearch, browseNewIn, saveBrowsedPiece,
   type BrowsePiece, type BrowseFacets, type BrowseSizes, type BrowseFilters,
 } from './actions'
 
@@ -188,6 +188,17 @@ export default function BrowseClient() {
   // Back to the piece: from the address the badge opens (?styled=&mode=&q=),
   // or the mark tapped while already here.
   const restore = useRef<{ id: string; mode: 'wardrobe' | 'new'; piece: BrowsePiece | null } | null>(null)
+  // NEW IN FROM HER BRANDS: the Monday push opens here with ?new=<since>.
+  // While it is set, filters narrow those pieces instead of running a search.
+  const newIn = useRef<string | null>(null)
+  useEffect(() => {
+    const since = new URLSearchParams(window.location.search).get('new')
+    if (!since) return
+    newIn.current = since
+    try { window.history.replaceState(null, '', window.location.pathname) } catch { /* fine */ }
+    void run('New in from your brands', {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const stashedPiece = (id: string): BrowsePiece | null => {
     try { const s = sessionStorage.getItem(STYLED_KEY); const p = s ? JSON.parse(s) : null; return p?.item_id === id ? p : null } catch { return null }
   }
@@ -242,7 +253,7 @@ export default function BrowseClient() {
     setBusy(true); setPieces(null); setError(null)
     setPicked(null); setStyling(null); setNote(null); setLanded(0)
     forgetCards()
-    const r = await browseSearch(q, filters)
+    const r = newIn.current ? await browseNewIn(newIn.current, filters) : await browseSearch(q, filters)
     setBusy(false)
     setPieces(r.pieces); setRead(r.read); setError(r.error ?? null)
     setSimilar(r.similar); setSimilarKind(r.similarKind); setBrandName(r.brand)
@@ -259,6 +270,7 @@ export default function BrowseClient() {
   // A brand-new question starts from a clean slate, so last search's filters
   // don't silently cull the next one.
   async function ask(query: string) {
+    newIn.current = null
     sizeTouched.current = false
     setFBrands([]); setFColours([]); setFTypes([]); setFClothing([]); setFShoes([]); setFiltersOpen(false)
     await run(query, {})

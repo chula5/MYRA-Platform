@@ -6,6 +6,8 @@ import ClientJourneyTracker from '@/components/analytics/ClientJourneyTracker'
 import StylistChat from './StylistChat'
 import { resolveClientMember } from '@/lib/client-member'
 import NativeShareBridge from '@/components/me/NativeShareBridge'
+import PushSetup from '@/components/me/PushSetup'
+import HerViewBar from '@/components/me/HerViewBar'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,12 +21,18 @@ export default async function MeLayout({ children }: { children: React.ReactNode
 
   const isAdmin = user.id === process.env.ADMIN_USER_ID
   if (!isAdmin && !(await resolveClientMember())) redirect('/')
+  // Chloe opening these pages as a member from HER VIEW.
+  const asHer = isAdmin ? await resolveClientMember() : null
 
   return (
     <div className="min-h-screen myra-pearl myra-safe-top-pad">
       <div className="myra-safe-top" aria-hidden />
+      {asHer?.test && <HerViewBar name={asHer.name} />}
       <MeChrome />
       {/* pb-28 on a phone keeps the last of the page clear of the tab bar. */}
+      {/* The rooms run edge to edge with -mx-6 sm:-ml-8 sm:-mr-10: out to the
+          rail (250px wide, so 282 - 250 = 32px) and the right edge. Change
+          this padding and those margins change with it. */}
       <main className="w-full px-6 sm:pl-[282px] sm:pr-10 pt-10 pb-28 sm:pb-10">{children}</main>
       <MeTour />
       {/* The house of stylists, one button away on every page. */}
@@ -37,6 +45,8 @@ export default async function MeLayout({ children }: { children: React.ReactNode
       {/* Inside the iPhone app: hand her sign-in to the share sheet, so
           "share to MYRA" from Safari works without the Safari extension. */}
       <NativeShareBridge />
+      {/* Inside the iPhone app: notifications — her yes, her token, a tap opens the page. */}
+      <PushSetup />
     </div>
   )
 }

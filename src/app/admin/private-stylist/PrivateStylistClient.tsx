@@ -37,7 +37,8 @@ import {
   COLOUR_SHADES,
   PRICE_BUCKETS,
   type StylePrefs,
-  type PriceBands, PIECE_PREFERENCES } from '@/lib/pilot-stylist'
+  type PriceBands, PIECE_PREFERENCES, applyAgeTicks } from '@/lib/pilot-stylist'
+import { AGE_RANGES } from '@/app/onboarding/brand-groups'
 import { INTAKE_SIZE_FIELDS, parseIntakeSize, parseWaist, parseBudgetText } from '@/lib/member-intake'
 import { createMember, updateMember, deleteMember, seedSyntheticPersonas, addKnownEvent, removeKnownEvent, setKnownEventBriefAdmin, loadEventPicksAdmin, composeEventPicksNow, setEventPickShownAdmin, removeEventPickAdmin, addWardrobeItem, removeWardrobeItem, createDelivery, deleteDelivery, reopenDelivery, deleteDeliveryAndMemory, updateDelivery, saveLook, deleteLook, clearLook, clearDeliveryLooks, markStockChecked, sendDelivery, recordResponse, logActivity, assignMemberPersona, composeDeliveryLooks, lookAlternates, swapComposedLookItem, removeComposedLookItem, lookAddOptions, addComposedLookItem, approveComposedLook, skipComposedLook, composeLookVariants, restoreLookShoot, deleteLookShoot, loadMemberTrust, recordMemberLookFeedback, setMemberBrands, addMemberBrands, removeMemberBrand, restoreMemberBrand, loadMemberBrandMap } from './actions.gated'
 import type { MemberTrust, MemberBrandMap, MemberBrandDot, SwapOption, PilotData, PilotMember, PilotDelivery, PilotLook, PilotActivity } from './actions'
@@ -1364,8 +1365,25 @@ function StylePreferences({ member: m, run, busy, ready = true }: { member: Pilo
     types_avoided: m.types_avoided ?? [],
   }), [m.colours_loved, m.colours_avoided, m.shapes_loved, m.shapes_avoided, m.types_loved, m.types_avoided])
   const [prefs, setPrefs] = useState<StylePrefs>(saved)
+  const [age, setAge] = useState<string | null>(m.age_range ?? null)
+  // What the age picker ticked in this sitting, so changing the age again
+  // lifts its own ticks — never one Chloe made by hand.
+  const [ageTicked, setAgeTicked] = useState<{ shapes: string[]; types: string[] }>({ shapes: [], types: [] })
   const key = `prefs-${m.member_id}`
-  const dirty = JSON.stringify(prefs) !== JSON.stringify(saved)
+  const dirty = JSON.stringify(prefs) !== JSON.stringify(saved) || age !== (m.age_range ?? null)
+
+  // Her age pre-ticks the WON'T WEAR side (lib/pilot-stylist AGE_AVOIDS). A
+  // piece she is down as wearing stays where it is.
+  const pickAge = (next: string | null) => {
+    const r = applyAgeTicks(prefs, ageTicked, next)
+    setPrefs(r.prefs)
+    setAgeTicked(r.ticked)
+    setAge(next)
+  }
+  const tickedLabels = [
+    ...ageTicked.shapes.filter((v) => prefs.shapes_avoided.includes(v)).map((v) => SHAPE_PREFERENCES.find((s) => s.id === v)?.label ?? v),
+    ...ageTicked.types.filter((v) => prefs.types_avoided.includes(v)).map((v) => PREF_TYPES.find((t) => t.value === v)?.label ?? v),
+  ]
 
   const count = (k: keyof StylePrefs) => prefs[k].length
 
@@ -1469,7 +1487,7 @@ function StylePreferences({ member: m, run, busy, ready = true }: { member: Pilo
             disabled={!dirty || busy === key || !ready}
             onClick={async () => {
               setResult(null)
-              const r = await run(key, () => updateMember(m.member_id, prefs), 'PREFERENCES SAVED — COMPOSER UPDATED')
+              const r = await run(key, () => updateMember(m.member_id, { ...prefs, age_range: age }), 'PREFERENCES SAVED — COMPOSER UPDATED')
               setResult(r?.error ? 'NOT SAVED — SEE THE MESSAGE AT THE TOP OF THE PAGE' : `SAVED · ${new Date().toLocaleTimeString()}`)
             }}
           >
@@ -1489,6 +1507,28 @@ function StylePreferences({ member: m, run, busy, ready = true }: { member: Pilo
           </p>
         </div>
       )}
+
+      <div>
+        <p className="text-[20px] tracking-[0.14em] text-[#6B6B6B] mb-2">HER AGE — PRE-TICKS WON&rsquo;T WEAR BELOW · UNTICK ANY SHE DOES WEAR</p>
+        <div className="flex flex-wrap gap-1.5">
+          {[null, ...AGE_RANGES].map((r) => (
+            <button
+              key={r ?? 'none'}
+              onClick={() => pickAge(r)}
+              className={`text-[20px] tracking-[0.1em] px-2 py-1.5 border transition-colors ${
+                age === r ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]' : 'bg-white text-[#6B6B6B] border-[#E2E0DB] hover:border-[#0A0A0A]'
+              }`}
+            >
+              {r ?? 'NOT SET'}
+            </button>
+          ))}
+        </div>
+        {tickedLabels.length > 0 && (
+          <p className="text-[20px] tracking-[0.04em] text-[#6B6B6B] mt-2 leading-relaxed normal-case">
+            Ticked under won&rsquo;t wear for {age}: {tickedLabels.join(', ')}. Untick any she does wear, then save.
+          </p>
+        )}
+      </div>
 
       {category('COLOURS — PICK A WHOLE FAMILY, OR JUST THE SHADE SHE MEANS', 'WEARS', 'WON\u2019T WEAR', 'colours_loved', 'colours_avoided', (listKey, otherKey, tone) => (
         <div className="space-y-2">

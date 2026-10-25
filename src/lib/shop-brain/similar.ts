@@ -7,7 +7,8 @@
 //
 // Saves speak loudest; a look counts for half; a search is a hint. Her
 // candidates are the SAME pool the composer uses: ready and live, in her size,
-// under her price ceiling.
+// under her price ceiling — and, like Browse, from the labels in her taste
+// graph only (lib/taste-graph): what she named and what sits next to it.
 
 import { loadComposableLibrary } from '@/app/admin/private-stylist/actions'
 import { itemPseudoVector, brandCosine } from '@/lib/brand-affinity'
@@ -16,6 +17,7 @@ import { slotForItemType } from '@/lib/composer'
 import { classifyExternalProduct } from '@/lib/brand-watch'
 import { readPriceBands, priceVerdict } from '@/lib/pilot-stylist'
 import { parseQuery } from '@/lib/search-taxonomy'
+import { loadTasteGraph, inHerGraph, blockedForHer, type TasteGraph } from '@/lib/taste-graph'
 
 export interface ShopPiece {
   item_id: string
@@ -146,6 +148,8 @@ export interface ShopContext {
   savedSlots: Set<string>
   /** Over her ceiling for its bucket — never put forward, whatever it scores. */
   overBudget: (i: any) => boolean
+  /** Her taste graph: the labels MORE OF THE SAME may answer from. */
+  graph: TasteGraph
   /** How close a piece is to the ones she kept. */
   closeness: (it: any, against: any[]) => number
   brandNames: string[]
@@ -161,13 +165,14 @@ export interface ShopContext {
 export async function buildShopContext(admin: any, me: ShopMember): Promise<ShopContext | null> {
   const since = new Date(Date.now() - LOOK_DAYS * 24 * 3600 * 1000).toISOString()
   const itemSel = 'item:item_id(*, brand:brand_id(name))'
-  const [savedRes, viewedFirst, searchRes, bandRes] = await Promise.all([
+  const [savedRes, viewedFirst, searchRes, bandRes, graph] = await Promise.all([
     admin.from('member_saved_item').select(`saved_at, source_host, ${itemSel}`).eq('member_id', me.memberId).order('saved_at', { ascending: false }).limit(SAVED),
     admin.from('recently_viewed').select(`viewed_at, host, dwell_ms, views, ${itemSel}`).eq('member_id', me.memberId).gte('viewed_at', since).order('viewed_at', { ascending: false }).limit(VIEWED),
     // Read more than we will use: the ones typed at a search engine are
     // dropped below, and dropping them must not leave the list empty.
     admin.from('mirror_search').select('host, query, times_searched, last_searched_at').eq('member_id', me.memberId).gte('last_searched_at', since).order('last_searched_at', { ascending: false }).limit(SEARCHES * 4),
     admin.from('pilot_member').select('price_bands').eq('member_id', me.memberId).maybeSingle(),
+    loadTasteGraph(admin, me.memberId),
   ])
   // Pre-0060 the table is not there yet: no sections, never an error page.
   if (savedRes.error) return null
@@ -230,7 +235,25 @@ export async function buildShopContext(admin: any, me: ShopMember): Promise<Shop
     return brandNames.filter((b) => b.length >= 3).sort((a, b) => b.length - a.length).find((b) => q.includes(` ${b.toLowerCase()} `)) ?? null
   }
 
-  return { admin, me, savedItems, viewedItems, searches, anchors, anchorIds, pool, savedSlots, overBudget, closeness, brandNames, brandInQuery }
+  return { admin, me, savedItems, viewedItems, searches, anchors, anchorIds, pool, savedSlots, overBudget, graph, closeness, brandNames, brandInQuery }
+}
+
+/** How much closer the best graph piece may be and a discovery still take its slot. */
+const DISCOVERY_REACH = 0.2
+
+/**
+ * The picks for one saved piece: the closest, with one slot kept for a label
+ * outside her graph when one is nearly as close. Most pieces are not scored
+ * yet, so closeness ties at the top and the lean towards her own labels would
+ * otherwise win every tie — she would never discover anything.
+ */
+function withDiscovery<T extends { i: any; c: number }>(ranked: T[], graph: TasteGraph): T[] {
+  const picks = ranked.slice(0, PER_ANCHOR)
+  if (!graph.weights.size || picks.length < PER_ANCHOR) return picks
+  const outside = (x: T) => !graph.weights.has(String(x.i.brand_id ?? ''))
+  if (picks.some(outside)) return picks
+  const found = ranked.find((x) => outside(x) && x.c >= picks[0].c - DISCOVERY_REACH)
+  return found ? [...picks.slice(0, PER_ANCHOR - 1), found] : picks
 }
 
 /**
@@ -240,17 +263,26 @@ export async function buildShopContext(admin: any, me: ShopMember): Promise<Shop
  * duplicate; strip it before it leaves the server.
  */
 export async function moreOfTheSame(ctx: ShopContext): Promise<StyledPiece[]> {
-  const { admin, anchors, pool, searches, savedSlots, closeness, brandNames, brandInQuery } = ctx
+  const { admin, anchors, searches, savedSlots, closeness, brandNames, brandInQuery } = ctx
+  // Labels from her taste graph lead. A label outside it may still answer
+  // when the piece is EXACTLY the kind she kept and inside her ceiling for
+  // it: she likes a £1,200 dress on Net-a-Porter and is shown dresses she
+  // would buy — that is how she discovers. Never a label she turned away.
+  // The label sections read ctx.pool as it is: they show her own labels on purpose.
+  const open = ctx.pool.filter((i: any) => !blockedForHer(ctx.graph, i))
+  const pool = open.filter((i: any) => inHerGraph(ctx.graph, i))
+  // Her named labels before their neighbours when two pieces are as close.
+  const lean = (i: any) => 0.1 * (ctx.graph.weights.get(String(i.brand_id ?? '')) ?? 0)
   const byAnchor: StyledPiece[][] = []
   for (const anchor of anchors.slice(0, 8)) {
     const v = itemPseudoVector(anchor)
     if (!v.length) continue
     const slot = slotForItemType(anchor.item_type)
-    const sameKind = pool.filter((i: any) => i.item_type === anchor.item_type)
+    const sameKind = open.filter((i: any) => i.item_type === anchor.item_type)
     const candidates = sameKind.length >= PER_ANCHOR ? sameKind : pool.filter((i: any) => slotForItemType(i.item_type) === slot)
     // A piece she only looked at has not been read by the scorer yet, so its
     // vector is mostly defaults: colour and material carry it until then.
-    const near = candidates
+    const ranked = candidates
       .map((i: any) => ({
         i,
         // brandCosine, not cosine. A single-item pseudo-vector holds eleven
@@ -268,11 +300,12 @@ export async function moreOfTheSame(ctx: ShopContext): Promise<StyledPiece[]> {
           // answers satin, faux fur answers faux fur, which is why those are
           // the matches that landed. It outweighs both family signals.
           + (anchor.material_primary && i.material_primary
-            && String(anchor.material_primary).toLowerCase() === String(i.material_primary).toLowerCase() ? 0.3 : 0),
+            && String(anchor.material_primary).toLowerCase() === String(i.material_primary).toLowerCase() ? 0.3 : 0)
+          + lean(i),
       }))
       .filter((x) => Number.isFinite(x.c))
       .sort((a, b) => b.c - a.c)
-      .slice(0, PER_ANCHOR)
+    const near = withDiscovery(ranked, ctx.graph)
       .map((x) => ({
         ...pieceOf(x.i, anchor.__kind === 'viewed' ? `Like the ${shortName(anchor)} you looked at` : `Like your ${shortName(anchor)}`),
         __style: styleKey(x.i),
@@ -313,7 +346,8 @@ export async function moreOfTheSame(ctx: ShopContext): Promise<StyledPiece[]> {
       if (dressed.length) byAnchor.push(dressed)
       continue
     }
-    const hits = pool
+    // A search that names the piece may find it outside her graph, as a saved piece can.
+    const hits = (q.itemTypes.length ? open : pool)
       .map((i: any) => ({
         i,
         c: (q.itemTypes.length ? (q.itemTypes.includes(i.item_type) ? 2 : -9) : 0)
