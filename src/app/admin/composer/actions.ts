@@ -15,6 +15,7 @@ import {
   type Slot,
 } from '@/lib/composer'
 import { revalidatePath } from 'next/cache'
+import { waitUntil } from '@vercel/functions'
 import { generateHiggsfieldShootForOutfit } from '@/app/admin/projects/higgsfield-actions'
 import { generateOccasionTags } from '@/app/admin/ai/occasion-tags'
 import { loadStyleModel, recordStyleDecision, recordStyleOffers } from '@/lib/style-brain-store'
@@ -670,6 +671,16 @@ export async function approveCandidate(
       // Constitution learning: every material pairing in an approved outfit
       // grows the pairing table.
       void recordMaterialPairings(allEntries.map((e) => toHouseItem(e.item, e.slot)), 'approve')
+    }
+
+    // A YES in Outfit Review lands the look in the Looks of every member it
+    // suits (lib/review-to-members). In the background: approval returns at once.
+    if (opts?.source === 'review' && opts?.recordDecision !== false) {
+      const landing = import('@/lib/review-to-members')
+        .then(({ landReviewOutfitForMembers }) => landReviewOutfitForMembers(supabase, outfitId))
+        .then((r) => console.log('[approveCandidate→members]', outfitId, r.filter((x) => x.landed).map((x) => x.name).join(', ') || 'none'))
+        .catch((err) => console.error('[approveCandidate→members]', err))
+      try { waitUntil(landing) } catch { /* local dev: the promise simply runs */ }
     }
 
     return { outfitId, projectId }
