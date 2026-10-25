@@ -37,7 +37,7 @@ export interface MarketplaceRead {
   returned: boolean
 }
 
-const MODEL = 'claude-haiku-4-5'
+const MODEL = 'claude-haiku-5-5'
 
 const SCHEMA = {
   type: 'object',
@@ -80,6 +80,7 @@ export async function readMarketplaceLines(orders: MarketplaceOrder[]): Promise<
       const res = await client.messages.create({
         model: MODEL,
         max_tokens: 4000,
+        thinking: { type: 'disabled' },
         output_config: { format: { type: 'json_schema', schema: SCHEMA } },
         messages: [{
           role: 'user',

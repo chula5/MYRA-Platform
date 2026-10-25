@@ -71,7 +71,7 @@ import { CLIENT_OCCASIONS, occasionsForMember } from '@/lib/client-occasions'
 import { checkRenderFidelity } from '@/app/admin/ai/render-fidelity'
 import { loadMemberSizeProfile, filterItemsForShopper } from '@/lib/size-availability'
 import { checkSizesForMember } from '@/lib/look-size-check'
-import { judgeLooksForMember, hasPieceOutOfSize } from '@/lib/look-check'
+import { judgeLooksForMember, lookPasses, checkDidNotRun, CHECK_DOWN_ERROR } from '@/lib/look-check'
 import { pendingAlertsForUser, markDelivered, ALERT_COPY } from '@/lib/stock-alerts'
 import { personaWeight, PERSONA_START_WEIGHT } from '@/lib/user-persona'
 import { slotForItemType, type Slot } from '@/lib/composer'
@@ -2262,8 +2262,9 @@ export async function composeDeliveryLooks(deliveryId: string, options: ComposeD
   const judged = await judgeLooksForMember(admin, delivery.member_id, planned.looks, 'unknown')
   const rank = (i: number) => (judged[i].check?.verdict === 'works' ? 0 : judged[i].check ? 1 : 2)
   const passing = planned.looks.map((_, i) => i)
-    .filter((i) => judged[i].check?.verdict !== 'clashes' && !hasPieceOutOfSize(judged[i]))
+    .filter((i) => lookPasses(judged[i]))
     .sort((a, b) => rank(a) - rank(b) || a - b)
+  if (!passing.length && checkDidNotRun(judged)) return { error: CHECK_DOWN_ERROR }
   if (!passing.length) {
     const why = judged.flatMap((j) => j.check?.issues ?? []).slice(0, 3).join(' · ')
     return { error: `Every composed look failed the check${why ? ` — ${why}` : ''}. Compose again.` }
@@ -2670,7 +2671,7 @@ export async function composeLookVariants(
   // or holds a piece not in her size, is never saved. STYLE 3 WAYS was the one
   // path that skipped it.
   const judged = await judgeLooksForMember(admin, delivery.member_id, composed, 'unknown')
-  const variants = composed.filter((_, i) => judged[i].check?.verdict !== 'clashes' && !hasPieceOutOfSize(judged[i]))
+  const variants = composed.filter((_, i) => lookPasses(judged[i]))
   const fresh: typeof variants = []
   for (const v of variants) {
     if (fresh.length >= need) break
@@ -2679,7 +2680,7 @@ export async function composeLookVariants(
     if (fresh.some((f) => sameSet(new Set(f.items.map((it) => it.item_id).filter(Boolean) as string[]), vset))) continue
     fresh.push(v)
   }
-  if (!fresh.length) return { error: 'Could not find a different way to style this piece from the library' }
+  if (!fresh.length) return { error: checkDidNotRun(judged) ? CHECK_DOWN_ERROR : 'Could not find a different way to style this piece from the library' }
 
   const { count } = await admin.from('pilot_look').select('look_id', { count: 'exact', head: true }).eq('delivery_id', look.delivery_id)
   const startPos = (count ?? 0) + 1
@@ -3662,7 +3663,7 @@ export async function styleSavedPiece(
   const judged = await judgeLooksForMember(admin, me.memberId, composed, 'unknown')
   const rank = (i: number) => (judged[i].check?.verdict === 'works' ? 0 : judged[i].check ? 1 : 2)
   const passing = composed.map((_, i) => i)
-    .filter((i) => judged[i].check?.verdict !== 'clashes' && !hasPieceOutOfSize(judged[i]))
+    .filter((i) => lookPasses(judged[i]))
     .sort((a, b) => rank(a) - rank(b) || a - b)
   const dims = new Map<string, any>((pool as any[]).map((i) => [i.item_id, i]))
   const prefs = readStylePrefs(member)
@@ -3678,7 +3679,7 @@ export async function styleSavedPiece(
   return {
     hidden: composed.length - passing.length,
     looks: looks.map(({ _verdict, _confidence, ...l }) => l),
-    ...(passing.length ? {} : { error: 'Nothing passed the check for this piece right now' }),
+    ...(passing.length ? {} : { error: checkDidNotRun(judged) ? CHECK_DOWN_ERROR : 'Nothing passed the check for this piece right now' }),
   }
 }
 
@@ -3769,7 +3770,7 @@ export async function styleOwnedPiece(
     const judged = await judgeLooksForMember(admin, me.memberId, composed, 'unknown')
     const rank = (i: number) => (judged[i].check?.verdict === 'works' ? 0 : judged[i].check ? 1 : 2)
     const passing = composed.map((_, i) => i)
-      .filter((i) => judged[i].check?.verdict !== 'clashes' && !hasPieceOutOfSize(judged[i]))
+      .filter((i) => lookPasses(judged[i]))
       .sort((a, b) => rank(a) - rank(b) || a - b)
     const dims = new Map<string, any>(library.map((i) => [i.item_id, i]))
     const prefs = readStylePrefs(member)
@@ -3789,7 +3790,7 @@ export async function styleOwnedPiece(
       hidden: composed.length - passing.length,
       read,
       looks: looks.map(({ _verdict, _confidence, ...l }) => l),
-      ...(passing.length ? {} : { error: 'Nothing passed the check for this piece right now — try another occasion' }),
+      ...(passing.length ? {} : { error: checkDidNotRun(judged) ? CHECK_DOWN_ERROR : 'Nothing passed the check for this piece right now — try another occasion' }),
     }
   } catch (err) {
     return { looks: [], error: err instanceof Error ? err.message : 'Could not style this piece' }

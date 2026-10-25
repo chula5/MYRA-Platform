@@ -8,7 +8,7 @@
 // fraction of a point of the expensive tiers, at roughly a fiftieth of the
 // cost. That difference is what makes scoring the WHOLE library affordable,
 // and an unscored item contributes nothing at all.
-export const DEFAULT_SCORING_MODEL = 'claude-haiku-4-5-20251001'
+export const DEFAULT_SCORING_MODEL = 'claude-haiku-5-5'
 
 // The 1-5 dimensions the composer reads. Kept here so the backfill, the eval
 // and the coverage read all agree on what "scored" means.

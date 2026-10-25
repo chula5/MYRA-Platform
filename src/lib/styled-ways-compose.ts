@@ -14,7 +14,7 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase-server'
 import { composeMemberVariants, tooSimilarVariant } from '@/lib/pilot-composer'
 import { slotForItemType } from '@/lib/composer'
-import { judgeLooksForMemberEach } from '@/lib/look-check'
+import { judgeLooksForMemberEach, CHECK_DOWN_ERROR } from '@/lib/look-check'
 import { whyThisSuitsHer } from '@/lib/look-why'
 import { readStylePrefs } from '@/lib/pilot-stylist'
 import { occasionsForMember, OCCASION_LABEL } from '@/lib/client-occasions'
@@ -170,6 +170,7 @@ export async function composeStyledWays(
   // verdicts cannot save a fourth.
   let claimed = 0
   let passed = 0
+  let checked = 0
   let firstLookMs: number | null = null
   const saved: StyledWayLook[] = []
   // The hero's own size never vetoes a way: she chose it — it may be hers
@@ -178,7 +179,9 @@ export async function composeStyledWays(
   const supportOutOfSize = (j: { sizes: Record<string, { verdict: string }> }) =>
     Object.entries(j.sizes).some(([id, sz]) => id !== heroId && sz.verdict === 'not_in_size')
   await judgeLooksForMemberEach(admin, memberId, chosen.map((c) => c.look), 'unknown', async (i, judged) => {
-    const ok = judged.check?.verdict !== 'clashes' && !supportOutOfSize(judged)
+    if (judged.check) checked++
+    // No verdict is not a pass: a look MYRA could not check is never kept.
+    const ok = !!judged.check && judged.check.verdict !== 'clashes' && !supportOutOfSize(judged)
     if (!ok) return
     passed++
     if (claimed >= want) return
@@ -205,7 +208,7 @@ export async function composeStyledWays(
     saved,
     firstLookMs,
     totalMs: Date.now() - t0,
-    ...(saved.length ? {} : { error: 'Nothing passed the check for this piece right now' }),
+    ...(saved.length ? {} : { error: checked ? 'Nothing passed the check for this piece right now' : CHECK_DOWN_ERROR }),
   }
 }
 

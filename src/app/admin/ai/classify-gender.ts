@@ -49,8 +49,9 @@ export async function classifyProductGender(imageUrl: string): Promise<{ gender:
       // Haiku read a plainly male model in cropped shorts as womenswear, and a
       // whole queue of menswear followed. This call decides what MYRA shows,
       // so it uses the stronger model — it still costs one word of output.
-      model: 'claude-haiku-4-5',
+      model: 'claude-haiku-5-5',
       max_tokens: 8,
+      thinking: { type: 'disabled' },
       messages: [{
         role: 'user',
         content: [

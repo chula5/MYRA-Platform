@@ -398,8 +398,9 @@ async function readHerStyle(memberId: string, firstName: string, threads: Thread
   try {
     const client = new Anthropic({ apiKey })
     const res = await client.messages.create({
-      model: 'claude-haiku-4-5',
+      model: 'claude-haiku-5-5',
       max_tokens: 700,
+      thinking: { type: 'disabled' },
       output_config: { format: { type: 'json_schema', schema: READ_SCHEMA } },
       messages: [{
         role: 'user',

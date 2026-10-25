@@ -49,8 +49,9 @@ export async function checkPatternAgainstMoodboard(
 
     const client = new Anthropic({ apiKey })
     const r = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-haiku-5-5',
       max_tokens: 8,
+      thinking: { type: 'disabled' },
       messages: [{
         role: 'user',
         content: [

@@ -17,7 +17,7 @@ import { scoreUpdateFor } from '@/lib/item-scoring'
 import { loadBrandGraph, resolveBrandNames } from '@/lib/brand-affinity'
 import { composeMemberVariants, tooSimilarVariant } from '@/lib/pilot-composer'
 import { slotForItemType } from '@/lib/composer'
-import { judgeLooksForMember, hasPieceOutOfSize } from '@/lib/look-check'
+import { judgeLooksForMember, lookPasses, checkDidNotRun, CHECK_DOWN_ERROR } from '@/lib/look-check'
 import { whyThisSuitsHer } from '@/lib/look-why'
 import { readStylePrefs } from '@/lib/pilot-stylist'
 import { occasionsForMember, OCCASION_LABEL } from '@/lib/client-occasions'
@@ -280,7 +280,7 @@ export async function styleExternalPiece(
   const judged = await judgeLooksForMember(admin, member.member_id, composed, 'unknown')
   const rank = (i: number) => (judged[i].check?.verdict === 'works' ? 0 : judged[i].check ? 1 : 2)
   const survived = composed.map((_, i) => i)
-    .filter((i) => judged[i].check?.verdict !== 'clashes' && !hasPieceOutOfSize(judged[i]))
+    .filter((i) => lookPasses(judged[i]))
     .sort((a, b) => rank(a) - rank(b) || a - b)
   const passing = oneEach(survived)
   const dims = new Map<string, any>(pool.map((i) => [i.item_id, i]))
@@ -309,6 +309,6 @@ export async function styleExternalPiece(
     checked: true,
     hidden: composed.length - survived.length,
     looks,
-    ...(passing.length ? {} : { error: 'Nothing passed the check for this piece right now' }),
+    ...(passing.length ? {} : { error: checkDidNotRun(judged) ? CHECK_DOWN_ERROR : 'Nothing passed the check for this piece right now' }),
   }
 }
