@@ -154,3 +154,26 @@ async function forgetLinkedMembers(admin: any, influenceId: string) {
   const { data } = await admin.from('member_style_influence').select('member_id').eq('influence_id', influenceId)
   for (const r of (data ?? []) as any[]) forgetMemberMemory(r.member_id)
 }
+
+/** For one member's card on /admin/private-stylist: who she is linked to, and everyone she could be. */
+export async function loadMemberInfluencesAdmin(memberId: string): Promise<{
+  linked: { id: string; name: string; image_url: string | null; source: string }[]
+  all: { id: string; name: string; status: string }[]
+  error?: string
+}> {
+  await assertAdmin()
+  const admin = createAdminClient() as any
+  const [{ data: all, error }, { data: links }] = await Promise.all([
+    admin.from('style_influence').select('influence_id, name, status, image_url').order('name', { ascending: true }),
+    admin.from('member_style_influence').select('influence_id, source, created_at').eq('member_id', memberId).order('created_at', { ascending: true }),
+  ])
+  if (error) return { linked: [], all: [], error: /schema cache|does not exist/i.test(error.message) ? 'RUN MIGRATION 0109' : error.message }
+  const byId = new Map<string, any>(((all ?? []) as any[]).map((r) => [r.influence_id, r]))
+  return {
+    linked: ((links ?? []) as any[]).filter((l) => byId.has(l.influence_id)).map((l) => {
+      const p = byId.get(l.influence_id)
+      return { id: p.influence_id, name: p.name, image_url: p.image_url ?? null, source: l.source }
+    }),
+    all: ((all ?? []) as any[]).map((r) => ({ id: r.influence_id, name: r.name, status: r.status })),
+  }
+}

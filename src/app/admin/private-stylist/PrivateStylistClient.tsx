@@ -40,6 +40,7 @@ import {
   type PriceBands, PIECE_PREFERENCES, applyAgeTicks } from '@/lib/pilot-stylist'
 import { AGE_RANGES } from '@/app/onboarding/brand-groups'
 import { INTAKE_SIZE_FIELDS, parseIntakeSize, parseWaist, parseBudgetText } from '@/lib/member-intake'
+import MemberInfluences from './MemberInfluences'
 import { createMember, updateMember, deleteMember, seedSyntheticPersonas, addKnownEvent, removeKnownEvent, setKnownEventBriefAdmin, loadEventPicksAdmin, composeEventPicksNow, setEventPickShownAdmin, removeEventPickAdmin, addWardrobeItem, removeWardrobeItem, createDelivery, deleteDelivery, reopenDelivery, deleteDeliveryAndMemory, updateDelivery, saveLook, deleteLook, clearLook, clearDeliveryLooks, markStockChecked, sendDelivery, recordResponse, logActivity, assignMemberPersona, composeDeliveryLooks, lookAlternates, swapComposedLookItem, removeComposedLookItem, lookAddOptions, addComposedLookItem, approveComposedLook, skipComposedLook, composeLookVariants, restoreLookShoot, deleteLookShoot, loadMemberTrust, recordMemberLookFeedback, setMemberBrands, addMemberBrands, removeMemberBrand, restoreMemberBrand, loadMemberBrandMap } from './actions.gated'
 import type { MemberTrust, MemberBrandMap, MemberBrandDot, SwapOption, PilotData, PilotMember, PilotDelivery, PilotLook, PilotActivity } from './actions'
 
@@ -1906,6 +1907,9 @@ function MemberCard({
           )}
         </div>
       </div>
+
+      {/* On top of her persona: the people whose style she loves. */}
+      <MemberInfluences memberId={m.member_id} />
 
       {open && (
         <div className="mt-6 space-y-6">
