@@ -59,9 +59,12 @@ export function facetCount(p: ParsedQuery): number {
     + (p.materials.length ? 1 : 0) + (p.formalityRange ? 1 : 0) + (p.seasons.length ? 1 : 0) + (p.cuts.length ? 1 : 0)
 }
 
-/** Is the piece sold as the cut she named? Read off its name — a pencil skirt says so. */
+/** Is the piece sold as the cut she named? Read off its name — a pencil skirt says so.
+ *  A word of hers outside CUT_WORDS ("ruffle") also takes its plain endings: ruffled, ruffles. */
 export function cutFits(it: RankablePiece, cut: string): boolean {
-  return (CUT_WORDS[cut] ?? [cut]).some((w) => hasWord(it.product_name, w))
+  const words = CUT_WORDS[cut]
+  if (words) return words.some((w) => hasWord(it.product_name, w))
+  return new RegExp(`\\b${cut.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(s|es|d|ed|y|ing)?\\b`, 'i').test(String(it.product_name ?? ''))
 }
 
 // ── Seasons ───────────────────────────────────────────────────────────────────

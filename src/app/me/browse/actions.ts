@@ -22,7 +22,7 @@
 import { createAdminClient } from '@/lib/supabase-server'
 import { resolveClientMember } from '@/lib/client-member'
 import { parseQuery, STOPWORDS, MATERIAL_TERMS, TYPE_FORMALITY, COLOUR, TYPE, MATERIAL, CUT_WORDS, isTypoOf, type ParsedQuery } from '@/lib/search-taxonomy'
-import { rankPieces, facetCount, mixByType, type RankContext, type Scored } from '@/lib/browse-rank'
+import { rankPieces, facetCount, mixByType, cutFits, type RankContext, type Scored } from '@/lib/browse-rank'
 import { brandKey, loadBrandGraph, computeSimilarBrands } from '@/lib/brand-affinity'
 import { isOwnedItem } from '@/lib/wardrobe/owned-items'
 import { styleExternalPiece } from '@/lib/mirror/style'
@@ -219,7 +219,8 @@ function readOf(parsed: ParsedQuery, brandName: string | null): string[] {
     ...(brandName ? [brandName.toUpperCase()] : []),
     ...parsed.colourFamilies.map((c) => c.toUpperCase()),
     ...parsed.cuts.map((c) => c.toUpperCase()),
-    ...parsed.itemTypes.map((t) => t.replace(/_/g, ' ').toUpperCase()),
+    // A cut that is itself the piece ("cami") already says it — not six kinds of top after it.
+    ...(parsed.cuts.some((c) => TYPE[c] && TYPE[c].join() === parsed.itemTypes.join()) ? [] : parsed.itemTypes.map((t) => t.replace(/_/g, ' ').toUpperCase())),
     ...parsed.materials.map((m) => m.toUpperCase()),
     ...parsed.occasionGroups.map((g) => g[0].toUpperCase()),
     ...(parsed.formalityRange ? [formalityLabel(parsed.formalityRange)] : []),
@@ -336,6 +337,10 @@ export async function browseSearch(
     if (parsed.materials.length) pools.push(base().or(materialOr(parsed.materials)).limit(POOL))
     for (const cut of parsed.cuts) pools.push(base().or(cutOr(cut)).limit(POOL))
   }
+  // A word MYRA has no dictionary for ("ruffle", "strappy") is pulled by name
+  // within everything else she asked for, and held below if her shops sell it.
+  const unread = facets > 0 ? (parsed.unread ?? []).filter((w) => w.length >= 3).slice(0, 3) : []
+  for (const w of unread) pools.push(withFacets(base()).ilike('product_name', `%${w}%`).limit(POOL))
   if (parsed.formalityRange && !parsed.itemTypes.length) {
     pools.push(withFacets(base()).gte('material_formality', Math.max(1, parsed.formalityRange[0] - 1)).limit(POOL))
   }
@@ -359,8 +364,14 @@ export async function browseSearch(
   const candidates: any[] = []
   for (const r of results) for (const row of ((r?.data ?? []) as any[])) if (showable(row) && affordable(row)) candidates.push(row)
 
+  // Her words are never dropped: one the shops name pieces with is held like a
+  // cut — "navy ruffle blouse" is ruffle blouses, not every navy blouse. One
+  // nothing is named with ("pretty") only orders the answers.
+  const held = unread.filter((w) => candidates.some((it) => cutFits(it, w)))
+  const asked: ParsedQuery = held.length ? { ...parsed, cuts: [...parsed.cuts, ...held] } : parsed
+
   // 3. Rank: exact answers, then what comes close.
-  const ranked = rankPieces(candidates, parsed, ctx)
+  const ranked = rankPieces(candidates, asked, ctx)
   if (parsed !== heard) ranked.exact = mixByType(ranked.exact)
   let similar: Scored<any>[] = ranked.similar
   let similarKind: BrowseView['similarKind'] = similar.length ? 'close' : null
@@ -368,7 +379,7 @@ export async function browseSearch(
   if (similarBrandIds.length) {
     const { data } = await withFacets(base().in('brand_id', similarBrandIds), true).limit(POOL)
     const rows = ((data ?? []) as any[]).filter((it) => showable(it) && affordable(it))
-    const fromLikeBrands = rankPieces(rows, { ...parsed, brand: null }, ctx).exact
+    const fromLikeBrands = rankPieces(rows, { ...asked, brand: null }, ctx).exact
     if (fromLikeBrands.length) {
       const taken = new Set(fromLikeBrands.map((s) => s.it.item_id))
       similar = [...fromLikeBrands, ...similar.filter((s) => !taken.has(s.it.item_id))]
@@ -450,7 +461,7 @@ export async function browseSearch(
     similar: similarN.slice(0, MOST).map((k) => pieceOf(k.it)),
     similarKind: similarN.length ? similarKind ?? 'close' : null,
     brand: brandName,
-    read: readOf(heard, brandName),
+    read: readOf(held.length ? { ...heard, cuts: [...heard.cuts, ...held] } : heard, brandName),
     facets: facetsOut,
     sizes,
   }
