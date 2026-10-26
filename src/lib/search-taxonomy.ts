@@ -33,6 +33,15 @@ const _SHOES = ['boot', 'heel', 'flat', 'sneaker', 'mule', 'sandal']
 const _BAGS = ['tote', 'shoulder_bag', 'clutch', 'crossbody', 'structured_bag']
 const _JEWEL = ['necklace', 'earrings', 'bracelet', 'ring', 'brooch']
 
+/** The pieces she asked for, said back as one word: TOPS, not six kinds of top. */
+export function piecesWord(types: string[]): string {
+  const family: Array<[string[], string]> = [[_TOPS, 'TOPS'], [_DRESS, 'DRESSES'], [_SHOES, 'SHOES'], [_BAGS, 'BAGS'], [_JEWEL, 'JEWELLERY']]
+  for (const [members, word] of family) if (types.length && types.every((t) => members.includes(t)) && members.every((t) => types.includes(t))) return word
+  if (types.length !== 1) return 'PIECES'
+  const one = types[0].replace(/_/g, ' ').toUpperCase()
+  return /S$|WEAR$|JEWELLERY$/.test(one) ? (one.endsWith('DRESS') ? `${one}ES` : one) : `${one}S`
+}
+
 // Item word → item_type enum values.
 export const TYPE: Record<string, string[]> = {
   dress: _DRESS, dresses: _DRESS, gown: ['maxi_dress'], gowns: ['maxi_dress'],

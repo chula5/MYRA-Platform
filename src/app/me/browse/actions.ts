@@ -21,7 +21,7 @@
 
 import { createAdminClient } from '@/lib/supabase-server'
 import { resolveClientMember } from '@/lib/client-member'
-import { parseQuery, STOPWORDS, MATERIAL_TERMS, TYPE_FORMALITY, COLOUR, TYPE, MATERIAL, CUT_WORDS, isTypoOf, type ParsedQuery } from '@/lib/search-taxonomy'
+import { parseQuery, piecesWord, STOPWORDS, MATERIAL_TERMS, TYPE_FORMALITY, COLOUR, TYPE, MATERIAL, CUT_WORDS, isTypoOf, type ParsedQuery } from '@/lib/search-taxonomy'
 import { rankPieces, facetCount, mixByType, cutFits, type RankContext, type Scored } from '@/lib/browse-rank'
 import { brandKey, loadBrandGraph, computeSimilarBrands } from '@/lib/brand-affinity'
 import { isOwnedItem } from '@/lib/wardrobe/owned-items'
@@ -80,6 +80,9 @@ export interface BrowseView {
   /** Why the similar pieces are there: labels like the one she named, or
    *  pieces that answer most of her words. */
   similarKind: 'brands' | 'close' | null
+  /** What comes close, in the order it was given, each kind under what it still
+   *  is: "CAMI TOPS IN OTHER COLOURS", then "NAVY BLUE TOPS". */
+  similarGroups?: Array<{ title: string; ids: string[] }>
   /** The label she named, as MYRA knows it. */
   brand: string | null
   /** What MYRA read out of her words: the label, the colours, the pieces, the cloth, the occasion. */
@@ -212,6 +215,45 @@ function formalityLabel(range: [number, number]): string {
   if (lo >= 3) return 'DRESSED UP'
   if (hi <= 2) return 'CASUAL'
   return 'SMART CASUAL'
+}
+
+/**
+ * What comes close, grouped by what it gave up and named by what it still is.
+ * The groups keep the ranker's order, so the kind that keeps the most of her
+ * ask — the piece itself — comes first.
+ */
+function closeGroups(list: Scored<any>[], p: ParsedQuery, brandName: string | null): { ordered: Scored<any>[]; groups: Array<{ title: string; ids: string[] }> } {
+  const byKey = new Map<string, Scored<any>[]>()
+  for (const s of list) {
+    const k = (s.missed ?? []).join('|')
+    const g = byKey.get(k) ?? []
+    g.push(s)
+    byKey.set(k, g)
+  }
+  const groups: Array<{ title: string; ids: string[] }> = []
+  const ordered: Scored<any>[] = []
+  // The three nearest kinds only: further off than that is no longer her ask.
+  for (const [k, members] of Array.from(byKey.entries()).slice(0, 3)) {
+    const missed = new Set(k ? k.split('|') : [])
+    const cut = !missed.has('cut') ? p.cuts.map((c) => c.toUpperCase()) : []
+    const piece = missed.has('type') ? 'PIECES' : p.itemTypes.length ? piecesWord(p.itemTypes) : 'PIECES'
+    const words = [
+      ...(p.brand && !missed.has('brand') && brandName ? [brandName.toUpperCase()] : []),
+      ...(!missed.has('colour') ? p.colourFamilies.map((c) => c.toUpperCase()) : []),
+      ...(!missed.has('material') ? p.materials.map((m) => m.toUpperCase()) : []),
+      ...cut,
+      // A cami is a top: "CAMI TOPS", never "CAMI PIECES" for a cami dress.
+      ...(missed.has('type') && cut.length ? ['IN OTHER PIECES'] : [piece]),
+    ]
+    const other = [missed.has('colour') ? 'COLOURS' : '', missed.has('material') ? 'CLOTHS' : ''].filter(Boolean)
+    const also = [
+      other.length ? `IN OTHER ${other.join(' AND ')}` : '',
+      missed.has('brand') ? 'FROM OTHER LABELS' : '',
+    ].filter(Boolean).join(' ')
+    groups.push({ title: [words.join(' '), also].filter(Boolean).join(' '), ids: members.map((s) => s.it.item_id) })
+    ordered.push(...members)
+  }
+  return { ordered, groups }
 }
 
 function readOf(parsed: ParsedQuery, brandName: string | null): string[] {
@@ -455,11 +497,13 @@ export async function browseSearch(
     similarN = similarN.filter(fits)
   }
 
+  const close = similarKind !== 'brands' ? closeGroups(similarN.slice(0, MOST), asked, brandName) : null
   return {
     query: q,
     pieces: exactN.slice(0, MOST).map((k) => pieceOf(k.it)),
-    similar: similarN.slice(0, MOST).map((k) => pieceOf(k.it)),
+    similar: (close ? close.ordered : similarN.slice(0, MOST)).map((k) => pieceOf(k.it)),
     similarKind: similarN.length ? similarKind ?? 'close' : null,
+    similarGroups: close?.groups ?? [],
     brand: brandName,
     read: readOf(held.length ? { ...heard, cuts: [...heard.cuts, ...held] } : heard, brandName),
     facets: facetsOut,

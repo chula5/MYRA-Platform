@@ -41,7 +41,20 @@ export interface RankContext {
   herBrands?: Map<string, number>
 }
 
-export interface Scored<T> { it: T; score: number; hits: number; facets: number; bonus: number }
+export interface Scored<T> {
+  it: T; score: number; hits: number; facets: number; bonus: number
+  /** The facets this piece does not hold ("colour", "cut"…) — what makes it close, not exact. */
+  missed?: string[]
+  /** Share of what she asked that holds, weighted so the piece counts most. */
+  weight?: number
+}
+
+/**
+ * How much each facet is worth when nothing answers all of them. The piece is
+ * what she wants most: with no navy cami, a cami in another colour comes
+ * before a navy top that is not a cami, and either before a navy cami dress.
+ */
+const FACET_WEIGHT: Record<string, number> = { brand: 3, type: 3, cut: 2, material: 2, colour: 1, formality: 1, season: 1 }
 export interface Ranked<T> { exact: Scored<T>[]; similar: Scored<T>[] }
 
 /** How far a piece may sit outside the asked formality range and still count. */
@@ -146,17 +159,23 @@ export function scorePiece(it: RankablePiece, p: ParsedQuery, ctx: RankContext):
   const name = String(it.product_name ?? '').toLowerCase()
   let hits = 0
   let facets = 0
-  const part = (hit: boolean) => { facets += 1; if (hit) hits += 1 }
-
-  if (p.brand) part(ctx.brandIds.has(String(it.brand_id ?? '')) || hasWord(it.brand?.name, p.brand))
-  if (p.itemTypes.length) part(p.itemTypes.includes(String(it.item_type ?? '')))
-  if (p.colourFamilies.length) {
-    part(p.colourFamilies.includes(String(it.colour_family ?? '')) || p.colourFamilies.some((c) => hasWord(name, c)))
+  let got = 0
+  let worth = 0
+  const missed: string[] = []
+  const part = (key: string, hit: boolean) => {
+    facets += 1; worth += FACET_WEIGHT[key]
+    if (hit) { hits += 1; got += FACET_WEIGHT[key] } else missed.push(key)
   }
-  if (p.materials.length) part(p.materials.some((m) => hasMaterial(it, m)))
-  if (p.formalityRange) part(formalityFits(it, p.formalityRange))
-  if (p.seasons.length) part(p.seasons.some((season) => seasonFits(it, season)))
-  if (p.cuts.length) part(p.cuts.every((cut) => cutFits(it, cut)))
+
+  if (p.brand) part('brand', ctx.brandIds.has(String(it.brand_id ?? '')) || hasWord(it.brand?.name, p.brand))
+  if (p.itemTypes.length) part('type', p.itemTypes.includes(String(it.item_type ?? '')))
+  if (p.colourFamilies.length) {
+    part('colour', p.colourFamilies.includes(String(it.colour_family ?? '')) || p.colourFamilies.some((c) => hasWord(name, c)))
+  }
+  if (p.materials.length) part('material', p.materials.some((m) => hasMaterial(it, m)))
+  if (p.formalityRange) part('formality', formalityFits(it, p.formalityRange))
+  if (p.seasons.length) part('season', p.seasons.some((season) => seasonFits(it, season)))
+  if (p.cuts.length) part('cut', p.cuts.every((cut) => cutFits(it, cut)))
 
   let bonus = 0
   // Within the season, the most seasonal first: a velvet long sleeve over a
@@ -189,7 +208,7 @@ export function scorePiece(it: RankablePiece, p: ParsedQuery, ctx: RankContext):
     const score = words.length ? matched / words.length : 0
     return { it, score: score + bonus, hits: matched, facets: words.length, bonus }
   }
-  return { it, score: hits / facets + bonus, hits, facets, bonus }
+  return { it, score: hits / facets + bonus, hits, facets, bonus, missed, weight: got / worth }
 }
 
 /**
@@ -212,7 +231,8 @@ export function rankPieces<T extends RankablePiece>(items: T[], p: ParsedQuery, 
   }
   const order = (a: Scored<T>, b: Scored<T>) => b.score - a.score || String(a.it.product_name ?? '').localeCompare(String(b.it.product_name ?? ''))
   exact.sort(order)
-  similar.sort(order)
+  // What comes close leads with what keeps the most of her ask, the piece first.
+  similar.sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0) || order(a, b))
   return { exact, similar }
 }
 

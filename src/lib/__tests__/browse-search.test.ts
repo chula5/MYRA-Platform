@@ -189,6 +189,18 @@ describe('rankPieces holds every facet as a requirement', () => {
     expect(r.exact.map((s) => s.it.item_id)).not.toContain('d')
   })
 
+  it('no navy cami: camis in other colours come first, then navy tops, then a navy cami dress', () => {
+    const p = parseQuery('navy cami top')
+    const blackCami = { item_id: 'c', product_name: 'Lace trim cami top', item_type: 'blouse', colour_family: 'black' }
+    const navyTop = { item_id: 't', product_name: 'Cashmere cap sleeve top', item_type: 'knitwear', colour_family: 'navy' }
+    const navyCamiDress = { item_id: 'd', product_name: 'Cami slip dress', item_type: 'slip_dress', colour_family: 'navy' }
+    const r = rankPieces([navyCamiDress, navyTop, blackCami], p, ctx([], ['navy', 'cami', 'top'], 'navy cami top'))
+    expect(r.exact).toEqual([])
+    expect(r.similar.map((s) => s.it.item_id)).toEqual(['c', 't', 'd'])
+    expect(r.similar[0].missed).toEqual(['colour'])
+    expect(r.similar[1].missed).toEqual(['cut'])
+  })
+
   it('a word no dictionary knows is kept, and matched with its plain endings', () => {
     expect(parseQuery('navy ruffle blouse').unread).toEqual(['ruffle'])
     expect(parseQuery('navy blue cami top').unread ?? []).toEqual([])
