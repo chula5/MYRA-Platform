@@ -1,0 +1,22 @@
+{
+  "name": "Julianne Moore",
+  "kind": "celebrity",
+  "handle": "@juliannemoore",
+  "members": ["Anne"],
+  "brief": {
+    "summary": "Relaxed, intelligent classics with knitwear as the hero: a fine sweater or cardigan over a slip skirt, wide-leg trousers or straight jeans, or a long knit column dress. Black, navy, camel and white, tonal and easy, lifted by gold hardware, one jewel-coloured accent and a soft leather bag; low heels, loafers or ankle boots.",
+    "signatures": [
+      "crew-neck cashmere sweater over a sheer or satin midi slip skirt",
+      "navy knit with a blazer over the shoulders and white wide-leg trousers",
+      "black cardigan with gold buttons and wide-leg trousers",
+      "turtleneck knit maxi dress with block-heel ankle boots",
+      "oversized checked wool shirt-jacket with straight jeans",
+      "soft leather tote or bucket bag",
+      "gold cuff, statement earrings, long pendant necklace",
+      "loafers and block-heel ankle boots"
+    ],
+    "silhouettes": ["easy, relaxed knits", "wide-leg or straight trousers", "midi and maxi lengths", "tonal column"],
+    "palette": ["black", "navy", "camel", "white", "taupe", "one jewel accent (emerald)", "gold hardware", "checks for outerwear"],
+    "nevers": ["tight bodycon", "visible logos", "loud colour head to toe", "short hemlines"]
+  }
+}
