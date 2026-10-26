@@ -418,8 +418,9 @@ export async function createMember(input: {
   // with a trace, everything else at baseline; warm-starts the taste vector.
   // Best-effort — onboarding must not fail if 0032 hasn't run yet.
   try {
-    const names = [...input.brands.map((b) => b.name), ...(input.brands_input_only ?? [])]
-    if (names.length) await seedUserAffinities(admin, memberId, names)
+    const names = input.brands.map((b) => b.name)
+    const inputOnly = input.brands_input_only ?? []
+    if (names.length || inputOnly.length) await seedUserAffinities(admin, memberId, names, { inputOnly })
   } catch { /* brand affinity is additive; ignore */ }
   revalidatePath(PATH)
   return { member_id: memberId }
@@ -704,9 +705,9 @@ export async function setMemberBrands(
   // never demotes a learned affinity.
   let unmatched: string[] = []
   try {
-    const names = [...clean.map((b) => b.name), ...cleanInputOnly]
-    if (names.length) {
-      const res = await seedUserAffinities(admin as any, memberId, names)
+    const names = clean.map((b) => b.name)
+    if (names.length || cleanInputOnly.length) {
+      const res = await seedUserAffinities(admin as any, memberId, names, { inputOnly: cleanInputOnly })
       unmatched = res.unmatched ?? []
     }
   } catch { /* brand affinity is additive; ignore */ }

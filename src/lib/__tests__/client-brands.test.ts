@@ -23,6 +23,7 @@ const brand = (name: string, aliases: string[] = [], over: Partial<BrandLite> = 
   core_category: null,
   price_position: null,
   codes: null,
+  customer_age_register: null,
   ...over,
 })
 
