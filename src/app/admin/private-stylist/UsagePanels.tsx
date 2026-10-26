@@ -11,7 +11,13 @@ import { useEffect, useState } from 'react'
 import { loadUsage } from './journey-actions'
 import { SERIES, STATUS } from '@/components/admin/charts/palette'
 import { fmtNumber, fmtPct } from '@/components/admin/charts/format'
+import { CLICK_SOURCE, type ClickSource } from '@/lib/journey'
 import type { JourneyUsage, UsageRank, UsageRow } from '@/lib/journey-usage'
+
+/** MYRA reaching out gets the colour; her own finds stay quiet grey. */
+const GROUP_COLOUR = { myra: SERIES[0], asked: SERIES[1], her: '#C9C7C2' } as const
+const GROUP_LABEL = { myra: 'MYRA REACHED OUT FIRST', asked: 'MYRA’S PICK, ON HER ASK', her: 'SHE FOUND IT HERSELF' } as const
+const CALENDAR_STATUS: Record<string, string> = { suggested: 'SUGGESTED', planning: 'PLANNING AN OUTFIT', ignored: 'NOT THIS ONE' }
 
 const day = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }).toUpperCase() : '—'
@@ -43,7 +49,15 @@ export default function UsagePanels({
 
   return (
     <div className="space-y-6">
+      <AtAGlance data={data} />
+
       <Retention data={data} everyone={everyone} onPick={onPick} />
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Prompted data={data} everyone={everyone} />
+        <SavedLooks data={data} everyone={everyone} />
+        <Calendar data={data} everyone={everyone} />
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Box title="BRANDS SHE CLICKED THROUGH TO" note={`${fmtNumber(data.clickTotal)} CLICKS TO A RETAILER · FROM THE OUTBOUND LOG`}>
@@ -73,7 +87,7 @@ export default function UsagePanels({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Box title="WHAT SHE SEARCHED FOR AND ASKED" note="HER OWN WORDS · NEWEST FIRST">
+        <Box title="WHAT SHE SEARCHED FOR AND ASKED" note={`${fmtNumber(data.searchTotal)} SEARCH${data.searchTotal === 1 ? '' : 'ES'} · ${fmtNumber(data.questionTotal)} QUESTION${data.questionTotal === 1 ? '' : 'S'} · HER OWN WORDS, NEWEST FIRST`}>
           {!data.searches.length && <Empty>NO SEARCHES OR QUESTIONS IN THIS WINDOW</Empty>}
           <div className="max-h-[520px] overflow-y-auto" data-lenis-prevent>
             {data.searches.map((s, i) => (
@@ -159,6 +173,130 @@ function Retention({ data, everyone, onPick }: { data: JourneyUsage; everyone: b
       <p className="text-[20px] tracking-[0.06em] text-[#C9C7C2] mt-4">
         VISITS PER WEEK, LAST EIGHT WEEKS · A VISIT ENDS AFTER 30 MINUTES AWAY (FROM 21 OCT 2026; BEFORE THAT THE IPHONE APP COUNTED A RETURN AS THE SAME VISIT)
       </p>
+    </Box>
+  )
+}
+
+// ── At a glance ─────────────────────────────────────────────────────────────
+
+function AtAGlance({ data }: { data: JourneyUsage }) {
+  const share = data.clickTotal ? fmtPct(data.promptedTotal / data.clickTotal, 0) : '—'
+  const connected = data.calendar.connections.filter((c) => c.status === 'connected').length
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+      <Fact label="CLICK-THROUGHS" value={fmtNumber(data.clickTotal)} sub={`LAST ${data.days} DAYS`} />
+      <Fact label="STARTED BY MYRA" value={fmtNumber(data.promptedTotal)} sub={`${share} OF CLICK-THROUGHS · UNASKED`} />
+      <Fact label="SAVED OUTFITS" value={fmtNumber(data.savedLookTotal)} />
+      <Fact label="SAVED PIECES" value={fmtNumber(data.savedPieceTotal)} />
+      <Fact label="SEARCHES" value={fmtNumber(data.searchTotal)} sub={`${fmtNumber(data.questionTotal)} QUESTIONS ASKED`} />
+      <Fact
+        label="CALENDAR EVENTS"
+        value={fmtNumber(data.calendar.events.length)}
+        sub={connected ? `${fmtNumber(data.calendar.planned)} PLANNING AN OUTFIT` : 'NO CALENDAR CONNECTED'}
+      />
+    </div>
+  )
+}
+
+// ── What started each click-through ─────────────────────────────────────────
+
+function Prompted({ data, everyone }: { data: JourneyUsage; everyone: boolean }) {
+  const max = Math.max(1, ...data.clickSources.map((s) => s.value))
+  const groups = (['myra', 'asked', 'her'] as const).map((g) => ({
+    g, rows: data.clickSources.filter((s) => CLICK_SOURCE[s.source].group === g),
+  }))
+  return (
+    <Box title="WHAT STARTED EACH CLICK-THROUGH" note="UNASKED = AN EMAIL, AN EVENT PICK OR A LOOK MYRA SENT BEFORE SHE LOOKED">
+      {!data.clickTotal && <Empty>NO CLICK-THROUGHS IN THIS WINDOW</Empty>}
+      {data.clickTotal > 0 && (
+        <div className="space-y-5">
+          {groups.map(({ g, rows }) => (
+            <div key={g}>
+              <p className="text-[20px] tracking-[0.1em] mb-2" style={{ color: g === 'her' ? '#7C838B' : '#0A0A0A' }}>
+                {GROUP_LABEL[g]} · {fmtNumber(rows.reduce((a, r) => a + r.value, 0))}
+              </p>
+              <div className="space-y-2.5">
+                {rows.map((r) => (
+                  <div key={r.source}>
+                    <div className="flex justify-between gap-3">
+                      <p className="text-[20px] tracking-[0.05em] text-[#4A4E57] truncate">{CLICK_SOURCE[r.source].label}</p>
+                      <p className="text-[20px] tracking-[0.05em] text-[#4A4E57]">{fmtNumber(r.value)}</p>
+                    </div>
+                    <div className="h-[6px] bg-[#F2F2F0] mt-1.5">
+                      <div className="h-full" style={{ width: `${(r.value / max) * 100}%`, background: GROUP_COLOUR[g] }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          <div className="max-h-[360px] overflow-y-auto border-t border-[#E2E0DB] pt-3" data-lenis-prevent>
+            {data.clicks.map((c, i) => (
+              <ClickLine key={`${c.at}-${i}`} source={c.source} label={c.label} why={c.why} at={c.at} member={everyone ? c.member : ''} />
+            ))}
+          </div>
+        </div>
+      )}
+    </Box>
+  )
+}
+
+function ClickLine({ source, label, why, at, member }: { source: ClickSource; label: string; why: string; at: string; member: string }) {
+  const g = CLICK_SOURCE[source].group
+  return (
+    <div className="py-3 border-b border-[#F2F2F0] last:border-0">
+      <p className="text-[20px] tracking-[0.04em] text-[#0A0A0A] truncate">{label.toUpperCase()}</p>
+      <p className="text-[20px] tracking-[0.05em] text-[#A8A8A4] mt-1">
+        <span className="inline-block w-2 h-2 rounded-full mr-2 translate-y-[-2px]" style={{ background: GROUP_COLOUR[g] }} aria-hidden />
+        {why} · {stamp(at)}{member ? ` · ${member.toUpperCase()}` : ''}
+      </p>
+    </div>
+  )
+}
+
+// ── Saved outfits ───────────────────────────────────────────────────────────
+
+function SavedLooks({ data, everyone }: { data: JourneyUsage; everyone: boolean }) {
+  return (
+    <Box title="OUTFITS SHE SAVED" note={`${fmtNumber(data.savedLookTotal)} · A LOOK SHE SAID YES TO, OR A WAY TO WEAR SHE KEPT`}>
+      {!data.savedLooks.length && <Empty>NO OUTFITS SAVED IN THIS WINDOW</Empty>}
+      <div className="max-h-[620px] overflow-y-auto" data-lenis-prevent>
+        {data.savedLooks.map((l) => (
+          <div key={l.lookId} className="py-3 border-b border-[#F2F2F0] last:border-0">
+            <p className="text-[20px] tracking-[0.04em] text-[#0A0A0A] normal-case leading-snug">{l.label}</p>
+            <p className="text-[20px] tracking-[0.05em] text-[#A8A8A4] mt-1">
+              {l.source} · {day(l.at)}{everyone && l.member ? ` · ${l.member.toUpperCase()}` : ''}
+            </p>
+          </div>
+        ))}
+      </div>
+    </Box>
+  )
+}
+
+// ── Calendar ────────────────────────────────────────────────────────────────
+
+function Calendar({ data, everyone }: { data: JourneyUsage; everyone: boolean }) {
+  const c = data.calendar
+  const note = c.connections.length
+    ? c.connections.map((x) => `${everyone && x.member ? `${x.member.toUpperCase()} · ` : ''}${x.status.toUpperCase()}${x.lastSynced ? ` · SYNCED ${day(x.lastSynced)}` : ''}`).join(' / ')
+    : 'NO CALENDAR CONNECTED'
+  return (
+    <Box title="CALENDAR EVENTS" note={`${fmtNumber(c.events.length)} LOGGED · ${note}`}>
+      {!c.events.length && <Empty>{c.connections.length ? 'NOTHING WORTH DRESSING FOR IN THIS WINDOW' : 'SHE HAS NOT CONNECTED A CALENDAR'}</Empty>}
+      <div className="max-h-[620px] overflow-y-auto" data-lenis-prevent>
+        {c.events.map((e, i) => (
+          <div key={`${e.at}-${i}`} className="py-3 border-b border-[#F2F2F0] last:border-0">
+            <p className="text-[20px] tracking-[0.04em] text-[#0A0A0A] normal-case truncate">{e.title}</p>
+            <p className="text-[20px] tracking-[0.05em] text-[#A8A8A4] mt-1">
+              {day(e.at)} · {CALENDAR_STATUS[e.status] ?? e.status.toUpperCase()}
+              {e.occasion ? ` · ${e.occasion.replace(/_/g, ' ').toUpperCase()}` : ''}
+              {e.picks ? ` · ${e.picks} OPTION${e.picks === 1 ? '' : 'S'} SENT, ${e.pickClicks} CLICKED` : ''}
+              {everyone && e.member ? ` · ${e.member.toUpperCase()}` : ''}
+            </p>
+          </div>
+        ))}
+      </div>
     </Box>
   )
 }
