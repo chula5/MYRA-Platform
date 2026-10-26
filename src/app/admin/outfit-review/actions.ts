@@ -6,21 +6,17 @@
 import { createAdminClient } from '@/lib/supabase-server'
 import { priceOfItem } from '@/lib/brand-affinity'
 import { getItem, getReadyAndLiveItems } from '@/lib/admin-queries'
+import { loadAskContext } from '@/app/admin/composer/ask-actions'
 import { pairCompat, slotForItemType, slotPlanForAnchor, deriveSlotScores, deriveOutfitLevelScores } from '@/lib/composer'
-import { loadStyleModel, recordStyleOffers } from '@/lib/style-brain-store'
+import { recordStyleOffers } from '@/lib/style-brain-store'
 import {
   formalityBand,
   deriveOccasionScores,
   confidenceGate,
 } from '@/lib/pipeline'
-import { loadLearnedMaterialPairs, recordHouseRejections } from '@/lib/house-style-store'
+import { recordHouseRejections } from '@/lib/house-style-store'
 import { composeReviewLooks, reviewLibrary, reviewFeature, tierBandViolation, REVIEW_ANCHOR_TYPES, REVIEW_OUTERWEAR } from '@/lib/review-compose'
-import {
-  loadEjectionConstraints,
-  loadApprovedVectors,
-  loadPipelineConfig,
-  vectorForCandidate,
-} from '@/lib/pipeline-store'
+import { vectorForCandidate } from '@/lib/pipeline-store'
 
 // Anchor garments we generate review outfits for (the shared review recipe).
 const ANCHOR_TYPES = REVIEW_ANCHOR_TYPES
@@ -125,12 +121,15 @@ export async function getReviewQueue(
 ): Promise<{ anchors: ReviewAnchor[]; brands: { name: string; count: number }[]; types: QueueFacet[]; colours: QueueFacet[]; error?: string }> {
   try {
     const admin = createAdminClient()
-    const library = await getReadyAndLiveItems()
-
-    const { data: outfits } = await admin
-      .from('outfit')
-      .select('outfit_id, outfit_item(item_id, slot)')
-      .neq('status', 'archived')
+    // The pool and the outfit counts are read together, and a pool up to 30
+    // minutes old is fine for choosing anchors (a fresh one is read behind it).
+    const [library, { data: outfits }] = await Promise.all([
+      getReadyAndLiveItems({ allowStale: true }),
+      admin
+        .from('outfit')
+        .select('outfit_id, outfit_item(item_id, slot)')
+        .neq('status', 'archived'),
+    ])
 
     const count = new Map<string, number>()
     // A coat counts wherever it is worn: an outfit anchored on a top still
@@ -223,16 +222,15 @@ export async function composeForReview(anchorItemId: string): Promise<{
   error?: string
 }> {
   try {
-    const anchor: any = await getItem(anchorItemId)
-    if (!anchor) return { error: 'Anchor not found' }
-    const [constraints, approvedVectors, config, learnedPairs, styleModel, library] = await Promise.all([
-      loadEjectionConstraints(),
-      loadApprovedVectors(500),
-      loadPipelineConfig(),
-      loadLearnedMaterialPairs(),
-      loadStyleModel(),
-      getReadyAndLiveItems(),
+    // Every anchor on the page composes in turn (server actions queue), so
+    // the context is the minute-long shared read the ask bar uses and the
+    // anchor comes from the pool — no per-anchor DB round trips.
+    const [[styleModel, constraints, approvedVectors, config, learnedPairs], library] = await Promise.all([
+      loadAskContext(),
+      getReadyAndLiveItems({ allowStale: true }),
     ])
+    const anchor: any = library.find((it) => it.item_id === anchorItemId) ?? await getItem(anchorItemId)
+    if (!anchor) return { error: 'Anchor not found' }
 
     // THE REVIEW RECIPE (lib/review-compose): brand-tier-coherent slot pools,
     // House Style Constitution gate, Style Brain blend, diversity cap. Shared
@@ -357,7 +355,7 @@ export async function getReviewAddOptions(
     const present = new Set(presentSlots)
     const missing = Array.from(valid).filter((s) => !present.has(s))
 
-    let pool = reviewLibrary(await getReadyAndLiveItems(), anchor).filter((it: any) => !exclude.has(it.item_id))
+    let pool = reviewLibrary(await getReadyAndLiveItems({ allowStale: true }), anchor).filter((it: any) => !exclude.has(it.item_id))
     if (q) {
       pool = pool.filter((it: any) => itemSearchText(it).includes(q))
     } else if (!filters.itemType) {
@@ -435,7 +433,7 @@ export async function getReviewSwapOptions(
     const anchorTier = anchor.brand?.price_tier ?? null
     const q = query.trim().toLowerCase()
 
-    let pool = reviewLibrary(await getReadyAndLiveItems(), anchor).filter((it: any) => !exclude.has(it.item_id))
+    let pool = reviewLibrary(await getReadyAndLiveItems({ allowStale: true }), anchor).filter((it: any) => !exclude.has(it.item_id))
 
     if (q) {
       pool = pool.filter((it: any) => itemSearchText(it).includes(q))
