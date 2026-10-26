@@ -7,9 +7,12 @@
 // keeps coming back at all.
 //
 // Wherever a server-side record exists it is the source, not the tracker:
-//   · click-throughs  item_click (0007/0025) — written by /go/ and the beacon,
-//                      so it counts every retailer click, tracker or not, and
-//                      reaches back before the JOURNEY existed
+//   · click-throughs  click (0019) — written by /go/ and the beacon, so it
+//                      counts every retailer click, tracker or not, and
+//                      reaches back before the JOURNEY existed. (item_click
+//                      went silent 2026-08-04 — a write that never sent.)
+//                      A shop tap the tracker saw but the log never got (the
+//                      app hands /go/ to Safari) still counts, once.
 //   · saves           saved_item + member_saved_item — the saves themselves
 //   · emails          email_log (sent) + email_click (0105, followed)
 //   · opens, searches client_event — only the tracker sees these
@@ -165,7 +168,7 @@ export async function loadJourneyUsage(opts: { memberId?: string | null; days?: 
   const inAuth = (q: any) => q.in('user_id', authIds.length ? authIds : ['00000000-0000-0000-0000-000000000000'])
 
   const [clicks, events, savedA, savedB, sent, emailClicks, sessionsAll] = await Promise.all([
-    readSince<{ item_id: string; user_id: string; clicked_at: string }>('item_click', 'clicked_at', since, 'item_id, user_id, clicked_at', { refine: inAuth }),
+    readSince<{ item_id: string; user_id: string; clicked_at: string }>('click', 'created_at', since, 'item_id, user_id, clicked_at:created_at', { refine: (q) => inAuth(q).eq('is_bot', false) }),
     readSince<{ member_id: string; at: string; type: string; label: string | null; target_id: string | null; target_kind: string | null; path: string | null; meta: any }>(
       'client_event', 'at', since, 'member_id, at, type, label, target_id, target_kind, path, meta',
       { refine: (q) => inMembers(q).in('type', ['item_open', 'look_open', 'click_out', 'search', 'chat_send', 'page_view', 'room_open']) },
@@ -195,6 +198,19 @@ export async function loadJourneyUsage(opts: { memberId?: string | null; days?: 
   // ── Click-throughs: the outbound log ──────────────────────────────────────
   const clicked = new Map<string, UsageRow>()
   for (const c of clicks.rows) bump(clicked, c.item_id, piece(c.item_id), c.clicked_at, nameByAuth.get(c.user_id))
+  // A shop tap on a piece the log has no row for — within ten minutes, same
+  // member, same piece — left MYRA all the same.
+  const memberAuth = new Map(members.map((m) => [m.member_id, m.auth_user_id]))
+  const logged = (memberId: string, itemId: string, at: string) => {
+    const t = Date.parse(at)
+    const auth = memberAuth.get(memberId)
+    return clicks.rows.some((c) => c.user_id === auth && c.item_id === itemId && Math.abs(Date.parse(c.clicked_at) - t) < 10 * 60_000)
+  }
+  for (const e of events.rows) {
+    if (e.type !== 'click_out' || !e.target_id || e.target_kind !== 'item') continue
+    if (logged(e.member_id, e.target_id, e.at)) continue
+    bump(clicked, e.target_id, piece(e.target_id, e.label), e.at, nameById.get(e.member_id))
+  }
   // Retailer links outside the log (a raw retailer link in her rooms) still
   // reach the tracker as click_out; counted only when the log has no row.
   for (const e of events.rows) {

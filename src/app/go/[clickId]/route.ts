@@ -81,7 +81,11 @@ export async function GET(
   const ua = req.headers.get('user-agent')
   const isBot = isBotRequest(ua, req.headers)
 
-  waitUntil(
+  // From the iPhone app this request arrives in Safari, without her MYRA
+  // session — the app logged the click itself, signed in, before handing off.
+  const loggedByApp = sp.get('logged') === 'app'
+
+  if (!loggedByApp) waitUntil(
     logOutboundClick({
       clickId,
       itemId,
