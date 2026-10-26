@@ -8,6 +8,7 @@
 
 import { useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
+import SavePieceHeart from '@/components/me/SavePieceHeart'
 import { PICKER_COLOURS, PICKER_TYPES } from '@/components/admin/ItemPickerModal'
 import type { LookItem } from '@/lib/pilot-stylist'
 import type { AskSwapOption } from '@/app/admin/private-stylist/actions'
@@ -76,6 +77,7 @@ export default function BuiltOutfit({
             <div key={`${it.item_id ?? it.product_name}-${i}`} className={`bg-white flex flex-col ${swapAt === i ? 'ring-2 ring-inset ring-[#2B2B2B]' : ''}`}>
               <div className="relative aspect-[3/4] overflow-hidden">
                 {it.image_url && <FallbackImage src={it.image_url} thumbWidth={400} alt={it.product_name} className="absolute inset-0 w-full h-full object-contain" />}
+                {!it.owned && it.item_id && <SavePieceHeart itemId={it.item_id} className="absolute top-2 right-2" />}
               </div>
               <div className="px-3 py-2.5 space-y-1">
                 <p className={`${T} text-[#6E6B65] leading-tight truncate`}>{it.owned ? 'Yours' : it.brand}</p>

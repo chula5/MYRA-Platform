@@ -5,11 +5,13 @@ import {
   addExclusion, addReferenceBrand, createFamily, deleteFamily, forceAddBrand,
   loadBrandDetail, loadMemberInspection, overrideAffinity, recomputeVectorsNow,
   removeExclusion, runHealthNow, seedMemberFromIntake, seedStarterFamily,
-  setBrandHidden, setMembership, simulateOnboarding,
+  setBrandHidden, setMemberAgeRange, setMembership, simulateOnboarding,
   type BrandDetail, type InspectorData, type MemberInspection, type SimulationResult, type MapBrand,
 } from './actions'
 import type { HealthReport } from '@/lib/brand-affinity'
 import { fitFrame } from '@/lib/brand-map-frame'
+import { AGE_RANGES } from '@/app/onboarding/brand-groups'
+import BrandGroupAdder from './BrandGroupAdder'
 import { saveAffinityConfig } from './actions'
 
 // Display copy of lib BAND_NAMES — brand-affinity.ts is server-only (it pulls
@@ -492,11 +494,11 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                 ) : (
                   <>
                     <div>
-                      <p className={H2}>NEAREST — AESTHETIC × PRICE = COMBINED</p>
+                      <p className={H2}>NEAREST — AESTHETIC × PRICE × AGE = COMBINED</p>
                       {(detail?.neighbours ?? []).map((n) => (
                         <div key={n.brand_id} className="flex justify-between gap-2 py-0.5 text-[16px] tracking-[0.08em] text-[#4A4E57]">
                           <span className="truncate">{n.name.toUpperCase()}{n.basis === 'vector' && <span className="text-[#B3202A]"> · PROV.</span>}</span>
-                          <span className="text-[#A8A8A4] whitespace-nowrap">{n.aesthetic.toFixed(2)} × {n.priceFactor.toFixed(2)} = <span className="text-[#4A4E57]">{n.combined.toFixed(2)}</span></span>
+                          <span className="text-[#A8A8A4] whitespace-nowrap">{n.aesthetic.toFixed(2)} × {n.priceFactor.toFixed(2)} × {n.ageFactor.toFixed(2)} = <span className="text-[#4A4E57]">{n.combined.toFixed(2)}</span></span>
                         </div>
                       ))}
                       {detail && !detail.neighbours.length && <p className="text-[16px] text-[#A8A8A4] tracking-[0.08em]">NO VECTOR YET</p>}
@@ -509,7 +511,7 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                           <span className="text-[#4A4E57] truncate">{s.name.toUpperCase()}</span>
                           <span className="text-[#A8A8A4] whitespace-nowrap">
                             {s.mechanism === 'core_family' ? `CORE · ${s.family_name}` : s.mechanism === 'adjacent_family' ? `ADJ · ${s.family_name}` :
-                              s.aesthetic != null ? `${s.basis === 'vector' ? 'PROV. ' : ''}${s.aesthetic.toFixed(2)} × ${s.priceFactor?.toFixed(2)} = ${s.score?.toFixed(2)}` : `VECTOR ${s.score}`}
+                              s.aesthetic != null ? `${s.basis === 'vector' ? 'PROV. ' : ''}${s.aesthetic.toFixed(2)} × ${s.priceFactor?.toFixed(2)} × ${(s.ageFactor ?? 1).toFixed(2)} = ${s.score?.toFixed(2)}` : `VECTOR ${s.score}`}
                           </span>
                         </div>
                       ))}
@@ -569,6 +571,25 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                   <button disabled={pending} className={BTN_LIGHT} onClick={() => selectMember(inspection.member.member_id, true)}>
                     REFRESH + LOG DISCOVERY IMPRESSIONS
                   </button>
+                  {/* her age gates brands whose customer skews younger (customer age register) */}
+                  <label className="flex gap-1.5 items-center">
+                    <span className={LABEL}>AGE</span>
+                    <select
+                      value={inspection.member.age_range ?? ''}
+                      disabled={pending}
+                      className={INPUT}
+                      onChange={(e) => {
+                        const v = e.target.value || null
+                        act(() => setMemberAgeRange(inspection.member.member_id, v), (r) => {
+                          setNotice(r.error ?? (v ? `AGE ${v} · ${r.reset} YOUNGER-SKEWING SUGGESTION${r.reset === 1 ? '' : 'S'} BACK TO BASELINE` : 'AGE CLEARED — NO AGE GATE'))
+                          selectMember(inspection.member.member_id)
+                        })
+                      }}
+                    >
+                      <option value="">NOT SET</option>
+                      {AGE_RANGES.map((r) => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  </label>
                   <span className="flex gap-1.5 items-center">
                     <input value={forceBrand} onChange={(e) => setForceBrand(e.target.value)} placeholder="FORCE-ADD BRAND" className={`${INPUT} w-40 uppercase placeholder:text-[#A8A8A4]`} />
                     <button disabled={pending || !forceBrand.trim()} className={BTN_GHOST} onClick={() => act(() => forceAddBrand(inspection.member.member_id, forceBrand), (r) => { setNotice(r.error ?? 'FORCE-ADDED AT 1.0'); setForceBrand(''); if (!r.error) selectMember(inspection.member.member_id) })}>ADD</button>
@@ -588,6 +609,8 @@ export default function TasteClient({ data }: { data: InspectorData }) {
                     <p className="mt-1.5 text-[16px] tracking-[0.1em] text-[#A8A8A4]">FREE-TEXT LOGGED FOR STOCKING INTEL: {inspection.unmatched.join(' · ').toUpperCase()}</p>
                   )}
                 </div>
+
+                <BrandGroupAdder memberId={inspection.member.member_id} onSaved={() => selectMember(inspection.member.member_id)} />
 
                 <MemberScatter
                   inspection={inspection}

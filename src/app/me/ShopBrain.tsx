@@ -648,7 +648,7 @@ export default function ShopBrain({ testMemberId, initialView, onReady }: {
               </div>
 
               {phone && sheet && current && (
-                <div className="fixed inset-0 z-[90]">
+                <div className="fixed inset-x-0 top-0 bottom-[calc(68px+env(safe-area-inset-bottom))] z-[90]">
                   <div className="absolute inset-0 bg-black/30" onClick={() => setSheet(false)} />
                   <div data-lenis-prevent className="myra-sheet-in-right absolute inset-y-0 right-0 w-full bg-[#F7F7F5] overflow-y-auto overscroll-contain px-5 pt-[calc(24px+env(safe-area-inset-top,0px))] pb-16">
                     <button type="button" onClick={() => setSheet(false)} className="text-[19px] tracking-[0.12em] text-[#4A4E57] underline underline-offset-4 mb-4">

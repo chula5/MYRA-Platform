@@ -57,6 +57,7 @@ export default function BrowseClient() {
   const [pieces, setPieces] = useState<BrowsePiece[] | null>(null)
   const [similar, setSimilar] = useState<BrowsePiece[]>([])
   const [similarKind, setSimilarKind] = useState<'brands' | 'close' | null>(null)
+  const [similarGroups, setSimilarGroups] = useState<Array<{ title: string; ids: string[] }>>([])
   const [brandName, setBrandName] = useState<string | null>(null)
   const [showSimilar, setShowSimilar] = useState(false)
   const [read, setRead] = useState<string[]>([])
@@ -256,7 +257,7 @@ export default function BrowseClient() {
     const r = newIn.current ? await browseNewIn(newIn.current, filters) : await browseSearch(q, filters)
     setBusy(false)
     setPieces(r.pieces); setRead(r.read); setError(r.error ?? null)
-    setSimilar(r.similar); setSimilarKind(r.similarKind); setBrandName(r.brand)
+    setSimilar(r.similar); setSimilarKind(r.similarKind); setSimilarGroups(r.similarGroups ?? []); setBrandName(r.brand)
     // Nothing exact: what comes close is the answer, so it is shown at once.
     setShowSimilar(r.pieces.length === 0 && r.similar.length > 0)
     setFacets(r.facets); setSizes(r.sizes)
@@ -535,7 +536,7 @@ export default function BrowseClient() {
           )}
           {pieces.length === 0 && similar.length > 0 && (
             <p className="myra-guide-text normal-case text-[19px] text-[#4A4E57] mb-5">
-              Nothing exact for that yet. Here is what comes close.
+              Nothing exactly that yet. Here is what comes closest.
             </p>
           )}
           {pieces.length > 0 && (
@@ -564,8 +565,24 @@ export default function BrowseClient() {
           )}
           {similar.length > 0 && showSimilar && (
             <div className={pieces.length > 0 ? 'mt-12' : ''}>
-              {pieces.length > 0 && <p className="text-[14px] tracking-[0.16em] text-[#6E6B65] mb-5">{similarTitle}</p>}
-              {grid(similar)}
+              {/* Close answers under what each still is: the piece in other colours first, then the colour in other pieces. */}
+              {similarKind === 'close' && similarGroups.length > 0 ? (
+                similarGroups.map((g, i) => {
+                  const list = g.ids.map((id) => similar.find((p) => p.item_id === id)).filter((p): p is BrowsePiece => !!p)
+                  if (!list.length) return null
+                  return (
+                    <div key={g.title} className={i > 0 ? 'mt-12' : ''}>
+                      <p className="text-[16px] sm:text-[18px] tracking-[0.14em] text-[#6E6B65] mb-5">{g.title}</p>
+                      {grid(list)}
+                    </div>
+                  )
+                })
+              ) : (
+                <>
+                  {pieces.length > 0 && <p className="text-[14px] tracking-[0.16em] text-[#6E6B65] mb-5">{similarTitle}</p>}
+                  {grid(similar)}
+                </>
+              )}
             </div>
           )}
         </div>

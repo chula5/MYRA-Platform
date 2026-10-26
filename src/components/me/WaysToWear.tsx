@@ -272,7 +272,8 @@ export default function WaysToWear({
 
   if (inline) return <section className="w-full">{body}</section>
   return (
-    <div data-lenis-prevent className="fixed inset-0 z-[130] overflow-y-auto myra-pearl" role="dialog" aria-label="Ways to wear it">
+    // Stops above the phone's tab bar, so every room is still a tap away.
+    <div data-lenis-prevent className="fixed inset-x-0 top-0 bottom-[calc(68px+env(safe-area-inset-bottom))] sm:bottom-0 z-[130] overflow-y-auto myra-pearl" role="dialog" aria-label="Ways to wear it">
       {body}
     </div>
   )

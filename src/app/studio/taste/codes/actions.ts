@@ -5,7 +5,7 @@
 // lands in brand_code_event (full history).
 
 import { createAdminClient, createServerClient } from '@/lib/supabase-server'
-import { codesComplete, ghostCodes, loadBrandGraph } from '@/lib/brand-affinity'
+import { AGE_DIMENSION, codesComplete, ghostCodes, loadBrandGraph } from '@/lib/brand-affinity'
 import { revalidatePath } from 'next/cache'
 
 const PATH = '/studio/taste/codes'
@@ -55,7 +55,8 @@ export async function loadCodesData(): Promise<CodesData> {
       status: b.status,
       complete: codesComplete(b),
       itemCount: b.vector_item_count,
-      codes: b.codes ?? {},
+      // customer age is scored in the same matrix, though not a code
+      codes: b.customer_age_register != null ? { ...(b.codes ?? {}), [AGE_DIMENSION]: b.customer_age_register } : (b.codes ?? {}),
       ghosts: ghostCodes(b, graph.config.bandBounds),
     }))
     .sort((a, b) => a.name.localeCompare(b.name))

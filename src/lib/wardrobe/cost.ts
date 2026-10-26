@@ -19,10 +19,10 @@ const DEFAULT_PRICES: Record<string, Price> = {
   'gpt-image-2': { inputPerM: 5, outputPerM: 30, imageInputPerM: 8, imageOutputPerM: 30 },
   'gpt-image-1.5': { inputPerM: 5, outputPerM: 32, imageInputPerM: 8, imageOutputPerM: 32 },
   'gpt-image-1': { inputPerM: 5, outputPerM: 40, imageInputPerM: 10, imageOutputPerM: 40 },
-  // Anthropic scoring pass — Haiku 4.5 since the tier was measured against
+  // Anthropic scoring pass — Haiku (5.5 since Oct 2026) since the tier was measured against
   // Opus and Sonnet on real items and matched them (see DEFAULT_SCORING_MODEL).
   // Override with WARDROBE_PRICE_ANTHROPIC if the tier changes again.
-  anthropic: { inputPerM: 1, outputPerM: 5 },
+  anthropic: { inputPerM: 0.1, outputPerM: 0.5 },
 }
 
 // Approximate output tokens for one generated image when the API returns no

@@ -13,7 +13,7 @@
 import { createAdminClient, createServerClient } from '@/lib/supabase-server'
 import { previewAskLooks, type AskPreviewLook } from './actions'
 import { pieceVerdicts } from '@/lib/piece-verdicts'
-import { judgeLooksForMember, hasPieceOutOfSize, type LookCheck } from '@/lib/look-check'
+import { judgeLooksForMember, hasPieceOutOfSize, CHECK_DOWN_ERROR, type LookCheck } from '@/lib/look-check'
 import type { PieceSize } from '@/lib/look-size-check'
 import { revalidatePath } from 'next/cache'
 import {
@@ -297,13 +297,16 @@ export async function previewAskForMember(
   try {
     // The check runs BEFORE anything is shown: a look that clashes, or holds a
     // piece not in her size, is replaced by a spare rather than put in front of
-    // you. Best verdicts first. If nothing passes, all are shown, flagged.
+    // you. Best verdicts first. If nothing passes, the checked ones are shown,
+    // flagged; a look MYRA could not check is never shown.
     const scored = await scoreLooksAgainstHistory(memberId, planned.looks)
-    const fails = (l: ScoredAskLook) => l.check?.verdict === 'clashes' || hasPieceOutOfSize({ check: l.check, sizes: l.sizes })
+    const fails = (l: ScoredAskLook) => !l.check || l.check.verdict === 'clashes' || hasPieceOutOfSize({ check: l.check, sizes: l.sizes })
     const rank = (l: ScoredAskLook) => (l.check?.verdict === 'works' ? 0 : l.check ? 1 : 2)
     const passing = scored.filter((l) => !fails(l)).sort((a, b) => rank(a) - rank(b) || b.score - a.score)
     const failed = scored.filter(fails)
-    const looks = passing.length ? passing.slice(0, ASK_LOOKS) : scored.slice(0, ASK_LOOKS)
+    const checked = scored.filter((l) => l.check)
+    if (!checked.length) return { ...empty, error: CHECK_DOWN_ERROR }
+    const looks = passing.length ? passing.slice(0, ASK_LOOKS) : checked.slice(0, ASK_LOOKS)
     return {
       scoreUsable: scored.some((l) => l.check),
       looks,

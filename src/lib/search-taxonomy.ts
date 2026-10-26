@@ -33,6 +33,15 @@ const _SHOES = ['boot', 'heel', 'flat', 'sneaker', 'mule', 'sandal']
 const _BAGS = ['tote', 'shoulder_bag', 'clutch', 'crossbody', 'structured_bag']
 const _JEWEL = ['necklace', 'earrings', 'bracelet', 'ring', 'brooch']
 
+/** The pieces she asked for, said back as one word: TOPS, not six kinds of top. */
+export function piecesWord(types: string[]): string {
+  const family: Array<[string[], string]> = [[_TOPS, 'TOPS'], [_DRESS, 'DRESSES'], [_SHOES, 'SHOES'], [_BAGS, 'BAGS'], [_JEWEL, 'JEWELLERY']]
+  for (const [members, word] of family) if (types.length && types.every((t) => members.includes(t)) && members.every((t) => types.includes(t))) return word
+  if (types.length !== 1) return 'PIECES'
+  const one = types[0].replace(/_/g, ' ').toUpperCase()
+  return /S$|WEAR$|JEWELLERY$/.test(one) ? (one.endsWith('DRESS') ? `${one}ES` : one) : `${one}S`
+}
+
 // Item word → item_type enum values.
 export const TYPE: Record<string, string[]> = {
   dress: _DRESS, dresses: _DRESS, gown: ['maxi_dress'], gowns: ['maxi_dress'],
@@ -47,6 +56,9 @@ export const TYPE: Record<string, string[]> = {
   // alone is also a sleeveless top here, so it reaches both.
   bodywarmer: ['gilet'], bodywarmers: ['gilet'], vest: ['gilet', 'blouse', 'knitwear'], vests: ['gilet', 'blouse', 'knitwear'],
   waistcoat: ['blouse', 'gilet'], waistcoats: ['blouse', 'gilet'],
+  // A cami is a top that is sold as one, so it is also held as a cut (below):
+  // "silk cami" is silk tops named cami, never every silk piece.
+  cami: _TOPS, camis: _TOPS, camisole: _TOPS, camisoles: _TOPS,
   shoe: _SHOES, shoes: _SHOES, boot: ['boot'], boots: ['boot'], heel: ['heel'], heels: ['heel'], pump: ['heel'], flat: ['flat'], flats: ['flat'], sneaker: ['sneaker'], trainer: ['sneaker'], mule: ['mule'], sandal: ['sandal'], sandals: ['sandal'],
   bag: _BAGS, bags: _BAGS, handbag: _BAGS, tote: ['tote'], clutch: ['clutch'], crossbody: ['crossbody'],
   jewellery: _JEWEL, jewelry: _JEWEL, necklace: ['necklace'], earrings: ['earrings'], bracelet: ['bracelet'], ring: ['ring'], brooch: ['brooch'],
@@ -149,6 +161,10 @@ const TYPE_PHRASES: Record<string, TypePhrase> = {
   'wide leg jeans': { types: ['jeans'], descriptor: 'wide leg' },
   'tank top': { types: _TOPS, descriptor: 'tank' },
   'vest top': { types: _TOPS, descriptor: 'vest' },
+  'cami top': { types: _TOPS, descriptor: 'cami' },
+  'cami tops': { types: _TOPS, descriptor: 'cami' },
+  'camisole top': { types: _TOPS, descriptor: 'cami' },
+  'cami dress': { types: _DRESS, descriptor: 'cami' },
   'body warmer': { types: ['gilet'] },
   'ankle boots': { types: ['boot'], descriptor: 'ankle' },
   'ankle boot': { types: ['boot'], descriptor: 'ankle' },
@@ -172,6 +188,7 @@ export const CUT_WORDS: Record<string, string[]> = {
   'a line': ['a line', 'a-line'],
   kitten: ['kitten'],
   ballet: ['ballet', 'ballerina'],
+  cami: ['cami', 'camis', 'camisole', 'camisoles'],
 }
 /** Every way she might type a cut, as its CUT_WORDS key. */
 const CUT_OF: Record<string, string> = Object.fromEntries(
@@ -346,6 +363,9 @@ export interface ParsedQuery {
    *  knits…). Not itemTypes: Browse holds a piece to them only when she named none. */
   occasionTypes: string[]
   intentTerms: string[]
+  /** Words no dictionary knew ("ruffle", "strappy"). Browse holds a piece to
+   *  them by name whenever her shops sell pieces named that way. */
+  unread?: string[]
   raw: string
 }
 
@@ -404,7 +424,13 @@ export function parseQuery(raw: string, knownBrands: string[] = []): ParsedQuery
     }
     // tok is now spelled right (or unknown), so the lookups are exact.
     const c = COLOUR[tok]; if (c) { add(p.colourFamilies, [c]); continue }
-    const t = TYPE[tok]; if (t) { add(p.itemTypes, t); continue }
+    const t = TYPE[tok]
+    if (t) {
+      add(p.itemTypes, t)
+      // A piece word that is also a cut ("cami") must be in the name too.
+      if (CUT_OF[tok]) { add(p.cuts, [CUT_OF[tok]]); if (!p.intentTerms.includes(CUT_OF[tok])) p.intentTerms.push(CUT_OF[tok]) }
+      continue
+    }
     const m = MATERIAL[tok]; if (m) { add(p.materials, [m]); continue }
     const rule = OCCASION_RULES[tok]; if (rule) { applyRule(p, addGroup, rule); continue }
     const o = OCCASION[tok]; if (o) { addGroup(o); continue }
@@ -414,6 +440,7 @@ export function parseQuery(raw: string, knownBrands: string[] = []): ParsedQuery
     const td = TIME[tok]; if (td != null) { p.timeOfDay = td; continue }
     // A cut is held as a requirement, and still read as a descriptor for the ask bar.
     if (CUT_OF[tok]) add(p.cuts, [CUT_OF[tok]])
+    else if (tok.length > 2) add((p.unread ??= []), [tok])
     if (tok.length > 2) p.intentTerms.push(tok) // leftover adjective → soft signal
   }
   // A fur or shearling "jacket" or "coat" is very often a sleeveless one:

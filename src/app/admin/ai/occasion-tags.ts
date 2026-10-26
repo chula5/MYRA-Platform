@@ -86,11 +86,13 @@ Return just the array, e.g. ["casual summer weekend","summer","weekend away","lu
   try {
     const client = new Anthropic({ apiKey })
     const msg = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-haiku-5-5',
       max_tokens: 200,
+      thinking: { type: 'disabled' },
       messages: [{ role: 'user', content: prompt }],
     })
-    const raw = msg.content[0]?.type === 'text' ? msg.content[0].text : ''
+    const block = msg.content.find((b) => b.type === 'text')
+    const raw = block && block.type === 'text' ? block.text : ''
     const arrStr = raw.match(/\[[\s\S]*\]/)?.[0]
     if (!arrStr) return { error: 'AI returned no tags' }
 

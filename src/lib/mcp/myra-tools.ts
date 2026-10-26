@@ -17,7 +17,7 @@ import { composeMemberLooks, composeMemberVariants, personaFitScore, toLookItem,
 import type { LookItem } from '@/lib/pilot-stylist'
 import { outfitToText, pictureLine, type OutfitPiece } from '@/lib/mcp/outfit-text'
 import { judgeAgainstBrief, briefAffinity, parseBrief, briefIsEmpty } from '@/lib/stylist-brief'
-import { judgeLooksForMember, hasPieceOutOfSize } from '@/lib/look-check'
+import { judgeLooksForMember, lookPasses, checkDidNotRun, CHECK_DOWN_ERROR } from '@/lib/look-check'
 import { whyThisSuitsHer } from '@/lib/look-why'
 import { CLIENT_OCCASIONS, ASK_KINDS, askKindForEvent } from '@/lib/client-occasions'
 import {
@@ -98,11 +98,13 @@ export async function outfitsFor(
   const judged = await judgeLooksForMember(admin, memberId, composed, 'unknown')
   const rank = (i: number) => (judged[i].check?.verdict === 'works' ? 0 : judged[i].check ? 1 : 2)
   const passing = composed.map((_, i) => i)
-    .filter((i) => judged[i].check?.verdict !== 'clashes' && !hasPieceOutOfSize(judged[i]))
+    .filter((i) => lookPasses(judged[i]))
     .sort((a, b) => rank(a) - rank(b) || a - b)
   const dims = new Map<string, any>((library as any[]).map((i) => [i.item_id, i]))
   const prefs = readStylePrefs(member)
-  const chosen = (passing.length ? passing : composed.map((_, i) => i)).slice(0, want)
+  // Only checked looks are offered — an unchecked one is never spoken either.
+  if (!passing.length) return { looks: [], occasionLabel: asked.label, error: checkDidNotRun(judged) ? CHECK_DOWN_ERROR : 'Nothing in her size passed the check for that right now' }
+  const chosen = passing.slice(0, want)
 
   return {
     occasionLabel: asked.label,
@@ -153,11 +155,12 @@ export async function outfitsAroundPiece(memberId: string, query: string, opts: 
   const composed = composeMemberVariants(taste, pool as any, hit.item_id, LOOKS + 2, undefined, lens, history, { ownedMode: 'blend' })
   if (!composed.length) return { piece: hit.product_name, looks: [], error: 'Nothing goes with it in her size right now' }
   const judged = await judgeLooksForMember(admin, memberId, composed, 'unknown')
-  const passing = composed.map((_, i) => i).filter((i) => judged[i].check?.verdict !== 'clashes' && !hasPieceOutOfSize(judged[i]))
+  const passing = composed.map((_, i) => i).filter((i) => lookPasses(judged[i]))
+  if (!passing.length) return { piece: hit.product_name, looks: [], error: checkDidNotRun(judged) ? CHECK_DOWN_ERROR : 'Nothing with it passed the check right now' }
   const dims = new Map<string, any>((pool as any[]).map((i) => [i.item_id, i]))
   const prefs = readStylePrefs(member)
   const whyOf = (i: number) => whyThisSuitsHer(composed[i].items.map((it) => ({ ...(dims.get(it.item_id ?? '') ?? {}), product_name: it.product_name, owned: !!it.owned })), prefs)
-  // Only what passed is kept — the unchecked fallback below is spoken, never remembered.
+  // Only what passed is kept, and only what passed is offered.
   saveStyledWays(admin, memberId, hit.item_id, 'blend', passing.slice(0, LOOKS).map((i) => ({
     items: composed[i].items.map((it: any) => ({ ...it, image_url: it.image_url ?? dims.get(it.item_id ?? '')?.image_url ?? null })),
     why: whyOf(i),
@@ -166,7 +169,7 @@ export async function outfitsAroundPiece(memberId: string, query: string, opts: 
   })), 'mcp').catch((err) => console.error('[styled-ways] mcp keep', err))
   return {
     piece: hit.product_name,
-    looks: (passing.length ? passing : composed.map((_, i) => i)).slice(0, LOOKS).map((i) => answerFor(composed[i].items, whyOf(i), dims)),
+    looks: passing.slice(0, LOOKS).map((i) => answerFor(composed[i].items, whyOf(i), dims)),
   }
 }
 

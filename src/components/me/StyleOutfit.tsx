@@ -26,7 +26,8 @@ export default function StyleOutfit({
 }) {
   const [items, setItems] = useState<LookItem[]>(initial)
   return (
-    <div data-lenis-prevent className="fixed inset-0 z-[140] overflow-y-auto myra-pearl" role="dialog" aria-label="Style this outfit">
+    // Stops above the phone's tab bar, so every room is still a tap away.
+    <div data-lenis-prevent className="fixed inset-x-0 top-0 bottom-[calc(68px+env(safe-area-inset-bottom))] sm:bottom-0 z-[140] overflow-y-auto myra-pearl" role="dialog" aria-label="Style this outfit">
       <div className="w-full px-6 sm:px-10 pt-[calc(40px+env(safe-area-inset-top,0px))] pb-10 max-w-[1700px] mx-auto space-y-8">
         <div className="flex items-center gap-5 flex-wrap">
           <div className="flex-1 min-w-[200px]">

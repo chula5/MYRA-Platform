@@ -9,7 +9,7 @@ import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
 import sharp from 'sharp'
 
-const MODEL = 'claude-haiku-4-5'
+const MODEL = 'claude-haiku-5-5'
 
 const PROMPT =
   'Does this photo show a person wearing an outfit where the clothes can be seen — at least from the shoulders to the hips? ' +
@@ -23,6 +23,7 @@ async function ask(content: Anthropic.ImageBlockParam['source']): Promise<boolea
     const res = await client.messages.create({
       model: MODEL,
       max_tokens: 5,
+      thinking: { type: 'disabled' },
       messages: [{ role: 'user', content: [{ type: 'image', source: content }, { type: 'text', text: PROMPT }] }],
     })
     const block = res.content.find((b): b is Anthropic.TextBlock => b.type === 'text')

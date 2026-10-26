@@ -16,7 +16,7 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase-server'
 import { analyseProductImage } from '@/app/admin/items/analyse-image'
-import { persistImageToCloudinary } from '@/lib/cloudinary-persist'
+import { isCloudinaryUrl, persistImageToCloudinary } from '@/lib/cloudinary-persist'
 import { productPageImage } from '@/lib/product-image'
 import { deleteOwnedItem, insertItemTolerantly, resolveBrandId } from '@/lib/wardrobe/store'
 import { uploadBufferToCloudinary } from '@/lib/wardrobe/cloudinary'
@@ -26,6 +26,7 @@ import { openAiConfigured } from '@/lib/wardrobe/config'
 import { rebuildLooksWithoutItems } from '@/app/admin/private-stylist/actions'
 import { buildOwnedItemFromProduct, lowConfidenceDims } from '@/lib/wardrobe/approve'
 import { encryptSecret, decryptSecret } from './secrets'
+import { checkPiecePhoto, type PhotoCheck } from './photo-check'
 import { googleAccessToken, listGmailPurchaseIds, getGmailHeaders, getGmailMessage, searchGmailIds, revokeGoogle } from './gmail'
 import { listImapPurchaseUids, fetchImapHeaders, fetchImapMessages, searchImapUids, testImapLogin, type ImapConfig } from './imap'
 import {
@@ -160,10 +161,10 @@ export async function listFinds(memberId: string, status: 'pending' | 'approved'
     .eq('member_id', memberId).eq('status', status)
     .order('order_date', { ascending: false, nullsFirst: false }).limit(300)
   return ((data ?? []) as any[])
-    // A find with neither a picture nor a real name is not a piece she can
-    // recognise — it stays in the table (a later email may complete it) but
-    // never on the page (Chloe, 2026-10-15).
-    .filter((r) => status !== 'pending' || r.image_url || !isGenericName(r.product_name))
+    // Only pieces with a photo are shown — never a grey box or a list of
+    // names (Chloe, 2026-10-25). The rest stay in the table: a later email or
+    // the photo hunt after each scan may still find their picture.
+    .filter((r) => status !== 'pending' || !!r.image_url)
     .map((r) => ({ ...r, price: r.price != null ? Number(r.price) : null }))
 }
 
@@ -409,6 +410,10 @@ async function recordEmail(
   }
 
   for (let item of e.items) {
+    // Only a real photo of the piece comes with it: spacer GIFs, return-label
+    // QR codes and links that no longer load are dropped here.
+    const photo = item.image_url ? await checkPiecePhoto(item.image_url) : null
+    if (!photo?.ok) item = { ...item, image_url: null }
     // Emails that never name the piece ("Item") — name it from its photo.
     if (isGenericName(item.product_name) && item.image_url) {
       const named = await namePieceFromPhoto(item.image_url)
@@ -421,6 +426,7 @@ async function recordEmail(
     const match = finds.find((f) => sameFind(f, incoming))
     if (match) {
       const patch = mergeFind(match, incoming) as Partial<FindRow>
+      if (patch.image_url && photo?.ok) patch.image_url = await hostPhoto(photo, patch.image_url, memberId, match.find_id)
       // Its return was read first: the piece arrives returned, or with its return started.
       if (isReturnMarker(match)) {
         if (match.error === RETURN_SEEN) patch.error = RETURNED
@@ -429,6 +435,7 @@ async function recordEmail(
       await save(match, patch)
       continue
     }
+    if (item.image_url && photo?.ok) item = { ...item, image_url: await hostPhoto(photo, item.image_url, memberId, `new-${Date.now()}`) }
     const row = await insertFind(a, finds, memberId, connectionId, messageId, e, item, { status: 'pending', error: null, keyPrefix: '' })
     if (row) added++
   }
@@ -496,10 +503,14 @@ export async function huntPhotoForFind(memberId: string, findId: string): Promis
     const ids = await searchInbox(c, `"${f.product_name.replace(/["]/g, '')}"`, f.retailer)
     for (const id of ids) {
       const m = await fetchMessages(c, [id])
-      const { images } = emailForExtraction(m[0] ?? { id, subject: '', from: '', date: null, html: null, text: null })
-      const photo = images[0]
-      if (!photo) continue
-      const hosted = await keepPhoto(photo, memberId, findId)
+      const { imageAlts } = emailForExtraction(m[0] ?? { id, subject: '', from: '', date: null, html: null, text: null })
+      // The first picture that is really the piece — not the shop's banner or a QR code.
+      let hosted: string | null = null
+      for (const img of imageAlts.slice(0, 8)) {
+        hosted = await keepPhoto(img.url, memberId, findId, img.alt)
+        if (hosted) break
+      }
+      if (!hosted) continue
       // A seller's snapshot becomes a product photo now, so the card shows it clean.
       const shown = SNAPSHOT_RETAILER.test(f.retailer ?? '')
         ? (await cutoutToProductPhoto(hosted, memberId, findId)) ?? hosted
@@ -517,25 +528,28 @@ export async function huntPhotoForFind(memberId: string, findId: string): Promis
  * Keep a photo for good. Cloudinary fetches most URLs itself, but some shops
  * (Vinted) sign theirs and refuse it, so the bytes are downloaded here instead.
  */
-export async function keepFindPhoto(url: string, memberId: string, findId: string, retailer?: string | null): Promise<string> {
+export async function keepFindPhoto(url: string, memberId: string, findId: string, retailer?: string | null): Promise<string | null> {
   const hosted = await keepPhoto(url, memberId, findId)
+  if (!hosted) return null
   return SNAPSHOT_RETAILER.test(retailer ?? '') ? (await cutoutToProductPhoto(hosted, memberId, findId)) ?? hosted : hosted
 }
 
-async function keepPhoto(url: string, memberId: string, findId: string): Promise<string> {
-  const hosted = await persistImageToCloudinary(url, { folder: `wardrobe/email/${memberId.slice(0, 8)}` })
-  if (hosted) return hosted
-  try {
-    const res = await fetch(url)
-    const type = res.headers.get('content-type') ?? 'image/jpeg'
-    if (!res.ok || !type.startsWith('image/')) return url
-    const up = await uploadBufferToCloudinary(Buffer.from(await res.arrayBuffer()), {
-      folder: `wardrobe/email/${memberId.slice(0, 8)}`, publicId: `find-${findId}`, contentType: type,
-    })
-    return up.url ?? url
-  } catch {
-    return url
-  }
+/** A checked photo, hosted for good — null when it is not a photo of the piece. */
+async function keepPhoto(url: string, memberId: string, findId: string, alt?: string | null): Promise<string | null> {
+  const photo = await checkPiecePhoto(url, alt)
+  return photo.ok ? hostPhoto(photo, url, memberId, findId) : null
+}
+
+/**
+ * Keep the bytes the check already downloaded, so the card never goes grey
+ * when the shop's link expires (Vinted signs its thumbnails for weeks only).
+ */
+async function hostPhoto(photo: Extract<PhotoCheck, { ok: true }>, url: string, memberId: string, key: string): Promise<string> {
+  if (isCloudinaryUrl(url)) return url
+  const up = await uploadBufferToCloudinary(photo.bytes, {
+    folder: `wardrobe/email/${memberId.slice(0, 8)}`, publicId: `find-${key}`, contentType: photo.contentType,
+  }).catch(() => ({ url: undefined }))
+  return up.url ?? (await persistImageToCloudinary(url, { folder: `wardrobe/email/${memberId.slice(0, 8)}` })) ?? url
 }
 
 /** Lay every snapshot in her list out on white — for pieces found before cutouts existed. */

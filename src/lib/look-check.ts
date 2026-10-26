@@ -147,7 +147,7 @@ async function lookSheet(pieces: CheckPiece[]): Promise<{ sheet: Buffer; shown: 
 export async function checkLook(
   pieces: CheckPiece[],
   clientDescription: string,
-  opts: { model?: string } = {},
+  opts: { model?: string; onUsage?: (usage: Anthropic.Beta.BetaUsage) => void } = {},
 ): Promise<LookCheck | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return null
@@ -171,6 +171,7 @@ export async function checkLook(
         ],
       }],
     } as any) as Anthropic.Beta.BetaMessage
+    opts.onUsage?.(res.usage)
     if (res.stop_reason === 'refusal') return null
     const text = res.content.find((b): b is Anthropic.Beta.BetaTextBlock => b.type === 'text')?.text
     if (!text) return null
@@ -234,6 +235,20 @@ export interface JudgedLook {
 /** Any piece confirmed as not in her size. */
 export const hasPieceOutOfSize = (j: JudgedLook): boolean =>
   Object.values(j.sizes).some((s) => s.verdict === 'not_in_size')
+
+/**
+ * Whether a judged look may be saved or shown. A check that could not run (no
+ * key, the API down, the spend limit reached) is not a pass: an unchecked look
+ * never reaches her.
+ */
+export const lookPasses = (j: JudgedLook): boolean =>
+  !!j.check && j.check.verdict !== 'clashes' && !hasPieceOutOfSize(j)
+
+/** True when MYRA's eye could not judge any of these looks — say so, not "nothing passed". */
+export const checkDidNotRun = (judged: { check: LookCheck | null }[]): boolean =>
+  judged.length > 0 && judged.every((j) => !j.check)
+
+export const CHECK_DOWN_ERROR = 'MYRA could not check these looks just now, so none were shown. Try again in a few minutes.'
 
 /**
  * Everything checked before a look is shown: Claude's eye on the photos, and

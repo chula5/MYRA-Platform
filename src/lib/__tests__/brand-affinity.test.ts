@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
-  applyDiscoverySlots, brandKey, centroidOf, codesComplete, codesSimilarity, combinedTaste,
+  ageGateResets, ageProximity, applyDiscoverySlots, brandKey, inputOnlyRepairs, seedLists, centroidOf, codesComplete, codesSimilarity, combinedTaste,
   computeSimilarBrands, expansionSeeds, ghostCodes, heroBrandOf, isThinBrand,
-  outfitBrandAffinity, pcaProject1D, positioningBand, priceProximity, stepDecay, stepPositive,
-  CODE_DIMENSIONS, DEFAULT_CONFIG, SEED, type BrandLite, type FeedRow,
+  outfitBrandAffinity, parseAgeRange, pcaProject1D, positioningBand, priceProximity, stepDecay, stepPositive,
+  withinMemberAgeReach, AGE_FLOOR_FACTOR, CODE_DIMENSIONS, DEFAULT_CONFIG, SEED, type BrandLite, type FeedRow,
 } from '@/lib/brand-affinity'
 
 const b = (id: string, name: string, tier: number, vector: number[] | null = null, price = 300): BrandLite => ({
@@ -14,6 +14,7 @@ const b = (id: string, name: string, tier: number, vector: number[] | null = nul
   core_category: 'dresses',
   price_position: Math.log(price),
   codes: null,
+  customer_age_register: null,
 })
 
 // fully coded brand — base profile with per-dimension overrides
@@ -141,6 +142,69 @@ describe('expansionSeeds', () => {
       ['cp', [{ brand_id: 'mz', name: 'Me+Em', mechanism: 'vector' as const, score: 0.7, aesthetic: 0.88, basis: 'codes' as const }]],
     ])
     expect(expansionSeeds([thin], similar).has('mz')).toBe(true)
+  })
+
+  it('codes-based seeds still need a real match: below 0.7 codes similarity they never seed', () => {
+    // The Zara case: top-12 coded "neighbours" reached down to 0.13.
+    const named = [b('mz', 'Massimo Dutti', 2)]
+    const similar = new Map([['mz', [
+      { brand_id: 'jc', name: 'J.Crew', mechanism: 'vector' as const, score: 0.678, aesthetic: 0.85, basis: 'codes' as const },
+      { brand_id: 'doen', name: 'DÔEN', mechanism: 'vector' as const, score: 0.075, aesthetic: 0.202, basis: 'codes' as const },
+      { brand_id: 'co', name: 'CO Core', mechanism: 'vector' as const, score: 0.304, aesthetic: 0.676, basis: 'codes' as const },
+    ]]])
+    const seeds = expansionSeeds(named, similar)
+    expect(seeds.has('jc')).toBe(true)
+    expect(seeds.has('doen')).toBe(false)
+    expect(seeds.has('co')).toBe(false)
+  })
+
+  it('never suggests a brand in `never` (her input-only brands), whatever links to it', () => {
+    const named = [b('mz', 'Massimo Dutti', 2)]
+    const similar = new Map([['mz', [
+      { brand_id: 'zara', name: 'Zara', mechanism: 'core_family' as const, family_name: 'High street' },
+      { brand_id: 'jc', name: 'J.Crew', mechanism: 'core_family' as const, family_name: 'High street' },
+    ]]])
+    const seeds = expansionSeeds(named, similar, { never: new Set(['zara']) })
+    expect(seeds.has('zara')).toBe(false)
+    expect(seeds.has('jc')).toBe(true)
+  })
+})
+
+describe('input-only brands (the Zara rule)', () => {
+  const zara = { brand_id: 'zara', name: 'Zara' }
+  const row = (brand_id: string, source: 'onboarded' | 'expanded' | 'learned', affinity: number, expansion_trace: string | null, positive_count = 0) =>
+    ({ brand_id, source, affinity, expansion_trace, positive_count })
+
+  it('repairs her Zara row from 1.0 and everything that came in only via Zara', () => {
+    const repairs = inputOnlyRepairs([
+      row('zara', 'onboarded', 1, null, 2), // mistaken favourite → baseline, clicks or not
+      row('ref', 'expanded', 0.35, 'vector 0.16 via Zara'),
+      row('jc', 'expanded', 0.35, 'vector 0.088 via Zara'),
+      row('liked', 'expanded', 0.35, 'vector 0.2 via Zara', 1), // she responded → stands
+      row('earned', 'learned', 0.6, 'vector 0.2 via Zara', 4), // learned → stands
+      row('cp', 'expanded', 0.6, "core family 'French contemporary' via Sézane"), // not via Zara
+      row('base', 'expanded', 0.1, 'baseline'),
+      row('meem', 'onboarded', 1, null), // a real favourite
+    ], [zara])
+    expect(repairs.map((r) => r.brand_id)).toEqual(['zara', 'ref', 'jc'])
+    expect(repairs[1].reason).toBe('input only: Zara never suggests other brands')
+  })
+
+  it('a learned input-only brand keeps what she earned', () => {
+    expect(inputOnlyRepairs([row('zara', 'learned', 0.7, null, 9)], [zara])).toEqual([])
+  })
+
+  it('a brand on both lists is input-only: the Zara rule wins over the favourites list', () => {
+    const brands = [b('zara', 'Zara', 1), b('meem', 'ME+EM', 2)]
+    const graph = { brands, byId: new Map(brands.map((x) => [x.brand_id, x])), families: [], memberships: [], exclusions: [], config: DEFAULT_CONFIG }
+    const lists = seedLists(graph, ['ME+EM', 'Zara', 'Unknown Label'], ['zara'])
+    expect(lists.named.map((x) => x.name)).toEqual(['ME+EM'])
+    expect(lists.inputOnly.map((x) => x.name)).toEqual(['Zara'])
+    expect(lists.unmatched).toEqual(['Unknown Label'])
+  })
+
+  it('"via Zara Home" is not "via Zara"', () => {
+    expect(inputOnlyRepairs([row('x', 'expanded', 0.35, 'vector 0.9 via Zara Home')], [zara])).toEqual([])
   })
 })
 
@@ -300,6 +364,111 @@ describe('pcaProject1D', () => {
     const aMean = (proj[0] + proj[1] + proj[2]) / 3
     const zMean = (proj[3] + proj[4] + proj[5]) / 3
     expect(Math.abs(aMean - zMean)).toBeGreaterThan(0.5)
+  })
+})
+
+describe('customer age', () => {
+  // Same style codes, same price — only the customer's age differs. The
+  // Reformation case: a brand that looks like her world on paper but dresses
+  // a 25-year-old.
+  const style = { aesthetic_output: 2, silhouette_language: 2, colour_identity: 1.5, era_orientation: 2.5 }
+  const aged = (id: string, name: string, price: number, age: number | null, over: Record<string, number> = {}): BrandLite => ({
+    ...coded(id, name, price, { ...style, ...over }), customer_age_register: age,
+  })
+  const wyse = aged('wyse', 'WYSE London', 250, 3.4)
+  const reformation = aged('ref', 'Reformation', 240, 1.5)
+  const peer = aged('peer', 'Peer Label', 260, 3.6, { era_orientation: 2.8 })
+  const unaged = aged('unaged', 'Unaged Label', 230, null)
+  const brands = [wyse, reformation, peer, unaged]
+  const graph = { brands, families: [], memberships: [], exclusions: [] }
+
+  it('is not a code: a fully coded brand without it is still complete', () => {
+    const withoutAge: BrandLite = { ...wyse, customer_age_register: null }
+    expect(codesComplete(withoutAge)).toBe(true)
+    expect(Object.keys(wyse.codes!)).not.toContain('customer_age_register')
+  })
+
+  it('age_proximity decays with the register gap; null when either brand has none', () => {
+    expect(ageProximity(wyse, wyse)!.factor).toBe(1)
+    expect(ageProximity(wyse, peer)!.factor).toBeGreaterThan(0.85)
+    expect(ageProximity(wyse, reformation)!.factor).toBeLessThan(AGE_FLOOR_FACTOR)
+    expect(ageProximity(wyse, unaged)).toBeNull()
+  })
+
+  it('pairs far apart in customer age leave algorithmic discovery; price-and-style matches stay', () => {
+    const out = computeSimilarBrands('wyse', graph)
+    expect(out.find((s) => s.brand_id === 'ref')).toBeUndefined() // same style + price, Δ age 1.9
+    const p = out.find((s) => s.brand_id === 'peer')!
+    expect(p.mechanism).toBe('vector')
+    expect(p.ageFactor).toBeGreaterThan(0.85)
+    expect(p.score).toBeCloseTo(p.aesthetic! * p.priceFactor! * p.ageFactor!, 2)
+    expect(out.find((s) => s.brand_id === 'unaged')!.ageFactor).toBe(1) // no value → no change
+  })
+
+  it('curated families and exclusions still override the age floor', () => {
+    const family = { family_id: 'f', name: 'Curated', description: null }
+    const memberships = [
+      { family_id: 'f', brand_id: 'wyse', weight: 'core' as const },
+      { family_id: 'f', brand_id: 'ref', weight: 'core' as const },
+    ]
+    const withFamily = computeSimilarBrands('wyse', { ...graph, families: [family], memberships })
+    expect(withFamily.find((s) => s.brand_id === 'ref')!.mechanism).toBe('core_family')
+    const withExclusion = computeSimilarBrands('wyse', { ...graph, exclusions: [{ brand_a: 'wyse', brand_b: 'peer' }] })
+    expect(withExclusion.find((s) => s.brand_id === 'peer')).toBeUndefined()
+  })
+
+  it('parses onboarding age ranges', () => {
+    expect(parseAgeRange('30-40')).toEqual({ lo: 30, hi: 40 })
+    expect(parseAgeRange('35–45')).toEqual({ lo: 35, hi: 45 })
+    expect(parseAgeRange('70+')).toEqual({ lo: 70, hi: 80 })
+    expect(parseAgeRange('')).toBeNull()
+    expect(parseAgeRange(null)).toBeNull()
+  })
+
+  it('member age reach is one-sided: only brands that skew younger than her are out', () => {
+    expect(withinMemberAgeReach('35–45', reformation)).toBe(false)
+    expect(withinMemberAgeReach('40-50', reformation)).toBe(false)
+    expect(withinMemberAgeReach('25-30', reformation)).toBe(true)
+    expect(withinMemberAgeReach('35–45', peer)).toBe(true)
+    expect(withinMemberAgeReach('50-60', aged('mid', 'Spans Ages', 250, 3))).toBe(true)
+    expect(withinMemberAgeReach('25-30', aged('old', 'Older Label', 250, 4.5))).toBe(true)
+    expect(withinMemberAgeReach('35–45', unaged)).toBe(true) // no register → no opinion
+    expect(withinMemberAgeReach(null, reformation)).toBe(true) // no age → no opinion
+  })
+
+  it('a Reformation-style brand drops out of a 35–45 member\'s expansion; price-and-style matches stay', () => {
+    // A named brand a little younger than WYSE, so Reformation clears the
+    // pair floor and only her own age keeps it out.
+    const sezane = aged('sez', 'Sézane', 250, 2.5)
+    const all = [sezane, reformation, peer, unaged]
+    const similar = new Map([['sez', computeSimilarBrands('sez', { brands: all, families: [], memberships: [], exclusions: [] })]])
+    expect(similar.get('sez')!.some((s) => s.brand_id === 'ref')).toBe(true)
+    const brandById = new Map(all.map((x) => [x.brand_id, x]))
+
+    const forHer = expansionSeeds([sezane], similar, { ageRange: '35–45', brandById })
+    expect(forHer.has('ref')).toBe(false)
+    expect(forHer.has('peer')).toBe(true)
+    expect(forHer.has('unaged')).toBe(true)
+
+    const noAge = expansionSeeds([sezane], similar, { brandById })
+    expect(noAge.has('ref')).toBe(true) // no age range → behaviour unchanged
+  })
+
+  it('setting her age resets only untouched suggestions; named and responded-to brands are never filtered', () => {
+    const young = (id: string) => aged(id, id, 240, 1.5)
+    const byId = new Map(['named', 'learned', 'liked', 'suggested', 'baseline'].map((id) => [id, young(id)]))
+    byId.set('peer', peer)
+    const row = (brand_id: string, source: 'onboarded' | 'expanded' | 'learned', affinity: number, positive_count = 0) =>
+      ({ brand_id, source, affinity, positive_count })
+    const resets = ageGateResets([
+      row('named', 'onboarded', 1),
+      row('learned', 'learned', 0.6, 3),
+      row('liked', 'expanded', 0.35, 1),
+      row('suggested', 'expanded', 0.35),
+      row('baseline', 'expanded', 0.1),
+      row('peer', 'expanded', 0.35),
+    ], byId, '35–45')
+    expect(resets).toEqual(['suggested'])
   })
 })
 

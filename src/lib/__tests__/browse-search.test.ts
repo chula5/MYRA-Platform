@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { parseQuery, hasMaterial, estimateItemFormality } from '@/lib/search-taxonomy'
-import { rankPieces, facetCount, seasonFits } from '@/lib/browse-rank'
+import { rankPieces, facetCount, seasonFits, cutFits } from '@/lib/browse-rank'
 
 const ctx = (brandIds: string[] = [], words: string[] = [], needle = '') => ({ brandIds: new Set(brandIds), words, needle })
 
@@ -166,6 +166,49 @@ describe('rankPieces holds every facet as a requirement', () => {
     const r = rankPieces([aline, blouse, pencil, mini, midiPencil], p, ctx([], ['pencil', 'skirt'], 'pencil skirt'))
     expect(r.exact.map((s) => s.it.item_id).sort()).toEqual(['m', 'p'])
     expect(r.similar.map((s) => s.it.item_id).sort()).toEqual(['a', 'n'])
+  })
+
+  it('silk cami: silk tops sold as a cami; a silk dress, a silk blouse and a cotton cami are not answers', () => {
+    const cami = { item_id: 'c', product_name: 'Tease Silk Cami (Silver)', item_type: 'blouse', material_primary: 'silk' }
+    const camisole = { item_id: 'k', product_name: 'Lace trim camisole', item_type: 'blouse', material_primary: 'silk satin' }
+    const dress = { item_id: 'd', product_name: 'Falja silk dress', item_type: 'midi_dress', material_primary: 'silk' }
+    const blouse = { item_id: 'b', product_name: 'Floral silk blouse', item_type: 'blouse', material_primary: 'silk' }
+    const cotton = { item_id: 't', product_name: 'Spot cami top', item_type: 'blouse', material_primary: 'viscose' }
+    for (const q of ['silk cami', 'silk camis', 'silk camisole', 'silk cami top']) {
+      expect(parseQuery(q).cuts, q).toEqual(['cami'])
+      expect(parseQuery(q).materials, q).toEqual(['silk'])
+      expect(parseQuery(q).itemTypes, q).toContain('blouse')
+      expect(parseQuery(q).itemTypes, q).not.toContain('midi_dress')
+    }
+    expect(parseQuery('cami dress').itemTypes).toContain('slip_dress')
+    expect(parseQuery('cami dress').itemTypes).not.toContain('blouse')
+    const p = parseQuery('silk cami')
+    expect(facetCount(p)).toBe(3)
+    const r = rankPieces([dress, blouse, cotton, cami, camisole], p, ctx([], ['silk', 'cami'], 'silk cami'))
+    expect(r.exact.map((s) => s.it.item_id).sort()).toEqual(['c', 'k'])
+    expect(r.exact.map((s) => s.it.item_id)).not.toContain('d')
+  })
+
+  it('no navy cami: camis in other colours come first, then navy tops, then a navy cami dress', () => {
+    const p = parseQuery('navy cami top')
+    const blackCami = { item_id: 'c', product_name: 'Lace trim cami top', item_type: 'blouse', colour_family: 'black' }
+    const navyTop = { item_id: 't', product_name: 'Cashmere cap sleeve top', item_type: 'knitwear', colour_family: 'navy' }
+    const navyCamiDress = { item_id: 'd', product_name: 'Cami slip dress', item_type: 'slip_dress', colour_family: 'navy' }
+    const r = rankPieces([navyCamiDress, navyTop, blackCami], p, ctx([], ['navy', 'cami', 'top'], 'navy cami top'))
+    expect(r.exact).toEqual([])
+    expect(r.similar.map((s) => s.it.item_id)).toEqual(['c', 't', 'd'])
+    expect(r.similar[0].missed).toEqual(['colour'])
+    expect(r.similar[1].missed).toEqual(['cut'])
+  })
+
+  it('a word no dictionary knows is kept, and matched with its plain endings', () => {
+    expect(parseQuery('navy ruffle blouse').unread).toEqual(['ruffle'])
+    expect(parseQuery('navy blue cami top').unread ?? []).toEqual([])
+    expect(parseQuery('navy blue cami top').cuts).toEqual(['cami'])
+    expect(cutFits({ item_id: 'a', product_name: 'Ruffled silk blouse' }, 'ruffle')).toBe(true)
+    expect(cutFits({ item_id: 'b', product_name: 'Ruffles midi blouse' }, 'ruffle')).toBe(true)
+    expect(cutFits({ item_id: 'c', product_name: 'Poplin blouse' }, 'ruffle')).toBe(false)
+    expect(cutFits({ item_id: 'd', product_name: 'Tiered skirt' }, 'tie')).toBe(false)
   })
 
   it('something for the office: office pieces, her brands first; jeans and a sequin top never', () => {
