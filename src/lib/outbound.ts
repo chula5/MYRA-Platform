@@ -109,10 +109,13 @@ export function goHref(opts: {
   outfitId?: string | null
   sessionId?: string | null
   ref?: string | null
+  /** The iPhone app already logged this click with her session (see ShopLink). */
+  loggedByApp?: boolean
 }): string {
   const sp = new URLSearchParams({ item: opts.itemId })
   if (opts.outfitId) sp.set('outfit', opts.outfitId)
   if (opts.sessionId) sp.set('sid', opts.sessionId)
   if (opts.ref) sp.set('ref', opts.ref)
+  if (opts.loggedByApp) sp.set('logged', 'app')
   return `/go/${opts.clickId}?${sp.toString()}`
 }
