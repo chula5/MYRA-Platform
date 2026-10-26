@@ -11,6 +11,7 @@ import { ArchiveCard } from '@/components/ArchiveCard'
 import { addMyInspiration, loadMyInspiration, type InspirationBoardView } from './board-actions'
 import MatchPanel from '@/app/me/dressing-room/MatchPanel'
 import ArchivalLooks from '@/app/me/dressing-room/ArchivalLooks'
+import InfluencePicker from '@/components/me/InfluencePicker'
 
 export default function InspirationBoard({ view: initial, testMemberId }: { view: InspirationBoardView; testMemberId?: string }) {
   const [view, setView] = useState(initial)
@@ -134,6 +135,9 @@ export default function InspirationBoard({ view: initial, testMemberId }: { view
             </>
           )}
         </ArchiveCard>
+
+        {/* The people whose style she loves — on top of her stylist. */}
+        <InfluencePicker testMemberId={testMemberId} className="mt-10 max-w-[1400px] mx-auto" />
 
         {/* Her own outfits, from Instagram or her photos — the other half of
             what she loves. The pieces MYRA picks out go to the Dressing Room. */}

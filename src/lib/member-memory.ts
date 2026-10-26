@@ -9,6 +9,7 @@ import 'server-only'
 //   what she has told MYRA     colours, shapes and pieces she loves or avoids, sizes, budget
 //   what she dresses for       her occasions, in her own ticks
 //   her brands                 what she named, and what she has been shown since
+//   who inspires her           the people she named (style influences)
 //   her pictures               the inspiration she keeps
 //   her archival looks         photographs of what she actually wears
 //   the looks she kept         MYRA's own outfits she said yes to
@@ -25,6 +26,7 @@ import { typeCounts } from '@/lib/reference-loves'
 import { OCCASION_TYPES } from '@/lib/pilot-stylist'
 import { CATEGORY_LABEL, SIZE_CATEGORIES } from '@/lib/size-canonical'
 import { loadMemberSizeProfile } from '@/lib/size-availability'
+import { loadMemberInfluences, influencesText } from '@/lib/style-influence-store'
 
 const tidy = (s: string) => s.replace(/_/g, ' ')
 const NOISE = new Set(['ring', 'earrings', 'bracelet', 'necklace', 'sunglasses', 'brooch'])
@@ -69,13 +71,14 @@ export async function memberMemory(memberId: string): Promise<MemberMemory> {
   const { data: member } = await admin.from('pilot_member').select('*').eq('member_id', memberId).maybeSingle()
   const owners = [memberId, member?.auth_user_id].filter(Boolean)
 
-  const [{ data: assignment }, { data: pics }, { data: archival }, { data: keptLooks }, { data: owned }, sizeCtx] = await Promise.all([
+  const [{ data: assignment }, { data: pics }, { data: archival }, { data: keptLooks }, { data: owned }, sizeCtx, influences] = await Promise.all([
     admin.from('user_persona').select('persona_id').eq('user_id', memberId).maybeSingle(),
     admin.from('inspiration_image').select('scores').in('user_id', owners).in('status', ['scored', 'confirmed']),
     admin.from('archival_look').select('analysis').eq('member_id', memberId).eq('hidden', false).not('analysis', 'is', null),
     admin.from('pilot_look').select('items, delivery:delivery_id!inner(member_id)').eq('delivery.member_id', memberId).not('approved_at', 'is', null),
     admin.from('item').select('item_type, colour_family').eq('ownership', 'owned').in('owner_user_id', owners).neq('status', 'archived'),
     loadMemberSizeProfile(memberId).catch(() => null),
+    loadMemberInfluences(admin, memberId).catch(() => []),
   ])
 
   let houseStyle: string | null = null
@@ -110,6 +113,9 @@ export async function memberMemory(memberId: string): Promise<MemberMemory> {
   // Her brands, in the order she named them.
   const brands = ((member?.brands ?? []) as any[]).map((b) => (typeof b === 'string' ? b : b?.name)).filter(Boolean)
   add('Brands she named', brands.length ? `${brands.slice(0, 8).join(', ')}.` : '')
+
+  // The people whose style she loves.
+  add('Who inspires her', influencesText(influences))
 
   // Her pictures.
   const scored = ((pics ?? []) as any[]).map((p) => p.scores).filter(Boolean)

@@ -23,6 +23,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import BrandPicker from '@/components/me/BrandPicker'
+import InfluencePicker from '@/components/me/InfluencePicker'
 import VirginConnect from '../dressing-room/VirginConnect'
 import InstagramImport from '../dressing-room/InstagramImport'
 import { loadEmailPanel, scanNow, type EmailPanelView } from '../dressing-room/email-actions'
@@ -156,6 +157,9 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
         <div className="rounded-[28px] bg-white/80 shadow-[0_18px_40px_-24px_rgba(43,43,43,0.35)] p-6 sm:p-9">
           <BrandPicker bare testMemberId={previewMemberId} onChange={setBrandCount} />
         </div>
+
+        {/* The people whose style she loves — shown once Chloe has made someone live. */}
+        <InfluencePicker testMemberId={previewMemberId} className="rounded-[28px] bg-white/80 shadow-[0_18px_40px_-24px_rgba(43,43,43,0.35)] p-6 sm:p-9" />
 
         <p className="text-center text-[clamp(18px,1.05vw,30px)] text-[#6E6B65]">
           You can change these any time in YOU.

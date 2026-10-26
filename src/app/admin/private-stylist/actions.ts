@@ -87,7 +87,8 @@ import { readTrust, trustHeadline, TRAILING, type LookOutcome, type TrustRead } 
 import { explainTraits } from '@/lib/member-traits'
 import { type ClimateId } from '@/lib/climate'
 import { DEFAULT_SCOPE, parsePatternKey, type LearnedRuleMatch } from '@/lib/learning-scope'
-import { tooSimilarVariant, REFERENCE_LENS_WEIGHT, HOUSE_LENS_WEIGHT } from '@/lib/pilot-composer'
+import { tooSimilarVariant, REFERENCE_LENS_WEIGHT, HOUSE_LENS_WEIGHT, INFLUENCE_LENS_WEIGHT } from '@/lib/pilot-composer'
+import { loadMemberInfluences, influenceLens } from '@/lib/style-influence-store'
 import { pieceVerdicts } from '@/lib/piece-verdicts'
 import { rulesForMember, type MemberRules } from '@/lib/style-rules'
 import { parseBrief, briefIsEmpty, type StylistBrief } from '@/lib/stylist-brief'
@@ -2029,10 +2030,11 @@ export async function loadPersonaLens(
   const owners = [memberId, member?.auth_user_id].filter(Boolean)
   // Two kinds of her own evidence, read into one envelope: the pictures she
   // keeps (what she likes) and her archival looks (what she actually wears).
-  const [{ data: refs }, { data: archival }, houseLooks] = await Promise.all([
+  const [{ data: refs }, { data: archival }, houseLooks, influences] = await Promise.all([
     admin.from('inspiration_image').select('vector').in('user_id', owners).in('status', ['scored', 'confirmed']),
     admin.from('archival_look').select('taste_vector').eq('member_id', memberId).eq('hidden', false).not('taste_vector', 'is', null),
     houseLookVectors(admin),
+    loadMemberInfluences(admin, memberId),
   ])
   const vectors = [
     ...((refs ?? []) as any[]).map((r) => r.vector),
@@ -2049,7 +2051,10 @@ export async function loadPersonaLens(
     ? { envelope: { mean: houseEnv.mean, spread: houseEnv.spread }, looks: sampleLooks(houseLooks), weight: HOUSE_LENS_WEIGHT }
     : null
 
-  if (!envelope && !reference && !house) return undefined
+  // The people she is inspired by, on top of the persona, under her pictures.
+  const influence = influenceLens(influences, INFLUENCE_LENS_WEIGHT)
+
+  if (!envelope && !reference && !house && !influence) return undefined
   return {
     name,
     envelope,
@@ -2061,6 +2066,7 @@ export async function loadPersonaLens(
     // the persona's eye, not only its centre.
     looks,
     house,
+    influences: influence,
   }
 }
 
