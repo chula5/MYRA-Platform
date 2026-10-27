@@ -452,12 +452,16 @@ export function evaluateHouseStyle(items: HouseItem[], opts: EvaluateOpts = {}):
     }
   }
   // Learned skip-list stays SOFT (blue+brown, cream+grey can sometimes work).
+  // Once per colour pair, however many pieces share it: four camel pieces
+  // were six camel + camel penalties, 0.3 off one look (2026-10-27).
   if (opts.softSkipPairs?.size) {
     const fams = items.map((i) => lower(i.colour_family)).filter(Boolean)
+    const seen = new Set<string>()
     for (let a = 0; a < fams.length; a++) {
       for (let b = a + 1; b < fams.length; b++) {
         const k = `colour:${[fams[a], fams[b]].sort().join('|')}`
-        if (opts.softSkipPairs.has(k)) {
+        if (opts.softSkipPairs.has(k) && !seen.has(k)) {
+          seen.add(k)
           P('colour.learned_skip', 'Colour engine', `${fams[a]} + ${fams[b]} is a combination you usually skip`, 0.05)
         }
       }

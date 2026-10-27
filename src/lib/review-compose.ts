@@ -10,7 +10,9 @@
 //      minus anything the ejection constraints quarantine in this context.
 //   2. Per slot, the top `perSlotPool` pieces by pairwise compatibility with
 //      the anchor (plus any `shortlistAdjust` pull), brand tiers kept in band
-//      (high-street / contemporary never with luxury / ultra; premium bridges).
+//      (high-street / contemporary never with luxury / ultra; premium bridges),
+//      and only brands from the anchor's family within one price bracket
+//      (lib/brand-families: the onboarding groups, bracketed by hand).
 //   3. Cartesian product of the slot pools: the other garment (for a
 //      separates anchor) + shoes + bag. Review itself never composes
 //      outerwear or jewellery (styled on by hand); a member's look may ask for
@@ -31,6 +33,7 @@ import { toHouseItem } from '@/lib/house-item'
 import { blendedScore, emptyModel, type FeatureItem, type StyleModel } from '@/lib/style-brain'
 import { formalityBand, hardSkipPairs, isExcluded, type EjectionConstraints } from '@/lib/pipeline'
 import { judgeLook, type MemberRules } from '@/lib/style-rules'
+import { bracketSpreadViolation, familyFits } from '@/lib/brand-families'
 
 // Anchor garments a review look is built around.
 export const REVIEW_DRESS = new Set(['mini_dress', 'midi_dress', 'maxi_dress', 'shirt_dress', 'slip_dress'])
@@ -280,6 +283,7 @@ function composeReviewLooksOnce(opts: ReviewComposeOpts): ReviewComposeResult {
   const pool = (slot: string, size: number) => {
     const ranked = library
       .filter((it) => slotForItemType(it.item_type) === slot && !tierBandViolation([anchorTier, it.brand?.price_tier ?? null]))
+      .filter((it) => familyFits(anchor.brand, it.brand, slot))
       .map((it) => ({ it, rank: pairCompat(anchor, it).total + (shortlistAdjust ? shortlistAdjust(it) : 0) }))
       .sort((a, b) => b.rank - a.rank)
     const top = ranked.slice(0, size).map((x) => x.it)
@@ -374,6 +378,8 @@ function composeReviewLooksOnce(opts: ReviewComposeOpts): ReviewComposeResult {
     .map((combo) => combo.filter((c): c is { item: ItemWithBrand; slot: string } => c != null))
     .filter((items) => items.length > 0)
     .filter((items) => !tierBandViolation([anchorTier, ...items.map((i) => i.item.brand?.price_tier ?? null)]))
+    // Pinned pieces are hers already — her wardrobe isn't held to a bracket.
+    .filter((items) => !bracketSpreadViolation([anchor.brand, ...items.filter((i) => !pinnedIds.has(i.item.item_id)).map((i) => i.item.brand)]))
     .map((items) => ({ items, judged: judge(items) }))
     .filter(({ judged }) => judged.pass)
     .filter(({ items }) => !lookGate || lookGate([anchor, ...items.map((i) => i.item)]))
