@@ -7,7 +7,7 @@
 
 import { resolveClientMember } from '@/lib/client-member'
 import {
-  approveFind, connectImap, disconnect, discardFind, huntPhotoForFind, keepReturnedPiece, listConnections, listFinds, listReturnedInWardrobe,
+  approveFind, connectImap, disconnect, discardFind, huntPhotoForFind, regenerateFindPhoto, keepReturnedPiece, listConnections, listFinds, listReturnedInWardrobe,
   processEmailScans, queueScan, removeReturnedPiece, setFindPhoto,
   type EmailConnectionView, type EmailFindView,
 } from '@/lib/email/connections'
@@ -116,4 +116,11 @@ export async function findPhotoInEmails(findId: string, asMemberId?: string): Pr
   const me = await resolveClientMember(asMemberId)
   if (!me) return { error: 'Not signed in' }
   return huntPhotoForFind(me.memberId, findId)
+}
+
+/** The photo came out wrong — make it again on white. */
+export async function redoFindPhoto(findId: string, asMemberId?: string): Promise<{ imageUrl?: string; error?: string }> {
+  const me = await resolveClientMember(asMemberId)
+  if (!me) return { error: 'Not signed in' }
+  return regenerateFindPhoto(me.memberId, findId)
 }

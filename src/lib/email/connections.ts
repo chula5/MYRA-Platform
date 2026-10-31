@@ -617,6 +617,29 @@ async function cutoutToProductPhoto(imageUrl: string, memberId: string, findId: 
   }
 }
 
+/**
+ * The photo came out wrong — lay it out on white again. A cutout is redone from
+ * the snapshot it was made from (kept in Cloudinary as find-<id>), never from
+ * the bad cutout itself, so a cropped or smudged result does not compound.
+ */
+export async function regenerateFindPhoto(memberId: string, findId: string): Promise<{ imageUrl?: string; error?: string }> {
+  const a = db()
+  const { data: f } = await a.from('email_purchase_find').select('find_id, image_url')
+    .eq('find_id', findId).eq('member_id', memberId).maybeSingle()
+  if (!f) return { error: 'Not found' }
+  if (!f.image_url) return { error: 'No photo to redo yet' }
+  if (!openAiConfigured()) return { error: 'Photo redo is not set up yet' }
+  let source: string = f.image_url
+  if (isCutout(f.image_url)) {
+    const original = f.image_url.replace(/\/upload\/(?:v\d+\/)?(.*\/)cutout-[^/]+$/, `/upload/$1find-${findId}`)
+    if (original !== f.image_url && (await fetch(original, { method: 'HEAD' }).then((r) => r.ok).catch(() => false))) source = original
+  }
+  const shown = await cutoutToProductPhoto(source, memberId, findId)
+  if (!shown) return { error: 'Could not redo the photo — try again in a moment' }
+  await a.from('email_purchase_find').update({ image_url: shown, error: null }).eq('find_id', findId)
+  return { imageUrl: shown }
+}
+
 /** A photo she adds to a find whose email had none (Vinted sends none). */
 export async function setFindPhoto(memberId: string, findId: string, bytes: Buffer, contentType: string): Promise<{ error?: string }> {
   const a = db()

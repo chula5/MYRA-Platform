@@ -8,11 +8,15 @@ import FallbackImage from '@/components/FallbackImage'
 import VirginConnect from './VirginConnect'
 import ServiceMark from '@/components/me/ServiceMark'
 import {
-  addFoundPiece, disconnectInbox, keepReturned, loadEmailPanel, notMine, removeReturned,
+  addFoundPiece, disconnectInbox, keepReturned, loadEmailPanel, notMine, redoFindPhoto, removeReturned,
   scanAgain, scanNow,
   type EmailPanelView,
 } from './email-actions'
 
+
+/** A raw API reply ("400 {"type":"error"…}") is never shown to her — just that it did not work. */
+const friendly = (e: string) =>
+  /[{}]|"type"|usage limit|request_id|^\d{3}\b/i.test(e) ? 'That didn’t go through — try again in a moment.' : e
 
 export default function EmailFinds({ testMemberId, onAdded, onCount }: { testMemberId?: string; onAdded?: () => void; onCount?: (n: number) => void }) {
   const [view, setView] = useState<EmailPanelView | null>(null)
@@ -81,7 +85,7 @@ export default function EmailFinds({ testMemberId, onAdded, onCount }: { testMem
     setBusy((b) => [...b, key])
     const r = await fn()
     setBusy((b) => b.filter((k) => k !== key))
-    setMsg(r.error ?? done ?? null)
+    setMsg(r.error ? friendly(r.error) : done ?? null)
     await refresh()
   }
 
@@ -113,7 +117,7 @@ export default function EmailFinds({ testMemberId, onAdded, onCount }: { testMem
     setView((v) => (v ? { ...v, finds: v.finds.filter((x) => x.find_id !== f.find_id) } : v))
     setMsg(done)
     const r = await fn()
-    if (r.error) { setMsg(r.error); await refresh(); return }
+    if (r.error) { setMsg(friendly(r.error)); await refresh(); return }
     onAdded?.()
   }
 
@@ -250,7 +254,16 @@ export default function EmailFinds({ testMemberId, onAdded, onCount }: { testMem
                   {f.error === 'Return started' ? (
                     <p className="text-[18px] xl:text-[21px] 2xl:text-[25px] text-[#7C838B]">You started a return — add it only if you kept it</p>
                   ) : f.error ? (
-                    <p className="text-[18px] xl:text-[21px] 2xl:text-[25px] text-[#B83A3A]">{f.error}</p>
+                    // Never the raw error (an API message means nothing to her) — just a way to go again.
+                    <p className="text-[18px] xl:text-[21px] 2xl:text-[25px] text-[#7C838B]">
+                      That didn&rsquo;t go through.{' '}
+                      <button
+                        onClick={() => decide(f, () => addFoundPiece(f.find_id, testMemberId), `Trying ${f.product_name} again…`)}
+                        className="underline underline-offset-4 text-[#2B2B2B]"
+                      >
+                        Try again
+                      </button>
+                    </p>
                   ) : null}
                   <div className="mt-auto pt-2 flex flex-col gap-2">
                     <button
@@ -261,6 +274,14 @@ export default function EmailFinds({ testMemberId, onAdded, onCount }: { testMem
                     </button>
                     <button onClick={() => decide(f, () => notMine(f.find_id, testMemberId), `${f.product_name} put aside.`)} className="text-[18px] xl:text-[21px] 2xl:text-[25px] py-2 text-[#55534E] underline underline-offset-4">
                       Not mine
+                    </button>
+                    {/* The photo came out wrong (cropped, not on white) — make it again. */}
+                    <button
+                      disabled={working(`redo-${f.find_id}`)}
+                      onClick={() => act(`redo-${f.find_id}`, () => redoFindPhoto(f.find_id, testMemberId), `New photo for ${f.product_name}.`)}
+                      className="text-[16px] xl:text-[19px] 2xl:text-[23px] pb-1 text-[#7C838B] underline underline-offset-4 disabled:opacity-40"
+                    >
+                      {working(`redo-${f.find_id}`) ? 'Redoing photo…' : 'Redo photo'}
                     </button>
                   </div>
                 </div>
