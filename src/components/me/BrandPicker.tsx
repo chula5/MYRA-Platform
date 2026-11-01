@@ -68,10 +68,13 @@ export default function BrandPicker({
   const [loved, setLoved] = useState<Map<string, string>>(new Map())
   const [never, setNever] = useState<Map<string, string>>(new Map())
   const queue = useRef<Promise<unknown>>(Promise.resolve())
+  // Saves still queued or running. While any are, a server read is already
+  // stale — it predates her later taps — so it must not overwrite them.
+  const pending = useRef(0)
 
   const adopt = (v: MyBrandsView | null) => {
     setView(v)
-    if (!v) return
+    if (!v || pending.current > 0) return
     setLoved(new Map(v.favourites.map((b) => [fold(b.name), b.name])))
     setNever(new Map(v.never.map((n) => [fold(n), n])))
     onChange?.(v.favourites.length)
@@ -86,11 +89,14 @@ export default function BrandPicker({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [testMemberId])
 
-  /** Saves run one after another in the order she tapped, and the list is
-   *  re-read from the server after each — so a quick double tap never races. */
+  /** Saves run one after another in the order she tapped. Her chips are only
+   *  re-read from the server once the last queued save is done — re-reading
+   *  between saves wiped the taps still waiting, so chips flicked off and a
+   *  second tap on them undid the first. */
   function save(fn: () => Promise<any>) {
     setBusy(true)
     setNote(null)
+    pending.current += 1
     queue.current = queue.current.then(async () => {
       try {
         const r = await fn()
@@ -98,12 +104,14 @@ export default function BrandPicker({
         else if (r?.requested) setNote(`MYRA doesn’t have ${r.requested} yet — your stylist has been told you want it.`)
         else if (r?.signalOnly) setNote(`MYRA will learn from ${r.signalOnly}, but won’t send it to you.`)
         else if (r?.already) setNote(`${r.already} is already on your list.`)
-        adopt(await loadMyBrands(testMemberId))
       } catch {
         setNote('Something went wrong — try again.')
       } finally {
-        setBusy(false)
+        pending.current -= 1
       }
+      if (pending.current > 0) return
+      try { adopt(await loadMyBrands(testMemberId)) } catch { /* keep what she sees */ }
+      if (pending.current === 0) setBusy(false)
     })
   }
 

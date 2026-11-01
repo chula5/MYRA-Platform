@@ -106,7 +106,9 @@ export interface BrandSaveResult {
 
 /** She is shown MYRA's strongest reads of her, not the catalogue. */
 const SUGGESTED_SHOWN = 18
-const MAX_FAVOURITES = 80
+// Above every brand in the picker's groups (~400), so LOVE ALL on every group
+// always fits. At 80, Anne filled it and each new tap was silently undone.
+const MAX_FAVOURITES = 600
 
 // ── Reads ───────────────────────────────────────────────────────────────────
 
