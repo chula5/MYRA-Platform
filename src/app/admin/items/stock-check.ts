@@ -9,6 +9,7 @@ import {
   myshopifyDomainIn, normaliseSizeLabel, sizeLabelFromVariant, sizesFromPage,
 } from '@/lib/retailer-sizes'
 import { loadBrandOffsets, upsertSizeAvailability } from '@/lib/size-availability'
+import { priceFromJsonLd, priceFromShopifyJs, type PriceReading } from '@/lib/retailer-prices'
 
 type StockStatus = 'in_stock' | 'low_stock' | 'out_of_stock' | 'unknown'
 
@@ -296,6 +297,8 @@ export interface DetailedStock {
   source: 'shopify' | 'jsonld' | 'regex' | 'error'
   /** One entry per size the page lists, with its own availability. */
   sizes: { label: string; inStock: boolean; level: 'in_stock' | 'low' | 'sold_out' | 'unknown' }[]
+  /** Today's price, read from the same data (lib/retailer-prices) — for WAIT FOR SALE. */
+  price?: PriceReading | null
 }
 
 export async function checkStockDetailed(url: string): Promise<DetailedStock> {
@@ -335,7 +338,7 @@ export async function checkStockDetailed(url: string): Promise<DetailedStock> {
       const sizes = structured.sizes
       const status = statusFromSizes(sizes)
       markSurvivorsLow(sizes)
-      return { status, signal: `page:${structured.via}:${status}`, source: 'regex', sizes }
+      return { status, signal: `page:${structured.via}:${status}`, source: 'regex', sizes, price: priceFromJsonLd(page.html) }
     }
 
     // 2c. JSON-LD offers (often carry size + availability), else text.
@@ -345,6 +348,7 @@ export async function checkStockDetailed(url: string): Promise<DetailedStock> {
       signal: r.signal,
       source: r.signal.startsWith('jsonld') ? 'jsonld' : 'regex',
       sizes: sizesFromJsonLd(page.html, url),
+      price: priceFromJsonLd(page.html),
     }
   } catch (err) {
     return {
@@ -411,7 +415,7 @@ async function shopifyVariants(url: string, domain?: string): Promise<DetailedSt
     else status = 'in_stock'
 
     markSurvivorsLow(sizes)
-    return { status, signal: `shopify:${status}`, source: 'shopify', sizes }
+    return { status, signal: `shopify:${status}`, source: 'shopify', sizes, price: priceFromShopifyJs(data) }
   } catch {
     return null
   }

@@ -30,11 +30,13 @@ const GBP_PER: Record<string, number> = {
   NOK: 0.0732,
   PLN: 0.202,
   CZK: 0.0347,
+  // Ukrainian hryvnia (Kulakovsky, J'amemme): ~54 ₴ to the pound, added 2026-11-01.
+  UAH: 0.0186,
 }
 
 const SYMBOL: Record<string, string> = {
   GBP: '£', USD: '$', EUR: '€', AUD: 'A$', CAD: 'C$', JPY: '¥', CHF: 'CHF ', KRW: '₩',
-  DKK: 'kr ', SEK: 'kr ', NOK: 'kr ', PLN: 'zł ', CZK: 'Kč ',
+  DKK: 'kr ', SEK: 'kr ', NOK: 'kr ', PLN: 'zł ', CZK: 'Kč ', UAH: '₴',
 }
 
 function parseAmount(price: string | number | null | undefined): number | null {

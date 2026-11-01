@@ -14,6 +14,7 @@ import { createAdminClient } from '@/lib/supabase-server'
 import { shopifyGraphql } from './client'
 import { markUninstalled, type ShopifyMerchant } from './merchant'
 import { accrueCommission, reconcileOrderUpdate } from '@/lib/ledger/store'
+import { recordPrice } from '@/lib/price-watch'
 
 export const WEBHOOK_TOPICS = [
   'ORDERS_CREATE',
@@ -190,6 +191,19 @@ async function handleProductUpdate(merchantId: string | null, payload: any): Pro
       shopify_synced_at: new Date().toISOString(),
     } as any)
     .eq('shopify_product_id', productId)
+
+  // WAIT FOR SALE: a price change arrives as a product update (lib/price-watch).
+  const priced = variants
+    .map((v) => ({ p: Number(v?.price), was: Number(v?.compare_at_price) }))
+    .filter((v) => v.p > 0)
+    .sort((a, b) => a.p - b.p)[0]
+  if (priced) {
+    const { data: rows } = await admin.from('item' as any).select('item_id').eq('shopify_product_id', productId)
+    for (const r of ((rows ?? []) as any[])) {
+      await recordPrice(admin, r.item_id, { amount: priced.p, was: priced.was > priced.p ? priced.was : null, currency: null }, 'shopify:webhook')
+        .catch((err) => console.error('[shopify webhook] price', err))
+    }
+  }
 }
 
 async function handleProductDelete(payload: any): Promise<void> {
