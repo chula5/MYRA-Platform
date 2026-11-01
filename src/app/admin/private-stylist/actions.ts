@@ -845,7 +845,7 @@ export async function loadEventPicksAdmin(memberId: string): Promise<{ events: E
  * (every pick has at least one outfit that passed the check).
  */
 export async function composeEventPicksNow(memberId: string, opts: { hold?: boolean; perEvent?: number; force?: boolean } = {}): Promise<ComposePicksResult> {
-  const r = await composeEventPicks(memberId, { hold: !!opts.hold, perEvent: opts.perEvent, force: opts.force ?? true })
+  const r = await composeEventPicks(memberId, { hold: !!opts.hold, perEvent: opts.perEvent, force: opts.force ?? true, anyDate: true })
   revalidatePath(PATH)
   return r
 }

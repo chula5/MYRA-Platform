@@ -25,6 +25,9 @@ import { getStyledWays } from '@/lib/styled-ways'
 import type { StyledWayLook } from '@/lib/styled-ways-core'
 import type { ItemWithBrand } from '@/lib/admin-queries'
 import { readEventBrief, describeBrief, sayPlace, MONTH_NAMES, type EventBrief } from './brief'
+import { readNevers, neverReason, pictureLeans, type EventNevers } from './nevers'
+import { eventPictureLens, type EventPictureLens } from './inspiration'
+import { itemPseudoVector, brandCosine } from '@/lib/brand-affinity'
 
 export const EVENT_PICKS_MIGRATION_HINT = 'Run migration 0099_event_picks.sql first (npm run migrate)'
 const missing = (m: string) => /event_pick|schema cache|does not exist|column .*brief/i.test(m)
@@ -38,7 +41,11 @@ const EVENT_OCCASIONS = ['event', 'dinner_drinks']
 /** How far ahead an event counts as coming up. */
 const HORIZON_DAYS = 180
 
-export interface KnownEventRow { event_id: string; member_id: string; label: string; event_date: string; brief: string | null; done: boolean }
+export interface KnownEventRow {
+  event_id: string; member_id: string; label: string; event_date: string; brief: string | null; done: boolean
+  /** What she does not want for it (0111): her words, a price cap, brands. */
+  nevers?: string | null; max_price_gbp?: number | null; never_brands?: string[] | null
+}
 
 export interface EventPickView {
   event_pick_id: string
@@ -90,13 +97,18 @@ export function eventUpcoming(eventDate: string, now = new Date(), horizonDays =
   return end.getTime() > now.getTime() && start.getTime() <= horizon.getTime()
 }
 
-/** Her upcoming known events, soonest first. */
-export async function upcomingEvents(admin: any, memberId: string): Promise<KnownEventRow[]> {
+/**
+ * Her upcoming known events, soonest first. `anyDate` keeps events past the
+ * horizon too (a wedding two summers away that she is already shopping for);
+ * the weekly cron leaves it off.
+ */
+export async function upcomingEvents(admin: any, memberId: string, opts: { anyDate?: boolean } = {}): Promise<KnownEventRow[]> {
+  // '*' so the nevers columns (0111) come when they exist and cost nothing when they do not.
   const { data, error } = await admin.from('pilot_known_event')
-    .select('event_id, member_id, label, event_date, brief, done')
+    .select('*')
     .eq('member_id', memberId).eq('done', false).order('event_date')
   if (error) throw new Error(missing(error.message) ? EVENT_PICKS_MIGRATION_HINT : error.message)
-  return ((data ?? []) as KnownEventRow[]).filter((e) => eventUpcoming(e.event_date))
+  return ((data ?? []) as KnownEventRow[]).filter((e) => eventUpcoming(e.event_date, new Date(), opts.anyDate ? 365 * 5 : HORIZON_DAYS))
 }
 
 /** The brief for an event: the event's own, else the brief of a task set for it. */
@@ -137,7 +149,7 @@ export function rankHeroes(
   taste: MemberTaste,
   library: ItemWithBrand[],
   brief: EventBrief,
-  opts: { exclude?: Set<string>; excludeFamilies?: Set<string> } = {},
+  opts: { exclude?: Set<string>; excludeFamilies?: Set<string>; nevers?: EventNevers; pictures?: EventPictureLens } = {},
 ): HeroCandidate[] {
   const types = brief.itemTypes
   const prefs = taste.prefs
@@ -153,6 +165,8 @@ export function rankHeroes(
     if (prefs && avoidReasons(prefs, i).length) continue
     if (itemPriceVerdict(taste, it) === 'over') continue
     if (priceOf(i) == null) continue
+    // What she said she does not want for THIS event: a price cap, brands, colours, nothing fussy.
+    if (opts.nevers && neverReason(i, priceOf(i), opts.nevers)) continue
     const fam = familyKey(i)
     if (seenFamily.has(fam)) continue
 
@@ -191,10 +205,39 @@ export function rankHeroes(
       if (hot && warm) score -= brief.climate === 'hot' ? 0.8 : 0.4
     }
     score += 0.3 * memberItemScore(taste, it)
+    // The colours of the pictures she loves, when her words named none.
+    const loves = opts.pictures?.loves ?? []
+    if (!brief.colours.length && loves.length && i.colour_family) {
+      const seen = loves.filter((p) => p.colours.includes(i.colour_family)).length
+      if (seen) { score += Math.min(0.6, 0.3 + 0.1 * seen); reasons.push(`in ${i.colour_family}, like your pictures`) }
+      else score -= 0.2
+    }
     seenFamily.add(fam)
     out.push({ item: it, score, reasons })
   }
+  applyPictureLean(out, opts.pictures)
   return out.sort((a, b) => b.score - a.score)
+}
+
+/**
+ * Lean toward the pictures she loves and away from the ones marked "not
+ * this": nearest loved picture minus nearest not-picture, z-scored across the
+ * candidates (see pictureLeans), worth up to ±0.8.
+ */
+function applyPictureLean(out: HeroCandidate[], pictures?: EventPictureLens): void {
+  if (!pictures || (!pictures.loves.length && !pictures.nots.length) || out.length < 2) return
+  const raw = out.map((c) => {
+    const v = itemPseudoVector(c.item)
+    const near = (ps: { vector: number[] }[]) => ps.reduce((m, p) => (p.vector.length === v.length ? Math.max(m, brandCosine(v, p.vector)) : m), -1)
+    const love = pictures.loves.length ? near(pictures.loves) : 0
+    const not = pictures.nots.length ? near(pictures.nots) : 0
+    return love - not
+  })
+  const z = pictureLeans(raw)
+  out.forEach((c, k) => {
+    c.score += 0.4 * z[k]
+    if (z[k] >= 1 && pictures.loves.length) c.reasons.push('close to your pictures')
+  })
 }
 
 const TYPE_WORD: Record<string, string> = {
@@ -234,6 +277,8 @@ export interface ComposePicksOpts {
   hold?: boolean
   /** Add picks even when this week already has them. */
   force?: boolean
+  /** Events past the six-month horizon too (Chloe's FIND NOW). */
+  anyDate?: boolean
   admin?: any
 }
 
@@ -262,7 +307,7 @@ export async function composeEventPicks(memberId: string, opts: ComposePicksOpts
   if (!member) return { week, events: [], error: 'Member not found' }
 
   let events: KnownEventRow[]
-  try { events = await upcomingEvents(admin, memberId) } catch (err) { return { week, events: [], error: err instanceof Error ? err.message : String(err) } }
+  try { events = await upcomingEvents(admin, memberId, { anyDate: opts.anyDate || !!opts.eventIds?.length }) } catch (err) { return { week, events: [], error: err instanceof Error ? err.message : String(err) } }
   if (opts.eventIds?.length) events = events.filter((e) => opts.eventIds!.includes(e.event_id))
   if (!events.length) return { week, events: [] }
 
@@ -278,6 +323,7 @@ export async function composeEventPicks(memberId: string, opts: ComposePicksOpts
   const allRows = (allPrior ?? []) as { item_id: string; known_event_id: string; week_key: string; dismissed_at: string | null }[]
   const usedItems = new Set(allRows.map((p) => p.item_id))
   const usedFamilies = new Set(library.filter((i) => usedItems.has(i.item_id)).map((i) => familyKey(i)))
+  const brandNames = Array.from(new Set(library.map((i) => (i as any).brand?.name).filter(Boolean))) as string[]
 
   for (const event of events) {
     const briefText = await briefFor(admin, event)
@@ -288,7 +334,14 @@ export async function composeEventPicks(memberId: string, opts: ComposePicksOpts
     const priorRows = allRows.filter((p) => p.known_event_id === event.event_id)
     if (!opts.force && priorRows.some((p) => p.week_key === week && !p.dismissed_at)) { report.skipped = 'already has picks this week'; continue }
 
-    const ranked = rankHeroes(taste, library, brief, { exclude: usedItems, excludeFamilies: usedFamilies })
+    const nevers = readNevers(event, brandNames)
+    const pictures = await eventPictureLens(admin, event.event_id)
+    // The kinds of piece her loved pictures show: seven long and midi dresses
+    // mean no mini, even though a wedding allows one.
+    const shown = new Set(pictures.loves.flatMap((p) => p.types))
+    const narrowed = brief.itemTypes.filter((t) => shown.has(t))
+    if (narrowed.length) brief.itemTypes = narrowed
+    const ranked = rankHeroes(taste, library, brief, { exclude: usedItems, excludeFamilies: usedFamilies, nevers, pictures })
     report.candidates = ranked.length
 
     // Breadth: the first pass takes at most one piece per brand, per colour
@@ -347,7 +400,8 @@ export async function composeEventPicks(memberId: string, opts: ComposePicksOpts
  */
 export async function eventsWithPicks(memberId: string, opts: { includeHeld?: boolean; admin?: any } = {}): Promise<EventWithPicks[]> {
   const admin = opts.admin ?? (createAdminClient() as any)
-  const events = await upcomingEvents(admin, memberId)
+  // Any future event: picks Chloe found for a far-off one still show.
+  const events = await upcomingEvents(admin, memberId, { anyDate: true })
   if (!events.length) return []
   let q = admin.from('event_pick').select('*').eq('member_id', memberId).in('known_event_id', events.map((e) => e.event_id)).is('dismissed_at', null).order('picked_at', { ascending: false })
   if (!opts.includeHeld) q = q.eq('shown', true)
@@ -396,6 +450,24 @@ export async function setPickShown(admin: any, pickId: string, shown: boolean): 
 export async function dismissPick(admin: any, memberId: string, pickId: string): Promise<{ error?: string }> {
   const { error } = await admin.from('event_pick').update({ dismissed_at: new Date().toISOString() }).eq('event_pick_id', pickId).eq('member_id', memberId)
   return error ? { error: error.message } : {}
+}
+
+/** What she does not want for the event: her words, a price cap, brands. */
+export async function setKnownEventNevers(
+  admin: any,
+  memberId: string,
+  eventId: string,
+  input: { nevers?: string | null; max_price_gbp?: number | string | null; never_brands?: string[] | null },
+): Promise<{ error?: string }> {
+  const price = Number(input.max_price_gbp)
+  const brands = (input.never_brands ?? []).map((b) => String(b).trim()).filter(Boolean).slice(0, 30)
+  const { error } = await admin.from('pilot_known_event').update({
+    nevers: (input.nevers ?? '').trim().slice(0, 500) || null,
+    max_price_gbp: Number.isFinite(price) && price > 0 ? Math.round(price) : null,
+    never_brands: brands,
+    updated_at: new Date().toISOString(),
+  }).eq('event_id', eventId).eq('member_id', memberId)
+  return error ? { error: /nevers|never_brands|max_price_gbp|schema cache/i.test(error.message) ? 'Run migration 0111_event_inspiration.sql first (npm run migrate)' : error.message } : {}
 }
 
 /** What she is looking for, in her words, on the event itself. */

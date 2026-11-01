@@ -32,7 +32,11 @@ export interface StylingTaskView {
   status: TaskStatus
   created_at: string
 }
-export interface KnownEventView { event_id: string; label: string; event_date: string; brief: string | null }
+export interface KnownEventView {
+  event_id: string; label: string; event_date: string; brief: string | null
+  /** What she does not want for it (0111). */
+  nevers: string | null; max_price_gbp: number | null; never_brands: string[]
+}
 
 const COLUMNS = 'task_id, calendar_event_id, known_event_id, event_label, event_date, brief, source, status, created_at'
 
@@ -61,13 +65,17 @@ export async function listStylingTasks(memberId: string): Promise<StylingTaskVie
 /** Events she gave MYRA during setup, before connecting any calendar. */
 export async function listKnownEvents(memberId: string): Promise<KnownEventView[]> {
   const admin = createAdminClient() as any
+  // '*' so the nevers columns (0111) come when they exist and cost nothing when they do not.
   const { data, error } = await admin.from('pilot_known_event')
-    .select('event_id, label, event_date, brief')
+    .select('*')
     .eq('member_id', memberId)
-    .gte('event_date', new Date().toISOString().slice(0, 10))
+    .gte('event_date', new Date().toISOString().slice(0, 7))
     .order('event_date')
   if (error) throw new Error(error.message)
-  return data ?? []
+  return ((data ?? []) as any[]).map((e) => ({
+    event_id: e.event_id, label: e.label, event_date: e.event_date, brief: e.brief ?? null,
+    nevers: e.nevers ?? null, max_price_gbp: e.max_price_gbp != null ? Number(e.max_price_gbp) : null, never_brands: e.never_brands ?? [],
+  }))
 }
 
 export async function createStylingTask(
