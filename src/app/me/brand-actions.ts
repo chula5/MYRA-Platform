@@ -106,9 +106,8 @@ export interface BrandSaveResult {
 
 /** She is shown MYRA's strongest reads of her, not the catalogue. */
 const SUGGESTED_SHOWN = 18
-// Above every brand in the picker's groups (~400), so LOVE ALL on every group
-// always fits. At 80, Anne filled it and each new tap was silently undone.
-const MAX_FAVOURITES = 600
+// No cap on how many brands she can love. There was one (80); Anne filled it
+// and each new tap was silently undone.
 
 // ── Reads ───────────────────────────────────────────────────────────────────
 
@@ -328,10 +327,6 @@ export async function addMyBrands(rawNames: string[], asMemberId?: string): Prom
     const toLove = names.filter((n) => !isFastFashion(n) && !had.has(brandKey(n)))
     const toSignal = names.filter((n) => isFastFashion(n) && !hadInputOnly.has(brandKey(n)))
     if (!toLove.length && !toSignal.length) return { already: names[0] }
-
-    if (brands.length + toLove.length > MAX_FAVOURITES) {
-      return { error: `That is as many brands as MYRA can hold for you — remove some first` }
-    }
 
     const keys = new Set(names.map((n) => brandKey(n)))
     const nextNever = never.filter((n) => !keys.has(brandKey(n)))
