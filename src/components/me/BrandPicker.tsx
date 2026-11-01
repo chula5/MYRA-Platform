@@ -12,7 +12,8 @@
 // Two modes, one tap. In LOVE mode a tap loves a brand (black chip) and × on
 // a loved chip drops it. In NOT FOR ME mode a tap marks a brand red; × clears
 // it. A brand is in exactly one of the three states: loved, not for me, or
-// neither. LOVE ALL / NONE OF THESE acts on the brands showing in that group.
+// neither. LOVE ALL / NONE OF THESE acts on every brand in that group, the
+// ones folded behind "+ N more" too.
 //
 // Every tap is saved at once — optimistically in the UI, then re-read from the
 // server. A whole group is one server call, because each save re-seeds her
@@ -138,7 +139,7 @@ export default function BrandPicker({
     else { setNever((m) => new Map(m).set(k, name)); save(() => setMyBrandsNever([name], true, testMemberId)) }
   }
 
-  /** LOVE ALL / NONE OF THESE on the brands showing in a group — one save. */
+  /** LOVE ALL / NONE OF THESE on every brand in a group — one save. */
   function takeGroup(names: string[]) {
     const target = mode === 'love' ? isLoved : isNever
     const every = names.every(target)
@@ -262,7 +263,8 @@ export default function BrandPicker({
         {groups.map((g) => {
           const showMore = open.has(g.key)
           const showing = showMore ? [...g.brands, ...g.more] : g.brands
-          const names = showing.map((b) => b.name)
+          // LOVE ALL takes the whole group, including the brands behind "+ N more".
+          const names = [...g.brands, ...g.more].map((b) => b.name)
           const target = mode === 'love' ? isLoved : isNever
           const every = names.length > 0 && names.every(target)
           const groupLabel = mode === 'love' ? (every ? '✓ ALL LOVED' : 'LOVE ALL') : (every ? '✓ NONE OF THESE' : 'NONE OF THESE')
