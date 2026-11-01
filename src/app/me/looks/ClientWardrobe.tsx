@@ -57,7 +57,8 @@ export default function ClientWardrobe({
   useEffect(() => { if (open) load() }, [open])
   useEffect(() => {
     const openIt = () => setOpen(true)
-    const saved = () => { if (open) load() }
+    // Always re-read, closed or open: the header heart's count rides on it.
+    const saved = () => { load() }
     window.addEventListener('myra:open-wardrobe', openIt)
     window.addEventListener('myra:item-saved', saved)
     return () => {
@@ -68,6 +69,14 @@ export default function ClientWardrobe({
 
   const count = loved.length + items.length
 
+  // Tell the header heart what is hanging here, and that the drawer is on this
+  // page to open; null when she leaves so it falls back to her saved pieces.
+  useEffect(() => {
+    if (readOnly) return
+    window.dispatchEvent(new CustomEvent('myra:wardrobe-count', { detail: count }))
+  }, [count, readOnly])
+  useEffect(() => () => { window.dispatchEvent(new CustomEvent('myra:wardrobe-count', { detail: null })) }, [])
+
   async function removeItem(id: string) {
     setItems((i) => i.filter((x) => x.item_id !== id))
     await toggleSaveItem(id)
@@ -75,21 +84,8 @@ export default function ClientWardrobe({
 
   return (
     <>
-      {!open && (
-        <button
-          onClick={() => setOpen(true)}
-          aria-label="Open my wardrobe"
-          className="fixed right-0 top-1/2 -translate-y-1/2 z-[55] flex flex-col items-center gap-2 bg-white border border-r-0 border-[#E2E0DB] rounded-l-[18px] px-4 py-6 shadow-[-4px_0_14px_rgba(0,0,0,0.07)] hover:pr-5 transition-all duration-300"
-        >
-          <HangerIcon className="w-7 h-7 text-[#4A4E57]" />
-          <span className="text-[16px] tracking-[0.16em] text-[#4A4E57] [writing-mode:vertical-rl] rotate-180">WARDROBE</span>
-          {count > 0 && (
-            <span className="text-[15px] text-white bg-[#C8302A] rounded-full min-w-[26px] h-[26px] px-1.5 flex items-center justify-center leading-none">
-              {count}
-            </span>
-          )}
-        </button>
-      )}
+      {/* No handle of its own any more: the heart in the header opens it
+          (Chloe, 2026-11-01 — the tab down the right edge took too much room). */}
 
       <div className={`fixed inset-0 z-50 ${open ? '' : 'pointer-events-none'}`}>
         <div
