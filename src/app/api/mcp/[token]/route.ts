@@ -3,11 +3,11 @@ import { resolveMirrorToken } from '@/lib/mirror/auth'
 import { createAdminClient } from '@/lib/supabase-server'
 import { hashAssistantToken } from '@/lib/mcp/link'
 import {
-  brandsFor, outfitsAroundPiece, outfitsFor, savedFor, savedPiecesFor, styleFor, wardrobeFor, type OutfitAnswer,
+  brandsFor, outfitsAroundPiece, outfitsFor, savedFor, savedIdsFor, savedPiecesFor, setPieceSaved, styleFor, wardrobeFor, type OutfitAnswer,
 } from '@/lib/mcp/myra-tools'
-import { SHOW_PICTURES, outfitToText, picturesOf } from '@/lib/mcp/outfit-text'
+import { SHOW_PICTURES, lookPicture, outfitToText, picturesOf } from '@/lib/mcp/outfit-text'
 import { pictureBlocks } from '@/lib/mcp/pictures'
-import { APP_HTML, APP_MIME, APP_RESOURCE, APP_TOOL_META, APP_URI, appPiece, type AppLooks, type AppPieces } from '@/lib/mcp/app'
+import { APP_CALLABLE_META, APP_HTML, APP_MIME, APP_RESOURCE, APP_TOOL_META, APP_URI, appPicture, appPiece, type AppLooks, type AppPieces } from '@/lib/mcp/app'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -23,14 +23,17 @@ export const maxDuration = 120
 // Add in Claude or ChatGPT as a custom connector:
 //   https://www.myraassistant.co.uk/api/mcp/<her token>
 //
-// An outfit is pictures, not a list. Every tool that returns pieces sends each
-// piece's picture twice: as a markdown image line under the piece, for the
-// assistant to copy into its reply, and as an image block beside the text, so
-// the tool result itself shows the look and the assistant can see it. And
-// since 2026-10-18 a third way, the one that looks like a shop's own app: the
-// result carries structuredContent and names the MYRA app (lib/mcp/app), so a
-// host that draws MCP Apps — Claude, ChatGPT — shows each piece as a card with
-// its picture, brand and price.
+// An outfit is a picture, not a list. A look's picture is the piece it was
+// built around, worn — the outfit styled, as her feed shows it. Every tool
+// that returns looks sends that picture twice: as a markdown image line under
+// the look's heading, for the assistant to copy into its reply above the
+// pieces, and as an image block beside the text, so the tool result itself
+// shows the look and the assistant can see it. And since 2026-10-18 a third
+// way, the one that looks like her feed: the result carries structuredContent
+// and names the MYRA app (lib/mcp/app), so a host that draws MCP Apps —
+// Claude, ChatGPT — shows each look styled with its pieces under it and a
+// heart on each. That heart is the one thing an assistant may write: it
+// calls save_piece, the same save as the heart on her own pages.
 
 const PROTOCOL = '2025-06-18'
 
@@ -38,7 +41,7 @@ const TOOLS = [
   {
     name: 'find_outfits',
     description:
-      'Outfits MYRA would put together for her, for an occasion — "dinner", "a wedding in June", "work". Uses her own wardrobe, her brands, her sizes and her stylist\'s rules, and every look is checked before it is returned. Each piece comes with its picture: show the pictures in your reply, not just names and links.',
+      'Outfits MYRA would put together for her, for an occasion — "dinner", "a wedding in June", "work". Uses her own wardrobe, her brands, her sizes and her stylist\'s rules, and every look is checked before it is returned. Each look comes with its picture, the outfit styled: show it in your reply with the pieces listed under it, not just names and links.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -51,7 +54,7 @@ const TOOLS = [
   },
   {
     name: 'style_a_piece',
-    description: 'Ways to wear one piece she owns or has saved — name it however she would ("my navy blazer", "the cream lace dress"). Each piece comes with its picture: show the pictures in your reply, not just names and links.',
+    description: 'Ways to wear one piece she owns or has saved — name it however she would ("my navy blazer", "the cream lace dress"). Each look comes with its picture, the outfit styled: show it in your reply with the pieces listed under it, not just names and links.',
     inputSchema: {
       type: 'object',
       properties: { piece: { type: 'string', description: 'The piece, in her words.' } },
@@ -67,6 +70,19 @@ const TOOLS = [
   { name: 'my_wardrobe', description: 'The pieces she owns, as MYRA has them.', inputSchema: { type: 'object', properties: {} } },
   { name: 'my_brands', description: 'The brands she wears, in her order, and the ones MYRA never recommends back.', inputSchema: { type: 'object', properties: {} } },
   { name: 'my_saved_pieces', description: 'Pieces she saved while shopping, with pictures, prices, links and whether they have gone.', inputSchema: { type: 'object', properties: {} }, _meta: APP_TOOL_META },
+  {
+    name: 'save_piece',
+    description: 'Save a piece from a MYRA look to her saved shelf (or remove it), by the item_id MYRA gave it. Only when she asks to save, like or keep a piece.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        item_id: { type: 'string', description: 'The piece\'s item_id from a MYRA look.' },
+        saved: { type: 'boolean', description: 'true to save, false to remove. Default true.' },
+      },
+      required: ['item_id'],
+    },
+    _meta: APP_CALLABLE_META,
+  },
 ] as const
 
 const CORS = {
@@ -83,17 +99,29 @@ const rpcError = (id: unknown, code: number, message: string) => json({ jsonrpc:
 const text = (s: string) => ({ content: [{ type: 'text', text: s }] })
 
 /**
- * Looks, as text with the pictures beside it. The text (with its markdown
- * image lines) is what the assistant writes from; the image blocks are what
- * the tool result shows and what the assistant sees. A picture that will not
- * fetch is left out of the blocks — its line is still in the text.
+ * Looks, as text with each look's picture beside it. The text (with one
+ * markdown image line per look) is what the assistant writes from; the image
+ * blocks — one per look, the outfit styled — are what the tool result shows
+ * and what the assistant sees. A picture that will not fetch is left out of
+ * the blocks; its line is still in the text. The structuredContent is the
+ * same looks for the app, with which pieces she has saved already.
  */
-async function looksAnswer(intro: string, looks: OutfitAnswer[]) {
+async function looksAnswer(memberId: string, intro: string, looks: OutfitAnswer[]) {
   const body = [intro, SHOW_PICTURES, '', ...looks.map(outfitToText)].join('\n')
-  const pieces = picturesOf(looks)
-  const blocks = await pictureBlocks(pieces.map((p) => p.url))
-  const pictures = pieces.flatMap((p, i) => (blocks[i] ? [{ type: 'text', text: p.caption }, blocks[i]] : []))
-  const structuredContent: AppLooks = { kind: 'looks', title: intro.replace(/ — ◈.*$/, ''), looks: looks.map((l) => ({ pieces: l.pieces.map(appPiece), why: l.why })) }
+  const heroes = picturesOf(looks)
+  const [blocks, saved] = await Promise.all([
+    pictureBlocks(heroes.map((p) => p.url)),
+    savedIdsFor(memberId, looks.flatMap((l) => l.pieces.map((p) => p.item_id ?? ''))).catch(() => new Set<string>()),
+  ])
+  const pictures = heroes.flatMap((p, i) => (blocks[i] ? [{ type: 'text', text: p.caption }, blocks[i]] : []))
+  const structuredContent: AppLooks = {
+    kind: 'looks', title: intro.replace(/ — ◈.*$/, ''),
+    looks: looks.map((l) => ({
+      image_url: appPicture(lookPicture(l)?.image_url, 828),
+      pieces: l.pieces.map((p) => appPiece(p, !!p.item_id && saved.has(p.item_id))),
+      why: l.why,
+    })),
+  }
   return { content: [{ type: 'text', text: body }, ...pictures], structuredContent }
 }
 
@@ -102,7 +130,7 @@ async function savedAnswer(memberId: string) {
   const [text, rows] = await Promise.all([savedFor(memberId), savedPiecesFor(memberId).catch(() => [])])
   const structuredContent: AppPieces = {
     kind: 'pieces', title: rows.length ? `${rows.length} saved from the shops` : 'Nothing saved yet',
-    pieces: rows.map((r) => appPiece({ ...r, name: r.gone ? `${r.name} (gone)` : r.name })),
+    pieces: rows.map((r) => appPiece({ ...r, name: r.gone ? `${r.name} (gone)` : r.name }, true)),
   }
   return { content: [{ type: 'text', text }], structuredContent }
 }
@@ -163,7 +191,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
             capabilities: { tools: { listChanged: false }, resources: { listChanged: false } },
             serverInfo: { name: 'MYRA', version: '1.0.0' },
             instructions:
-              'MYRA is her private stylist. Ask find_outfits for an occasion, style_a_piece to wear something she owns, or my_style to know her taste before advising. Outfits are composed from pieces MYRA can actually source in her size; a piece marked ◈ is already hers. Every piece comes with its picture as a markdown image line — copy those lines into your reply so she sees each piece. Never answer with names and links alone.',
+              'MYRA is her private stylist. Ask find_outfits for an occasion, style_a_piece to wear something she owns, or my_style to know her taste before advising. Outfits are composed from pieces MYRA can actually source in her size; a piece marked ◈ is already hers. Every look comes with one picture — the outfit styled — as a markdown image line under its heading: copy that line into your reply, then list the look\'s pieces under it. Never answer with names and links alone. If she asks to save or keep a piece, call save_piece with its item_id.',
           },
         })
         break
@@ -213,12 +241,20 @@ async function callTool(memberId: string, name: string, args: any) {
       const asked = String(args?.occasion ?? '').slice(0, 200)
       const r = await outfitsFor(memberId, { words: asked, count: Number(args?.count) || 3 })
       if (r.error) return { ...text(r.error), isError: true }
-      return looksAnswer(`${r.looks.length} outfit${r.looks.length === 1 ? '' : 's'} for ${r.occasionLabel.toLowerCase()} — ◈ is a piece she already owns.`, r.looks)
+      return looksAnswer(memberId, `${r.looks.length} outfit${r.looks.length === 1 ? '' : 's'} for ${r.occasionLabel.toLowerCase()} — ◈ is a piece she already owns.`, r.looks)
     }
     case 'style_a_piece': {
       const r = await outfitsAroundPiece(memberId, String(args?.piece ?? '').slice(0, 200))
       if (r.error) return { ...text(r.error), isError: true }
-      return looksAnswer(`Ways to wear ${r.piece}:`, r.looks)
+      return looksAnswer(memberId, `Ways to wear ${r.piece}:`, r.looks)
+    }
+    case 'save_piece': {
+      const itemId = String(args?.item_id ?? '').trim()
+      if (!/^[0-9a-f-]{36}$/i.test(itemId)) return { ...text('save_piece needs the item_id MYRA gave the piece.'), isError: true }
+      const want = args?.saved !== false
+      const r = await setPieceSaved(memberId, itemId, want)
+      if (r.error) return { ...text(r.error), isError: true }
+      return { ...text(want ? 'Saved to her MYRA shelf.' : 'Removed from her saved shelf.'), structuredContent: { kind: 'saved', item_id: itemId, saved: r.saved } }
     }
     case 'my_style': return text(await styleFor(memberId))
     case 'my_wardrobe': return text(await wardrobeFor(memberId))

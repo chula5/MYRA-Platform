@@ -42,7 +42,7 @@ export interface ThroughStylist { stylistId?: string | null }
  */
 const answerFor = (items: LookItem[], why: string, pictures?: Map<string, any>): OutfitAnswer => ({
   pieces: items.map((it) => ({
-    name: it.product_name, brand: it.brand, price_gbp: it.price_gbp ?? null, owned: !!it.owned, url: it.url ?? null,
+    name: it.product_name, brand: it.brand, price_gbp: it.price_gbp ?? null, owned: !!it.owned, url: it.url ?? null, item_id: it.item_id ?? null,
     image_url: it.image_url ?? pictures?.get(it.item_id ?? '')?.image_url ?? null,
   })),
   why,
@@ -273,12 +273,12 @@ export async function brandsFor(memberId: string): Promise<string> {
 export async function savedPiecesFor(memberId: string): Promise<(OutfitPiece & { gone: boolean })[]> {
   const admin = createAdminClient() as any
   const { data } = await admin.from('member_saved_item')
-    .select('saved_at, source_host, item:item_id(product_name, price_gbp, retailer_url, stock_status, image_url, brand:brand_id(name))')
+    .select('saved_at, source_host, item:item_id(item_id, product_name, price_gbp, retailer_url, stock_status, image_url, brand:brand_id(name))')
     .eq('member_id', memberId).order('saved_at', { ascending: false }).limit(40)
   return ((data ?? []) as any[]).filter((r) => r.item).map((r) => ({
     name: r.item.product_name, brand: r.item.brand?.name ?? r.source_host ?? '',
     price_gbp: r.item.price_gbp != null ? Number(r.item.price_gbp) : null, owned: false,
-    url: r.item.retailer_url ?? null, image_url: r.item.image_url ?? null, gone: r.item.stock_status === 'out_of_stock',
+    url: r.item.retailer_url ?? null, image_url: r.item.image_url ?? null, gone: r.item.stock_status === 'out_of_stock', item_id: r.item.item_id ?? null,
   }))
 }
 
@@ -309,3 +309,31 @@ export async function styleFor(memberId: string): Promise<string> {
 
 /** An outfit, written out — each piece with its picture under it. */
 export { outfitToText }
+
+/** Which of these pieces she has already saved — so a heart opens filled. */
+export async function savedIdsFor(memberId: string, itemIds: string[]): Promise<Set<string>> {
+  const ids = Array.from(new Set(itemIds.filter(Boolean)))
+  if (!ids.length) return new Set()
+  const admin = createAdminClient() as any
+  const { data } = await admin.from('member_saved_item').select('item_id').eq('member_id', memberId).in('item_id', ids)
+  return new Set(((data ?? []) as any[]).map((r) => r.item_id))
+}
+
+/**
+ * A HEART from inside an assistant: the one thing an assistant may write.
+ * Saves (or unsaves) a piece MYRA holds, exactly as the heart on her own
+ * pages does — her saved shelf, her size alerts, her ways to wear it.
+ */
+export async function setPieceSaved(memberId: string, itemId: string, saved: boolean): Promise<{ saved: boolean; error?: string }> {
+  const admin = createAdminClient() as any
+  const { data } = await admin.from('pilot_member').select('member_id, name, auth_user_id, brands, brands_input_only, sizes').eq('member_id', memberId).maybeSingle()
+  if (!data) return { saved: false, error: 'No MYRA account behind this link' }
+  const member = {
+    member_id: data.member_id, name: data.name, auth_user_id: data.auth_user_id ?? null,
+    brands: Array.isArray(data.brands) ? data.brands : [], brands_input_only: data.brands_input_only ?? [], sizes: data.sizes ?? {},
+    actingAdmin: false, actorUserId: null,
+  }
+  const { saveItemForMember, unsaveItemForMember } = await import('@/lib/mirror/save')
+  const r = saved ? await saveItemForMember(member, itemId) : await unsaveItemForMember(member, itemId)
+  return { saved: !!r.saved, error: r.error }
+}
