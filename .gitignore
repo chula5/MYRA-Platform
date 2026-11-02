@@ -63,3 +63,6 @@ next-env.d.ts
 
 # one-off mend scripts and their logs
 .scratch/
+
+# Mac Safari container app build output
+/safari-mac/MYRA\ Mirror/build/

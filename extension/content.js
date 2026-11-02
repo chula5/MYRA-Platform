@@ -1426,9 +1426,10 @@
     }
     pillFor = key
     pillFrom = from
+    const drawPill = () => {
     pill.innerHTML = `
       <div style="display:flex;gap:11px;align-items:flex-start">
-        ${product.image ? `<img src="${esc(product.image)}" alt="" style="width:46px;height:61px;object-fit:contain;background:#fff;border-radius:6px;flex:0 0 auto">` : `<img src="${ext.runtime.getURL('icons/mirror.png')}" alt="" style="width:22px;height:auto;margin-top:2px">`}
+        ${product.image ? `<img data-myra="hero" src="${esc(product.image)}" alt="" style="width:46px;height:61px;object-fit:contain;background:#fff;border-radius:6px;flex:0 0 auto">` : `<img src="${ext.runtime.getURL('icons/mirror.png')}" alt="" style="width:22px;height:auto;margin-top:2px">`}
         <div style="flex:1;min-width:0">
           <div style="font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;opacity:.5">MYRA</div>
           <div style="font-size:14.5px;font-weight:600;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(product.title)}</div>
@@ -1436,13 +1437,116 @@
           <div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap">
             <button data-myra="save" style="border:0;border-radius:999px;background:#141414;color:#F7F6F3;padding:9px 14px;font:500 12px/1 ${FONT};letter-spacing:.08em;text-transform:uppercase;cursor:pointer">♥ Save to MYRA</button>
             <button data-myra="style" style="border:0;border-radius:999px;background:#fff;color:#2B2B2B;padding:9px 14px;font:500 12px/1 ${FONT};letter-spacing:.08em;text-transform:uppercase;cursor:pointer">What do I wear with this?</button>
+            ${product.image ? `<button data-myra="model" style="border:0;border-radius:999px;background:#fff;color:#2B2B2B;padding:9px 14px;font:500 12px/1 ${FONT};letter-spacing:.08em;text-transform:uppercase;cursor:pointer">See on a model</button>` : ''}
           </div>
           <div data-myra="said" style="font-size:12.5px;margin-top:9px;display:none;opacity:.75"></div>
         </div>
         <button data-myra="close" aria-label="Close" style="border:0;background:transparent;font-size:17px;line-height:1;color:#55534E;cursor:pointer">×</button>
       </div>`
+    }
+    drawPill()
     const said = pill.querySelector('[data-myra="said"]')
     const say = (t) => { said.style.display = 'block'; said.textContent = t }
+    pill.querySelector('[data-myra="close"]').addEventListener('click', () => { hidePiece(); pillOff = true })
+    pill.querySelector('[data-myra="save"]').addEventListener('click', async (e) => {
+      const b = e.currentTarget
+      b.disabled = true
+      say('Saving…')
+      const r = await savePiece(product)
+      if (r?.error) { say(friendly(r.error)); b.disabled = false; return }
+      b.textContent = '♥ Saved'
+      say('In your saved pieces — MYRA watches its stock and will tell you if it starts to go.')
+    })
+    pill.querySelector('[data-myra="style"]').addEventListener('click', (e) => openMenu(e.currentTarget, product))
+    pill.querySelector('[data-myra="model"]')?.addEventListener('click', async (e) => {
+      const b = e.currentTarget
+      b.disabled = true
+      b.textContent = 'Shooting…'
+      const r = await modelShotFor(product, (t) => say(t))
+      if (!r?.imageUrl) { say(friendly(r?.error || 'MYRA could not shoot this piece')); b.disabled = false; b.textContent = 'See on a model'; return }
+      showOnModel(product, r.imageUrl)
+    })
+  }
+
+  // ── SEE ON A MODEL ─────────────────────────────────────────────────────────
+  // One Higgsfield shoot of the piece on a fictional model, from MYRA
+  // (/api/mirror/model). Made in the request where MYRA's renderer is to
+  // hand; otherwise queued and polled for — a shoot is a minute or two.
+  const MODEL_POLL_MS = 6000
+  const MODEL_WAIT_MS = 4 * 60_000
+  async function modelShotFor(product, say) {
+    const t = await creds()
+    if (!t?.token) return { error: `Connect MYRA first · ${RELOAD_NOTE}` }
+    const base = (t.apiBase || API).replace(/\/+$/, '')
+    const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${t.token}` }
+    try {
+      say('MYRA is shooting this on a model — a minute or two.')
+      const res = await fetch(`${base}/api/mirror/model`, { method: 'POST', headers, body: JSON.stringify(product) })
+      let r = await res.json()
+      if (r?.error) return r
+      const until = Date.now() + MODEL_WAIT_MS
+      while (r?.status !== 'done' && r?.status !== 'failed' && Date.now() < until) {
+        if (r?.renderer === 'queued') say('In the queue for MYRA\u2019s studio — the picture lands here when it is shot.')
+        await new Promise((ok) => setTimeout(ok, MODEL_POLL_MS))
+        if (!pill || pillFor !== (product.url || product.title)) return { error: 'moved on' }
+        const p = await fetch(`${base}/api/mirror/model?item=${encodeURIComponent(r.itemId)}`, { headers })
+        r = await p.json()
+      }
+      if (r?.status === 'done' && r.imageUrl) return r
+      return { error: r?.error || (r?.status === 'failed' ? 'The shoot failed — try again later' : 'Still shooting — ask again in a minute') }
+    } catch (err) { return { error: String(err?.message || err) } }
+  }
+
+  /** The pictures of this piece on the page: hers first, then other big ones from the same picture host. */
+  function pieceImages(product) {
+    const out = []
+    const seen = new Set()
+    const add = (u) => { if (u && !seen.has(u) && !/^data:/i.test(u)) { seen.add(u); out.push(u) } }
+    add(product.image)
+    let host = ''
+    try { host = new URL(product.image, location.href).host } catch { /* no picture */ }
+    for (const img of document.querySelectorAll('img')) {
+      if (out.length >= 5) break
+      if (pill?.contains(img)) continue
+      const r = img.getBoundingClientRect()
+      if (r.width < 180 || r.height < 180) continue
+      let u = null
+      try { u = new URL(img.currentSrc || img.src, location.href).href } catch { continue }
+      if (host && !u.includes(host)) continue
+      add(u)
+    }
+    return out
+  }
+
+  /** The card becomes the shoot: the model wears the piece, the product pictures sit beneath to click. */
+  function showOnModel(product, modelUrl) {
+    if (!pill) return
+    const thumbs = pieceImages(product)
+    const all = [modelUrl, ...thumbs]
+    pill.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;opacity:.5">MYRA · On a model</div>
+        <button data-myra="close" aria-label="Close" style="border:0;background:transparent;font-size:17px;line-height:1;color:#55534E;cursor:pointer">×</button>
+      </div>
+      <img data-myra="big" src="${esc(modelUrl)}" alt="" style="display:block;width:100%;aspect-ratio:3/4;object-fit:cover;background:#E4E2DD;border-radius:14px;margin-top:9px">
+      <div style="font-size:14.5px;font-weight:600;margin-top:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(product.title)}</div>
+      <div style="font-size:12.5px;opacity:.62;margin-top:2px">${esc(product.brand || '')}${product.price ? ` · £${Math.round(product.price)}` : ''}</div>
+      <div data-myra="thumbs" style="display:flex;gap:6px;margin-top:9px;overflow-x:auto">
+        ${all.map((u, i) => `<img data-myra="thumb" data-i="${i}" src="${esc(u)}" alt="" style="width:48px;height:64px;object-fit:cover;background:#fff;border-radius:6px;flex:0 0 auto;cursor:pointer;outline:${i === 0 ? '2px solid #141414' : '1px solid rgba(0,0,0,.08)'}">`).join('')}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap">
+        <button data-myra="save" style="border:0;border-radius:999px;background:#141414;color:#F7F6F3;padding:9px 14px;font:500 12px/1 ${FONT};letter-spacing:.08em;text-transform:uppercase;cursor:pointer">♥ Save to MYRA</button>
+        <button data-myra="style" style="border:0;border-radius:999px;background:#fff;color:#2B2B2B;padding:9px 14px;font:500 12px/1 ${FONT};letter-spacing:.08em;text-transform:uppercase;cursor:pointer">What do I wear with this?</button>
+      </div>
+      <div data-myra="said" style="font-size:12.5px;margin-top:9px;display:none;opacity:.75"></div>`
+    const big = pill.querySelector('[data-myra="big"]')
+    const said = pill.querySelector('[data-myra="said"]')
+    const say = (t) => { said.style.display = 'block'; said.textContent = t }
+    pill.querySelectorAll('[data-myra="thumb"]').forEach((th) => th.addEventListener('click', () => {
+      big.src = th.src
+      big.style.objectFit = th.dataset.i === '0' ? 'cover' : 'contain'
+      pill.querySelectorAll('[data-myra="thumb"]').forEach((o) => { o.style.outline = o === th ? '2px solid #141414' : '1px solid rgba(0,0,0,.08)' })
+    }))
     pill.querySelector('[data-myra="close"]').addEventListener('click', () => { hidePiece(); pillOff = true })
     pill.querySelector('[data-myra="save"]').addEventListener('click', async (e) => {
       const b = e.currentTarget
