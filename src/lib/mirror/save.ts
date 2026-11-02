@@ -110,3 +110,39 @@ export async function listSavesForMember(member: MirrorMember): Promise<{ saves:
   const alerts = (await listUserAlerts(alertKeyFor(member), 60)).filter((a) => ids.has(a.item_id))
   return { saves, alerts, urls: saves.map((s) => s.url).filter(Boolean) as string[] }
 }
+
+// ── By id ─────────────────────────────────────────────────────────────────
+//
+// A heart on a piece MYRA already holds — a look drawn inside Claude or
+// ChatGPT (lib/mcp/app) — names the item, not a page. Same rows, same
+// alerts, same warm-up as a save from a shop; nothing to read first.
+
+export async function saveItemForMember(member: MirrorMember, itemId: string): Promise<{ saved?: true; error?: string }> {
+  const admin = createAdminClient() as any
+  const { data: item } = await admin.from('item').select('item_id, item_type, retailer_url').eq('item_id', itemId).maybeSingle()
+  if (!item) return { error: 'MYRA does not hold that piece' }
+  const { error } = await admin.from('member_saved_item')
+    .upsert({ member_id: member.member_id, item_id: item.item_id, source_host: item.retailer_url ? hostOf(item.retailer_url) : null }, { onConflict: 'member_id,item_id' })
+  if (error) return { error: /schema cache|does not exist/i.test(error.message) ? MIGRATION_HINT : error.message }
+  if (member.auth_user_id) {
+    try { await admin.from('saved_item').upsert({ user_id: member.auth_user_id, item_id: item.item_id }, { onConflict: 'user_id,item_id' }) } catch { /* optional mirror */ }
+  }
+  try {
+    const ctx = await loadMemberSizeProfile(member.member_id)
+    await subscribeToItems(alertKeyFor(member), [{ item_id: item.item_id, item_type: item.item_type }], 'saved_item', null, ctx)
+  } catch (err) { console.error('[mirror/save] by id alerts', err) }
+  try {
+    const q = await enqueueWarmups(admin, member.member_id, [item.item_id], 'save')
+    if (q.queued.length) kickStyledWaysDrain()
+  } catch (err) { console.error('[mirror/save] by id styled ways', err) }
+  return { saved: true }
+}
+
+export async function unsaveItemForMember(member: MirrorMember, itemId: string): Promise<{ saved: false; error?: string }> {
+  const admin = createAdminClient() as any
+  const { error } = await admin.from('member_saved_item').delete().eq('member_id', member.member_id).eq('item_id', itemId)
+  if (error) return { saved: false, error: error.message }
+  if (member.auth_user_id) { try { await admin.from('saved_item').delete().eq('user_id', member.auth_user_id).eq('item_id', itemId) } catch { /* optional */ } }
+  await unsubscribe(alertKeyFor(member), itemId, 'saved_item').catch(() => undefined)
+  return { saved: false }
+}
