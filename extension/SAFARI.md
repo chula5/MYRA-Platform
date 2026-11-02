@@ -24,3 +24,37 @@ the iPhone install button alongside the Chrome link.
 The extension target is linked to the repository's `extension/` directory, so
 Chrome and Safari do not have separate copies of the JavaScript to keep in
 sync.
+
+# MYRA Mirror on Mac Safari
+
+`safari-mac/MYRA Mirror/` is a macOS container app made with
+`xcrun safari-web-extension-converter`. Its extension files point at this same
+`extension/` folder, so Chrome, iPhone Safari and Mac Safari share one copy.
+
+Build and install:
+
+```bash
+cd "safari-mac/MYRA Mirror"
+xcodebuild -project "MYRA Mirror.xcodeproj" -scheme "MYRA Mirror" -configuration Release -derivedDataPath build DEVELOPMENT_TEAM=2LSB76B969 -allowProvisioningUpdates build
+ditto "build/Build/Products/Release/MYRA Mirror.app" "/Applications/MYRA Mirror.app"
+open "/Applications/MYRA Mirror.app"
+```
+
+Then in Safari: **Settings → Extensions → tick MYRA Mirror Extension**, set it to
+allow on every website, and press the toolbar button → **Connect to MYRA**.
+Rebuild after changing `extension/` (Safari does not re-read the folder live).
+
+## Mac TestFlight
+
+The Mac app uses the iPhone app's bundle IDs (`uk.co.myraassistant.app` and
+`uk.co.myraassistant.app.mirror`), so it is the macOS side of the same App Store
+Connect app and the same TestFlight testers. In App Store Connect add the macOS
+platform to the app once, then:
+
+```bash
+cd "safari-mac/MYRA Mirror"
+xcodebuild -project "MYRA Mirror.xcodeproj" -scheme "MYRA Mirror" -configuration Release -archivePath build/MYRA-Mirror.xcarchive DEVELOPMENT_TEAM=2LSB76B969 -allowProvisioningUpdates archive
+xcodebuild -exportArchive -archivePath build/MYRA-Mirror.xcarchive -exportOptionsPlist ExportOptions.plist -exportPath build/export -allowProvisioningUpdates
+```
+
+Bump `CURRENT_PROJECT_VERSION` before every new upload.

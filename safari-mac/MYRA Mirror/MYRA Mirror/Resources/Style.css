@@ -1,0 +1,87 @@
+* {
+    -webkit-user-select: none;
+    -webkit-user-drag: none;
+    cursor: default;
+}
+
+:root {
+    color-scheme: light;
+
+    --spacing: 20px;
+    --ink: #111111;
+    --silver: #7C838B;
+    --paper: #F4F3F0;
+}
+
+html {
+    height: 100%;
+    background: var(--paper);
+}
+
+body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+
+    gap: var(--spacing);
+    margin: 0 calc(var(--spacing) * 2);
+    height: 100%;
+
+    font: 19px -apple-system, "Helvetica Neue", sans-serif;
+    color: var(--ink);
+    text-align: center;
+}
+
+img {
+    border-radius: 22px;
+}
+
+h1 {
+    margin: 0;
+    font: 400 34px "Didot", "Bodoni 72", Georgia, serif;
+    letter-spacing: 0.04em;
+}
+
+p {
+    margin: 0;
+    max-width: 30em;
+    line-height: 1.4;
+}
+
+.lede {
+    color: var(--silver);
+}
+
+.steps {
+    margin: 0;
+    padding-left: 1.2em;
+    text-align: left;
+    line-height: 1.7;
+}
+
+body.state-on .steps {
+    display: none;
+}
+
+body:not(.state-on, .state-off) :is(.state-on, .state-off) {
+    display: none;
+}
+
+body.state-on :is(.state-off, .state-unknown) {
+    display: none;
+}
+
+body.state-off :is(.state-on, .state-unknown) {
+    display: none;
+}
+
+button {
+    padding: 14px 28px;
+    border: 0;
+    border-radius: 0;
+    background: var(--ink);
+    color: #fff;
+    font: 600 16px -apple-system, sans-serif;
+    letter-spacing: 0.12em;
+}

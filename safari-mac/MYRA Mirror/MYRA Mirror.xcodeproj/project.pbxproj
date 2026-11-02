@@ -1,0 +1,641 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		41BC7E5F30976779005412D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41BC7E5E30976779005412D9 /* AppDelegate.swift */; };
+		41BC7E6330976779005412D9 /* Main.html in Resources */ = {isa = PBXBuildFile; fileRef = 41BC7E6130976779005412D9 /* Main.html */; };
+		41BC7E6530976779005412D9 /* Icon.png in Resources */ = {isa = PBXBuildFile; fileRef = 41BC7E6430976779005412D9 /* Icon.png */; };
+		41BC7E6730976779005412D9 /* Style.css in Resources */ = {isa = PBXBuildFile; fileRef = 41BC7E6630976779005412D9 /* Style.css */; };
+		41BC7E6930976779005412D9 /* Script.js in Resources */ = {isa = PBXBuildFile; fileRef = 41BC7E6830976779005412D9 /* Script.js */; };
+		41BC7E6B30976779005412D9 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41BC7E6A30976779005412D9 /* ViewController.swift */; };
+		41BC7E6E30976779005412D9 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 41BC7E6C30976779005412D9 /* Main.storyboard */; };
+		41BC7E703097677A005412D9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 41BC7E6F3097677A005412D9 /* Assets.xcassets */; };
+		41BC7E773097677A005412D9 /* MYRA Mirror Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 41BC7E763097677A005412D9 /* MYRA Mirror Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		41BC7E7C3097677A005412D9 /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41BC7E7B3097677A005412D9 /* SafariWebExtensionHandler.swift */; };
+		41BC7E943097677B005412D9 /* popup in Resources */ = {isa = PBXBuildFile; fileRef = 41BC7E883097677B005412D9 /* popup */; };
+		41BC7E953097677B005412D9 /* background.js in Resources */ = {isa = PBXBuildFile; fileRef = 41BC7E893097677B005412D9 /* background.js */; };
+		41BC7E963097677B005412D9 /* SAFARI.md in Resources */ = {isa = PBXBuildFile; fileRef = 41BC7E8A3097677B005412D9 /* SAFARI.md */; };
+		41BC7E973097677B005412D9 /* vinted.js in Resources */ = {isa = PBXBuildFile; fileRef = 41BC7E8B3097677B005412D9 /* vinted.js */; };
+		41BC7E983097677B005412D9 /* connect.js in Resources */ = {isa = PBXBuildFile; fileRef = 41BC7E8C3097677B005412D9 /* connect.js */; };
+		41BC7E993097677B005412D9 /* STORE.md in Resources */ = {isa = PBXBuildFile; fileRef = 41BC7E8D3097677B005412D9 /* STORE.md */; };
+		41BC7E9A3097677B005412D9 /* adapters.js in Resources */ = {isa = PBXBuildFile; fileRef = 41BC7E8E3097677B005412D9 /* adapters.js */; };
+		41BC7E9B3097677B005412D9 /* icons in Resources */ = {isa = PBXBuildFile; fileRef = 41BC7E8F3097677B005412D9 /* icons */; };
+		41BC7E9C3097677B005412D9 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 41BC7E903097677B005412D9 /* manifest.json */; };
+		41BC7E9D3097677B005412D9 /* browser-api.js in Resources */ = {isa = PBXBuildFile; fileRef = 41BC7E913097677B005412D9 /* browser-api.js */; };
+		41BC7E9E3097677B005412D9 /* admin.js in Resources */ = {isa = PBXBuildFile; fileRef = 41BC7E923097677B005412D9 /* admin.js */; };
+		41BC7E9F3097677B005412D9 /* content.js in Resources */ = {isa = PBXBuildFile; fileRef = 41BC7E933097677B005412D9 /* content.js */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		41BC7E783097677A005412D9 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 41BC7E5330976779005412D9 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 41BC7E753097677A005412D9;
+			remoteInfo = "MYRA Mirror Extension";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		41BC7E833097677A005412D9 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				41BC7E773097677A005412D9 /* MYRA Mirror Extension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		41BC7E5B30976779005412D9 /* MYRA Mirror.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "MYRA Mirror.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		41BC7E5E30976779005412D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		41BC7E6230976779005412D9 /* Base */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = Base; path = Base.lproj/Main.html; sourceTree = "<group>"; };
+		41BC7E6430976779005412D9 /* Icon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon.png; sourceTree = "<group>"; };
+		41BC7E6630976779005412D9 /* Style.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = Style.css; sourceTree = "<group>"; };
+		41BC7E6830976779005412D9 /* Script.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = Script.js; sourceTree = "<group>"; };
+		41BC7E6A30976779005412D9 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
+		41BC7E6D30976779005412D9 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
+		41BC7E6F3097677A005412D9 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		41BC7E713097677A005412D9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		41BC7E763097677A005412D9 /* MYRA Mirror Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "MYRA Mirror Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		41BC7E7B3097677A005412D9 /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
+		41BC7E7D3097677A005412D9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		41BC7E883097677B005412D9 /* popup */ = {isa = PBXFileReference; lastKnownFileType = folder; name = popup; path = ../../../extension/popup; sourceTree = "<group>"; };
+		41BC7E893097677B005412D9 /* background.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = background.js; path = ../../../extension/background.js; sourceTree = "<group>"; };
+		41BC7E8A3097677B005412D9 /* SAFARI.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = SAFARI.md; path = ../../../extension/SAFARI.md; sourceTree = "<group>"; };
+		41BC7E8B3097677B005412D9 /* vinted.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = vinted.js; path = ../../../extension/vinted.js; sourceTree = "<group>"; };
+		41BC7E8C3097677B005412D9 /* connect.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = connect.js; path = ../../../extension/connect.js; sourceTree = "<group>"; };
+		41BC7E8D3097677B005412D9 /* STORE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = STORE.md; path = ../../../extension/STORE.md; sourceTree = "<group>"; };
+		41BC7E8E3097677B005412D9 /* adapters.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = adapters.js; path = ../../../extension/adapters.js; sourceTree = "<group>"; };
+		41BC7E8F3097677B005412D9 /* icons */ = {isa = PBXFileReference; lastKnownFileType = folder; name = icons; path = ../../../extension/icons; sourceTree = "<group>"; };
+		41BC7E903097677B005412D9 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = manifest.json; path = ../../../extension/manifest.json; sourceTree = "<group>"; };
+		41BC7E913097677B005412D9 /* browser-api.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "browser-api.js"; path = "../../../extension/browser-api.js"; sourceTree = "<group>"; };
+		41BC7E923097677B005412D9 /* admin.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = admin.js; path = ../../../extension/admin.js; sourceTree = "<group>"; };
+		41BC7E933097677B005412D9 /* content.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = content.js; path = ../../../extension/content.js; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		41BC7E5830976779005412D9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		41BC7E733097677A005412D9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		41BC7E5230976779005412D9 = {
+			isa = PBXGroup;
+			children = (
+				41BC7E5D30976779005412D9 /* MYRA Mirror */,
+				41BC7E7A3097677A005412D9 /* MYRA Mirror Extension */,
+				41BC7E5C30976779005412D9 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		41BC7E5C30976779005412D9 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				41BC7E5B30976779005412D9 /* MYRA Mirror.app */,
+				41BC7E763097677A005412D9 /* MYRA Mirror Extension.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		41BC7E5D30976779005412D9 /* MYRA Mirror */ = {
+			isa = PBXGroup;
+			children = (
+				41BC7E5E30976779005412D9 /* AppDelegate.swift */,
+				41BC7E6A30976779005412D9 /* ViewController.swift */,
+				41BC7E6C30976779005412D9 /* Main.storyboard */,
+				41BC7E6F3097677A005412D9 /* Assets.xcassets */,
+				41BC7E713097677A005412D9 /* Info.plist */,
+				41BC7E6030976779005412D9 /* Resources */,
+			);
+			path = "MYRA Mirror";
+			sourceTree = "<group>";
+		};
+		41BC7E6030976779005412D9 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				41BC7E6130976779005412D9 /* Main.html */,
+				41BC7E6430976779005412D9 /* Icon.png */,
+				41BC7E6630976779005412D9 /* Style.css */,
+				41BC7E6830976779005412D9 /* Script.js */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		41BC7E7A3097677A005412D9 /* MYRA Mirror Extension */ = {
+			isa = PBXGroup;
+			children = (
+				41BC7E873097677B005412D9 /* Resources */,
+				41BC7E7B3097677A005412D9 /* SafariWebExtensionHandler.swift */,
+				41BC7E7D3097677A005412D9 /* Info.plist */,
+			);
+			path = "MYRA Mirror Extension";
+			sourceTree = "<group>";
+		};
+		41BC7E873097677B005412D9 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				41BC7E883097677B005412D9 /* popup */,
+				41BC7E893097677B005412D9 /* background.js */,
+				41BC7E8A3097677B005412D9 /* SAFARI.md */,
+				41BC7E8B3097677B005412D9 /* vinted.js */,
+				41BC7E8C3097677B005412D9 /* connect.js */,
+				41BC7E8D3097677B005412D9 /* STORE.md */,
+				41BC7E8E3097677B005412D9 /* adapters.js */,
+				41BC7E8F3097677B005412D9 /* icons */,
+				41BC7E903097677B005412D9 /* manifest.json */,
+				41BC7E913097677B005412D9 /* browser-api.js */,
+				41BC7E923097677B005412D9 /* admin.js */,
+				41BC7E933097677B005412D9 /* content.js */,
+			);
+			name = Resources;
+			path = "MYRA Mirror Extension";
+			sourceTree = SOURCE_ROOT;
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		41BC7E5A30976779005412D9 /* MYRA Mirror */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 41BC7E843097677A005412D9 /* Build configuration list for PBXNativeTarget "MYRA Mirror" */;
+			buildPhases = (
+				41BC7E5730976779005412D9 /* Sources */,
+				41BC7E5830976779005412D9 /* Frameworks */,
+				41BC7E5930976779005412D9 /* Resources */,
+				41BC7E833097677A005412D9 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				41BC7E793097677A005412D9 /* PBXTargetDependency */,
+			);
+			name = "MYRA Mirror";
+			packageProductDependencies = (
+			);
+			productName = "MYRA Mirror";
+			productReference = 41BC7E5B30976779005412D9 /* MYRA Mirror.app */;
+			productType = "com.apple.product-type.application";
+		};
+		41BC7E753097677A005412D9 /* MYRA Mirror Extension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 41BC7E803097677A005412D9 /* Build configuration list for PBXNativeTarget "MYRA Mirror Extension" */;
+			buildPhases = (
+				41BC7E723097677A005412D9 /* Sources */,
+				41BC7E733097677A005412D9 /* Frameworks */,
+				41BC7E743097677A005412D9 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "MYRA Mirror Extension";
+			packageProductDependencies = (
+			);
+			productName = "MYRA Mirror Extension";
+			productReference = 41BC7E763097677A005412D9 /* MYRA Mirror Extension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		41BC7E5330976779005412D9 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2650;
+				LastUpgradeCheck = 2650;
+				TargetAttributes = {
+					41BC7E5A30976779005412D9 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+					41BC7E753097677A005412D9 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+				};
+			};
+			buildConfigurationList = 41BC7E5630976779005412D9 /* Build configuration list for PBXProject "MYRA Mirror" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 41BC7E5230976779005412D9;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 41BC7E5C30976779005412D9 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				41BC7E5A30976779005412D9 /* MYRA Mirror */,
+				41BC7E753097677A005412D9 /* MYRA Mirror Extension */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		41BC7E5930976779005412D9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				41BC7E6530976779005412D9 /* Icon.png in Resources */,
+				41BC7E6E30976779005412D9 /* Main.storyboard in Resources */,
+				41BC7E6930976779005412D9 /* Script.js in Resources */,
+				41BC7E6330976779005412D9 /* Main.html in Resources */,
+				41BC7E703097677A005412D9 /* Assets.xcassets in Resources */,
+				41BC7E6730976779005412D9 /* Style.css in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		41BC7E743097677A005412D9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				41BC7E9F3097677B005412D9 /* content.js in Resources */,
+				41BC7E9D3097677B005412D9 /* browser-api.js in Resources */,
+				41BC7E953097677B005412D9 /* background.js in Resources */,
+				41BC7E9B3097677B005412D9 /* icons in Resources */,
+				41BC7E963097677B005412D9 /* SAFARI.md in Resources */,
+				41BC7E973097677B005412D9 /* vinted.js in Resources */,
+				41BC7E9C3097677B005412D9 /* manifest.json in Resources */,
+				41BC7E943097677B005412D9 /* popup in Resources */,
+				41BC7E9E3097677B005412D9 /* admin.js in Resources */,
+				41BC7E993097677B005412D9 /* STORE.md in Resources */,
+				41BC7E9A3097677B005412D9 /* adapters.js in Resources */,
+				41BC7E983097677B005412D9 /* connect.js in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		41BC7E5730976779005412D9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				41BC7E6B30976779005412D9 /* ViewController.swift in Sources */,
+				41BC7E5F30976779005412D9 /* AppDelegate.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		41BC7E723097677A005412D9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				41BC7E7C3097677A005412D9 /* SafariWebExtensionHandler.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		41BC7E793097677A005412D9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 41BC7E753097677A005412D9 /* MYRA Mirror Extension */;
+			targetProxy = 41BC7E783097677A005412D9 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		41BC7E6130976779005412D9 /* Main.html */ = {
+			isa = PBXVariantGroup;
+			children = (
+				41BC7E6230976779005412D9 /* Base */,
+			);
+			name = Main.html;
+			sourceTree = "<group>";
+		};
+		41BC7E6C30976779005412D9 /* Main.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				41BC7E6D30976779005412D9 /* Base */,
+			);
+			name = Main.storyboard;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		41BC7E7E3097677A005412D9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		41BC7E7F3097677A005412D9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		41BC7E813097677A005412D9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "MYRA Mirror Extension/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "MYRA Mirror Extension";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = uk.co.myraassistant.app.mirror;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		41BC7E823097677A005412D9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "MYRA Mirror Extension/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "MYRA Mirror Extension";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = uk.co.myraassistant.app.mirror;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		41BC7E853097677A005412D9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "MYRA Mirror/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "MYRA Mirror";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMainStoryboardFile = Main;
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+					"-framework",
+					WebKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = uk.co.myraassistant.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		41BC7E863097677A005412D9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "MYRA Mirror/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "MYRA Mirror";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMainStoryboardFile = Main;
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+					"-framework",
+					WebKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = uk.co.myraassistant.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		41BC7E5630976779005412D9 /* Build configuration list for PBXProject "MYRA Mirror" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				41BC7E7E3097677A005412D9 /* Debug */,
+				41BC7E7F3097677A005412D9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		41BC7E803097677A005412D9 /* Build configuration list for PBXNativeTarget "MYRA Mirror Extension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				41BC7E813097677A005412D9 /* Debug */,
+				41BC7E823097677A005412D9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		41BC7E843097677A005412D9 /* Build configuration list for PBXNativeTarget "MYRA Mirror" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				41BC7E853097677A005412D9 /* Debug */,
+				41BC7E863097677A005412D9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 41BC7E5330976779005412D9 /* Project object */;
+}
