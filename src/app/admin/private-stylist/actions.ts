@@ -3590,6 +3590,8 @@ export interface SavedPieceView {
   source_host: string | null
   saved_at: string
   stock_status: string | null
+  /** How many studio outfits it is already in — "STYLED IN 2 LOOKS" on the tile. */
+  studio_count?: number
 }
 
 /** The pieces she has saved from the shops, newest first (migration 0060). */
@@ -3601,8 +3603,12 @@ export async function loadSavedPieces(asMemberId?: string): Promise<{ pieces: Sa
     .select('item_id, source_host, saved_at, item:item_id(product_name, image_url, price_gbp, retailer_url, stock_status, brand:brand_id(name))')
     .eq('member_id', me.memberId).order('saved_at', { ascending: false }).limit(60)
   if (error) return { pieces: [], error: /member_saved_item/.test(error.message) ? 'Run migration 0060 in Supabase first' : error.message }
+  const kept = ((data ?? []) as any[]).filter((r) => r.item)
+  // The studio outfits each piece is already in, so the tile can say so (Chloe, 2026-11-03).
+  const { studioCountsFor } = await import('@/lib/studio-looks')
+  const counts = await studioCountsFor(admin, kept.map((r) => r.item_id)).catch(() => new Map<string, number>())
   return {
-    pieces: ((data ?? []) as any[]).filter((r) => r.item).map((r) => ({
+    pieces: kept.map((r) => ({
       item_id: r.item_id,
       product_name: r.item.product_name,
       brand: r.item.brand?.name ?? null,
@@ -3612,6 +3618,7 @@ export async function loadSavedPieces(asMemberId?: string): Promise<{ pieces: Sa
       source_host: r.source_host ?? null,
       saved_at: r.saved_at,
       stock_status: r.item.stock_status ?? null,
+      studio_count: counts.get(r.item_id) ?? 0,
     })),
   }
 }

@@ -17,7 +17,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import ClientWardrobe from './ClientWardrobe'
-import { myRequests, reactToLook, requestLooks, savedWhileBrowsing, type ClientView, type ClientLook, type ClientLookItem, type BrowsedPiece } from './actions'
+import { myRequests, reactToLook, requestLooks, savedWhileBrowsing, searchStudioLooks, type ClientView, type ClientLook, type ClientLookItem, type BrowsedPiece } from './actions'
+import ComposedLookCard from '@/components/me/ComposedLookCard'
+import type { StudioLook } from '@/lib/studio-looks'
 import { CLIENT_OCCASIONS, askKindForEvent, whereFor, ASK_KINDS, ASK_WHEN, ASK_FEEL, ASK_WEATHER, ASK_LIMITS, ASK_BUDGET } from '@/lib/client-occasions'
 import { lookSimilarity, relatedLooks, looksWearing } from '@/lib/look-similarity'
 import FallbackImage from '@/components/FallbackImage'
@@ -249,6 +251,18 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
       return q.split(/\s+/).every((t) => hay.includes(t))
     })
   }, [browsable, query])
+
+  // The studio's outfits that answer her words, under her own (Chloe, 2026-11-03).
+  const [studioHits, setStudioHits] = useState<StudioLook[]>([])
+  useEffect(() => {
+    const q = query.trim()
+    if (q.length < 2) { setStudioHits([]); return }
+    let live = true
+    const t = setTimeout(() => {
+      void searchStudioLooks(q).then((r) => { if (live) setStudioHits(r) })
+    }, 350)
+    return () => { live = false; clearTimeout(t) }
+  }, [query])
 
   const loved = view.looks.filter((l) => l.response === 'yes')
   // The shelves. A look sits on the one its source names; SAVED OUTFITS also
@@ -530,7 +544,18 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
             onBack={() => setQuery('')}
             looks={searched}
             cardProps={cardProps}
+            empty={studioHits.length ? <p className="text-center myra-section-note py-6">NONE OF YOUR OWN YET — THE STUDIO HAS THESE.</p> : undefined}
           />
+        )}
+        {/* What the studio has made with what she asked for: reachable from a search, not only the feed. */}
+        {!related && searched && studioHits.length > 0 && (
+          <section className="mt-12">
+            <p className="myra-section-label">FROM THE STUDIO</p>
+            <p className="myra-section-note mt-3">{`${studioHits.length} OUTFIT${studioHits.length === 1 ? '' : 'S'} WITH “${query.toUpperCase()}”`}</p>
+            <div className={`${LOOK_GRID} mt-6`}>
+              {studioHits.map((l) => <ComposedLookCard key={l.outfit_id} look={l} testMemberId={readOnly ? view.memberId ?? undefined : undefined} />)}
+            </div>
+          </section>
         )}
 
         {/* ── One occasion, opened ────────────────────────────────────────── */}

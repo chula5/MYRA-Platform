@@ -37,6 +37,8 @@ export interface BrowseFilters {
   clothingSizes?: number[]
   /** Canonical UK shoe sizes (2..9). */
   shoeSizes?: number[]
+  /** She asked to see past her price bands for this search (the ABOVE MY BUDGET switch). */
+  aboveBudget?: boolean
 }
 
 /** The options a filter panel can offer, drawn from what the search answered. */
@@ -74,6 +76,8 @@ export interface BrowseView {
   read: string[]
   facets: BrowseFacets
   sizes: BrowseSizes
+  /** Answers held back by her budget this search — the switch says how many wait above it. */
+  overBudget?: number
   error?: string
 }
 
@@ -334,8 +338,13 @@ export async function searchForMember(
   const graph = await loadTasteGraph(admin, me.memberId, known)
   const herBrands = brandIds.length ? new Map<string, number>() : graph.weights
   const universe = brandIds.length ? [] : Array.from(graph.weights.keys())
-  const affordable = (it: any) => !overHerBudget(graph, it)
-  const ceiling = Math.max(0, ...Object.values(graph.bands).map((b) => b?.max ?? 0))
+  // ABOVE MY BUDGET: she can lift her bands for one search, so a label with
+  // little under her ceiling is never a dead end (Chloe, 2026-11-03: one scarf
+  // for 16Arlington while the skirt she wanted sat at £790).
+  const lifted = !!filters.aboveBudget
+  const affordable = (it: any) => lifted || !overHerBudget(graph, it)
+  let overBudget = 0
+  const ceiling = lifted ? 0 : Math.max(0, ...Object.values(graph.bands).map((b) => b?.max ?? 0))
   const ctx: RankContext = { brandIds: new Set(brandIds), words, needle, herBrands }
 
   // 2. Pull candidates. One strict query carries every facet at once (so the
@@ -360,10 +369,12 @@ export async function searchForMember(
   }
 
   const pools: Promise<any>[] = []
-  if (facets > 0) pools.push(withFacets(base()).limit(STRICT_POOL))
+  // Which pools answer everything she asked: the budget count reads those alone.
+  const strict: number[] = []
+  if (facets > 0) { strict.push(pools.length); pools.push(withFacets(base()).limit(STRICT_POOL)) }
   // The strict pool is any 160 answers; her named labels' answers are pulled on their own so they are there to lead.
   const named = Array.from(herBrands.entries()).filter(([, w]) => w > SEED.coreFamily).map(([id]) => id)
-  if (facets > 0 && named.length) pools.push(withFacets(base().in('brand_id', named)).limit(STRICT_POOL))
+  if (facets > 0 && named.length) { strict.push(pools.length); pools.push(withFacets(base().in('brand_id', named)).limit(STRICT_POOL)) }
   if (nameWords.length) pools.push(base().or(nameWords.map((w) => `product_name.ilike.${orVal(w)}`).join(',')).limit(POOL))
   if (facets >= 2) {
     if (brandIds.length) pools.push(base().in('brand_id', brandIds).limit(POOL))
@@ -397,7 +408,15 @@ export async function searchForMember(
 
   const [results, similarBrandIds] = await Promise.all([Promise.all(pools), likeBrands])
   const candidates: any[] = []
-  for (const r of results) for (const row of ((r?.data ?? []) as any[])) if (showable(row) && affordable(row)) candidates.push(row)
+  const seenOver = new Set<string>()
+  results.forEach((r, i) => {
+    for (const row of ((r?.data ?? []) as any[])) {
+      if (!showable(row)) continue
+      if (affordable(row)) candidates.push(row)
+      // Held back by her budget — counted only where it would have been a real answer.
+      else if ((!strict.length || strict.includes(i)) && !seenOver.has(row.item_id)) { seenOver.add(row.item_id); overBudget++ }
+    }
+  })
 
   // Her words are never dropped: one the shops name pieces with is held like a
   // cut — "navy ruffle blouse" is ruffle blouses, not every navy blouse. One
@@ -507,5 +526,6 @@ export async function searchForMember(
     read: readOf(held.length ? { ...heard, cuts: [...heard.cuts, ...held] } : heard, brandName),
     facets: facetsOut,
     sizes,
+    overBudget,
   }
 }

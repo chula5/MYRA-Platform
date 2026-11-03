@@ -147,6 +147,10 @@ function SavedTile({ piece: p, open, gone, onOpen }: { piece: SavedPieceView; op
               </div>
               <div className="px-3 py-2">
                 <p className="text-[14px] xl:text-[16px] text-[#2B2B2B] leading-tight truncate">{p.product_name}</p>
+                {/* The studio has already dressed it: a tap opens those outfits first. */}
+                {!!p.studio_count && (
+                  <p className="text-[13px] xl:text-[14px] tracking-[0.1em] text-[#7C838B] mt-0.5">STYLED IN {p.studio_count} LOOK{p.studio_count === 1 ? '' : 'S'}</p>
+                )}
               </div>
             </button>
   )
