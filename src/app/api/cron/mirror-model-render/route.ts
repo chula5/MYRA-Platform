@@ -1,4 +1,4 @@
-// MIRROR — SEE ON A MODEL pictures (LOCAL ONLY; not in vercel.json).
+// MIRROR — SEE ON A MODEL pictures for asks that found no renderer (not in vercel.json).
 //
 // A member on the live site asks the Mirror to see a piece on a model; Vercel
 // has no Higgsfield CLI, so the ask waits in mirror_model_shot. This is opened
