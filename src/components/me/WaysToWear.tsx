@@ -15,6 +15,8 @@
 import { useEffect, useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import BuiltOutfit from '@/app/me/dressing-room/BuiltOutfit'
+import ComposedLookCard from '@/components/me/ComposedLookCard'
+import type { StudioLook } from '@/lib/studio-looks'
 import SaveOutfit from '@/components/me/SaveOutfit'
 import ShareWithFriend from '@/components/me/ShareWithFriend'
 import type { LookItem } from '@/lib/pilot-stylist'
@@ -61,6 +63,8 @@ export default function WaysToWear({
   onStatus?: (status: WaysStatus | 'opening', landed: number) => void
 }) {
   const [looks, setLooks] = useState<StyledWayLook[]>([])
+  // What the studio already made with it: drawn first, before MYRA's own ways.
+  const [studio, setStudio] = useState<StudioLook[]>([])
   const [status, setStatus] = useState<WaysStatus | 'opening'>('opening')
   const [error, setError] = useState<string | null>(null)
   const [shown, setShown] = useState<WaysPiece | null>(null)
@@ -130,6 +134,7 @@ export default function WaysToWear({
     if (v.piece) setShown(v.piece)
     setTest(!!v.test)
     setLooks(v.looks)
+    if (v.studio) setStudio(v.studio)
     if (v.error && v.status !== 'working') setError(v.error)
     setStatus(v.status)
     if (v.status === 'working') { working.current = true; setTimeout(poll, POLL_MS) }
@@ -193,7 +198,20 @@ export default function WaysToWear({
         </div>
       )}
       {error && !busy && <p className={`${T} text-[#4A4E57]`}>{error}</p>}
-      {!busy && !error && status === 'none' && <p className={`${T} text-[#4A4E57]`}>Nothing in your size goes with it yet.</p>}
+      {!busy && !error && status === 'none' && !studio.length && <p className={`${T} text-[#4A4E57]`}>Nothing in your size goes with it yet.</p>}
+
+      {/* FROM THE STUDIO — the outfits Chloe's studio has already made with this
+          piece. Not composed, not judged again: what the feed shows, here under
+          the piece she tapped (Chloe, 2026-11-03). */}
+      {studio.length > 0 && (
+        <div className="space-y-4">
+          <p className={`${T_SMALL} tracking-[0.12em] text-[#6E6B65]`}>FROM THE STUDIO · {studio.length}</p>
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+            {studio.map((l) => <ComposedLookCard key={l.outfit_id} look={l} heroId={itemId} testMemberId={testMemberId} />)}
+          </div>
+          {(looks.length > 0 || busy) && <p className={`${T_SMALL} tracking-[0.12em] text-[#6E6B65] pt-2`}>MYRA&rsquo;S WAYS FOR YOU</p>}
+        </div>
+      )}
       {status === 'idle' && (
         <button type="button" onClick={() => void open(false)} className={`${T_SMALL} px-5 py-2.5 rounded-full bg-[#2B2B2B] text-white`}>
           {looks.length ? 'See more ways' : 'See it styled'}

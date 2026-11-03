@@ -72,6 +72,10 @@ export default function BrowseClient() {
   const [fTypes, setFTypes] = useState<string[]>([])
   const [fClothing, setFClothing] = useState<number[]>([])
   const [fShoes, setFShoes] = useState<number[]>([])
+  // ABOVE MY BUDGET: lift her price bands for this search. Off by default so
+  // Browse stays what she would actually spend; on, nothing is held back.
+  const [fAbove, setFAbove] = useState(false)
+  const [overBudget, setOverBudget] = useState(0)
   // Her own sizes seed the picker once, so a fresh search opens set to her.
   const sizeTouched = useRef(false)
 
@@ -272,7 +276,7 @@ export default function BrowseClient() {
     forgetCards()
     const r = newIn.current ? await browseNewIn(newIn.current, filters) : await browseSearch(q, filters)
     setBusy(false)
-    setPieces(r.pieces); setRead(r.read); setError(r.error ?? null)
+    setPieces(r.pieces); setRead(r.read); setError(r.error ?? null); setOverBudget(r.overBudget ?? 0)
     setSimilar(r.similar); setSimilarKind(r.similarKind); setSimilarGroups(r.similarGroups ?? []); setBrandName(r.brand)
     // Nothing exact: what comes close is the answer, so it is shown at once.
     setShowSimilar(r.pieces.length === 0 && r.similar.length > 0)
@@ -281,7 +285,7 @@ export default function BrowseClient() {
   }
 
   function currentFilters(): BrowseFilters {
-    return { brands: fBrands, colours: fColours, types: fTypes, clothingSizes: fClothing, shoeSizes: fShoes }
+    return { brands: fBrands, colours: fColours, types: fTypes, clothingSizes: fClothing, shoeSizes: fShoes, aboveBudget: fAbove }
   }
 
   // A brand-new question starts from a clean slate, so last search's filters
@@ -533,10 +537,22 @@ export default function BrowseClient() {
             {read.length > 0 && (
               <p className="text-[16px] sm:text-[18px] tracking-[0.14em] text-[#6E6B65] mr-auto">READ AS {read.join(' · ')}</p>
             )}
+            {/* Past her price bands for this search: the £ switch. It says how
+                many answers wait above her budget, so a thin result is never a
+                dead end (Chloe, 2026-11-03). */}
+            <button
+              type="button"
+              onClick={() => { const next = !fAbove; setFAbove(next); if (asked) void run(asked, { ...currentFilters(), aboveBudget: next }) }}
+              aria-pressed={fAbove}
+              aria-label={fAbove ? 'Back to your budget' : 'Show pieces above your budget'}
+              className={`ml-auto text-[16px] sm:text-[18px] tracking-[0.1em] rounded-full border px-5 py-2.5 whitespace-nowrap ${fAbove ? 'bg-[#2B2B2B] text-white border-[#2B2B2B]' : 'border-[rgba(43,43,43,0.3)] text-[#2B2B2B] hover:bg-white'}`}
+            >
+              £ {fAbove ? 'ABOVE MY BUDGET ✓' : overBudget ? `${overBudget} ABOVE MY BUDGET` : 'ABOVE MY BUDGET'}
+            </button>
             <button
               type="button"
               onClick={() => setFiltersOpen((o) => !o)}
-              className={`ml-auto text-[16px] sm:text-[18px] tracking-[0.1em] rounded-full border px-5 py-2.5 ${activeCount ? 'bg-[#2B2B2B] text-white border-[#2B2B2B]' : 'border-[rgba(43,43,43,0.3)] text-[#2B2B2B] hover:bg-white'}`}
+              className={`text-[16px] sm:text-[18px] tracking-[0.1em] rounded-full border px-5 py-2.5 ${activeCount ? 'bg-[#2B2B2B] text-white border-[#2B2B2B]' : 'border-[rgba(43,43,43,0.3)] text-[#2B2B2B] hover:bg-white'}`}
             >
               FILTER{activeCount ? ` · ${activeCount}` : ''}
             </button>
