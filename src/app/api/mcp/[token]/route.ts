@@ -3,7 +3,7 @@ import { resolveMirrorToken } from '@/lib/mirror/auth'
 import { createAdminClient } from '@/lib/supabase-server'
 import { hashAssistantToken } from '@/lib/mcp/link'
 import {
-  brandsFor, outfitsAroundPiece, outfitsFor, savedFor, savedIdsFor, savedPiecesFor, setPieceSaved, styleFor, wardrobeFor, type OutfitAnswer,
+  brandsFor, modelShotsFor, outfitsAroundPiece, outfitsFor, savedFor, savedIdsFor, savedPiecesFor, setPieceSaved, styleFor, wardrobeFor, type OutfitAnswer,
 } from '@/lib/mcp/myra-tools'
 import { SHOW_PICTURES, lookPicture, outfitToText, picturesOf } from '@/lib/mcp/outfit-text'
 import { pictureBlocks } from '@/lib/mcp/pictures'
@@ -106,13 +106,17 @@ const text = (s: string) => ({ content: [{ type: 'text', text: s }] })
  * the blocks; its line is still in the text. The structuredContent is the
  * same looks for the app, with which pieces she has saved already.
  */
-async function looksAnswer(memberId: string, intro: string, looks: OutfitAnswer[]) {
+async function looksAnswer(memberId: string, intro: string, raw: OutfitAnswer[]) {
+  const itemIds = raw.flatMap((l) => l.pieces.map((p) => p.item_id ?? ''))
+  const [shots, saved] = await Promise.all([
+    modelShotsFor(itemIds).catch(() => new Map<string, string>()),
+    savedIdsFor(memberId, itemIds).catch(() => new Set<string>()),
+  ])
+  // A look leads with a piece already shot on a model where it has one.
+  const looks = raw.map((l) => ({ ...l, picture_url: l.pieces.map((p) => (p.item_id ? shots.get(p.item_id) : null)).find(Boolean) ?? null }))
   const body = [intro, SHOW_PICTURES, '', ...looks.map(outfitToText)].join('\n')
   const heroes = picturesOf(looks)
-  const [blocks, saved] = await Promise.all([
-    pictureBlocks(heroes.map((p) => p.url)),
-    savedIdsFor(memberId, looks.flatMap((l) => l.pieces.map((p) => p.item_id ?? ''))).catch(() => new Set<string>()),
-  ])
+  const blocks = await pictureBlocks(heroes.map((p) => p.url))
   const pictures = heroes.flatMap((p, i) => (blocks[i] ? [{ type: 'text', text: p.caption }, blocks[i]] : []))
   const structuredContent: AppLooks = {
     kind: 'looks', title: intro.replace(/ — ◈.*$/, ''),
