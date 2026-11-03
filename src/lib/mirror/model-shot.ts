@@ -6,16 +6,33 @@
 // kept per item in mirror_model_shot (migration 0113) so the second person to
 // ask, or the same person tomorrow, gets it at once.
 //
-// The renderer is the Higgsfield CLI on Chloe's Mac (render-queue's
-// rendererAvailable). Where it is present the shoot is made in the request
-// (~75–95s); on Vercel the ask is queued and /api/cron/mirror-model-render,
-// opened on the Mac, makes the picture. The extension polls until it is there.
+// The renderer is the Higgsfield cloud API where HF_API_KEY_ID/SECRET are set
+// (Vercel), else the Higgsfield CLI on Chloe's Mac (render-queue's
+// rendererAvailable). Where either is present the shoot is made in the request
+// (a minute or two); where neither is, the ask is queued and
+// /api/cron/mirror-model-render, opened on a machine that has one, makes the
+// picture. The extension polls until it is there.
 
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase-server'
 import { ensureMirrorItem, type SiteProduct } from '@/lib/mirror/style'
 import type { MirrorMember } from '@/lib/mirror/auth'
-import { rendererAvailable } from '@/lib/studio/render-queue'
+import { rendererAvailable as cliAvailable } from '@/lib/studio/render-queue'
+import { cloudRendererAvailable, runHiggsfieldCloudGeneration } from '@/lib/higgsfield-cloud'
+
+/**
+ * Which renderer this process has: the cloud API (works on Vercel, set by
+ * HF_API_KEY_ID/SECRET), the CLI on the Mac, or neither. The CLI is preferred
+ * where both exist — it is the studio's Seedream recipe — unless
+ * HIGGSFIELD_PREFER_CLOUD=1.
+ */
+export function modelRenderer(): 'cli' | 'cloud' | null {
+  const cli = cliAvailable()
+  const cloud = cloudRendererAvailable()
+  if (cli && cloud) return process.env.HIGGSFIELD_PREFER_CLOUD === '1' ? 'cloud' : 'cli'
+  return cli ? 'cli' : cloud ? 'cloud' : null
+}
+const rendererAvailable = () => modelRenderer() !== null
 import { HIGGSFIELD_COMBOS, buildGenerationPrompt, buildReferenceUrls, type ShootItem } from '@/lib/higgsfield-shoot'
 import { persistImageToCloudinary, isCloudinaryUrl } from '@/lib/cloudinary-persist'
 
@@ -82,7 +99,8 @@ export async function readModelShot(itemId: string): Promise<ModelShot | null> {
 /** Make the picture for one queued piece. Needs the CLI on this machine. */
 export async function renderModelShot(itemId: string, adminIn?: any): Promise<ModelShot | { error: string }> {
   const admin = adminIn ?? (createAdminClient() as any)
-  if (!rendererAvailable()) return { error: 'Higgsfield CLI is not on this machine' }
+  const which = modelRenderer()
+  if (!which) return { error: 'No Higgsfield renderer here: set HF_API_KEY_ID/HF_API_KEY_SECRET, or run on the Mac with the CLI' }
   const { data: row } = await admin.from('mirror_model_shot').select('*').eq('item_id', itemId).maybeSingle()
   if (!row) return { error: 'No ask for this piece' }
   const { data: item } = await admin.from('item').select('item_id, product_name, item_type, material_primary, image_url, brand:brand_id(name)').eq('item_id', itemId).maybeSingle()
@@ -115,8 +133,10 @@ export async function renderModelShot(itemId: string, adminIn?: any): Promise<Mo
     const combo = HIGGSFIELD_COMBOS[POSE]
     const prompt = buildGenerationPrompt(combo, [shootItem])
     const refs = buildReferenceUrls(combo, [shootItem])
-    const { runHiggsfieldGeneration } = await import('@/app/admin/projects/higgsfield-actions')
-    const gen = await runHiggsfieldGeneration(prompt, refs, `mirror-model-${itemId}-${Date.now()}`)
+    const publicId = `mirror-model-${itemId}-${Date.now()}`
+    const gen = which === 'cloud'
+      ? await runHiggsfieldCloudGeneration(prompt, refs, publicId)
+      : await (await import('@/app/admin/projects/higgsfield-actions')).runHiggsfieldGeneration(prompt, refs, publicId)
     if (!gen.imageUrl) return fail(gen.error ?? 'Higgsfield made no picture')
 
     const { data: done } = await admin.from('mirror_model_shot').update({
@@ -128,10 +148,10 @@ export async function renderModelShot(itemId: string, adminIn?: any): Promise<Mo
   }
 }
 
-/** The Mac's drain: oldest asks first, one at a time, within a time budget. */
+/** The drain for queued asks: oldest first, one at a time, within a time budget. */
 export async function drainModelShots(opts: { limit?: number; budgetMs?: number } = {}) {
   const admin = createAdminClient() as any
-  if (!rendererAvailable()) return { skipped: 'Higgsfield CLI is not on this machine', made: 0, failed: 0, results: [] as any[] }
+  if (!rendererAvailable()) return { skipped: 'No Higgsfield renderer here (no CLI, no HF_API_KEY_ID/SECRET)', made: 0, failed: 0, results: [] as any[] }
   const limit = opts.limit ?? 6
   const budgetMs = opts.budgetMs ?? 280_000
   const t0 = Date.now()
