@@ -21,6 +21,8 @@ export interface OutfitPiece {
 export interface OutfitText {
   pieces: OutfitPiece[]
   why: string
+  /** The look shot styled on a model, where MYRA has one; else the anchor piece stands in. */
+  picture_url?: string | null
 }
 
 const clean = (s: string) => String(s ?? '').replace(/[\[\]\n]/g, ' ').replace(/\s+/g, ' ').trim()
@@ -35,7 +37,9 @@ export const pictureLine = (p: Pick<OutfitPiece, 'brand' | 'name' | 'image_url'>
  * whose first piece has no picture falls back to the first piece that does.
  */
 export const lookPicture = (o: OutfitText): OutfitPiece | null =>
-  o.pieces.find((p) => p.image_url) ?? null
+  o.picture_url
+    ? { name: 'styled on a model', brand: 'MYRA', price_gbp: null, owned: false, url: null, image_url: o.picture_url }
+    : o.pieces.find((p) => p.image_url) ?? null
 
 export const lineFor = (p: OutfitPiece): string =>
   `${p.owned ? '◈ ' : ''}${p.brand} — ${p.name}${p.owned ? ' (hers already)' : p.price_gbp != null ? ` · £${Math.round(p.price_gbp)}` : ''}${p.url ? ` · ${p.url}` : ''}`

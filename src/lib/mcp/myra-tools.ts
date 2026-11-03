@@ -337,3 +337,16 @@ export async function setPieceSaved(memberId: string, itemId: string, saved: boo
   const r = saved ? await saveItemForMember(member, itemId) : await unsaveItemForMember(member, itemId)
   return { saved: !!r.saved, error: r.error }
 }
+
+/**
+ * The pieces among these already shot on a model (Mirror's SEE ON A MODEL,
+ * mirror_model_shot): item_id → picture. A look drawn in an assistant leads
+ * with the first of its pieces that has one.
+ */
+export async function modelShotsFor(itemIds: string[]): Promise<Map<string, string>> {
+  const ids = Array.from(new Set(itemIds.filter(Boolean)))
+  if (!ids.length) return new Map()
+  const admin = createAdminClient() as any
+  const { data } = await admin.from('mirror_model_shot').select('item_id, image_url').eq('status', 'done').in('item_id', ids)
+  return new Map(((data ?? []) as any[]).filter((r) => r.image_url).map((r) => [r.item_id, r.image_url as string]))
+}

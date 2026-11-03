@@ -48,3 +48,17 @@ describe('outfit text for an assistant', () => {
     expect(picturesOf(looks, 2).map((p) => p.url)).toEqual(['https://cdn.sezane.com/dan.jpg', 'https://cdn/shoe.jpg'])
   })
 })
+
+describe('a look shot on a model', () => {
+  it('leads with the model shot over the anchor piece', () => {
+    const look = {
+      picture_url: 'https://pics/model.jpg',
+      pieces: [{ name: 'Skirt', brand: 'Birger', price_gbp: 570, owned: false, url: null, image_url: 'https://pics/skirt.jpg', item_id: 'a' }],
+      why: '',
+    }
+    expect(lookPicture(look)?.image_url).toBe('https://pics/model.jpg')
+    expect(outfitToText(look, 0)).toContain('](https://pics/model.jpg)')
+    expect(outfitToText(look, 0)).not.toContain('skirt.jpg)')
+    expect(picturesOf([look])[0].url).toBe('https://pics/model.jpg')
+  })
+})
