@@ -9,7 +9,7 @@
 import 'server-only'
 import { apnsConfigured, sendPush, type ApnsEnvironment, type PushMessage } from './apns'
 
-export type NoteKind = 'looks_ready' | 'note' | 'event_picks' | 'share' | 'new_in'
+export type NoteKind = 'looks_ready' | 'note' | 'event_picks' | 'share' | 'new_in' | 'saved_search' | 'price_drop'
 
 export interface PushReport {
   devices: number

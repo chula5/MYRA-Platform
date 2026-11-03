@@ -68,7 +68,7 @@ export function forgetMirrorFedBrands() { fedCache = null }
 function currencyFor(url: string): string | null {
   try {
     const u = new URL(url)
-    if (/\.co\.uk$/i.test(u.host) || /\.uk$/i.test(u.host)) return 'GBP'
+    if (/\.co\.uk$/i.test(u.host) || /\.uk$/i.test(u.host) || /^(uk|gb)\./i.test(u.host)) return 'GBP'
     if (/^\/(gb|uk)(\/|$)|^\/en-(gb|uk)(\/|$)/i.test(u.pathname)) return 'GBP'
   } catch { /* not a URL we can read */ }
   return null
