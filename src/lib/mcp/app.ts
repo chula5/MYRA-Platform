@@ -290,9 +290,10 @@ export const APP_HTML = `<!doctype html>
   window.addEventListener('message', function (e) {
     var m = e.data;
     if (!m || m.jsonrpc !== '2.0') return;
-    if (m.id != null && m.id === initId && m.result) {
+    if (m.id != null && m.id === initId) {
+      if (m.error) { root.innerHTML = '<p class="empty">MYRA could not open here: ' + esc(m.error.message || 'handshake refused') + '</p>'; return; }
       hostLinks = true;
-      theme(m.result.hostContext);
+      theme(m.result && m.result.hostContext);
       notify('ui/notifications/initialized');
       return;
     }
@@ -323,7 +324,7 @@ export const APP_HTML = `<!doctype html>
 
   initId = request('ui/initialize', {
     protocolVersion: '${APP_PROTOCOL}',
-    clientInfo: { name: 'MYRA', version: '1.1.0' },
+    appInfo: { name: 'MYRA', version: '1.1.1' },
     appCapabilities: { availableDisplayModes: ['inline'] },
   });
 })();
