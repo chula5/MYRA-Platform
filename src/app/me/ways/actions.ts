@@ -14,7 +14,7 @@ import { resolveClientMember } from '@/lib/client-member'
 import { getStyledWays, heroSoldOut, waysForSoldOutHero, type StyledWayLook, type WayMode } from '@/lib/styled-ways'
 import { WAYS } from '@/lib/styled-ways-core'
 import {
-  requestStyledWays, enqueueWarmups, openJobFor, lastJobFor, kickStyledWaysDrain, RUNNING_STALE_MS, type JobReason,
+  requestStyledWays, enqueueWarmups, openJobFor, lastJobFor, kickStyledWaysDrain, jobAliveAt, RUNNING_STALE_MS, type JobReason,
 } from '@/lib/styled-ways-queue'
 import { recordTap } from '@/lib/styled-ways-demand'
 
@@ -58,8 +58,11 @@ async function statusFor(admin: any, memberId: string, itemId: string, mode: Way
     // cron), and one running longer than any compose takes is one whose
     // function died: the poll that finds either starts a drain, which gives
     // the dead one back to the queue and picks it up.
-    const stale = open.status === 'running' && !!open.started_at && Date.now() - Date.parse(open.started_at) > RUNNING_STALE_MS
-    if (open.status === 'queued' || stale) kickStyledWaysDrain()
+    const alive = jobAliveAt(open)
+    const stale = open.status === 'running' && alive != null && Date.now() - alive > RUNNING_STALE_MS
+    // A job queued this moment is one the tap just kicked for: nothing to do yet.
+    const waiting = open.status === 'queued' && Date.now() - Date.parse(open.created_at) > 4_000
+    if (waiting || stale) kickStyledWaysDrain()
     return { status: 'working' }
   }
   if (looks.length) return { status: 'ready' }
