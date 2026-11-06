@@ -186,6 +186,12 @@ export default async function AdminLayout({
             APPLICATIONS
           </a>
           <a
+            href="/admin/new-brands"
+            className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
+          >
+            NEW BRANDS
+          </a>
+          <a
             href="/admin/influences"
             className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
           >

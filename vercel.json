@@ -68,6 +68,10 @@
       "schedule": "30 6 * * *"
     },
     {
+      "path": "/api/cron/new-brands-note",
+      "schedule": "0 20 * * 6"
+    },
+    {
       "path": "/api/cron/styled-ways",
       "schedule": "*/5 * * * *"
     },
