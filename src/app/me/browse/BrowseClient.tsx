@@ -33,7 +33,7 @@ import {
   browseSearch, browseNewIn, saveBrowsedPiece,
   type BrowsePiece, type BrowseFacets, type BrowseSizes, type BrowseFilters,
 } from './actions'
-import { listMySearches, openSavedSearch, saveSearch, type SavedSearchView } from './saved-search-actions'
+import { answerFind, listMySearches, openSavedSearch, saveSearch, type SavedSearchView, type SavedSearchPiece } from './saved-search-actions'
 
 /** What to try when she has not thought of anything yet. */
 const PROMPTS = ['A black dress for a winter wedding', 'Leather jacket', 'Silk slip skirt', 'Something for the office']
@@ -158,7 +158,10 @@ export default function BrowseClient() {
   // SAVED SEARCHES (lib/saved-search): she keeps a search, MYRA keeps looking
   // every hour, and what it found since she last looked leads the answer.
   const [searches, setSearches] = useState<SavedSearchView[]>([])
-  const [fresh, setFresh] = useState<BrowsePiece[]>([])
+  // An opened saved search: every find (NEW ones first), with why it matched and her YES / NOT THIS.
+  const [fresh, setFresh] = useState<SavedSearchPiece[]>([])
+  const [openSearchId, setOpenSearchId] = useState<string | null>(null)
+  const [shopNote, setShopNote] = useState<string | null>(null)
   const [keeping, setKeeping] = useState(false)
   const loadSearches = () => listMySearches().then((r) => setSearches(r.searches)).catch(() => { /* chips are a nicety */ })
   useEffect(() => { void loadSearches() }, [])
@@ -292,7 +295,7 @@ export default function BrowseClient() {
   // don't silently cull the next one.
   async function ask(query: string) {
     newIn.current = null
-    setFresh([])
+    setFresh([]); setOpenSearchId(null); setShopNote(null)
     sizeTouched.current = false
     setFBrands([]); setFColours([]); setFTypes([]); setFClothing([]); setFShoes([]); setFiltersOpen(false)
     await run(query, {})
@@ -309,7 +312,8 @@ export default function BrowseClient() {
     sizeTouched.current = !!(f.clothingSizes?.length || f.shoeSizes?.length)
     setFBrands(f.brands ?? []); setFColours(f.colours ?? []); setFTypes(f.types ?? [])
     setFClothing(f.clothingSizes ?? []); setFShoes(f.shoeSizes ?? []); setFiltersOpen(false)
-    setFresh(r.search.pieces.filter((p) => freshIds.has(p.item_id)))
+    setFresh([...r.search.pieces].sort((a, b) => Number(freshIds.has(b.item_id)) - Number(freshIds.has(a.item_id))))
+    setOpenSearchId(id); setShopNote(r.search.shopNote)
     setSearches((cur) => cur.map((s) => (s.id === id ? { ...s, fresh: 0 } : s)))
     await run(r.search.query, f)
   }
@@ -412,7 +416,16 @@ export default function BrowseClient() {
     </div>
   ) : null
 
-  const grid = (list: BrowsePiece[]) => (
+  // YES keeps it to her saved pieces; NOT THIS takes it out of the search and teaches it.
+  async function answer(p: SavedSearchPiece, verdict: 'yes' | 'no') {
+    if (!openSearchId) return
+    setFresh((cur) => (verdict === 'no' ? cur.filter((x) => x.item_id !== p.item_id) : cur.map((x) => (x.item_id === p.item_id ? { ...x, verdict } : x))))
+    if (verdict === 'yes') setSaved((cur) => new Set(cur).add(p.item_id))
+    const r = await answerFind(openSearchId, p.item_id, verdict).catch(() => ({ error: 'Could not answer' }))
+    if (r.error) setNote(r.error)
+  }
+
+  const grid = (list: BrowsePiece[], finds = false) => (
     <div className="grid grid-flow-row-dense grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4">
       {list.map((p) => (
         <Fragment key={p.item_id}>
@@ -429,6 +442,7 @@ export default function BrowseClient() {
             onPick={() => pick(p)}
             onStyle={(mode) => void style(p, mode)}
             onSave={() => void save(p)}
+            find={finds ? { piece: p as SavedSearchPiece, onAnswer: (v) => void answer(p as SavedSearchPiece, v) } : undefined}
           />
           {picked === p.item_id && stylePanel}
         </Fragment>
@@ -641,8 +655,12 @@ export default function BrowseClient() {
           )}
           {fresh.length > 0 && (
             <div className="mb-12">
-              <p className="text-[16px] sm:text-[18px] tracking-[0.14em] text-[#2B2B2B] mb-5">NEW SINCE YOU LAST LOOKED · {fresh.length}</p>
-              {grid(fresh)}
+              <p className="text-[16px] sm:text-[18px] tracking-[0.14em] text-[#2B2B2B]">MYRA&rsquo;S FINDS FOR THIS SEARCH · {fresh.length}</p>
+              <p className="myra-guide-text normal-case text-[16px] sm:text-[18px] text-[#6E6B65] mt-1 mb-5">
+                Tap YES to keep one, NOT THIS to teach the search.{shopNote ? '' : ' MYRA keeps looking every hour, in the shops too.'}
+              </p>
+              {shopNote && <p className="text-[15px] sm:text-[17px] tracking-[0.12em] text-[#7C838B] -mt-3 mb-5">{shopNote}</p>}
+              {grid(fresh, true)}
             </div>
           )}
           {pieces.length > 0 && grid(fresh.length ? pieces.filter((p) => !fresh.some((f) => f.item_id === p.item_id)) : pieces)}
@@ -696,7 +714,7 @@ export default function BrowseClient() {
 // through the tracked click-out, opened in a new tab — from the iOS app that
 // is Safari. Tapping also chooses the piece here, so the two ways to style it
 // are waiting when she comes back. STYLE chooses without leaving the page.
-function PieceCard({ piece, shopItem, picked, styling, working = false, saved, saving, ready = false, cardRef, onPick, onStyle, onSave }: {
+function PieceCard({ piece, shopItem, picked, styling, working = false, saved, saving, ready = false, cardRef, onPick, onStyle, onSave, find }: {
   piece: BrowsePiece
   shopItem: ShopLinkItem
   picked: boolean
@@ -711,6 +729,8 @@ function PieceCard({ piece, shopItem, picked, styling, working = false, saved, s
   onPick: () => void
   onStyle: (mode: 'wardrobe' | 'new') => void
   onSave: () => void
+  /** A find of a saved search: why it matched, and her YES / NOT THIS. */
+  find?: { piece: SavedSearchPiece; onAnswer: (v: 'yes' | 'no') => void }
 }) {
   const choice = (mode: 'wardrobe' | 'new', label: string) => {
     const on = styling === mode
@@ -735,6 +755,7 @@ function PieceCard({ piece, shopItem, picked, styling, working = false, saved, s
         <p className="text-[17px] sm:text-[19px] text-[#2B2B2B] leading-snug truncate mt-0.5">{piece.product_name}</p>
         {piece.price_gbp != null && <p className="text-[16px] sm:text-[18px] text-[#6E6B65] mt-1">£{Math.round(piece.price_gbp)}</p>}
         {ready && <p className="text-[14px] sm:text-[15px] tracking-[0.12em] text-[#7C838B] mt-1.5">STYLED · READY</p>}
+        {find?.piece.why && <p className="text-[14px] sm:text-[15px] tracking-[0.1em] text-[#7C838B] mt-1.5 leading-snug">{find.piece.why}</p>}
       </div>
     </>
   )
@@ -746,6 +767,31 @@ function PieceCard({ piece, shopItem, picked, styling, working = false, saved, s
         </ShopLink>
       ) : (
         <button type="button" onClick={onPick} className="block w-full text-left">{body}</button>
+      )}
+      {find && (
+        <div className="flex gap-2 px-4 pb-4 -mt-1">
+          <button
+            type="button"
+            onClick={() => find.onAnswer('yes')}
+            disabled={find.piece.verdict === 'yes'}
+            className={`flex-1 rounded-full px-3 py-2.5 text-[15px] sm:text-[16px] tracking-[0.1em] ${find.piece.verdict === 'yes' ? 'bg-[#7C838B] text-white' : 'bg-[#2B2B2B] text-white'}`}
+          >
+            {find.piece.verdict === 'yes' ? 'KEPT ✓' : 'YES'}
+          </button>
+          <button
+            type="button"
+            onClick={() => find.onAnswer('no')}
+            className="flex-1 rounded-full px-3 py-2.5 text-[15px] sm:text-[16px] tracking-[0.1em] border border-[rgba(43,43,43,0.3)] text-[#2B2B2B]"
+          >
+            NOT THIS
+          </button>
+        </div>
+      )}
+      {find && !picked && (find.piece.fresh || find.piece.fromShop) && (
+        <span className="absolute top-[64px] left-2.5 flex flex-col items-start gap-1.5 pointer-events-none">
+          {find.piece.fresh && <span className="rounded-full bg-[#7C838B] text-white px-3 py-1 text-[13px] sm:text-[14px] tracking-[0.12em]">NEW</span>}
+          {find.piece.fromShop && <span className="rounded-full bg-white/95 text-[#2B2B2B] px-3 py-1 text-[13px] sm:text-[14px] tracking-[0.12em] shadow-sm">FROM THE SHOPS</span>}
+        </span>
       )}
       <button
         type="button"

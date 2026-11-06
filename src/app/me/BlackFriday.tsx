@@ -23,22 +23,33 @@ const SLOT_WORD: Record<string, string> = {
   top: 'TOPS', bottom: 'TROUSERS AND SKIRTS', shoe: 'SHOES', outerwear: 'COATS', dress: 'DRESSES', bag: 'BAGS', jewellery: 'JEWELLERY', accessory: 'ACCESSORIES',
 }
 
-export default function BlackFriday({ testMemberId }: { testMemberId?: string }) {
+/** `standalone`: the SALE page from the price tag — more pieces, and says so when nothing is on sale. */
+export default function BlackFriday({ testMemberId, standalone = false }: { testMemberId?: string; standalone?: boolean }) {
   const [view, setView] = useState<(SaleView & { blackFriday: boolean }) | null>(null)
   const [brand, setBrand] = useState<string | null>(null)
   const [all, setAll] = useState(false)
 
   useEffect(() => {
     let live = true
-    loadMySale(testMemberId).then((v) => { if (live) setView(v) }).catch(() => { /* no sale section is no loss */ })
+    loadMySale(testMemberId, standalone ? 160 : 48).then((v) => { if (live) setView(v) }).catch(() => { /* no sale section is no loss */ })
     return () => { live = false }
-  }, [testMemberId])
+  }, [testMemberId, standalone])
 
   const shown = useMemo(() => {
     const list = view?.pieces ?? []
     return brand ? list.filter((p) => p.brand === brand) : list
   }, [view, brand])
 
+  if (standalone && view && !view.pieces.length) {
+    return (
+      <section className="text-center max-w-[620px] mx-auto mt-16">
+        <h2 className={HEAD}>THE SALE</h2>
+        <p className="myra-guide-text normal-case text-[19px] sm:text-[21px] text-[#4A4E57] mt-5">
+          None of your brands has a sale on right now. MYRA checks them every few hours and tells you the moment one starts — ring WAIT FOR SALE on a saved piece to hear when that one drops.
+        </p>
+      </section>
+    )
+  }
   if (!view || !view.pieces.length) return null
   const gapLine = view.gaps.length ? `YOUR WARDROBE IS SHORT OF ${view.gaps.slice(0, 2).map((g) => SLOT_WORD[g.slot] ?? g.slot.toUpperCase()).join(' AND ')} — THOSE COME FIRST` : null
 
@@ -70,9 +81,9 @@ export default function BlackFriday({ testMemberId }: { testMemberId?: string })
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-5 mt-7">
-        {(all ? shown : shown.slice(0, FIRST)).map((p) => <SaleCard key={p.item_id} piece={p} />)}
+        {(all || standalone ? shown : shown.slice(0, FIRST)).map((p) => <SaleCard key={p.item_id} piece={p} />)}
       </div>
-      {!all && shown.length > FIRST && (
+      {!all && !standalone && shown.length > FIRST && (
         <div className="text-center mt-8">
           <button
             type="button"

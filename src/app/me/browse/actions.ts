@@ -66,6 +66,14 @@ export async function saveBrowsedPiece(itemId: string, asMemberId?: string): Pro
     try { await admin.from('saved_item').upsert({ user_id: me.authUserId, item_id: itemId }, { onConflict: 'user_id,item_id' }) } catch { /* optional mirror */ }
   }
 
+  // Watched in her size from here on: low, sold out, back (lib/stock-alerts).
+  try {
+    const { subscribeToItems } = await import('@/lib/stock-alerts')
+    const { loadMemberSizeProfile } = await import('@/lib/size-availability')
+    const { data: typed } = await admin.from('item').select('item_type').eq('item_id', itemId).maybeSingle()
+    await subscribeToItems(me.authUserId ?? me.memberId, [{ item_id: itemId, item_type: typed?.item_type ?? null }], 'saved_item', null, await loadMemberSizeProfile(me.memberId))
+  } catch (err) { console.error('[saveBrowsedPiece] stock watch', err) }
+
   // Saved means she will come back to it: its ways are styled now (blend, the
   // pool her saved shelf opens in). A queue problem never fails the save.
   try {
