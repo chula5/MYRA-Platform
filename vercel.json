@@ -64,6 +64,10 @@
       "schedule": "0 6 * * 1"
     },
     {
+      "path": "/api/cron/picker-brands",
+      "schedule": "30 6 * * *"
+    },
+    {
       "path": "/api/cron/styled-ways",
       "schedule": "*/5 * * * *"
     },

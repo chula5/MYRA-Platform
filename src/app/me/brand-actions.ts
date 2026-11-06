@@ -142,7 +142,7 @@ export async function loadMyBrands(asMemberId?: string): Promise<MyBrandsView | 
   }
 
   try {
-    const [graph, affinities, { data: requests }] = await Promise.all([
+    const [graph, affinities, { data: requests }, { data: filedRows }] = await Promise.all([
       loadBrandGraph(admin),
       loadAffinities(admin, me.memberId),
       admin.from('unmatched_brand_log')
@@ -151,6 +151,13 @@ export async function loadMyBrands(asMemberId?: string): Promise<MyBrandsView | 
         .is('handled_at', null)
         .order('created_at', { ascending: false })
         .limit(40),
+      // Brands filed into a group since the groups were written (lib/picker-placement).
+      admin.from('brand')
+        .select('name, picker_group')
+        .eq('status', 'stocked')
+        .not('picker_group', 'is', null)
+        .neq('picker_group', 'none')
+        .order('name'),
     ])
     // No brand table at all means 0032 has not been run. An empty affinity map
     // is a different thing — a member nobody has seeded yet — and must not be
@@ -182,7 +189,7 @@ export async function loadMyBrands(asMemberId?: string): Promise<MyBrandsView | 
       })),
       suggested,
       requested: dedupeNames(((requests ?? []) as any[]).map((r) => String(r.raw_name))),
-      groups: buildGroups(stocked, mineKeys, neverKeys),
+      groups: buildGroups(stocked, mineKeys, neverKeys, (filedRows ?? []) as { name: string; picker_group: string }[]),
       available: true,
     }
   } catch (err) {
@@ -206,20 +213,30 @@ function stockedKeys(graph: BrandGraph): Set<string> {
 
 /** The picker. A brand MYRA does not stock is still offered — naming it makes
  *  a request Chloe sees — but it is marked, so the list never implies MYRA can
- *  shop something it cannot. */
-function buildGroups(stocked: Set<string>, mine: Set<string>, never: Set<string>): MyBrandsView['groups'] {
+ *  shop something it cannot. Brands MYRA has filed into a group since the
+ *  groups were written join that group's "+ more". */
+function buildGroups(
+  stocked: Set<string>,
+  mine: Set<string>,
+  never: Set<string>,
+  filed: { name: string; picker_group: string }[] = [],
+): MyBrandsView['groups'] {
   const one = (name: string): PickerBrand => ({
     name,
     stocked: stocked.has(brandKey(name)),
     mine: mine.has(brandKey(name)),
     never: never.has(brandKey(name)),
   })
+  const named = new Set(BRAND_GROUPS.flatMap((g) => [...g.brands, ...(g.more ?? [])]).map(brandKey))
   return BRAND_GROUPS.map((g) => ({
     key: g.key,
     name: g.name,
     blurb: g.blurb,
     brands: g.brands.map(one),
-    more: (g.more ?? []).map(one),
+    more: [
+      ...(g.more ?? []),
+      ...filed.filter((f) => f.picker_group === g.key && !named.has(brandKey(f.name))).map((f) => f.name),
+    ].map(one),
   }))
 }
 
