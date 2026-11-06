@@ -92,6 +92,10 @@
       "schedule": "40 * * * *"
     },
     {
+      "path": "/api/cron/sales",
+      "schedule": "10 * * * *"
+    },
+    {
       "path": "/api/cron/event-picks?mode=compose",
       "schedule": "0 10 * * 1"
     }

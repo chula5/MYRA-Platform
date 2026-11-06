@@ -42,6 +42,12 @@ export default async function AdminLayout({
             STOCK
           </a>
           <a
+            href="/admin/sales"
+            className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
+          >
+            SALES
+          </a>
+          <a
             href="/admin/projects"
             className="text-[11px] tracking-[0.09em] text-white/70 hover:text-white transition-colors duration-300"
           >

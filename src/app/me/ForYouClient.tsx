@@ -10,6 +10,7 @@ import Link from 'next/link'
 import MirrorCurtain from '@/components/me/MirrorCurtain'
 import Mannequin from '@/components/me/Mannequin'
 import ShopBrain from './ShopBrain'
+import BlackFriday from './BlackFriday'
 import type { ForYouView } from './for-you-actions'
 import type { ShopBrainView } from './shop-brain-actions'
 
@@ -69,6 +70,10 @@ export default function ForYouClient({ view, testMemberId, shopBrain }: {
               {view.firstName ? `HELLO ${view.firstName.toUpperCase()}` : 'HELLO'}
             </h1>
           </div>
+
+          {/* BLACK FRIDAY: her brands' sales, in her size, gaps first. Draws
+              nothing unless one of her brands is on sale. */}
+          <BlackFriday testMemberId={testMemberId} />
 
           {/* What she kept on other people's sites, already worked on. Draws
               nothing until there is something to show. */}
