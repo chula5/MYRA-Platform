@@ -287,6 +287,39 @@ function typesInRange(range: [number, number]): string[] {
  * Once answered she can narrow by brand, colour, piece and size; her own
  * sizes come pre-filled and she can add another to mix it up for one search.
  */
+/** Her words read the way Browse reads them: the label, piece, colour, cloth and cuts — for the saved-search shop sweep. */
+export interface ReadQuery {
+  parsed: ParsedQuery
+  brandIds: string[]
+  brandName: string | null
+  /** Words MYRA has no dictionary for, held by name ("sequin", "embellished"). */
+  unread: string[]
+}
+
+export async function readQuery(admin: any, query: string): Promise<ReadQuery> {
+  const q = query.trim().slice(0, 120)
+  const known = await loadKnownBrands(admin)
+  const fixed = fixBrandTypos(q, known)
+  const inQuery = brandsInQuery(fixed, known)
+  const heard = parseQuery(fixed, inQuery.names)
+  const parsed: ParsedQuery = !heard.itemTypes.length && heard.occasionTypes.length ? { ...heard, itemTypes: heard.occasionTypes } : heard
+  const rows = parsed.brand ? (inQuery.byKey.get(brandKey(parsed.brand)) ?? []) : []
+  return {
+    parsed,
+    brandIds: rows.map((b) => b.brand_id),
+    brandName: rows[0]?.name ?? null,
+    unread: (parsed.unread ?? []).filter((w) => w.length >= 3).slice(0, 3),
+  }
+}
+
+/** PostgREST or() filters for the cloths and cuts she named, for another table with a product_name. */
+export function nameFilters(p: ParsedQuery): string[] {
+  return [
+    ...(p.materials.length ? [dedupe(p.materials.flatMap((m) => MATERIAL_TERMS[m] ?? [m])).map((t) => `product_name.ilike.${orVal(t)}`).join(',')] : []),
+    ...p.cuts.map((c) => (CUT_WORDS[c] ?? [c]).map((w) => `product_name.ilike.${orVal(w)}`).join(',')),
+  ]
+}
+
 export interface SearchOptions {
   /** Only pieces that came into MYRA after this moment (ISO), held to the note bar. */
   since?: string
@@ -510,9 +543,10 @@ export async function searchForMember(
   }
 
   // A note on her phone only ever points at what she could buy today in her size.
-  if (opts.since && exactN.length) {
-    const fit = new Set((await filterItemsForShopper(exactN.map((k) => k.it).filter(sellable), sizeCtx, { strict: true })).map((it: any) => it.item_id))
+  if (opts.since && (exactN.length || similarN.length)) {
+    const fit = new Set((await filterItemsForShopper([...exactN, ...similarN].map((k) => k.it).filter(sellable), sizeCtx, { strict: true })).map((it: any) => it.item_id))
     exactN = exactN.filter((k) => fit.has(k.it.item_id))
+    similarN = similarN.filter((k) => fit.has(k.it.item_id))
   }
 
   const close = similarKind !== 'brands' ? closeGroups(similarN.slice(0, MOST), asked, brandName) : null

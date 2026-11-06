@@ -4,7 +4,10 @@
 // saved search is re-run for what came into MYRA since it last ran
 // (lib/saved-search), and every new answer is kept for her chip's N NEW.
 //
-// Quiet by design: from 17:00 UK, a member with anything unseen gets ONE note
+// Each run also searches the shops' new pieces for every search (lib/saved-search).
+// A STRONG find — the label she named, or one of her own labels — goes to her
+// phone at once (one a search every six hours, three a day, never 21:00–08:00).
+// The rest is quiet: from 17:00 UK, a member with anything unseen gets ONE note
 // for the day — all her searches together — and a push where she said yes.
 //
 //     curl -H "Authorization: Bearer $CRON_SECRET" "http://localhost:3000/api/cron/saved-searches?dry=1"
@@ -12,15 +15,19 @@
 //   ?member=<id>   one member only
 //   ?dry=1         run the searches, keep nothing, send nothing
 //   ?notify=1      send the note now, whatever the hour (still once a day)
+//   ?shops=0       do not search the shops' new pieces this run
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-server'
 import { searchForMember } from '@/lib/member-search'
 import { notifyMember } from '@/lib/push/notify'
 import {
-  runSavedSearch, savedSearchesFor, savedSearchMessage, savedSearchPath, ukDay, ukHour, NOTE_HOUR_UK,
+  runSavedSearch, savedSearchesFor, savedSearchMessage, savedSearchPath, instantMessage, ukDay, ukHour, NOTE_HOUR_UK,
   type SavedSearchRow,
 } from '@/lib/saved-search'
+
+const INSTANT_GAP_MS = 6 * 3600_000
+const INSTANT_A_DAY = 3
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -39,7 +46,7 @@ export async function GET(req: NextRequest) {
   const started = Date.now()
 
   let sel = admin.from('saved_search')
-    .select('saved_search_id, member_id, query, filters, label, last_run_at, last_seen_at, last_pushed_at, created_at')
+    .select('saved_search_id, member_id, query, filters, label, last_run_at, last_seen_at, last_pushed_at, created_at, shop_note, last_instant_at')
     .eq('active', true).order('last_run_at', { ascending: true }).limit(400)
   if (q.get('member')) sel = sel.eq('member_id', q.get('member'))
   const { data, error } = await sel
@@ -59,7 +66,24 @@ export async function GET(req: NextRequest) {
         const view = await searchForMember(admin, row.member_id, row.query, row.filters ?? {}, { since: row.last_run_at })
         entry.wouldAdd = view.pieces.length
       } else {
-        entry.added = await runSavedSearch(admin, row)
+        const r = await runSavedSearch(admin, row, new Date(), { shops: q.get('shops') !== '0' })
+        entry.added = r.added
+        entry.fromShops = r.fromShops
+        // Strong and new: to her phone now, within the limits.
+        const nowAt = new Date()
+        const hour = ukHour(nowAt)
+        const today = ukDay(nowAt)
+        const sentToday = rows.filter((x) => x.member_id === row.member_id && x.last_instant_at && ukDay(x.last_instant_at) === today).length
+        const rested = !row.last_instant_at || nowAt.getTime() - Date.parse(row.last_instant_at) > INSTANT_GAP_MS
+        const msg = instantMessage(row.query, r.strong)
+        if (msg && rested && sentToday < INSTANT_A_DAY && hour >= 8 && hour < 21) {
+          const res = await notifyMember(admin,
+            { memberId: row.member_id, kind: 'saved_search', body: msg.body },
+            { title: msg.title, url: savedSearchPath(row.saved_search_id), collapseId: `search-${row.saved_search_id}` })
+          await admin.from('saved_search').update({ last_instant_at: nowAt.toISOString() }).eq('saved_search_id', row.saved_search_id)
+          row.last_instant_at = nowAt.toISOString()
+          entry.instant = { body: msg.body, pushed: res.push?.sent ?? 0 }
+        }
       }
     } catch (err) {
       entry.error = err instanceof Error ? err.message : String(err)

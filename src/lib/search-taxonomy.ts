@@ -370,6 +370,10 @@ export interface ParsedQuery {
 }
 
 // Parse a free-text query into MYRA's taxonomy. Deterministic.
+/** A length word read alone is a dress; beside another piece it is that piece's length. */
+const LENGTH_DRESS: Record<string, string> = { midi: 'midi_dress', maxi: 'maxi_dress', mini: 'mini_dress' }
+const LENGTH_DRESSES = new Set(Object.values(LENGTH_DRESS))
+
 export function parseQuery(raw: string, knownBrands: string[] = []): ParsedQuery {
   let text = normalise(raw)
   const p: ParsedQuery = {
@@ -380,6 +384,7 @@ export function parseQuery(raw: string, knownBrands: string[] = []): ParsedQuery
   const consume = (phrase: string) => { text = text.replace(new RegExp(`\\b${phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g'), ' ').replace(/\s+/g, ' ').trim() }
   const add = (arr: string[], vals: string[]) => { for (const v of vals) if (!arr.includes(v)) arr.push(v) }
   const addGroup = (vals: string[]) => { const k = vals.join('|'); if (!p.occasionGroups.some((g) => g.join('|') === k)) p.occasionGroups.push(vals) }
+  const lengths: string[] = []
 
   // 1. Multi-word phrases first (longest first), across all phrase dictionaries.
   // OCCASION_RULES go first so a full occasion ("beach wedding guest") is matched
@@ -426,6 +431,7 @@ export function parseQuery(raw: string, knownBrands: string[] = []): ParsedQuery
     const c = COLOUR[tok]; if (c) { add(p.colourFamilies, [c]); continue }
     const t = TYPE[tok]
     if (t) {
+      if (LENGTH_DRESS[tok]) lengths.push(tok)
       add(p.itemTypes, t)
       // A piece word that is also a cut ("cami") must be in the name too.
       if (CUT_OF[tok]) { add(p.cuts, [CUT_OF[tok]]); if (!p.intentTerms.includes(CUT_OF[tok])) p.intentTerms.push(CUT_OF[tok]) }
@@ -442,6 +448,16 @@ export function parseQuery(raw: string, knownBrands: string[] = []): ParsedQuery
     if (CUT_OF[tok]) add(p.cuts, [CUT_OF[tok]])
     else if (tok.length > 2) add((p.unread ??= []), [tok])
     if (tok.length > 2) p.intentTerms.push(tok) // leftover adjective → soft signal
+  }
+  // "Midi", "maxi" and "mini" on their own are dresses; beside another piece
+  // ("sequin midi pencil skirt") they are its length — the dress is dropped and
+  // the length kept as a soft word, never a requirement.
+  for (const len of lengths) {
+    const dress = LENGTH_DRESS[len]
+    if (p.itemTypes.some((x) => x !== dress && !LENGTH_DRESSES.has(x))) {
+      p.itemTypes = p.itemTypes.filter((x) => x !== dress)
+      if (!p.intentTerms.includes(len)) p.intentTerms.push(len)
+    }
   }
   // A fur or shearling "jacket" or "coat" is very often a sleeveless one:
   // Antik Batik and Isabel Marant sell theirs as vests and gilets.
