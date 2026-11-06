@@ -289,16 +289,17 @@ export async function judgeLooksForMemberEach(
   onEach?: (index: number, judged: JudgedLook) => void | Promise<void>,
 ): Promise<JudgedLook[]> {
   const { memberMemory } = await import('@/lib/member-memory')
-  const [description, sizeMap] = await Promise.all([
-    memberMemory(memberId).then((m) => m.text).catch(() => loadClientDescription(admin, memberId)),
-    checkSizesForMember(admin, memberId, looks.flatMap((l) => l.items), sizeRefresh),
-  ])
-  const sizesOf = (l: { items: any[] }) => Object.fromEntries(
+  // The sizes are re-read from the retailers (up to 8s a page) WHILE Claude
+  // looks at the photos, not before: the eye only needs her description. A
+  // look's verdict still waits for both.
+  const sizesReady = checkSizesForMember(admin, memberId, looks.flatMap((l) => l.items), sizeRefresh)
+  const description = await memberMemory(memberId).then((m) => m.text).catch(() => loadClientDescription(admin, memberId))
+  const sizesOf = (sizeMap: Map<string, PieceSize>, l: { items: any[] }) => Object.fromEntries(
     l.items.filter((it) => it.item_id && sizeMap.has(it.item_id)).map((it) => [it.item_id as string, sizeMap.get(it.item_id)!]),
   )
   return Promise.all(looks.map(async (l, i) => {
-    const check = await checkLook(l.items, description)
-    const judged: JudgedLook = { check, sizes: sizesOf(l) }
+    const [check, sizeMap] = await Promise.all([checkLook(l.items, description), sizesReady])
+    const judged: JudgedLook = { check, sizes: sizesOf(sizeMap, l) }
     if (onEach) {
       try { await onEach(i, judged) } catch (err) { console.error('[look-check] onEach', err) }
     }

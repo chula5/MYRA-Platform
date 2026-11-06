@@ -64,6 +64,7 @@ import {
   type ComposeHistory,
 } from '@/lib/pilot-composer'
 import { listOwnedItems, looksUsingItems } from '@/lib/wardrobe/store'
+import { loadRetailLibrary } from '@/lib/library-snapshot'
 import { ownerRefsForMember, isOwnedItem, styledInCounts } from '@/lib/wardrobe/owned-items'
 import { resolveClientMember, firstNameOf } from '@/lib/client-member'
 import { whyThisSuitsHer } from '@/lib/look-why'
@@ -1829,22 +1830,34 @@ export async function loadMemberTaste(
 // three thousand rows and their size rows, before a single look was composed.
 // It is kept for a short while per member; her own pieces are always read
 // fresh, so a piece she has just added is in her next outfit.
+// The retail part comes from the library snapshot (lib/library-snapshot: one
+// object-store read instead of 27 paged queries on the nano database), and
+// her size gate runs in memory on the size rows that came with it. Kept per
+// member for five minutes; concurrent asks for the same member — three jobs
+// claimed together — share one read instead of each paying for it.
 const LIBRARY_CACHE_MS = 5 * 60 * 1000
 const libraryCache = new Map<string, { at: number; value: ItemWithBrand[] }>()
-
+const libraryInFlight = new Map<string, Promise<ItemWithBrand[]>>()
 async function retailLibraryFor(member?: { member_id: string } | null): Promise<ItemWithBrand[]> {
   const key = member?.member_id ?? '*'
   const hit = libraryCache.get(key)
   if (hit && Date.now() - hit.at < LIBRARY_CACHE_MS) return hit.value
-  const [ready, live] = await Promise.all([getAllItems('ready'), getAllItems('live')])
-  const retail = [...ready, ...live]
-  let value = retail
-  if (member) {
-    const ctx = await loadMemberSizeProfile(member.member_id)
-    value = (await filterItemsForShopper(retail as any[], ctx, { strict: true })) as ItemWithBrand[]
-  }
-  libraryCache.set(key, { at: Date.now(), value })
-  return value
+  const running = libraryInFlight.get(key)
+  if (running) return running
+  const work = (async () => {
+    const t0 = Date.now()
+    const lib = await loadRetailLibrary()
+    let value = lib.items
+    if (member) {
+      const ctx = await loadMemberSizeProfile(member.member_id)
+      value = (await filterItemsForShopper(lib.items as any[], ctx, { strict: true, rows: lib.sizeRows })) as ItemWithBrand[]
+    }
+    libraryCache.set(key, { at: Date.now(), value })
+    console.log(`[library] ${key === '*' ? 'shop' : 'member'} library ${value.length} pieces from ${lib.from} in ${Date.now() - t0}ms`)
+    return value
+  })().finally(() => { libraryInFlight.delete(key) })
+  libraryInFlight.set(key, work)
+  return work
 }
 
 export async function loadComposableLibrary(member?: { member_id: string; auth_user_id?: string | null } | null): Promise<ItemWithBrand[]> {

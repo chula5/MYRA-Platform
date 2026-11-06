@@ -296,7 +296,8 @@ export async function availabilityForItems<T extends SizedItem>(
 export async function filterItemsForShopper<T extends SizedItem>(
   items: T[],
   ctx: ShopperSizeContext,
-  opts: { strict?: boolean } = {},
+  /** `rows`: size rows the caller already holds (the library snapshot), so a whole-library gate is no database read. */
+  opts: { strict?: boolean; rows?: Map<string, SizeRow[]> } = {},
 ): Promise<T[]> {
   const consentFiltered = items.filter((i) => {
     if ((i as any).status === 'sold') return false
@@ -307,7 +308,7 @@ export async function filterItemsForShopper<T extends SizedItem>(
   const needsGate = consentFiltered.filter((i) => opts.strict || isUnique(i))
   if (!needsGate.length || !ctx.hasProfile) return consentFiltered
 
-  const rows = await loadSizeRowsFor(needsGate.map((i) => i.item_id))
+  const rows = opts.rows ?? await loadSizeRowsFor(needsGate.map((i) => i.item_id))
   const blocked = new Set(
     needsGate
       .filter((i) => !passesSizeGate(i as any, rows.get(i.item_id) ?? [], ctx.profile, opts))
