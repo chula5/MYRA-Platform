@@ -39,6 +39,10 @@ export type EmailKind =
   | 'shopper_invitation'
   // Her account is set up: TestFlight, then the MYRA app on her iPhone.
   | 'shopper_app_ready'
+  // The week's new brands, sent when Chloe presses SEND on /admin/new-brands.
+  | 'shopper_new_brands'
+  // To Chloe, Saturday night: the week's new-brands note is drafted and waiting for her.
+  | 'new_brands_draft'
 
 /** Shopper-facing kinds go out as MYRA, with replies to Chloe; the studio kinds stay MYRA Studio. */
 const isMemberKind = (kind: EmailKind) => kind.startsWith('shopper_')
