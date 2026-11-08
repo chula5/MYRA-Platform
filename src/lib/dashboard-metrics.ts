@@ -24,6 +24,7 @@ import {
   type Bucket,
 } from '@/lib/metrics-core'
 import { WAYS } from '@/lib/styled-ways-core'
+import { loadDashboardCounts } from '@/lib/admin-queries'
 
 export const METRIC_KEYS = [
   'outfits-generated',
@@ -114,8 +115,6 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
   const labels = buckets.map((b) => b.label)
   const since = buckets[0].start
 
-  const admin = createAdminClient()
-
   const [
     composed,
     outfits,
@@ -126,7 +125,7 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
     commissions,
     adSpend,
     signupDates,
-    stockCounts,
+    counts,
     demand,
     waysJobs,
     waysFresh,
@@ -166,7 +165,7 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
       { columnType: 'date' },
     ),
     listSignupDates(),
-    currentStockCounts(),
+    loadDashboardCounts(),
     readSince<{ first_seen_at: string; last_seen_at: string; member_id: string; hero_item_id: string; mode: string; source: string; taps: number; tap_hits: number }>(
       'styled_way_demand',
       'first_seen_at',
@@ -181,6 +180,13 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
     ),
     freshWayCounts(),
   ])
+
+  const stockCounts = {
+    total: counts.items.total,
+    out: counts.items.out_of_stock,
+    low: counts.items.low_stock,
+    flagged: counts.items.out_of_stock + counts.items.low_stock,
+  }
 
   // ── Composition ───────────────────────────────────────────────────────────
   // Outfits generated = candidates the composer staged. Falls back to real
@@ -438,10 +444,11 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
   }
 
   // ── Area health ───────────────────────────────────────────────────────────
-  const pendingReview = await countRows(admin, 'composed_outfit', (q) => q.eq('status', 'pending'))
-  const waysQueued = await countRows(admin, 'styled_way_job', (q) => q.eq('status', 'queued'))
-  const needsDesktop = await countRows(admin, 'outfit', (q) => q.eq('status', 'needs_desktop'))
-  const liveOutfits = await countRows(admin, 'outfit', (q) => q.eq('status', 'live'))
+  // All four come with the one counts read above — four more round trips saved.
+  const pendingReview = counts.composed_pending
+  const waysQueued = counts.ways_queued
+  const needsDesktop = counts.outfits.needs_desktop
+  const liveOutfits = counts.outfits.live
 
   const flaggedRate = stockCounts.total > 0 ? stockCounts.flagged / stockCounts.total : 0
 
@@ -550,36 +557,6 @@ function rateTone(v: number, warn: number, bad: number): AreaHealth['tone'] {
   if (v >= bad) return 'critical'
   if (v > warn) return 'warning'
   return 'good'
-}
-
-async function countRows(
-  admin: ReturnType<typeof createAdminClient>,
-  table: string,
-  refine?: (q: any) => any,
-): Promise<number> {
-  try {
-    let q = admin.from(table as any).select('*', { count: 'exact', head: true })
-    if (refine) q = refine(q)
-    const { count, error } = await q
-    if (error) return 0
-    return count ?? 0
-  } catch {
-    return 0
-  }
-}
-
-async function currentStockCounts(): Promise<{ total: number; out: number; low: number; flagged: number }> {
-  const admin = createAdminClient()
-  try {
-    const [{ count: total }, { count: out }, { count: low }] = await Promise.all([
-      admin.from('item').select('*', { count: 'exact', head: true }),
-      admin.from('item').select('*', { count: 'exact', head: true }).eq('stock_status', 'out_of_stock'),
-      admin.from('item').select('*', { count: 'exact', head: true }).eq('stock_status', 'low_stock'),
-    ])
-    return { total: total ?? 0, out: out ?? 0, low: low ?? 0, flagged: (out ?? 0) + (low ?? 0) }
-  } catch {
-    return { total: 0, out: 0, low: 0, flagged: 0 }
-  }
 }
 
 /**
