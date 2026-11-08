@@ -15,6 +15,7 @@
 
 import { Fragment, useEffect, useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
+import HeartIcon from '@/components/me/HeartIcon'
 import MicButton from '@/components/me/MicButton'
 import WaysToWear from '@/components/me/WaysToWear'
 import { WAYS_READY_EVENT } from '@/components/me/ways-watch'
@@ -24,7 +25,7 @@ import { useScrollTo } from '@/lib/smooth-scroll'
 import {
   STYLING_OPEN_EVENT, clearStylingReady, getStylingProgress, keepWatchingStyling, publishStyling, stopWatchingStyling,
 } from '@/components/me/styling-progress'
-import ShopLink, { type ShopLinkItem } from '@/components/ShopLink'
+import ShopLink from '@/components/ShopLink'
 
 /** The piece being styled, kept so the badge can bring her back to it after a new search. */
 const STYLED_KEY = 'myra:browse-styled'
@@ -33,6 +34,7 @@ import {
   browseSearch, browseNewIn, saveBrowsedPiece,
   type BrowsePiece, type BrowseFacets, type BrowseSizes, type BrowseFilters,
 } from './actions'
+import { listMySearches, openSavedSearch, saveSearch, type SavedSearchView } from './saved-search-actions'
 
 /** What to try when she has not thought of anything yet. */
 const PROMPTS = ['A black dress for a winter wedding', 'Leather jacket', 'Silk slip skirt', 'Something for the office']
@@ -71,10 +73,17 @@ export default function BrowseClient() {
   const [fTypes, setFTypes] = useState<string[]>([])
   const [fClothing, setFClothing] = useState<number[]>([])
   const [fShoes, setFShoes] = useState<number[]>([])
+  // ABOVE MY BUDGET: lift her price bands for this search. Off by default so
+  // Browse stays what she would actually spend; on, nothing is held back.
+  const [fAbove, setFAbove] = useState(false)
   // Her own sizes seed the picker once, so a fresh search opens set to her.
   const sizeTouched = useRef(false)
 
   const [picked, setPicked] = useState<string | null>(null)
+  // The piece she tapped: opened in the mirror — what the studio has made with
+  // it, MYRA's ways on ask, VIEW ON SITE — before she ever leaves MYRA
+  // (Chloe, 2026-11-08).
+  const [opened, setOpened] = useState<BrowsePiece | null>(null)
   const [styling, setStyling] = useState<'wardrobe' | 'new' | null>(null)
   // Where the styling has got to, for the button and the mark at the top.
   const [phase, setPhase] = useState<'idle' | 'working' | 'ready' | 'failed'>('idle')
@@ -150,8 +159,16 @@ export default function BrowseClient() {
   const [saved, setSaved] = useState<Set<string>>(new Set())
   const [savingId, setSavingId] = useState<string | null>(null)
 
+  // SAVED SEARCHES (lib/saved-search): she keeps a search, MYRA keeps looking
+  // every hour, and what it found since she last looked leads the answer.
+  const [searches, setSearches] = useState<SavedSearchView[]>([])
+  const [fresh, setFresh] = useState<BrowsePiece[]>([])
+  const [keeping, setKeeping] = useState(false)
+  const loadSearches = () => listMySearches().then((r) => setSearches(r.searches)).catch(() => { /* chips are a nicety */ })
+  useEffect(() => { void loadSearches() }, [])
+
   const started = asked != null
-  const chosen = pieces?.find((p) => p.item_id === picked) ?? similar.find((p) => p.item_id === picked) ?? null
+  const chosen = pieces?.find((p) => p.item_id === picked) ?? similar.find((p) => p.item_id === picked) ?? fresh.find((p) => p.item_id === picked) ?? null
   const activeCount = fBrands.length + fColours.length + fTypes.length + fClothing.length + fShoes.length
 
   // ── The mark in the corner (components/me/styling-progress) ──────────────
@@ -198,6 +215,13 @@ export default function BrowseClient() {
     newIn.current = since
     try { window.history.replaceState(null, '', window.location.pathname) } catch { /* fine */ }
     void run('New in from your brands', {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('saved')
+    if (!id) return
+    try { window.history.replaceState(null, '', window.location.pathname) } catch { /* fine */ }
+    void openSearch(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const stashedPiece = (id: string): BrowsePiece | null => {
@@ -265,16 +289,45 @@ export default function BrowseClient() {
   }
 
   function currentFilters(): BrowseFilters {
-    return { brands: fBrands, colours: fColours, types: fTypes, clothingSizes: fClothing, shoeSizes: fShoes }
+    return { brands: fBrands, colours: fColours, types: fTypes, clothingSizes: fClothing, shoeSizes: fShoes, aboveBudget: fAbove }
   }
 
   // A brand-new question starts from a clean slate, so last search's filters
   // don't silently cull the next one.
   async function ask(query: string) {
     newIn.current = null
+    setFresh([])
     sizeTouched.current = false
     setFBrands([]); setFColours([]); setFTypes([]); setFClothing([]); setFShoes([]); setFiltersOpen(false)
     await run(query, {})
+  }
+
+  // A kept search: what MYRA found since she last looked first, then the search
+  // itself, run again with the narrowing she saved it with.
+  async function openSearch(id: string) {
+    const r = await openSavedSearch(id)
+    if (!r.search) { setError(r.error ?? null); return }
+    const freshIds = new Set(r.fresh)
+    newIn.current = null
+    const f = r.filters ?? {}
+    sizeTouched.current = !!(f.clothingSizes?.length || f.shoeSizes?.length)
+    setFBrands(f.brands ?? []); setFColours(f.colours ?? []); setFTypes(f.types ?? [])
+    setFClothing(f.clothingSizes ?? []); setFShoes(f.shoeSizes ?? []); setFiltersOpen(false)
+    setFresh(r.search.pieces.filter((p) => freshIds.has(p.item_id)))
+    setSearches((cur) => cur.map((s) => (s.id === id ? { ...s, fresh: 0 } : s)))
+    await run(r.search.query, f)
+  }
+
+  // SAVE THIS SEARCH sits in the bar beside the mic once a search has answered.
+  const canKeep = !busy && !newIn.current && !!asked && !!pieces && (pieces.length > 0 || similar.length > 0)
+  const keptSearch = asked ? searches.find((s) => s.query.toLowerCase() === asked.toLowerCase()) : undefined
+  async function keepSearch() {
+    if (!asked || keptSearch || keeping) return
+    setKeeping(true)
+    const r = await saveSearch(asked, currentFilters()).catch(() => ({ error: 'Could not keep that search' }) as { id?: string; error?: string })
+    setKeeping(false)
+    if (r.error) setNote(r.error)
+    else void loadSearches()
   }
 
   // The sheet asks, waits and keeps (lib/styled-ways): judged before it shows,
@@ -369,7 +422,6 @@ export default function BrowseClient() {
         <Fragment key={p.item_id}>
           <PieceCard
             piece={p}
-            shopItem={shopItem(p)}
             picked={picked === p.item_id}
             styling={picked === p.item_id ? styling : null}
             working={picked === p.item_id && phase === 'working'}
@@ -378,6 +430,7 @@ export default function BrowseClient() {
             ready={ready.has(p.item_id)}
             cardRef={(el) => registerCard(el, p.item_id)}
             onPick={() => pick(p)}
+            onOpen={() => setOpened(p)}
             onStyle={(mode) => void style(p, mode)}
             onSave={() => void save(p)}
           />
@@ -404,8 +457,19 @@ export default function BrowseClient() {
             aria-label="Search through MYRA"
             data-tour="browse-search"
             type="text"
-            className="w-full rounded-full bg-white border-2 border-transparent shadow-md transition-all duration-300 focus:outline-none focus:border-[#2B2B2B] text-[#2B2B2B] placeholder:text-[#8C8A85] text-[18px] sm:text-[clamp(22px,1.5vw,32px)] pl-16 sm:pl-20 pr-24 sm:pr-36 py-4 sm:py-6"
+            className={`w-full rounded-full bg-white border-2 border-transparent shadow-md transition-all duration-300 focus:outline-none focus:border-[#2B2B2B] text-[#2B2B2B] placeholder:text-[#8C8A85] text-[18px] sm:text-[clamp(22px,1.5vw,32px)] pl-16 sm:pl-20 ${canKeep ? 'pr-[200px] sm:pr-[400px]' : 'pr-24 sm:pr-36'} py-4 sm:py-6`}
           />
+          {/* Keep this search: MYRA keeps looking and the finds wait under YOUR SEARCHES. */}
+          {canKeep && (
+            <button
+              type="button"
+              onClick={() => void keepSearch()}
+              disabled={!!keptSearch || keeping}
+              className={`absolute top-1/2 -translate-y-1/2 ${draft ? 'right-[100px] sm:right-[144px]' : 'right-[60px] sm:right-[88px]'} rounded-full px-4 sm:px-6 py-2.5 sm:py-3 text-[15px] sm:text-[18px] tracking-[0.1em] whitespace-nowrap ${keptSearch ? 'bg-[#7C838B] text-white' : 'bg-[#2B2B2B] text-white hover:bg-black'}`}
+            >
+              {keptSearch ? (<>SAVED ✓<span className="hidden sm:inline"> · MYRA IS LOOKING</span></>) : keeping ? 'SAVING…' : (<>SAVE<span className="hidden sm:inline"> THIS SEARCH</span></>)}
+            </button>
+          )}
           {/* Speak the search: at the end of the bar, the words filling it as she says them. */}
           <MicButton
             size="bar"
@@ -420,6 +484,24 @@ export default function BrowseClient() {
             </button>
           )}
         </form>
+
+        {/* Her kept searches: MYRA is still looking for each; N NEW is what it found since she last looked. */}
+        {searches.length > 0 && (
+          <div className="flex flex-wrap items-center justify-center gap-2 mt-5 max-w-[1100px] mx-auto">
+            <span className="text-[15px] sm:text-[16px] tracking-[0.14em] text-[#6E6B65] mr-1">YOUR SEARCHES</span>
+            {searches.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => void openSearch(s.id)}
+                className={`text-[16px] sm:text-[18px] tracking-[0.04em] rounded-full border px-5 py-2.5 ${asked && asked.toLowerCase() === s.query.toLowerCase() ? 'bg-[#2B2B2B] text-white border-[#2B2B2B]' : 'border-[rgba(43,43,43,0.25)] text-[#2B2B2B] hover:bg-white'}`}
+              >
+                {s.query}
+                {s.fresh > 0 && <span className="ml-2 text-[14px] sm:text-[15px] tracking-[0.12em] rounded-full bg-[#7C838B] text-white px-2.5 py-0.5">{s.fresh} NEW</span>}
+              </button>
+            ))}
+          </div>
+        )}
 
         {!started && (
           <>
@@ -457,12 +539,24 @@ export default function BrowseClient() {
         <div className="mt-10">
           <div className="flex flex-wrap items-center gap-3 mb-5">
             {read.length > 0 && (
-              <p className="text-[16px] sm:text-[18px] tracking-[0.14em] text-[#6E6B65] mr-auto">READ AS {read.join(' · ')}</p>
+              <p className="text-[16px] sm:text-[18px] tracking-[0.14em] text-[#6E6B65] basis-full sm:basis-auto sm:mr-auto">{read.join(' · ')}</p>
             )}
+            {/* Past her price bands for this search: the £ switch. It says how
+                many answers wait above her budget, so a thin result is never a
+                dead end (Chloe, 2026-11-03). */}
+            <button
+              type="button"
+              onClick={() => { const next = !fAbove; setFAbove(next); if (asked) void run(asked, { ...currentFilters(), aboveBudget: next }) }}
+              aria-pressed={fAbove}
+              aria-label={fAbove ? 'Back to your budget' : 'Show pieces above your budget'}
+              className={`text-[16px] sm:text-[18px] tracking-[0.1em] rounded-full border px-5 py-2.5 whitespace-nowrap ${fAbove ? 'bg-[#2B2B2B] text-white border-[#2B2B2B]' : 'border-[rgba(43,43,43,0.3)] text-[#2B2B2B] hover:bg-white'}`}
+            >
+              ABOVE MY BUDGET
+            </button>
             <button
               type="button"
               onClick={() => setFiltersOpen((o) => !o)}
-              className={`ml-auto text-[16px] sm:text-[18px] tracking-[0.1em] rounded-full border px-5 py-2.5 ${activeCount ? 'bg-[#2B2B2B] text-white border-[#2B2B2B]' : 'border-[rgba(43,43,43,0.3)] text-[#2B2B2B] hover:bg-white'}`}
+              className={`text-[16px] sm:text-[18px] tracking-[0.1em] rounded-full border px-5 py-2.5 ${activeCount ? 'bg-[#2B2B2B] text-white border-[#2B2B2B]' : 'border-[rgba(43,43,43,0.3)] text-[#2B2B2B] hover:bg-white'}`}
             >
               FILTER{activeCount ? ` · ${activeCount}` : ''}
             </button>
@@ -542,14 +636,20 @@ export default function BrowseClient() {
           {pieces.length > 0 && (
             <div className="flex justify-center mb-8">
               <p
-                className={`${picked ? '' : 'animate-bounce'} bg-white rounded-full px-8 xl:px-10 py-4 xl:py-5 text-[19px] xl:text-[24px] tracking-[0.12em] text-[#2B2B2B] shadow-[0_2px_16px_rgba(43,43,43,0.16)]`}
+                className={`${picked ? '' : 'animate-bounce'} bg-white rounded-full px-5 py-2.5 text-[16px] sm:text-[18px] tracking-[0.1em] text-[#2B2B2B] whitespace-nowrap shadow-[0_2px_16px_rgba(43,43,43,0.16)]`}
                 style={{ animationIterationCount: 3 }}
               >
-                STYLE ANY ITEM · TAP STYLE ON IT ↓
+                STYLE ANY PIECE · TAP STYLE ↓
               </p>
             </div>
           )}
-          {pieces.length > 0 && grid(pieces)}
+          {fresh.length > 0 && (
+            <div className="mb-12">
+              <p className="text-[16px] sm:text-[18px] tracking-[0.14em] text-[#2B2B2B] mb-5">NEW · {fresh.length}</p>
+              {grid(fresh)}
+            </div>
+          )}
+          {pieces.length > 0 && grid(fresh.length ? pieces.filter((p) => !fresh.some((f) => f.item_id === p.item_id)) : pieces)}
 
           {/* What answers most of her words, never in front of the real answers. */}
           {similar.length > 0 && pieces.length > 0 && !showSimilar && (
@@ -592,6 +692,18 @@ export default function BrowseClient() {
           (components/me/StylingBadge): it follows her out of this room and
           brings her back to the piece. */}
       {note && !styling && <p className="myra-guide-text normal-case text-[18px] text-[#4A4E57] mt-6">{note}</p>}
+
+      {/* The piece she tapped, in the mirror: studio outfits with it first,
+          MYRA's own ways when she asks, VIEW ON SITE to buy. */}
+      {opened && (
+        <WaysToWear
+          itemId={opened.item_id}
+          piece={{ item_id: opened.item_id, product_name: opened.product_name, brand: opened.brand, image_url: opened.image_url, url: opened.url, price_gbp: opened.price_gbp }}
+          autoStart={false}
+          startLabel="Build outfits with it"
+          onClose={() => setOpened(null)}
+        />
+      )}
     </div>
   )
 }
@@ -600,9 +712,8 @@ export default function BrowseClient() {
 // through the tracked click-out, opened in a new tab — from the iOS app that
 // is Safari. Tapping also chooses the piece here, so the two ways to style it
 // are waiting when she comes back. STYLE chooses without leaving the page.
-function PieceCard({ piece, shopItem, picked, styling, working = false, saved, saving, ready = false, cardRef, onPick, onStyle, onSave }: {
+function PieceCard({ piece, picked, styling, working = false, saved, saving, ready = false, cardRef, onPick, onOpen, onStyle, onSave }: {
   piece: BrowsePiece
-  shopItem: ShopLinkItem
   picked: boolean
   /** Which way she is styling this piece, when it is the one she picked. */
   styling: 'wardrobe' | 'new' | null
@@ -613,6 +724,8 @@ function PieceCard({ piece, shopItem, picked, styling, working = false, saved, s
   ready?: boolean
   cardRef?: (el: HTMLDivElement | null) => void
   onPick: () => void
+  /** The card itself: the piece opens in the mirror. */
+  onOpen: () => void
   onStyle: (mode: 'wardrobe' | 'new') => void
   onSave: () => void
 }) {
@@ -635,8 +748,8 @@ function PieceCard({ piece, shopItem, picked, styling, working = false, saved, s
         {piece.image_url && <FallbackImage src={piece.image_url} thumbWidth={600} alt={piece.product_name} className="absolute inset-0 w-full h-full object-cover" />}
       </div>
       <div className="px-4 py-3.5">
-        {piece.brand && <p className="text-[15px] sm:text-[16px] tracking-[0.12em] text-[#6E6B65] truncate">{piece.brand.toUpperCase()}</p>}
-        <p className="text-[17px] sm:text-[19px] text-[#2B2B2B] leading-snug truncate mt-0.5">{piece.product_name}</p>
+        {piece.brand && <p className="text-[15px] sm:text-[16px] tracking-[0.1em] text-[#6E6B65] leading-snug line-clamp-2 break-words">{piece.brand.toUpperCase()}</p>}
+        <p className="text-[17px] sm:text-[19px] text-[#2B2B2B] leading-snug line-clamp-3 break-words mt-0.5">{piece.product_name}</p>
         {piece.price_gbp != null && <p className="text-[16px] sm:text-[18px] text-[#6E6B65] mt-1">£{Math.round(piece.price_gbp)}</p>}
         {ready && <p className="text-[14px] sm:text-[15px] tracking-[0.12em] text-[#7C838B] mt-1.5">STYLED · READY</p>}
       </div>
@@ -644,13 +757,7 @@ function PieceCard({ piece, shopItem, picked, styling, working = false, saved, s
   )
   return (
     <div ref={cardRef} className={`relative text-left bg-white rounded-[16px] overflow-hidden shadow-[0_1px_8px_rgba(43,43,43,0.06)] transition-shadow ${picked ? 'ring-2 ring-[#2B2B2B]' : ''}`}>
-      {piece.url ? (
-        <ShopLink item={shopItem} onNavigate={onPick} className="block w-full text-left">
-          {body}
-        </ShopLink>
-      ) : (
-        <button type="button" onClick={onPick} className="block w-full text-left">{body}</button>
-      )}
+      <button type="button" onClick={onOpen} className="block w-full text-left" aria-label={`Open ${piece.product_name}`}>{body}</button>
       <button
         type="button"
         onClick={onSave}
@@ -658,21 +765,19 @@ function PieceCard({ piece, shopItem, picked, styling, working = false, saved, s
         aria-label={saved ? 'Saved' : 'Save'}
         className="absolute top-2.5 right-2.5 w-9 h-9 rounded-full bg-white/90 shadow-[0_1px_6px_rgba(43,43,43,0.14)] grid place-items-center text-[#2B2B2B] disabled:opacity-50"
       >
-        <svg viewBox="0 0 24 24" className="w-5 h-5" fill={saved ? 'currentColor' : 'none'} stroke="currentColor" aria-hidden>
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" d="M12 21s-7.5-4.9-10-9.3C.6 8.9 2 5.5 5.2 5.5c2 0 3.3 1.2 3.8 2.3h6c.5-1.1 1.8-2.3 3.8-2.3 3.2 0 4.6 3.4 3.2 6.2C19.5 16.1 12 21 12 21z" />
-        </svg>
+        <HeartIcon filled={saved} />
       </button>
       <button
         type="button"
         onClick={onPick}
         aria-label={`Style ${piece.product_name}`}
-        className={`absolute top-2.5 left-2.5 text-[16px] xl:text-[18px] tracking-[0.12em] rounded-full px-5 py-3 shadow-[0_2px_10px_rgba(43,43,43,0.18)] ${picked ? 'bg-[#2B2B2B] text-white' : 'bg-white/90 text-[#2B2B2B] hover:bg-white'}`}
+        className={`absolute top-2.5 left-2.5 h-9 text-[14px] xl:text-[15px] tracking-[0.12em] rounded-full px-3.5 shadow-[0_1px_6px_rgba(43,43,43,0.14)] ${picked ? 'bg-[#2B2B2B] text-white' : 'bg-white/90 text-[#2B2B2B] hover:bg-white'}`}
       >
         {picked ? 'CHOSEN ✕' : 'STYLE'}
       </button>
       {/* Tapped: the two ways to style it, right under the button. */}
       {picked && (
-        <div className="absolute top-[64px] left-2.5 flex flex-col gap-2 z-10">
+        <div className="absolute top-[52px] left-2.5 flex flex-col gap-2 z-10">
           {choice('wardrobe', 'WITH MY WARDROBE')}
           {choice('new', 'WITH SOMETHING NEW')}
         </div>

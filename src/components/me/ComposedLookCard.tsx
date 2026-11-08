@@ -7,12 +7,14 @@
 // the same card: her picture when the look has one, otherwise the pieces laid
 // three across on stone, the piece it was built around ringed.
 
+import { useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import SaveOutfit from '@/components/me/SaveOutfit'
 import SavePieceHeart from '@/components/me/SavePieceHeart'
+import StudioLookSheet from '@/components/me/StudioLookSheet'
 import type { StyledLook } from '@/app/admin/private-stylist/actions'
 
-type CardLook = StyledLook & { styled_way_id?: string; saved_look_id?: string | null }
+type CardLook = StyledLook & { styled_way_id?: string; saved_look_id?: string | null; outfit_id?: string }
 
 export default function ComposedLookCard({ look, heroId, saveable, testMemberId }: {
   look: CardLook
@@ -21,8 +23,11 @@ export default function ComposedLookCard({ look, heroId, saveable, testMemberId 
   saveable?: boolean
   testMemberId?: string
 }) {
-  return (
-    <article className="bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] rounded-[18px] overflow-hidden">
+  // A studio outfit opens: its pieces, each a way into more outfits (StudioLookSheet).
+  const studio = !!look.outfit_id
+  const [open, setOpen] = useState(false)
+  const picture = (
+    <>
       {look.image_url ? (
         <div className="relative aspect-[3/4] bg-[#E4E2DD] overflow-hidden rounded-[14px]">
           <FallbackImage src={look.image_url} thumbWidth={700} alt="" className="absolute inset-0 w-full h-full object-cover" />
@@ -37,14 +42,29 @@ export default function ComposedLookCard({ look, heroId, saveable, testMemberId 
           ))}
         </div>
       )}
+    </>
+  )
+  return (
+    <article className="bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] rounded-[18px] overflow-hidden">
+      {studio ? (
+        <button type="button" onClick={() => setOpen(true)} className="block w-full text-left" aria-label="Open this outfit and its pieces">
+          {picture}
+        </button>
+      ) : picture}
       {/* The outfit speaks for itself; how many of her own pieces are in it does not. */}
       <div className="px-5 py-4">
         {look.occasion_label && (
           <p className="myra-section-note mb-1">{look.occasion_label.toUpperCase()}</p>
         )}
-        <p className="text-[21px] xl:text-[24px] text-[#6E6B65]">
-          {look.items.filter((it) => it.owned).length} of your own
-        </p>
+        {studio ? (
+          <button type="button" onClick={() => setOpen(true)} className="text-[21px] xl:text-[24px] text-[#2B2B2B] underline underline-offset-4 text-left">
+            {look.items.length} pieces — see them
+          </button>
+        ) : (
+          <p className="text-[21px] xl:text-[24px] text-[#6E6B65]">
+            {look.items.filter((it) => it.owned).length} of your own
+          </p>
+        )}
         {saveable && look.styled_way_id && (
           <div className="mt-4">
             <SaveOutfit
@@ -60,6 +80,7 @@ export default function ComposedLookCard({ look, heroId, saveable, testMemberId 
           </div>
         )}
       </div>
+      {open && <StudioLookSheet look={look} heroId={heroId} testMemberId={testMemberId} onClose={() => setOpen(false)} />}
     </article>
   )
 }

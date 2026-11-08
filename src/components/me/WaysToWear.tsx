@@ -15,8 +15,11 @@
 import { useEffect, useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import BuiltOutfit from '@/app/me/dressing-room/BuiltOutfit'
+import ComposedLookCard from '@/components/me/ComposedLookCard'
+import type { StudioLook } from '@/lib/studio-looks'
 import SaveOutfit from '@/components/me/SaveOutfit'
 import ShareWithFriend from '@/components/me/ShareWithFriend'
+import ShopLink from '@/components/ShopLink'
 import type { LookItem } from '@/lib/pilot-stylist'
 import { openWaysToWear, pollWaysToWear, reactToWay, type WaysPiece, type WaysStatus } from '@/app/me/ways/actions'
 import { WAYS, type StyledWayLook, type WayMode } from '@/lib/styled-ways-core'
@@ -44,7 +47,7 @@ const PATIENT_AFTER_MS = 5 * 60_000
 const PATIENT_POLL_MS = 10_000
 
 export default function WaysToWear({
-  itemId, piece, mode = 'blend', testMemberId, onClose, inline = false, heading, autoStart = true, onStatus,
+  itemId, piece, mode = 'blend', testMemberId, onClose, inline = false, heading, autoStart = true, startLabel, onStatus,
 }: {
   itemId: string
   /** What to pin while the first answer loads; the server's own copy replaces it. */
@@ -57,10 +60,14 @@ export default function WaysToWear({
   heading?: string
   /** False: show what is kept and wait to be asked (a rest on a piece, not a tap). */
   autoStart?: boolean
+  /** What the button says while the sheet waits to be asked (autoStart false). */
+  startLabel?: string
   /** Where the sheet has got to, and how many ways have landed — for a page that shows its own progress mark. */
   onStatus?: (status: WaysStatus | 'opening', landed: number) => void
 }) {
   const [looks, setLooks] = useState<StyledWayLook[]>([])
+  // What the studio already made with it: drawn first, before MYRA's own ways.
+  const [studio, setStudio] = useState<StudioLook[]>([])
   const [status, setStatus] = useState<WaysStatus | 'opening'>('opening')
   const [error, setError] = useState<string | null>(null)
   const [shown, setShown] = useState<WaysPiece | null>(null)
@@ -70,6 +77,9 @@ export default function WaysToWear({
   // Her verdicts this sitting: a like is saved at once (the look id), a dislike is gone.
   const [liked, setLiked] = useState<Record<string, string>>({})
   const [reacting, setReacting] = useState<string | null>(null)
+  // A piece tapped inside one of the outfits: its own sheet opens over this one,
+  // what the studio made with it first, MYRA's ways on ask (Chloe, 2026-11-08).
+  const [waysFor, setWaysFor] = useState<WaysPiece | null>(null)
 
   async function react(l: StyledWayLook, reaction: 'like' | 'dislike') {
     if (reacting) return
@@ -130,6 +140,7 @@ export default function WaysToWear({
     if (v.piece) setShown(v.piece)
     setTest(!!v.test)
     setLooks(v.looks)
+    if (v.studio) setStudio(v.studio)
     if (v.error && v.status !== 'working') setError(v.error)
     setStatus(v.status)
     if (v.status === 'working') { working.current = true; setTimeout(poll, POLL_MS) }
@@ -166,8 +177,17 @@ export default function WaysToWear({
         <div className="flex-1 min-w-[200px]">
           <p className={`${T_SMALL} tracking-[0.12em] text-[#6E6B65]`}>{heading ?? 'WAYS TO WEAR IT'}</p>
           <p className={`${T} text-[#2B2B2B] leading-tight line-clamp-2`}>{name}</p>
+          {typeof p.price_gbp === 'number' && <p className={`${T_SMALL} text-[#6E6B65] mt-0.5`}>£{Math.round(p.price_gbp)}</p>}
         </div>
         <div className="flex items-center gap-3 flex-wrap">
+          {p.url && p.item_id && (
+            <ShopLink
+              item={{ item_id: p.item_id, retailer_url: p.url, product_name: p.product_name, brand: p.brand ? { name: p.brand } : null }}
+              className={`${T_SMALL} px-5 py-2.5 rounded-full border border-[#2B2B2B] text-[#2B2B2B]`}
+            >
+              View on site
+            </ShopLink>
+          )}
           {status === 'ready' && (
             <button type="button" onClick={() => void open(true)} className={`${T_SMALL} px-5 py-2.5 rounded-full bg-[#2B2B2B] text-white`}>
               More ways
@@ -193,10 +213,23 @@ export default function WaysToWear({
         </div>
       )}
       {error && !busy && <p className={`${T} text-[#4A4E57]`}>{error}</p>}
-      {!busy && !error && status === 'none' && <p className={`${T} text-[#4A4E57]`}>Nothing in your size goes with it yet.</p>}
+      {!busy && !error && status === 'none' && !studio.length && <p className={`${T} text-[#4A4E57]`}>Nothing in your size goes with it yet.</p>}
+
+      {/* FROM THE STUDIO — the outfits Chloe's studio has already made with this
+          piece. Not composed, not judged again: what the feed shows, here under
+          the piece she tapped (Chloe, 2026-11-03). */}
+      {studio.length > 0 && (
+        <div className="space-y-4">
+          <p className={`${T_SMALL} tracking-[0.12em] text-[#6E6B65]`}>FROM THE STUDIO · {studio.length}</p>
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+            {studio.map((l) => <ComposedLookCard key={l.outfit_id} look={l} heroId={itemId} testMemberId={testMemberId} />)}
+          </div>
+          {(looks.length > 0 || busy) && <p className={`${T_SMALL} tracking-[0.12em] text-[#6E6B65] pt-2`}>MYRA&rsquo;S WAYS FOR YOU</p>}
+        </div>
+      )}
       {status === 'idle' && (
         <button type="button" onClick={() => void open(false)} className={`${T_SMALL} px-5 py-2.5 rounded-full bg-[#2B2B2B] text-white`}>
-          {looks.length ? 'See more ways' : 'See it styled'}
+          {looks.length ? 'See more ways' : startLabel ?? 'See it styled'}
         </button>
       )}
 
@@ -214,7 +247,14 @@ export default function WaysToWear({
                     <FallbackImage src={l.image_url} thumbWidth={900} alt="" className="absolute inset-0 w-full h-full object-cover" />
                   </div>
                 )}
-                <BuiltOutfit items={l.items} heroId={itemId} why={l.why} testMemberId={testMemberId} onChange={(items) => setEdited((e) => ({ ...e, [l.styled_way_id]: items }))} />
+                <BuiltOutfit
+                  items={l.items}
+                  heroId={itemId}
+                  why={l.why}
+                  testMemberId={testMemberId}
+                  onChange={(items) => setEdited((e) => ({ ...e, [l.styled_way_id]: items }))}
+                  onPiece={(it) => it.item_id && setWaysFor({ item_id: it.item_id, product_name: it.product_name, brand: it.brand ?? null, image_url: it.image_url ?? null, url: it.url ?? null, price_gbp: it.price_gbp ?? null })}
+                />
                 {!savedLook && (
                   <div className="flex items-center gap-3 flex-wrap">
                     <button
@@ -267,6 +307,10 @@ export default function WaysToWear({
           )
         })}
       </div>
+
+      {waysFor && (
+        <WaysToWear itemId={waysFor.item_id} piece={waysFor} testMemberId={testMemberId} autoStart={false} startLabel="Build outfits with it" onClose={() => setWaysFor(null)} />
+      )}
     </div>
   )
 

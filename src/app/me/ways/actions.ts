@@ -14,9 +14,10 @@ import { resolveClientMember } from '@/lib/client-member'
 import { getStyledWays, heroSoldOut, waysForSoldOutHero, type StyledWayLook, type WayMode } from '@/lib/styled-ways'
 import { WAYS } from '@/lib/styled-ways-core'
 import {
-  requestStyledWays, enqueueWarmups, openJobFor, lastJobFor, kickStyledWaysDrain, RUNNING_STALE_MS, type JobReason,
+  requestStyledWays, enqueueWarmups, openJobFor, lastJobFor, kickStyledWaysDrain, jobAliveAt, RUNNING_STALE_MS, type JobReason,
 } from '@/lib/styled-ways-queue'
 import { recordTap } from '@/lib/styled-ways-demand'
+import { studioLooksWithPiece, type StudioLook } from '@/lib/studio-looks'
 
 /** Finish a small write after the response has gone (the ledger must never slow a tap). */
 function after(work: Promise<unknown>): void {
@@ -32,22 +33,27 @@ export interface WaysPiece {
   product_name: string
   brand: string | null
   image_url: string | null
+  /** Where to buy it — VIEW ON SITE in the sheet. */
+  url?: string | null
+  price_gbp?: number | null
 }
 
 export interface WaysView {
   looks: StyledWayLook[]
   status: WaysStatus
   piece: WaysPiece | null
+  /** The outfits Chloe's studio has already made with this piece — shown first, nothing composed. */
+  studio?: StudioLook[]
   error?: string
   /** Chloe testing as her. */
   test?: boolean
 }
 
 async function pieceFor(admin: any, itemId: string): Promise<WaysPiece | null> {
-  const { data } = await admin.from('item').select('item_id, product_name, image_url, status, brand:brand_id(name)')
+  const { data } = await admin.from('item').select('item_id, product_name, image_url, status, retailer_url, price_gbp, brand:brand_id(name)')
     .eq('item_id', itemId).neq('status', 'archived').maybeSingle()
   if (!data) return null
-  return { item_id: data.item_id, product_name: data.product_name, brand: data.brand?.name ?? null, image_url: data.image_url ?? null }
+  return { item_id: data.item_id, product_name: data.product_name, brand: data.brand?.name ?? null, image_url: data.image_url ?? null, url: data.retailer_url ?? null, price_gbp: data.price_gbp ?? null }
 }
 
 async function statusFor(admin: any, memberId: string, itemId: string, mode: WayMode, looks: StyledWayLook[]):
@@ -58,8 +64,11 @@ async function statusFor(admin: any, memberId: string, itemId: string, mode: Way
     // cron), and one running longer than any compose takes is one whose
     // function died: the poll that finds either starts a drain, which gives
     // the dead one back to the queue and picks it up.
-    const stale = open.status === 'running' && !!open.started_at && Date.now() - Date.parse(open.started_at) > RUNNING_STALE_MS
-    if (open.status === 'queued' || stale) kickStyledWaysDrain()
+    const alive = jobAliveAt(open)
+    const stale = open.status === 'running' && alive != null && Date.now() - alive > RUNNING_STALE_MS
+    // A job queued this moment is one the tap just kicked for: nothing to do yet.
+    const waiting = open.status === 'queued' && Date.now() - Date.parse(open.created_at) > 4_000
+    if (waiting || stale) kickStyledWaysDrain()
     return { status: 'working' }
   }
   if (looks.length) return { status: 'ready' }
@@ -83,34 +92,38 @@ export async function openWaysToWear(
   const admin = createAdminClient() as any
   const mode: WayMode = opts.mode ?? 'blend'
   try {
-    const piece = await pieceFor(admin, itemId)
+    const [piece, looks, studio] = await Promise.all([
+      pieceFor(admin, itemId),
+      getStyledWays(admin, me.memberId, itemId, mode),
+      // What the studio already made with it comes first, whatever MYRA has kept.
+      studioLooksWithPiece(admin, itemId).catch(() => [] as StudioLook[]),
+    ])
     if (!piece) return { looks: [], status: 'none', piece: null, error: 'That piece is no longer here', test: me.test }
-    const looks = await getStyledWays(admin, me.memberId, itemId, mode)
     // A tap is counted on the ledger with whether the memory answered it whole.
     if (!opts.passive && !opts.more) after(recordTap(admin, me.memberId, itemId, mode, looks.length >= WAYS))
-    if (!opts.more && looks.length >= WAYS) return { looks, status: 'ready', piece, test: me.test }
+    if (!opts.more && looks.length >= WAYS) return { looks, status: 'ready', piece, studio, test: me.test }
     // The piece has sold out: never style it again. Show the last outfits MYRA
     // made with it instead of a wait that can only end in nothing.
     if (await heroSoldOut(admin, itemId)) {
       const last = await waysForSoldOutHero(admin, me.memberId, itemId, mode)
       const all = [...looks, ...last.filter((l) => !looks.some((k) => k.styled_way_id === l.styled_way_id))].slice(0, WAYS)
       return all.length
-        ? { looks: all, status: 'ready', piece, error: 'This piece has sold out. These are the last outfits MYRA made with it.', test: me.test }
-        : { looks: [], status: 'none', piece, error: 'This piece has sold out, so MYRA won’t style it again.', test: me.test }
+        ? { looks: all, status: 'ready', piece, studio, error: 'This piece has sold out. These are the last outfits MYRA made with it.', test: me.test }
+        : { looks: [], status: 'none', piece, studio, error: 'This piece has sold out, so MYRA won’t style it again.', test: me.test }
     }
     // Passive (a rest, not a tap): show what is kept, and whether MYRA is
     // already on it, without spending the judge on a piece she only passed.
     if (opts.passive) {
       const s = await statusFor(admin, me.memberId, itemId, mode, looks)
-      return { looks, piece, test: me.test, ...(s.status === 'working' ? s : { status: 'idle' as const }) }
+      return { looks, piece, studio, test: me.test, ...(s.status === 'working' ? s : { status: 'idle' as const }) }
     }
 
     const r = await requestStyledWays(admin, me.memberId, itemId, {
       mode, reason: opts.more ? 'more' : 'tap', shuffle: opts.more ? looks.length + 1 : 0, priority: 1,
     })
-    if (r.error) return { looks, status: looks.length ? 'ready' : 'failed', piece, error: r.error, test: me.test }
+    if (r.error) return { looks, status: looks.length ? 'ready' : 'failed', piece, studio, error: r.error, test: me.test }
     kickStyledWaysDrain()
-    return { looks, status: 'working', piece, test: me.test }
+    return { looks, status: 'working', piece, studio, test: me.test }
   } catch (err) {
     return { looks: [], status: 'failed', piece: null, error: err instanceof Error ? err.message : 'Could not open this piece', test: me.test }
   }
