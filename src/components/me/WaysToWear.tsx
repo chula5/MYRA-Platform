@@ -46,7 +46,7 @@ const PATIENT_AFTER_MS = 5 * 60_000
 const PATIENT_POLL_MS = 10_000
 
 export default function WaysToWear({
-  itemId, piece, mode = 'blend', testMemberId, onClose, inline = false, heading, autoStart = true, onStatus,
+  itemId, piece, mode = 'blend', testMemberId, onClose, inline = false, heading, autoStart = true, startLabel, onStatus,
 }: {
   itemId: string
   /** What to pin while the first answer loads; the server's own copy replaces it. */
@@ -59,6 +59,8 @@ export default function WaysToWear({
   heading?: string
   /** False: show what is kept and wait to be asked (a rest on a piece, not a tap). */
   autoStart?: boolean
+  /** What the button says while the sheet waits to be asked (autoStart false). */
+  startLabel?: string
   /** Where the sheet has got to, and how many ways have landed — for a page that shows its own progress mark. */
   onStatus?: (status: WaysStatus | 'opening', landed: number) => void
 }) {
@@ -214,7 +216,7 @@ export default function WaysToWear({
       )}
       {status === 'idle' && (
         <button type="button" onClick={() => void open(false)} className={`${T_SMALL} px-5 py-2.5 rounded-full bg-[#2B2B2B] text-white`}>
-          {looks.length ? 'See more ways' : 'See it styled'}
+          {looks.length ? 'See more ways' : startLabel ?? 'See it styled'}
         </button>
       )}
 
