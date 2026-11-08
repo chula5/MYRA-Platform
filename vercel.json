@@ -98,6 +98,10 @@
     {
       "path": "/api/cron/event-picks?mode=compose",
       "schedule": "0 10 * * 1"
+    },
+    {
+      "path": "/api/cron/avatar",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

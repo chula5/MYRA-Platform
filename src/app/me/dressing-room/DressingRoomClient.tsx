@@ -185,6 +185,10 @@ export default function DressingRoomClient({
           <div className="relative px-6 sm:px-8 py-6 sm:py-7 lg:pr-[330px] 2xl:pr-[440px]">
             {/* Just the room's name (Chloe, 2026-10-17: no "own pieces" line, no count). */}
             <h1 className="text-[clamp(26px,3.2vw,46px)] 2xl:text-[clamp(44px,3.4vw,72px)] tracking-[0.14em] text-[#2B2B2B] leading-[1.05]">DRESSING ROOM</h1>
+            {/* Her avatar: the body every piece is tried on (phase 1: make and approve it). */}
+            {!testMemberId && (
+              <Link href="/me/avatar" className="mt-3 inline-flex items-center rounded-full border border-[#2B2B2B] px-4 py-2 text-[13px] tracking-[0.12em] uppercase text-[#2B2B2B]">My avatar</Link>
+            )}
 
             {/* The ways to fill the room: the apps' marks in circles, one line saying why. */}
             <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-3">
