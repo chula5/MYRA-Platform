@@ -59,7 +59,7 @@ export async function startMyAvatar(formData: FormData): Promise<{ avatarId?: st
   const { normalisePhoto } = await import('@/lib/wardrobe/cutout')
   const toJpeg = async (f: File) => {
     const { png } = await normalisePhoto(Buffer.from(await f.arrayBuffer()), 1600)
-    const sharp = (await import('sharp')).default
+    const m: any = await import('sharp'); const sharp = m.default ?? m
     return sharp(png).jpeg({ quality: 90 }).toBuffer()
   }
   try {

@@ -3,7 +3,8 @@
 
 import 'server-only'
 
-async function sharp() { return (await import('sharp')).default }
+// Next hands back the ESM default; a plain Node/jiti load hands back the module itself.
+async function sharp() { const m: any = await import('sharp'); return (m.default ?? m) as typeof import('sharp').default }
 
 export interface Raw { data: Buffer; width: number; height: number; channels: number }
 

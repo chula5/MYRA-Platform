@@ -11,14 +11,16 @@
 //   AVATAR_BODY_MODEL                 default gemini-3-pro-image
 //   AVATAR_DRESS_MODEL                default gemini-nano-banana-2.1
 //   OPENAI_API_KEY                    required for the portrait
-//   AVATAR_PORTRAIT_MODEL             default gpt-image-2.6
+//   AVATAR_PORTRAIT_MODELS            default gpt-image-2.6-flare,gpt-image-2.6-sunburst
+//                                     one portrait candidate per model, cycling; OpenAI has no bare
+//                                     'gpt-image-2.6' id (that was Higgsfield's name for it)
 
 export const AVATAR_CONFIG = {
   project: process.env.GOOGLE_CLOUD_PROJECT || '',
   location: process.env.GOOGLE_CLOUD_LOCATION || 'global',
   bodyModel: process.env.AVATAR_BODY_MODEL || 'gemini-3-pro-image',
   dressModel: process.env.AVATAR_DRESS_MODEL || 'gemini-nano-banana-2.1',
-  portraitModel: process.env.AVATAR_PORTRAIT_MODEL || 'gpt-image-2.6',
+  portraitModels: (process.env.AVATAR_PORTRAIT_MODELS || process.env.AVATAR_PORTRAIT_MODEL || 'gpt-image-2.6-flare,gpt-image-2.6-sunburst').split(',').map((s) => s.trim()).filter(Boolean),
   imageSize: '2K' as const,          // 1696 × 2528 at 2:3 — the size every layer shares
   aspect: '2:3' as const,
   storageBucket: 'avatar-photos',

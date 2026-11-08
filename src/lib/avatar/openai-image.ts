@@ -21,7 +21,7 @@ export async function generateOpenAIImage(opts: {
   const key = process.env.OPENAI_API_KEY
   if (!key) throw new OpenAIImageError('OPENAI_API_KEY is missing')
   const form = new FormData()
-  form.set('model', opts.model ?? AVATAR_CONFIG.portraitModel)
+  form.set('model', opts.model ?? AVATAR_CONFIG.portraitModels[0])
   form.set('prompt', opts.prompt)
   form.set('size', opts.size ?? '1024x1024')
   form.set('quality', opts.quality ?? 'high')

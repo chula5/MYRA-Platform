@@ -35,7 +35,8 @@ export async function runPortraitStep(avatarId: string, heartbeat?: () => void):
   const urls: string[] = []
   for (let i = 0; i < AVATAR_CONFIG.portraitCandidates; i++) {
     heartbeat?.()
-    const r = await generateOpenAIImage({ prompt: portraitPrompt(), images: refs, size: '1024x1024', quality: 'high' })
+    const model = AVATAR_CONFIG.portraitModels[i % AVATAR_CONFIG.portraitModels.length]
+    const r = await generateOpenAIImage({ prompt: portraitPrompt(), images: refs, model, size: '1024x1024', quality: 'high' })
     urls.push(await keepPicture(avatar.member_id, `portrait-${i + 1}`, r.png, 'image/png'))
     await addCost(avatarId, AVATAR_CONFIG.costGbp.portrait)
   }
