@@ -59,12 +59,14 @@ export default function SavedSearches({ testMemberId }: { testMemberId?: string 
               Stop looking
             </button>
           </div>
+          {s.shopNote && <p className="text-[15px] xl:text-[17px] tracking-[0.12em] text-[#7C838B] -mt-1 mb-4">{s.shopNote}</p>}
           {s.pieces.length > 0 ? (
             <div className="grid grid-cols-3 sm:grid-cols-4 xl:grid-cols-6 gap-3">
               {s.pieces.slice(0, 6).map((p) => (
                 <Link key={p.item_id} href={`/me/browse?saved=${encodeURIComponent(s.id)}`} className="block bg-white rounded-[14px] overflow-hidden shadow-[0_1px_8px_rgba(43,43,43,0.06)]">
                   <div className="relative aspect-[3/4] bg-[#F3F2F0] overflow-hidden">
                     {p.image_url && <FallbackImage src={p.image_url} thumbWidth={400} alt={p.product_name} className="absolute inset-0 w-full h-full object-cover" />}
+                    {p.fresh && <span className="absolute top-2 left-2 rounded-full bg-[#7C838B] text-white px-2.5 py-0.5 text-[13px] tracking-[0.12em]">NEW</span>}
                   </div>
                   <div className="px-2.5 py-2">
                     {p.brand && <p className="text-[13px] xl:text-[15px] tracking-[0.1em] text-[#6E6B65] truncate">{p.brand.toUpperCase()}</p>}

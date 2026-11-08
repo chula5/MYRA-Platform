@@ -75,7 +75,8 @@ export async function recordPrice(admin: any, itemId: string, reading: PriceRead
   return raisePriceDrops(admin, item, gbp.now)
 }
 
-async function raisePriceDrops(admin: any, item: any, now: number): Promise<number> {
+/** Tell every member waiting on this piece, if `now` is a drop for them. `item` needs item_id, product_name, brand.name. */
+export async function raisePriceDrops(admin: any, item: any, now: number): Promise<number> {
   const { data: watchers } = await admin.from('member_saved_item')
     .select('member_id, price_at_watch, lowest_seen').eq('item_id', item.item_id).eq('price_watch', true)
   let told = 0

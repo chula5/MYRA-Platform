@@ -9,6 +9,7 @@ import { ROOMS, ROW_ROOMS, RoomIcon, RoomSearch, type RoomId } from '@/component
 import YouButton from '@/components/me/YouButton'
 import ShareButton from '@/components/me/ShareButton'
 import WardrobeButton from '@/components/me/WardrobeButton'
+import SaleButton from '@/components/me/SaleButton'
 import MobileTabBar from '@/components/me/MobileTabBar'
 import StylingBadge from '@/components/me/StylingBadge'
 
@@ -64,6 +65,7 @@ export default function MeChrome() {
                   <img src="/myra-logo-black.png" alt="MYRA" className="h-12 w-auto" />
                 </Link>
                 <div className="flex items-center justify-end gap-6">
+                  <SaleButton />
                   <WardrobeButton />
                   <ShareButton />
                   <YouButton />
@@ -78,6 +80,7 @@ export default function MeChrome() {
                   <img src="/myra-logo-black.png" alt="MYRA" className="h-8 w-auto" />
                 </Link>
                 <div className="flex items-center gap-4">
+                  <SaleButton showLabel={false} />
                   <WardrobeButton showLabel={false} />
                   <ShareButton showLabel={false} />
                   <YouButton showLabel={false} />
@@ -96,7 +99,8 @@ export default function MeChrome() {
                 {active !== 'browse' && <RoomSearch variant="header" />}
               </div>
               <div className="flex items-center gap-6">
-                <WardrobeButton />
+                <SaleButton />
+                  <WardrobeButton />
                 <ShareButton active={active === 'sharing'} />
                 <YouButton active={active === 'profile'} />
               </div>
@@ -108,7 +112,8 @@ export default function MeChrome() {
                 <img src="/myra-logo-black.png" alt="MYRA" className="h-8 w-auto" />
               </Link>
               <div className="flex items-center gap-4">
-                <WardrobeButton showLabel={false} />
+                <SaleButton showLabel={false} />
+                  <WardrobeButton showLabel={false} />
                 <ShareButton active={active === 'sharing'} showLabel={false} />
                 <YouButton active={active === 'profile'} showLabel={false} />
               </div>

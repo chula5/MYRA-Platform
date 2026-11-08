@@ -15,7 +15,8 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase-server'
 import { acceptedValues, sizeCategoryFor, type SizeCategory } from '@/lib/size-canonical'
-import { loadUserSizeProfile, loadSizeRowsFor, type ShopperSizeContext } from '@/lib/size-availability'
+import { loadUserSizeProfile, loadMemberSizeProfile, loadSizeRowsFor, type ShopperSizeContext } from '@/lib/size-availability'
+import { notifyMember } from '@/lib/push/notify'
 import type { SizeRow } from '@/lib/size-match'
 import { alertPriority, isFastMoving, type StockClass, type RiskInputs } from '@/lib/second-hand'
 import { sendStudioEmail, emailShell, emailButton, siteUrl } from '@/lib/studio/email'
@@ -55,7 +56,7 @@ export async function subscribeToItems(
   if (!items.length) return
   try {
     const admin = createAdminClient()
-    const sizes = ctx ?? (await loadUserSizeProfile(userId))
+    const sizes = ctx ?? (await sizesForAlertKey(userId))
     const rows = items.map((item) => {
       const category = sizeCategoryFor(item.item_type as any)
       const values = category ? acceptedValues(sizes.profile, category) : []
@@ -77,6 +78,23 @@ export async function subscribeToItems(
     // Alerting must never break a save.
     console.error('[subscribeToItems]', err)
   }
+}
+
+/**
+ * The sizes to watch for whoever holds this alert key. A member's sizes live on
+ * her member record (pilot_member.sizes), not in the shopper size profile, so a
+ * heart tapped by a member used to watch no size at all and never alerted.
+ */
+async function sizesForAlertKey(userId: string): Promise<ShopperSizeContext> {
+  const shopper = await loadUserSizeProfile(userId)
+  if (shopper.hasProfile) return shopper
+  try {
+    const admin = createAdminClient() as any
+    const { data } = await admin.from('pilot_member').select('member_id')
+      .or(`auth_user_id.eq.${userId},member_id.eq.${userId}`).limit(1).maybeSingle()
+    if (data?.member_id) return await loadMemberSizeProfile(data.member_id)
+  } catch { /* fall back to the shopper profile */ }
+  return shopper
 }
 
 /** Subscribe to every item in an outfit she just saved. */
@@ -372,11 +390,10 @@ export async function deliverAlerts(mode: 'urgent' | 'batch'): Promise<{ users: 
   const admin = createAdminClient()
   let query = admin
     .from('stock_alert' as any)
-    .select('alert_id, user_id, item_id, outfit_id, kind, size_label, item(product_name, image_url, retailer_url, brand(name))')
+    .select('alert_id, user_id, item_id, outfit_id, kind, size_label, priority, created_at, item(product_name, image_url, retailer_url, brand(name))')
     .is('delivered_at', null)
     .order('created_at', { ascending: true })
     .limit(1000)
-  if (mode === 'urgent') query = query.eq('priority', 'urgent')
 
   const { data, error } = await query
   if (error) { console.error('[deliverAlerts]', error); return { users: 0, alerts: 0 } }
@@ -384,9 +401,16 @@ export async function deliverAlerts(mode: 'urgent' | 'batch'): Promise<{ users: 
   if (!rows.length) return { users: 0, alerts: 0 }
 
   const privateClients = await privateClientUserIds()
+  const members = await memberForAlertKey()
 
   const byUser = new Map<string, PendingRow[]>()
+  const byMember = new Map<string, PendingRow[]>()
   for (const r of rows) {
+    // A MYRA member hears it in the app and on her phone (lib/push), at once.
+    // Every kind, every hour: "only a few left" is no use tomorrow morning.
+    const memberId = members.get(r.user_id)
+    if (memberId) { byMember.set(memberId, [...(byMember.get(memberId) ?? []), r]); continue }
+    if (mode === 'urgent' && (r as any).priority !== 'urgent') continue
     if (privateClients.has(r.user_id)) continue // handled by the stylist digest
     const list = byUser.get(r.user_id) ?? []
     list.push(r)
@@ -395,6 +419,18 @@ export async function deliverAlerts(mode: 'urgent' | 'batch'): Promise<{ users: 
 
   let sentUsers = 0
   let sentAlerts = 0
+  for (const [memberId, memberRows] of Array.from(byMember.entries())) {
+    try {
+      // News older than two days is stale on a phone: filed as delivered, not sent.
+      const fresh = memberRows.filter((r: any) => Date.now() - Date.parse(r.created_at) < 48 * 3600_000)
+      if (fresh.length) await tellMemberAboutStock(admin, memberId, fresh)
+      await (admin.from('stock_alert') as any)
+        .update({ delivered_at: new Date().toISOString() })
+        .in('alert_id', memberRows.map((r: PendingRow) => r.alert_id))
+      sentUsers++
+      sentAlerts += memberRows.length
+    } catch (err) { console.error('[deliverAlerts] member', memberId, err) }
+  }
   for (const [userId, userRows] of Array.from(byUser.entries())) {
     const email = await emailFor(userId)
     if (!email) continue
@@ -453,6 +489,38 @@ async function privateClientUserIds(): Promise<Set<string>> {
     for (const r of (data ?? []) as any[]) if (r.auth_user_id) ids.add(r.auth_user_id)
   } catch { /* same */ }
   return ids
+}
+
+/** Every alert key a member's saves are filed under (her login, else her member id) → her member id. */
+async function memberForAlertKey(): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  try {
+    const admin = createAdminClient()
+    const { data } = await admin.from('pilot_member' as any).select('member_id, auth_user_id').eq('is_synthetic', false)
+    for (const m of (data ?? []) as any[]) {
+      out.set(m.member_id, m.member_id)
+      if (m.auth_user_id) out.set(m.auth_user_id, m.member_id)
+    }
+  } catch { /* no members table: shoppers only */ }
+  return out
+}
+
+/** Words for her phone, piece by piece — the urgent ones first, three at most, the rest in one line. */
+const STOCK_ORDER: AlertKind[] = ['unique_sold', 'low_in_size', 'sold_out_in_size', 'back_in_size', 'restyled']
+async function tellMemberAboutStock(admin: any, memberId: string, rows: PendingRow[]): Promise<void> {
+  const sorted = rows.slice().sort((a, b) => STOCK_ORDER.indexOf(a.kind as AlertKind) - STOCK_ORDER.indexOf(b.kind as AlertKind))
+  const named = (r: PendingRow) => [r.item?.brand?.name, r.item?.product_name].filter(Boolean).join(' ') || 'A piece you saved'
+  for (const r of sorted.slice(0, 3)) {
+    const line = ALERT_COPY[r.kind as AlertKind]?.(r.size_label) ?? 'Stock has changed'
+    await notifyMember(admin,
+      { memberId, kind: 'note', body: `${named(r)}: ${line.charAt(0).toLowerCase()}${line.slice(1)}.` },
+      { title: r.kind === 'low_in_size' ? 'Nearly gone in your size' : r.kind === 'back_in_size' ? 'Back in your size' : 'A saved piece changed', url: `/me/dressing-room?tab=saved&piece=${r.item_id}`, collapseId: `stock-${r.item_id}` })
+  }
+  if (sorted.length > 3) {
+    await notifyMember(admin,
+      { memberId, kind: 'note', body: `${sorted.length - 3} more of your saved pieces changed in stock. See them in your Dressing Room.` },
+      { title: 'Your saved pieces', url: '/me/dressing-room?tab=saved', collapseId: 'stock-more' })
+  }
 }
 
 async function emailFor(userId: string): Promise<string | null> {
