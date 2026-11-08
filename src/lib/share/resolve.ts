@@ -437,7 +437,7 @@ export function extractProduct(html: string, pageUrl: string): ResolvedProduct |
 
 // ── THE RESOLVER ─────────────────────────────────────────────────────────────
 
-async function fetchText(url: string): Promise<{ html: string; url: string } | null> {
+export async function fetchText(url: string): Promise<{ html: string; url: string } | null> {
   try {
     const res = await fetch(url, {
       headers: { 'user-agent': UA, 'accept': 'text/html,application/xhtml+xml', 'accept-language': 'en-GB,en;q=0.9' },
