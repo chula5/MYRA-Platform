@@ -10,6 +10,7 @@ import FallbackImage from '@/components/FallbackImage'
 import WaysToWear from '@/components/me/WaysToWear'
 import ShareWithFriend from '@/components/me/ShareWithFriend'
 import { useWaysReady } from '@/components/me/ways-watch'
+import { PIECE_SAVED_EVENT } from '@/components/me/SaveScreenshot'
 import { forgetMySavedPiece, loadMySavedPieces } from './actions'
 import type { SavedPieceView } from '@/app/admin/private-stylist/actions'
 
@@ -39,6 +40,19 @@ export default function SavedPieces({ testMemberId, onCount }: { testMemberId?: 
       } catch { /* no window, no deep link */ }
     })
     return () => { live = false }
+  }, [testMemberId])
+
+  // A screenshot saved on this page lands on the shelf at once, and opens.
+  useEffect(() => {
+    const onSaved = (e: Event) => {
+      const id = (e as CustomEvent).detail?.item_id as string | undefined
+      void loadMySavedPieces(testMemberId).then((r) => {
+        setPieces(r.pieces); setError(r.error ?? null)
+        if (id && r.pieces.some((p) => p.item_id === id)) setOpen(id)
+      })
+    }
+    window.addEventListener(PIECE_SAVED_EVENT, onSaved)
+    return () => window.removeEventListener(PIECE_SAVED_EVENT, onSaved)
   }, [testMemberId])
 
   async function forget(itemId: string) {

@@ -22,6 +22,7 @@ import { noticePieces, openWaysToWear, pollWaysToWear } from '@/app/me/ways/acti
 import { WAYS, type StyledWayLook } from '@/lib/styled-ways-core'
 import BuiltOutfit from './BuiltOutfit'
 import SavedPieces from './SavedPieces'
+import SaveScreenshot from '@/components/me/SaveScreenshot'
 import DressingRoomScene from '@/components/me/DressingRoomScene'
 import ServiceMark from '@/components/me/ServiceMark'
 import MicButton from '@/components/me/MicButton'
@@ -610,10 +611,14 @@ export default function DressingRoomClient({
             section keeps loading and watching behind the other tabs, so its
             count is right and a styling she left carries on. */}
         <div className={tab === 'saved' ? 'space-y-6' : 'hidden'}>
+          {/* No Mirror needed: a screenshot of a piece lands on this shelf too. */}
+          <div className="flex justify-center">
+            <SaveScreenshot testMemberId={testMemberId} />
+          </div>
           <SavedPieces testMemberId={testMemberId} onCount={setSavedCount} />
           {savedCount === 0 && (
             <section className={`${CARD} px-6 sm:px-8 py-10 text-center`}>
-              <p className="text-[21px] xl:text-[24px] 2xl:text-[28px] text-[#4A4E57]">Nothing saved yet. Tap the heart in the MYRA Mirror while you shop, and the piece lands here — styled three ways.</p>
+              <p className="text-[21px] xl:text-[24px] 2xl:text-[28px] text-[#4A4E57]">Nothing saved yet. Tap the heart in the MYRA Mirror while you shop, or save a screenshot of a piece above, and it lands here — styled three ways.</p>
             </section>
           )}
         </div>

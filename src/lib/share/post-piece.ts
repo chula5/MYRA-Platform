@@ -246,7 +246,7 @@ async function libraryRail(site: string): Promise<Candidate[]> {
 }
 
 /** Shopify's own predictive search, when the shop is Shopify and lets a server in. */
-async function shopifyRail(site: string, q: string): Promise<Candidate[]> {
+export async function shopifyRail(site: string, q: string): Promise<Candidate[]> {
   let origin: string
   try { origin = new URL(site).origin } catch { return [] }
   try {
@@ -280,7 +280,7 @@ export function garmentPhrase(read: GarmentRead | null): string {
   return `the ${name || words}`
 }
 
-async function pickSamePiece(post: VisionImage, shortlist: Candidate[], read: GarmentRead | null, caption: string | null = null): Promise<number | null> {
+export async function pickSamePiece(post: VisionImage, shortlist: Candidate[], read: GarmentRead | null, caption: string | null = null): Promise<number | null> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey || !shortlist.length) return null
   const rail = await Promise.all(shortlist.map((c) => fetchImageForVision(c.image, 400)))
