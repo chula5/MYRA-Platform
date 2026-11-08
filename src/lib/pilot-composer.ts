@@ -904,7 +904,7 @@ export function composeMemberLooks(
   const inStock = library.filter(
     (i) =>
       i.image_url &&
-      sellable(i) &&
+      (isOwnedItem(i as any) || sellable(i)) &&
       !(!isOwnedItem(i as any) && i.brand_id && t.hiddenBrandIds?.has(i.brand_id)) &&
       // owned pieces are exempt from the input-only (Zara) rule — see memberGate
       (isOwnedItem(i as any) || !(i.brand?.name && t.inputOnlyBrands.has(i.brand.name.toLowerCase()))),
@@ -1080,7 +1080,9 @@ export function composeMemberVariants(
   // Same pool construction as composeMemberLooks — kept in step deliberately so
   // a variant is never built from a piece a fresh delivery wouldn't use.
   const inStock = library.filter(
-    (i) => i.image_url && sellable(i) &&
+    // A piece she owns is in stock by definition — the sentinel's reading of
+    // the shop page it came from says nothing about her wardrobe.
+    (i) => i.image_url && (isOwnedItem(i as any) || sellable(i)) &&
       !(!isOwnedItem(i as any) && i.brand_id && t.hiddenBrandIds?.has(i.brand_id)) &&
       (isOwnedItem(i as any) || !(i.brand?.name && t.inputOnlyBrands.has(i.brand.name.toLowerCase()))),
   )
@@ -1212,7 +1214,7 @@ export function rankAlternates(
       slotForItemType(i.item_type) === slot &&
       !excludeIds.has(i.item_id) &&
       i.image_url &&
-      sellable(i) &&
+      (isOwnedItem(i as any) || sellable(i)) &&
       !(!isOwnedItem(i as any) && i.brand_id && t.hiddenBrandIds?.has(i.brand_id)) &&
       (isOwnedItem(i as any) || !(i.brand?.name && t.inputOnlyBrands.has(i.brand.name.toLowerCase()))),
   )
