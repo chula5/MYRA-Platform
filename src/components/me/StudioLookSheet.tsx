@@ -103,7 +103,10 @@ export default function StudioLookSheet({ look, heroId, testMemberId, onClose }:
       </div>
 
       {waysFor && (
-        <WaysToWear itemId={waysFor.item_id} piece={waysFor} testMemberId={testMemberId} onClose={() => setWaysFor(null)} />
+        // What the studio already made with it shows at once; MYRA composes
+        // only when she asks (Chloe, 2026-11-08: "it should only build outfits
+        // once the user clicks on build the outfits").
+        <WaysToWear itemId={waysFor.item_id} piece={waysFor} testMemberId={testMemberId} autoStart={false} startLabel="Build outfits with it" onClose={() => setWaysFor(null)} />
       )}
     </div>
   )
