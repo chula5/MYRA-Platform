@@ -20,6 +20,7 @@ import { CLIENT_OCCASIONS, OCCASION_LABEL, occasionsForMember } from '@/lib/clie
 import { styleExternalPiece } from '@/lib/mirror/style'
 import type { MirrorMember } from '@/lib/mirror/auth'
 import type { StyledLook } from '@/app/admin/private-stylist/actions'
+import type { StudioLook } from '@/lib/studio-looks'
 import { lookSourceOf, type LookSource } from '@/lib/emailed-looks'
 
 export interface ClientLookItem {
@@ -384,4 +385,19 @@ export async function styleSavedPiece(itemId: string): Promise<{ looks: StyledLo
   }
   const res = await styleExternalPiece(item, 'wardrobe', member, admin, { check: false })
   return { looks: res.looks ?? [], error: res.error }
+}
+
+/**
+ * SEARCH A LOOK reaches past her own looks into the studio: the live outfits
+ * whose pieces carry her words ("16arlington", "feather skirt"). Chloe,
+ * 2026-11-03: searching a label in Looks found 0 while the studio had outfits
+ * with that very skirt.
+ */
+export async function searchStudioLooks(query: string): Promise<StudioLook[]> {
+  const me = await resolveClientMember()
+  if (!me) return []
+  const q = query.trim()
+  if (q.length < 2) return []
+  const { studioLooksMatching } = await import('@/lib/studio-looks')
+  try { return await studioLooksMatching(createAdminClient() as any, q) } catch { return [] }
 }

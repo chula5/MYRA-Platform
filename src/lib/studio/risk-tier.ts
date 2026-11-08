@@ -39,7 +39,7 @@ export async function computeRisk(
   const ids = items.map((i) => i.item_id)
   const now = Date.now()
 
-  const [subsRes, clicksRes, liveRes] = await Promise.all([
+  const [subsRes, clicksRes, liveRes, watchRes] = await Promise.all([
     admin
       .from('stock_subscription' as any)
       .select('item_id, watch_category, watch_values')
@@ -55,6 +55,12 @@ export async function computeRisk(
       .select('item_id, outfit!inner(status)')
       .in('item_id', ids)
       .eq('outfit.status', 'live'),
+    // WAIT FOR SALE: a piece she is waiting on is read as often as one saved in her size.
+    admin
+      .from('member_saved_item' as any)
+      .select('item_id')
+      .in('item_id', ids)
+      .eq('price_watch', true),
   ])
 
   const inSize = new Map<string, number>()
@@ -64,6 +70,7 @@ export async function computeRisk(
     const map = watching ? inSize : otherSize
     map.set(s.item_id, (map.get(s.item_id) ?? 0) + 1)
   }
+  for (const w of ((watchRes.data ?? []) as any[])) inSize.set(w.item_id, (inSize.get(w.item_id) ?? 0) + 1)
 
   const c48 = new Map<string, number>()
   const c24 = new Map<string, number>()

@@ -33,6 +33,7 @@ import {
   browseSearch, browseNewIn, saveBrowsedPiece,
   type BrowsePiece, type BrowseFacets, type BrowseSizes, type BrowseFilters,
 } from './actions'
+import { listMySearches, openSavedSearch, saveSearch, type SavedSearchView } from './saved-search-actions'
 
 /** What to try when she has not thought of anything yet. */
 const PROMPTS = ['A black dress for a winter wedding', 'Leather jacket', 'Silk slip skirt', 'Something for the office']
@@ -71,6 +72,10 @@ export default function BrowseClient() {
   const [fTypes, setFTypes] = useState<string[]>([])
   const [fClothing, setFClothing] = useState<number[]>([])
   const [fShoes, setFShoes] = useState<number[]>([])
+  // ABOVE MY BUDGET: lift her price bands for this search. Off by default so
+  // Browse stays what she would actually spend; on, nothing is held back.
+  const [fAbove, setFAbove] = useState(false)
+  const [overBudget, setOverBudget] = useState(0)
   // Her own sizes seed the picker once, so a fresh search opens set to her.
   const sizeTouched = useRef(false)
 
@@ -150,8 +155,16 @@ export default function BrowseClient() {
   const [saved, setSaved] = useState<Set<string>>(new Set())
   const [savingId, setSavingId] = useState<string | null>(null)
 
+  // SAVED SEARCHES (lib/saved-search): she keeps a search, MYRA keeps looking
+  // every hour, and what it found since she last looked leads the answer.
+  const [searches, setSearches] = useState<SavedSearchView[]>([])
+  const [fresh, setFresh] = useState<BrowsePiece[]>([])
+  const [keeping, setKeeping] = useState(false)
+  const loadSearches = () => listMySearches().then((r) => setSearches(r.searches)).catch(() => { /* chips are a nicety */ })
+  useEffect(() => { void loadSearches() }, [])
+
   const started = asked != null
-  const chosen = pieces?.find((p) => p.item_id === picked) ?? similar.find((p) => p.item_id === picked) ?? null
+  const chosen = pieces?.find((p) => p.item_id === picked) ?? similar.find((p) => p.item_id === picked) ?? fresh.find((p) => p.item_id === picked) ?? null
   const activeCount = fBrands.length + fColours.length + fTypes.length + fClothing.length + fShoes.length
 
   // ── The mark in the corner (components/me/styling-progress) ──────────────
@@ -198,6 +211,13 @@ export default function BrowseClient() {
     newIn.current = since
     try { window.history.replaceState(null, '', window.location.pathname) } catch { /* fine */ }
     void run('New in from your brands', {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('saved')
+    if (!id) return
+    try { window.history.replaceState(null, '', window.location.pathname) } catch { /* fine */ }
+    void openSearch(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const stashedPiece = (id: string): BrowsePiece | null => {
@@ -256,7 +276,7 @@ export default function BrowseClient() {
     forgetCards()
     const r = newIn.current ? await browseNewIn(newIn.current, filters) : await browseSearch(q, filters)
     setBusy(false)
-    setPieces(r.pieces); setRead(r.read); setError(r.error ?? null)
+    setPieces(r.pieces); setRead(r.read); setError(r.error ?? null); setOverBudget(r.overBudget ?? 0)
     setSimilar(r.similar); setSimilarKind(r.similarKind); setSimilarGroups(r.similarGroups ?? []); setBrandName(r.brand)
     // Nothing exact: what comes close is the answer, so it is shown at once.
     setShowSimilar(r.pieces.length === 0 && r.similar.length > 0)
@@ -265,16 +285,45 @@ export default function BrowseClient() {
   }
 
   function currentFilters(): BrowseFilters {
-    return { brands: fBrands, colours: fColours, types: fTypes, clothingSizes: fClothing, shoeSizes: fShoes }
+    return { brands: fBrands, colours: fColours, types: fTypes, clothingSizes: fClothing, shoeSizes: fShoes, aboveBudget: fAbove }
   }
 
   // A brand-new question starts from a clean slate, so last search's filters
   // don't silently cull the next one.
   async function ask(query: string) {
     newIn.current = null
+    setFresh([])
     sizeTouched.current = false
     setFBrands([]); setFColours([]); setFTypes([]); setFClothing([]); setFShoes([]); setFiltersOpen(false)
     await run(query, {})
+  }
+
+  // A kept search: what MYRA found since she last looked first, then the search
+  // itself, run again with the narrowing she saved it with.
+  async function openSearch(id: string) {
+    const r = await openSavedSearch(id)
+    if (!r.search) { setError(r.error ?? null); return }
+    const freshIds = new Set(r.fresh)
+    newIn.current = null
+    const f = r.filters ?? {}
+    sizeTouched.current = !!(f.clothingSizes?.length || f.shoeSizes?.length)
+    setFBrands(f.brands ?? []); setFColours(f.colours ?? []); setFTypes(f.types ?? [])
+    setFClothing(f.clothingSizes ?? []); setFShoes(f.shoeSizes ?? []); setFiltersOpen(false)
+    setFresh(r.search.pieces.filter((p) => freshIds.has(p.item_id)))
+    setSearches((cur) => cur.map((s) => (s.id === id ? { ...s, fresh: 0 } : s)))
+    await run(r.search.query, f)
+  }
+
+  // SAVE THIS SEARCH sits in the bar beside the mic once a search has answered.
+  const canKeep = !busy && !newIn.current && !!asked && !!pieces && (pieces.length > 0 || similar.length > 0)
+  const keptSearch = asked ? searches.find((s) => s.query.toLowerCase() === asked.toLowerCase()) : undefined
+  async function keepSearch() {
+    if (!asked || keptSearch || keeping) return
+    setKeeping(true)
+    const r = await saveSearch(asked, currentFilters()).catch(() => ({ error: 'Could not keep that search' }) as { id?: string; error?: string })
+    setKeeping(false)
+    if (r.error) setNote(r.error)
+    else void loadSearches()
   }
 
   // The sheet asks, waits and keeps (lib/styled-ways): judged before it shows,
@@ -404,8 +453,19 @@ export default function BrowseClient() {
             aria-label="Search through MYRA"
             data-tour="browse-search"
             type="text"
-            className="w-full rounded-full bg-white border-2 border-transparent shadow-md transition-all duration-300 focus:outline-none focus:border-[#2B2B2B] text-[#2B2B2B] placeholder:text-[#8C8A85] text-[18px] sm:text-[clamp(22px,1.5vw,32px)] pl-16 sm:pl-20 pr-24 sm:pr-36 py-4 sm:py-6"
+            className={`w-full rounded-full bg-white border-2 border-transparent shadow-md transition-all duration-300 focus:outline-none focus:border-[#2B2B2B] text-[#2B2B2B] placeholder:text-[#8C8A85] text-[18px] sm:text-[clamp(22px,1.5vw,32px)] pl-16 sm:pl-20 ${canKeep ? 'pr-[200px] sm:pr-[400px]' : 'pr-24 sm:pr-36'} py-4 sm:py-6`}
           />
+          {/* Keep this search: MYRA keeps looking and the finds wait under YOUR SEARCHES. */}
+          {canKeep && (
+            <button
+              type="button"
+              onClick={() => void keepSearch()}
+              disabled={!!keptSearch || keeping}
+              className={`absolute top-1/2 -translate-y-1/2 ${draft ? 'right-[100px] sm:right-[144px]' : 'right-[60px] sm:right-[88px]'} rounded-full px-4 sm:px-6 py-2.5 sm:py-3 text-[15px] sm:text-[18px] tracking-[0.1em] whitespace-nowrap ${keptSearch ? 'bg-[#7C838B] text-white' : 'bg-[#2B2B2B] text-white hover:bg-black'}`}
+            >
+              {keptSearch ? (<>SAVED ✓<span className="hidden sm:inline"> · MYRA IS LOOKING</span></>) : keeping ? 'SAVING…' : (<>SAVE<span className="hidden sm:inline"> THIS SEARCH</span></>)}
+            </button>
+          )}
           {/* Speak the search: at the end of the bar, the words filling it as she says them. */}
           <MicButton
             size="bar"
@@ -420,6 +480,24 @@ export default function BrowseClient() {
             </button>
           )}
         </form>
+
+        {/* Her kept searches: MYRA is still looking for each; N NEW is what it found since she last looked. */}
+        {searches.length > 0 && (
+          <div className="flex flex-wrap items-center justify-center gap-2 mt-5 max-w-[1100px] mx-auto">
+            <span className="text-[15px] sm:text-[16px] tracking-[0.14em] text-[#6E6B65] mr-1">YOUR SEARCHES</span>
+            {searches.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => void openSearch(s.id)}
+                className={`text-[16px] sm:text-[18px] tracking-[0.04em] rounded-full border px-5 py-2.5 ${asked && asked.toLowerCase() === s.query.toLowerCase() ? 'bg-[#2B2B2B] text-white border-[#2B2B2B]' : 'border-[rgba(43,43,43,0.25)] text-[#2B2B2B] hover:bg-white'}`}
+              >
+                {s.query}
+                {s.fresh > 0 && <span className="ml-2 text-[14px] sm:text-[15px] tracking-[0.12em] rounded-full bg-[#7C838B] text-white px-2.5 py-0.5">{s.fresh} NEW</span>}
+              </button>
+            ))}
+          </div>
+        )}
 
         {!started && (
           <>
@@ -459,10 +537,22 @@ export default function BrowseClient() {
             {read.length > 0 && (
               <p className="text-[16px] sm:text-[18px] tracking-[0.14em] text-[#6E6B65] mr-auto">READ AS {read.join(' · ')}</p>
             )}
+            {/* Past her price bands for this search: the £ switch. It says how
+                many answers wait above her budget, so a thin result is never a
+                dead end (Chloe, 2026-11-03). */}
+            <button
+              type="button"
+              onClick={() => { const next = !fAbove; setFAbove(next); if (asked) void run(asked, { ...currentFilters(), aboveBudget: next }) }}
+              aria-pressed={fAbove}
+              aria-label={fAbove ? 'Back to your budget' : 'Show pieces above your budget'}
+              className={`ml-auto text-[16px] sm:text-[18px] tracking-[0.1em] rounded-full border px-5 py-2.5 whitespace-nowrap ${fAbove ? 'bg-[#2B2B2B] text-white border-[#2B2B2B]' : 'border-[rgba(43,43,43,0.3)] text-[#2B2B2B] hover:bg-white'}`}
+            >
+              £ {fAbove ? 'ABOVE MY BUDGET ✓' : overBudget ? `${overBudget} ABOVE MY BUDGET` : 'ABOVE MY BUDGET'}
+            </button>
             <button
               type="button"
               onClick={() => setFiltersOpen((o) => !o)}
-              className={`ml-auto text-[16px] sm:text-[18px] tracking-[0.1em] rounded-full border px-5 py-2.5 ${activeCount ? 'bg-[#2B2B2B] text-white border-[#2B2B2B]' : 'border-[rgba(43,43,43,0.3)] text-[#2B2B2B] hover:bg-white'}`}
+              className={`text-[16px] sm:text-[18px] tracking-[0.1em] rounded-full border px-5 py-2.5 ${activeCount ? 'bg-[#2B2B2B] text-white border-[#2B2B2B]' : 'border-[rgba(43,43,43,0.3)] text-[#2B2B2B] hover:bg-white'}`}
             >
               FILTER{activeCount ? ` · ${activeCount}` : ''}
             </button>
@@ -549,7 +639,13 @@ export default function BrowseClient() {
               </p>
             </div>
           )}
-          {pieces.length > 0 && grid(pieces)}
+          {fresh.length > 0 && (
+            <div className="mb-12">
+              <p className="text-[16px] sm:text-[18px] tracking-[0.14em] text-[#2B2B2B] mb-5">NEW SINCE YOU LAST LOOKED · {fresh.length}</p>
+              {grid(fresh)}
+            </div>
+          )}
+          {pieces.length > 0 && grid(fresh.length ? pieces.filter((p) => !fresh.some((f) => f.item_id === p.item_id)) : pieces)}
 
           {/* What answers most of her words, never in front of the real answers. */}
           {similar.length > 0 && pieces.length > 0 && !showSimilar && (

@@ -35,9 +35,31 @@ export type JobStatus = 'queued' | 'running' | 'done' | 'failed'
  * it is failed rather than tried again.
  */
 export const RUNNING_STALE_MS = 90_000
+/** A running job touches heartbeat_at this often (migration 0114); stale is measured from the last touch. */
+const HEARTBEAT_MS = 20_000
 const MAX_ATTEMPTS = 2
 /** Jobs one drain runs side by side. */
 const CONCURRENCY = 3
+
+// Until migration 0114 has run there is no heartbeat_at column: the first
+// write that names it says so, and the queue falls back to judging a job by
+// its start alone, as it did before, rather than refusing to drain at all.
+const heartbeat = ((globalThis as any).__myraStyledWaysHeartbeat ??= { supported: true }) as { supported: boolean }
+const noHeartbeatColumn = (err: { message?: string } | null | undefined): boolean => {
+  if (!err || !/heartbeat_at/.test(err.message ?? '')) return false
+  if (heartbeat.supported) console.error('[styled-ways] no heartbeat_at column — run migration 0114; judging stale jobs by their start until then')
+  heartbeat.supported = false
+  return true
+}
+/** A kick within this of the last one from this function is not sent again — the drain it started is still running. */
+const KICK_THROTTLE_MS = 10_000
+let lastKickAt = 0
+
+/** When the job last showed it was alive: its last heartbeat, or its start before the first beat. */
+export function jobAliveAt(job: { heartbeat_at?: string | null; started_at?: string | null }): number | null {
+  const at = job.heartbeat_at ?? job.started_at
+  return at ? Date.parse(at) : null
+}
 
 interface Job {
   job_id: string
@@ -54,10 +76,12 @@ const migrationHint = (msg: string) => (/styled_way_job/.test(msg) ? 'Run migrat
 
 /** The open job for a piece, if any. */
 export async function openJobFor(admin: any, memberId: string, heroId: string, mode: WayMode = 'blend'):
-  Promise<{ job_id: string; status: JobStatus; error: string | null; created_at: string; started_at: string | null; attempts: number } | null> {
-  const { data } = await admin.from('styled_way_job').select('job_id, status, error, created_at, started_at, attempts')
+  Promise<{ job_id: string; status: JobStatus; error: string | null; created_at: string; started_at: string | null; heartbeat_at?: string | null; attempts: number } | null> {
+  const read = () => admin.from('styled_way_job').select(`job_id, status, error, created_at, started_at, attempts${heartbeat.supported ? ', heartbeat_at' : ''}`)
     .eq('member_id', memberId).eq('hero_item_id', heroId).eq('mode', mode)
     .in('status', ['queued', 'running']).limit(1)
+  let { data, error } = await read()
+  if (error && noHeartbeatColumn(error)) ({ data, error } = await read())
   return (data ?? [])[0] ?? null
 }
 
@@ -159,14 +183,24 @@ export async function enqueueWarmups(
 async function runJob(a: any, job: Job): Promise<boolean | null> {
   let error: string | null = null
   let stats: Partial<{ composed: number; passed: number; first_look_ms: number | null; total_ms: number; cost_gbp: number }> = {}
+  // Alive, every HEARTBEAT_MS, until done: a drain that finds a fresh beat
+  // leaves the job alone instead of running it a second time.
+  const beat = setInterval(() => {
+    if (!heartbeat.supported) return
+    a.from('styled_way_job').update({ heartbeat_at: new Date().toISOString() }).eq('job_id', job.job_id).eq('status', 'running')
+      .then(({ error: e }: { error: { message: string } | null }) => { if (e && !noHeartbeatColumn(e)) console.error('[styled-ways] heartbeat', e.message) }, () => { /* the next beat tries again */ })
+  }, HEARTBEAT_MS)
   try {
     const r = await composeStyledWays(job.member_id, job.hero_item_id, {
       mode: job.mode, shuffle: job.shuffle, source: job.priority === 1 ? 'tap' : 'warmup', admin: a,
     })
     stats = { composed: r.composed, passed: r.passed, first_look_ms: r.firstLookMs, total_ms: r.totalMs, cost_gbp: judgedCost(r.judged) }
+    console.log(`[styled-ways] job ${job.job_id} ${job.reason} ${job.mode} first ${r.firstLookMs ?? '-'}ms total ${r.totalMs}ms stages ${JSON.stringify(r.stages)}${r.error ? ` error "${r.error}"` : ''}`)
     if (r.error && !r.saved.length) error = r.error
   } catch (err) {
     error = (err instanceof Error ? err.message : 'Job crashed').slice(0, 500)
+  } finally {
+    clearInterval(beat)
   }
 
   if (!error) {
@@ -196,16 +230,27 @@ export async function drainStyledWaysQueue(budgetMs = 50_000): Promise<{ done: n
   let done = 0
   let failed = 0
 
-  // Jobs whose function died under them: a first time goes back to the
-  // queue, a second time is a failure she is told about.
+  // Jobs whose function died under them — no heartbeat for RUNNING_STALE_MS
+  // (or no start that recent, before the first beat): a first time goes back
+  // to the queue, a second time is a failure she is told about. A job still
+  // beating is left alone however long it has run.
   const staleBefore = new Date(Date.now() - RUNNING_STALE_MS).toISOString()
-  const { error: failErr } = await a.from('styled_way_job')
-    .update({ status: 'failed', finished_at: new Date().toISOString(), error: 'MYRA ran out of time styling this piece — try it again' })
-    .eq('status', 'running').lt('started_at', staleBefore).gte('attempts', MAX_ATTEMPTS)
-  if (failErr) return { done: 0, failed: 0, remaining: 0, skipped: migrationHint(failErr.message) }
-  const { error: staleErr } = await a.from('styled_way_job').update({ status: 'queued' })
-    .eq('status', 'running').lt('started_at', staleBefore).lt('attempts', MAX_ATTEMPTS)
-  if (staleErr) return { done: 0, failed: 0, remaining: 0, skipped: migrationHint(staleErr.message) }
+  const silentOnes = (q: any) => (heartbeat.supported
+    ? q.or(`heartbeat_at.lt.${staleBefore},and(heartbeat_at.is.null,started_at.lt.${staleBefore})`)
+    : q.lt('started_at', staleBefore))
+  const reclaim = async (): Promise<{ message: string } | null> => {
+    const { error: failErr } = await silentOnes(a.from('styled_way_job')
+      .update({ status: 'failed', finished_at: new Date().toISOString(), error: 'MYRA ran out of time styling this piece — try it again' })
+      .eq('status', 'running')).gte('attempts', MAX_ATTEMPTS)
+    if (failErr) return failErr
+    const { error: staleErr } = await silentOnes(a.from('styled_way_job')
+      .update({ status: 'queued', ...(heartbeat.supported ? { heartbeat_at: null } : {}) })
+      .eq('status', 'running')).lt('attempts', MAX_ATTEMPTS)
+    return staleErr ?? null
+  }
+  let reclaimErr = await reclaim()
+  if (reclaimErr && noHeartbeatColumn(reclaimErr)) reclaimErr = await reclaim()
+  if (reclaimErr) return { done: 0, failed: 0, remaining: 0, skipped: migrationHint(reclaimErr.message) }
 
   while (Date.now() - startedAt < budgetMs) {
     const { data: nextRows } = await a.from('styled_way_job')
@@ -224,9 +269,12 @@ export async function drainStyledWaysQueue(budgetMs = 50_000): Promise<{ done: n
     const claimedJobs: Job[] = []
     for (const job of candidates) {
       if (job.priority > 1 && running >= CONCURRENCY) break
-      const { data: claimed } = await a.from('styled_way_job')
-        .update({ status: 'running', started_at: new Date().toISOString(), attempts: job.attempts + 1 })
+      const claim = () => a.from('styled_way_job')
+        .update({ status: 'running', started_at: new Date().toISOString(), attempts: job.attempts + 1, ...(heartbeat.supported ? { heartbeat_at: new Date().toISOString() } : {}) })
         .eq('job_id', job.job_id).eq('status', 'queued').select('job_id')
+      let { data: claimed, error: claimErr } = await claim()
+      if (claimErr && noHeartbeatColumn(claimErr)) ({ data: claimed, error: claimErr } = await claim())
+      if (claimErr) console.error('[styled-ways] claim', claimErr.message)
       if (!claimed || claimed.length === 0) continue
       claimedJobs.push(job)
       running++
@@ -267,6 +315,12 @@ export function kickStyledWaysRender(memberId: string, limit = 3): void {
  * Locally, or without the cron secret, it runs here as before.
  */
 export function kickStyledWaysDrain(budgetMs = 50_000): void {
+  // A sheet polls every 1.5s and asked for a drain on each poll while its job
+  // sat queued: a new 300s function per poll, all contending for the same
+  // database. One kick per KICK_THROTTLE_MS from this function is enough —
+  // the drain it started claims the job within seconds.
+  if (Date.now() - lastKickAt < KICK_THROTTLE_MS) return
+  lastKickAt = Date.now()
   const secret = process.env.CRON_SECRET
   if (secret && process.env.VERCEL) {
     const budget = Math.min(240_000, Math.max(budgetMs, 120_000))

@@ -23,7 +23,7 @@ import {
   loadComposableLibrary, loadMemberTaste, loadPersonaLens, loadComposeHistory,
 } from '@/app/admin/private-stylist/actions'
 import { getStyledWays, keptItemIds, saveStyledWays, type StyledWayLook, type WayMode } from '@/lib/styled-ways'
-import { WAYS, signatureOf, type WaySource } from '@/lib/styled-ways-core'
+import { WAYS, signatureOf, sellableWays, type WaySource } from '@/lib/styled-ways-core'
 
 const MIN_WARDROBE = 6
 /** Spares judged beyond what is wanted, so a failed check still leaves three. */
@@ -38,6 +38,8 @@ export interface ComposeWaysResult {
   saved: StyledWayLook[]
   firstLookMs: number | null
   totalMs: number
+  /** Milliseconds per stage — where a slow tap went (logged by the queue runner). */
+  stages: Record<string, number>
   error?: string
 }
 
@@ -64,16 +66,24 @@ export async function composeStyledWays(
   const mode: WayMode = opts.mode ?? 'blend'
   const want = opts.want ?? WAYS
   const source: WaySource = opts.source ?? 'tap'
+  // Where the time goes, stage by stage: the queue logs it with the job.
+  const stages: Record<string, number> = {}
+  let mark = Date.now()
+  const stage = (name: string) => { stages[name] = Date.now() - mark; mark = Date.now() }
   const fail = (error: string): ComposeWaysResult =>
-    ({ composed: 0, judged: 0, passed: 0, saved: [], firstLookMs: null, totalMs: Date.now() - t0, error })
+    ({ composed: 0, judged: 0, passed: 0, saved: [], firstLookMs: null, totalMs: Date.now() - t0, stages, error })
 
-  const { data: member } = await admin.from('pilot_member').select('*').eq('member_id', memberId).maybeSingle()
+  const [{ data: member }, { data: hero }] = await Promise.all([
+    admin.from('pilot_member').select('*').eq('member_id', memberId).maybeSingle(),
+    admin.from('item').select('*, brand(*)').eq('item_id', heroId).neq('status', 'archived').maybeSingle(),
+  ])
   if (!member) return fail('Member not found')
-  const { data: hero } = await admin.from('item').select('*, brand(*)').eq('item_id', heroId).neq('status', 'archived').maybeSingle()
   if (!hero) return fail('MYRA cannot find that piece any more')
   if (!hero.image_url) return fail('No picture of this piece to work from')
+  stage('member_hero')
 
   const library = await loadComposableLibrary(member)
+  stage('library')
   const inLibrary = library.some((i) => i.item_id === heroId)
   let pool: any[]
   if (mode === 'wardrobe') {
@@ -93,6 +103,7 @@ export async function composeStyledWays(
     loadComposeHistory(admin, memberId),
     keptItemIds(admin, memberId, heroId, mode),
   ])
+  stage('member_taste')
   const ownedMode = mode === 'inspiration' ? 'retail_only' : 'blend'
   const shuffle = (opts.shuffle ?? 0) + kept.length
 
@@ -154,6 +165,25 @@ export async function composeStyledWays(
     if (okWith(p.look, true)) { take(p); takenOcc.add(occ) }
   }
   for (const p of perOccasion) { if (chosen.length >= want + SPARES) break; if (!chosen.includes(p) && okWith(p.look, false)) take(p) }
+  stage('compose')
+
+  // The library is a snapshot up to an hour old (lib/library-snapshot): the
+  // few pieces actually picked are checked against the shop as it is now, so
+  // a piece that sold out since is never judged, kept or shown.
+  if (chosen.length) {
+    const pickedIds = Array.from(new Set(chosen.flatMap((c) => idsOfLook(c.look)).filter((id): id is string => !!id && id !== heroId)))
+    const { data: facts } = await admin.from('item').select('item_id, stock_status, status').in('item_id', pickedIds)
+    const stock = new Map<string, { stock_status: string | null; status: string | null }>(
+      ((facts ?? []) as any[]).map((i) => [i.item_id, { stock_status: i.stock_status ?? null, status: i.status ?? null }]),
+    )
+    const { dead } = sellableWays(chosen.map((c) => ({ c, item_ids: pickedIds.filter((id) => idsOfLook(c.look).includes(id)), items: c.look.items as any[] })), stock)
+    if (dead.length) {
+      const gone = new Set(dead.map((d) => d.row.c))
+      for (let i = chosen.length - 1; i >= 0; i--) if (gone.has(chosen[i])) chosen.splice(i, 1)
+      console.log(`[styled-ways] ${dead.length} look(s) dropped before the check: ${dead.map((d) => `${d.reason}:${d.itemId}`).join(', ')}`)
+    }
+    stage('stock_recheck')
+  }
 
   if (!chosen.length) {
     return fail(mode === 'wardrobe'
@@ -200,6 +230,7 @@ export async function composeStyledWays(
     saved.push(rows[0])
     if (opts.onLook) await opts.onLook(rows[0])
   })
+  stage('check_and_keep')
 
   return {
     composed: perOccasion.length,
@@ -208,6 +239,7 @@ export async function composeStyledWays(
     saved,
     firstLookMs,
     totalMs: Date.now() - t0,
+    stages,
     ...(saved.length ? {} : { error: checked ? 'Nothing passed the check for this piece right now' : CHECK_DOWN_ERROR }),
   }
 }

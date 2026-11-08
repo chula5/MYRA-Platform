@@ -1,15 +1,20 @@
 import type { Metadata, Viewport } from 'next'
 import Script from 'next/script'
-import { Manrope } from 'next/font/google'
+import localFont from 'next/font/local'
 import { FeedProvider } from '@/context/FeedContext'
 import SessionTracker from '@/components/analytics/SessionTracker'
 import SmoothScroll from '@/components/SmoothScroll'
 import './globals.css'
 
 // Site typeface — a clean, gently rounded grotesque close to Pragmatica.
-const manrope = Manrope({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700', '800'],
+// Served from public/fonts (Manrope variable, 200–800) rather than fetched
+// from Google at build time: the Google loader broke two production builds
+// on 2026-11-03 and took the site's deploys down with it.
+const manrope = localFont({
+  src: [
+    { path: '../../public/fonts/Manrope-latin.woff2', weight: '200 800', style: 'normal' },
+    { path: '../../public/fonts/Manrope-latin-ext.woff2', weight: '200 800', style: 'normal' },
+  ],
   variable: '--font-manrope',
   display: 'swap',
 })

@@ -27,6 +27,7 @@ import ServiceMark from '@/components/me/ServiceMark'
 import MicButton from '@/components/me/MicButton'
 import EmailFinds from './EmailFinds'
 import FoundPieces from './FoundPieces'
+import SavedSearches from './SavedSearches'
 import { loadEmailPanel } from './email-actions'
 import { useScrollTo } from '@/lib/smooth-scroll'
 
@@ -49,19 +50,20 @@ const CARD = 'bg-white/85 shadow-[0_2px_14px_rgba(43,43,43,0.08)] rounded-[18px]
 // emails turned up. A link can open a shelf — /me/dressing-room?tab=saved,
 // or the old #saved-pieces / #email-finds / ?piece= — and the tour asks for
 // one with the DRESSING_TAB_EVENT.
-export type DressingTab = 'wardrobe' | 'saved' | 'email'
+export type DressingTab = 'wardrobe' | 'saved' | 'email' | 'searches'
 export const DRESSING_TAB_EVENT = 'myra:dressing-tab'
 const TABS: { id: DressingTab; label: string }[] = [
   // Two short words each, so all four sit side by side on a phone.
   { id: 'wardrobe', label: 'Your wardrobe' },
   { id: 'saved', label: 'Saved pieces' },
   { id: 'email', label: 'Email finds' },
+  { id: 'searches', label: 'Your searches' },
 ]
 function tabFromUrl(): DressingTab {
   if (typeof window === 'undefined') return 'wardrobe'
   const q = new URLSearchParams(window.location.search)
   const t = q.get('tab')
-  if (t === 'saved' || t === 'email' || t === 'wardrobe') return t
+  if (t === 'saved' || t === 'email' || t === 'wardrobe' || t === 'searches') return t
   if (q.get('piece') || window.location.hash === '#saved-pieces') return 'saved'
   if (window.location.hash === '#email-finds') return 'email'
   return 'wardrobe'
@@ -94,7 +96,7 @@ export default function DressingRoomClient({
     setTab(tabFromUrl())
     const onAsk = (e: Event) => {
       const t = (e as CustomEvent).detail
-      if (t === 'wardrobe' || t === 'saved' || t === 'email') setTab(t)
+      if (t === 'wardrobe' || t === 'saved' || t === 'email' || t === 'searches') setTab(t)
     }
     window.addEventListener(DRESSING_TAB_EVENT, onAsk)
     return () => window.removeEventListener(DRESSING_TAB_EVENT, onAsk)
@@ -344,7 +346,7 @@ export default function DressingRoomClient({
 
         {/* The three shelves, all in view at once on any width; no counts on
             them (Chloe, 2026-10-17). A label may take two lines on a phone. */}
-        <div role="tablist" aria-label="Your dressing room" className="grid grid-cols-3 gap-2">
+        <div role="tablist" aria-label="Your dressing room" className="grid grid-cols-4 gap-2">
           {TABS.map((t) => {
             const on = tab === t.id
             return (
@@ -622,6 +624,9 @@ export default function DressingRoomClient({
         <div className={tab === 'email' ? '' : 'hidden'}>
           <EmailFinds testMemberId={testMemberId} />
         </div>
+
+        {/* The searches she kept in Browse, and what MYRA found for each since. */}
+        {tab === 'searches' && <SavedSearches testMemberId={testMemberId} />}
 
         {!testMemberId && tab === 'wardrobe' && (
           <p className="text-center">

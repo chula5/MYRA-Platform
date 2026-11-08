@@ -28,6 +28,7 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase-server'
 import { checkStockDetailed } from '@/app/admin/items/stock-check'
+import { recordPrice } from '@/lib/price-watch'
 import { getOutfit, getReadyAndLiveItems, type ItemWithBrand } from '@/lib/admin-queries'
 import { getSwapCandidates, qualifiesForAutoSwap, type SwapCandidate } from './swap-candidates'
 import { loadStyleGuards } from './guards'
@@ -140,6 +141,12 @@ export async function runStockSentinel(
     }
 
     await scheduleNextCheck(item.item_id, item.poll_tier)
+
+    // ── WAIT FOR SALE: the price, read from the same page (lib/price-watch) ──
+    if (checked.price && (checked.status === 'in_stock' || checked.status === 'low_stock')) {
+      try { await recordPrice(admin, item.item_id, checked.price, `sentinel:${checked.source}`) }
+      catch (err) { console.error('[stock-sentinel] price', item.item_id, err) }
+    }
 
     if (checked.status === 'unknown') {
       // Unreadable. A retailer's downtime is not a strike, and a first failure
