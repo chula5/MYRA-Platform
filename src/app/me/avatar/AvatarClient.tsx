@@ -7,12 +7,14 @@ import { useEffect, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { startMyAvatar, chooseMyPortrait, approveMyAvatar, retakeMyAvatar, deleteMyAvatar, loadMyAvatar, type MyAvatarView } from './actions'
 import { CONSENT_TEXT } from './consent'
+import RoomClient from './RoomClient'
+import type { RoomView } from '@/lib/avatar/wardrobe'
 
 const EYEBROW = 'text-[13px] tracking-[0.22em] uppercase text-[#7C838B]'
 const BTN = 'inline-flex items-center justify-center rounded-full border border-[#141414] px-6 py-3 text-[14px] tracking-[0.1em] uppercase disabled:opacity-40'
 const BTN_DARK = `${BTN} bg-[#141414] text-[#F7F6F3]`
 
-export default function AvatarClient({ view: initial }: { view: MyAvatarView }) {
+export default function AvatarClient({ view: initial, room }: { view: MyAvatarView; room: RoomView | null }) {
   const [view, setView] = useState(initial)
   const [pending, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -80,19 +82,13 @@ export default function AvatarClient({ view: initial }: { view: MyAvatarView }) 
         </section>
       )}
 
-      {a && a.status === 'ready' && a.base_url && (
+      {a && a.status === 'ready' && a.base_url && room && (
+        <RoomClient initial={room} onDelete={() => { if (window.confirm('Delete your avatar and every picture made from it?')) run(() => deleteMyAvatar()) }} />
+      )}
+      {a && a.status === 'ready' && a.base_url && !room && (
         <section className="space-y-4">
-          <div className="grid gap-6 sm:grid-cols-[minmax(0,320px)_1fr] items-start">
-            <img src={a.base_url} alt="Your avatar" className="w-full rounded-[18px] bg-[#E4E2DD]" />
-            <div className="space-y-4 text-[17px] max-w-[48ch]">
-              <p>Your avatar is ready. Your wardrobe is next: each piece is shot on it once and kept, so trying things on is instant.</p>
-              <div className="flex flex-wrap gap-3">
-                <Link href="/me/dressing-room" className={BTN_DARK}>To the dressing room</Link>
-                <button type="button" className={BTN} disabled={pending} onClick={() => run(() => deleteMyAvatar())}>Delete my avatar</button>
-              </div>
-              <p className="text-[14px] text-[#7C838B]">Delete removes the avatar and every picture made from it. Your photos were deleted when you approved it.</p>
-            </div>
-          </div>
+          <img src={a.base_url} alt="Your avatar" className="w-full max-w-[320px] rounded-[18px] bg-[#E4E2DD]" />
+          <p className="text-[17px] max-w-[48ch]">Your avatar is ready. Refresh to open the room.</p>
         </section>
       )}
 

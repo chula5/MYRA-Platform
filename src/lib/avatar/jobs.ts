@@ -8,17 +8,21 @@ import { createAdminClient } from '@/lib/supabase-server'
 import { siteUrl } from '@/lib/studio/email'
 import { AVATAR_CONFIG } from './config'
 import { runPortraitStep, runBodyStep } from './pipeline'
+import { runLayerStep, runFinishStep } from './layers'
 import { getAvatar, updateAvatar } from './store'
 
 export type JobKind = 'portrait' | 'body' | 'layer' | 'finish'
 const RUNNING_STALE_MS = 90_000
 const HEARTBEAT_MS = 20_000
 const KICK_THROTTLE_MS = 15_000
+const RATE_LIMIT_WAIT_MS = 30_000
+const MAX_PARALLEL_DRAINS = 2        // Google's image quota is a few calls a minute: more drainers only trade work for 429s
+let draining = false
 let lastKickAt = 0
 
 const admin = () => createAdminClient() as any
 
-export async function enqueueAvatarJob(kind: JobKind, refId: string, memberId: string, priority: 1 | 2 = 1): Promise<void> {
+export async function enqueueAvatarJob(kind: JobKind, refId: string, memberId: string, priority: 1 | 2 | 3 = 1): Promise<void> {
   const { error } = await admin().from('avatar_job').insert({ kind, ref_id: refId, member_id: memberId, priority })
   // the unique open index turns a duplicate into a no-op
   if (error && !/duplicate|unique|23505/i.test(error.message ?? '')) throw new Error(`avatar_job insert: ${error.message}`)
@@ -36,16 +40,28 @@ async function runJob(job: { job_id: string; kind: JobKind; ref_id: string; memb
   try {
     if (job.kind === 'portrait') await runPortraitStep(job.ref_id, beat)
     else if (job.kind === 'body') await runBodyStep(job.ref_id, beat)
-    else throw new Error(`job kind ${job.kind} arrives in phase 2`)
+    else if (job.kind === 'layer') await runLayerStep(job.ref_id, beat)
+    else if (job.kind === 'finish') await runFinishStep(job.ref_id, beat)
+    else throw new Error(`unknown job kind ${job.kind}`)
     await a.from('avatar_job').update({ status: 'done', finished_at: new Date().toISOString() }).eq('job_id', job.job_id)
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
+    // a rate limit is not the job's fault: back off, put it back, and don't count the attempt
+    if (/429|RESOURCE_EXHAUSTED|rate limit/i.test(msg)) {
+      await a.from('avatar_job').update({ status: 'queued', attempts: Math.max(0, job.attempts - 1), error: 'rate limited, waiting' }).eq('job_id', job.job_id)
+      if (job.kind === 'layer') await a.from('avatar_layer').update({ status: 'queued', error: null, updated_at: new Date().toISOString() }).eq('layer_id', job.ref_id)
+      clearInterval(timer)
+      await new Promise((r) => setTimeout(r, RATE_LIMIT_WAIT_MS))
+      return
+    }
     const giveUp = job.attempts >= AVATAR_CONFIG.maxAttempts
     await a.from('avatar_job').update({ status: giveUp ? 'failed' : 'queued', error: msg.slice(0, 500), finished_at: giveUp ? new Date().toISOString() : null }).eq('job_id', job.job_id)
     if (giveUp && (job.kind === 'portrait' || job.kind === 'body')) {
       const av = await getAvatar(job.ref_id)
       if (av) await updateAvatar(av.avatar_id, { status: 'failed', error: msg.slice(0, 500), attempts: av.attempts + 1 })
     }
+    if (job.kind === 'layer') await a.from('avatar_layer').update({ status: giveUp ? 'failed' : 'queued', error: msg.slice(0, 300), attempts: job.attempts, updated_at: new Date().toISOString() }).eq('layer_id', job.ref_id)
+    if (job.kind === 'finish' && giveUp) await a.from('avatar_look').update({ finish_status: 'failed' }).eq('look_id', job.ref_id)
     console.error('[avatar] job', job.kind, job.ref_id, msg)
   } finally {
     clearInterval(timer)
@@ -56,6 +72,19 @@ async function runJob(job: { job_id: string; kind: JobKind; ref_id: string; memb
 export async function drainAvatarQueue(budgetMs = 240_000): Promise<{ done: number; failed: number; remaining: number }> {
   const a = admin()
   const t0 = Date.now()
+  if (draining) return { done: 0, failed: 0, remaining: -1 }   // this process already has one going
+  // other processes (another function, a script): jobs with a fresh heartbeat are theirs
+  const { count: live } = await a.from('avatar_job').select('job_id', { count: 'exact', head: true }).eq('status', 'running').gt('heartbeat_at', new Date(Date.now() - 45_000).toISOString())
+  if ((live ?? 0) >= MAX_PARALLEL_DRAINS) return { done: 0, failed: 0, remaining: -1 }
+  draining = true
+  try {
+    return await drainInner(a, t0, budgetMs)
+  } finally {
+    draining = false
+  }
+}
+
+async function drainInner(a: any, t0: number, budgetMs: number): Promise<{ done: number; failed: number; remaining: number }> {
   const staleBefore = new Date(Date.now() - RUNNING_STALE_MS).toISOString()
   await a.from('avatar_job').update({ status: 'queued', heartbeat_at: null })
     .eq('status', 'running').or(`heartbeat_at.lt.${staleBefore},and(heartbeat_at.is.null,started_at.lt.${staleBefore})`)
@@ -88,6 +117,7 @@ export function kickAvatarDrain(budgetMs = 240_000): void {
     try { waitUntil(Promise.race([req, new Promise((r) => setTimeout(r, 3_000))])) } catch { /* local */ }
     return
   }
-  const work = drainAvatarQueue(budgetMs).catch((e) => console.error('[avatar] drain', e))
-  try { waitUntil(work) } catch { /* local dev: it simply runs */ }
+  // Not on Vercel (dev server, a script): the process lives on, so the drain simply runs in the
+  // background. Holding the response open with waitUntil here kept every tap's action pending.
+  void drainAvatarQueue(budgetMs).catch((e) => console.error('[avatar] drain', e))
 }

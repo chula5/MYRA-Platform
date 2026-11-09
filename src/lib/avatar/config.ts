@@ -31,6 +31,8 @@ export const AVATAR_CONFIG = {
   maxPhotoBytes: 12 * 1024 * 1024,
   portraitCandidates: 2,
   maxAttempts: 2,
+  // when Nano Banana's shared capacity is saturated (429, project quota untouched), shoot on Pro instead
+  fallbackToPro: (process.env.AVATAR_FALLBACK_TO_PRO ?? 'true') !== 'false',
   // what one picture costs, so admin can show spend by member (Google list prices, Nov 2026)
   costGbp: { body: 0.11, dress: 0.045, portrait: 0.15 },
 }

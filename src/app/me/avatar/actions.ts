@@ -8,6 +8,7 @@ import { resolveClientMember } from '@/lib/client-member'
 import { AVATAR_CONFIG, avatarConfigured } from '@/lib/avatar/config'
 import { createAvatar, liveAvatarFor, updateAvatar, deletePhotos, retireAvatar, signedPhotoUrls, type MemberAvatar } from '@/lib/avatar/store'
 import { enqueueAvatarJob, kickAvatarDrain, openJobFor } from '@/lib/avatar/jobs'
+import { queueWardrobeLayers } from '@/lib/avatar/wardrobe'
 import { CONSENT_TEXT } from './consent'
 
 const PATH = '/me/avatar'
@@ -100,6 +101,8 @@ export async function approveMyAvatar(): Promise<{ error?: string }> {
   if (!avatar || avatar.status !== 'review' || !avatar.base_url) return { error: 'Nothing to approve yet' }
   await updateAvatar(avatar.avatar_id, { status: 'ready', approved_at: new Date().toISOString() })
   await deletePhotos(avatar).catch(() => undefined)
+  // her wardrobe goes on it from here: every wearable piece, every way, defaults first
+  try { await queueWardrobeLayers({ ...avatar, status: 'ready' }); kickAvatarDrain() } catch (e) { console.error('[avatar] queue wardrobe', e) }
   revalidatePath(PATH)
   revalidatePath('/me/dressing-room')
   return {}

@@ -23,6 +23,7 @@ export interface MemberAvatar {
   height: number | null
   consent_at: string | null
   approved_at: string | null
+  wardrobe_queued_at: string | null
   attempts: number
   error: string | null
   cost_gbp: number
