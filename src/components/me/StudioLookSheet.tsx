@@ -70,7 +70,7 @@ export default function StudioLookSheet({ look, heroId, testMemberId, onClose }:
                   <div key={id} className={`relative bg-white rounded-[14px] overflow-hidden shadow-[0_1px_8px_rgba(43,43,43,0.06)] ${id === heroId ? 'ring-2 ring-[#2B2B2B]' : ''}`}>
                     <button
                       type="button"
-                      onClick={() => setWaysFor({ item_id: id, product_name: it.product_name, brand: it.brand ?? null, image_url: it.image_url ?? null, url: it.url ?? null, price_gbp: it.price_gbp ?? null })}
+                      onClick={() => setWaysFor({ item_id: id, product_name: it.product_name, brand: it.brand ?? null, image_url: it.image_url ?? null })}
                       className="block w-full text-left"
                       aria-label={`${it.brand} ${it.product_name} — see it in other outfits`}
                     >

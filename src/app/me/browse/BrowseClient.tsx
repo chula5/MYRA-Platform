@@ -15,7 +15,6 @@
 
 import { Fragment, useEffect, useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
-import HeartIcon from '@/components/me/HeartIcon'
 import MicButton from '@/components/me/MicButton'
 import WaysToWear from '@/components/me/WaysToWear'
 import { WAYS_READY_EVENT } from '@/components/me/ways-watch'
@@ -25,7 +24,7 @@ import { useScrollTo } from '@/lib/smooth-scroll'
 import {
   STYLING_OPEN_EVENT, clearStylingReady, getStylingProgress, keepWatchingStyling, publishStyling, stopWatchingStyling,
 } from '@/components/me/styling-progress'
-import ShopLink from '@/components/ShopLink'
+import ShopLink, { type ShopLinkItem } from '@/components/ShopLink'
 
 /** The piece being styled, kept so the badge can bring her back to it after a new search. */
 const STYLED_KEY = 'myra:browse-styled'
@@ -76,14 +75,11 @@ export default function BrowseClient() {
   // ABOVE MY BUDGET: lift her price bands for this search. Off by default so
   // Browse stays what she would actually spend; on, nothing is held back.
   const [fAbove, setFAbove] = useState(false)
+  const [overBudget, setOverBudget] = useState(0)
   // Her own sizes seed the picker once, so a fresh search opens set to her.
   const sizeTouched = useRef(false)
 
   const [picked, setPicked] = useState<string | null>(null)
-  // The piece she tapped: opened in the mirror — what the studio has made with
-  // it, MYRA's ways on ask, VIEW ON SITE — before she ever leaves MYRA
-  // (Chloe, 2026-11-08).
-  const [opened, setOpened] = useState<BrowsePiece | null>(null)
   const [styling, setStyling] = useState<'wardrobe' | 'new' | null>(null)
   // Where the styling has got to, for the button and the mark at the top.
   const [phase, setPhase] = useState<'idle' | 'working' | 'ready' | 'failed'>('idle')
@@ -280,7 +276,7 @@ export default function BrowseClient() {
     forgetCards()
     const r = newIn.current ? await browseNewIn(newIn.current, filters) : await browseSearch(q, filters)
     setBusy(false)
-    setPieces(r.pieces); setRead(r.read); setError(r.error ?? null)
+    setPieces(r.pieces); setRead(r.read); setError(r.error ?? null); setOverBudget(r.overBudget ?? 0)
     setSimilar(r.similar); setSimilarKind(r.similarKind); setSimilarGroups(r.similarGroups ?? []); setBrandName(r.brand)
     // Nothing exact: what comes close is the answer, so it is shown at once.
     setShowSimilar(r.pieces.length === 0 && r.similar.length > 0)
@@ -422,6 +418,7 @@ export default function BrowseClient() {
         <Fragment key={p.item_id}>
           <PieceCard
             piece={p}
+            shopItem={shopItem(p)}
             picked={picked === p.item_id}
             styling={picked === p.item_id ? styling : null}
             working={picked === p.item_id && phase === 'working'}
@@ -430,7 +427,6 @@ export default function BrowseClient() {
             ready={ready.has(p.item_id)}
             cardRef={(el) => registerCard(el, p.item_id)}
             onPick={() => pick(p)}
-            onOpen={() => setOpened(p)}
             onStyle={(mode) => void style(p, mode)}
             onSave={() => void save(p)}
           />
@@ -539,7 +535,7 @@ export default function BrowseClient() {
         <div className="mt-10">
           <div className="flex flex-wrap items-center gap-3 mb-5">
             {read.length > 0 && (
-              <p className="text-[16px] sm:text-[18px] tracking-[0.14em] text-[#6E6B65] basis-full sm:basis-auto sm:mr-auto">{read.join(' · ')}</p>
+              <p className="text-[16px] sm:text-[18px] tracking-[0.14em] text-[#6E6B65] mr-auto">READ AS {read.join(' · ')}</p>
             )}
             {/* Past her price bands for this search: the £ switch. It says how
                 many answers wait above her budget, so a thin result is never a
@@ -549,9 +545,9 @@ export default function BrowseClient() {
               onClick={() => { const next = !fAbove; setFAbove(next); if (asked) void run(asked, { ...currentFilters(), aboveBudget: next }) }}
               aria-pressed={fAbove}
               aria-label={fAbove ? 'Back to your budget' : 'Show pieces above your budget'}
-              className={`text-[16px] sm:text-[18px] tracking-[0.1em] rounded-full border px-5 py-2.5 whitespace-nowrap ${fAbove ? 'bg-[#2B2B2B] text-white border-[#2B2B2B]' : 'border-[rgba(43,43,43,0.3)] text-[#2B2B2B] hover:bg-white'}`}
+              className={`ml-auto text-[16px] sm:text-[18px] tracking-[0.1em] rounded-full border px-5 py-2.5 whitespace-nowrap ${fAbove ? 'bg-[#2B2B2B] text-white border-[#2B2B2B]' : 'border-[rgba(43,43,43,0.3)] text-[#2B2B2B] hover:bg-white'}`}
             >
-              ABOVE MY BUDGET
+              £ {fAbove ? 'ABOVE MY BUDGET ✓' : overBudget ? `${overBudget} ABOVE MY BUDGET` : 'ABOVE MY BUDGET'}
             </button>
             <button
               type="button"
@@ -636,16 +632,16 @@ export default function BrowseClient() {
           {pieces.length > 0 && (
             <div className="flex justify-center mb-8">
               <p
-                className={`${picked ? '' : 'animate-bounce'} bg-white rounded-full px-5 py-2.5 text-[16px] sm:text-[18px] tracking-[0.1em] text-[#2B2B2B] whitespace-nowrap shadow-[0_2px_16px_rgba(43,43,43,0.16)]`}
+                className={`${picked ? '' : 'animate-bounce'} bg-white rounded-full px-8 xl:px-10 py-4 xl:py-5 text-[19px] xl:text-[24px] tracking-[0.12em] text-[#2B2B2B] shadow-[0_2px_16px_rgba(43,43,43,0.16)]`}
                 style={{ animationIterationCount: 3 }}
               >
-                STYLE ANY PIECE · TAP STYLE ↓
+                STYLE ANY ITEM · TAP STYLE ON IT ↓
               </p>
             </div>
           )}
           {fresh.length > 0 && (
             <div className="mb-12">
-              <p className="text-[16px] sm:text-[18px] tracking-[0.14em] text-[#2B2B2B] mb-5">NEW · {fresh.length}</p>
+              <p className="text-[16px] sm:text-[18px] tracking-[0.14em] text-[#2B2B2B] mb-5">NEW SINCE YOU LAST LOOKED · {fresh.length}</p>
               {grid(fresh)}
             </div>
           )}
@@ -692,18 +688,6 @@ export default function BrowseClient() {
           (components/me/StylingBadge): it follows her out of this room and
           brings her back to the piece. */}
       {note && !styling && <p className="myra-guide-text normal-case text-[18px] text-[#4A4E57] mt-6">{note}</p>}
-
-      {/* The piece she tapped, in the mirror: studio outfits with it first,
-          MYRA's own ways when she asks, VIEW ON SITE to buy. */}
-      {opened && (
-        <WaysToWear
-          itemId={opened.item_id}
-          piece={{ item_id: opened.item_id, product_name: opened.product_name, brand: opened.brand, image_url: opened.image_url, url: opened.url, price_gbp: opened.price_gbp }}
-          autoStart={false}
-          startLabel="Build outfits with it"
-          onClose={() => setOpened(null)}
-        />
-      )}
     </div>
   )
 }
@@ -712,8 +696,9 @@ export default function BrowseClient() {
 // through the tracked click-out, opened in a new tab — from the iOS app that
 // is Safari. Tapping also chooses the piece here, so the two ways to style it
 // are waiting when she comes back. STYLE chooses without leaving the page.
-function PieceCard({ piece, picked, styling, working = false, saved, saving, ready = false, cardRef, onPick, onOpen, onStyle, onSave }: {
+function PieceCard({ piece, shopItem, picked, styling, working = false, saved, saving, ready = false, cardRef, onPick, onStyle, onSave }: {
   piece: BrowsePiece
+  shopItem: ShopLinkItem
   picked: boolean
   /** Which way she is styling this piece, when it is the one she picked. */
   styling: 'wardrobe' | 'new' | null
@@ -724,8 +709,6 @@ function PieceCard({ piece, picked, styling, working = false, saved, saving, rea
   ready?: boolean
   cardRef?: (el: HTMLDivElement | null) => void
   onPick: () => void
-  /** The card itself: the piece opens in the mirror. */
-  onOpen: () => void
   onStyle: (mode: 'wardrobe' | 'new') => void
   onSave: () => void
 }) {
@@ -748,8 +731,8 @@ function PieceCard({ piece, picked, styling, working = false, saved, saving, rea
         {piece.image_url && <FallbackImage src={piece.image_url} thumbWidth={600} alt={piece.product_name} className="absolute inset-0 w-full h-full object-cover" />}
       </div>
       <div className="px-4 py-3.5">
-        {piece.brand && <p className="text-[15px] sm:text-[16px] tracking-[0.1em] text-[#6E6B65] leading-snug line-clamp-2 break-words">{piece.brand.toUpperCase()}</p>}
-        <p className="text-[17px] sm:text-[19px] text-[#2B2B2B] leading-snug line-clamp-3 break-words mt-0.5">{piece.product_name}</p>
+        {piece.brand && <p className="text-[15px] sm:text-[16px] tracking-[0.12em] text-[#6E6B65] truncate">{piece.brand.toUpperCase()}</p>}
+        <p className="text-[17px] sm:text-[19px] text-[#2B2B2B] leading-snug truncate mt-0.5">{piece.product_name}</p>
         {piece.price_gbp != null && <p className="text-[16px] sm:text-[18px] text-[#6E6B65] mt-1">£{Math.round(piece.price_gbp)}</p>}
         {ready && <p className="text-[14px] sm:text-[15px] tracking-[0.12em] text-[#7C838B] mt-1.5">STYLED · READY</p>}
       </div>
@@ -757,7 +740,13 @@ function PieceCard({ piece, picked, styling, working = false, saved, saving, rea
   )
   return (
     <div ref={cardRef} className={`relative text-left bg-white rounded-[16px] overflow-hidden shadow-[0_1px_8px_rgba(43,43,43,0.06)] transition-shadow ${picked ? 'ring-2 ring-[#2B2B2B]' : ''}`}>
-      <button type="button" onClick={onOpen} className="block w-full text-left" aria-label={`Open ${piece.product_name}`}>{body}</button>
+      {piece.url ? (
+        <ShopLink item={shopItem} onNavigate={onPick} className="block w-full text-left">
+          {body}
+        </ShopLink>
+      ) : (
+        <button type="button" onClick={onPick} className="block w-full text-left">{body}</button>
+      )}
       <button
         type="button"
         onClick={onSave}
@@ -765,19 +754,21 @@ function PieceCard({ piece, picked, styling, working = false, saved, saving, rea
         aria-label={saved ? 'Saved' : 'Save'}
         className="absolute top-2.5 right-2.5 w-9 h-9 rounded-full bg-white/90 shadow-[0_1px_6px_rgba(43,43,43,0.14)] grid place-items-center text-[#2B2B2B] disabled:opacity-50"
       >
-        <HeartIcon filled={saved} />
+        <svg viewBox="0 0 24 24" className="w-5 h-5" fill={saved ? 'currentColor' : 'none'} stroke="currentColor" aria-hidden>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" d="M12 21s-7.5-4.9-10-9.3C.6 8.9 2 5.5 5.2 5.5c2 0 3.3 1.2 3.8 2.3h6c.5-1.1 1.8-2.3 3.8-2.3 3.2 0 4.6 3.4 3.2 6.2C19.5 16.1 12 21 12 21z" />
+        </svg>
       </button>
       <button
         type="button"
         onClick={onPick}
         aria-label={`Style ${piece.product_name}`}
-        className={`absolute top-2.5 left-2.5 h-9 text-[14px] xl:text-[15px] tracking-[0.12em] rounded-full px-3.5 shadow-[0_1px_6px_rgba(43,43,43,0.14)] ${picked ? 'bg-[#2B2B2B] text-white' : 'bg-white/90 text-[#2B2B2B] hover:bg-white'}`}
+        className={`absolute top-2.5 left-2.5 text-[16px] xl:text-[18px] tracking-[0.12em] rounded-full px-5 py-3 shadow-[0_2px_10px_rgba(43,43,43,0.18)] ${picked ? 'bg-[#2B2B2B] text-white' : 'bg-white/90 text-[#2B2B2B] hover:bg-white'}`}
       >
         {picked ? 'CHOSEN ✕' : 'STYLE'}
       </button>
       {/* Tapped: the two ways to style it, right under the button. */}
       {picked && (
-        <div className="absolute top-[52px] left-2.5 flex flex-col gap-2 z-10">
+        <div className="absolute top-[64px] left-2.5 flex flex-col gap-2 z-10">
           {choice('wardrobe', 'WITH MY WARDROBE')}
           {choice('new', 'WITH SOMETHING NEW')}
         </div>
