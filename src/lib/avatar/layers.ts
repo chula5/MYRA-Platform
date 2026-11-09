@@ -15,6 +15,7 @@ import { generateGoogleImage, googleCostGbp, GoogleImageError, type ImageRef, ty
 import { dressPrompt, magentaPrompt, finishPrompt } from './prompts'
 import { toJpeg, toRaw, cutLayer, openingMask } from './image-ops'
 import { getAvatar, keepPicture, addCost } from './store'
+import { fitNoteFor } from './fit-note'
 
 const admin = () => createAdminClient() as any
 const png = (bytes: Buffer): ImageRef => ({ bytes, mime: 'image/png' })
@@ -105,7 +106,7 @@ export async function runLayerStep(layerId: string, heartbeat?: () => void): Pro
   if (layer.status === 'ready') return
   const [avatar, { data: item }, { data: way }] = await Promise.all([
     getAvatar(layer.avatar_id),
-    a.from('item').select('item_id, product_name, item_type, colour_family, image_url').eq('item_id', layer.item_id).maybeSingle(),
+    a.from('item').select('item_id, product_name, item_type, colour_family, image_url, owned_metadata').eq('item_id', layer.item_id).maybeSingle(),
     a.from('avatar_way').select('*').eq('way_key', layer.way_key).maybeSingle(),
   ])
   if (!avatar?.base_url) throw new Error('avatar has no base picture')
@@ -117,8 +118,8 @@ export async function runLayerStep(layerId: string, heartbeat?: () => void): Pro
   // 1. dress her
   await setLayer(layerId, { status: 'shooting', error: null })
   heartbeat?.()
-  const [base, product] = await Promise.all([fetchBytes(avatar.base_url), fetchBytes(item.image_url).then((b) => toJpeg(b, 1024, 90))])
-  const shotCall = await dressCall(dressPrompt((way as AvatarWay).shoot_prompt.replace(/\{piece\}/g, piece)), [png(base), jpg(product)])
+  const [base, product, fitNote] = await Promise.all([fetchBytes(avatar.base_url), fetchBytes(item.image_url).then((b) => toJpeg(b, 1024, 90)), fitNoteFor(item)])
+  const shotCall = await dressCall(dressPrompt((way as AvatarWay).shoot_prompt.replace(/\{piece\}/g, piece), fitNote), [png(base), jpg(product)])
   const shot = shotCall.r
   cost += googleCostGbp(shot, shotCall.model)
 

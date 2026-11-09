@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import type { RoomView, RoomPiece } from '@/lib/avatar/wardrobe'
-import { loadMyRoom, nudgeMyWardrobe, finishMyLook, retryMyLayers, deleteMyLook } from './room-actions'
+import { loadMyRoom, nudgeMyWardrobe, finishMyLook, retryMyLayers, deleteMyLook, shootMyWay, reshootMyPiece } from './room-actions'
 
 const STAGE = '#E4E2DD'
 const EYEBROW = 'text-[13px] tracking-[0.22em] uppercase text-[#7C838B]'
@@ -36,6 +36,7 @@ export default function RoomClient({ initial, onDelete }: { initial: RoomView; o
   const [finishing, setFinishing] = useState<string | null>(null)   // look_id being rendered
   const [showFinish, setShowFinish] = useState<string | null>(null) // finish_url on show
   const [error, setError] = useState<string | null>(null)
+  const [requested, setRequested] = useState<Set<string>>(new Set())   // item|way she asked to be shot now
   const [pending, start] = useTransition()
   const nudged = useRef(false)
 
@@ -49,7 +50,7 @@ export default function RoomClient({ initial, onDelete }: { initial: RoomView; o
   }, [refresh])
 
   // while MYRA is shooting pieces or rendering a look, ask again every few seconds
-  const busy = view.progress.ready + view.progress.failed < view.progress.total || !!finishing || view.looks.some((l) => l.finish_status === 'queued' || l.finish_status === 'rendering')
+  const busy = view.progress.ready + view.progress.failed < view.progress.total || !!finishing || requested.size > 0 || view.looks.some((l) => l.finish_status === 'queued' || l.finish_status === 'rendering')
   // one poll at a time: a new server-action call would abort the one still in flight
   useEffect(() => {
     if (!busy) return
@@ -120,7 +121,28 @@ export default function RoomClient({ initial, onDelete }: { initial: RoomView; o
     setChosen((c) => { const n = new Set(c); n.delete(p.item_id); return n })
   }
   const takeOff = (id: string) => setOn((cur) => { const n = { ...cur }; delete n[id]; return n })
-  const pickWay = (p: RoomPiece, way: string) => { setOn((cur) => ({ ...cur, [p.item_id]: way })); setChosen((c) => new Set(c).add(p.item_id)) }
+  const pickWay = (p: RoomPiece, way: string) => {
+    setOn((cur) => ({ ...cur, [p.item_id]: way }))
+    setChosen((c) => new Set(c).add(p.item_id))
+    if (!readyLayer(p, way)) {
+      // not shot yet: ask for it now; the stage switches to it the moment it lands
+      const key = `${p.item_id}|${way}`
+      setRequested((r) => new Set(r).add(key))
+      shootMyWay(p.item_id, way).then((res) => { if (res.error) { setError(res.error); setRequested((r) => { const n = new Set(r); n.delete(key); return n }) } }).catch(() => undefined)
+    }
+  }
+  // a requested way that has landed is no longer outstanding
+  useEffect(() => {
+    if (!requested.size) return
+    const still = new Set<string>()
+    for (const key of Array.from(requested)) {
+      const [id, way] = key.split('|'); const p = pieces.get(id)
+      if (!p) continue
+      if (way === '*') { if (p.layers.some((l) => l.status !== 'ready' && l.status !== 'failed')) still.add(key); continue }
+      if (!readyLayer(p, way)) still.add(key)
+    }
+    if (still.size !== requested.size) setRequested(still)
+  }, [view.pieces, requested, pieces])
   const wear = (items: { item_id: string; way_key: string }[]) => {
     const n: On = {}
     for (const it of items) if (pieces.has(it.item_id)) n[it.item_id] = it.way_key
@@ -141,6 +163,12 @@ export default function RoomClient({ initial, onDelete }: { initial: RoomView; o
   const shelfPieces = view.pieces.filter((p) => p.family === shelf)
   const shelves = SHELVES.filter((s) => view.pieces.some((p) => p.family === s.family))
   const wayPiece = shelfPieces.find((p) => on[p.item_id] && waysFor(p).length > 1) ?? null
+  const shownPiece = shelfPieces.find((p) => on[p.item_id] && anyReady(p)) ?? null
+  const reshoot = (p: RoomPiece) => {
+    const key = `${p.item_id}|*`
+    setRequested((r) => new Set(r).add(key))
+    reshootMyPiece(p.item_id).then((res) => { if (res.error) setError(res.error) }).catch(() => undefined)
+  }
   const docked = (side: 'left' | 'right') => worn.filter((w) => sideOf(w.piece.family) === side)
   const shooting = view.progress.total - view.progress.ready - view.progress.failed
 
@@ -234,19 +262,28 @@ export default function RoomClient({ initial, onDelete }: { initial: RoomView; o
         {!shelfPieces.length && <p className="py-4 text-[15px] text-[#7C838B]">Nothing on this shelf yet.</p>}
       </div>
 
-      {/* ways for the piece on show */}
+      {/* ways for the piece on show, and a second go when a shot came out wrong */}
       <div className="flex min-h-[36px] flex-wrap items-center gap-2">
         {wayPiece && (
           <>
             <span className={EYEBROW}>Ways</span>
             {waysFor(wayPiece).map((w) => {
-              const cur = effectiveWay(wayPiece, on[wayPiece.item_id]) === w.way_key
               const ready = !!readyLayer(wayPiece, w.way_key)
+              const asked = on[wayPiece.item_id] === w.way_key
+              const cur = ready && effectiveWay(wayPiece, on[wayPiece.item_id]) === w.way_key
+              const waiting = !ready && (asked || requested.has(`${wayPiece.item_id}|${w.way_key}`))
               return (
-                <button key={w.way_key} type="button" aria-pressed={cur} disabled={!ready} title={ready ? undefined : 'Still shooting this way'} onClick={() => pickWay(wayPiece, w.way_key)} className={`${PILL} !px-3 !py-1.5 !text-[12px] ${cur ? PILL_ON : PILL_OFF}`}>{w.label}</button>
+                <button key={w.way_key} type="button" aria-pressed={cur} title={ready ? undefined : 'Not shot yet · tap to shoot it now'} onClick={() => pickWay(wayPiece, w.way_key)} className={`${PILL} !px-3 !py-1.5 !text-[12px] ${cur ? PILL_ON : PILL_OFF} ${ready || waiting ? '' : 'border-dashed text-[#7C838B]'}`}>
+                  {w.label}{waiting ? ' · shooting' : ''}
+                </button>
               )
             })}
           </>
+        )}
+        {shownPiece && (
+          <button type="button" onClick={() => reshoot(shownPiece)} disabled={requested.has(`${shownPiece.item_id}|*`)} className="ml-auto text-[13px] tracking-[0.1em] uppercase text-[#7C838B] underline underline-offset-4 disabled:no-underline disabled:opacity-60">
+            {requested.has(`${shownPiece.item_id}|*`) ? 'Shooting again' : 'Shoot again'}
+          </button>
         )}
       </div>
 

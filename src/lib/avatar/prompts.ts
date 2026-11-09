@@ -34,8 +34,11 @@ export const RELAX_PROMPT = `Image 1 is a full-length studio photograph of a wom
 const KEEP_DRESSED = `Keep absolutely everything else identical to image 1: the same woman and face, the exact same relaxed pose with her arms hanging at her sides, the same position, scale and framing (do not move, zoom or re-crop her), everything she already wears wherever it is not covered, the same bare feet unless the piece is shoes, the same flat ${STAGE_BG} background and lighting. Reproduce the garment exactly as in image 2: colour, print, fabric, cut, proportions and length. Add nothing else: no extra clothes, no accessories, no props, no text.`
 
 /** Dress one piece one way. `way` is avatar_way.shoot_prompt with {piece} filled in. */
-export function dressPrompt(way: string): string {
-  return `Image 1 is a full-length photo of a woman in a fixed pose. Image 2 is a product photo of one item. Edit image 1 so that ${way}. ${KEEP_DRESSED}`
+export function dressPrompt(way: string, fitNote?: string): string {
+  const fit = fitNote
+    ? ` Length and fit, read from image 2: ${fitNote} Keep exactly that on her: the hem, sleeves and fit end at the same points on her body as they do in image 2. Do not lengthen, shorten, loosen or tighten the piece.`
+    : ''
+  return `Image 1 is a full-length photo of a woman in a fixed pose. Image 2 is a product photo of one item. Edit image 1 so that ${way}.${fit} ${KEEP_DRESSED}`
 }
 
 /** One real photograph from the stacked layers plus the product photos. */

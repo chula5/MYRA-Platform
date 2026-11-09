@@ -70,3 +70,42 @@ export async function deleteMyLook(lookId: string): Promise<{ error?: string }> 
   revalidatePath(PATH)
   return {}
 }
+
+/** She tapped a way that has not been shot yet: shoot it now, ahead of the warm-up queue. */
+export async function shootMyWay(itemId: string, wayKey: string): Promise<{ error?: string }> {
+  const r = await myReadyAvatar()
+  if (r.error !== undefined) return { error: r.error }
+  const a = createAdminClient() as any
+  const { data: way } = await a.from('avatar_way').select('way_key, item_types').eq('way_key', wayKey).eq('active', true).maybeSingle()
+  const { data: item } = await a.from('item').select('item_id, item_type').eq('item_id', itemId).maybeSingle()
+  if (!way || !item || !way.item_types.includes(item.item_type)) return { error: 'That way does not fit this piece' }
+  const { data: layer, error } = await a.from('avatar_layer').upsert({ avatar_id: r.avatar.avatar_id, item_id: itemId, way_key: wayKey }, { onConflict: 'avatar_id,item_id,way_key' }).select('layer_id, status').single()
+  if (error || !layer) return { error: error?.message ?? 'Could not queue it' }
+  if (layer.status === 'ready') return {}
+  if (layer.status === 'failed') await a.from('avatar_layer').update({ status: 'queued', attempts: 0, error: null, updated_at: new Date().toISOString() }).eq('layer_id', layer.layer_id)
+  // an open job jumps the queue; otherwise a new one at the front
+  const { data: bumped } = await a.from('avatar_job').update({ priority: 1 }).eq('kind', 'layer').eq('ref_id', layer.layer_id).in('status', ['queued', 'running']).select('job_id')
+  if (!bumped?.length) await enqueueAvatarJob('layer', layer.layer_id, r.m.memberId, 1)
+  kickAvatarDrain()
+  return {}
+}
+
+/** A piece came out wrong: shoot every one of its ways again, ahead of the queue. */
+export async function reshootMyPiece(itemId: string): Promise<{ error?: string }> {
+  const r = await myReadyAvatar()
+  if (r.error !== undefined) return { error: r.error }
+  const a = createAdminClient() as any
+  const { data: layers } = await a.from('avatar_layer').select('layer_id').eq('avatar_id', r.avatar.avatar_id).eq('item_id', itemId)
+  if (!layers?.length) return { error: 'Nothing shot for this piece yet' }
+  const ids = layers.map((l: any) => l.layer_id)
+  await a.from('avatar_layer').update({ status: 'queued', attempts: 0, error: null, updated_at: new Date().toISOString() }).in('layer_id', ids)
+  // the stored fit note is read again too
+  const { data: it } = await a.from('item').select('owned_metadata').eq('item_id', itemId).maybeSingle()
+  if (it?.owned_metadata?.avatar_fit_note) { const md = { ...it.owned_metadata }; delete md.avatar_fit_note; await a.from('item').update({ owned_metadata: md }).eq('item_id', itemId) }
+  for (const id of ids) {
+    const { data: bumped } = await a.from('avatar_job').update({ priority: 1 }).eq('kind', 'layer').eq('ref_id', id).in('status', ['queued', 'running']).select('job_id')
+    if (!bumped?.length) await enqueueAvatarJob('layer', id, r.m.memberId, 1)
+  }
+  kickAvatarDrain()
+  return {}
+}

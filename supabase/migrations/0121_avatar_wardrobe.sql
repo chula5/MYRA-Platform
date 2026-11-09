@@ -23,6 +23,10 @@ update public.avatar_way set item_types = array['coat','trench','jacket','blazer
 update public.avatar_way set item_types = array['scarf'] where way_key like 'scarf.%';
 update public.avatar_way set item_types = array['boot','heel','flat','sneaker','mule','sandal'] where way_key = 'shoes.worn';
 
+-- the plain ways follow the product photo: done up in the photo → done up on her (Chloe, 2026-11-09)
+update public.avatar_way set shoot_prompt = 'she is wearing the {piece} from image 2, fastened exactly as it is in image 2 (if it is shown buttoned or zipped up, it stays done up; if shown open, it stays open), hanging loose and untucked so its hem falls over the top of the grey shorts' where way_key = 'top.untucked';
+update public.avatar_way set shoot_prompt = 'she is wearing the {piece} from image 2, fastened exactly as it is in image 2 (if it is shown buttoned or zipped up, it stays done up; if shown open, it stays open), neatly tucked all the way into the waistband of the grey shorts, so no hem is visible below the waistband' where way_key = 'top.tucked';
+
 -- the scarf as a belt stands on its own now
 update public.avatar_way set
   needs_way = null,
@@ -34,6 +38,15 @@ insert into public.avatar_way (way_key, item_types, label, shoot_prompt, mask_pr
   ('outer.cinched', array['coat','trench','jacket','blazer','gilet','cape'], 'Cinched',
     'she is wearing the {piece} from image 2 properly with her arms through the sleeves, pulled closed and cinched in at her natural waist by a narrow plain light-grey fabric band tied around the waist over it, so the {piece} wraps her waist and flares below it',
     'the {piece} only, including its sleeves, lapels and collar, but NOT the grey band at the waist', 8, null, null, false, '{"when":"waist_piece_on"}', 41),
+  ('top.buttoned', array['shirt','blouse','knitwear'], 'Buttoned',
+    'she is wearing the {piece} from image 2 done up, every button fastened from the collar down so it is closed over the grey tank top, hanging loose and untucked so its hem falls over the top of the grey shorts',
+    'the {piece}, including its sleeves, cuffs, collar, buttons and hem', 4, null, null, false, null, 12),
+  ('top.buttoned_tucked', array['shirt','blouse','knitwear'], 'Buttoned, tucked',
+    'she is wearing the {piece} from image 2 done up, every button fastened from the collar down so it is closed over the grey tank top, and neatly tucked all the way into the waistband of the grey shorts so no hem is visible below the waistband',
+    'the {piece}, including its sleeves, cuffs, collar and buttons', 2, null, null, false, null, 13),
+  ('top.open', array['shirt','blouse','knitwear'], 'Open',
+    'she is wearing the {piece} from image 2 worn open and unfastened over the grey tank top, every button undone, hanging loose and untucked so its hem falls over the top of the grey shorts',
+    'the {piece}, including its sleeves, cuffs, collar and hem', 4, null, null, false, null, 14),
   ('belt.waist', array['belt'], 'Waist',
     'she is wearing the {piece} from image 2 buckled around her natural waist over the grey tank top',
     'the {piece}, including its buckle and the free end', 7, null, 'outer', true, null, 55)
