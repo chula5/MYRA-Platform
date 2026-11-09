@@ -120,6 +120,36 @@ function Working({ step, job }: { step: 'portrait' | 'body'; job: { status: stri
   )
 }
 
+// Vercel refuses a request over 4.5MB, and a few phone photos are far more than that, so each
+// photo is made smaller here before it leaves her phone. 1800px is ample for the face and body
+// models. A format the browser can't draw (HEIC on desktop Chrome) goes up as it is.
+const UPLOAD_LIMIT_BYTES = 4 * 1024 * 1024
+async function shrinkPhoto(file: File, longEdge: number, quality: number): Promise<File> {
+  const url = URL.createObjectURL(file)
+  try {
+    const img = new Image()
+    img.src = url
+    await img.decode()
+    const scale = Math.min(1, longEdge / Math.max(img.naturalWidth, img.naturalHeight))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round(img.naturalWidth * scale)
+    canvas.height = Math.round(img.naturalHeight * scale)
+    canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height)
+    const blob = await new Promise<Blob | null>((done) => canvas.toBlob(done, 'image/jpeg', quality))
+    if (!blob || (scale === 1 && blob.size >= file.size)) return file
+    return new File([blob], `${file.name.replace(/\.[^.]+$/, '')}.jpg`, { type: 'image/jpeg' })
+  } catch {
+    return file
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+async function shrinkAll(files: File[]): Promise<File[]> {
+  const first = await Promise.all(files.map((f) => shrinkPhoto(f, 1800, 0.86)))
+  if (first.reduce((n, f) => n + f.size, 0) <= UPLOAD_LIMIT_BYTES) return first
+  return Promise.all(files.map((f) => shrinkPhoto(f, 1400, 0.8)))
+}
+
 function Start({ onSubmit, pending, firstName }: { onSubmit: (fd: FormData) => void; pending: boolean; firstName: string }) {
   const [agreed, setAgreed] = useState(false)
   const [faces, setFaces] = useState<File[]>([])
@@ -128,11 +158,18 @@ function Start({ onSubmit, pending, firstName }: { onSubmit: (fd: FormData) => v
   const faceRef = useRef<HTMLInputElement | null>(null)
   const fullRef = useRef<HTMLInputElement | null>(null)
   const ready = agreed && faces.length >= 2 && fulls.length >= 1 && faces.length + fulls.length <= 6
+  const [preparing, setPreparing] = useState(false)
+  const [tooBig, setTooBig] = useState(false)
 
-  const submit = () => {
+  const submit = async () => {
+    setPreparing(true)
+    setTooBig(false)
+    const small = await shrinkAll([...faces, ...fulls])
+    setPreparing(false)
+    if (small.reduce((n, f) => n + f.size, 0) > UPLOAD_LIMIT_BYTES) { setTooBig(true); return }
     const fd = new FormData()
-    faces.forEach((f) => fd.append('face', f))
-    fulls.forEach((f) => fd.append('full', f))
+    small.slice(0, faces.length).forEach((f) => fd.append('face', f))
+    small.slice(faces.length).forEach((f) => fd.append('full', f))
     fd.set('height_cm', height)
     fd.set('consent', agreed ? 'yes' : 'no')
     onSubmit(fd)
@@ -159,7 +196,8 @@ function Start({ onSubmit, pending, firstName }: { onSubmit: (fd: FormData) => v
         <input type="number" inputMode="numeric" value={height} onChange={(e) => setHeight(e.target.value)} placeholder="168" className="mt-1 block w-32 rounded-full border border-[#DCDAD4] px-4 py-2 text-[16px]" />
       </label>
 
-      <button type="button" className={BTN_DARK} disabled={!ready || pending} onClick={submit}>Make my avatar</button>
+      {tooBig && <p className="text-[15px] text-[#B83A3A]">Those photos are too large to send. Please choose JPEG or PNG photos, or fewer of them.</p>}
+      <button type="button" className={BTN_DARK} disabled={!ready || pending || preparing} onClick={submit}>{preparing ? 'Preparing your photos' : 'Make my avatar'}</button>
     </section>
   )
 }
