@@ -10,7 +10,6 @@ import Link from 'next/link'
 import MirrorCurtain from '@/components/me/MirrorCurtain'
 import Mannequin from '@/components/me/Mannequin'
 import ShopBrain from './ShopBrain'
-import SaveScreenshot from '@/components/me/SaveScreenshot'
 import type { ForYouView } from './for-you-actions'
 import type { ShopBrainView } from './shop-brain-actions'
 
@@ -69,10 +68,6 @@ export default function ForYouClient({ view, testMemberId, shopBrain }: {
             <h1 className="text-[clamp(20px,2.2vw,32px)] tracking-[0.045em] text-[#4A4E57] leading-[1.05]">
               {view.firstName ? `HELLO ${view.firstName.toUpperCase()}` : 'HELLO'}
             </h1>
-            {/* No Mirror needed: a screenshot of a piece, saved and styled like a heart. */}
-            <div className="mt-6">
-              <SaveScreenshot testMemberId={testMemberId} />
-            </div>
           </div>
 
           {/* What she kept on other people's sites, already worked on. Draws
@@ -92,7 +87,7 @@ export default function ForYouClient({ view, testMemberId, shopBrain }: {
             <div className="text-center max-w-[560px] mx-auto mt-6 mb-16">
               <p className="myra-section-note">NOTHING HERE YET</p>
               <p className="myra-guide-text normal-case text-[19px] text-[#4A4E57] mt-5">
-                Save a piece with the MYRA Mirror while you shop, or screenshot one and save the screenshot above, and by the time you open MYRA it is styled and waiting here. The looks your stylist made for you are in LOOKS.
+                Save a piece with the MYRA Mirror while you shop, and by the time you open MYRA it is styled and waiting here. The looks your stylist made for you are in LOOKS.
               </p>
               <div className="flex flex-wrap justify-center gap-3 mt-7">
                 <Link href="/me/looks" className="inline-block text-[15px] tracking-[0.06em] rounded-full bg-[#2B2B2B] text-white px-7 py-3">

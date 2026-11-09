@@ -33,9 +33,6 @@ export interface WaysPiece {
   product_name: string
   brand: string | null
   image_url: string | null
-  /** Where to buy it — VIEW ON SITE in the sheet. */
-  url?: string | null
-  price_gbp?: number | null
 }
 
 export interface WaysView {
@@ -50,10 +47,10 @@ export interface WaysView {
 }
 
 async function pieceFor(admin: any, itemId: string): Promise<WaysPiece | null> {
-  const { data } = await admin.from('item').select('item_id, product_name, image_url, status, retailer_url, price_gbp, brand:brand_id(name)')
+  const { data } = await admin.from('item').select('item_id, product_name, image_url, status, brand:brand_id(name)')
     .eq('item_id', itemId).neq('status', 'archived').maybeSingle()
   if (!data) return null
-  return { item_id: data.item_id, product_name: data.product_name, brand: data.brand?.name ?? null, image_url: data.image_url ?? null, url: data.retailer_url ?? null, price_gbp: data.price_gbp ?? null }
+  return { item_id: data.item_id, product_name: data.product_name, brand: data.brand?.name ?? null, image_url: data.image_url ?? null }
 }
 
 async function statusFor(admin: any, memberId: string, itemId: string, mode: WayMode, looks: StyledWayLook[]):

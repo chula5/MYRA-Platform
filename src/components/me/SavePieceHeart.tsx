@@ -7,7 +7,6 @@
 
 import { useEffect, useState } from 'react'
 import { getSavedItemIds, toggleSaveItem } from '@/app/edit/save-actions'
-import HeartIcon from './HeartIcon'
 
 let savedRead: Promise<Set<string>> | null = null
 function savedIds(): Promise<Set<string>> {
@@ -44,7 +43,7 @@ export default function SavePieceHeart({ itemId, className = '' }: { itemId: str
       aria-pressed={saved}
       className={`w-9 h-9 rounded-full bg-white/90 shadow-[0_2px_8px_rgba(0,0,0,0.15)] flex items-center justify-center ${className}`}
     >
-      <span className="text-[#2B2B2B]"><HeartIcon filled={saved} /></span>
+      <span className={`text-[20px] leading-none ${saved ? 'text-[#C8302A]' : 'text-[#2B2B2B]'}`}>{saved ? '♥' : '♡'}</span>
     </button>
   )
 }

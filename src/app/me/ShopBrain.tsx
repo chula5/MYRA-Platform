@@ -20,7 +20,6 @@ import FallbackImage from '@/components/FallbackImage'
 import ShopLink from '@/components/ShopLink'
 import ComposedLookCard from '@/components/me/ComposedLookCard'
 import StylingBadge from '@/components/me/StylingBadge'
-import { PIECE_SAVED_EVENT } from '@/components/me/SaveScreenshot'
 import { STYLING_OPEN_EVENT, clearStylingReady, getStylingProgress, keepWatchingStyling, publishStyling, stopWatchingStyling } from '@/components/me/styling-progress'
 import { WAYS } from '@/lib/styled-ways-core'
 import { useScrollTo } from '@/lib/smooth-scroll'
@@ -319,21 +318,9 @@ export default function ShopBrain({ testMemberId, initialView, onReady }: {
     void load(0)
     const onVisible = () => { if (document.visibilityState === 'visible' && !viewRef.current) void load(1) }
     document.addEventListener('visibilitychange', onVisible)
-    // A screenshot saved on this page: MORE OF THE SAME is rebuilt around it
-    // now, not on her next visit. The fresh view replaces the kept one.
-    const onSaved = () => {
-      void loadShopBrain(testMemberId, { fresh: true }).then((f) => {
-        if (!live) return
-        viewRef.current = f
-        setView(f)
-        tell(hasContent(f))
-      }).catch(() => {})
-    }
-    window.addEventListener(PIECE_SAVED_EVENT, onSaved)
     return () => {
       live = false
       document.removeEventListener('visibilitychange', onVisible)
-      window.removeEventListener(PIECE_SAVED_EVENT, onSaved)
     }
   }, [testMemberId])
 
