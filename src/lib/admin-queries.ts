@@ -534,11 +534,14 @@ export function resetReadyAndLiveItemsCache(): void {
   poolState.inFlight = null
 }
 
-export async function getReadyAndLiveItems(opts?: { allowStale?: boolean }): Promise<ItemWithBrand[]> {
+export async function getReadyAndLiveItems(opts?: { allowStale?: boolean; neverBlock?: boolean }): Promise<ItemWithBrand[]> {
   const cache = poolState.cache
   const age = cache ? Date.now() - cache.at : Infinity
   if (cache && age < POOL_TTL_MS) return cache.items
-  if (cache && opts?.allowStale && age < POOL_STALE_OK_MS) {
+  // neverBlock: an interactive search (the Review picker) answers from
+  // whatever pool there is, however old, and the fresh read runs behind it;
+  // only an empty process waits for the database.
+  if (cache && opts?.allowStale && (opts.neverBlock || age < POOL_STALE_OK_MS)) {
     void refreshReadyAndLiveItems()
     return cache.items
   }

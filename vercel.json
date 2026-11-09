@@ -72,6 +72,10 @@
       "schedule": "0 20 * * 6"
     },
     {
+      "path": "/api/cron/review-projects",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/cron/styled-ways",
       "schedule": "*/5 * * * *"
     },
