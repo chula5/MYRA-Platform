@@ -135,6 +135,8 @@ export async function runLayerStep(layerId: string, heartbeat?: () => void): Pro
   heartbeat?.()
   // Shoes carry her feet with them (image-ops.extendToFloor); every layer keeps its print whole (fillEnclosedHoles).
   const cut = await cutLayer(shot.png, mask.png, {
+    // skin the model uncovered where the base's grey tank or shorts were joins the layer (image-ops.uncoveredBase)
+    basePng: base,
     toFloor: wayFamily(layer.way_key) === SHOE_FAMILY,
     // worn open by itself: the V between the fronts is part of the layer (image-ops.closeFront)
     closeFront: layer.way_key === 'top.open',

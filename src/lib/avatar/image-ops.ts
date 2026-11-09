@@ -147,14 +147,40 @@ export function closeFront(mask: Uint8Array, width: number, height: number, img?
   return out
 }
 
+/**
+ * The base wears a grey tank and grey cycling shorts. A piece shorter than they are —
+ * cream shorts above mid-thigh, a cropped top — is drawn by the model with her skin where
+ * the grey used to be, but the layer, cut to the piece alone, left the base's grey
+ * showing below it (Chloe, 2026-11-09: "these shorts should not be appearing like that").
+ * Wherever the BASE is neutral light grey (its tank or shorts) and the SHOT shows warm
+ * skin there, that skin joins the layer, so it covers the grey it replaced.
+ */
+export function uncoveredBase(mask: Uint8Array, shot: Raw, base: Raw): Uint8Array {
+  const out = new Uint8Array(mask)
+  const N = shot.width * shot.height
+  for (let i = 0; i < N; i++) {
+    if (out[i]) continue
+    const b = i * base.channels, bR = base.data[b], bG = base.data[b + 1], bB = base.data[b + 2]
+    const greyBase = Math.abs(bR - bG) < 14 && Math.abs(bG - bB) < 14 && bR > 120 && bR < 225
+    if (!greyBase) continue
+    const sIdx = i * shot.channels, sR = shot.data[sIdx], sB = shot.data[sIdx + 2]
+    if (sR > 110 && sR - sB > 18) out[i] = 255
+  }
+  return out
+}
+
 /** The dressed pixels under a mask, as a webp with alpha. */
-export async function cutLayer(dressedPng: Buffer, maskPng: Buffer, opts: { toFloor?: boolean; fillHoles?: boolean; closeFront?: boolean } = {}): Promise<{ webp: Buffer; width: number; height: number; coverage: number }> {
+export async function cutLayer(dressedPng: Buffer, maskPng: Buffer, opts: { toFloor?: boolean; fillHoles?: boolean; closeFront?: boolean; basePng?: Buffer } = {}): Promise<{ webp: Buffer; width: number; height: number; coverage: number }> {
   const s = await sharp()
   const img = await toRaw(dressedPng)
   const mk = await toRaw(maskPng, img.width, img.height)
   const { mask, count } = magentaMask(mk)
   const N = img.width * img.height
   let sm = await smoothMask(mask, img.width, img.height, 2, 120)
+  if (opts.basePng) {
+    const base = await toRaw(opts.basePng, img.width, img.height)
+    sm = await smoothMask(uncoveredBase(sm, img, base), img.width, img.height, 1.5, 120)
+  }
   if (opts.fillHoles !== false) sm = fillEnclosedHoles(sm, img.width, img.height)
   if (opts.closeFront) sm = closeFront(sm, img.width, img.height, img)
   if (opts.toFloor) sm = extendToFloor(sm, img.width, img.height)

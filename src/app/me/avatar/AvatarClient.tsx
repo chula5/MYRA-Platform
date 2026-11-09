@@ -14,7 +14,7 @@ const EYEBROW = 'text-[13px] tracking-[0.22em] uppercase text-[#7C838B]'
 const BTN = 'inline-flex items-center justify-center rounded-full border border-[#141414] px-6 py-3 text-[14px] tracking-[0.1em] uppercase disabled:opacity-40'
 const BTN_DARK = `${BTN} bg-[#141414] text-[#F7F6F3]`
 
-export default function AvatarClient({ view: initial, room }: { view: MyAvatarView; room: RoomView | null }) {
+export default function AvatarClient({ view: initial, room, startItem = null }: { view: MyAvatarView; room: RoomView | null; startItem?: string | null }) {
   const [view, setView] = useState(initial)
   const [pending, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -83,7 +83,7 @@ export default function AvatarClient({ view: initial, room }: { view: MyAvatarVi
       )}
 
       {a && a.status === 'ready' && a.base_url && room && (
-        <RoomClient initial={room} onDelete={() => { if (window.confirm('Delete your avatar and every picture made from it?')) run(() => deleteMyAvatar()) }} />
+        <RoomClient initial={room} startItem={startItem} onDelete={() => { if (window.confirm('Delete your avatar and every picture made from it?')) run(() => deleteMyAvatar()) }} />
       )}
       {a && a.status === 'ready' && a.base_url && !room && (
         <section className="space-y-4">

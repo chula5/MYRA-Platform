@@ -28,11 +28,18 @@ const sideOf = (family: string) => SHELVES.find((s) => s.family === family)?.sid
 
 type On = Record<string, string>   // item_id → way_key she asked for
 
-export default function RoomClient({ initial, onDelete }: { initial: RoomView; onDelete?: () => void }) {
+export default function RoomClient({ initial, startItem = null, onDelete }: { initial: RoomView; startItem?: string | null; onDelete?: () => void }) {
   const [view, setView] = useState(initial)
-  const [on, setOn] = useState<On>({})
+  // Opened from a wardrobe tile (/me/avatar?item=…): that piece is on from the first frame, in its default way.
+  const startPiece = startItem ? initial.pieces.find((p) => p.item_id === startItem) ?? null : null
+  const [on, setOn] = useState<On>(() => {
+    if (!startPiece) return {}
+    const ways = initial.ways.filter((w) => w.item_types.includes(startPiece.item_type))
+    const def = ways.find((w) => w.is_default) ?? ways[0]
+    return { [startPiece.item_id]: def?.way_key ?? '' }
+  })
   const [chosen, setChosen] = useState<Set<string>>(new Set())   // pieces whose way she picked herself
-  const [shelf, setShelf] = useState<string>(() => SHELVES.find((s) => initial.pieces.some((p) => p.family === s.family))?.family ?? 'top')
+  const [shelf, setShelf] = useState<string>(() => startPiece?.family ?? SHELVES.find((s) => initial.pieces.some((p) => p.family === s.family))?.family ?? 'top')
   const [finishing, setFinishing] = useState<string | null>(null)   // look_id being rendered
   const [showFinish, setShowFinish] = useState<string | null>(null) // finish_url on show
   const [error, setError] = useState<string | null>(null)
