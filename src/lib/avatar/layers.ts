@@ -78,6 +78,7 @@ export async function listWays(): Promise<AvatarWay[]> {
 /** The family a way belongs to: 'top', 'outer', 'scarf'… (the part before the dot). */
 export const wayFamily = (wayKey: string) => wayKey.split('.')[0]
 export const OUTER_FAMILY = 'outer'
+export const SHOE_FAMILY = 'shoes'
 
 /** How the piece is named inside a prompt: "the navy floral wide-leg trousers (trousers)". */
 export function pieceDescription(item: { product_name: string | null; item_type: string | null; colour_family?: string | null }): string {
@@ -132,7 +133,12 @@ export async function runLayerStep(layerId: string, heartbeat?: () => void): Pro
 
   // 3. cut, and check the model actually dressed her
   heartbeat?.()
-  const cut = await cutLayer(shot.png, mask.png)
+  // Shoes carry her feet with them (image-ops.extendToFloor); every layer keeps its print whole (fillEnclosedHoles).
+  const cut = await cutLayer(shot.png, mask.png, {
+    toFloor: wayFamily(layer.way_key) === SHOE_FAMILY,
+    // worn open by itself: the V between the fronts is part of the layer (image-ops.closeFront)
+    closeFront: layer.way_key === 'top.open',
+  })
   await addCost(avatar.avatar_id, cost)
   await a.from('avatar_layer').update({ cost_gbp: Number(layer.cost_gbp ?? 0) + cost }).eq('layer_id', layerId)
   if (cut.coverage < 0.004) throw new Error('the piece did not appear on the avatar')

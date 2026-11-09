@@ -51,14 +51,113 @@ export async function smoothMask(mask: Uint8Array, width: number, height: number
   return o
 }
 
+/**
+ * Fill every hole the mask does not reach from the picture's edge. The model marks a
+ * garment by colour, so the cream flowers on navy trousers, a pale stripe or a light
+ * button band come back unmarked and the cut-out had windows showing her bare legs
+ * through the print (2026-11-09). A real gap — between two trouser legs, inside an open
+ * front, under a hem — always connects to the background and so to the edge; only an
+ * island inside the garment is filled.
+ */
+export function fillEnclosedHoles(mask: Uint8Array, width: number, height: number): Uint8Array {
+  const N = width * height
+  const reach = new Uint8Array(N) // 1 = clear pixel connected to the edge
+  const stack: number[] = []
+  const push = (i: number) => { if (!reach[i] && !mask[i]) { reach[i] = 1; stack.push(i) } }
+  for (let x = 0; x < width; x++) { push(x); push((height - 1) * width + x) }
+  for (let y = 0; y < height; y++) { push(y * width); push(y * width + width - 1) }
+  while (stack.length) {
+    const i = stack.pop()!
+    const x = i % width
+    if (x > 0) push(i - 1)
+    if (x < width - 1) push(i + 1)
+    if (i >= width) push(i - width)
+    if (i + width < N) push(i + width)
+  }
+  const out = new Uint8Array(mask)
+  for (let i = 0; i < N; i++) if (!mask[i] && !reach[i]) out[i] = 255
+  return out
+}
+
+/**
+ * Shoes replace her feet, not just cover them. A shoe layer cut to the shoe alone sat on
+ * the base's bare feet, and wherever the drawn shoe was narrower, shorter or placed
+ * differently the bare toes and heels showed around it (every pair, 2026-11-09). So the
+ * layer takes the whole lower band of the shot — shoes, feet, ankles and the flat stage
+ * floor around them — from a little above the top of the shoes down to the bottom edge,
+ * across the legs' span with room either side, feathered along its top edge.
+ */
+export function extendToFloor(mask: Uint8Array, width: number, height: number): Uint8Array {
+  let y0 = height, x0 = width, x1 = -1
+  for (let i = 0; i < mask.length; i++) if (mask[i]) { const y = (i / width) | 0, x = i % width; if (y < y0) y0 = y; if (x < x0) x0 = x; if (x > x1) x1 = x }
+  if (x1 < 0) return mask
+  const pad = Math.max(80, Math.round((x1 - x0) * 0.6))
+  const left = Math.max(0, x0 - pad), right = Math.min(width - 1, x1 + pad)
+  const top = Math.max(0, y0 - 14)
+  const feather = 28
+  const out = new Uint8Array(mask)
+  for (let y = top; y < height; y++) {
+    const a = y - top >= feather ? 255 : Math.round(255 * (y - top) / feather)
+    for (let x = left; x <= right; x++) { const i = y * width + x; if (out[i] < a) out[i] = a }
+  }
+  return out
+}
+
+/**
+ * A piece worn OPEN by itself (an unbuttoned cardigan) keeps whatever the shot shows
+ * between its two fronts — the model marks the knit and leaves the V of skin out, and
+ * the base's grey tank then showed through the gap (2026-11-09). Row by row, from the
+ * garment's centre line outwards to the first marked pixel each side; when both fronts
+ * are found within the garment's width the span between them is kept. The gaps between
+ * a sleeve and the body are left alone (they are not reached from the centre line).
+ */
+export function closeFront(mask: Uint8Array, width: number, height: number, img?: Raw): Uint8Array {
+  let x0 = width, x1 = -1, y0 = height, y1 = -1
+  for (let i = 0; i < mask.length; i++) if (mask[i]) { const x = i % width, y = (i / width) | 0; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y }
+  if (x1 < 0) return mask
+  const cx = (x0 + x1) >> 1
+  const reach = Math.round((x1 - x0) * 0.35)
+  // Below the hem the two SLEEVES bound the centre line instead of the fronts, and the
+  // span between them is her shorts and midriff: the gap there is far wider than any
+  // opening between two fronts. The first row whose gap exceeds a fifth of the garment's
+  // width, after the fill has begun, is the hem — nothing below it is filled.
+  const maxGap = Math.round((x1 - x0) * 0.2)
+  const out = new Uint8Array(mask)
+  let filled = false
+  for (let y = y0; y <= y1; y++) {
+    const row = y * width
+    if (mask[row + cx]) continue
+    let l = cx, r = cx
+    while (l > x0 && !mask[row + l] && cx - l < reach) l--
+    while (r < x1 && !mask[row + r] && r - cx < reach) r++
+    if (!mask[row + l] || !mask[row + r]) continue
+    if (r - l > maxGap) { if (filled) break; continue }
+    // Between the fronts the shot shows her skin, and below the waist the base's grey
+    // shorts. The shorts must not travel in the layer (they would cover a skirt worn
+    // under an open cardigan), so the fill ends where the span stops being skin: warm
+    // (red well above blue) rather than the shorts' neutral grey.
+    if (img && filled) {
+      let warm = 0, n = 0
+      for (let x = l + 1; x < r; x++) { const i = (row + x) * img.channels; warm += img.data[i] - img.data[i + 2]; n++ }
+      if (n > 0 && warm / n < 12) break
+    }
+    filled = true
+    for (let x = l; x <= r; x++) out[row + x] = 255
+  }
+  return out
+}
+
 /** The dressed pixels under a mask, as a webp with alpha. */
-export async function cutLayer(dressedPng: Buffer, maskPng: Buffer): Promise<{ webp: Buffer; width: number; height: number; coverage: number }> {
+export async function cutLayer(dressedPng: Buffer, maskPng: Buffer, opts: { toFloor?: boolean; fillHoles?: boolean; closeFront?: boolean } = {}): Promise<{ webp: Buffer; width: number; height: number; coverage: number }> {
   const s = await sharp()
   const img = await toRaw(dressedPng)
   const mk = await toRaw(maskPng, img.width, img.height)
   const { mask, count } = magentaMask(mk)
   const N = img.width * img.height
-  const sm = await smoothMask(mask, img.width, img.height, 2, 120)
+  let sm = await smoothMask(mask, img.width, img.height, 2, 120)
+  if (opts.fillHoles !== false) sm = fillEnclosedHoles(sm, img.width, img.height)
+  if (opts.closeFront) sm = closeFront(sm, img.width, img.height, img)
+  if (opts.toFloor) sm = extendToFloor(sm, img.width, img.height)
   const alphaBuf = await s(Buffer.from(sm), { raw: { width: img.width, height: img.height, channels: 1 } }).blur(1.4).raw().toBuffer()
   const ach = alphaBuf.length / N
   const rgba = Buffer.alloc(N * 4)
