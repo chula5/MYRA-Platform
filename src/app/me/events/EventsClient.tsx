@@ -17,7 +17,8 @@ import {
 } from '../dressing-room/calendar-actions'
 import { appleCalendarAvailable, readAppleCalendar } from '@/lib/native/apple-calendar'
 import {
-  dismissMyEventPick, loadMyEvents, removeMyStylingTask, scheduleMyStylingTask, setMyEventBrief, setMyStylingTaskStatus, type EventsAreaView,
+  addMyEventPicture, dismissMyEventPick, loadMyEvents, removeMyEventPicture, removeMyStylingTask, scheduleMyStylingTask, setMyEventBrief,
+  setMyEventNevers, setMyEventPictureKind, setMyStylingTaskStatus, type EventsAreaView,
 } from './actions'
 import WaysToWear from '@/components/me/WaysToWear'
 import FallbackImage from '@/components/FallbackImage'
@@ -26,6 +27,8 @@ type Task = EventsAreaView['tasks'][number]
 type TaskSource = Task['source']
 type EventPicks = EventsAreaView['picks'][number]
 type Pick = EventPicks['picks'][number]
+type Picture = EventsAreaView['pictures'][number]
+type KnownEvent = EventsAreaView['knownEvents'][number]
 
 const T = 'text-[clamp(20px,1.2vw,36px)]'
 const SMALL = 'text-[clamp(18px,1.05vw,30px)]'
@@ -142,6 +145,125 @@ function BriefLine({ eventId, brief, reading, onSave, busy }: {
   )
 }
 
+/**
+ * Pictures for one event: what she loves (more like this) and what is "not
+ * this". MYRA reads both — the colours and the look — when it picks options.
+ * Tap a picture to move it between the two; × takes it away.
+ */
+function EventPictures({ eventId, pictures, testMemberId, onChanged, onMessage }: {
+  eventId: string
+  pictures: Picture[]
+  testMemberId?: string
+  onChanged: () => Promise<void>
+  onMessage: (m: string) => void
+}) {
+  const [adding, setAdding] = useState<null | 'love' | 'not'>(null)
+  const [count, setCount] = useState({ done: 0, of: 0 })
+  const upload = async (files: FileList | null, kind: 'love' | 'not') => {
+    const list = Array.from(files ?? []).filter((f) => f.type.startsWith('image/'))
+    if (!list.length) return
+    setAdding(kind); setCount({ done: 0, of: list.length })
+    let failed = ''
+    for (let k = 0; k < list.length; k++) {
+      const file = list[k]
+      const fd = new FormData()
+      fd.set('file', file); fd.set('eventId', eventId); fd.set('kind', kind)
+      if (testMemberId) fd.set('member', testMemberId)
+      const r = await addMyEventPicture(fd).catch((e) => ({ error: e instanceof Error ? e.message : 'Could not add that picture' }))
+      if (r.error) failed = r.error
+      setCount({ done: k + 1, of: list.length })
+    }
+    setAdding(null)
+    onMessage(failed || (kind === 'love' ? 'Added. MYRA will look for more like these.' : 'Added. MYRA will keep away from this.'))
+    await onChanged()
+  }
+  const flip = async (p: Picture) => { await setMyEventPictureKind(p.image_id, p.kind === 'love' ? 'not' : 'love', testMemberId); await onChanged() }
+  const remove = async (p: Picture) => { await removeMyEventPicture(p.image_id, testMemberId); await onChanged() }
+
+  const group = (kind: 'love' | 'not') => {
+    const ps = pictures.filter((p) => p.kind === kind)
+    return (
+      <div className="space-y-2">
+        <p className={`${SMALL} tracking-[0.1em] text-[#6E6B65]`}>{kind === 'love' ? 'MORE LIKE THIS' : 'NOT LIKE THIS'}</p>
+        <div className="flex flex-wrap gap-2">
+          {ps.map((p) => (
+            <div key={p.image_id} className="relative w-[84px] md:w-[104px] aspect-[3/4] overflow-hidden rounded-[10px] bg-[#F7F6F3]">
+              <button type="button" onClick={() => flip(p)} className="w-full h-full" aria-label={kind === 'love' ? 'Move to not like this' : 'Move to more like this'}>
+                <FallbackImage src={p.image_url} alt="" className={`w-full h-full object-cover ${kind === 'not' ? 'opacity-70 grayscale' : ''}`} loading="lazy" />
+              </button>
+              {p.status === 'pending_scoring' && <span className="absolute inset-x-0 bottom-0 bg-white/85 text-center text-[13px] py-1 text-[#6E6B65]">Reading…</span>}
+              <button type="button" onClick={() => remove(p)} aria-label="Remove picture" className="absolute top-1 right-1 grid h-7 w-7 place-items-center rounded-full bg-white/90 text-[18px] leading-none text-[#2B2B2B]">×</button>
+            </div>
+          ))}
+          <label className={`${SMALL} w-[84px] md:w-[104px] aspect-[3/4] grid place-items-center rounded-[10px] border border-dashed border-[#C3BFB8] text-center text-[#6E6B65] cursor-pointer hover:border-[#2B2B2B] ${adding ? 'opacity-50 pointer-events-none' : ''}`}>
+            <span className="px-2 leading-tight">{adding === kind ? `${count.done}/${count.of}` : '+ Add'}</span>
+            <input type="file" accept="image/*" multiple className="sr-only" onChange={(e) => { void upload(e.target.files, kind); e.target.value = '' }} />
+          </label>
+        </div>
+      </div>
+    )
+  }
+  return <div className="grid gap-4 md:grid-cols-[2fr_1fr]">{group('love')}{group('not')}</div>
+}
+
+type NeversSave = (eventId: string, v: { nevers: string; max_price_gbp: string; never_brands: string[] }) => Promise<void>
+/** The event's nevers as saved, so one line can change its part and keep the rest. */
+const savedNevers = (event: KnownEvent) => ({
+  nevers: event.nevers ?? '',
+  max_price_gbp: event.max_price_gbp ? String(event.max_price_gbp) : '',
+  never_brands: event.never_brands ?? [],
+})
+
+/** Her budget for the piece — its own line: a budget is not a "not". */
+function BudgetLine({ event, onSave, busy }: { event: KnownEvent; onSave: NeversSave; busy: boolean }) {
+  const [editing, setEditing] = useState(false)
+  const [price, setPrice] = useState(event.max_price_gbp ? String(event.max_price_gbp) : '')
+  useEffect(() => { setPrice(event.max_price_gbp ? String(event.max_price_gbp) : '') }, [event.max_price_gbp])
+  if (editing) {
+    return (
+      <div className="flex flex-wrap items-center gap-3 w-full">
+        <input value={price} onChange={(e) => setPrice(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" placeholder="Up to £" className={`${FIELD} max-w-[12em]`} aria-label="Your budget for the piece, in pounds" />
+        <button type="button" disabled={busy} onClick={async () => { await onSave(event.event_id, { ...savedNevers(event), max_price_gbp: price }); setEditing(false) }} className={`${SMALL} rounded-full bg-[#2B2B2B] px-4 py-[0.4em] text-white disabled:opacity-40`}>{busy ? 'Saving…' : 'Save'}</button>
+        <button type="button" onClick={() => setEditing(false)} className={`${SMALL} underline underline-offset-4 text-[#6E6B65]`}>Cancel</button>
+      </div>
+    )
+  }
+  return (
+    <p className={`${SMALL} text-[#6E6B65]`}>
+      Budget: <span className="text-[#2B2B2B]">{event.max_price_gbp ? `up to £${Math.round(event.max_price_gbp)}` : 'none set'}</span>
+      {' '}<button type="button" onClick={() => setEditing(true)} className="underline underline-offset-4 text-[#2B2B2B]">{event.max_price_gbp ? 'Change' : 'Set one'}</button>
+    </p>
+  )
+}
+
+/** What she does not want for this event: her words, and brands. */
+function NeversLine({ event, onSave, busy }: { event: KnownEvent; onSave: NeversSave; busy: boolean }) {
+  const initial = () => ({ nevers: event.nevers ?? '', brands: (event.never_brands ?? []).join(', ') })
+  const [editing, setEditing] = useState(false)
+  const [v, setV] = useState(initial)
+  useEffect(() => { setV(initial()) // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [event.nevers, event.never_brands])
+  const said = [event.never_brands?.length ? `not ${event.never_brands.join(', ')}` : '', event.nevers ?? ''].filter(Boolean)
+  if (editing) {
+    return (
+      <div className="space-y-3 w-full">
+        <input value={v.nevers} onChange={(e) => setV({ ...v, nevers: e.target.value })} placeholder="Nothing fussy, not mother of the bride" className={FIELD} aria-label="What you do not want" />
+        <input value={v.brands} onChange={(e) => setV({ ...v, brands: e.target.value })} placeholder="Not these brands: Rixo, ME+EM" className={FIELD} aria-label="Brands you do not want for this" />
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" disabled={busy} onClick={async () => { await onSave(event.event_id, { ...savedNevers(event), nevers: v.nevers, never_brands: v.brands.split(/[,;\n]+/).map((b) => b.trim()).filter(Boolean) }); setEditing(false) }} className={`${SMALL} rounded-full bg-[#2B2B2B] px-4 py-[0.4em] text-white disabled:opacity-40`}>{busy ? 'Saving…' : 'Save'}</button>
+          <button type="button" onClick={() => { setV(initial()); setEditing(false) }} className={`${SMALL} underline underline-offset-4 text-[#6E6B65]`}>Cancel</button>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <p className={`${SMALL} text-[#6E6B65]`}>
+      {said.length ? <>Not for this one: <span className="text-[#2B2B2B]">{said.join(' · ')}</span></> : <>Anything you don’t want?</>}
+      {' '}<button type="button" onClick={() => setEditing(true)} className="underline underline-offset-4 text-[#2B2B2B]">{said.length ? 'Change' : 'Tell MYRA'}</button>
+    </p>
+  )
+}
+
 export default function EventsClient({ testMemberId }: { testMemberId?: string }) {
   const [calendar, setCalendar] = useState<CalendarPanelView | null>(null)
   const [area, setArea] = useState<EventsAreaView | null>(null)
@@ -230,6 +352,11 @@ export default function EventsClient({ testMemberId }: { testMemberId?: string }
   const saveBrief = async (eventId: string, brief: string) => run(`brief:${eventId}`, async () => {
     const r = await setMyEventBrief(eventId, brief, testMemberId)
     setMsg(r.error ?? (brief.trim() ? 'Noted. The next options follow this.' : 'Cleared.'))
+    await refresh()
+  })
+  const saveNevers = async (eventId: string, v: { nevers: string; max_price_gbp: string; never_brands: string[] }) => run(`nevers:${eventId}`, async () => {
+    const r = await setMyEventNevers(eventId, v, testMemberId)
+    setMsg(r.error ?? 'Noted. The next options follow this.')
     await refresh()
   })
   const dismissPick = (p: Pick) => run(p.event_pick_id, async () => {
@@ -393,6 +520,9 @@ export default function EventsClient({ testMemberId }: { testMemberId?: string }
                     )}
                   </div>
                   <BriefLine eventId={event.event_id} brief={event.brief ?? task?.brief ?? null} reading={ep?.reading} onSave={saveBrief} busy={working(`brief:${event.event_id}`)} />
+                  <BudgetLine event={event} onSave={saveNevers} busy={working(`nevers:${event.event_id}`)} />
+                  <NeversLine event={event} onSave={saveNevers} busy={working(`nevers:${event.event_id}`)} />
+                  <EventPictures eventId={event.event_id} pictures={area.pictures.filter((p) => p.known_event_id === event.event_id)} testMemberId={testMemberId} onChanged={refresh} onMessage={setMsg} />
                   {ep?.picks.length
                     ? <PicksRow picks={ep.picks} onOpen={setWays} onDismiss={dismissPick} busy={working} />
                     : <p className={`${SMALL} text-[#6E6B65]`}>MYRA looks for options every Monday and tells you when they land.</p>}

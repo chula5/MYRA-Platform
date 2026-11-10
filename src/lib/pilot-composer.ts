@@ -81,10 +81,19 @@ export interface PersonaLens {
    * what MYRA looks like before it knows her.
    */
   house?: { envelope: { mean: number[]; spread: number[] } | null; looks: number[][] | null; weight: number } | null
+  /**
+   * HER STYLE INFLUENCES — the people she named (Gillian Anderson, a house's
+   * look), their pictures pooled. On top of the persona, under her own
+   * pictures: she admires them, but what she keeps and wears is truer. Never
+   * fades and never teaches anyone (lib/style-influence-store.ts).
+   */
+  influences?: { envelope: { mean: number[]; spread: number[] }; looks: number[][] | null; weight: number } | null
 }
 
 /** How much her reference pictures pull, relative to the house style's lens. */
 export const REFERENCE_LENS_WEIGHT = 0.5
+/** How much the people she is inspired by pull — below her own pictures (0.5). */
+export const INFLUENCE_LENS_WEIGHT = 0.3
 /**
  * How much the house (Chloe's looks) pulls, under a persona (0.9 fading to
  * 0.3) and her own pictures (0.5): the base every look starts from, never the
@@ -130,6 +139,11 @@ export function personaFitScore(lens: PersonaLens | undefined, item: ItemWithBra
     score += envelopeFit(lens.reference.envelope, item) * lens.reference.weight
   }
   score += nearestLookFit(lens.referenceLooks, item)
+  // The people she is inspired by, at the influence weight.
+  if (lens.influences && lens.influences.weight > 0) {
+    score += envelopeFit(lens.influences.envelope, item) * lens.influences.weight
+    if (lens.influences.looks?.length) score += nearestLookFit(lens.influences.looks, item) * lens.influences.weight
+  }
   // The house underneath everything: Chloe's looks, at the house weight.
   if (lens.house && lens.house.weight > 0) {
     if (lens.house.envelope?.mean?.length) score += envelopeFit(lens.house.envelope, item) * lens.house.weight
@@ -890,7 +904,7 @@ export function composeMemberLooks(
   const inStock = library.filter(
     (i) =>
       i.image_url &&
-      sellable(i) &&
+      (isOwnedItem(i as any) || sellable(i)) &&
       !(!isOwnedItem(i as any) && i.brand_id && t.hiddenBrandIds?.has(i.brand_id)) &&
       // owned pieces are exempt from the input-only (Zara) rule — see memberGate
       (isOwnedItem(i as any) || !(i.brand?.name && t.inputOnlyBrands.has(i.brand.name.toLowerCase()))),
@@ -1066,7 +1080,9 @@ export function composeMemberVariants(
   // Same pool construction as composeMemberLooks — kept in step deliberately so
   // a variant is never built from a piece a fresh delivery wouldn't use.
   const inStock = library.filter(
-    (i) => i.image_url && sellable(i) &&
+    // A piece she owns is in stock by definition — the sentinel's reading of
+    // the shop page it came from says nothing about her wardrobe.
+    (i) => i.image_url && (isOwnedItem(i as any) || sellable(i)) &&
       !(!isOwnedItem(i as any) && i.brand_id && t.hiddenBrandIds?.has(i.brand_id)) &&
       (isOwnedItem(i as any) || !(i.brand?.name && t.inputOnlyBrands.has(i.brand.name.toLowerCase()))),
   )
@@ -1198,7 +1214,7 @@ export function rankAlternates(
       slotForItemType(i.item_type) === slot &&
       !excludeIds.has(i.item_id) &&
       i.image_url &&
-      sellable(i) &&
+      (isOwnedItem(i as any) || sellable(i)) &&
       !(!isOwnedItem(i as any) && i.brand_id && t.hiddenBrandIds?.has(i.brand_id)) &&
       (isOwnedItem(i as any) || !(i.brand?.name && t.inputOnlyBrands.has(i.brand.name.toLowerCase()))),
   )

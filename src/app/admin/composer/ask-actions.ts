@@ -36,7 +36,8 @@ const ANCHOR_PRIORITY: Slot[] = ['dress', 'top', 'bottom', 'outerwear', 'shoe', 
 // she asked for one by name.
 const ONE_PIECE = /\b(jumpsuit|playsuit|boilersuit|catsuit|romper|all[- ]in[- ]one|dungarees?|unitard)\b/i
 // The run of context every ask reads; kept a minute so the anchors of one
-// ask (Outfit Review builds ~20, one call each) don't each re-read it.
+// ask (Outfit Review builds ~20, one call each) don't each re-read it. Outfit
+// Review's own composeForReview shares it for the same reason.
 const CONTEXT_TTL_MS = 60_000
 let contextCache: { at: number; ctx: Promise<AskContext> } | null = null
 type AskContext = [
@@ -46,7 +47,7 @@ type AskContext = [
   Awaited<ReturnType<typeof loadPipelineConfig>>,
   Awaited<ReturnType<typeof loadLearnedMaterialPairs>>,
 ]
-function loadAskContext(): Promise<AskContext> {
+export function loadAskContext(): Promise<AskContext> {
   if (contextCache && Date.now() - contextCache.at < CONTEXT_TTL_MS) return contextCache.ctx
   const ctx = Promise.all([
     loadStyleModel(),
@@ -168,7 +169,7 @@ export async function composeFromAsk(
     const text = ask.trim()
     if (!text) return { error: 'Say what the look is — e.g. a long dress and brown boots' }
 
-    const library = await getReadyAndLiveItems()
+    const library = await getReadyAndLiveItems({ allowStale: true })
     // An empty pool is a failed read (a busy database), never an empty library.
     if (library.length === 0) return { error: 'The library didn’t load — the database is busy. Try again in a moment' }
     const brands =Array.from(new Set(library.map((i) => i.brand?.name).filter(Boolean) as string[]))

@@ -276,6 +276,7 @@ export async function runStockSentinel(
     await writeAudit({
       action: 'archive', entity: 'item', entityId: row.item_id,
       trigger: 'stock_sentinel', before: { status: 'out_of_stock' }, after: { status: 'archived', reason: '30_days_out_of_stock' },
+    .or('ownership.is.null,ownership.neq.owned')
     })
   }
 

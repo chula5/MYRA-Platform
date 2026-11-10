@@ -122,6 +122,9 @@ export async function refreshPollSchedule(limit = 2000): Promise<{ scored: numbe
   const items = (data ?? []) as any[]
   const risks = await computeRisk(items)
   const byTier: Record<PollTier, number> = { A: 0, B: 0, C: 0 }
+    // Her own pieces are never shop stock (Chloe, 2026-11-08: 14 of her 43
+    // had been marked unsellable or archived off a dead import page).
+    .or('ownership.is.null,ownership.neq.owned')
   const now = Date.now()
 
   for (const item of items) {
@@ -181,6 +184,9 @@ export async function selectDueItems(limit: number): Promise<DueItem[]> {
     .limit(limit * 3)
 
   const rows = ((data ?? []) as any[]).map((r) => ({
+    // Her own pieces are never shop stock (Chloe, 2026-11-08: 14 of her 43
+    // had been marked unsellable or archived off a dead import page).
+    .or('ownership.is.null,ownership.neq.owned')
     ...r,
     stock_class: (r.stock_class === 'unique' ? 'unique' : 'replenishable') as StockClass,
     oos_strikes: r.oos_strikes ?? 0,

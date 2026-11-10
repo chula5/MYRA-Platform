@@ -88,7 +88,8 @@ import { readTrust, trustHeadline, TRAILING, type LookOutcome, type TrustRead } 
 import { explainTraits } from '@/lib/member-traits'
 import { type ClimateId } from '@/lib/climate'
 import { DEFAULT_SCOPE, parsePatternKey, type LearnedRuleMatch } from '@/lib/learning-scope'
-import { tooSimilarVariant, REFERENCE_LENS_WEIGHT, HOUSE_LENS_WEIGHT } from '@/lib/pilot-composer'
+import { tooSimilarVariant, REFERENCE_LENS_WEIGHT, HOUSE_LENS_WEIGHT, INFLUENCE_LENS_WEIGHT } from '@/lib/pilot-composer'
+import { loadMemberInfluences, influenceLens } from '@/lib/style-influence-store'
 import { pieceVerdicts } from '@/lib/piece-verdicts'
 import { rulesForMember, type MemberRules } from '@/lib/style-rules'
 import { parseBrief, briefIsEmpty, type StylistBrief } from '@/lib/stylist-brief'
@@ -845,7 +846,7 @@ export async function loadEventPicksAdmin(memberId: string): Promise<{ events: E
  * (every pick has at least one outfit that passed the check).
  */
 export async function composeEventPicksNow(memberId: string, opts: { hold?: boolean; perEvent?: number; force?: boolean } = {}): Promise<ComposePicksResult> {
-  const r = await composeEventPicks(memberId, { hold: !!opts.hold, perEvent: opts.perEvent, force: opts.force ?? true })
+  const r = await composeEventPicks(memberId, { hold: !!opts.hold, perEvent: opts.perEvent, force: opts.force ?? true, anyDate: true })
   revalidatePath(PATH)
   return r
 }
@@ -1961,7 +1962,7 @@ async function approvedOutfitVectors(admin: any): Promise<number[][]> {
     const out: number[][] = []
     for (let from = 0; ; from += 1000) {
       const { data, error } = await admin.from('outfit')
-        .select('taste_vector').in('status', ['ready', 'live']).not('taste_vector', 'is', null).range(from, from + 999)
+        .select('taste_vector').eq('status', 'live').not('taste_vector', 'is', null).range(from, from + 999)
       if (error) throw new Error(error.message)
       for (const row of data ?? []) {
         const v = readTasteVector(row.taste_vector)
@@ -2042,10 +2043,11 @@ export async function loadPersonaLens(
   const owners = [memberId, member?.auth_user_id].filter(Boolean)
   // Two kinds of her own evidence, read into one envelope: the pictures she
   // keeps (what she likes) and her archival looks (what she actually wears).
-  const [{ data: refs }, { data: archival }, houseLooks] = await Promise.all([
+  const [{ data: refs }, { data: archival }, houseLooks, influences] = await Promise.all([
     admin.from('inspiration_image').select('vector').in('user_id', owners).in('status', ['scored', 'confirmed']),
     admin.from('archival_look').select('taste_vector').eq('member_id', memberId).eq('hidden', false).not('taste_vector', 'is', null),
     houseLookVectors(admin),
+    loadMemberInfluences(admin, memberId),
   ])
   const vectors = [
     ...((refs ?? []) as any[]).map((r) => r.vector),
@@ -2062,7 +2064,10 @@ export async function loadPersonaLens(
     ? { envelope: { mean: houseEnv.mean, spread: houseEnv.spread }, looks: sampleLooks(houseLooks), weight: HOUSE_LENS_WEIGHT }
     : null
 
-  if (!envelope && !reference && !house) return undefined
+  // The people she is inspired by, on top of the persona, under her pictures.
+  const influence = influenceLens(influences, INFLUENCE_LENS_WEIGHT)
+
+  if (!envelope && !reference && !house && !influence) return undefined
   return {
     name,
     envelope,
@@ -2074,6 +2079,7 @@ export async function loadPersonaLens(
     // the persona's eye, not only its centre.
     looks,
     house,
+    influences: influence,
   }
 }
 
@@ -3444,6 +3450,8 @@ export interface StyledLook {
   why: string
   /** Set when the look was composed FOR an occasion — "Daytime", "Dinners and drinks". */
   occasion_id?: string | null
+  /** Outfits MYRA keeps around it (lib/styled-ways) — shown the moment she taps. */
+  ways_in: number
   occasion_label?: string | null
 }
 
@@ -3472,7 +3480,7 @@ const FINDER_LABEL: Record<string, string> = {
 const STYLE_THIS_LOOKS = 3
 const WHY_DIMS = 'item_id, item_type, colour_family, product_name, fit, leg_opening, length, structure, neckline, sleeve, rise, shoulder, waist_definition, pattern'
 
-function toPiece(it: ItemWithBrand, styled: Map<string, number>): DressingRoomPiece {
+function toPiece(it: ItemWithBrand, styled: Map<string, number>, ways?: Map<string, number>): DressingRoomPiece {
   const a = it as any
   return {
     item_id: it.item_id,
@@ -3499,11 +3507,15 @@ export async function loadDressingRoom(asMemberId?: string): Promise<DressingRoo
   try {
     const admin = createAdminClient() as any
     const [pieces, looks] = await Promise.all([
+    ways_in: ways?.get(it.item_id) ?? 0,
       listOwnedItems(ownerRefsForMember({ member_id: me.memberId, auth_user_id: me.authUserId })),
       memberLooksFor(admin, me.memberId, me.test),
     ])
     const styled = styledInCounts(looks)
-    return { ...base, pieces: pieces.map((p) => toPiece(p, styled)) }
+    // How many outfits MYRA already keeps around each piece — the number on the tile.
+    const { countFreshWays } = await import('@/lib/styled-ways')
+    const ways = await countFreshWays(admin, me.memberId, pieces.map((p) => p.item_id), 'blend').catch(() => new Map<string, number>())
+    return { ...base, pieces: pieces.map((p) => toPiece(p, styled, ways)) }
   } catch (err) {
     return { ...base, pieces: [], error: err instanceof Error ? err.message : 'Could not load your wardrobe' }
   }
@@ -3557,6 +3569,65 @@ export async function loadOwnedPiece(itemId: string, asMemberId?: string): Promi
     if (!hero) return { ...base, error: 'That piece is not in your wardrobe' }
     const styled = styledInCounts(looks)
     const prefs = readStylePrefs(member)
+/**
+ * Every outfit around every piece of her wardrobe, in one read: her own looks
+ * that use each piece and the outfits MYRA keeps around it. The Dressing Room
+ * loads this once behind the rail, so a tap on any piece answers from memory
+ * (Chloe, 2026-11-08: "the outfits with the items should show instantaneously").
+ */
+export interface WardrobeOutfits {
+  byPiece: Record<string, { looks: StyledLook[]; ways: StyledLook[] }>
+  error?: string
+}
+
+export async function wardrobeOutfits(asMemberId?: string): Promise<WardrobeOutfits> {
+  const me = await resolveClientMember(asMemberId)
+  if (!me) return { byPiece: {}, error: 'Not signed in' }
+  try {
+    const admin = createAdminClient() as any
+    const owners = ownerRefsForMember({ member_id: me.memberId, auth_user_id: me.authUserId })
+    const [{ data: member }, owned, looks] = await Promise.all([
+      admin.from('pilot_member').select('*').eq('member_id', me.memberId).single(),
+      listOwnedItems(owners),
+      memberLooksFor(admin, me.memberId, me.test),
+    ])
+    const ownedIds = new Set(owned.map((p) => p.item_id))
+    const using = looks.filter((l) => ((l.items ?? []) as any[]).some((i) => i.item_id && ownedIds.has(i.item_id)))
+    const { getStyledWaysMany } = await import('@/lib/styled-ways')
+    const [ways, dims] = await Promise.all([
+      getStyledWaysMany(admin, me.memberId, Array.from(ownedIds), 'blend').catch(() => new Map<string, StyledLook[]>()),
+      (async () => {
+        const ids = Array.from(new Set(using.flatMap((l) => (l.items ?? []).map((i: any) => i.item_id)).filter(Boolean))) as string[]
+        const m = new Map<string, any>()
+        for (let i = 0; i < ids.length; i += 400) {
+          const { data: rows } = await admin.from('item').select(WHY_DIMS).in('item_id', ids.slice(i, i + 400))
+          for (const r of (rows ?? []) as any[]) m.set(r.item_id, r)
+        }
+        return m
+      })(),
+    ])
+    const prefs = readStylePrefs(member)
+    const byPiece: WardrobeOutfits['byPiece'] = {}
+    for (const p of owned) {
+      const mine = using.filter((l) => ((l.items ?? []) as any[]).some((i) => i.item_id === p.item_id))
+      const w = ways.get(p.item_id) ?? []
+      if (!mine.length && !w.length) continue
+      byPiece[p.item_id] = {
+        looks: mine.map((l) => ({
+          look_id: l.look_id,
+          image_url: l.image_url ?? null,
+          items: l.items ?? [],
+          why: whyThisSuitsHer((l.items ?? []).map((it: any) => ({ ...(dims.get(it.item_id) ?? {}), product_name: it.product_name, owned: !!it.owned })), prefs),
+        })),
+        ways: w,
+      }
+    }
+    return { byPiece }
+  } catch (err) {
+    return { byPiece: {}, error: err instanceof Error ? err.message : 'Could not load your outfits' }
+  }
+}
+
 
     // How it has been styled: her looks that use it, each with its reason.
     const using = looks.filter((l) => ((l.items ?? []) as any[]).some((i) => i.item_id === itemId))

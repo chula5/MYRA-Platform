@@ -1,0 +1,23 @@
+{
+  "name": "Kelly Rutherford",
+  "kind": "celebrity",
+  "handle": "@kellyrutherford",
+  "members": ["Anne"],
+  "brief": {
+    "summary": "Soft, romantic polish: statement knitwear — chunky hand-knits, volume sleeves, folk motifs — over long fluid skirts, or with straight cropped jeans. Tonal ivory, cream and grey head to toe; volume and texture on top, long and fluid below; flats, loafers or pointed pumps, and sunglasses always.",
+    "signatures": [
+      "chunky hand-knit cardigan with volume or balloon sleeves",
+      "belted knit cardigan over a flared wool midi skirt",
+      "jumper over a lace or embroidered midi skirt",
+      "tonal ivory pleats, sculptural shoulders",
+      "oversized mohair knit over a white slip dress",
+      "straight cropped mid-wash jeans with loafers",
+      "cream structured top-handle bag, brown leather tote",
+      "ballet flats, loafers and pointed pumps",
+      "statement sunglasses"
+    ],
+    "silhouettes": ["volume on top, long and fluid below", "cinched waist", "midi and maxi skirts", "straight cropped jeans"],
+    "palette": ["ivory", "cream", "white", "grey marl", "charcoal", "black accents", "brown leather"],
+    "nevers": ["short hemlines", "tight bodycon", "loud colour", "big logos", "high shine"]
+  }
+}

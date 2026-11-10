@@ -3,16 +3,23 @@
 // DRESSING ROOM — the room across the top, her rail under it, and MYRA
 // working down the right.
 //
-// Tapping a piece stands it up on the right with the looks she ALREADY has
-// with it — free, instant, her own looks. Building new outfits is a deliberate
-// press, because that composes and checks for real. The piece's own page (how
-// it has been styled, STYLE THIS by occasion, the finders) is one tap further in.
+// Tapping a piece stands it up on the right with every outfit there ALREADY is
+// around it — her own looks and the ones MYRA keeps — from a memory the room
+// loads once behind the rail, so the tap costs no round trip. On a phone the
+// panel slides in from the right over the rail (Chloe, 2026-11-08: the outfits
+// used to appear below the grid, where she could not see anything happening),
+// and every tile carries the number of outfits it is in. Building NEW outfits
+// is a deliberate press that goes through the styled-ways queue, so the first
+// one lands in seconds and the work carries on if she leaves. The piece's own
+// page (STYLE THIS by occasion, the finders) is one tap further in.
 
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import type { DressingRoomPiece, DressingRoomView, StyledLook } from '@/app/admin/private-stylist/actions'
-import { keepStyledLook, myLooksWithPiece, styleMyPiece } from './actions'
+import { keepStyledLook, myLooksWithPiece, myWardrobeOutfits, styleMyPiece } from './actions'
+import { noticePieces, openWaysToWear, pollWaysToWear } from '@/app/me/ways/actions'
+import { WAYS, type StyledWayLook } from '@/lib/styled-ways-core'
 import BuiltOutfit from './BuiltOutfit'
 import SavedPieces from './SavedPieces'
 import SaveScreenshot from '@/components/me/SaveScreenshot'
@@ -109,14 +116,49 @@ export default function DressingRoomClient({
     if (inboxes) window.dispatchEvent(new CustomEvent('myra:email-sync'))
   }
   const [picked, setPicked] = useState<DressingRoomPiece | null>(null)
-  // What she already has with this piece, and what MYRA makes when she asks.
+  // What she already has with this piece (her looks), what MYRA keeps around
+  // it (ways), and what a worded ask built just now (looks).
   const [worn, setWorn] = useState<StyledLook[]>([])
+  const [ways, setWays] = useState<StyledWayLook[]>([])
   const [looks, setLooks] = useState<StyledLook[]>([])
   const [loadingWorn, setLoadingWorn] = useState(false)
   const [styling, setStyling] = useState(false)
+  const [building, setBuilding] = useState(false)
+  const [slow, setSlow] = useState(false)
   const [note, setNote] = useState<string | null>(null)
   // Only the latest tap's outfits are shown, however fast she moves.
   const wanted = useRef<string | null>(null)
+
+  // THE RAIL'S MEMORY — every outfit around every piece, read once. A tap
+  // answers from here; until it lands, a tap asks the server for that piece.
+  type PieceOutfits = { looks: StyledLook[]; ways: StyledWayLook[] }
+  const [memory, setMemory] = useState<Record<string, PieceOutfits> | null>(null)
+  const pieceIds = useMemo(() => view.pieces.map((p) => p.item_id).join('|'), [view.pieces])
+  useEffect(() => {
+    if (!view.pieces.length) { setMemory({}); return }
+    let live = true
+    myWardrobeOutfits(testMemberId)
+      .then((r) => {
+        if (!live) return
+        const got = (r.byPiece ?? {}) as Record<string, PieceOutfits>
+        setMemory(got)
+        // MYRA starts on the pieces nothing has been made around yet, so by
+        // the time she taps one, its outfits are waiting (the queue skips what
+        // is already kept and keeps to the daily cap).
+        const bare = view.pieces.filter((p) => !(got[p.item_id]?.ways.length) && p.image_url).map((p) => p.item_id).slice(0, 24)
+        if (bare.length) void noticePieces(bare, 'blend', 'view', testMemberId).catch(() => { /* warm-ups are best effort */ })
+      })
+      .catch(() => { if (live) setMemory({}) })
+    return () => { live = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pieceIds, testMemberId])
+  const remember = (itemId: string, patch: Partial<PieceOutfits>) =>
+    setMemory((m) => ({ ...(m ?? {}), [itemId]: { looks: [], ways: [], ...(m?.[itemId] ?? {}), ...patch } }))
+  /** The number on a tile: her looks with it plus MYRA's kept outfits. */
+  const outfitCount = (p: DressingRoomPiece) => {
+    const m = memory?.[p.item_id]
+    return m ? m.looks.length + m.ways.length : memory ? 0 : p.styled_in + p.ways_in
+  }
 
   const counts = useMemo(() => {
     const m = new Map<string, number>()
@@ -130,22 +172,86 @@ export default function DressingRoomClient({
     return !t || !t.slots.length ? view.pieces : view.pieces.filter((p) => t.slots.includes(p.slot ?? ''))
   }, [typeFilter, view.pieces])
 
-  /** Tapping a piece shows the looks she already has with it — free and instant. */
+  /** Tapping a piece shows every outfit there already is around it — from memory, at once. */
   async function pick(p: DressingRoomPiece) {
     setPicked(p)
-    setWorn([])
     setLooks([])
     setNote(null)
-    setLoadingWorn(true)
+    setAsk('')
+    setShuffle(0)
+    setBuilding(false)
+    setSlow(false)
     wanted.current = p.item_id
+    const m = memory?.[p.item_id]
+    if (memory) {
+      setWorn(m?.looks ?? [])
+      setWays(m?.ways ?? [])
+      setLoadingWorn(false)
+      return
+    }
+    // The memory has not landed yet: ask for this one piece.
+    setWorn([])
+    setWays([])
+    setLoadingWorn(true)
     const r = await myLooksWithPiece(p.item_id, testMemberId)
     if (wanted.current !== p.item_id) return
     setLoadingWorn(false)
     setWorn(r.looks ?? [])
     if (r.error) setNote(r.error)
   }
+  // The memory landed after she tapped: fill the panel from it.
+  useEffect(() => {
+    if (!memory || !picked) return
+    const m = memory[picked.item_id]
+    if (m && !ways.length && !worn.length) { setWorn(m.looks); setWays(m.ways) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [memory])
 
-  /** New outfits are built only when she asks: real composing, checked before it shows. */
+  /**
+   * BUILD — new outfits through the styled-ways queue: the first lands in a
+   * few seconds and the rest follow while she watches; if she leaves, the job
+   * finishes anyway and is kept for the next tap. `more` asks for another
+   * round around the same piece, different from what is kept.
+   */
+  const startedAt = useRef(0)
+  async function build(p: DressingRoomPiece, more: boolean) {
+    setBuilding(true)
+    setSlow(false)
+    setNote(null)
+    wanted.current = p.item_id
+    startedAt.current = Date.now()
+    const v = await openWaysToWear(p.item_id, { more }, testMemberId)
+    if (wanted.current !== p.item_id) return
+    if (v.looks.length) { setWays(v.looks); remember(p.item_id, { ways: v.looks }) }
+    if (v.status !== 'working') {
+      setBuilding(false)
+      if (v.error) setNote(v.error)
+      else if (!v.looks.length) setNote('Nothing in the library goes with this one yet.')
+      return
+    }
+    const poll = async () => {
+      if (wanted.current !== p.item_id) return
+      let next: Awaited<ReturnType<typeof pollWaysToWear>> | null = null
+      try { next = await pollWaysToWear(p.item_id, 'blend', testMemberId) } catch { /* try again */ }
+      if (wanted.current !== p.item_id) return
+      if (next) {
+        if (next.looks.length) { setWays(next.looks); remember(p.item_id, { ways: next.looks }) }
+        if (next.status !== 'working') {
+          setBuilding(false)
+          if (next.error && !next.looks.length) setNote(next.error)
+          else if (next.status === 'none' && !next.looks.length) setNote('Nothing in the library goes with this one yet.')
+          return
+        }
+      }
+      const elapsed = Date.now() - startedAt.current
+      if (elapsed >= 60_000) setSlow(true)
+      if (elapsed >= 5 * 60_000) { setBuilding(false); setNote('MYRA is still working on this one — come back in a minute and it will be here.'); return }
+      setTimeout(poll, elapsed >= 60_000 ? 5_000 : 2_000)
+    }
+    setTimeout(poll, 2_000)
+  }
+
+  /** A worded ask ("a black top to go with these") composes now, checked before it shows. */
   async function styleNow(p: DressingRoomPiece, opts: { shuffle?: number; query?: string } = {}) {
     setStyling(true)
     setNote(null)
@@ -158,21 +264,30 @@ export default function DressingRoomClient({
   }
 
   // The stylist can accept a built outfit into her looks (HER VIEW only).
-  const [keptIdx, setKeptIdx] = useState<Record<number, 'saving' | 'done' | string>>({})
-  async function acceptLook(i: number, items: any[], why: string) {
-    setKeptIdx((k) => ({ ...k, [i]: 'saving' }))
+  const [keptIdx, setKeptIdx] = useState<Record<string, 'saving' | 'done' | string>>({})
+  async function acceptLook(key: string, items: any[], why: string) {
+    setKeptIdx((k) => ({ ...k, [key]: 'saving' }))
     const r = await keepStyledLook(items, why, null, testMemberId)
-    setKeptIdx((k) => ({ ...k, [i]: r.error ? r.error : 'done' }))
+    setKeptIdx((k) => ({ ...k, [key]: r.error ? r.error : 'done' }))
   }
 
   // Ask again for different answers, or ask for something in particular.
   const [shuffle, setShuffle] = useState(0)
   const [ask, setAsk] = useState('')
   function reshuffle(p: DressingRoomPiece) {
-    const next = shuffle + 1
-    setShuffle(next)
-    void styleNow(p, { shuffle: next, query: ask })
+    if (ask.trim()) { const next = shuffle + 1; setShuffle(next); void styleNow(p, { shuffle: next, query: ask }); return }
+    void build(p, true)
   }
+
+  // The panel on a phone closes on Escape, and the rail stays where it was.
+  const close = () => { wanted.current = null; setPicked(null); setBuilding(false); setStyling(false) }
+  useEffect(() => {
+    if (!picked) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picked])
 
   const openPiece = (itemId: string) => { if (onOpenPiece) onOpenPiece(itemId) }
 
@@ -254,7 +369,7 @@ export default function DressingRoomClient({
         {/* The pieces MYRA found in her photos, waiting for her yes. */}
         {!testMemberId && tab === 'wardrobe' && <FoundPieces />}
 
-        {/* Her rail, and MYRA working down the right */}
+        {/* Her rail, and MYRA's panel: down the right on a desk, sliding in over the rail on a phone */}
         {tab === 'wardrobe' && view.pieces.length > 0 && (
           <section className={`${CARD} px-6 sm:px-8 py-8`}>
             <div className="grid xl:grid-cols-[minmax(0,1fr)_minmax(460px,36%)] 2xl:grid-cols-[minmax(0,1fr)_42%] gap-8">
@@ -282,15 +397,23 @@ export default function DressingRoomClient({
                 <div data-tour="wardrobe" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-3 2xl:grid-cols-4 min-[2200px]:grid-cols-5 min-[2800px]:grid-cols-6 gap-4">
                   {shown.map((p) => {
                     const on = picked?.item_id === p.item_id
+                    const n = outfitCount(p)
                     return (
                       <button
                         key={p.item_id}
                         onClick={() => pick(p)}
+                        aria-label={`${p.product_name}${n ? ` — in ${n} outfit${n === 1 ? '' : 's'}` : ''}`}
                         className={`text-left bg-white rounded-[16px] overflow-hidden transition-shadow ${on ? 'ring-2 ring-[#2B2B2B]' : 'shadow-[0_1px_8px_rgba(43,43,43,0.06)] hover:shadow-[0_4px_18px_rgba(43,43,43,0.12)]'}`}
                       >
                         <div className="relative aspect-[3/4] bg-[#F3F2F0] overflow-hidden">
                           {p.image_url && (
                             <FallbackImage src={p.image_url} thumbWidth={600} alt={p.product_name} className="absolute inset-0 w-full h-full object-contain" />
+                          )}
+                          {/* How many outfits it is already in — so she knows before she taps. */}
+                          {n > 0 && (
+                            <span className="absolute top-2 right-2 min-w-[30px] h-[30px] px-2 rounded-full bg-[#2B2B2B] text-white text-[15px] xl:text-[17px] leading-[30px] text-center tabular-nums shadow-[0_2px_8px_rgba(43,43,43,0.25)]" aria-hidden>
+                              {n}
+                            </span>
                           )}
                         </div>
                       </button>
@@ -299,42 +422,67 @@ export default function DressingRoomClient({
                 </div>
               </div>
 
-              {/* The right pane: the piece, then the outfits MYRA makes with it */}
-              <aside data-tour="styling-pane" className="xl:sticky xl:top-6 self-start space-y-4">
+              {/* On a phone the panel slides in from the right over the rail; the rail stays under it. */}
+              {picked && (
+                <button
+                  type="button"
+                  aria-label="Close"
+                  onClick={close}
+                  className="fixed inset-0 z-[129] bg-[rgba(43,43,43,0.28)] xl:hidden"
+                />
+              )}
+              <aside
+                data-tour="styling-pane"
+                data-lenis-prevent
+                role="region"
+                aria-label="Outfits with this piece"
+                aria-hidden={!picked}
+                className={`fixed top-0 right-0 bottom-[calc(68px+env(safe-area-inset-bottom))] sm:bottom-0 z-[130] w-[90vw] max-w-[640px] overflow-y-auto bg-white px-5 sm:px-7 pt-[calc(20px+env(safe-area-inset-top,0px))] pb-10 shadow-[-16px_0_48px_rgba(43,43,43,0.22)] transition-transform duration-300 ease-out space-y-5 ${picked ? 'translate-x-0' : 'translate-x-full pointer-events-none'} xl:sticky xl:top-6 xl:right-auto xl:bottom-auto xl:z-auto xl:w-auto xl:max-w-none xl:overflow-visible xl:bg-transparent xl:p-0 xl:shadow-none xl:translate-x-0 xl:pointer-events-auto xl:self-start xl:transition-none`}
+              >
                 {!picked && (
-                  <div className="rounded-[16px] bg-white/70 px-6 py-12 text-center">
-                    <p className="text-[21px] xl:text-[24px] 2xl:text-[28px] text-[#4A4E57]">Ask MYRA about a piece.</p>
+                  <div className="hidden xl:block rounded-[16px] bg-white/70 px-6 py-12 text-center">
+                    <p className="text-[21px] xl:text-[24px] 2xl:text-[28px] text-[#4A4E57]">Tap a piece to see its outfits.</p>
                   </div>
                 )}
                 {picked && (
                   <>
                     <div className="flex gap-4 items-start">
-                      <div className="relative w-[120px] xl:w-[150px] 2xl:w-[200px] aspect-[3/4] bg-white rounded-[14px] overflow-hidden shrink-0 shadow-[0_1px_8px_rgba(43,43,43,0.06)]">
+                      <div className="relative w-[110px] sm:w-[130px] xl:w-[150px] 2xl:w-[200px] aspect-[3/4] bg-[#F3F2F0] rounded-[14px] overflow-hidden shrink-0 shadow-[0_1px_8px_rgba(43,43,43,0.06)]">
                         {picked.image_url && (
                           <FallbackImage src={picked.image_url} thumbWidth={400} alt={picked.product_name} className="absolute inset-0 w-full h-full object-contain" />
                         )}
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-[21px] xl:text-[24px] 2xl:text-[28px] text-[#2B2B2B] leading-tight">{picked.product_name}</p>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start gap-3">
+                          <p className="text-[21px] xl:text-[24px] 2xl:text-[28px] text-[#2B2B2B] leading-tight flex-1">{picked.product_name}</p>
+                          <button type="button" onClick={close} aria-label="Close" className="xl:hidden shrink-0 -mt-1 -mr-1 w-11 h-11 rounded-full bg-[#F3F2F0] text-[#2B2B2B] text-[26px] leading-[44px] text-center">×</button>
+                        </div>
                         <p className="text-[19px] xl:text-[22px] 2xl:text-[26px] text-[#6E6B65] mt-1">
                           {[picked.item_type?.replace(/_/g, ' '), picked.colour_family].filter(Boolean).join(' · ')}
                         </p>
                         <p className="text-[18px] xl:text-[21px] tracking-[0.12em] text-[#6E6B65] mt-3">ASK MYRA TO BUILD AN OUTFIT</p>
-                        <button
-                          onClick={() => styleNow(picked)}
-                          disabled={styling}
-                          className="mt-3 text-[19px] xl:text-[22px] 2xl:text-[26px] px-5 py-2.5 rounded-full bg-[#2B2B2B] text-white disabled:opacity-40"
-                        >
-                          {styling ? 'Building…' : looks.length ? 'Build more' : 'Build outfit'}
-                        </button>
-                        {looks.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-3">
                           <button
-                            onClick={() => reshuffle(picked)}
-                            disabled={styling}
-                            className="mt-3 ml-3 text-[19px] xl:text-[22px] 2xl:text-[26px] px-5 py-2.5 rounded-full bg-white text-[#2B2B2B] shadow-[0_8px_18px_-12px_rgba(43,43,43,0.5)] disabled:opacity-40"
+                            onClick={() => build(picked, ways.length > 0)}
+                            disabled={building || styling}
+                            className="text-[19px] xl:text-[22px] 2xl:text-[26px] px-5 py-2.5 rounded-full bg-[#2B2B2B] text-white disabled:opacity-40"
                           >
-                            Reshuffle
+                            {building ? 'Building…' : ways.length || looks.length ? 'Build more' : 'Build outfit'}
                           </button>
+                          {(ways.length > 0 || looks.length > 0) && (
+                            <button
+                              onClick={() => reshuffle(picked)}
+                              disabled={building || styling}
+                              className="text-[19px] xl:text-[22px] 2xl:text-[26px] px-5 py-2.5 rounded-full bg-white text-[#2B2B2B] shadow-[0_8px_18px_-12px_rgba(43,43,43,0.5)] disabled:opacity-40"
+                            >
+                              Reshuffle
+                            </button>
+                          )}
+                        </div>
+                        {onOpenPiece ? (
+                          <button onClick={() => openPiece(picked.item_id)} className="mt-3 text-[18px] xl:text-[21px] text-[#2B2B2B] underline underline-offset-4">Open its page</button>
+                        ) : (
+                          <Link href={`/me/dressing-room/${picked.item_id}`} className="inline-block mt-3 text-[18px] xl:text-[21px] text-[#2B2B2B] underline underline-offset-4">Open its page</Link>
                         )}
                       </div>
                     </div>
@@ -348,14 +496,14 @@ export default function DressingRoomClient({
                         value={ask}
                         onChange={(e) => setAsk(e.target.value)}
                         placeholder="Find a black top to go with these bottoms…"
-                        className="myra-guide-text flex-1 min-w-[240px] rounded-full bg-white px-6 py-3 text-[19px] xl:text-[22px] 2xl:text-[26px] outline-none border-2 border-transparent focus:border-[#C9C9C9]"
+                        className="myra-guide-text flex-1 min-w-[200px] rounded-full bg-[#F7F6F4] xl:bg-white px-6 py-3 text-[19px] xl:text-[22px] 2xl:text-[26px] outline-none border-2 border-transparent focus:border-[#C9C9C9]"
                       />
                       <MicButton size="sm" onText={(t, final) => { setAsk(t); if (final && t.trim() && !styling) void styleNow(picked, { shuffle, query: t }) }} />
-                      <button type="submit" disabled={styling || !ask.trim()} className="text-[19px] xl:text-[22px] 2xl:text-[26px] px-5 py-2.5 rounded-full bg-[#2B2B2B] text-white disabled:opacity-40">
+                      <button type="submit" disabled={styling || building || !ask.trim()} className="text-[19px] xl:text-[22px] 2xl:text-[26px] px-5 py-2.5 rounded-full bg-[#2B2B2B] text-white disabled:opacity-40">
                         Find it
                       </button>
                       {ask && (
-                        <button type="button" onClick={() => { setAsk(''); void styleNow(picked, { shuffle }) }} className="text-[19px] xl:text-[22px] text-[#6E6B65] underline underline-offset-4">
+                        <button type="button" onClick={() => { setAsk(''); setLooks([]) }} className="text-[19px] xl:text-[22px] text-[#6E6B65] underline underline-offset-4">
                           Clear
                         </button>
                       )}
@@ -363,76 +511,90 @@ export default function DressingRoomClient({
 
                     {loadingWorn && <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#6E6B65]">Looking for what you wear it with…</p>}
 
-                    {worn.length > 0 && (
-                      <p className="text-[19px] xl:text-[22px] 2xl:text-[26px] tracking-[0.12em] text-[#6E6B65]">
-                        ALREADY STYLED — {worn.length} LOOK{worn.length === 1 ? '' : 'S'}
-                      </p>
+                    {(styling || building) && (
+                      <div className="rounded-[16px] bg-[#F7F6F4] xl:bg-white/70 px-6 py-8 text-center">
+                        <img src="/myra-mirror-transparent.png" alt="" className="myra-mirror-wiggle h-20 w-auto mx-auto" />
+                        <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#4A4E57] mt-4">
+                          {styling ? 'Finding it…' : ways.length ? 'Building another outfit around it…' : 'Building outfits around it — the first lands in a few seconds.'}
+                        </p>
+                        {slow && <p className="text-[18px] xl:text-[21px] text-[#6E6B65] mt-2">Taking longer than usual. It will be here when it is done, even if you leave.</p>}
+                      </div>
                     )}
-                    {!loadingWorn && !worn.length && !looks.length && !styling && (
+
+                    {note && !styling && !building && <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#4A4E57]">{note}</p>}
+
+                    {!loadingWorn && !worn.length && !ways.length && !looks.length && !styling && !building && !note && (
                       <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#4A4E57]">MYRA hasn&rsquo;t styled this one yet. Build an outfit around it.</p>
                     )}
 
-                    {styling && (
-                      <div className="rounded-[16px] bg-white/70 px-6 py-10 text-center">
-                        <img src="/myra-mirror-transparent.png" alt="" className="myra-mirror-wiggle h-24 w-auto mx-auto" />
-                        <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#4A4E57] mt-4">Building outfits around it…</p>
-                      </div>
-                    )}
-
-                    {note && !styling && <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#4A4E57]">{note}</p>}
-
+                    {/* Built for a worded ask, just now: every piece can be swapped, with undo. */}
                     {looks.length > 0 && (
                       <p className="text-[19px] xl:text-[22px] 2xl:text-[26px] tracking-[0.12em] text-[#6E6B65]">NEW — BUILT JUST NOW</p>
                     )}
-
                     <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
-                    {/* Built just now: every piece can be swapped, with undo. */}
-                    {looks.map((l, i) => (
-                      <div key={`new-${i}`} className="space-y-2">
-                        <BuiltOutfit
-                          items={l.items}
-                          heroId={picked.item_id}
-                          why={l.why}
-                          testMemberId={testMemberId}
-                          onChange={(next) => setLooks((cur) => cur.map((x, j) => (j === i ? { ...x, items: next } : x)))}
-                        />
-                        {testMemberId && (
-                          <div className="flex items-center gap-3 flex-wrap">
-                            <button
-                              onClick={() => acceptLook(i, l.items, l.why)}
-                              disabled={keptIdx[i] === 'saving' || keptIdx[i] === 'done'}
-                              className="text-[19px] xl:text-[22px] px-5 py-2.5 rounded-full bg-[#2B2B2B] text-white disabled:opacity-40"
-                            >
-                              {keptIdx[i] === 'saving' ? 'Sending…' : keptIdx[i] === 'done' ? 'In her looks' : 'Accept — add to her looks'}
-                            </button>
-                            {keptIdx[i] && keptIdx[i] !== 'saving' && keptIdx[i] !== 'done' && (
-                              <span className="text-[19px] text-[#9B3A3A]">{keptIdx[i]}</span>
+                      {looks.map((l, i) => (
+                        <div key={`new-${i}`} className="space-y-2">
+                          <BuiltOutfit
+                            items={l.items}
+                            heroId={picked.item_id}
+                            why={l.why}
+                            testMemberId={testMemberId}
+                            onChange={(next) => setLooks((cur) => cur.map((x, j) => (j === i ? { ...x, items: next } : x)))}
+                          />
+                          {testMemberId && <AcceptRow state={keptIdx[`new-${i}`]} onAccept={() => acceptLook(`new-${i}`, l.items, l.why)} />}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* What MYRA keeps around it — instant from the rail's memory, growing as a build lands. */}
+                    {ways.length > 0 && (
+                      <p className="text-[19px] xl:text-[22px] 2xl:text-[26px] tracking-[0.12em] text-[#6E6B65]">
+                        MYRA&rsquo;S OUTFITS — {ways.length}
+                      </p>
+                    )}
+                    <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
+                      {ways.map((l) => (
+                        <div key={l.styled_way_id} className="space-y-2">
+                          <BuiltOutfit
+                            items={l.items}
+                            heroId={picked.item_id}
+                            why={l.why}
+                            testMemberId={testMemberId}
+                            onChange={(next) => setWays((cur) => cur.map((x) => (x.styled_way_id === l.styled_way_id ? { ...x, items: next } : x)))}
+                          />
+                          {testMemberId && <AcceptRow state={keptIdx[l.styled_way_id]} onAccept={() => acceptLook(l.styled_way_id, l.items, l.why)} />}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Her own looks that already use it. */}
+                    {worn.length > 0 && (
+                      <p className="text-[19px] xl:text-[22px] 2xl:text-[26px] tracking-[0.12em] text-[#6E6B65]">
+                        IN YOUR LOOKS — {worn.length}
+                      </p>
+                    )}
+                    <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
+                      {worn.map((l, i) => (
+                        <div key={l.look_id ?? i} className="bg-white rounded-[16px] overflow-hidden shadow-[0_1px_8px_rgba(43,43,43,0.06)]">
+                          <div className="relative aspect-[3/4] bg-[#F3F2F0] overflow-hidden">
+                            {l.image_url ? (
+                              <FallbackImage src={l.image_url} thumbWidth={800} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                            ) : (
+                              // No shoot for a look composed just now: show its pieces.
+                              <div className="absolute inset-0 grid grid-cols-2 gap-px bg-[#EDEBE7]">
+                                {l.items.slice(0, 4).map((it, j) => (
+                                  <div key={j} className="relative bg-white overflow-hidden">
+                                    {it.image_url && (
+                                      <FallbackImage src={it.image_url} thumbWidth={400} alt={it.product_name} className="absolute inset-0 w-full h-full object-contain" />
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
                             )}
                           </div>
-                        )}
-                      </div>
-                    ))}
-                    {worn.map((l, i) => (
-                      <div key={l.look_id ?? i} className="bg-white rounded-[16px] overflow-hidden shadow-[0_1px_8px_rgba(43,43,43,0.06)]">
-                        <div className="relative aspect-[3/4] bg-[#F3F2F0] overflow-hidden">
-                          {l.image_url ? (
-                            <FallbackImage src={l.image_url} thumbWidth={800} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                          ) : (
-                            // No shoot for a look composed just now: show its pieces.
-                            <div className="absolute inset-0 grid grid-cols-2 gap-px bg-[#EDEBE7]">
-                              {l.items.slice(0, 4).map((it, j) => (
-                                <div key={j} className="relative bg-white overflow-hidden">
-                                  {it.image_url && (
-                                    <FallbackImage src={it.image_url} thumbWidth={400} alt={it.product_name} className="absolute inset-0 w-full h-full object-contain" />
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
+                          {l.why && <p className="text-[19px] xl:text-[22px] 2xl:text-[26px] text-[#4A4E57] px-4 py-3 leading-snug">{l.why}</p>}
                         </div>
-                        {l.why && <p className="text-[19px] xl:text-[22px] 2xl:text-[26px] text-[#4A4E57] px-4 py-3 leading-snug">{l.why}</p>}
-                      </div>
-                    ))}
+                      ))}
                     </div>
                   </>
                 )}
@@ -479,6 +641,22 @@ export default function DressingRoomClient({
           </p>
         )}
       </div>
+    </div>
+  )
+}
+
+/** HER VIEW: the stylist sends a built outfit to her looks. */
+function AcceptRow({ state, onAccept }: { state: 'saving' | 'done' | string | undefined; onAccept: () => void }) {
+  return (
+    <div className="flex items-center gap-3 flex-wrap">
+      <button
+        onClick={onAccept}
+        disabled={state === 'saving' || state === 'done'}
+        className="text-[19px] xl:text-[22px] px-5 py-2.5 rounded-full bg-[#2B2B2B] text-white disabled:opacity-40"
+      >
+        {state === 'saving' ? 'Sending…' : state === 'done' ? 'In her looks' : 'Accept — add to her looks'}
+      </button>
+      {state && state !== 'saving' && state !== 'done' && <span className="text-[19px] text-[#9B3A3A]">{state}</span>}
     </div>
   )
 }

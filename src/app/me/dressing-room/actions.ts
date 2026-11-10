@@ -74,6 +74,11 @@ export async function swapInMyOutfit(
   return impl.swapOwnedLookItem(me.memberId, items, itemIndex, filters)
 }
 
+/** Every outfit around every piece she owns, in one read — the rail's memory. */
+export async function myWardrobeOutfits(asMemberId?: string): Promise<impl.WardrobeOutfits> {
+  return impl.wardrobeOutfits(asMemberId)
+}
+
 /** Her looks that already use this piece — no composing, nothing paid for. */
 export async function myLooksWithPiece(itemId: string, asMemberId?: string): Promise<{ looks: impl.StyledLook[]; error?: string }> {
   return impl.looksWithOwnedPiece(itemId, asMemberId)

@@ -1,0 +1,17 @@
+{
+  "name": "Gillian Anderson",
+  "kind": "celebrity",
+  "handle": "@gilliana",
+  "members": ["Anne"],
+  "brief": {
+    "summary": "Polished, grown-up femininity: almost always a midi dress — a sleeveless column or a belted shirt dress with a full pleated skirt — in black, navy or ivory. Texture (tweed, bouclé, pleats, appliqué) instead of print; one deep accent; pointed pumps or a fine strappy sandal.",
+    "signatures": [
+      "sleeveless column midi dress", "belted shirt dress with a full pleated midi skirt", "tweed or bouclé dress",
+      "high-neck pleated chiffon dress", "cardigan over a crisp shirt with a pleated plaid midi skirt",
+      "pointed-toe pumps and slingbacks", "fine ankle-strap sandals", "structured top-handle bag", "small gold hoops"
+    ],
+    "silhouettes": ["boat or high neckline", "defined waist", "midi to ankle length", "fitted bodice, column or full pleated skirt"],
+    "palette": ["black", "navy", "ivory", "white", "burgundy accent", "pale blue"],
+    "nevers": ["short hemlines", "busy prints", "visible logos", "plunging necklines", "slouchy streetwear"]
+  }
+}

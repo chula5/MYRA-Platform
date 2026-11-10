@@ -65,10 +65,51 @@ export async function getStyledWays(
   return orderWays(keep).slice(0, opts.limit ?? WAYS).map(toStyledLook)
 }
 
+/**
+ * The fresh ways around MANY pieces at once — the Dressing Room's whole rail
+ * in one read, so a tap on any piece shows what MYRA keeps for it with no
+ * round trip. Same retire-on-sight as getStyledWays.
+ */
+export async function getStyledWaysMany(
+  admin: any,
+  memberId: string,
+  heroIds: string[],
+  mode: WayMode = 'blend',
+): Promise<Map<string, StyledWayLook[]>> {
+  const out = new Map<string, StyledWayLook[]>()
+  const ids = Array.from(new Set(heroIds.filter(Boolean)))
+  if (!ids.length) return out
+  const { data, error } = await admin.from('styled_way').select(COLS)
+    .eq('member_id', memberId).eq('mode', mode).eq('stale', false).in('hero_item_id', ids)
+    .order('judged_at', { ascending: false }).limit(ids.length * 12)
+  if (error) throw new Error(/styled_way/.test(error.message) ? 'Run migration 0094 in Supabase first' : error.message)
+  const rows = (data ?? []) as StyledWayRow[]
+  if (!rows.length) return out
+  const itemIds = Array.from(new Set(rows.flatMap((r) => r.item_ids)))
+  const stock = new Map<string, { stock_status: string | null; status: string | null }>()
+  for (let i = 0; i < itemIds.length; i += 400) {
+    const { data: items } = await admin.from('item').select('item_id, stock_status, status').in('item_id', itemIds.slice(i, i + 400))
+    for (const it of (items ?? []) as any[]) stock.set(it.item_id, { stock_status: it.stock_status ?? null, status: it.status ?? null })
+  }
+  const { keep, dead } = sellableWays(rows, stock)
+  if (dead.length) {
+    await Promise.all(dead.map((d) =>
+      admin.from('styled_way').update({ stale: true, stale_reason: `${d.reason}:${d.itemId}` }).eq('styled_way_id', d.row.styled_way_id),
+    )).catch(() => { /* the next read tries again */ })
+  }
+  const byHero = new Map<string, StyledWayRow[]>()
+  for (const r of keep) byHero.set(r.hero_item_id, [...(byHero.get(r.hero_item_id) ?? []), r])
+  byHero.forEach((list, hero) => out.set(hero, orderWays(list).slice(0, WAYS).map(toStyledLook)))
+  return out
+}
+
 /** Can the piece itself still be bought? Read the way a kept way is judged (sellableWays). */
 export async function heroSoldOut(admin: any, heroId: string): Promise<boolean> {
-  const { data } = await admin.from('item').select('item_id, stock_status, status').eq('item_id', heroId).maybeSingle()
+  const { data } = await admin.from('item').select('item_id, stock_status, status, ownership').eq('item_id', heroId).maybeSingle()
   if (!data) return true
+  // Her own piece cannot sell out on her: whatever the sentinel read off the
+  // shop page it was imported from, it is in her wardrobe.
+  if (data.ownership === 'owned') return false
   const stock = new Map([[heroId, { stock_status: data.stock_status ?? null, status: data.status ?? null }]])
   return sellableWays([{ item_ids: [heroId], items: [] }], stock).keep.length === 0
 }

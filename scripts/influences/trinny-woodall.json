@@ -1,0 +1,19 @@
+{
+  "name": "Trinny Woodall",
+  "kind": "influencer",
+  "handle": "@trinnywoodall",
+  "members": ["Anne"],
+  "brief": {
+    "summary": "Confident, easy denim dressing: high-waisted wide-leg or flared jeans with a shirt that has something to say — volume sleeves, smocked cuffs, a cropped stripe. Clear blues and crisp white against indigo or light-wash denim, finished with chunky white trainers.",
+    "signatures": [
+      "high-waisted wide-leg or flared jeans",
+      "shirt with volume sleeves and smocked cuffs",
+      "cropped striped shirt over a white tee",
+      "dark indigo and light-wash denim",
+      "chunky white flatform trainers"
+    ],
+    "silhouettes": ["high waist", "wide-leg and flared trousers, full length", "volume in the sleeve", "cropped or tucked tops"],
+    "palette": ["cornflower blue", "chambray", "white", "grey stripe", "indigo", "light-wash denim"],
+    "nevers": ["skinny jeans", "low-rise", "shapeless tops"]
+  }
+}

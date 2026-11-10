@@ -1,0 +1,9 @@
+{
+  "member": "Anne",
+  "label": "Wedding guest",
+  "event_date": "2028-06",
+  "brief": "A classic, smart, clean-cut dress — satin or silk, with sleeves, in a deep rich colour: olive, chocolate, teal, navy or plum, or a dark floral.",
+  "nevers": "Nothing fussy — not mother-of-the-bride, not a long ball-gown. Not what everyone else is wearing.",
+  "max_price_gbp": 600,
+  "never_brands": ["Rixo", "ME+EM"]
+}
