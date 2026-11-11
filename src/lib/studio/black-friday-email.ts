@@ -3,12 +3,12 @@ import { sendStudioEmail, siteUrl } from './email'
 
 // BLACK FRIDAY, SORTED — the announcement Chloe approved from the preview sent
 // on 9 Nov: the sale edit at her brands, wait-for-sale, saved searches,
-// save-a-screenshot, and the avatar as coming soon. Sent as MYRA, replies to
+// save-a-screenshot, and the avatar (launched 10 Nov). Sent as MYRA, replies to
 // Chloe, addressed to each member by her first name.
 
 const esc = (s: string) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
-export const BLACK_FRIDAY_SUBJECT = 'Black Friday, sorted — and three new ways MYRA shops for you'
+export const BLACK_FRIDAY_SUBJECT = 'Black Friday, sorted — and your own avatar is here'
 
 const FONT = 'font-family:Helvetica,Arial,sans-serif;'
 const p = (t: string) => `<p style="margin:0 0 16px 0;${FONT}font-size:16px;line-height:1.6;color:#2b2b2b;">${t}</p>`
@@ -18,7 +18,7 @@ const b = (t: string) => `<strong style="color:#0a0a0a;">${t}</strong>`
 export function blackFridayEmailHtml(name: string): string {
   const first = (name ?? '').trim().split(/\s+/)[0] ?? ''
   const greeting = first ? `Hello ${esc(first)},` : 'Hello,'
-  const avatar = siteUrl('/email/avatar-coming-soon.jpg')
+  const avatar = siteUrl('/email/avatar.jpg')
 
   const body = `
 ${p(greeting)}
@@ -42,8 +42,10 @@ ${h('4. See it, screenshot it, save it')}
 ${p(`Spotted something you love while you&rsquo;re shopping in Safari? Take a screenshot and tap ${b('SAVE A SCREENSHOT')} on your ${b('For You')} page or your ${b('Saved')} shelf in the Dressing Room.`)}
 ${p('MYRA reads the picture, works out the brand and the piece, and finds the real link for you, at any brand. It&rsquo;s then saved like anything else in MYRA: styled for you, and watched for stock and price. No extension to install. If MYRA can&rsquo;t find the exact piece, your screenshot is still kept.')}
 
-${h('5. Coming soon: your own avatar')}
-${p('Soon MYRA will build an avatar of you from your own photos, in your real shape. Dress it in the pieces from your wardrobe: tuck a top, cinch a jacket, swap the shoes, and see the whole outfit before you get dressed.')}
+${h('5. New: your own avatar')}
+${p(`MYRA can now build an avatar of you, with your face and in your real shape. Tap ${b('MY AVATAR')} in your Dressing Room and add three or four photos of yourself. Within a few minutes MYRA draws two portraits; pick the one that looks most like you.`)}
+${p(`Then dress it in the pieces from your wardrobe: tuck a top, cinch a jacket, swap the shoes, and see the whole outfit before you get dressed. Any piece marked ${b('SEE ON MY AVATAR')} goes straight on.`)}
+${p('Your photos are used only to make your avatar and are deleted once you approve it.')}
 <img src="${avatar}" width="496" alt="A MYRA avatar dressed in a check wool blazer, wide trousers and heels" style="display:block;width:100%;max-width:496px;height:auto;border-radius:12px;margin:8px 0 0 0;border:0;" />`
 
   return `<!doctype html><html><body style="margin:0;padding:0;background:#ffffff;">
