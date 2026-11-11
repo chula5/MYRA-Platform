@@ -514,31 +514,50 @@ const POOL_PAGE = 1000
 // rather than nothing. Stock, status and size changes reach the pool within
 // the window; a bulk change can call resetReadyAndLiveItemsCache().
 const POOL_TTL_MS = 5 * 60 * 1000
+// Admin surfaces (Outfit Review) may be handed a pool up to this old while a
+// fresh one is read behind them — 20k pieces is 40s+ on a busy evening, and
+// waiting for it on every page load is what made Review feel stuck
+// (2026-10-26). Member-facing callers keep the strict five minutes.
+const POOL_STALE_OK_MS = 30 * 60 * 1000
 const POOL_PAGE_CONCURRENCY = 2
 const POOL_PAGE_RETRIES = 3
-let poolCache: { at: number; items: ItemWithBrand[] } | null = null
-let poolInFlight: Promise<ItemWithBrand[]> | null = null
+// Kept on globalThis so a dev-server recompile of this module (any session's
+// edit to an importer) doesn't throw away a 40-second read.
+const poolState = ((globalThis as any).__myraReadyPool ??= { cache: null, inFlight: null }) as {
+  cache: { at: number; items: ItemWithBrand[] } | null
+  inFlight: Promise<ItemWithBrand[]> | null
+}
 
 /** Test seam / after a bulk change: forget the shared pool. */
 export function resetReadyAndLiveItemsCache(): void {
-  poolCache = null
-  poolInFlight = null
+  poolState.cache = null
+  poolState.inFlight = null
 }
 
-export async function getReadyAndLiveItems(): Promise<ItemWithBrand[]> {
-  if (poolCache && Date.now() - poolCache.at < POOL_TTL_MS) return poolCache.items
-  if (poolInFlight) return poolInFlight
-  poolInFlight = readReadyAndLiveItems()
+export async function getReadyAndLiveItems(opts?: { allowStale?: boolean }): Promise<ItemWithBrand[]> {
+  const cache = poolState.cache
+  const age = cache ? Date.now() - cache.at : Infinity
+  if (cache && age < POOL_TTL_MS) return cache.items
+  if (cache && opts?.allowStale && age < POOL_STALE_OK_MS) {
+    void refreshReadyAndLiveItems()
+    return cache.items
+  }
+  return refreshReadyAndLiveItems()
+}
+
+function refreshReadyAndLiveItems(): Promise<ItemWithBrand[]> {
+  if (poolState.inFlight) return poolState.inFlight
+  poolState.inFlight = readReadyAndLiveItems()
     .then((items) => {
       if (items) {
-        poolCache = { at: Date.now(), items }
+        poolState.cache = { at: Date.now(), items }
         return items
       }
       // The read failed: the last good pool is better than an empty one.
-      return poolCache?.items ?? []
+      return poolState.cache?.items ?? []
     })
-    .finally(() => { poolInFlight = null })
-  return poolInFlight
+    .finally(() => { poolState.inFlight = null })
+  return poolState.inFlight
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -548,23 +567,30 @@ async function readReadyAndLiveItems(): Promise<ItemWithBrand[] | null> {
   const supabase = createAdminClient()
   try {
     const statuses = ['draft', 'ready', 'live']
-    const { count, error: countErr } = await supabase
-      .from('item')
-      .select('item_id', { count: 'exact', head: true })
-      .in('status', statuses)
+    // Brands read once and joined here, as getAllItems does: the lateral
+    // brand(*) join repeated each brand row on every piece (a third of the
+    // bytes) and was the heaviest query on the database (2026-10-26).
+    const [{ data: brandRows, error: brandErr }, { count, error: countErr }] = await Promise.all([
+      supabase.from('brand').select('*'),
+      supabase.from('item').select('item_id', { count: 'exact', head: true }).in('status', statuses),
+    ])
+    if (brandErr) throw brandErr
     if (countErr) throw countErr
+    const brands = new Map<string, Brand>(((brandRows ?? []) as Brand[]).map((b) => [b.brand_id, b]))
     const pages = Math.max(1, Math.ceil((count ?? 0) / POOL_PAGE))
     const readPage = async (i: number) => {
       let lastErr: unknown = null
       for (let attempt = 0; attempt < POOL_PAGE_RETRIES; attempt++) {
         const r = await supabase
           .from('item')
-          .select('*, brand(*)')
+          .select('*')
           .in('status', statuses)
           .order('created_at', { ascending: false })
           .order('item_id', { ascending: true })
           .range(i * POOL_PAGE, i * POOL_PAGE + POOL_PAGE - 1)
-        if (!r.error) return (r.data ?? []) as unknown as ItemWithBrand[]
+        if (!r.error) {
+          return ((r.data ?? []) as Item[]).map((row) => ({ ...row, brand: (row.brand_id && brands.get(row.brand_id)) || null }) as unknown as ItemWithBrand)
+        }
         lastErr = r.error
         await sleep(300 * (attempt + 1))
       }
