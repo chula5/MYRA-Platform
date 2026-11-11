@@ -10,6 +10,8 @@ import * as impl from '@/app/admin/private-stylist/actions'
 import { resolveClientMember } from '@/lib/client-member'
 import type { LookItem } from '@/lib/pilot-stylist'
 import type { AskSwapOption } from '@/app/admin/private-stylist/actions'
+import { createAdminClient } from '@/lib/supabase-server'
+import { studioLooksWithPiece, type StudioLook } from '@/lib/studio-looks'
 
 export async function loadMyDressingRoom(asMemberId?: string): Promise<impl.DressingRoomView> {
   return impl.loadDressingRoom(asMemberId)
@@ -77,4 +79,15 @@ export async function swapInMyOutfit(
 /** Her looks that already use this piece — no composing, nothing paid for. */
 export async function myLooksWithPiece(itemId: string, asMemberId?: string): Promise<{ looks: impl.StyledLook[]; error?: string }> {
   return impl.looksWithOwnedPiece(itemId, asMemberId)
+}
+
+/**
+ * The studio outfits a piece of hers appears in — for the small row of looks
+ * under a tapped wardrobe tile. Read from the in-memory studio index, nothing
+ * composed; her own looks with the piece come from myLooksWithPiece.
+ */
+export async function studioLooksForPiece(itemId: string, asMemberId?: string): Promise<{ looks: StudioLook[] }> {
+  const me = await resolveClientMember(asMemberId)
+  if (!me) return { looks: [] }
+  try { return { looks: await studioLooksWithPiece(createAdminClient() as any, itemId, 6) } } catch { return { looks: [] } }
 }

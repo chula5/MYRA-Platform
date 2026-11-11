@@ -12,7 +12,9 @@ import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import type { DressingRoomPiece, DressingRoomView, StyledLook } from '@/app/admin/private-stylist/actions'
-import { keepStyledLook, myLooksWithPiece, styleMyPiece } from './actions'
+import { keepStyledLook, myLooksWithPiece, styleMyPiece, studioLooksForPiece } from './actions'
+import StudioLookSheet, { type SheetLook } from '@/components/me/StudioLookSheet'
+import type { StudioLook } from '@/lib/studio-looks'
 import BuiltOutfit from './BuiltOutfit'
 import SavedPieces from './SavedPieces'
 import SaveScreenshot from '@/components/me/SaveScreenshot'
@@ -66,6 +68,23 @@ function tabFromUrl(): DressingTab {
 // words on them (Chloe, 2026-10-17: the labelled pills were too much); one
 // line beside them says what they are for.
 const ROOM_BTN = 'shrink-0 rounded-full transition-opacity hover:opacity-85 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2B2B2B] focus-visible:ring-offset-2'
+// Her avatar: a head and shoulders, the mark on the MY AVATAR button and on every tile.
+function PersonIcon({ className = 'w-6 h-6' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden>
+      <circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
+// Build an outfit: a hanger.
+function HangerIcon({ className = 'w-5 h-5' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden>
+      <path d="M12 4.5a2 2 0 1 1 2 2c-1.1 0-2 .9-2 2v1.2M12 9.7 3.6 15.3A1.6 1.6 0 0 0 4.5 18.2h15a1.6 1.6 0 0 0 .9-2.9L12 9.7z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
 function PhotoIcon() {
   return (
     <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-white text-[#2B2B2B] shadow-[0_2px_8px_rgba(43,43,43,0.12)]">
@@ -117,6 +136,10 @@ export default function DressingRoomClient({
   const [note, setNote] = useState<string | null>(null)
   // Only the latest tap's outfits are shown, however fast she moves.
   const wanted = useRef<string | null>(null)
+  // Under a tapped tile: the studio outfits the piece is in (read once per piece) and the look she opened.
+  const [studioFor, setStudioFor] = useState<Record<string, StudioLook[]>>({})
+  const [openLook, setOpenLook] = useState<{ look: SheetLook; heroId: string } | null>(null)
+  const paneRef = useRef<HTMLElement | null>(null)
 
   const counts = useMemo(() => {
     const m = new Map<string, number>()
@@ -138,11 +161,34 @@ export default function DressingRoomClient({
     setNote(null)
     setLoadingWorn(true)
     wanted.current = p.item_id
+    if (!studioFor[p.item_id]) {
+      studioLooksForPiece(p.item_id, testMemberId)
+        .then((s) => setStudioFor((cur) => (cur[p.item_id] ? cur : { ...cur, [p.item_id]: s.looks })))
+        .catch(() => setStudioFor((cur) => (cur[p.item_id] ? cur : { ...cur, [p.item_id]: [] })))
+    }
     const r = await myLooksWithPiece(p.item_id, testMemberId)
     if (wanted.current !== p.item_id) return
     setLoadingWorn(false)
     setWorn(r.looks ?? [])
     if (r.error) setNote(r.error)
+  }
+
+  /** The tile's hanger: pick the piece and have MYRA build around it at once, then show the pane. */
+  async function buildFromTile(p: DressingRoomPiece) {
+    void pick(p)
+    setTimeout(() => { if (paneRef.current && window.innerWidth < 1280) scrollTo(paneRef.current, { offset: -16 }) }, 60)
+    await styleNow(p)
+  }
+
+  /** What the avatar room can wear (lib/avatar/wardrobe families): the SEE ON MY AVATAR mark is only on those. */
+  const avatarWears = (p: DressingRoomPiece) =>
+    ['top', 'bottom', 'dress', 'outerwear', 'shoe'].includes(p.slot ?? '') || ['belt', 'scarf'].includes(String(p.item_type ?? ''))
+
+  /** The small looks under a tapped tile: her own looks with it, then the studio's. */
+  const tileLooks = (p: DressingRoomPiece): SheetLook[] => {
+    const mine: SheetLook[] = picked?.item_id === p.item_id ? worn : []
+    const studio: SheetLook[] = (studioFor[p.item_id] ?? []).map((l) => ({ image_url: l.image_url, items: l.items, why: l.why, occasion_id: l.occasion_id ?? null, occasion_label: l.occasion_label }))
+    return [...mine, ...studio].slice(0, 6)
   }
 
   /** New outfits are built only when she asks: real composing, checked before it shows. */
@@ -207,6 +253,19 @@ export default function DressingRoomClient({
               </div>
               <p className="text-[17px] xl:text-[20px] 2xl:text-[24px] text-[#4A4E57]">Sync your apps to pull in your pieces.</p>
             </div>
+
+            {/* Her avatar: the body every piece is tried on. Solid, with her mark on it,
+                below the apps — Chloe, 2026-11-09: "make it more clear to click on the avatar". */}
+            {!testMemberId && (
+              <Link
+                href="/me/avatar"
+                data-tour="my-avatar"
+                className="mt-6 flex w-full sm:w-auto sm:inline-flex items-center justify-center gap-3 rounded-full bg-[#2B2B2B] px-7 py-3.5 text-white text-[17px] xl:text-[20px] 2xl:text-[23px] tracking-[0.14em] uppercase shadow-[0_8px_18px_-10px_rgba(43,43,43,0.6)] hover:bg-[#111] transition-colors"
+              >
+                <PersonIcon className="w-6 h-6 xl:w-7 xl:h-7" />
+                My avatar
+              </Link>
+            )}
           </div>
 
           {/* Your look — the card standing in the room */}
@@ -282,25 +341,82 @@ export default function DressingRoomClient({
                 <div data-tour="wardrobe" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-3 2xl:grid-cols-4 min-[2200px]:grid-cols-5 min-[2800px]:grid-cols-6 gap-4">
                   {shown.map((p) => {
                     const on = picked?.item_id === p.item_id
+                    const under = on ? tileLooks(p) : []
                     return (
-                      <button
+                      <div
                         key={p.item_id}
-                        onClick={() => pick(p)}
-                        className={`text-left bg-white rounded-[16px] overflow-hidden transition-shadow ${on ? 'ring-2 ring-[#2B2B2B]' : 'shadow-[0_1px_8px_rgba(43,43,43,0.06)] hover:shadow-[0_4px_18px_rgba(43,43,43,0.12)]'}`}
+                        className={`relative bg-white rounded-[16px] overflow-hidden transition-shadow ${on ? 'ring-2 ring-[#2B2B2B]' : 'shadow-[0_1px_8px_rgba(43,43,43,0.06)] hover:shadow-[0_4px_18px_rgba(43,43,43,0.12)]'}`}
                       >
-                        <div className="relative aspect-[3/4] bg-[#F3F2F0] overflow-hidden">
-                          {p.image_url && (
-                            <FallbackImage src={p.image_url} thumbWidth={600} alt={p.product_name} className="absolute inset-0 w-full h-full object-contain" />
+                        <button onClick={() => pick(p)} className="block w-full text-left" aria-label={`${p.product_name}: see its looks`}>
+                          <div className="relative aspect-[3/4] bg-[#F3F2F0] overflow-hidden">
+                            {p.image_url && (
+                              <FallbackImage src={p.image_url} thumbWidth={600} alt={p.product_name} className="absolute inset-0 w-full h-full object-contain" />
+                            )}
+                          </div>
+                        </button>
+                        {/* Top right: build an outfit around it; see it on her avatar. */}
+                        <div className="absolute top-2 right-2 flex flex-col gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); void buildFromTile(p) }}
+                            aria-label={`Build an outfit around ${p.product_name}`}
+                            title="Build an outfit"
+                            className="grid h-9 w-9 place-items-center rounded-full bg-white/90 text-[#2B2B2B] shadow-[0_2px_8px_rgba(43,43,43,0.18)] hover:bg-[#2B2B2B] hover:text-white transition-colors"
+                          >
+                            <HangerIcon />
+                          </button>
+                          {!testMemberId && avatarWears(p) && (
+                            <Link
+                              href={`/me/avatar?item=${encodeURIComponent(p.item_id)}`}
+                              onClick={(e) => e.stopPropagation()}
+                              aria-label={`See ${p.product_name} on my avatar`}
+                              title="See it on my avatar"
+                              className="grid h-9 w-9 place-items-center rounded-full bg-white/90 text-[#2B2B2B] shadow-[0_2px_8px_rgba(43,43,43,0.18)] hover:bg-[#2B2B2B] hover:text-white transition-colors"
+                            >
+                              <PersonIcon className="w-5 h-5" />
+                            </Link>
                           )}
                         </div>
-                      </button>
+                        {/* Tapped: its outfits, small, under the piece — tap one to open it. */}
+                        {on && (
+                          <div className="px-2 pb-2 pt-1.5">
+                            {under.length > 0 ? (
+                              <div data-lenis-prevent className="flex gap-1.5 overflow-x-auto" aria-label={`Looks with ${p.product_name}`}>
+                                {under.map((l, i) => (
+                                  <button
+                                    key={i}
+                                    type="button"
+                                    onClick={() => setOpenLook({ look: l, heroId: p.item_id })}
+                                    className="relative shrink-0 w-[52px] aspect-[3/4] rounded-[8px] overflow-hidden bg-[#F3F2F0] ring-1 ring-black/5 hover:ring-[#2B2B2B]"
+                                    aria-label={`Open look ${i + 1}`}
+                                  >
+                                    {l.image_url ? (
+                                      <FallbackImage src={l.image_url} thumbWidth={200} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                                    ) : (
+                                      <div className="absolute inset-0 grid grid-cols-2 gap-px bg-[#EDEBE7]">
+                                        {l.items.slice(0, 4).map((it, j) => (
+                                          <div key={j} className="relative bg-white overflow-hidden">
+                                            {it.image_url && <FallbackImage src={it.image_url} thumbWidth={120} alt="" className="absolute inset-0 w-full h-full object-contain" />}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-[15px] xl:text-[17px] text-[#6E6B65] leading-snug">{loadingWorn ? 'Looking…' : 'No looks yet'}</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     )
                   })}
                 </div>
               </div>
 
               {/* The right pane: the piece, then the outfits MYRA makes with it */}
-              <aside data-tour="styling-pane" className="xl:sticky xl:top-6 self-start space-y-4">
+              <aside ref={paneRef} data-tour="styling-pane" className="xl:sticky xl:top-6 self-start space-y-4">
                 {!picked && (
                   <div className="rounded-[16px] bg-white/70 px-6 py-12 text-center">
                     <p className="text-[21px] xl:text-[24px] 2xl:text-[28px] text-[#4A4E57]">Ask MYRA about a piece.</p>
@@ -440,6 +556,8 @@ export default function DressingRoomClient({
             </div>
           </section>
         )}
+
+        {openLook && <StudioLookSheet look={openLook.look} heroId={openLook.heroId} testMemberId={testMemberId} onClose={() => setOpenLook(null)} />}
 
         {tab === 'wardrobe' && !view.pieces.length && (
           <section className={`${CARD} px-6 sm:px-8 py-10 text-center`}>
