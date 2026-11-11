@@ -10,8 +10,17 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const a = pressBySlug((await params).slug)
   if (!a) return {}
   return {
-    title: `${a.title} · ${a.publication} · MYRA`,
+    title: `${a.title} · ${a.publication}`,
     description: a.subtitle ?? a.summary[0],
+    alternates: { canonical: `/press/${a.slug}` },
+    openGraph: {
+      title: a.title,
+      description: a.subtitle ?? a.summary[0],
+      type: 'article',
+      publishedTime: a.date,
+      authors: [a.author],
+      ...(a.image ? { images: [a.image] } : {}),
+    },
   }
 }
 

@@ -5,6 +5,7 @@ import { FeedProvider } from '@/context/FeedContext'
 import SessionTracker from '@/components/analytics/SessionTracker'
 import SmoothScroll from '@/components/SmoothScroll'
 import './globals.css'
+import { SITE_URL, SITE_NAME, SITE_TITLE, SITE_DESCRIPTION, SITE_KEYWORDS } from '@/lib/seo'
 
 // Site typeface — a clean, gently rounded grotesque close to Pragmatica.
 // Served from public/fonts (Manrope variable, 200–800) rather than fetched
@@ -30,12 +31,34 @@ export const viewport: Viewport = {
 }
 
 export const metadata: Metadata = {
-  title: 'MYRA',
-  description: 'MYRA — Outfit-first fashion discovery, personalised to your taste.',
+  metadataBase: new URL(SITE_URL),
+  title: { default: SITE_TITLE, template: '%s · MYRA' },
+  description: SITE_DESCRIPTION,
+  keywords: SITE_KEYWORDS,
+  applicationName: SITE_NAME,
   openGraph: {
-    title: 'MYRA',
-    description: 'Outfit-first fashion discovery.',
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    siteName: SITE_NAME,
+    locale: 'en_GB',
     type: 'website',
+    images: [{ url: '/silver-hero-wide.webp', alt: 'MYRA, the AI styling assistant' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    images: ['/silver-hero-wide.webp'],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true, 'max-image-preview': 'large', 'max-snippet': -1 },
+  },
+  // Search Console / Bing ownership, once their tokens are set on Vercel.
+  verification: {
+    ...(process.env.GOOGLE_SITE_VERIFICATION ? { google: process.env.GOOGLE_SITE_VERIFICATION } : {}),
+    ...(process.env.BING_SITE_VERIFICATION ? { other: { 'msvalidate.01': process.env.BING_SITE_VERIFICATION } } : {}),
   },
   // FlexOffers site-ownership verification.
   other: {
@@ -53,6 +76,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={manrope.variable} suppressHydrationWarning>
       <head>
+        <link rel="alternate" type="text/plain" href="/llms.txt" title="MYRA for AI assistants" />
         {/* THE APP NEVER SHOWS THE WEBSITE. Capacitor's bridge is in the page
             before its first byte, so this one line marks <html> as the app at
             document start; anything wrapped in <WebOnly> is then invisible from

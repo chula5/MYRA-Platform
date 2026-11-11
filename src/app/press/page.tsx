@@ -2,8 +2,9 @@ import Link from 'next/link'
 import { PRESS, formatPressDate } from '@/lib/press'
 
 export const metadata = {
-  title: 'Press · MYRA',
-  description: 'What people are writing about MYRA.',
+  title: 'Press',
+  description: 'What people are writing about MYRA, the AI styling assistant.',
+  alternates: { canonical: '/press' },
 }
 
 export default function PressPage() {

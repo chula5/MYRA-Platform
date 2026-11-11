@@ -107,9 +107,12 @@ export default function ScatterHero() {
           className="absolute inset-0 z-20 flex flex-col items-center justify-center text-center px-4 sm:px-6 pointer-events-none"
           style={{ opacity: 0 }}
         >
-          <h2 className="text-[#0A0A0A] font-semibold uppercase tracking-[0.01em] leading-[0.95] whitespace-nowrap text-[clamp(30px,9vw,420px)] sm:text-[clamp(36px,5.1vw,200px)]">
+          {/* The page's one h1. The hidden lead names MYRA for search engines and
+              screen readers; sighted visitors see only the headline. */}
+          <h1 className="text-[#0A0A0A] font-semibold uppercase tracking-[0.01em] leading-[0.95] whitespace-nowrap text-[clamp(30px,9vw,420px)] sm:text-[clamp(36px,5.1vw,200px)]">
+            <span className="sr-only">MYRA, the AI styling assistant: </span>
             OUTFITS, NOT ITEMS
-          </h2>
+          </h1>
           <ApplyButton
             label="APPLY FOR ACCESS"
             className={`mt-[clamp(40px,4.5vw,120px)] ${BIG_APPLY_CLASS}`}

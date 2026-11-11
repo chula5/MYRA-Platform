@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import Navigation from '@/components/navigation/Navigation'
 import ScatterHero from '@/components/ScatterHero'
@@ -25,8 +26,15 @@ import { resolveClientMember } from '@/lib/client-member'
 import AppDoor from '@/components/AppDoor'
 import WebOnly from '@/components/WebOnly'
 import type { OutfitWithItems } from '@/types/database'
+import { organizationJsonLd, jsonLdScript } from '@/lib/seo'
 
 export const dynamic = 'force-dynamic'
+
+// Title, description and social cards come from the root layout (src/lib/seo).
+export const metadata: Metadata = {
+  alternates: { canonical: '/' },
+  openGraph: { url: '/' },
+}
 
 export default async function LandingPage({
   searchParams,
@@ -51,6 +59,8 @@ export default async function LandingPage({
 
   return (
     <>
+      {/* Who MYRA is, for Google and AI answer engines (Organization, WebSite, WebApplication). */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={jsonLdScript(organizationJsonLd())} />
       <AppDoor state={doorState} withApplyModal={false} />
 
       {/* The website — nav to footer — is invisible in the app from the first
@@ -96,6 +106,12 @@ export default async function LandingPage({
             MYRA
           </Link>
           <div className="flex items-center gap-8 sm:gap-10">
+            <a href="/ai-stylist" className="tracking-[0.1em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300 text-[clamp(15px,1.4vw,22px)]">
+              ABOUT
+            </a>
+            <a href="/press" className="tracking-[0.1em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300 text-[clamp(15px,1.4vw,22px)]">
+              PRESS
+            </a>
             <a href="/privacy" className="tracking-[0.1em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300 text-[clamp(15px,1.4vw,22px)]">
               PRIVACY
             </a>

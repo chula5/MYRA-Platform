@@ -13,6 +13,9 @@ export default function PressLayout({ children }: { children: React.ReactNode })
             MYRA
           </Link>
           <div className="flex items-center gap-8 sm:gap-10">
+            <a href="/ai-stylist" className="tracking-[0.1em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300 text-[clamp(15px,1.4vw,22px)]">
+              ABOUT
+            </a>
             <a href="/privacy" className="tracking-[0.1em] text-[#6B6B6B] hover:text-[#4A4E57] transition-colors duration-300 text-[clamp(15px,1.4vw,22px)]">
               PRIVACY
             </a>
