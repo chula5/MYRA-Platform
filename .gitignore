@@ -43,6 +43,7 @@ next-env.d.ts
 /ios/DerivedData/
 .DS_Store
 .next-dev/
+.next-dev-*/
 
 # claude session worktrees
 /.claude/

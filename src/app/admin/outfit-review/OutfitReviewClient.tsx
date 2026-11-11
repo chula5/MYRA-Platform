@@ -446,6 +446,8 @@ function AnchorReview({ anchor, initial }: { anchor: ReviewAnchor; initial?: Ask
   const [swapType, setSwapType] = useState('')
   const [swapBrands, setSwapBrands] = useState<{ name: string; count: number }[]>([])
   const [swapLoading, setSwapLoading] = useState(false)
+  const swapReqRef = useRef(0)   // only the latest search's answer is shown
+  const swapTypingRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (initial) return // composed from words already
@@ -562,12 +564,14 @@ function AnchorReview({ anchor, initial }: { anchor: ReviewAnchor; initial?: Ask
   // colour and type filters (all AND).
   async function runSwapSearch(q: string, brand: string, colour = swapColour, itemType = swapType) {
     if (!swap) return
+    const id = ++swapReqRef.current
     setSwapLoading(true)
     const exclude = [anchor.item_id, ...cands[swap.candIdx].items.map((i) => i.item_id)]
     const res =
       swap.mode === 'add'
         ? await fetchReviewOptions({ mode: 'add', anchor: anchor.item_id, present: cands[swap.candIdx].items.map((i) => i.slot), exclude, q, brand, colour, itemType })
         : await fetchReviewOptions({ mode: 'swap', anchor: anchor.item_id, slot: swap.slot, exclude, q, brand, colour, itemType })
+    if (id !== swapReqRef.current) return // a newer search has taken over
     setSwapOptions(res.options)
     // Keep the brand list in sync with the current text query (but not the
     // brand filter itself — the server computes it before applying the filter).
@@ -575,9 +579,11 @@ function AnchorReview({ anchor, initial }: { anchor: ReviewAnchor; initial?: Ask
     setSwapLoading(false)
   }
 
+  // Typing waits for a pause (250ms) rather than searching every keystroke.
   function runSwapQuery(q: string) {
     setSwapQuery(q)
-    void runSwapSearch(q, swapBrand)
+    if (swapTypingRef.current) clearTimeout(swapTypingRef.current)
+    swapTypingRef.current = setTimeout(() => { void runSwapSearch(q, swapBrand) }, 250)
   }
 
   function runSwapBrand(brand: string) {

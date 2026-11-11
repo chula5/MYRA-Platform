@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase-server'
+import { isAdminRequest } from '@/lib/admin-request'
 import { getReviewSwapOptions, getReviewAddOptions } from '@/app/admin/outfit-review/actions'
 
 export const dynamic = 'force-dynamic'
@@ -10,12 +10,12 @@ export const dynamic = 'force-dynamic'
 // swap search would otherwise be queued behind it and appear frozen. A route
 // handler is a normal concurrent request, so search keeps working during shoots.
 export async function GET(req: NextRequest) {
-  // Admin gate — mirror the /admin layout check.
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user || user.id !== process.env.ADMIN_USER_ID) {
-    return NextResponse.json({ options: [] }, { status: 401 })
-  }
+  // Admin gate — the /admin layout check, remembered per session (lib/admin-request).
+  const t0 = Date.now()
+  if (!(await isAdminRequest())) return NextResponse.json({ options: [] }, { status: 401 })
+  const t1 = Date.now()
+  // Server-Timing says where a slow search spent its time (DevTools → Network → Timing).
+  const timed = (body: unknown) => NextResponse.json(body, { headers: { 'Server-Timing': `auth;dur=${t1 - t0}, work;dur=${Date.now() - t1}` } })
 
   const sp = req.nextUrl.searchParams
   const mode = sp.get('mode') ?? 'swap'
@@ -29,10 +29,10 @@ export async function GET(req: NextRequest) {
   if (mode === 'add') {
     const present = (sp.get('present') ?? '').split(',').filter(Boolean)
     const res = await getReviewAddOptions(anchor, present, exclude, query, brand, filters)
-    return NextResponse.json(res)
+    return timed(res)
   }
 
   const slot = sp.get('slot') ?? ''
   const res = await getReviewSwapOptions(anchor, slot, exclude, query, brand, filters)
-  return NextResponse.json(res)
+  return timed(res)
 }
