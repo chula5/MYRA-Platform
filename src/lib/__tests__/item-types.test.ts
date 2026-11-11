@@ -259,3 +259,85 @@ describe('a shoe word inside a garment name is not a shoe', () => {
     expect(typeOf('Raffia Texture Flat Bag')).not.toBe('flat')
   })
 })
+
+describe('knit is a construction, not a garment (Chloe, 2026-11-09)', () => {
+  // Outfit Review set Yves Salomon's fur jackets in the TOP slot under a camel
+  // coat: the bare word "knit" was filed as knitwear before any garment word
+  // below it could be read. 355 pieces were typed knitwear by that word alone.
+  it('reads the garment word over the knit', () => {
+    expect(typeOf('Merino knit jacket with fox fur')).toBe('jacket')
+    expect(typeOf('Mink fur and Merino knit jacket')).toBe('jacket')
+    expect(typeOf('Tech Knit Jacket')).toBe('jacket')
+    expect(typeOf('Knit bomber jacket in wool blend')).toBe('jacket')
+    expect(typeOf('Knit straight trousers')).toBe('trousers')
+    expect(typeOf('Merino knit wide leg trousers')).toBe('trousers')
+    expect(typeOf('ASPEN SANDSTONE STRIPE KNIT PANT')).toBe('trousers')
+    expect(typeOf('Jacquard Midi Knit Skirt')).toBe('skirt')
+    expect(typeOf('Flecked knit shorts co-ord')).toBe('shorts')
+    expect(typeOf('Culottes in fine lamb leather')).toBe('trousers')
+    expect(typeOf('Triangle Knit Scarf')).toBe('scarf')
+    expect(typeOf('Knitted wool beanie')).toBe('hat')
+    expect(typeOf('100% cashmere knit balaclava')).toBe('hat')
+    expect(typeOf('HOOD IN YAK ALPACA')).toBe('hat')
+    expect(typeOf('Cashmere wool knit and rex rabbit fur fingerless gloves')).toBe('gloves')
+    expect(typeOf('Cashmere and wool knit mittens with cashmere lambskin')).toBe('gloves')
+    expect(typeOf('100% cashmere knit bandana')).toBe('scarf')
+    // The garment word can come BEFORE the knit.
+    expect(typeOf('Long jacket in knitted fox fur')).toBe('jacket')
+    expect(typeOf('Knitted short fox fur jacket')).toBe('jacket')
+    // A handle that says "fox vest" is a fur gilet, not a knit vest.
+    expect(classifyExternalProduct(parsed('Merino knit and fox fur jacket', 'https://www.yves-salomon.co.uk/products/merino-knit-and-fox-vest-brown-27wyg90871marea2197')).itemType).toBe('gilet')
+    expect(typeOf('Cashmere High Neck Knit Vest')).toBe('knitwear')
+  })
+  it('still reads a knit top as knitwear', () => {
+    expect(typeOf('Merino knit sweater')).toBe('knitwear')
+    expect(typeOf('Ribbed Knit Top')).toBe('knitwear')
+    expect(typeOf('Cable Cardigan')).toBe('knitwear')
+    expect(typeOf('Cashmere Boxy Polo Neck')).toBe('knitwear')
+    // A scarf that comes WITH the jumper does not make the jumper a scarf.
+    expect(typeOf('Straight Sweater + Scarf')).toBe('knitwear')
+    expect(typeOf('Cashmere V-neck sweater with removable scarf')).toBe('knitwear')
+    expect(typeOf('ANDIE IVORY SCARF KNIT JUMPER')).toBe('knitwear')
+  })
+  it('reads the last word of a knit compound as the garment', () => {
+    expect(typeOf('Bomber sweater-jacket in colorblock vintage wool')).toBe('jacket')
+    expect(typeOf('Cardigan jacket in vintage wool blend')).toBe('jacket')
+    expect(typeOf('Nadine Column Sweater Skirt')).toBe('skirt')
+    expect(typeOf('Mini knit sweater-skirt in argyle wool')).toBe('skirt')
+  })
+  it('reads a cardigan made of fur as a jacket, and a fur-trimmed one as a cardigan', () => {
+    expect(typeOf('Belted cardigan in merino knit and fox fur')).toBe('jacket')
+    expect(typeOf('Knitted Cardigan With Faux Fur Cuffs Navy Green Red Argyle Brown')).toBe('knitwear')
+    expect(typeOf('Bill Blass 1980s Cream Fur Plaid Lined Sweater')).toBe('knitwear')
+  })
+})
+
+describe('knit accessories that fell to the Spanish rules', () => {
+  it('reads a knitted collar as a scarf, not a Spanish necklace', () => {
+    expect(typeOf('Kate Collar - Tobacco')).toBe('scarf')
+    expect(typeOf('COLLAR GAD BEIGE MELANGE')).toBe('scarf')
+    expect(typeOf('COLLAR WOOL  BEIGE')).toBe('scarf')
+    expect(typeOf('COLLAR GAD NAVY')).toBe('scarf')
+    expect(typeOf('Dusyk zip collar (262 / W / CAPTAIN)')).toBe('scarf')
+    // A Spanish necklace is still a necklace.
+    expect(typeOf('COLLAR PERLAS')).toBe('necklace')
+  })
+  it('reads the shoes that name no heel or sole of their own', () => {
+    // MKDT Studio's fringed flat was set in the TOP slot of an outfit.
+    expect(typeOf('Ardea Shoes - IVORY')).toBe('flat')
+    expect(typeOf('Alaia Shoes - BLACK')).toBe('flat')
+    expect(typeOf('Chylak Monk Shoes “glossy black”')).toBe('flat')
+    expect(typeOf('Leather boat shoes')).toBe('flat')
+    expect(typeOf('Romine suede slippers')).toBe('flat')
+    expect(typeOf('Ponyhair Clogs (262 / W / BROWN)')).toBe('mule')
+    expect(typeOf('Topstitched smooth leather clogs')).toBe('mule')
+    // Not the things sold for shoes, a shoestring strap, or a garment in a shoe's name.
+    expect(typeOf('Chylak Pearl Shoe Clips')).not.toBe('flat')
+    expect(typeOf('Shoe-string Strap Cami Top')).not.toBe('flat')
+    expect(typeOf('Organic Cotton Ballerina Top - Jet Black')).toBe('blouse')
+    expect(typeOf('Cath X WYSE Loafer Jean - Mid Wash')).toBe('jeans')
+  })
+  it('reads a cardi as knitwear, not a Spanish salón heel', () => {
+    expect(typeOf('The Brushed Cashmere Salon Cardi -- Taupe Multi')).toBe('knitwear')
+  })
+})

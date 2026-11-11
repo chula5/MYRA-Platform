@@ -18,6 +18,7 @@ import {
 } from '@/lib/brand-watch-browser'
 import { buildLearning, type DecidedRow, type LearnedVerdict } from '@/lib/brand-watch-learning'
 import { automationOn } from '@/lib/brand-watch-trust'
+import { browserbaseConfigured, browserbaseScanAndQueue, cloudCanRead } from '@/lib/brand-watch-browserbase'
 import { WOMEN_RE, MEN_RE, KIDS_RE } from '@/lib/brand-watch-gender'
 
 // ---------------------------------------------------------------- types
@@ -142,13 +143,13 @@ function scanDiagnostic(
 const HOUSE_STYLE = {
   weights: { colour: 3, material: 2, silhouette: 2 },
   houseColours: ['black', 'white', 'ivory', 'cream', 'ecru', 'bone', 'off white', 'off-white', 'beige', 'taupe', 'sand', 'camel', 'tan', 'caramel', 'chocolate', 'brown', 'cognac', 'grey', 'gray', 'charcoal', 'navy', 'khaki', 'olive', 'burgundy', 'bordeaux', 'oxblood'],
-  offColours: ['neon', 'fluo', 'lime', 'fuchsia', 'magenta', 'hot pink', 'shocking pink', 'bright pink', 'turquoise', 'rainbow', 'multicolour', 'multicolor', 'leopard', 'zebra', 'animal print', 'cow print', 'snake print', 'glitter', 'holographic', 'iridescent', 'metallic silver', 'metallic gold'],
-  houseMaterials: ['leather', 'suede', 'calf', 'nappa', 'lambskin', 'nubuck', 'shearling', 'wool', 'cashmere', 'merino', 'mohair', 'silk', 'cotton', 'linen', 'poplin', 'denim'],
-  offMaterials: ['sequin', 'diamante', 'rhinestone', 'pvc', 'vinyl', 'faux fur', 'marabou', 'feather', 'lurex', 'glitter'],
-  houseSilhouettes: ['pointed', 'pointy', 'slingback', 'kitten heel', 'stiletto', 'ballet', 'ballerina', 'loafer', 'riding boot', 'knee boot', 'ankle boot', 'column', 'straight leg', 'wide leg', 'tailored', 'blazer', 'trench', 'slip dress', 'shirt dress', 'square toe', 'minimal', 'clean', 'structured', 'longline'],
+  offColours: ['neon', 'fluo', 'lime', 'fuchsia', 'magenta', 'hot pink', 'shocking pink', 'bright pink', 'turquoise', 'rainbow', 'multicolour', 'multicolor', 'leopard', 'zebra', 'animal print', 'cow print', 'snake print', 'glitter', 'holographic', 'iridescent', 'metallic silver', 'metallic gold', 'fucsia', 'leopardo', 'cebra', 'estampado animal', 'turquesa', 'lima'],
+  houseMaterials: ['leather', 'suede', 'calf', 'nappa', 'lambskin', 'nubuck', 'shearling', 'wool', 'cashmere', 'merino', 'mohair', 'silk', 'cotton', 'linen', 'poplin', 'denim', 'lana', 'cachemir', 'cachemira', 'seda', 'algodón', 'algodon', 'lino', 'piel', 'cuero', 'napa', 'serraje', 'popelín', 'popelin', 'vaquero', 'vaquera'],
+  offMaterials: ['sequin', 'diamante', 'rhinestone', 'pvc', 'vinyl', 'faux fur', 'marabou', 'feather', 'lurex', 'glitter', 'lentejuela', 'lentejuelas', 'pelo sintético', 'pelo sintetico', 'plumas', 'purpurina'],
+  houseSilhouettes: ['pointed', 'pointy', 'slingback', 'kitten heel', 'stiletto', 'ballet', 'ballerina', 'loafer', 'riding boot', 'knee boot', 'ankle boot', 'column', 'straight leg', 'wide leg', 'tailored', 'blazer', 'trench', 'slip dress', 'shirt dress', 'square toe', 'minimal', 'clean', 'structured', 'longline', 'americana', 'gabardina', 'sastre', 'recto', 'recta', 'pierna ancha', 'bailarina', 'mocasín', 'mocasin', 'punta fina', 'tacón fino', 'tacon fino', 'bota alta', 'botín', 'botin', 'minimalista', 'estructurado', 'estructurada'],
   // 'chunky' alone punished chunky KNITS — a house staple. The penalty is
   // about footwear silhouettes, so it names them.
-  offSilhouettes: ['platform', 'flatform', 'chunky sole', 'chunky sneaker', 'chunky trainer', 'chunky boot', 'chunky loafer', 'chunky sandal', 'wedge sneaker', 'extreme crop', 'cut-out', 'cut out', 'ruffle', 'bow embellished', 'ultra mini', 'micro mini'],
+  offSilhouettes: ['platform', 'flatform', 'chunky sole', 'chunky sneaker', 'chunky trainer', 'chunky boot', 'chunky loafer', 'chunky sandal', 'wedge sneaker', 'extreme crop', 'cut-out', 'cut out', 'ruffle', 'bow embellished', 'ultra mini', 'micro mini', 'plataforma', 'volantes', 'con lazo'],
   // Categories that are not clothing. Matched on whole words (see NON_FASHION_RE)
   // so fashion vocabulary can't be caught by accident: "linen" is a fabric and
   // only "bed linen" is homeware, "slip" is a dress, "cupro" a fibre.
@@ -165,6 +166,7 @@ const HOUSE_STYLE = {
     'swimsuit', 'swimwear', 'swim suit', 'bikini', 'swim short', 'swim shorts',
     'swimming costume', 'bathing suit', 'tankini', 'beachwear', 'sarong',
     'underwear', 'lingerie', 'thong', 'bra ', 'briefs', 'nightwear', 'pyjama', 'pajama',
+    'bañador', 'banador', 'calcetines', 'calcetín', 'ropa interior', 'pijama', 'sujetador', 'braguita', 'tarjeta regalo',
     // beauty and fragrance
     'beauty', 'skincare', 'skin care', 'cosmetic', 'fragrance', 'perfume', 'parfum',
     'parfume', 'eau de parfum', 'eau de toilette', 'cologne', 'scent', 'diffuser',
@@ -226,7 +228,9 @@ const TYPE_RULES: Array<[RegExp, string]> = [
   // A waistcoat is worn as a TOP, not a layer (Chloe, 2026-09-15) — only warm,
   // padded or fur gilets and vests are outerwear.
   // "button down vest" is a top — only down FILL makes a vest outerwear.
-  [/\bgilet|(?:quilted|padded|puffer|shearling|utility|(?<!button[\s-])down|fleece|duffle|hunting|field|fur|sheepskin|teddy)[\s-]*vest/, 'gilet'],
+  // The animal names too: Yves Salomon's handle says "merino knit and fox
+  // vest" where its name says jacket, and a fox vest is a fur gilet.
+  [/\bgilet|(?:quilted|padded|puffer|shearling|utility|(?<!button[\s-])down|fleece|duffle|hunting|field|fur|fox|mink|sable|rabbit|lambskin|toscana|sheepskin|teddy)[\s-]*vest/, 'gilet'],
   [/\bcape|poncho/, 'cape'],
   [/\bouterwear/, 'jacket'], // umbrella category (Munthe et al) — jacket as the safe default
   // "Runner" is what activewear brands call a sneaker — Varley sells six and
@@ -241,6 +245,18 @@ const TYPE_RULES: Array<[RegExp, string]> = [
   // "flat front" trouser and WYSE's "loafer jean" were all filed as flats. A
   // garment word within reach on either side keeps this rule off.
   [/(?<!\b(?:top|tops|knit|knitted|sweatshirts?|sweater|jumper|cardigan|trousers?|pants?|sweatpants?|dress|dresses|jeans?|shirts?|blouse|bodies|bodysuit|skirts?|sleeve|belt)\b[\s\w-]{0,40})(?:ballerina|ballet|mary.?jane|loafer|espadrille|\bflat\b(?!\s*(?:front|bag|pouch|clutch|purse|wallet|tote|cross.?body|cap|calfskin|leather belt)\b)|\bflats\b)(?![\s\w-]{0,40}\b(?:top|tops|knit|knitted|sweatshirts?|sweater|jumper|cardigan|trousers?|pants?|sweatpants?|dress|dresses|jeans?|shirts?|blouse|bodies|bodysuit|skirts?|sleeve|belt)\b)/, 'flat'],
+  // The shoes that name no heel, strap or sole of their own. A clog is a
+  // backless shoe (the Spanish rules file a zueco the same way): Bellerose's
+  // "Ponyhair Clogs" were hair accessories, Claudie Pierlot's "leather boat
+  // shoes" a dress, By Malene Birger's "suede slippers" a blouse. "Ballet
+  // slipper" is left to the ballet rule above, which knows it as a colour.
+  [/\bclogs?\b/, 'mule'],
+  [/\bcourt shoes?\b/, 'heel'],
+  [/(?<!ballet\s)\bslippers?\b|\bmoccasins?\b|\bbrogues?\b/, 'flat'],
+  // And the bare word, last of the shoes: MKDT Studio's "Ardea Shoes" was set
+  // in the TOP slot of an outfit (Chloe, 2026-11-12), Chylak's "Monk Shoes"
+  // were bags. Not the things sold FOR shoes, nor a shoestring strap.
+  [/\bshoes?\b(?![\s-]*(?:strings?|clips?|care|bags?|box|horn|trees?|laces?|charms?|brush|polish|cream))/, 'flat'],
   [/\btote/, 'tote'], [/\bclutch|\bpouch/, 'clutch'], [/cross.?body/, 'crossbody'],
   [/shoulder bag/, 'shoulder_bag'], [/\bhandbag|\bbag\b|\bbags\b/, 'structured_bag'],
   [/shirt.?dress/, 'shirt_dress'], [/slip.?dress/, 'slip_dress'],
@@ -255,7 +271,23 @@ const TYPE_RULES: Array<[RegExp, string]> = [
   // The fibre word is rarely adjacent: "relaxed cashmere HIGH NECK vest".
   // Bounded so it cannot reach across a whole description.
   [/(?:knit|ribbed|cashmere|merino|wool|sweater|jumper)[\s\w-]{0,20}(?:vest|waistcoat)/, 'knitwear'],
-  [/knit|sweater|jumper|cardigan|pullover|turtleneck|roll.?neck|polo.?neck/, 'knitwear'],
+  // A knit CARDIGAN or JUMPER made of fur is a fur jacket, whatever the brand
+  // calls it. Yves Salomon's "Merino knit and fox fur jacket" and "Belted
+  // cardigan in merino knit and fox fur" were both filed as knitwear, so
+  // Outfit Review set a fur jacket in the TOP slot under a camel coat (Chloe,
+  // 2026-11-09). Fur that only TRIMS the piece — cuffs, collar, lining — leaves
+  // it a cardigan.
+  [/\b(?:cardigan|jumper|sweater|pullover)\b[^.|]{0,50}\b(?:fur|fourrure|shearling)\b(?![\s\w-]{0,15}\b(?:cuffs?|collars?|col|trims?|trimmed|linings?|lined|pockets?|details?|hoods?)\b)|\b(?:fur|fourrure|shearling)\b(?![\s\w-]{0,15}\b(?:cuffs?|collars?|col|trims?|trimmed|linings?|lined|pockets?|details?|hoods?)\b)[^.|]{0,50}\b(?:cardigan|jumper|sweater|pullover)\b/, 'jacket'],
+  // "Knit" names a construction, not a garment. Read bare, it beat every
+  // garment word tested below it — "Merino knit jacket with fox fur", "Knit
+  // straight trousers", "Jacquard Midi Knit Skirt", "Triangle Knit Scarf",
+  // "Knitted wool beanie" were all knitwear (355 pieces, 2026-11-09), so a
+  // knit jacket sat in the TOP slot and a knit skirt in no slot at all. A
+  // garment word anywhere in the text now wins — before it too: "Long
+  // jacket in knitted fox fur". The garment NOUNS (sweater,
+  // jumper, cardigan) still decide, except in a compound whose last word is
+  // the garment: "sweater-jacket", "cardigan jacket", "sweater skirt".
+  [/^(?![\s\S]*\b(?:jackets?|bombers?|blousons?|coats?|skirts?|pants?|trousers?|shorts|culottes?|leggings?|jeans|dress(?:es)?|scar(?:f|ves)|bandanas?|snoods?|stoles?|shawls?|beanies?|balaclavas?|hats?|gloves?|mittens?|hoods?)\b)[\s\S]*?knit|(?:sweater|jumper|cardigan|cardis?\b|pullover)(?![\s-]*(?:jackets?|skirts?|dress(?:es)?|coats?)\b)|turtleneck|roll.?neck|polo.?neck/, 'knitwear'],
   // Everything else called a vest: a sleeveless top.
   [/\bblouse|camisole|\bcami\b|\btop\b|\btops\b|\btank\b|\bvest\b|\bwaistcoat/, 'blouse'], [/\bovershirt|\bshirt/, 'shirt'],
   // Singular too: WYSE names a piece "Signature Jean". Not a jean jacket or skirt.
@@ -274,7 +306,7 @@ const TYPE_RULES: Array<[RegExp, string]> = [
   // skirt, "Short black double breasted wool bomber" is a jacket, "Short
   // Glove" is a glove. Every one of those rules is tested below this one, so
   // an unguarded "pant"/"short" wins by being read first.
-  [/trouser|\bpants|\bpant\b(?=[\s-]*(?:$|\d|[-–|,]|in\b))|sweatpants?|chino|legging/, 'trousers'],
+  [/trouser|\bpants|\bpant\b(?=[\s-]*(?:$|\d|[-–|,]|in\b))|sweatpants?|chino|legging|culottes?\b/, 'trousers'],
   [/bermuda|\bshorts|\bshort\b(?=[\s-]*(?:$|\d|[-–|,]|in\b))(?<!\bskirt\b[\s\w-]{0,40})/, 'shorts'],
   [/\bskirt/, 'skirt'],
   [/\bjacket|bomber|anorak|windbreaker/, 'jacket'],
@@ -283,8 +315,46 @@ const TYPE_RULES: Array<[RegExp, string]> = [
   // the bare word "chain" was tested before "earring".
   [/earring|ear cuff|\bhoop/, 'earrings'], [/necklace|pendant|choker|\bchain\b/, 'necklace'],
   [/bracelet|bangle|\bcuff\b/, 'bracelet'], [/brooch/, 'brooch'], [/\bring\b|\brings\b/, 'ring'],
-  [/hair/, 'hair_accessory'], [/\bhat\b|beanie|\bcap\b|beret/, 'hat'],
-  [/glove/, 'gloves'], [/sunglass|eyewear|glasses/, 'sunglasses'],
+  // A balaclava, a knitted hood and earmuffs are headwear, not knitwear.
+  [/hair/, 'hair_accessory'], [/\bhat\b|beanie|\bcap\b|beret|balaclava|\bhoods?\b|earmuffs?/, 'hat'],
+  [/glove|mittens?\b/, 'gloves'], [/sunglass|eyewear|glasses/, 'sunglasses'],
+  // A knitted COLLAR — Linnea Lund's "Kate Collar - Tobacco", SOEUR's "COLLAR
+  // GAD BEIGE MELANGE", Bellerose's "Dusyk zip collar" — is a neck-warmer worn
+  // like a scarf. Read last, so it only names a piece no garment word did;
+  // the Spanish "collar" (a necklace) is read after the English rules, so the
+  // Spanish jewellery words keep it off a Spanish feed.
+  [/(?![\s\S]*\b(?:perlas?|dorad[oa]|platead[oa]|cadena|oro|plata|ba[ñn]ad[oa])\b)(?:^\s*collar\b|\bzip collar|\bcollar\b(?=\s*(?:[-–|(]|$))|(?:knit|knitted|wool|cashmere|merino|rib|ribbed)[\s\w-]{0,20}\bcollar\b|\bcollar\b[\s\w-]{0,20}\b(?:knit|wool|cashmere|merino|melange|marl)\b)/, 'scarf'],
+]
+
+// Spanish-language feeds. Philippa 1970 and Redondo Brand publish /products.json
+// in Spanish only — "VESTIDO SUK", "FALDA LIORA", "CAMISA ALTO", "JERSEY ELENA
+// CAMEL" — and 268 of Philippa's 290 pieces came through with no type and 261
+// with no colour, so almost everything scored 0 against a bar of 5 and two
+// healthy Shopify stores looked broken (2026-11-06). Read AFTER the English
+// rules, on the same haystacks, so an English name is never re-filed by a
+// Spanish word. The Spanish fabric and cut words live in HOUSE_STYLE beside
+// the English ones, and the colours at the end of COLOUR_RULES.
+const SPANISH_TYPE_RULES: Array<[RegExp, string]> = [
+  [/\bgabardina/, 'trench'], [/\babrigo|plum[ií]fero/, 'coat'], [/\bamericana/, 'blazer'],
+  [/\bchaleco[\s\w-]{0,20}(?:acolchad|plum|pelo|borreg)/, 'gilet'], [/\bcapa\b|\bponcho/, 'cape'],
+  [/\bbot(?:a|as|[ií]n|ines)\b/, 'boot'], [/zapatilla|deportiva/, 'sneaker'], [/\bzueco/, 'mule'],
+  [/\bsandalia/, 'sandal'], [/\btac[oó]n|\bsal[oó]n\b/, 'heel'],
+  [/\bbailarina|\bmocas[ií]n|\balpargata|\bmanoletina/, 'flat'],
+  [/\bbandolera/, 'crossbody'], [/\bbolso/, 'structured_bag'],
+  [/\bvestido camisero/, 'shirt_dress'], [/\bvestido lencero/, 'slip_dress'],
+  [/\bvestido largo/, 'maxi_dress'], [/\bvestido (?:corto|mini)/, 'mini_dress'], [/\bvestido/, 'midi_dress'],
+  [/\bbody\b/, 'bodysuit'], [/\bcamiseta/, 't-shirt'], [/\bsudadera/, 'knitwear'],
+  [/\bjersey\b|\bc[aá]rdigan|\bchaqueta de punto/, 'knitwear'],
+  [/\bblusa|\bcamisola|\bchaleco/, 'blouse'], [/\bcamisa/, 'shirt'],
+  [/\bvaquer[oa]s?\b|\btejan[oa]s?\b/, 'jeans'], [/\bpantal[oó]n|\bpantalones|\bleggings?\b/, 'trousers'],
+  [/\bbermuda/, 'shorts'], [/\bfalda/, 'skirt'],
+  [/\bchaqueta|\bcazadora|\bblus[oó]n/, 'jacket'],
+  [/\bcintur[oó]n/, 'belt'], [/\bbufanda|\bpa[ñn]uelo|\bfular|\bfoulard|\bestola/, 'scarf'],
+  [/\bpendientes?\b/, 'earrings'], [/\bcollar\b|\bgargantilla|\bcolgante/, 'necklace'],
+  [/\bpulsera|\bbrazalete/, 'bracelet'], [/\bbroche/, 'brooch'], [/\banillo/, 'ring'],
+  [/\bgorro|\bgorra|\bsombrero|\bboina/, 'hat'], [/\bguantes?\b/, 'gloves'], [/\bgafas/, 'sunglasses'],
+  // "de punto" names a knit when no garment word did.
+  [/\bpunto\b/, 'knitwear'],
 ]
 
 
@@ -346,6 +416,24 @@ const COLOUR_RULES: Array<[RegExp, string]> = [
   [/\brust\b|terracotta|coral|apricot|\borange/, 'orange'],
   [/lilac|lavender|violet|\bplum\b|\bpurple/, 'purple'],
   [/multi|leopard|zebra|print|striped|check/, 'multicolour'],
+  // Spanish colour names (see SPANISH_TYPE_RULES): read only when no English
+  // word did, so they can never override a colour the feed stated in English.
+  [/\bnegr[oa]s?\b/, 'black'],
+  [/\bcrud[oa]\b|\bcrema\b|\bhueso\b|\bmarfil\b/, 'cream'],
+  [/\bblanc[oa]s?\b/, 'white'],
+  [/\bgris(?:es)?\b|\bantracita\b|\bplomo\b/, 'grey'],
+  [/\bmarino\b/, 'navy'],
+  [/\barena\b|\btostad[oa]\b|\bvis[oó]n\b|\bbeis\b|\btopo\b/, 'camel'],
+  [/\bmarr[oó]n\b|\bco[ñn]ac\b|\bcasta[ñn]o\b|\btabaco\b/, 'brown'],
+  [/\bverde\b|\boliva\b|\bcaqui\b|\bkaki\b/, 'green'],
+  [/\bburdeos\b|\bgranate\b|\bvino\b/, 'burgundy'],
+  [/\broj[oa]s?\b/, 'red'],
+  [/\bazul\b|\bceleste\b|\bvaquer[oa]\b/, 'blue'],
+  [/\bros[ae]\b|\bfucsia\b/, 'pink'],
+  [/\bamarill[oa]\b|\bmostaza\b|\bdorad[oa]\b/, 'yellow'],
+  [/\bnaranja\b|\bteja\b/, 'orange'],
+  [/\blila\b|\bmorad[oa]\b|\bviolet[ae]\b|\bciruela\b/, 'purple'],
+  [/\bestampad[oa]\b|\bleopardo\b|\bcebra\b|\brayas\b|\bcuadros\b/, 'multicolour'],
 ]
 
 function tagValue(tags: string[], key: string): string | null {
@@ -358,11 +446,11 @@ function tagValue(tags: string[], key: string): string | null {
 
 function mapMaterialCategory(materialStr: string | null, hay: string, itemType: string | null): string | null {
   const m = (materialStr || hay || '').toLowerCase()
-  if (/leather|suede|calf|nappa|lamb\s?skin|lambskin|nubuck|shearling|goat|patent|croc/.test(m)) return 'leather_suede'
+  if (/leather|suede|calf|nappa|lamb\s?skin|lambskin|nubuck|shearling|goat|patent|croc|\bpiel\b|\bcuero\b|\bnapa\b|serraje|charol/.test(m)) return 'leather_suede'
   if (/neoprene|scuba|gore|technical|ripstop|performance/.test(m)) return 'technical'
   const knit = itemType === 'knitwear' || /knit|jersey|\brib\b|ribbed/.test(m)
-  const natural = /wool|cashmere|merino|mohair|alpaca|silk|cotton|linen|viscose|lyocell|tencel|modal|hemp/.test(m)
-  const synthetic = /polyester|polyamide|nylon|acrylic|elastane|spandex|pvc|vinyl/.test(m)
+  const natural = /wool|cashmere|merino|mohair|alpaca|silk|cotton|linen|viscose|lyocell|tencel|modal|hemp|\blana\b|cachemir|\bseda\b|algod[oó]n|\blino\b|viscosa/.test(m)
+  const synthetic = /polyester|polyamide|nylon|acrylic|elastane|spandex|pvc|vinyl|poli[eé]ster|poliamida|acr[ií]lic|elastano/.test(m)
   if (natural && synthetic) return 'mixed'
   if (natural) return knit ? 'natural_knit' : 'natural_woven'
   if (synthetic) return knit ? 'synthetic_knit' : 'synthetic_woven'
@@ -473,6 +561,11 @@ function classifyAndScore(p: {
   // type after all.
   const typeHay = hay.replace(AMBIGUOUS_CATEGORY, ' ')
   if (!itemType) for (const [re, t] of TYPE_RULES) { if (re.test(typeHay)) { itemType = t; break } }
+  // Only once every English rule has passed, on the same haystacks in the same order.
+  if (!itemType) for (const h of [catHay, typeHay]) {
+    for (const [re, t] of SPANISH_TYPE_RULES) { if (re.test(h)) { itemType = t; break } }
+    if (itemType) break
+  }
   // A bare "vest" falls to the sleeveless-top rule, but Antik Batik and
   // Isabel Marant name their fur gilets "Ivan vest", "Jocya vest": the fur
   // lives in the description or the material. When it says fur, shearling
@@ -1273,6 +1366,20 @@ function isRecent(p: ScannedProduct, days: number): boolean {
  * this rather than throwing, so the weekly run, CHECK NOW and FULL SCAN all
  * say the same true thing instead of reporting a failure she cannot fix.
  */
+/**
+ * A mirror brand's scan: from the cloud when Browserbase is configured and the
+ * brand has a NEW-IN PAGE (the same read SCAN IN CHROME makes, without her
+ * Chrome), else the honest "fed by the Mirror" answer.
+ */
+async function mirrorBrandScan(watched: WatchedBrandRow): Promise<BrandCheckResult> {
+  if (!browserbaseConfigured() || !cloudCanRead(watched)) return mirrorFedResult(watched)
+  const r = await browserbaseScanAndQueue(watched)
+  return {
+    name: watched.name, scanned: r.seen, newProducts: r.queued, queued: r.queued, belowScore: 0,
+    skippedStock: 0, suppressedByLearning: 0, restocked: 0, note: r.note,
+  }
+}
+
 export function mirrorFedResult(watched: WatchedBrandRow): BrandCheckResult {
   return {
     name: watched.name, scanned: 0, newProducts: 0, queued: 0, belowScore: 0,
@@ -1284,7 +1391,7 @@ export function mirrorFedResult(watched: WatchedBrandRow): BrandCheckResult {
 // Add a brand: scan, queue only the last 60 days of on-taste pieces (so a
 // 2,000-product back catalogue doesn't land at once), mark everything seen.
 export async function baselineBrand(watched: WatchedBrandRow): Promise<BrandCheckResult> {
-  if (watched.platform === 'mirror') return mirrorFedResult(watched)
+  if (watched.platform === 'mirror') return mirrorBrandScan(watched)
   if (watched.platform === 'browser') return browserScanAndQueue(watched, 'watch')
   return scanAndQueue(watched, (p) => p.score >= watched.min_score && isRecent(p, HOUSE_STYLE.newDays))
 }
@@ -1293,7 +1400,7 @@ export async function baselineBrand(watched: WatchedBrandRow): Promise<BrandChec
 // publish date. The threshold is the brand's min_score — lower it and run
 // again to pull in the next band down (already-queued pieces are deduped).
 export async function onboardBrand(watched: WatchedBrandRow): Promise<BrandCheckResult> {
-  if (watched.platform === 'mirror') return mirrorFedResult(watched)
+  if (watched.platform === 'mirror') return mirrorBrandScan(watched)
   if (watched.platform === 'browser') return browserScanAndQueue(watched, 'scan')
   return scanAndQueue(watched, (p) => p.score >= watched.min_score)
 }
@@ -1727,7 +1834,7 @@ export async function checkWatchedBrand(watchedIn: WatchedBrandRow): Promise<Bra
   // A mirror-fed brand has no catalogue to fetch — its pieces arrive as she
   // browses. Reporting that is the honest answer; throwing would show the
   // weekly run a failure it can never fix.
-  if (watchedIn.platform === 'mirror') return mirrorFedResult(watchedIn)
+  if (watchedIn.platform === 'mirror') return mirrorBrandScan(watchedIn)
   if (watchedIn.platform === 'browser') return browserScanAndQueue(watchedIn, 'scan')
   const admin = createAdminClient()
   const products = await fetchCatalogue(watchedIn.base_url)
