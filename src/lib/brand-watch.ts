@@ -18,7 +18,6 @@ import {
 } from '@/lib/brand-watch-browser'
 import { buildLearning, type DecidedRow, type LearnedVerdict } from '@/lib/brand-watch-learning'
 import { automationOn } from '@/lib/brand-watch-trust'
-import { browserbaseConfigured, browserbaseScanAndQueue, cloudCanRead } from '@/lib/brand-watch-browserbase'
 import { WOMEN_RE, MEN_RE, KIDS_RE } from '@/lib/brand-watch-gender'
 
 // ---------------------------------------------------------------- types
@@ -1367,17 +1366,11 @@ function isRecent(p: ScannedProduct, days: number): boolean {
  * say the same true thing instead of reporting a failure she cannot fix.
  */
 /**
- * A mirror brand's scan: from the cloud when Browserbase is configured and the
- * brand has a NEW-IN PAGE (the same read SCAN IN CHROME makes, without her
- * Chrome), else the honest "fed by the Mirror" answer.
+ * A mirror brand's scan. The cloud read (Browserbase, lib/brand-watch-browserbase)
+ * is on its own branch; until it lands, the honest "fed by the Mirror" answer.
  */
 async function mirrorBrandScan(watched: WatchedBrandRow): Promise<BrandCheckResult> {
-  if (!browserbaseConfigured() || !cloudCanRead(watched)) return mirrorFedResult(watched)
-  const r = await browserbaseScanAndQueue(watched)
-  return {
-    name: watched.name, scanned: r.seen, newProducts: r.queued, queued: r.queued, belowScore: 0,
-    skippedStock: 0, suppressedByLearning: 0, restocked: 0, note: r.note,
-  }
+  return mirrorFedResult(watched)
 }
 
 export function mirrorFedResult(watched: WatchedBrandRow): BrandCheckResult {
