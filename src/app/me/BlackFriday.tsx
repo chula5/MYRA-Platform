@@ -11,8 +11,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
-import ShopLink from '@/components/ShopLink'
 import SavePieceHeart from '@/components/me/SavePieceHeart'
+import WaysToWear from '@/components/me/WaysToWear'
 import { loadMySale, type SaleView, type SalePiece } from './sale-actions'
 
 const HEAD = 'myra-section-label !text-[clamp(28px,3vw,46px)]'
@@ -28,6 +28,8 @@ export default function BlackFriday({ testMemberId, standalone = false }: { test
   const [view, setView] = useState<(SaleView & { blackFriday: boolean }) | null>(null)
   const [brand, setBrand] = useState<string | null>(null)
   const [all, setAll] = useState(false)
+  // The piece she tapped, open in the mirror — the shop is the last step.
+  const [opened, setOpened] = useState<SalePiece | null>(null)
 
   useEffect(() => {
     let live = true
@@ -81,7 +83,7 @@ export default function BlackFriday({ testMemberId, standalone = false }: { test
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-5 mt-7">
-        {(all || standalone ? shown : shown.slice(0, FIRST)).map((p) => <SaleCard key={p.item_id} piece={p} />)}
+        {(all || standalone ? shown : shown.slice(0, FIRST)).map((p) => <SaleCard key={p.item_id} piece={p} onOpen={setOpened} />)}
       </div>
       {!all && !standalone && shown.length > FIRST && (
         <div className="text-center mt-8">
@@ -94,11 +96,22 @@ export default function BlackFriday({ testMemberId, standalone = false }: { test
           </button>
         </div>
       )}
+
+      {opened && (
+        <WaysToWear
+          itemId={opened.item_id}
+          piece={{ item_id: opened.item_id, product_name: opened.product_name, brand: opened.brand, image_url: opened.image_url, url: opened.url, price_gbp: opened.price_gbp }}
+          testMemberId={testMemberId}
+          autoStart={false}
+          startLabel="Build outfits with it"
+          onClose={() => setOpened(null)}
+        />
+      )}
     </section>
   )
 }
 
-function SaleCard({ piece: p }: { piece: SalePiece }) {
+function SaleCard({ piece: p, onOpen }: { piece: SalePiece; onOpen: (p: SalePiece) => void }) {
   const body = (
     <>
       <div className="relative aspect-[3/4] bg-white overflow-hidden rounded-[14px]">
@@ -115,11 +128,9 @@ function SaleCard({ piece: p }: { piece: SalePiece }) {
   )
   return (
     <div className="relative">
-      {p.url ? (
-        <ShopLink item={{ item_id: p.item_id, retailer_url: p.url, product_name: p.product_name, brand: { name: p.brand } }} className="block group">
-          {body}
-        </ShopLink>
-      ) : body}
+      <button type="button" onClick={() => onOpen(p)} className="block w-full text-left group" aria-label={`Open ${p.product_name}`}>
+        {body}
+      </button>
       <SavePieceHeart itemId={p.item_id} className="absolute top-2.5 right-2.5" />
     </div>
   )

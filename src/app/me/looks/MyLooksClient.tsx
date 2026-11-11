@@ -792,6 +792,7 @@ function LookCard({
               canSave={!readOnly}
               savedItemIds={Array.from(savedItems)}
               onToggleItem={onToggleItem}
+              onOpen={onEnterPiece}
             />
           </div>
         )}
