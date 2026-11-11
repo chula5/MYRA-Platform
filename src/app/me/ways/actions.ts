@@ -10,6 +10,7 @@
 // or the member Chloe names from HER VIEW, honoured only for the admin.
 
 import { createAdminClient } from '@/lib/supabase-server'
+import { pieceGallery, type PieceGallery } from '@/lib/piece-gallery'
 import { resolveClientMember } from '@/lib/client-member'
 import { getStyledWays, heroSoldOut, waysForSoldOutHero, type StyledWayLook, type WayMode } from '@/lib/styled-ways'
 import { WAYS } from '@/lib/styled-ways-core'
@@ -33,6 +34,9 @@ export interface WaysPiece {
   product_name: string
   brand: string | null
   image_url: string | null
+  /** Where to buy it — VIEW ON SITE in the sheet. */
+  url?: string | null
+  price_gbp?: number | null
 }
 
 export interface WaysView {
@@ -47,10 +51,28 @@ export interface WaysView {
 }
 
 async function pieceFor(admin: any, itemId: string): Promise<WaysPiece | null> {
-  const { data } = await admin.from('item').select('item_id, product_name, image_url, status, brand:brand_id(name)')
+  const { data } = await admin.from('item').select('item_id, product_name, image_url, status, retailer_url, price_gbp, brand:brand_id(name)')
     .eq('item_id', itemId).neq('status', 'archived').maybeSingle()
   if (!data) return null
-  return { item_id: data.item_id, product_name: data.product_name, brand: data.brand?.name ?? null, image_url: data.image_url ?? null }
+  return { item_id: data.item_id, product_name: data.product_name, brand: data.brand?.name ?? null, image_url: data.image_url ?? null, url: data.retailer_url ?? null, price_gbp: data.price_gbp ?? null }
+}
+
+/**
+ * The other pictures of a piece — MYRA's model shot and the shop's own photos —
+ * for the strip under the piece in the sheet. Fetched after the sheet has drawn;
+ * nothing here ever holds the outfits up.
+ */
+export async function pieceGalleryFor(itemId: string, asMemberId?: string): Promise<PieceGallery> {
+  const me = await resolveClientMember(asMemberId)
+  if (!me) return { model_shot: null, photos: [] }
+  const admin = createAdminClient() as any
+  const piece = await pieceFor(admin, itemId)
+  if (!piece) return { model_shot: null, photos: [] }
+  try {
+    return await pieceGallery({ item_id: piece.item_id, image_url: piece.image_url, url: piece.url ?? null })
+  } catch {
+    return { model_shot: null, photos: piece.image_url ? [piece.image_url] : [] }
+  }
 }
 
 async function statusFor(admin: any, memberId: string, itemId: string, mode: WayMode, looks: StyledWayLook[]):

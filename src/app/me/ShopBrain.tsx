@@ -17,8 +17,8 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import FallbackImage from '@/components/FallbackImage'
-import ShopLink from '@/components/ShopLink'
 import ComposedLookCard from '@/components/me/ComposedLookCard'
+import WaysToWear from '@/components/me/WaysToWear'
 import StylingBadge from '@/components/me/StylingBadge'
 import { PIECE_SAVED_EVENT } from '@/components/me/SaveScreenshot'
 import { STYLING_OPEN_EVENT, clearStylingReady, getStylingProgress, keepWatchingStyling, publishStyling, stopWatchingStyling } from '@/components/me/styling-progress'
@@ -35,7 +35,10 @@ const HEAD = 'myra-section-label !text-[clamp(28px,3vw,46px)]'
 const NOTE = 'myra-section-note mt-2 !text-[clamp(17px,1.6vw,24px)]'
 const FLIP = 'transition-transform duration-[600ms] [transition-timing-function:cubic-bezier(0.175,0.885,0.32,1.275)]'
 
-function Piece({ piece }: { piece: ShopPiece }) {
+// ONE PIECE in an open door. A tap opens it in the mirror — its pictures, the
+// studio's outfits with it, MYRA's ways, her avatar, VIEW ON SITE — never
+// straight out to the shop (Chloe, 2026-11-11).
+function Piece({ piece, onOpen }: { piece: ShopPiece; onOpen: (p: ShopPiece) => void }) {
   const body = (
     <>
       <div className="relative aspect-[3/4] bg-white overflow-hidden rounded-[14px]">
@@ -48,14 +51,10 @@ function Piece({ piece }: { piece: ShopPiece }) {
       {piece.price_gbp != null && <p className="text-[19px] xl:text-[22px] text-[#7C838B]">£{Math.round(piece.price_gbp)}</p>}
     </>
   )
-  if (!piece.url) return <div className="block">{body}</div>
   return (
-    <ShopLink
-      item={{ item_id: piece.item_id, retailer_url: piece.url, product_name: piece.product_name, brand: { name: piece.brand } }}
-      className="block group"
-    >
+    <button type="button" onClick={() => onOpen(piece)} className="block w-full text-left group" aria-label={`Open ${piece.product_name}`}>
       {body}
-    </ShopLink>
+    </button>
   )
 }
 
@@ -234,6 +233,8 @@ export default function ShopBrain({ testMemberId, initialView, onReady }: {
   const told = useRef(false)
   const tell = (has: boolean) => { if (told.current) return; told.current = true; onReadyRef.current?.(has) }
   const [door, setDoor] = useState<Door | null>(null)
+  // The piece she tapped, open in the mirror.
+  const [opened, setOpened] = useState<ShopPiece | null>(null)
   const [anchor, setAnchor] = useState<string | null>(null)
   const [looks, setLooks] = useState<Record<string, StyledLook[]>>({})
   const [busy, setBusy] = useState<string | null>(null)
@@ -608,7 +609,7 @@ export default function ShopBrain({ testMemberId, initialView, onReady }: {
           {door === 'similar' && (
             view.similar.length ? (
               <>
-                <div className={PIECE_GRID}>{view.similar.map((p) => <Piece key={p.item_id} piece={p} />)}</div>
+                <div className={PIECE_GRID}>{view.similar.map((p) => <Piece key={p.item_id} piece={p} onOpen={setOpened} />)}</div>
                 {view.similar[0]?.because && <p className="text-[15px] text-[#7C838B] mt-5">{view.similar[0].because}.</p>}
               </>
             ) : (
@@ -618,7 +619,7 @@ export default function ShopBrain({ testMemberId, initialView, onReady }: {
 
           {door === 'brands' && (
             view.fromBrands.length ? (
-              <div className={PIECE_GRID}>{view.fromBrands.map((p) => <Piece key={p.item_id} piece={p} />)}</div>
+              <div className={PIECE_GRID}>{view.fromBrands.map((p) => <Piece key={p.item_id} piece={p} onOpen={setOpened} />)}</div>
             ) : (
               <p className="text-[19px] text-[#55534E]">Nothing from {labels.length ? labels.join(' or ') : 'those labels'} or their neighbours yet. MYRA is watching them.</p>
             )
@@ -674,6 +675,17 @@ export default function ShopBrain({ testMemberId, initialView, onReady }: {
             </>
           )}
         </div>
+      )}
+
+      {opened && (
+        <WaysToWear
+          itemId={opened.item_id}
+          piece={{ item_id: opened.item_id, product_name: opened.product_name, brand: opened.brand, image_url: opened.image_url, url: opened.url, price_gbp: opened.price_gbp }}
+          testMemberId={testMemberId}
+          autoStart={false}
+          startLabel="Build outfits with it"
+          onClose={() => setOpened(null)}
+        />
       )}
     </section>
   )
