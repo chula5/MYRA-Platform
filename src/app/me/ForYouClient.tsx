@@ -10,7 +10,6 @@ import Link from 'next/link'
 import MirrorCurtain from '@/components/me/MirrorCurtain'
 import Mannequin from '@/components/me/Mannequin'
 import ShopBrain from './ShopBrain'
-import BlackFriday from './BlackFriday'
 import SaveScreenshot from '@/components/me/SaveScreenshot'
 import type { ForYouView } from './for-you-actions'
 import type { ShopBrainView } from './shop-brain-actions'
@@ -75,10 +74,6 @@ export default function ForYouClient({ view, testMemberId, shopBrain }: {
               <SaveScreenshot testMemberId={testMemberId} />
             </div>
           </div>
-
-          {/* BLACK FRIDAY: her brands' sales, in her size, gaps first. Draws
-              nothing unless one of her brands is on sale. */}
-          <BlackFriday testMemberId={testMemberId} />
 
           {/* What she kept on other people's sites, already worked on. Draws
               nothing until there is something to show. */}

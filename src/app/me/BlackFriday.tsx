@@ -24,16 +24,23 @@ const SLOT_WORD: Record<string, string> = {
 }
 
 /** `standalone`: the SALE page from the price tag — more pieces, and says so when nothing is on sale. */
-export default function BlackFriday({ testMemberId, standalone = false }: { testMemberId?: string; standalone?: boolean }) {
-  const [view, setView] = useState<(SaleView & { blackFriday: boolean }) | null>(null)
+/** `initial`: the view already read (the BLACK FRIDAY door on For You). `inPanel`: drawn inside that door, which carries the heading. */
+export default function BlackFriday({ testMemberId, standalone = false, initial, inPanel = false }: {
+  testMemberId?: string
+  standalone?: boolean
+  initial?: (SaleView & { blackFriday: boolean }) | null
+  inPanel?: boolean
+}) {
+  const [view, setView] = useState<(SaleView & { blackFriday: boolean }) | null>(initial ?? null)
   const [brand, setBrand] = useState<string | null>(null)
   const [all, setAll] = useState(false)
 
   useEffect(() => {
+    if (initial) return
     let live = true
     loadMySale(testMemberId, standalone ? 160 : 48).then((v) => { if (live) setView(v) }).catch(() => { /* no sale section is no loss */ })
     return () => { live = false }
-  }, [testMemberId, standalone])
+  }, [testMemberId, standalone, initial])
 
   const shown = useMemo(() => {
     const list = view?.pieces ?? []
@@ -55,8 +62,8 @@ export default function BlackFriday({ testMemberId, standalone = false }: { test
 
   return (
     <section id="black-friday" className="mb-20 pt-2 scroll-mt-28">
-      <h2 className={HEAD}>{view.blackFriday ? 'BLACK FRIDAY' : 'IN THE SALE'}</h2>
-      <p className={NOTE}>YOUR BRANDS ON SALE, IN YOUR SIZE</p>
+      {!inPanel && <h2 className={HEAD}>{view.blackFriday ? 'BLACK FRIDAY' : 'IN THE SALE'}</h2>}
+      {!inPanel && <p className={NOTE}>YOUR BRANDS ON SALE, IN YOUR SIZE</p>}
       {gapLine && <p className="mt-3 text-[17px] sm:text-[20px] tracking-[0.1em] text-[#2B2B2B]">{gapLine}</p>}
 
       {/* Her brands on sale: tap one to see only its pieces. */}
