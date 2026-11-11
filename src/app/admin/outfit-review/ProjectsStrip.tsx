@@ -119,7 +119,11 @@ export default function ProjectsStrip() {
             Say what the content is about — a piece, an occasion, a brand — and MYRA composes it in the background and keeps every look. Pick the ones for Higgsfield when you&rsquo;re ready, while the next project runs. A screenshot is optional, for building around one piece.
           </p>
         </div>
-        {loadError && <p className="text-[9px] tracking-[0.12em] text-[#B83A3A] flex-shrink-0">{loadError.toUpperCase()}</p>}
+        <div className="flex items-center gap-3 flex-shrink-0">
+          {loadError && <p className="text-[9px] tracking-[0.12em] text-[#B83A3A]">{loadError.toUpperCase()}</p>}
+          {/* Every photo shot from these projects, with the pieces in each */}
+          <Link href="/admin/outfit-review/photos" className="bg-[#0A0A0A] text-white px-5 py-2.5 text-[10px] tracking-[0.16em] rounded-full hover:opacity-85 whitespace-nowrap">PROJECT PHOTOS →</Link>
+        </div>
       </div>
 
       {/* New project */}
