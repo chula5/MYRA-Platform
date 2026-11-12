@@ -82,7 +82,7 @@ export function greetingName(name: string | null | undefined): string {
 // People Chloe added by hand (2026-11-12), at the addresses she gave. Any member
 // row with the same name is skipped so neither gets it twice.
 const ADDED_BY_CHLOE = [
-  { name: 'Carys James', to: 'jamescarys@hotmail.co.uk', match: /carys.*james/i },
+  { name: 'Carys James', to: 'jamescarys@yahoo.co.uk', match: /carys.*james/i },
   { name: 'Sevinch', to: 'sevinch.ochilova8@gmail.com', match: /sevinch/i },
 ]
 
