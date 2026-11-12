@@ -1,5 +1,5 @@
 import 'server-only'
-import { sendStudioEmail, siteUrl } from './email'
+import { sendStudioEmail, siteUrl, memberEmailShell } from './email'
 
 // BLACK FRIDAY, SORTED — the announcement Chloe approved from the preview sent
 // on 9 Nov: the sale edit at her brands, wait-for-sale, saved searches,
@@ -11,8 +11,8 @@ const esc = (s: string) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, 
 export const BLACK_FRIDAY_SUBJECT = 'Black Friday, sorted — and your own avatar is here'
 
 const FONT = 'font-family:Helvetica,Arial,sans-serif;'
-const p = (t: string) => `<p style="margin:0 0 16px 0;${FONT}font-size:16px;line-height:1.6;color:#2b2b2b;">${t}</p>`
-const h = (t: string) => `<p style="margin:30px 0 10px 0;${FONT}font-size:15px;letter-spacing:0.12em;line-height:1.4;color:#2b2b2b;text-transform:uppercase;">${t}</p>`
+const p = (t: string) => `<p style="margin:0 0 16px 0;${FONT}font-size:15px;line-height:1.6;color:#2b2b2b;">${t}</p>`
+const h = (t: string) => `<p style="margin:28px 0 8px 0;${FONT}font-size:13px;letter-spacing:0.12em;line-height:1.4;color:#2b2b2b;text-transform:uppercase;">${t}</p>`
 const b = (t: string) => `<strong style="color:#0a0a0a;">${t}</strong>`
 
 export function blackFridayEmailHtml(name: string): string {
@@ -46,19 +46,9 @@ ${h('5. New: your own avatar')}
 ${p(`MYRA can now build an avatar of you, with your face and in your real shape. Tap ${b('MY AVATAR')} in your Dressing Room and add three or four photos of yourself. Within a few minutes MYRA draws two portraits; pick the one that looks most like you.`)}
 ${p(`Then dress it in the pieces from your wardrobe: tuck a top, cinch a jacket, swap the shoes, and see the whole outfit before you get dressed. Any piece marked ${b('SEE ON MY AVATAR')} goes straight on.`)}
 ${p('Your photos are used only to make your avatar and are deleted once you approve it.')}
-<img src="${avatar}" width="496" alt="A MYRA avatar dressed in a check wool blazer, wide trousers and heels" style="display:block;width:100%;max-width:496px;height:auto;border-radius:12px;margin:8px 0 0 0;border:0;" />`
+<img src="${avatar}" width="496" alt="A MYRA avatar dressed in an olive knit, a leather skirt, heels and a bag" style="display:block;width:100%;max-width:496px;height:auto;border-radius:12px;margin:8px 0 0 0;border:0;" />`
 
-  return `<!doctype html><html><body style="margin:0;padding:0;background:#ffffff;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;">
-<tr><td align="center" style="padding:32px 16px;">
-<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
-<tr><td style="padding:0 0 28px 0;${FONT}font-size:26px;letter-spacing:0.14em;color:#2b2b2b;">MYRA</td></tr>
-<tr><td>
-${body}
-</td></tr>
-<tr><td style="padding:28px 0 0 0;${FONT}font-size:11px;letter-spacing:0.08em;color:#a8a8a4;">MYRA &middot; YOUR PRIVATE STYLIST</td></tr>
-</table>
-</td></tr></table></body></html>`
+  return memberEmailShell('BLACK FRIDAY, SORTED', body, BLACK_FRIDAY_SUBJECT)
 }
 
 export async function sendBlackFridayEmail(to: string, name: string, meta: Record<string, unknown> = {}) {

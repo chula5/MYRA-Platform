@@ -148,3 +148,26 @@ export function thumbCell(src: string | null, size = 96): string {
     : `<div style="width:${size}px;height:${Math.round(size * 1.33)}px;background:#ededed;border-radius:6px;"></div>`
   return `<td style="padding:4px;">${img}</td>`
 }
+
+/**
+ * THE member email look — every email a member receives uses this, no
+ * one-off layouts (Chloe, 2026-11-12: "keep brand integrity and be
+ * consistent"). The MYRA logo, a kicker line, 15px body on a white card
+ * over grey, silver footer. Same as the invitation email.
+ */
+export function memberEmailShell(kicker: string, bodyHtml: string, title = 'MYRA'): string {
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title></head><body style="margin:0;padding:0;background:#f2f2f2;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f2f2f2;padding:24px 0;">
+<tr><td align="center">
+<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #e2e0db;border-radius:12px;overflow:hidden;">
+<tr><td style="padding:28px 32px 8px 32px;font-family:Helvetica,Arial,sans-serif;">
+  <img src="${siteUrl('/myra-logo-black.png')}" width="118" alt="MYRA" style="display:block;width:118px;height:auto;border:0;margin:0 0 10px 0;" />
+  <p style="margin:0;font-size:11px;letter-spacing:0.08em;color:#a8a8a4;text-transform:uppercase;">${kicker}</p>
+</td></tr>
+<tr><td style="padding:16px 32px 32px 32px;font-family:Helvetica,Arial,sans-serif;color:#4a4e57;font-size:15px;line-height:1.6;">
+${bodyHtml}
+</td></tr>
+</table>
+<p style="font-family:Helvetica,Arial,sans-serif;font-size:10px;color:#a8a8a4;margin-top:14px;letter-spacing:0.05em;">MYRA · YOUR STYLIST</p>
+</td></tr></table></body></html>`
+}
