@@ -79,11 +79,11 @@ export function greetingName(name: string | null | undefined): string {
   return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase()
 }
 
-// People Chloe asked for by name (2026-11-12): "add Carys James … do Sevinch as
-// well". Found among members (test flag or not) and applications.
-const ASKED_FOR = [
-  { label: 'Carys James', pattern: '%carys%james%' },
-  { label: 'Sevinch', pattern: '%sevinch%' },
+// People Chloe added by hand (2026-11-12), at the addresses she gave. Any member
+// row with the same name is skipped so neither gets it twice.
+const ADDED_BY_CHLOE = [
+  { name: 'Carys James', to: 'jamescarys@hotmail.co.uk', match: /carys.*james/i },
+  { name: 'Sevinch', to: 'sevinch.ochilova8@gmail.com', match: /sevinch/i },
 ]
 
 const pause = () => new Promise((r) => setTimeout(r, 600))
@@ -115,25 +115,13 @@ export async function sendBlackFridayToEveryone(admin: any, send: boolean) {
     const row: SendRow = { who: m.name ?? m.member_id, greeting: g ? `Hello ${g},` : 'Hello,', status: m.auth_user_id ? 'signed up' : 'added, not signed in yet' }
     rows.push(row)
     if (doneMember.has(m.member_id)) { row.skipped = 'already sent'; continue }
+    if (ADDED_BY_CHLOE.some((p) => p.match.test(String(m.name ?? '')))) { row.skipped = 'sent to the address Chloe gave instead'; continue }
     queue.push({ m, to: await addressFor(m), row })
   }
 
-  for (const ask of ASKED_FOR) {
-    const { data: ms } = await admin.from('pilot_member')
-      .select('member_id, name, auth_user_id, email, invite_email').ilike('name', ask.pattern)
-    const { data: apps } = await admin.from('application').select('name, email').ilike('name', ask.pattern)
-    const found = [
-      ...((ms ?? []) as any[]).map((m) => ({ m, src: 'member' })),
-      ...((apps ?? []) as any[]).map((a) => ({ m: { name: a.name, email: a.email }, src: 'application' })),
-    ]
-    if (!found.length) { rows.push({ who: ask.label, greeting: '', skipped: 'NOT FOUND among members or applications' }); continue }
-    for (const f of found) {
-      const g = greetingName(f.m.name)
-      const row: SendRow = { who: `${f.m.name ?? ask.label} (asked for by Chloe)`, greeting: g ? `Hello ${g},` : 'Hello,', status: f.src }
-      rows.push(row)
-      if (f.m.member_id && doneMember.has(f.m.member_id)) { row.skipped = 'already sent'; continue }
-      queue.push({ m: f.m, to: await addressFor(f.m), row })
-    }
+  for (const p of ADDED_BY_CHLOE) {
+    const g = greetingName(p.name)
+    queue.unshift({ m: { name: p.name }, to: p.to, row: (() => { const r: SendRow = { who: `${p.name} (added by Chloe)`, greeting: `Hello ${g},` }; rows.push(r); return r })() })
   }
 
   let sent = 0

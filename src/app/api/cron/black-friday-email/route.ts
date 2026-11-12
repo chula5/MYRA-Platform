@@ -1,6 +1,6 @@
 // ONE-OFF: sends the Black Friday announcement to every member through
 // Resend on Vercel, then emails Chloe the list of who it went to.
-// Scheduled once in vercel.json (09:30 UTC, 12 Nov 2026), at Chloe's ask:
+// Scheduled in vercel.json every 10 minutes, 08:00–09:59 UTC on 12 Nov 2026, at Chloe's ask:
 // "just send it how you normally send with resend … go through vercel".
 // Safe to run again: anyone already sent it is skipped. Does nothing after
 // 14 Nov 2026, so the yearly cron line cannot fire again next year.
@@ -23,6 +23,10 @@ export async function GET(req: NextRequest) {
   const send = req.nextUrl.searchParams.get('dry') !== '1'
   const result = await sendBlackFridayToEveryone(createAdminClient() as any, send)
   const mode = send ? 'SENT' : 'DRY RUN'
+  // It runs every 10 minutes for a short window; only a run that sent
+  // something (or failed) writes to Chloe, so she gets one report.
+  const sentNow = 'sent' in result ? result.sent : 0
+  if (send && !sentNow && !('error' in result && result.error)) return NextResponse.json({ mode, nothingNew: true, ...result })
   await sendStudioEmail({
     kind: 'black_friday_report',
     subject: `MYRA — Black Friday email: ${'sent' in result ? result.sent : 0} sent`,
