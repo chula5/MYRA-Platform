@@ -48,7 +48,7 @@ export async function logOutboundClick(input: OutboundClickInput): Promise<void>
 
     // The click row — the permanent record. Idempotent on click_id (double
     // clicks / retried beacons reuse the same id and are dropped).
-    await admin.from('click' as any).upsert(
+    const { data: inserted, error: clickError } = await admin.from('click' as any).upsert(
       {
         click_id: input.clickId,
         user_id: userId,
@@ -63,15 +63,21 @@ export async function logOutboundClick(input: OutboundClickInput): Promise<void>
         is_bot: input.isBot ?? false,
       } as any,
       { onConflict: 'click_id', ignoreDuplicates: true },
-    )
+    ).select('click_id')
 
     if (input.isBot) return // bots get logged (flagged) but never train taste or analytics
+    // Already logged under this click_id (a double tap, a retried beacon): the
+    // first one counted it everywhere below, so this one stops here.
+    if (!clickError && Array.isArray(inserted) && inserted.length === 0) return
 
     // Legacy dual-writes so existing admin analytics stay continuous:
     // item_click (top-items view) + landing_event mirror (referral breakdowns).
     const visitorId = await getVisitorId()
 
-    void admin.from('item_click' as any).insert({
+    // Awaited: a Supabase query only runs when it is awaited or then'd, so the
+    // old `void admin.from(…).insert(…)` never sent — item_click went silent on
+    // 2026-08-04, the day /go/ took over from recordItemClick.
+    await admin.from('item_click' as any).insert({
       item_id: input.itemId,
       outfit_id: input.outfitId ?? null,
       user_id: userId,

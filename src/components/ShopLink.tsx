@@ -41,6 +41,26 @@ function sessionId(): string | null {
 
 const label = (item: ShopLinkItem) => [item.brand?.name, item.product_name].filter(Boolean).join(' — ')
 
+// Inside the iPhone app a new-tab link is handed to iOS, so /go/ is fetched by
+// Safari — without her MYRA session, and sometimes not at all (Fiona's first
+// click-through, 2026-10-25, never reached the server). There the app logs the
+// click itself, signed in, and tells /go/ not to log it again.
+function inApp(): boolean {
+  try { return Boolean((window as any).Capacitor?.isNativePlatform?.()) } catch { return false }
+}
+
+function logFromApp(item: ShopLinkItem, clickId: string, outfitId?: string | null): void {
+  void recordOutboundBeacon({
+    clickId,
+    itemId: item.item_id,
+    outfitId: outfitId ?? null,
+    destinationUrl: affiliateUrl(item.retailer_url as string, { brandName: item.brand?.name, contentId: item.item_id }),
+    sessionId: sessionId(),
+    ref: getStoredRef(),
+    label: label(item),
+  })
+}
+
 // Imperative variant for callsites that window.open() programmatically.
 export function openShop(item: ShopLinkItem, outfitId?: string | null): void {
   if (!item?.retailer_url) return
@@ -69,8 +89,10 @@ export function openShop(item: ShopLinkItem, outfitId?: string | null): void {
     )
     return
   }
+  const app = inApp()
+  if (app) logFromApp(item, clickId, outfitId)
   window.open(
-    goHref({ clickId, itemId: item.item_id, outfitId, sessionId: sessionId(), ref: getStoredRef() }),
+    goHref({ clickId, itemId: item.item_id, outfitId, sessionId: sessionId(), ref: getStoredRef(), loggedByApp: app }),
     '_blank', 'noopener,noreferrer',
   )
 }
@@ -114,8 +136,10 @@ export default function ShopLink({
       })
     } else {
       // Attach client-only context to the /go/ URL just before navigation.
+      const app = inApp()
+      if (app) logFromApp(item, clickId, outfitId)
       e.currentTarget.href = goHref({
-        clickId, itemId: item.item_id, outfitId, sessionId: sessionId(), ref: getStoredRef(),
+        clickId, itemId: item.item_id, outfitId, sessionId: sessionId(), ref: getStoredRef(), loggedByApp: app,
       })
     }
     onNavigate?.()

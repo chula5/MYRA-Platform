@@ -179,7 +179,7 @@ export default function JourneyReplay({
             </p>
           )}
           {replay?.available && mode === 'video' && hasVideo && (
-            <VideoReplay events={replay.recording} />
+            <VideoReplay events={replay.recording} fileBase={fileBaseOf(session)} />
           )}
           {replay?.available && mode === 'timeline' && (
             <TimelineReplay events={replay.events} />
@@ -197,15 +197,143 @@ export default function JourneyReplay({
 
 // ── VIDEO ───────────────────────────────────────────────────────────────────
 
+/** "myra-visit-fiona-leeming-2026-10-25-1614" — what a saved visit is called. */
+function fileBaseOf(session: Replay['session'] | null): string {
+  if (!session) return 'myra-visit'
+  const d = new Date(session.startedAt)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const when = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`
+  const who = session.memberName.toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+  return `myra-visit-${who}-${when}`
+}
+
+function download(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
+}
+
+/** The player copied into public/ — jsDelivr serves the .cjs build as
+ *  application/node, which browsers refuse to run. */
+const PLAYER_JS = '/vendor/rrweb-player-2.1.6/rrweb-player.min.js'
+const PLAYER_CSS = '/vendor/rrweb-player-2.1.6/style.min.css'
+
+/** One HTML file that plays the visit anywhere, offline: the player and the
+ *  recording are both inside it. */
+async function replayFile(events: any[], title: string): Promise<Blob> {
+  const [js, css] = await Promise.all([
+    fetch(PLAYER_JS).then((r) => { if (!r.ok) throw new Error('player not found'); return r.text() }),
+    fetch(PLAYER_CSS).then((r) => (r.ok ? r.text() : '')),
+  ])
+  // Nothing inside a <script> may read as a closing tag.
+  const safe = (s: string) => s.replace(/<\/(script)/gi, '<\\/$1')
+  const data = JSON.stringify(events).replace(/</g, '\\u003c')
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${title.replace(/[<&]/g, '')}</title><style>${css}
+body{margin:0;background:#FAFAF8;font-family:system-ui,sans-serif;display:flex;justify-content:center;padding:24px}</style></head>
+<body><div id="player"></div><script>${safe(js)}</script><script>
+var events=${data};
+var P=window.rrwebPlayer.Player||window.rrwebPlayer.default||window.rrwebPlayer;
+var w=Math.min(1100,window.innerWidth-48);
+new P({target:document.getElementById('player'),props:{events:events,width:w,height:Math.round(w*0.62),autoPlay:false,skipInactive:true}});
+</script></body></html>`
+  return new Blob([html], { type: 'text/html' })
+}
+
+/** The best video format this browser can record: MP4 where Chrome has it
+ *  (plays on an iPhone and in QuickTime), WebM otherwise. */
+function videoType(): string {
+  const options = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm']
+  return options.find((m) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m)) ?? ''
+}
+
 /**
  * rrweb's own player, loaded on demand. It brings its own controls (play,
  * scrub, speed), so there is nothing to rebuild here — the work is confining it
  * to the width of this panel and tearing it down cleanly when the mode changes,
  * which it does not do by itself.
+ *
+ * Saving: an rrweb recording is pages, not pixels, so there is no video file to
+ * hand over. SAVE AS VIDEO records the player while it plays (the browser asks
+ * to share this tab; Chrome crops it to the frame), SAVE REPLAY FILE writes one
+ * HTML file that plays the visit anywhere.
  */
-function VideoReplay({ events }: { events: any[] }) {
+function VideoReplay({ events, fileBase }: { events: any[]; fileBase: string }) {
   const host = useRef<HTMLDivElement | null>(null)
+  const playerRef = useRef<any>(null)
+  const recorderRef = useRef<MediaRecorder | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
+  const [saving, setSaving] = useState<'idle' | 'video' | 'file'>('idle')
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  const saveFile = useCallback(async () => {
+    setSaveError(null)
+    setSaving('file')
+    try {
+      download(await replayFile(events, fileBase), `${fileBase}.html`)
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSaving('idle')
+    }
+  }, [events, fileBase])
+
+  const stopVideo = useCallback(() => {
+    const rec = recorderRef.current
+    if (rec && rec.state !== 'inactive') rec.stop()
+  }, [])
+
+  const saveVideo = useCallback(async () => {
+    const player = playerRef.current
+    const mount = host.current
+    if (!player || !mount) return
+    setSaveError(null)
+    if (!navigator.mediaDevices?.getDisplayMedia || typeof MediaRecorder === 'undefined') {
+      setSaveError('this browser cannot record a tab — use Chrome, or save the replay file')
+      return
+    }
+    let stream: MediaStream
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: 30 }, audio: false, preferCurrentTab: true, selfBrowserSurface: 'include',
+      } as any)
+    } catch {
+      return // she said no to sharing the tab
+    }
+    const [track] = stream.getVideoTracks()
+    // Chrome can crop the shared tab to the player's frame.
+    const frame = (mount.querySelector('.rr-player__frame') as HTMLElement | null) ?? mount
+    const Crop = (window as any).CropTarget
+    if (Crop && typeof (track as any).cropTo === 'function') {
+      try { await (track as any).cropTo(await Crop.fromElement(frame)) } catch { /* whole tab, then */ }
+    }
+    const type = videoType()
+    const rec = new MediaRecorder(stream, type ? { mimeType: type, videoBitsPerSecond: 6_000_000 } : undefined)
+    const chunks: Blob[] = []
+    rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data) }
+    rec.onstop = () => {
+      stream.getTracks().forEach((t) => t.stop())
+      try { player.pause() } catch { /* gone */ }
+      const mime = rec.mimeType || type || 'video/webm'
+      if (chunks.length) download(new Blob(chunks, { type: mime }), `${fileBase}.${mime.includes('mp4') ? 'mp4' : 'webm'}`)
+      recorderRef.current = null
+      setSaving('idle')
+    }
+    // Stopping the share from Chrome's own bar ends the video there.
+    track.addEventListener('ended', () => { if (rec.state !== 'inactive') rec.stop() })
+    recorderRef.current = rec
+    setSaving('video')
+    player.goto(0, false)
+    // A beat for Chrome's "sharing this tab" bar to settle before the first frame.
+    await new Promise((r) => setTimeout(r, 500))
+    rec.start(1000)
+    player.play()
+  }, [fileBase])
 
   useEffect(() => {
     if (!host.current) return
@@ -231,6 +359,12 @@ function VideoReplay({ events }: { events: any[] }) {
             skipInactive: true,
           },
         })
+        playerRef.current = player
+        // The end of the visit is the end of the video.
+        player.addEventListener('finish', () => {
+          const rec = recorderRef.current
+          if (rec && rec.state === 'recording') setTimeout(() => rec.state === 'recording' && rec.stop(), 800)
+        })
       })
       .catch((e) => {
         if (!cancelled) setFailed(e instanceof Error ? e.message : String(e))
@@ -238,6 +372,9 @@ function VideoReplay({ events }: { events: any[] }) {
 
     return () => {
       cancelled = true
+      const rec = recorderRef.current
+      if (rec && rec.state !== 'inactive') rec.stop()
+      playerRef.current = null
       try { player?.$destroy?.() } catch { /* already gone */ }
       if (mount) mount.innerHTML = ''
     }
@@ -249,6 +386,36 @@ function VideoReplay({ events }: { events: any[] }) {
         Her screen as she saw it. Everything she typed was masked at the point of recording, so
         the fields play back blank — what she deliberately sent is in the timeline.
       </p>
+      <div className="flex items-center gap-6 flex-wrap mb-4">
+        {saving === 'video' ? (
+          <button onClick={stopVideo} className="text-[20px] tracking-[0.14em] text-[#B83A3A] hover:text-[#0A0A0A] transition-colors">
+            ● RECORDING — STOP AND SAVE
+          </button>
+        ) : (
+          <button
+            onClick={saveVideo}
+            disabled={saving !== 'idle'}
+            className="text-[20px] tracking-[0.14em] text-[#0A0A0A] hover:text-[#7C838B] transition-colors disabled:text-[#C9C7C2]"
+          >
+            SAVE AS VIDEO
+          </button>
+        )}
+        <button
+          onClick={saveFile}
+          disabled={saving !== 'idle'}
+          className="text-[20px] tracking-[0.14em] text-[#0A0A0A] hover:text-[#7C838B] transition-colors disabled:text-[#C9C7C2]"
+        >
+          {saving === 'file' ? 'SAVING…' : 'SAVE REPLAY FILE'}
+        </button>
+      </div>
+      <p className="text-[20px] tracking-[0.06em] text-[#A8A8A4] mb-4 leading-relaxed">
+        {saving === 'video'
+          ? 'Playing from the start and recording. Keep this tab open — the video saves itself when the visit ends, or when you stop it.'
+          : 'Video: choose THIS TAB when Chrome asks, and it records at the speed set under the player. Replay file: one file that plays the visit in any browser, offline.'}
+      </p>
+      {saveError && (
+        <p className="text-[20px] tracking-[0.1em] text-[#B83A3A] mb-4">COULD NOT SAVE — {saveError.toUpperCase()}</p>
+      )}
       {failed && (
         <p className="text-[20px] tracking-[0.1em] text-[#B83A3A] mb-4">
           THE PLAYER DID NOT LOAD — {failed.toUpperCase()}. THE TIMELINE STILL WORKS.
