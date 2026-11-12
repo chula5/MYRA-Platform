@@ -20,10 +20,13 @@ export async function GET(req: NextRequest) {
   if (secret && req.headers.get('authorization') !== `Bearer ${secret}`) return new NextResponse('Unauthorized', { status: 401 })
   if (Date.now() > LAST_DAY) return NextResponse.json({ skipped: 'past its one-off date' })
   // Paused 12 Nov at Chloe's ask ("bad email") until she approves a fix.
-  if (process.env.BLACK_FRIDAY_SEND !== 'on') return NextResponse.json({ skipped: 'paused' })
+  // Chloe, 12 Nov: "send Carys like the Sevinch one" — only the hand-added
+  // people still run; the everyone-send stays paused.
+  const onlyAdded = req.nextUrl.searchParams.get('only') === 'added'
+  if (!onlyAdded && process.env.BLACK_FRIDAY_SEND !== 'on') return NextResponse.json({ skipped: 'paused' })
 
   const send = req.nextUrl.searchParams.get('dry') !== '1'
-  const result = await sendBlackFridayToEveryone(createAdminClient() as any, send)
+  const result = await sendBlackFridayToEveryone(createAdminClient() as any, send, onlyAdded)
   const mode = send ? 'SENT' : 'DRY RUN'
   // It runs every 10 minutes for a short window; only a run that sent
   // something (or failed) writes to Chloe, so she gets one report.

@@ -90,7 +90,7 @@ const pause = () => new Promise((r) => setTimeout(r, 600))
 
 export type SendRow = { who: string; greeting: string; to?: string; status?: string; skipped?: string; sent?: boolean; error?: string }
 
-export async function sendBlackFridayToEveryone(admin: any, send: boolean) {
+export async function sendBlackFridayToEveryone(admin: any, send: boolean, onlyAdded = false) {
   const { data: logged } = await admin.from('email_log').select('meta').eq('kind', 'shopper_black_friday')
   const doneMember = new Set(((logged ?? []) as any[]).map((r) => r.meta?.memberId).filter(Boolean))
   const doneTo = new Set(((logged ?? []) as any[]).map((r) => String(r.meta?.to ?? '').toLowerCase()).filter(Boolean))
@@ -107,9 +107,11 @@ export async function sendBlackFridayToEveryone(admin: any, send: boolean) {
 
   const queue: { m: any; to: string | null; row: SendRow }[] = []
 
-  const { data: members, error } = await admin.from('pilot_member')
+  const { data: allMembers, error } = await admin.from('pilot_member')
     .select('member_id, name, auth_user_id, email, invite_email').eq('is_synthetic', false)
   if (error) return { error: error.message, rows }
+  // onlyAdded: just the people Chloe added by hand (Carys's corrected address).
+  const members = onlyAdded ? [] : allMembers
   for (const m of (members ?? []) as any[]) {
     const g = greetingName(m.name)
     const row: SendRow = { who: m.name ?? m.member_id, greeting: g ? `Hello ${g},` : 'Hello,', status: m.auth_user_id ? 'signed up' : 'added, not signed in yet' }
