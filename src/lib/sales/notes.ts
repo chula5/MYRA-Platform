@@ -19,7 +19,7 @@ export const MAX_SALE_NOTES_A_DAY = 3
 /** Nothing on her phone before 8 or after 9 in the evening (UK). */
 const QUIET = { from: 8, to: 21 }
 const ROUNDUP_HOUR = 18
-export const SALE_PATH = '/me#black-friday'
+export const SALE_PATH = '/me?door=sale'
 
 const SLOT_WORD: Record<string, string> = {
   top: 'tops', bottom: 'trousers and skirts', shoe: 'shoes', outerwear: 'a coat', dress: 'dresses', bag: 'a bag', jewellery: 'jewellery', accessory: 'accessories',

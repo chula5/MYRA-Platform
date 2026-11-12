@@ -25,11 +25,13 @@ import { STYLING_OPEN_EVENT, clearStylingReady, getStylingProgress, keepWatching
 import { WAYS } from '@/lib/styled-ways-core'
 import { useScrollTo } from '@/lib/smooth-scroll'
 import { loadShopBrain, type ShopBrainView, type ShopPiece } from './shop-brain-actions'
+import { loadMySale, type SaleView } from './sale-actions'
+import BlackFriday from './BlackFriday'
 import { warmUpShopBrain, pollWaysMany, openWaysToWear } from './ways/actions'
 import type { StyledLook } from '@/app/admin/private-stylist/actions'
 import type { StyledWayLook } from '@/lib/styled-ways-core'
 
-type Door = 'similar' | 'brands' | 'styled'
+type Door = 'sale' | 'similar' | 'brands' | 'styled'
 
 const HEAD = 'myra-section-label !text-[clamp(28px,3vw,46px)]'
 const NOTE = 'myra-section-note mt-2 !text-[clamp(17px,1.6vw,24px)]'
@@ -66,6 +68,7 @@ const PIECE_GRID = 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-
 // full height, and a section drawn under all three was a long way down
 // (Chloe, 2026-10-16). CLOSE stands the doors back up.
 const DOOR_TABS: { id: Door; label: string; short: string }[] = [
+  { id: 'sale', label: 'BLACK FRIDAY', short: 'SALE' },
   { id: 'similar', label: 'MORE OF THE SAME', short: 'SAME' },
   { id: 'brands', label: 'MORE FROM YOUR BRANDS', short: 'BRANDS' },
   { id: 'styled', label: 'STYLED FOR YOU', short: 'STYLED' },
@@ -238,6 +241,14 @@ export default function ShopBrain({ testMemberId, initialView, onReady }: {
   const [looks, setLooks] = useState<Record<string, StyledLook[]>>({})
   const [busy, setBusy] = useState<string | null>(null)
   const [failed, setFailed] = useState<Record<string, string>>({})
+  // BLACK FRIDAY: her brands' sales, read on their own so they never hold the
+  // curtain. The door stands only while one of her brands is on sale for her.
+  const [sale, setSale] = useState<(SaleView & { blackFriday: boolean }) | null>(null)
+  useEffect(() => {
+    let live = true
+    loadMySale(testMemberId, 96).then((v) => { if (live) setSale(v) }).catch(() => { /* no sale door is no loss */ })
+    return () => { live = false }
+  }, [testMemberId])
   const queued = useRef(false)
   const openRef = useRef<HTMLDivElement>(null)
   const tabsRef = useRef<HTMLDivElement>(null)
@@ -285,6 +296,8 @@ export default function ShopBrain({ testMemberId, initialView, onReady }: {
     const sp = new URLSearchParams(window.location.search)
     if (sp.get('styled') === '1') return 'styled'
     const d = sp.get('door')
+    // A sale note opens the BLACK FRIDAY door (?door=sale, or the older #black-friday).
+    if (d === 'sale' || window.location.hash === '#black-friday') return 'sale'
     return d === 'similar' || d === 'brands' || d === 'styled' ? d : null
   })())
 
@@ -449,15 +462,20 @@ export default function ShopBrain({ testMemberId, initialView, onReady }: {
   useEffect(() => {
     const want = wantDoor.current
     if (!want || !view) return
+    // The sale door waits for the sale to be read; no sale for her, no door to open.
+    if (want === 'sale' && !sale) return
     wantDoor.current = null
+    if (want === 'sale' && !sale!.pieces.length) return
     try { window.history.replaceState(null, '', window.location.pathname) } catch { /* fine */ }
     // STYLED lands on her outfits; any other door opens as a tap on its pill would.
     setTimeout(want === 'styled' ? goToReady : () => toggle(want), 120)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view])
+  }, [view, sale])
 
-  if (!view || (!view.saved.length && !view.similar.length && !view.fromBrands.length)) return null
-  const doors = view.saved.length ? 3 : 2
+  const onSale = !!sale?.pieces.length
+  if (!view || (!view.saved.length && !view.similar.length && !view.fromBrands.length && !onSale)) return null
+  const doors = 2 + (view.saved.length ? 1 : 0) + (onSale ? 1 : 0)
+  const saleTitle = sale?.blackFriday ? 'BLACK FRIDAY' : 'IN THE SALE'
 
   const labels = view.brands.slice(0, 2)
   const current = anchor ? view.saved.find((s) => s.item_id === anchor) ?? view.saved[0] : view.saved[0]
@@ -535,7 +553,7 @@ export default function ShopBrain({ testMemberId, initialView, onReady }: {
           sit in. */}
       {door ? (
         <div ref={tabsRef} role="tablist" aria-label="MYRA worked while you shopped" className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap sm:gap-3 px-2 sm:px-4 lg:px-8 scroll-mt-24">
-          {DOOR_TABS.filter((t) => t.id !== 'styled' || view.saved.length > 0).map((t) => {
+          {DOOR_TABS.filter((t) => (t.id !== 'styled' || view.saved.length > 0) && (t.id !== 'sale' || onSale)).map((t) => {
             const on = door === t.id
             return (
               <button
@@ -547,13 +565,20 @@ export default function ShopBrain({ testMemberId, initialView, onReady }: {
                 className={`rounded-full px-3 sm:px-6 py-3 sm:py-3.5 text-[15px] sm:text-[19px] xl:text-[22px] 2xl:text-[25px] tracking-[0.08em] uppercase text-center transition-colors ${on ? 'bg-[#2B2B2B] text-white' : 'bg-white/85 text-[#55534E] shadow-[0_2px_14px_rgba(43,43,43,0.08)] hover:text-[#2B2B2B]'}`}
               >
                 <span className="sm:hidden">{t.short}</span>
-                <span className="hidden sm:inline">{t.id === 'brands' ? brandsTitle : t.label}</span>
+                <span className="hidden sm:inline">{t.id === 'brands' ? brandsTitle : t.id === 'sale' ? saleTitle : t.label}</span>
               </button>
             )
           })}
         </div>
       ) : (
-      <div className={`grid ${doors === 3 ? 'grid-cols-1 lg:grid-cols-3' : 'grid-cols-1 lg:grid-cols-2'} gap-5 sm:gap-8 lg:gap-12 2xl:gap-16 w-full px-2 sm:px-4 lg:px-8`}>
+      <div className={`grid ${doors === 4 ? 'grid-cols-1 lg:grid-cols-2 2xl:grid-cols-4' : doors === 3 ? 'grid-cols-1 lg:grid-cols-3' : 'grid-cols-1 lg:grid-cols-2'} gap-5 sm:gap-8 lg:gap-12 2xl:gap-16 w-full px-2 sm:px-4 lg:px-8`}>
+        {/* BLACK FRIDAY first: her brands on sale, in her size, the gaps in her wardrobe leading. */}
+        {onSale && <Door
+          title={saleTitle}
+          cover={sale!.pieces[0]?.image_url ?? null}
+          inside={sale!.pieces.slice(0, 9).map((p) => p.image_url ?? null)}
+          open={door === 'sale'} onOpen={() => toggle('sale')}
+        />}
         <Door
           title="MORE OF THE SAME"
           cover={view.similar[0]?.image_url ?? null}
@@ -587,9 +612,9 @@ export default function ShopBrain({ testMemberId, initialView, onReady }: {
         <div ref={openRef} className="mt-5 mx-2 sm:mx-4 lg:mx-8 rounded-[24px] bg-white/85 shadow-[0_2px_18px_rgba(43,43,43,0.07)] px-6 md:px-10 py-9 scroll-mt-6">
           <div className="flex items-start justify-between gap-6 mb-6">
             <div>
-              <p className={HEAD}>{door === 'similar' ? 'MORE OF THE SAME' : door === 'brands' ? brandsTitle : 'STYLED FOR YOU'}</p>
+              <p className={HEAD}>{door === 'sale' ? saleTitle : door === 'similar' ? 'MORE OF THE SAME' : door === 'brands' ? brandsTitle : 'STYLED FOR YOU'}</p>
               <p className={NOTE}>
-                {door === 'similar' ? 'CLOSE TO WHAT YOU KEPT' : door === 'brands' ? brandsNote : 'TAP A PIECE TO STYLE IT'}
+                {door === 'sale' ? 'YOUR BRANDS ON SALE, IN YOUR SIZE' : door === 'similar' ? 'CLOSE TO WHAT YOU KEPT' : door === 'brands' ? brandsNote : 'TAP A PIECE TO STYLE IT'}
               </p>
             </div>
             <div className="flex flex-col items-end gap-2 shrink-0">
@@ -604,6 +629,8 @@ export default function ShopBrain({ testMemberId, initialView, onReady }: {
               )}
             </div>
           </div>
+
+          {door === 'sale' && sale && <BlackFriday initial={sale} inPanel testMemberId={testMemberId} />}
 
           {door === 'similar' && (
             view.similar.length ? (
