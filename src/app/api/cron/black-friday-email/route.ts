@@ -19,6 +19,8 @@ export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET
   if (secret && req.headers.get('authorization') !== `Bearer ${secret}`) return new NextResponse('Unauthorized', { status: 401 })
   if (Date.now() > LAST_DAY) return NextResponse.json({ skipped: 'past its one-off date' })
+  // Paused 12 Nov at Chloe's ask ("bad email") until she approves a fix.
+  if (process.env.BLACK_FRIDAY_SEND !== 'on') return NextResponse.json({ skipped: 'paused' })
 
   const send = req.nextUrl.searchParams.get('dry') !== '1'
   const result = await sendBlackFridayToEveryone(createAdminClient() as any, send)
