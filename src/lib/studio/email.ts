@@ -45,6 +45,8 @@ export type EmailKind =
   | 'new_brands_draft'
   // The Black Friday announcement: sale edit, wait-for-sale, saved searches, screenshots.
   | 'shopper_black_friday'
+  // To Chloe: who the Black Friday email went to.
+  | 'black_friday_report'
 
 /** Shopper-facing kinds go out as MYRA, with replies to Chloe; the studio kinds stay MYRA Studio. */
 const isMemberKind = (kind: EmailKind) => kind.startsWith('shopper_')

@@ -16,7 +16,7 @@ const h = (t: string) => `<p style="margin:30px 0 10px 0;${FONT}font-size:15px;l
 const b = (t: string) => `<strong style="color:#0a0a0a;">${t}</strong>`
 
 export function blackFridayEmailHtml(name: string): string {
-  const first = (name ?? '').trim().split(/\s+/)[0] ?? ''
+  const first = greetingName(name)
   const greeting = first ? `Hello ${esc(first)},` : 'Hello,'
   const avatar = siteUrl('/email/avatar.jpg')
 
@@ -66,4 +66,102 @@ export async function sendBlackFridayEmail(to: string, name: string, meta: Recor
     kind: 'shopper_black_friday', to, subject: BLACK_FRIDAY_SUBJECT,
     html: blackFridayEmailHtml(name), meta: { to, name, ...meta },
   })
+}
+
+// ── The send to every member ────────────────────────────────────────────────
+
+/** "anne" → "Anne"; an email or blank in the name field greets her plainly. */
+export function greetingName(name: string | null | undefined): string {
+  let first = String(name ?? '').trim().split(/\s+/)[0] ?? ''
+  if (!first || first.includes('@')) return ''
+  // Chloe, 2026-11-12: "fix Anne Spaven, fix her name".
+  if (/spaven/i.test(String(name))) first = 'Anne'
+  return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase()
+}
+
+// People Chloe asked for by name (2026-11-12): "add Carys James … do Sevinch as
+// well". Found among members (test flag or not) and applications.
+const ASKED_FOR = [
+  { label: 'Carys James', pattern: '%carys%james%' },
+  { label: 'Sevinch', pattern: '%sevinch%' },
+]
+
+const pause = () => new Promise((r) => setTimeout(r, 600))
+
+export type SendRow = { who: string; greeting: string; to?: string; status?: string; skipped?: string; sent?: boolean; error?: string }
+
+export async function sendBlackFridayToEveryone(admin: any, send: boolean) {
+  const { data: logged } = await admin.from('email_log').select('meta').eq('kind', 'shopper_black_friday')
+  const doneMember = new Set(((logged ?? []) as any[]).map((r) => r.meta?.memberId).filter(Boolean))
+  const doneTo = new Set(((logged ?? []) as any[]).map((r) => String(r.meta?.to ?? '').toLowerCase()).filter(Boolean))
+  const seen = new Set<string>()
+  const rows: SendRow[] = []
+
+  const addressFor = async (m: any): Promise<string | null> => {
+    let email: string | null = null
+    if (m.auth_user_id) {
+      try { email = (await admin.auth.admin.getUserById(m.auth_user_id)).data?.user?.email ?? null } catch { /* none */ }
+    }
+    return email || m.email || m.invite_email || null
+  }
+
+  const queue: { m: any; to: string | null; row: SendRow }[] = []
+
+  const { data: members, error } = await admin.from('pilot_member')
+    .select('member_id, name, auth_user_id, email, invite_email').eq('is_synthetic', false)
+  if (error) return { error: error.message, rows }
+  for (const m of (members ?? []) as any[]) {
+    const g = greetingName(m.name)
+    const row: SendRow = { who: m.name ?? m.member_id, greeting: g ? `Hello ${g},` : 'Hello,', status: m.auth_user_id ? 'signed up' : 'added, not signed in yet' }
+    rows.push(row)
+    if (doneMember.has(m.member_id)) { row.skipped = 'already sent'; continue }
+    queue.push({ m, to: await addressFor(m), row })
+  }
+
+  for (const ask of ASKED_FOR) {
+    const { data: ms } = await admin.from('pilot_member')
+      .select('member_id, name, auth_user_id, email, invite_email').ilike('name', ask.pattern)
+    const { data: apps } = await admin.from('application').select('name, email').ilike('name', ask.pattern)
+    const found = [
+      ...((ms ?? []) as any[]).map((m) => ({ m, src: 'member' })),
+      ...((apps ?? []) as any[]).map((a) => ({ m: { name: a.name, email: a.email }, src: 'application' })),
+    ]
+    if (!found.length) { rows.push({ who: ask.label, greeting: '', skipped: 'NOT FOUND among members or applications' }); continue }
+    for (const f of found) {
+      const g = greetingName(f.m.name)
+      const row: SendRow = { who: `${f.m.name ?? ask.label} (asked for by Chloe)`, greeting: g ? `Hello ${g},` : 'Hello,', status: f.src }
+      rows.push(row)
+      if (f.m.member_id && doneMember.has(f.m.member_id)) { row.skipped = 'already sent'; continue }
+      queue.push({ m: f.m, to: await addressFor(f.m), row })
+    }
+  }
+
+  let sent = 0
+  for (const { m, to, row } of queue) {
+    if (!to) { row.skipped = 'no email address on file'; continue }
+    row.to = to
+    const key = to.toLowerCase()
+    if (doneTo.has(key)) { row.skipped = 'already sent to this address'; continue }
+    if (seen.has(key)) { row.skipped = 'same address as another row'; continue }
+    seen.add(key)
+    if (!send) continue
+    const res = await sendBlackFridayEmail(to, greetingName(m.name), m.member_id ? { memberId: m.member_id } : {})
+    row.sent = res.sent
+    if (res.error) row.error = res.error
+    if (res.sent) sent++
+    await pause()
+  }
+
+  return { members: (members ?? []).length, willReceive: rows.filter((r) => r.to && !r.skipped).length, sent, rows }
+}
+
+/** To Chloe: exactly who it went to, who was skipped and why. */
+export function sendReportHtml(result: { sent?: number; rows: SendRow[]; error?: string }, mode: string): string {
+  const cell = (t: string) => `<td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:13px;vertical-align:top;">${esc(t)}</td>`
+  const trs = result.rows.map((r) => `<tr>${cell(r.who)}${cell(r.greeting)}${cell(r.to ?? '—')}${cell(r.sent ? 'SENT' : r.skipped ?? r.error ?? (mode === 'SENT' ? 'not sent' : 'will send'))}</tr>`).join('')
+  return `<div style="${FONT}color:#2b2b2b;">
+<p style="font-size:15px;">${esc(mode)}: Black Friday email. ${result.error ? 'Error: ' + esc(result.error) : `${result.sent ?? 0} sent.`}</p>
+<table cellpadding="0" cellspacing="0" style="border-collapse:collapse;${FONT}">
+<tr>${['Who', 'Greeting', 'Address', 'Result'].map((h) => `<th align="left" style="padding:6px 8px;font-size:11px;letter-spacing:0.08em;color:#a8a8a4;">${h.toUpperCase()}</th>`).join('')}</tr>
+${trs}</table></div>`
 }
