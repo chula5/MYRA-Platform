@@ -41,8 +41,8 @@ export async function GET(req: NextRequest) {
 
   const admin = createAdminClient() as any
   const { data: members, error } = await admin.from('pilot_member')
-    .select('member_id, name, auth_user_id')
-    .eq('is_synthetic', false).not('auth_user_id', 'is', null)
+    .select('member_id, name, auth_user_id, email, invite_email')
+    .eq('is_synthetic', false)
   if (error) return json({ error: error.message }, 500)
 
   // Who already has it, so a second press never sends twice.
@@ -52,15 +52,24 @@ export async function GET(req: NextRequest) {
   const send = q.get('confirm') === 'send'
   const report: Record<string, unknown>[] = []
   let sent = 0
+  const seen = new Set<string>()
   for (const m of (members ?? []) as any[]) {
     const first = (m.name ?? '').trim().split(/\s+/)[0] ?? ''
     const entry: Record<string, unknown> = { member: m.name ?? m.member_id, greeting: first ? `Hello ${first},` : 'Hello,' }
     report.push(entry)
     if (already.has(m.member_id)) { entry.skipped = 'already sent'; continue }
+    // Every real member, signed up or not: her login's address first, else the
+    // one Chloe wrote down for her (Chloe, 2026-11-12: "I want them all to receive it").
     let email: string | null = null
-    try { email = (await admin.auth.admin.getUserById(m.auth_user_id)).data?.user?.email ?? null } catch { /* no address */ }
-    if (!email) { entry.skipped = 'no address'; continue }
+    if (m.auth_user_id) {
+      try { email = (await admin.auth.admin.getUserById(m.auth_user_id)).data?.user?.email ?? null } catch { /* no address */ }
+    }
+    email = email || m.email || m.invite_email || null
+    entry.status = m.auth_user_id ? 'signed up' : 'added, not signed in yet'
+    if (!email) { entry.skipped = 'no email address on file'; continue }
     entry.to = email
+    if (seen.has(email.toLowerCase())) { entry.skipped = 'same address as another member'; continue }
+    seen.add(email.toLowerCase())
     if (!send) continue
     const res = await sendBlackFridayEmail(email, m.name ?? '', { memberId: m.member_id })
     entry.sent = res.sent
@@ -72,6 +81,7 @@ export async function GET(req: NextRequest) {
   return json({
     mode: send ? 'SENT' : 'DRY RUN — nothing sent. Add &confirm=send to send.',
     members: (members ?? []).length,
+    willReceive: report.filter((r) => r.to && !r.skipped).length,
     sent,
     report,
   })
