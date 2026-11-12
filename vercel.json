@@ -8,6 +8,10 @@
   "installCommand": "npm install",
   "crons": [
     {
+      "path": "/api/cron/black-friday-email",
+      "schedule": "30 9 12 11 *"
+    },
+    {
       "path": "/api/cron/weekly-calibration",
       "schedule": "0 7 * * 1"
     },
