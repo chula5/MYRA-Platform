@@ -86,7 +86,11 @@ export async function ensureMirrorItem(p: SiteProduct, member: MirrorMember, adm
   if (notAProductPage(p)) return { error: 'Not a piece MYRA styles' }
   const admin = adminIn ?? (createAdminClient() as any)
   const base = baseUrl(p.url)
-  const { data: existing } = await admin.from('item').select('*, brand(*)').like('retailer_url', `${base}%`).neq('status', 'archived').limit(1)
+  // Oldest first, so a piece that was written more than once (two requests
+  // racing on different servers) always resolves to the SAME row — the looks
+  // MYRA keeps are filed under the row's id, and a different copy each time
+  // meant building and checking them again.
+  const { data: existing } = await admin.from('item').select('*, brand(*)').like('retailer_url', `${base}%`).neq('status', 'archived').order('created_at', { ascending: true }).limit(1)
   let item = existing?.[0] ?? null
 
   if (!item) {
@@ -120,9 +124,16 @@ export async function ensureMirrorItem(p: SiteProduct, member: MirrorMember, adm
       discovery_source: 'mirror',
       admin_notes: `MYRA Mirror — ${member.name} asked to style this on ${host}${brand ? '' : p.brand ? ` (brand "${p.brand}" not in MYRA)` : ''}`,
     })
-    if (!ins.itemId) return { error: ins.error ?? 'Could not keep a note of this piece' }
-    const { data: created } = await admin.from('item').select('*, brand(*)').eq('item_id', ins.itemId).single()
-    item = created
+    // Two asks for a new piece reach here at once on different servers. The
+    // unique index (migration 0124) refuses the second write, and whichever
+    // row is oldest for the page is the piece from now on — so reselect rather
+    // than trust our own insert, and if ours was a second copy, fold it.
+    const { data: oldest } = await admin.from('item').select('*, brand(*)').like('retailer_url', `${base}%`).neq('status', 'archived').order('created_at', { ascending: true }).limit(1)
+    item = oldest?.[0] ?? null
+    if (!item) return { error: ins.error ?? 'Could not keep a note of this piece' }
+    if (ins.itemId && item.item_id !== ins.itemId) {
+      await admin.from('item').update({ status: 'archived', admin_notes: `Merged into ${item.item_id} (same page written twice)` }).eq('item_id', ins.itemId)
+    }
   }
 
   // Score it so the composer can read its shape, structure and colour depth.
