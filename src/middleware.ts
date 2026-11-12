@@ -5,7 +5,23 @@ import { createServerClient } from '@supabase/ssr'
 const RESERVED_SEGMENTS = new Set([
   'actions', 'admin', 'api', 'earlyaccess', 'edit', 'signin', 'reset-password', 'feed', 'login', 'me', 'onboarding', 'outfit', 'privacy', 'studio',
   'picks', 'press',
+  // OAuth / MCP discovery names a connector probes when a server publishes no
+  // auth metadata. They must 404: a 200 landing page here reads as a sign-in
+  // page and fails Claude's "no sign-in" connector check. (`.well-known` never
+  // reaches the rewrite: the segment test already excludes dots.)
+  'register', 'authorize', 'token', 'oauth', 'oauth2', 'revoke', 'introspect', 'userinfo', 'jwks',
+  'mcp', 'sse', 'well-known',
 ])
+
+// A referral link is a person (or a link-preview crawler) opening a page: a GET
+// or HEAD that does not ask for JSON or an event stream. Machine probes (POST
+// /register, Accept: application/json, text/event-stream) never get the landing page.
+function wantsPage(request: NextRequest): boolean {
+  if (request.method !== 'GET' && request.method !== 'HEAD') return false
+  const accept = (request.headers.get('accept') ?? '').toLowerCase()
+  if (accept.includes('text/html')) return true
+  return !accept.includes('application/json') && !accept.includes('text/event-stream')
+}
 
 export async function middleware(request: NextRequest) {
   // Supabase password-recovery links land on the Site URL (/) with a one-time
@@ -23,6 +39,7 @@ export async function middleware(request: NextRequest) {
   const seg = request.nextUrl.pathname.slice(1)
   if (
     seg &&
+    wantsPage(request) &&
     !seg.includes('/') &&
     !seg.includes('.') &&
     /^[a-z0-9_-]{2,30}$/i.test(seg) &&
