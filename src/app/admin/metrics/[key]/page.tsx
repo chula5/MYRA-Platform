@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
-import { getDashboardMetrics, getMetric, METRIC_KEYS } from '@/lib/dashboard-metrics'
+import { getMetric, METRIC_KEYS } from '@/lib/dashboard-metrics'
+import { loadDashboard } from '@/lib/admin-dashboard'
 import { getBreakdowns } from '@/lib/metric-detail'
 import TrendChart from '@/components/admin/charts/TrendChart'
 import BarChart from '@/components/admin/charts/BarChart'
@@ -18,7 +19,8 @@ function formatValue(kind: string, v: number): string {
 
 export default async function MetricDetailPage({ params }: { params: Promise<{ key: string }> }) {
   const { key } = await params
-  const all = await getDashboardMetrics()
+  // The same remembered read the dashboard draws from — the tile and its detail agree.
+  const all = (await loadDashboard()).perf
   const m = getMetric(all, key)
   if (!m) notFound()
 
