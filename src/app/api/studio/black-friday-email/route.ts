@@ -48,6 +48,9 @@ export async function GET(req: NextRequest) {
   // Who already has it, so a second press never sends twice.
   const { data: logged } = await admin.from('email_log').select('meta').eq('kind', 'shopper_black_friday')
   const already = new Set(((logged ?? []) as any[]).map((r) => r.meta?.memberId).filter(Boolean))
+  // ...and every address already sent one by hand with ?to= (a corrected name,
+  // or someone not on the member list), so the main send skips them.
+  const alreadyTo = new Set(((logged ?? []) as any[]).map((r) => String(r.meta?.to ?? '').toLowerCase()).filter(Boolean))
 
   const send = q.get('confirm') === 'send'
   const report: Record<string, unknown>[] = []
@@ -68,6 +71,7 @@ export async function GET(req: NextRequest) {
     entry.status = m.auth_user_id ? 'signed up' : 'added, not signed in yet'
     if (!email) { entry.skipped = 'no email address on file'; continue }
     entry.to = email
+    if (alreadyTo.has(email.toLowerCase())) { entry.skipped = 'already sent to this address'; continue }
     if (seen.has(email.toLowerCase())) { entry.skipped = 'same address as another member'; continue }
     seen.add(email.toLowerCase())
     if (!send) continue
