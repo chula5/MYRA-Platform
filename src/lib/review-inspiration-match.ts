@@ -157,8 +157,12 @@ async function eyeScores(look: { data: string; mediaType: string }, label: strin
 }
 
 /** Every key piece of the picture, matched to the library: shortlist by words, then the eye. */
-export async function matchInspiration(insp: ProjectInspiration): Promise<{ matches: PieceMatch[]; notes: string[] }> {
-  const library = await getReadyAndLiveItems({ allowStale: true })
+export async function matchInspiration(
+  insp: ProjectInspiration,
+  /** `pool`: the pieces to match from — a member's library in her size and budget — instead of the whole shop. */
+  opts: { pool?: ItemWithBrand[] } = {},
+): Promise<{ matches: PieceMatch[]; notes: string[] }> {
+  const library = opts.pool ?? await getReadyAndLiveItems({ allowStale: true })
   const pool = library.filter((i) => i.image_url && sellable(i as any))
   const notes: string[] = []
   if (pool.length === 0) return { matches: [], notes: ['The library didn’t load — the database is busy. Try again in a moment'] }
@@ -238,9 +242,10 @@ export async function composeInspirationLooks(
   way: string | null,
   avoid: string[],
   count: number,
+  opts: { pool?: ItemWithBrand[] } = {},
 ): Promise<{ anchor: ReturnType<typeof anchorPayload>; candidates: ReviewCandidate[] } | null> {
   const matches = insp.matches ?? []
-  const library = await getReadyAndLiveItems({ allowStale: true })
+  const library = opts.pool ?? await getReadyAndLiveItems({ allowStale: true })
   const byId = new Map(library.map((i) => [i.item_id, i]))
   const anchor = byId.get(anchorId)
   if (!anchor || !sellable(anchor as any)) return null

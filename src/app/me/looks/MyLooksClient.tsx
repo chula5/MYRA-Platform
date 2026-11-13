@@ -33,6 +33,7 @@ import WaysToWear from '@/components/me/WaysToWear'
 import { noticePieces } from '@/app/me/ways/actions'
 import StyleOutfit from '@/components/me/StyleOutfit'
 import ShareWithFriend from '@/components/me/ShareWithFriend'
+import InspirationToOutfit from '@/components/me/InspirationToOutfit'
 import type { OutfitWithItems } from '@/types/database'
 import { previewAskForMember, rescoreAskLook, type AskPreviewResult } from '@/app/admin/private-stylist/confidence-actions'
 import { keepAskPreview, askPreviewAlternates } from '@/app/admin/private-stylist/actions.gated'
@@ -80,10 +81,11 @@ const SHELF_AT_REST = 6
  *   new      NEW FOR INSPIRATION — MYRA's own, unanswered
  *   saved    SAVED OUTFITS — what she saved or said yes to
  */
-type ShelfKey = 'emailed' | 'asked' | 'new' | 'saved'
+type ShelfKey = 'emailed' | 'asked' | 'inspiration' | 'new' | 'saved'
 const SHELVES: Record<ShelfKey, { label: string; note: (n: number) => string }> = {
   emailed: { label: 'Emailed to you', note: (n) => `${n} outfit${n === 1 ? '' : 's'} from MYRA's notes, styled around pieces you liked` },
   asked: { label: 'You asked for', note: (n) => `${n} look${n === 1 ? '' : 's'} for your occasions` },
+  inspiration: { label: 'From your inspiration', note: (n) => `${n} outfit${n === 1 ? '' : 's'} styled from pictures you dropped in, in your size and price range` },
   new: { label: 'New for inspiration', note: (n) => `${n} look${n === 1 ? '' : 's'}. Thumbs up or down, and MYRA learns` },
   saved: { label: 'Saved outfits', note: (n) => `${n} outfit${n === 1 ? '' : 's'} you kept · shaping what comes next` },
 }
@@ -270,6 +272,7 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
   const shelfLooks: Record<ShelfKey, ClientLook[]> = useMemo(() => ({
     emailed: browsable.filter((l) => l.source === 'emailed'),
     asked: browsable.filter((l) => l.source === 'asked'),
+    inspiration: browsable.filter((l) => l.source === 'inspiration'),
     new: browsable.filter((l) => !l.response && (l.source ?? 'for_you') === 'for_you'),
     saved: browsable.filter((l) => l.source === 'saved' || l.response === 'yes'),
   }), [browsable])
@@ -279,7 +282,7 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
     if (!shelf) return null
     let looks = shelfLooks[shelf.key]
     let note = SHELVES[shelf.key].note(looks.length)
-    if (shelf.key === 'emailed' && (shelf.deliveryId || shelf.piece)) {
+    if ((shelf.key === 'emailed' || shelf.key === 'inspiration') && (shelf.deliveryId || shelf.piece)) {
       const fromEmail = shelf.deliveryId ? looks.filter((l) => l.delivery_id === shelf.deliveryId) : looks
       const pool = fromEmail.length ? fromEmail : looks
       const wearing = shelf.piece ? pool.filter((l) => l.items.some((i) => i.item_id === shelf.piece)) : pool
@@ -287,7 +290,7 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
       const piece = shelf.piece ? looks.flatMap((l) => l.items).find((i) => i.item_id === shelf.piece) : null
       note = piece && wearing.length
         ? `${[piece.brand, piece.product_name].filter(Boolean).join(' ')} · ${looks.length} way${looks.length === 1 ? '' : 's'} to wear it`
-        : `${looks.length} outfit${looks.length === 1 ? '' : 's'} from this note`
+        : `${looks.length} outfit${looks.length === 1 ? '' : 's'} from ${shelf.key === 'inspiration' ? 'your picture' : 'this note'}`
     }
     return { label: SHELVES[shelf.key].label, note, looks }
   }, [shelf, shelfLooks])
@@ -476,6 +479,16 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
                   ))}
                 </div>
               )}
+              {/* INSPIRATION TO OUTFIT — a picture of a look she loves, styled
+                  from pieces in her size and price range (lib/member-inspiration). */}
+              {!asking && (
+                <InspirationToOutfit
+                  className="mt-5"
+                  testMemberId={readOnly ? view.memberId ?? undefined : undefined}
+                  firstName={view.name.split(' ')[0] || 'her'}
+                  onLanded={(deliveryId) => { setRelated(null); setQuery(''); setOccasion(null); setShelf({ key: 'inspiration', deliveryId }) }}
+                />
+              )}
             </div>
 
             {/* Occasion grid — the feed's 3-across contact grid, each occasion
@@ -588,7 +601,7 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
             {/* Where each look came from, one shelf each, newest first — what
                 MYRA emailed, what she asked for, what is new to her. The
                 thumbs moved here from FOR YOU (Chloe, 2026-10-18). */}
-            {(['emailed', 'asked', 'new'] as const).map((key) => (
+            {(['emailed', 'asked', 'inspiration', 'new'] as const).map((key) => (
               <Shelf key={key} shelfKey={key} looks={shelfLooks[key]} cardProps={cardProps} onSeeAll={() => setShelf({ key })} />
             ))}
 
