@@ -28,12 +28,16 @@ export const SAVED_REQUEST_TEXT = 'Saved from WAYS TO WEAR IT'
  *   asked    she asked for it (an occasion)
  *   for_you  MYRA's own, for inspiration
  */
-export type LookSource = 'emailed' | 'saved' | 'asked' | 'for_you'
+export type LookSource = 'emailed' | 'saved' | 'asked' | 'inspiration' | 'for_you'
+
+/** The request_text of a delivery MYRA styled from a picture she dropped in (lib/member-inspiration). */
+export const INSPIRATION_REQUEST_PREFIX = 'Inspiration — '
 
 export function lookSourceOf(d: { trigger?: string | null; request_text?: string | null } | undefined): LookSource {
   if (!d) return 'for_you'
   if (isEmailedRequest(d.request_text)) return 'emailed'
   if (d.request_text === SAVED_REQUEST_TEXT) return 'saved'
+  if (String(d.request_text ?? '').startsWith(INSPIRATION_REQUEST_PREFIX)) return 'inspiration'
   if (d.trigger === 'request') return 'asked'
   return 'for_you'
 }

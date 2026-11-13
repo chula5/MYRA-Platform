@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 // route needs the minutes for that, not the seconds a page normally gets.
 export const maxDuration = 60
 
-const SHELF_KEYS = ['emailed', 'asked', 'new', 'saved'] as const
+const SHELF_KEYS = ['emailed', 'asked', 'inspiration', 'new', 'saved'] as const
 
 export default async function MyLooksPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = (await searchParams) ?? {}

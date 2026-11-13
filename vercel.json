@@ -80,6 +80,14 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/review-projects",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/member-inspiration",
+      "schedule": "*/10 * * * *"
+    },
+    {
       "path": "/api/cron/styled-ways-nightly",
       "schedule": "0 2 */3 * *"
     },
