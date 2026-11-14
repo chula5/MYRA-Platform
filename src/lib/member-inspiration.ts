@@ -219,10 +219,17 @@ async function runOne(admin: any, row: MemberInspiration): Promise<void> {
   const pickedIds = Array.from(new Set(candidates.flatMap((c) => c.items.map((i) => i.item_id)).filter((id): id is string => !!id)))
   const { data: facts } = await admin.from('item').select('item_id, stock_status, status').in('item_id', pickedIds)
   const live = new Set(((facts ?? []) as any[]).filter((f) => f.status !== 'archived' && sellable(f)).map((f) => f.item_id))
-  const judgeable = candidates
+  // Four outfits she can tell apart: no two share more than one piece (the
+  // first test kept the same jumper, skirt and bag twice with other shoes).
+  const distinct: Candidate[] = []
+  for (const c of candidates
     .filter((c) => c.items.every((i) => i.item_id && live.has(i.item_id)))
-    .sort((a, b) => (a.way === WAY_CLOSE ? -1 : 0) - (b.way === WAY_CLOSE ? -1 : 0) || b.score - a.score)
-    .slice(0, JUDGE_AT_MOST)
+    .sort((a, b) => (a.way === WAY_CLOSE ? -1 : 0) - (b.way === WAY_CLOSE ? -1 : 0) || b.score - a.score)) {
+    const ids = new Set(c.items.map((i) => i.item_id))
+    if (distinct.some((d) => d.items.filter((i) => ids.has(i.item_id)).length > 1)) continue
+    distinct.push(c)
+  }
+  const judgeable = distinct.slice(0, JUDGE_AT_MOST)
   if (judgeable.length === 0) return fail('The pieces that matched your picture have just sold out — try again in a day or two')
 
   // MYRA's eye on every candidate, with her sizes; the first WANT that pass are kept.
