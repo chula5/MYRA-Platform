@@ -19,7 +19,8 @@ const T_SMALL = 'text-[clamp(17px,1vw,23px)]'
 const POLL_MS = 4_000
 
 type Reply = InspirationStatusView | { error: string; read?: string | null }
-const failed = (r: Reply | null): r is { error: string; read?: string | null } => !!r && 'error' in r
+// A status carries `error: null` on a good day; only a reply WITHOUT a status is a failure to start.
+const failed = (r: Reply | null): r is { error: string; read?: string | null } => !!r && !('status' in r)
 
 export default function InspirationToOutfit({
   testMemberId, firstName, onLanded, className = '',
