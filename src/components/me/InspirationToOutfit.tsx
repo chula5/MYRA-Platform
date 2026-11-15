@@ -53,6 +53,9 @@ export default function InspirationToOutfit({
       r = (await res.json().catch(() => ({ error: 'MYRA could not read that — try again' }))) as Reply
     } catch { r = { error: 'MYRA could not reach the server — try again' } }
     setReply(r); setBusy(false)
+    // The picture joins YOUR INSPIRATION as STYLING… straight away, so she can
+    // leave the sheet and still find it.
+    if (!failed(r)) router.refresh()
   }
 
   // Follow the styling until the outfits land (or it gives up).

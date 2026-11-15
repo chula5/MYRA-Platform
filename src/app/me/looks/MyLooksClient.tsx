@@ -17,7 +17,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import ClientWardrobe from './ClientWardrobe'
-import { myRequests, reactToLook, requestLooks, savedWhileBrowsing, searchStudioLooks, type ClientView, type ClientLook, type ClientLookItem, type BrowsedPiece } from './actions'
+import { myRequests, reactToLook, requestLooks, savedWhileBrowsing, searchStudioLooks, type ClientView, type ClientLook, type ClientLookItem, type BrowsedPiece, type ClientInspiration } from './actions'
 import ComposedLookCard from '@/components/me/ComposedLookCard'
 import type { StudioLook } from '@/lib/studio-looks'
 import { CLIENT_OCCASIONS, askKindForEvent, whereFor, ASK_KINDS, ASK_WHEN, ASK_FEEL, ASK_WEATHER, ASK_LIMITS, ASK_BUDGET } from '@/lib/client-occasions'
@@ -491,6 +491,16 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
               )}
             </div>
 
+            {/* YOUR INSPIRATION — every picture she dropped in, right under the
+                door she used (Chloe, 2026-11-15: "I cannot find where the
+                outfits it made are… maybe an inspo>outfit image category"). */}
+            {!related && !searched && !occasion && !shelf && !asking && (view.inspirations?.length ?? 0) > 0 && (
+              <InspirationRow
+                pictures={view.inspirations!}
+                onOpen={(deliveryId) => { setShelf({ key: 'inspiration', deliveryId }) }}
+              />
+            )}
+
             {/* Occasion grid — the feed's 3-across contact grid, each occasion
                 through one of her own looks, name in white at the centre. */}
             {!related && !searched && !occasion && !shelf && occasions.length > 0 && (
@@ -585,6 +595,15 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
         {/* ── One shelf, opened ──────────────────────────────────────────── */}
         {!related && !searched && shelfOpen && (
           <div ref={shelfRef}>
+            {shelf?.key === 'inspiration' && shelf.deliveryId && (() => {
+              const pic = view.inspirations?.find((p) => p.delivery_id === shelf.deliveryId)
+              return pic?.image_url ? (
+                <div className="flex justify-center mb-8">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={pic.image_url} alt={pic.title} className="w-[160px] md:w-[220px] aspect-[3/4] object-cover rounded-[14px] bg-[#E4E2DD]" />
+                </div>
+              ) : null
+            })()}
             <Results
               label={shelfOpen.label}
               note={shelfOpen.note}
@@ -648,6 +667,60 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
 
       </div>
     </div>
+  )
+}
+
+/**
+ * The pictures she dropped into INSPO TO OUTFIT, newest first, each with how
+ * far MYRA has got. A picture still styling shows STYLING… and the page
+ * re-reads every 10 seconds until it lands, so leaving the sheet never loses it.
+ */
+function InspirationRow({ pictures, onOpen }: { pictures: ClientInspiration[]; onOpen: (deliveryId: string) => void }) {
+  const router = useRouter()
+  const styling = pictures.some((p) => p.status === 'queued' || p.status === 'running')
+  useEffect(() => {
+    if (!styling) return
+    const t = setInterval(() => router.refresh(), 10_000)
+    return () => clearInterval(t)
+  }, [styling, router])
+  return (
+    <section className="mb-12 md:mb-16">
+      <SectionHead label="Your inspiration" note="Pictures you dropped in · tap one for its outfits" />
+      <div className="flex gap-[6px] overflow-x-auto pb-2 -mx-1 px-1" data-lenis-prevent>
+        {pictures.map((p) => {
+          const working = p.status === 'queued' || p.status === 'running'
+          const ready = p.status === 'done' && !!p.delivery_id && p.looks_count > 0
+          const line = working ? 'STYLING…'
+            : ready ? `${p.looks_count} OUTFIT${p.looks_count === 1 ? '' : 'S'}`
+            : 'NONE KEPT'
+          return (
+            <button
+              key={p.id}
+              type="button"
+              disabled={!ready}
+              onClick={() => ready && onOpen(p.delivery_id!)}
+              className="shrink-0 w-[140px] md:w-[190px] text-left disabled:cursor-default"
+              title={p.title}
+            >
+              <span className="relative block w-full aspect-[3/4] overflow-hidden rounded-[14px] bg-[#E4E2DD]">
+                {p.image_url && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={p.image_url} alt="" loading="lazy" className={`absolute inset-0 w-full h-full object-cover ${ready || working ? '' : 'opacity-50'}`} />
+                )}
+                {working && (
+                  <span className="absolute left-2 top-2 flex h-2.5 w-2.5" aria-hidden>
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-60" />
+                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-white" />
+                  </span>
+                )}
+              </span>
+              <span className="block mt-2 text-[15px] md:text-[17px] tracking-[0.12em] text-[#2B2B2B]">{line}</span>
+              <span className="block text-[15px] md:text-[17px] tracking-[0.04em] text-[#7C838B] truncate">{p.title}</span>
+            </button>
+          )
+        })}
+      </div>
+    </section>
   )
 }
 

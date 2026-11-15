@@ -59,7 +59,21 @@ export interface ClientView {
   unread: number
   /** Occasion ids to offer her, most often first — from her occasion profile. */
   occasions?: string[]
+  /** Pictures she dropped into INSPO TO OUTFIT, newest first. */
+  inspirations?: ClientInspiration[]
   error?: string
+}
+
+/** One picture she dropped in, and how far MYRA has got with it. */
+export interface ClientInspiration {
+  id: string
+  image_url: string | null
+  title: string
+  status: 'queued' | 'running' | 'done' | 'failed' | string
+  looks_count: number
+  /** The delivery holding its outfits, once some were kept. */
+  delivery_id: string | null
+  created_at: string
 }
 
 
@@ -80,32 +94,44 @@ async function loadLooksFor(memberId: string): Promise<ClientView> {
   const empty: ClientView = { memberId: null, name: '', looks: [], unread: 0 }
   try {
     const admin = createAdminClient() as any
-    const { data: member } = await admin.from('pilot_member').select('member_id, name, occasions').eq('member_id', memberId).maybeSingle()
+    // One round of reads, side by side (Chloe, 2026-11-15: "takes ages to
+    // load"). The looks come with their delivery joined, so they no longer
+    // wait on a separate list of her deliveries first.
+    const [{ data: member }, { data: looks }, { count: unread }, { data: pictures }] = await Promise.all([
+      admin.from('pilot_member').select('member_id, name, occasions').eq('member_id', memberId).maybeSingle(),
+      admin
+        .from('pilot_look')
+        .select('look_id, delivery_id, position, image_url, items, response, published_at, delivery:delivery_id!inner(member_id, occasion, request_text, trigger)')
+        .eq('delivery.member_id', memberId)
+        .eq('visible_to_client', true)
+        .order('published_at', { ascending: false }),
+      admin.from('pilot_notification').select('notification_id', { count: 'exact', head: true })
+        .eq('member_id', memberId).is('read_at', null),
+      // The pictures she dropped in, newest first — the INSPIRATION row.
+      admin.from('member_inspiration')
+        .select('inspiration_id, image_url, title, status, looks_count, delivery_id, created_at')
+        .eq('member_id', memberId)
+        .order('created_at', { ascending: false })
+        .limit(24),
+    ])
     if (!member) return empty
     const me = { memberId: member.member_id as string, name: ((member.name as string | null) ?? '') }
-
-    const { data: dels } = await admin
-      .from('pilot_delivery').select('delivery_id, occasion, request_text, trigger').eq('member_id', me.memberId)
-    const byDelivery = new Map((dels ?? []).map((d: any) => [d.delivery_id, d]))
-    const ids = Array.from(byDelivery.keys())
-    if (!ids.length) return { ...empty, memberId: me.memberId, name: me.name }
-
-    const { data: looks } = await admin
-      .from('pilot_look')
-      .select('look_id, delivery_id, position, image_url, items, response, published_at')
-      .in('delivery_id', ids)
-      .eq('visible_to_client', true)
-      .order('published_at', { ascending: false })
-
-    const { count: unread } = await admin
-      .from('pilot_notification').select('notification_id', { count: 'exact', head: true })
-      .eq('member_id', me.memberId).is('read_at', null)
+    const byDelivery = new Map((looks ?? []).map((l: any) => [l.delivery_id, l.delivery]))
 
     return {
       memberId: me.memberId,
       name: me.name,
       unread: unread ?? 0,
       occasions: occasionsForMember(member.occasions),
+      inspirations: ((pictures ?? []) as any[]).map((p) => ({
+        id: p.inspiration_id,
+        image_url: p.image_url ?? null,
+        title: p.title ?? '',
+        status: p.status,
+        looks_count: p.looks_count ?? 0,
+        delivery_id: p.delivery_id ?? null,
+        created_at: p.created_at,
+      })),
       looks: (looks ?? []).map((l: any) => {
         const d: any = byDelivery.get(l.delivery_id)
         return {
