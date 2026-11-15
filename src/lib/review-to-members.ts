@@ -12,6 +12,8 @@
 //   every piece clears her own gates: avoided colours/shapes/types, hidden and
 //     input-only labels, her price ceiling
 //   the whole look clears her rule layer and her stylist's nevers (memberGate)
+//   no piece is from a label far younger than her (lib/member-style-gate —
+//     Anne, 60, was sent a Reformation slip dress on 2026-11-11)
 //   nothing is known to be out of her size (unconfirmed sizes are shown honestly)
 // A member with no taste graph yet gets nothing: "everything is hers" is right
 // for Browse, wrong for putting a look in front of her.
@@ -28,6 +30,8 @@ import { loadTasteGraph, blockedForHer, type TasteGraph } from '@/lib/taste-grap
 import { checkSizesForMember } from '@/lib/look-size-check'
 import { lookVectorFromItems } from '@/lib/taste-vector'
 import { REAL_MEMBER_IDS } from '@/lib/outfit-quality/identities'
+import { withinMemberAgeReach, loadMemberAgeRanges } from '@/lib/brand-affinity'
+import { loadAgeRegisters } from '@/lib/member-style-gate'
 
 /** Every studio delivery's request_text starts with this — one delivery per member per day. */
 export const STUDIO_PREFIX = 'From the studio'
@@ -48,6 +52,7 @@ export function whyNotForHer(
   graph: TasteGraph,
   anchor: ItemWithBrand,
   rest: { item: ItemWithBrand; slot: Slot }[],
+  age?: { range: string | null; registerOf: (brandId: string | null | undefined) => number | null },
 ): string | null {
   if (!graph.weights.size) return 'no taste graph yet'
   if (!graph.weights.has(String(anchor.brand_id ?? ''))) return `${anchor.brand?.name ?? 'the anchor label'} is not in her graph`
@@ -58,6 +63,7 @@ export function whyNotForHer(
     const avoided = avoidReasons(taste.prefs, it as any)
     if (avoided.length) return `${label}: ${avoided[0]}`
     if (itemPriceVerdict(taste, it) === 'over') return `${label} is over her budget`
+    if (age && !withinMemberAgeReach(age.range, { customer_age_register: age.registerOf(it.brand_id) })) return `${it.brand?.name} is a younger label than her`
   }
   if (!memberGate(taste, anchor, rest)) return 'her rules or her stylist\'s nevers'
   return null
@@ -87,6 +93,9 @@ export async function landReviewOutfitForMembers(admin: any, outfitId: string): 
   const { data: members } = await admin
     .from('pilot_member').select('member_id, name').eq('is_synthetic', false).neq('member_id', REAL_MEMBER_IDS.chloe)
   const { loadMemberTasteFor } = await import('@/app/admin/private-stylist/actions')
+  const memberIds = ((members ?? []) as { member_id: string }[]).map((m) => m.member_id)
+  const [ages, registers] = await Promise.all([loadMemberAgeRanges(admin, memberIds), loadAgeRegisters(admin)])
+  const registerOf = (id: string | null | undefined) => (id ? registers.get(String(id)) ?? null : null)
 
   const out: MemberLanding[] = []
   for (const m of (members ?? []) as { member_id: string; name: string }[]) {
@@ -94,7 +103,7 @@ export async function landReviewOutfitForMembers(admin: any, outfitId: string): 
     try {
       const [taste, graph] = await Promise.all([loadMemberTasteFor(m.member_id), loadTasteGraph(admin, m.member_id)])
       if (!taste) { out.push(res('no taste profile')); continue }
-      const why = whyNotForHer(taste, graph, anchor, rest)
+      const why = whyNotForHer(taste, graph, anchor, rest, { range: ages.get(m.member_id) ?? null, registerOf })
       if (why) { out.push(res(why)); continue }
 
       const sizes = await checkSizesForMember(admin, m.member_id, lookItems, 'unknown')

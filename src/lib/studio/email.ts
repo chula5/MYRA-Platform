@@ -47,6 +47,8 @@ export type EmailKind =
   | 'shopper_black_friday'
   // To Chloe: who the Black Friday email went to.
   | 'black_friday_report'
+  // Monday morning: her looks this week, new at her brands, and the sale prices at her brands.
+  | 'shopper_monday_edit'
 
 /** Shopper-facing kinds go out as MYRA, with replies to Chloe; the studio kinds stay MYRA Studio. */
 const isMemberKind = (kind: EmailKind) => kind.startsWith('shopper_')
@@ -122,7 +124,7 @@ export async function sendStudioEmail(opts: {
 // ── Shared HTML bits (email-client-safe: tables + inline styles) ─────────────
 
 export function emailShell(title: string, bodyHtml: string, footer = 'MYRA STUDIO · AUTOMATED'): string {
-  return `<!doctype html><html><body style="margin:0;padding:0;background:#f2f2f2;">
+  return `<!doctype html><html><head><meta charset="utf-8" /></head><body style="margin:0;padding:0;background:#f2f2f2;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f2f2f2;padding:24px 0;">
 <tr><td align="center">
 <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #e2e0db;border-radius:12px;overflow:hidden;">
@@ -135,6 +137,53 @@ ${bodyHtml}
 </td></tr>
 </table>
 <p style="font-family:Helvetica,Arial,sans-serif;font-size:10px;color:#a8a8a4;margin-top:14px;letter-spacing:0.05em;">${footer}</p>
+</td></tr></table></body></html>`
+}
+
+/** The MYRA wordmark with the mirror for a Y, served from the live site (public/myra-logo-black.png). */
+export const LOGO_URL = 'https://www.myraassistant.co.uk/myra-logo-black.png'
+
+/**
+ * The member card Chloe asked for on 15 Nov 2026 ("a bit like the styled
+ * overnight one, with the MYRA logo top left"): the grey page, the white
+ * rounded card, the logo at the top left with a small tracked subtitle under
+ * it, 15px text. Pieces go in thumbnail rows (lib/studio/monday-edit).
+ */
+export function memberCardShell(subtitle: string, bodyHtml: string, footer = 'MYRA &middot; YOUR PRIVATE STYLIST'): string {
+  const font = 'font-family:Helvetica,Arial,sans-serif;'
+  return `<!doctype html><html><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /></head><body style="margin:0;padding:0;background:#f2f2f2;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f2f2f2;">
+<tr><td align="center" style="padding:24px 12px;">
+<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border:1px solid #e2e0db;border-radius:12px;">
+<tr><td style="padding:28px 32px 8px 32px;${font}">
+  <a href="https://www.myraassistant.co.uk/me" style="text-decoration:none;"><img src="${LOGO_URL}" width="112" alt="MYRA" style="display:block;width:112px;height:auto;border:0;" /></a>
+  <p style="margin:10px 0 0 0;font-size:11px;letter-spacing:0.14em;color:#a8a8a4;text-transform:uppercase;">${subtitle}</p>
+</td></tr>
+<tr><td style="padding:14px 32px 32px 32px;${font}color:#2b2b2b;font-size:15px;line-height:1.6;">
+${bodyHtml}
+</td></tr>
+</table>
+<p style="${font}font-size:10px;color:#a8a8a4;margin:14px 0 0 0;letter-spacing:0.08em;">${footer}</p>
+</td></tr></table></body></html>`
+}
+
+/**
+ * The member layout Chloe approved from the Black Friday preview (9 Nov 2026):
+ * white, no card, MYRA at 26px, 16px text, tracked uppercase headings, signed
+ * off "MYRA · YOUR PRIVATE STYLIST". The studio shell above is for her own reports.
+ */
+export function memberEmailShell(bodyHtml: string, footer = 'MYRA &middot; YOUR PRIVATE STYLIST'): string {
+  const font = 'font-family:Helvetica,Arial,sans-serif;'
+  return `<!doctype html><html><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /></head><body style="margin:0;padding:0;background:#ffffff;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;">
+<tr><td align="center" style="padding:32px 16px;">
+<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
+<tr><td style="padding:0 0 28px 0;${font}font-size:26px;letter-spacing:0.14em;color:#2b2b2b;">MYRA</td></tr>
+<tr><td>
+${bodyHtml}
+</td></tr>
+<tr><td style="padding:28px 0 0 0;${font}font-size:11px;letter-spacing:0.08em;color:#a8a8a4;">${footer}</td></tr>
+</table>
 </td></tr></table></body></html>`
 }
 

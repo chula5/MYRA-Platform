@@ -114,6 +114,10 @@
     {
       "path": "/api/cron/avatar",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/monday-edit",
+      "schedule": "0 8 * * 1"
     }
   ]
 }

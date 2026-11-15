@@ -9,7 +9,9 @@
 //
 // "Could buy" is the same bar as everywhere she is shown pieces: a picture,
 // not sold or out of stock or unreadable (sellable), not something she owns,
-// and through the strict size gate the composer uses (filterItemsForShopper).
+// through the strict size gate the composer uses (filterItemsForShopper), and
+// within her reach (lib/member-style-gate): never a colour, shape or type she
+// avoids, never over her price band, never a label far younger than her.
 // Drafts count — Browse shows them, and the label section of the shop brain
 // shows her brands' drafts on purpose.
 //
@@ -20,10 +22,11 @@ import { brandKey } from '@/lib/brand-affinity'
 import { sellable } from '@/lib/stock-sellable'
 import { isOwnedItem } from '@/lib/wardrobe/owned-items'
 import { filterItemsForShopper, loadMemberSizeProfile } from '@/lib/size-availability'
+import { STYLE_DIMS, loadMemberReach, forHer } from '@/lib/member-style-gate'
 
 export const NEW_IN_DAYS = 7
 const SHOWABLE = ['ready', 'live', 'draft']
-const CARD = 'item_id, product_name, image_url, price_gbp, retailer_url, item_type, colour_family, status, stock_status, stock_class, available, ownership, owner_kind, created_at, brand_id, brand:brand_id(name, source_type, size_offset)'
+const CARD = `item_id, product_name, image_url, price_gbp, retailer_url, item_type, colour_family, status, stock_status, stock_class, available, ownership, owner_kind, created_at, brand_id, ${STYLE_DIMS}, brand:brand_id(name, source_type, size_offset)`
 
 export interface NewInMember {
   member_id: string
@@ -88,8 +91,8 @@ export async function newInForMember(admin: any, m: NewInMember, since?: string)
     .not('image_url', 'is', null).order('created_at', { ascending: false }).limit(1000)
   if (error) throw new Error(error.message)
   const buyable = ((data ?? []) as any[]).filter((it) => it.available !== false && sellable(it) && !isOwnedItem(it))
-  const ctx = await loadMemberSizeProfile(m.member_id)
-  const items = await filterItemsForShopper(buyable, ctx, { strict: true })
+  const [ctx, reach] = await Promise.all([loadMemberSizeProfile(m.member_id), loadMemberReach(admin, m.member_id)])
+  const items = forHer(reach, await filterItemsForShopper(buyable, ctx, { strict: true }))
 
   const counts = new Map<string, NewInBrand>()
   for (const it of items) {

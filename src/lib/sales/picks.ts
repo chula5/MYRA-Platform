@@ -3,13 +3,19 @@
 // For the BLACK FRIDAY section on For You and the notes that open it. Only
 // brands in her taste graph that are ON SALE (lib/sales/detect, never one
 // Chloe paused); only pieces she could buy today in her size, under her
-// ceiling at the SALE price, never her own. Then in the order a stylist would
+// ceiling at the SALE price, never her own, and within her reach
+// (lib/member-style-gate: no heels for a member who said no heels, no label
+// far younger than her). Then in the order a stylist would
 // put them:
 //
 //   1. pieces that fill a gap in her wardrobe (lib/mirror/gaps) — "You own one coat"
 //   2. pieces she rang WAIT FOR SALE on
 //   3. pieces one of her saved searches found
-//   4. the rest: her named labels first, then the deepest markdown
+//   4. the rest: her named labels first, brand by brand in her order; within
+//      a brand what she has said she loves (colour, shape, type), then what
+//      sits closest to her taste vector, before the deepest markdown — a
+//      74%-off lace pant is not a reason on its own
+//      (Chloe, 2026-11-15: "these DISSH trousers are showing up everywhere")
 //
 // A member whose wardrobe MYRA has not seen is never told she is short of
 // anything — gaps are only claimed from a wardrobe that is there.
@@ -21,9 +27,11 @@ import { filterItemsForShopper, loadMemberSizeProfile } from '@/lib/size-availab
 import { ownerRefsForMember } from '@/lib/wardrobe/owned-items'
 import { wardrobeGaps, gapForItemType, gapSentence, type WardrobeGap } from '@/lib/mirror/gaps'
 import { percentOff, saleLine } from './detect'
+import { STYLE_DIMS, TASTE_DIMS, loadMemberReach, forHer, herTaste } from '@/lib/member-style-gate'
+import { lovedScore } from '@/lib/pilot-stylist'
 
 const SHOWABLE = ['ready', 'live', 'draft']
-const CARD = 'item_id, product_name, image_url, price_gbp, was_price_gbp, retailer_url, item_type, colour_family, status, stock_status, stock_class, available, ownership, owner_kind, brand_id, brand:brand_id(name, source_type, size_offset)'
+const CARD = `item_id, product_name, image_url, price_gbp, was_price_gbp, retailer_url, item_type, colour_family, status, stock_status, stock_class, available, ownership, owner_kind, brand_id, ${STYLE_DIMS}, ${TASTE_DIMS}, brand:brand_id(name, source_type, size_offset, price_tier, era_orientation, aesthetic_output, cultural_legibility, creative_behaviour)`
 const NAMED = 0.8
 /** Pieces one gap may show before the other brands get their turn. */
 const GAP_SHOWN = 6
@@ -81,8 +89,8 @@ export async function salePicksFor(admin: any, memberId: string, opts: { limit?:
     it.available !== false && sellable(it) && it.ownership !== 'owned'
     && percentOff(Number(it.price_gbp), Number(it.was_price_gbp)) != null
     && !overHerBudget(graph, it))
-  const sizeCtx = await loadMemberSizeProfile(memberId)
-  const buyable = await filterItemsForShopper(marked, sizeCtx, { strict: true })
+  const [sizeCtx, reach] = await Promise.all([loadMemberSizeProfile(memberId), loadMemberReach(admin, memberId)])
+  const buyable = forHer(reach, await filterItemsForShopper(marked, sizeCtx, { strict: true }), { budget: false })
   if (!buyable.length) return EMPTY
 
   // Her wardrobe, her waiting list, her searches — the three reasons a piece leads.
@@ -132,8 +140,12 @@ export async function salePicksFor(admin: any, memberId: string, opts: { limit?:
   // one gap shows six at most before the rest of her brands get a turn. Each
   // queue keeps its deepest markdown first.
   const brandRank = (id: string) => -(graph.weights.get(id) ?? 0)
+  const itemOf = new Map(buyable.map((it) => [it.item_id, it]))
+  const loved = (p: SalePiece) => lovedScore(reach.prefs, itemOf.get(p.item_id) as any)
+  const taste = new Map(buyable.map((it) => [it.item_id, herTaste(reach, it)]))
+  const byHerThenOff = (a: SalePiece, b: SalePiece) => loved(b) - loved(a) || (taste.get(b.item_id) ?? 0) - (taste.get(a.item_id) ?? 0) || b.off - a.off
   const slotOfPiece = (p: SalePiece) => gapForItemType(typeOf.get(p.item_id), gaps)?.slot ?? ''
-  const gapPieces = takeTurns(pieces.filter((p) => p.why === 'gap'), slotOfPiece, (k) => gapRank.get(k as any) ?? 9, (q) => takeTurns(q, (p) => brandOf.get(p.item_id)!, brandRank))
+  const gapPieces = takeTurns(pieces.filter((p) => p.why === 'gap'), slotOfPiece, (k) => gapRank.get(k as any) ?? 9, (q) => takeTurns(q.sort(byHerThenOff), (p) => brandOf.get(p.item_id)!, brandRank))
   const perSlot = new Map<string, number>()
   const lead: SalePiece[] = []
   const spill: SalePiece[] = []
@@ -143,7 +155,7 @@ export async function salePicksFor(admin: any, memberId: string, opts: { limit?:
     ;((perSlot.get(k) ?? 0) <= GAP_SHOWN ? lead : spill).push(p)
   }
   for (const why of ['waiting', 'search'] as const) lead.push(...pieces.filter((p) => p.why === why))
-  const rest = takeTurns([...pieces.filter((p) => p.why === 'brand'), ...spill].sort((a, b) => b.off - a.off), (p) => brandOf.get(p.item_id)!, brandRank)
+  const rest = takeTurns([...pieces.filter((p) => p.why === 'brand'), ...spill].sort(byHerThenOff), (p) => brandOf.get(p.item_id)!, brandRank)
   const capped = [...lead, ...rest]
 
   const perBrand = new Map<string, number>()
