@@ -541,6 +541,9 @@ export async function approveCandidate(
     stylingSetId?: string | null
     stylistId?: string | null
     variantDirection?: string | null
+    // File the outfit under THIS Outfit Project (admin_project) instead of the
+    // Composer bucket — a Review project's picks land in a project of its name.
+    projectId?: string | null
   },
 ): Promise<{ outfitId?: string; projectId?: string; error?: string }> {
   if (itemIds.length !== slots.length) return { error: 'itemIds and slots length mismatch' }
@@ -559,7 +562,7 @@ export async function approveCandidate(
     // dimensions — vision-score any incomplete item's image first.
     await ensureItemsScored([anchor, ...additions.map((a) => a.item)])
 
-    const projRes = await ensureComposerProject()
+    const projRes = opts?.projectId ? { projectId: opts.projectId } : await ensureComposerProject()
     if (projRes.error || !projRes.projectId) return { error: projRes.error ?? 'No project' }
     const projectId = projRes.projectId
 

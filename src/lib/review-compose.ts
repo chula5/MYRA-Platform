@@ -10,7 +10,9 @@
 //      minus anything the ejection constraints quarantine in this context.
 //   2. Per slot, the top `perSlotPool` pieces by pairwise compatibility with
 //      the anchor (plus any `shortlistAdjust` pull), brand tiers kept in band
-//      (high-street / contemporary never with luxury / ultra; premium bridges).
+//      (high-street / contemporary never with luxury / ultra; premium bridges),
+//      and only brands from the anchor's family within one price bracket
+//      (lib/brand-families: the onboarding groups, bracketed by hand).
 //   3. Cartesian product of the slot pools: the other garment (for a
 //      separates anchor) + shoes + bag. Review itself never composes
 //      outerwear or jewellery (styled on by hand); a member's look may ask for
@@ -31,6 +33,8 @@ import { toHouseItem } from '@/lib/house-item'
 import { blendedScore, emptyModel, type FeatureItem, type StyleModel } from '@/lib/style-brain'
 import { formalityBand, hardSkipPairs, isExcluded, type EjectionConstraints } from '@/lib/pipeline'
 import { judgeLook, type MemberRules } from '@/lib/style-rules'
+import { bracketSpreadViolation, familyFits } from '@/lib/brand-families'
+import { pricePointViolation } from '@/lib/price-point'
 
 // Anchor garments a review look is built around.
 export const REVIEW_DRESS = new Set(['mini_dress', 'midi_dress', 'maxi_dress', 'shirt_dress', 'slip_dress'])
@@ -208,6 +212,8 @@ export interface ReviewComposeResult {
   picks: ReviewPick[]
   /** Every hard-rule violation that discarded a combo — for the rejection ledger. */
   rejectionHits: RuleHit[]
+  /** How many picks the strict pass gave (no piece in more than `maxUsesPerItem`, no twins) before any loosening. */
+  strictCount?: number
 }
 
 const EXTRA_SLOT_POOL = 3
@@ -237,10 +243,15 @@ const STATEMENT_RESERVE = 2
  */
 export function composeReviewLooks(opts: ReviewComposeOpts): ReviewComposeResult {
   const base = opts.perSlotPool ?? REVIEW_PER_SLOT_POOL
+  const count = opts.count ?? REVIEW_PICK_COUNT
   let result = composeReviewLooksOnce({ ...opts, perSlotPool: base })
+  // Widen too when the set is only full because the per-piece cap was
+  // dropped: a dress anchor whose five shortlisted shoes hold one black
+  // loafer came back with that loafer in every look (Chloe, 2026-11-12).
   for (const size of [base * 2, base * 4]) {
-    if (result.picks.length > 0 || size > REVIEW_MAX_SLOT_POOL) break
-    result = composeReviewLooksOnce({ ...opts, perSlotPool: size })
+    if ((result.strictCount ?? result.picks.length) >= count || size > REVIEW_MAX_SLOT_POOL) break
+    const wider = composeReviewLooksOnce({ ...opts, perSlotPool: size })
+    if ((wider.strictCount ?? 0) > (result.strictCount ?? 0) || wider.picks.length > result.picks.length) result = wider
   }
   return result
 }
@@ -280,6 +291,9 @@ function composeReviewLooksOnce(opts: ReviewComposeOpts): ReviewComposeResult {
   const pool = (slot: string, size: number) => {
     const ranked = library
       .filter((it) => slotForItemType(it.item_type) === slot && !tierBandViolation([anchorTier, it.brand?.price_tier ?? null]))
+      .filter((it) => familyFits(anchor.brand, it.brand, slot))
+      // Her price point (lib/price-point): a £40 jumper never reaches the shortlist beside a £1,695 skirt.
+      .filter((it) => pinnedIds.has(it.item_id) || !pricePointViolation([{ ...(anchor as any), slot: anchorSlot }, { ...(it as any), slot }]))
       .map((it) => ({ it, rank: pairCompat(anchor, it).total + (shortlistAdjust ? shortlistAdjust(it) : 0) }))
       .sort((a, b) => b.rank - a.rank)
     const top = ranked.slice(0, size).map((x) => x.it)
@@ -374,6 +388,9 @@ function composeReviewLooksOnce(opts: ReviewComposeOpts): ReviewComposeResult {
     .map((combo) => combo.filter((c): c is { item: ItemWithBrand; slot: string } => c != null))
     .filter((items) => items.length > 0)
     .filter((items) => !tierBandViolation([anchorTier, ...items.map((i) => i.item.brand?.price_tier ?? null)]))
+    // Pinned pieces are hers already — her wardrobe isn't held to a bracket.
+    .filter((items) => !bracketSpreadViolation([anchor.brand, ...items.filter((i) => !pinnedIds.has(i.item.item_id)).map((i) => i.item.brand)]))
+    .filter((items) => !pricePointViolation([{ ...(anchor as any), slot: anchorSlot }, ...items.filter((i) => !pinnedIds.has(i.item.item_id)).map((i) => ({ ...(i.item as any), slot: i.slot }))]))
     .map((items) => ({ items, judged: judge(items) }))
     .filter(({ judged }) => judged.pass)
     .filter(({ items }) => !lookGate || lookGate([anchor, ...items.map((i) => i.item)]))
@@ -417,14 +434,16 @@ function composeReviewLooksOnce(opts: ReviewComposeOpts): ReviewComposeResult {
     (s) => !isTwin(s),
     ...(opts.noTwins ? [] : [() => true]),
   ]
-  for (const ok of passes) {
+  let strictCount = 0
+  for (const [pass, ok] of passes.entries()) {
     for (const s of scored) {
       if (picked.length >= count) break
       if (picked.includes(s) || !ok(s)) continue
       s.items.forEach(({ item }) => use.set(item.item_id, (use.get(item.item_id) ?? 0) + 1))
       picked.push(s)
     }
+    if (pass === 0) strictCount = picked.length
     if (picked.length >= count) break
   }
-  return { picks: picked, rejectionHits }
+  return { picks: picked, rejectionHits, strictCount }
 }

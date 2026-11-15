@@ -1,5 +1,6 @@
 import { getReviewQueue } from './actions'
 import OutfitReviewClient from './OutfitReviewClient'
+import ProjectsStrip from './ProjectsStrip'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,6 +21,8 @@ export default async function OutfitReviewPage() {
           propose brand-coherent looks — tap <span className="text-[#4A4E57]">YES</span> to create the draft and
           trigger a Higgsfield shoot (same as the Composer), or <span className="text-[#4A4E57]">SKIP</span>.
           Brand tiers are kept in band (high-street/contemporary not mixed with luxury/ultra; premium bridges).
+          For a run of content, start a <span className="text-[#4A4E57]">PROJECT</span> below: MYRA composes the whole brief in the
+          background and keeps the looks for you to pick from.
         </p>
         {error && <p className="mt-3 text-[10px] tracking-[0.12em] text-[#B83A3A]">{error.toUpperCase()}</p>}
         {!error && (
@@ -27,6 +30,10 @@ export default async function OutfitReviewPage() {
             <span className="text-[#4A4E57]">{anchors.length}</span> ANCHOR{anchors.length === 1 ? '' : 'S'} NEED REVIEW
           </p>
         )}
+      </div>
+
+      <div className="mb-8">
+        <ProjectsStrip />
       </div>
 
       <OutfitReviewClient anchors={anchors} brands={brands} types={types} colours={colours} />

@@ -46,6 +46,7 @@ const ASK_WORDS = new Set([
 // midi, never a mini.
 const LONG_WORDS = new Set(['long', 'longline', 'floor', 'floorlength', 'ankle'])
 const SHORT_WORDS = new Set(['short', 'cropped'])
+const DRESS_LENGTH_WORDS = new Set(['midi', 'maxi', 'mini'])
 const LONG_TYPES = new Set(['maxi_dress', 'midi_dress'])
 const SHORT_TYPES = new Set(['mini_dress', 'shorts'])
 const LONG_TERMS = ['maxi', 'midi', 'long', 'floor length', 'floor-length', 'column', 'gown', 'ankle length']
@@ -131,6 +132,14 @@ function readChunk(words: string[], brands: string[]): PieceSpec | null {
   addAll(spec.itemTypes, p.itemTypes)
   addAll(spec.colours, p.colourFamilies)
   addAll(spec.materials, p.materials)
+  // "midi skirts", "mini skirt": midi / maxi / mini beside another garment is
+  // its length, not a dress — the dress types the word carries are dropped
+  // unless she also said "dress" (2026-11-08: a midi-skirts project came back
+  // half midi dresses).
+  if (words.some((w) => DRESS_LENGTH_WORDS.has(w)) && !words.some((w) => /^dress(es)?$/.test(w))) {
+    const others = spec.itemTypes.filter((t) => !t.endsWith('_dress'))
+    if (others.length > 0 && others.length < spec.itemTypes.length) spec.itemTypes = others
+  }
   // "maxi", "mini" are read as types by parseQuery; as lengths they mean the same.
   spec.descriptors = p.intentTerms.filter((t) => !ASK_WORDS.has(t) && !STOPWORDS.has(t) && !/^\d+$/.test(t))
   // A long or short dress narrows the dress types; any other piece keeps its
