@@ -118,16 +118,15 @@ export default function InspirationToOutfit({
         onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
         onDragLeave={() => setDragOver(false)}
         onDrop={(e) => { e.preventDefault(); setDragOver(false); void drop(e.dataTransfer.files?.[0]) }}
-        className={className}
+        className={`h-full ${className}`}
       >
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
-          className={`w-full border border-dashed px-6 py-5 myra-field tracking-[0.14em] rounded-full transition-colors ${dragOver ? 'border-[#2B2B2B] bg-[#2B2B2B] text-white' : 'border-[#2B2B2B] bg-[rgba(255,255,255,0.18)] text-[#2B2B2B] hover:bg-[#2B2B2B] hover:text-white'}`}
+          className={`w-full h-full border border-dashed px-4 md:px-6 py-5 myra-field tracking-[0.14em] rounded-full transition-colors ${dragOver ? 'border-[#2B2B2B] bg-[#2B2B2B] text-white' : 'border-[#2B2B2B] bg-[rgba(255,255,255,0.18)] text-[#2B2B2B] hover:bg-[#2B2B2B] hover:text-white'}`}
         >
-          {testMemberId ? `INSPIRATION TO OUTFIT — TEST AS ${firstName.toUpperCase()}` : 'INSPIRATION TO OUTFIT — DROP IN A LOOK YOU LOVE'}
+          {testMemberId ? `INSPO TO OUTFIT — TEST AS ${firstName.toUpperCase()}` : 'INSPO TO OUTFIT'}
         </button>
-        <p className="myra-section-note mt-3 text-center">A RUNWAY EXIT, A STREET SHOT, A SAVED POST · MYRA STYLES IT FROM PIECES IN YOUR SIZE AND PRICE RANGE</p>
       </div>
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => { void drop(e.target.files?.[0]); e.target.value = '' }} />
 

@@ -428,9 +428,10 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
               </div>
             }
           >
-            <div className="mx-auto w-full max-w-[900px] flex items-center justify-center gap-3 mb-5 md:mb-7" data-tour="looks-search">
-              <span className="myra-field shrink-0 text-[#55524C]">SEARCH A LOOK</span>
-              <div className="flex-1 min-w-0 rounded-full bg-white/70 border border-[rgba(43,43,43,0.15)] flex items-center">
+            {/* The label sits above so the field runs the full width (Chloe, 2026-11-15). */}
+            <div className="w-full flex flex-col items-stretch gap-3 mb-5 md:mb-7" data-tour="looks-search">
+              <span className="myra-field text-center text-[#55524C]">SEARCH A LOOK</span>
+              <div className="w-full min-w-0 rounded-full bg-white/70 border border-[rgba(43,43,43,0.15)] flex items-center">
                 <input
                   value={query}
                   onChange={(e) => { setQuery(e.target.value); setOccasion(null); setRelated(null); setShelf(null) }}
@@ -456,12 +457,22 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
                   occasionIds={view.occasions}
                 />
               ) : (
-                <button
-                  onClick={() => setAsking(true)}
-                  className="w-full border border-[#2B2B2B] bg-[rgba(255,255,255,0.18)] px-6 py-5 myra-field tracking-[0.14em] text-[#2B2B2B] hover:bg-[#2B2B2B] hover:text-white transition-colors rounded-full"
-                >
-                  {readOnly ? `ASK MYRA — TEST AS ${(view.name.split(' ')[0] || 'HER').toUpperCase()}` : 'ASK MYRA FOR SOMETHING NEW'}
-                </button>
+                // Two doors side by side: an occasion in words, or a picture of
+                // a look she loves (lib/member-inspiration).
+                <div className="grid grid-cols-2 gap-[6px] md:gap-3">
+                  <button
+                    onClick={() => setAsking(true)}
+                    className="w-full h-full border border-[#2B2B2B] bg-[rgba(255,255,255,0.18)] px-4 md:px-6 py-5 myra-field tracking-[0.14em] text-[#2B2B2B] hover:bg-[#2B2B2B] hover:text-white transition-colors rounded-full"
+                  >
+                    {readOnly ? `NEW LOOKS — TEST AS ${(view.name.split(' ')[0] || 'HER').toUpperCase()}` : 'NEW LOOKS'}
+                  </button>
+                  <InspirationToOutfit
+                    testMemberId={readOnly ? view.memberId ?? undefined : undefined}
+                    firstName={view.name.split(' ')[0] || 'her'}
+                    onLanded={(deliveryId) => { setRelated(null); setQuery(''); setOccasion(null); setShelf({ key: 'inspiration', deliveryId }) }}
+                  />
+                  <p className="myra-section-note col-span-2 mt-1 text-center">TELL MYRA THE OCCASION, OR DROP IN A RUNWAY EXIT, A STREET SHOT, A SAVED POST · STYLED FROM PIECES IN YOUR SIZE AND PRICE RANGE</p>
+                </div>
               )}
               {/* What she has asked for and not yet received: one small card each,
                   the occasion and nothing else. The looks arrive once MYRA has checked them. */}
@@ -478,16 +489,6 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
                     </div>
                   ))}
                 </div>
-              )}
-              {/* INSPIRATION TO OUTFIT — a picture of a look she loves, styled
-                  from pieces in her size and price range (lib/member-inspiration). */}
-              {!asking && (
-                <InspirationToOutfit
-                  className="mt-5"
-                  testMemberId={readOnly ? view.memberId ?? undefined : undefined}
-                  firstName={view.name.split(' ')[0] || 'her'}
-                  onLanded={(deliveryId) => { setRelated(null); setQuery(''); setOccasion(null); setShelf({ key: 'inspiration', deliveryId }) }}
-                />
               )}
             </div>
 
