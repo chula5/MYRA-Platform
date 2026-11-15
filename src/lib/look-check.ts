@@ -287,13 +287,16 @@ export async function judgeLooksForMemberEach(
   looks: { items: any[] }[],
   sizeRefresh: 'none' | 'unknown' | 'all' = 'unknown',
   onEach?: (index: number, judged: JudgedLook) => void | Promise<void>,
+  /** What she asked for this time (a picture she dropped in), read with her profile. */
+  brief?: string,
 ): Promise<JudgedLook[]> {
   const { memberMemory } = await import('@/lib/member-memory')
   // The sizes are re-read from the retailers (up to 8s a page) WHILE Claude
   // looks at the photos, not before: the eye only needs her description. A
   // look's verdict still waits for both.
   const sizesReady = checkSizesForMember(admin, memberId, looks.flatMap((l) => l.items), sizeRefresh)
-  const description = await memberMemory(memberId).then((m) => m.text).catch(() => loadClientDescription(admin, memberId))
+  const profile = await memberMemory(memberId).then((m) => m.text).catch(() => loadClientDescription(admin, memberId))
+  const description = brief ? `${profile}\n\n${brief}` : profile
   const sizesOf = (sizeMap: Map<string, PieceSize>, l: { items: any[] }) => Object.fromEntries(
     l.items.filter((it) => it.item_id && sizeMap.has(it.item_id)).map((it) => [it.item_id as string, sizeMap.get(it.item_id)!]),
   )

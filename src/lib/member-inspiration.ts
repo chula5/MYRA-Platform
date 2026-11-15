@@ -195,6 +195,7 @@ async function runOne(admin: any, row: MemberInspiration): Promise<void> {
   await beat({ inspiration: insp })
   const byId = new Map(pool.map((i) => [i.item_id, i]))
   const plan = anchorsFor(insp, (id) => String((byId.get(id) as any)?.colour_family ?? '').toLowerCase())
+  console.log('[member-inspiration]', row.inspiration_id, 'pool', pool.length, 'matches', (insp.matches ?? []).map((m) => `${m.slot}:${m.picks.length}`).join(' '), 'anchors', plan.length)
   if (plan.length === 0) return fail('MYRA could not find pieces like the ones in your picture in your size and price range')
 
   // Compose around each anchor; every candidate is a look of hers in the making.
@@ -229,19 +230,39 @@ async function runOne(admin: any, row: MemberInspiration): Promise<void> {
     if (distinct.some((d) => d.items.filter((i) => ids.has(i.item_id)).length > 1)) continue
     distinct.push(c)
   }
-  const judgeable = distinct.slice(0, JUDGE_AT_MOST)
-  if (judgeable.length === 0) return fail('The pieces that matched your picture have just sold out — try again in a day or two')
+  // The distinct ones are judged first; near twins fill the rest of the
+  // batch so that a picture with three matching trousers still gets its four.
+  const rest = candidates.filter((c) => !distinct.includes(c) && c.items.every((i) => i.item_id && live.has(i.item_id)))
+  const judgeable = [...distinct, ...rest].slice(0, JUDGE_AT_MOST)
+  console.log('[member-inspiration]', row.inspiration_id, 'candidates', candidates.length, 'live+distinct', distinct.length, 'judging', judgeable.length)
+  if (judgeable.length === 0) return fail('The pieces that matched your picture have just sold out — try another picture or try again in a day or two')
 
-  // MYRA's eye on every candidate, with her sizes; the first WANT that pass are kept.
-  const kept: Candidate[] = []
+  // MYRA's eye on every candidate, with her sizes. The picture is her brief:
+  // its pairing (a checked shirt under a beaded jacket, say) is what she asked
+  // for, so the check reads it beside her profile rather than against the
+  // one-statement house rule.
+  const brief = `What she asked for this time: she dropped in a picture of an outfit to recreate in spirit — ${insp.summary}. The pairing of pieces in that picture is her brief, not a mistake: judge whether THESE pieces carry that style well together for her, in her colours and sizes; do not fail an outfit only for having the same mix of statement pieces as her picture.`
+  const passed: Candidate[] = []
   let checked = 0
   await judgeLooksForMemberEach(admin, row.member_id, judgeable.map((c) => ({ items: c.items })), 'unknown', (i, judged) => {
     if (judged.check) checked++
     const ok = !!judged.check && judged.check.verdict !== 'clashes' && !hasPieceOutOfSize(judged)
-    if (ok && kept.length < WANT) kept.push(judgeable[i])
-  })
+    // One line per outfit so a "nothing passed" can be read back from the log.
+    const sizes = Object.values(judged.sizes).filter((s) => s.verdict === 'not_in_size').length
+    console.log('[member-inspiration]', row.inspiration_id, `look ${i + 1}`, judged.check ? `${judged.check.verdict} (${judged.check.issues.join('; ').slice(0, 200)})` : 'check: null', sizes ? `${sizes} not in size` : '', ok ? 'PASSED' : '')
+    if (ok) passed.push(judgeable[i])
+  }, brief)
   await beat()
-  if (kept.length === 0) return fail(checked ? 'None of the outfits MYRA tried passed its check in your size — try another picture' : CHECK_DOWN_ERROR)
+  if (passed.length === 0) return fail(checked ? 'None of the outfits MYRA tried passed its check in your size — try another picture' : CHECK_DOWN_ERROR)
+  // Four she can tell apart first; a near twin only when there is nothing else.
+  const kept: Candidate[] = []
+  for (const c of passed) {
+    if (kept.length >= WANT) break
+    const ids = new Set(c.items.map((i) => i.item_id))
+    if (kept.some((d) => d.items.filter((i) => ids.has(i.item_id)).length > 1)) continue
+    kept.push(c)
+  }
+  for (const c of passed) { if (kept.length >= Math.min(WANT, 2)) break; if (!kept.includes(c)) kept.push(c) }
 
   // Kept as a delivery of hers: her Looks page shows them like any other.
   const now = nowIso()

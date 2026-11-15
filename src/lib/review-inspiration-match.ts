@@ -132,12 +132,16 @@ async function eyeScores(look: { data: string; mediaType: string }, label: strin
       content.push({ type: 'image_url', image_url: { url: `data:${s.image.mediaType};base64,${s.image.data}`, detail: 'low' } })
     })
     try {
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      const body = JSON.stringify({ model: VISION_WORD_MODEL, max_completion_tokens: 400, reasoning_effort: 'none', messages: [{ role: 'user', content }] })
+      const send = () => fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: VISION_WORD_MODEL, max_completion_tokens: 400, reasoning_effort: 'none', messages: [{ role: 'user', content }] }),
+        body,
         signal: AbortSignal.timeout(90_000),
       })
+      // A batch is several megabytes of pictures; the socket is sometimes
+      // closed mid-send, and one more try is cheaper than losing ten matches.
+      const res = await send().catch(() => send())
       const j: any = await res.json().catch(() => ({}))
       if (!res.ok) { console.error('[review-inspiration-match] eye', res.status, String(j?.error?.message ?? '').slice(0, 160)); return }
       const raw = String(j.choices?.[0]?.message?.content ?? '')
