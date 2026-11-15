@@ -123,7 +123,7 @@ export default function InspirationToOutfit({
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
-          className={`w-full h-full border border-dashed px-4 md:px-6 py-5 myra-field tracking-[0.14em] rounded-full transition-colors ${dragOver ? 'border-[#2B2B2B] bg-[#2B2B2B] text-white' : 'border-[#2B2B2B] bg-[rgba(255,255,255,0.18)] text-[#2B2B2B] hover:bg-[#2B2B2B] hover:text-white'}`}
+          className={`w-full h-full border border-dashed px-4 md:px-6 py-4 myra-field tracking-[0.14em] rounded-full transition-colors ${dragOver ? 'border-[#2B2B2B] bg-[#2B2B2B] text-white' : 'border-[#2B2B2B] bg-[rgba(255,255,255,0.18)] text-[#2B2B2B] hover:bg-[#2B2B2B] hover:text-white'}`}
         >
           {testMemberId ? `INSPO TO OUTFIT — TEST AS ${firstName.toUpperCase()}` : 'INSPO TO OUTFIT'}
         </button>

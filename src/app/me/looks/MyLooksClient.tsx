@@ -459,10 +459,10 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
               ) : (
                 // Two doors side by side: an occasion in words, or a picture of
                 // a look she loves (lib/member-inspiration).
-                <div className="grid grid-cols-2 gap-[6px] md:gap-3">
+                <div className="grid grid-cols-2 gap-2 md:gap-3 w-full max-w-[480px] mx-auto">
                   <button
                     onClick={() => setAsking(true)}
-                    className="w-full h-full border border-[#2B2B2B] bg-[rgba(255,255,255,0.18)] px-4 md:px-6 py-5 myra-field tracking-[0.14em] text-[#2B2B2B] hover:bg-[#2B2B2B] hover:text-white transition-colors rounded-full"
+                    className="w-full h-full border border-[#2B2B2B] bg-[rgba(255,255,255,0.18)] px-4 md:px-6 py-4 myra-field tracking-[0.14em] text-[#2B2B2B] hover:bg-[#2B2B2B] hover:text-white transition-colors rounded-full"
                   >
                     {readOnly ? `NEW LOOKS — TEST AS ${(view.name.split(' ')[0] || 'HER').toUpperCase()}` : 'NEW LOOKS'}
                   </button>
@@ -471,7 +471,6 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
                     firstName={view.name.split(' ')[0] || 'her'}
                     onLanded={(deliveryId) => { setRelated(null); setQuery(''); setOccasion(null); setShelf({ key: 'inspiration', deliveryId }) }}
                   />
-                  <p className="myra-section-note col-span-2 mt-1 text-center">TELL MYRA THE OCCASION, OR DROP IN A RUNWAY EXIT, A STREET SHOT, A SAVED POST · STYLED FROM PIECES IN YOUR SIZE AND PRICE RANGE</p>
                 </div>
               )}
               {/* What she has asked for and not yet received: one small card each,
