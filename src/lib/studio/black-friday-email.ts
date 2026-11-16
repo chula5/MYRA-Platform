@@ -76,7 +76,8 @@ export function greetingName(name: string | null | undefined): string {
   if (!first || first.includes('@')) return ''
   // Chloe, 2026-11-12: "fix Anne Spaven, fix her name".
   if (/spaven/i.test(String(name))) first = 'Anne'
-  return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase()
+  // "Ann-Marie", not "Ann-marie": each hyphenated part keeps its capital.
+  return first.split('-').map((s) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()).join('-')
 }
 
 // People Chloe added by hand (2026-11-12), at the addresses she gave. Any member

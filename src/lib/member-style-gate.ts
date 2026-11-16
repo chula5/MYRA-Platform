@@ -19,8 +19,21 @@
 
 import 'server-only'
 import { avoidReasons, readStylePrefs, priceVerdict, readPriceBands, type StylePrefs, type PriceBands } from '@/lib/pilot-stylist'
-import { AGE_DIMENSION, withinMemberAgeReach, loadMemberAgeRanges } from '@/lib/brand-affinity'
+import { AGE_DIMENSION, withinMemberAgeReach, loadMemberAgeRanges, brandKey } from '@/lib/brand-affinity'
 import { cosine, isZero, lookVectorFromItems } from '@/lib/taste-vector'
+
+/**
+ * The age register tops out at "45+" (no brand is coded above 4.2 today), so
+ * read literally it refuses Brora, TOAST, Jigsaw and Boden for a woman of 60:
+ * every registered brand "a younger label than her". A member older than
+ * REGISTER_TOP_AGE is judged as that age for this check (2026-11-16), which
+ * still keeps Reformation and DISSH away from Anne and Alison.
+ */
+export const REGISTER_TOP_AGE = 50
+export function labelReachesHer(ageRange: string | null | undefined, register: number | null | undefined): boolean {
+  const capped = ageRange ? String(ageRange).replace(/\d{2}/, (lo) => String(Math.min(Number(lo), REGISTER_TOP_AGE))) : ageRange
+  return withinMemberAgeReach(capped, { customer_age_register: register ?? null })
+}
 
 /** The item columns the shape and colour matchers read; add to any card select that will pass through the gate. */
 export const STYLE_DIMS = 'fit, length, rise, structure, shoulder, neckline, sleeve, waist_definition, leg_opening, pattern'
@@ -33,6 +46,8 @@ export interface MemberReach {
   tasteVector: number[] | null
   /** customer_age_register by brand_id (brand_codes), for the age gate. */
   registerOf: (brandId: string | null | undefined) => number | null
+  /** The brands she named (pilot_member.brands, minus input-only and never): she chose them, so the age gate never refuses them. */
+  namedBrandIds: Set<string>
 }
 
 export interface ReachItem {
@@ -57,20 +72,44 @@ export async function loadAgeRegisters(admin: any): Promise<Map<string, number>>
   return map
 }
 
+let brandIdCache: { at: number; byKey: Map<string, string> } | null = null
+
+/** brand_id by brandKey(name), read once and kept five minutes. */
+async function loadBrandIdsByKey(admin: any): Promise<Map<string, string>> {
+  if (brandIdCache && Date.now() - brandIdCache.at < 5 * 60_000) return brandIdCache.byKey
+  const byKey = new Map<string, string>()
+  try {
+    const { data } = await admin.from('brand').select('brand_id, name').limit(3000)
+    for (const b of (data ?? []) as any[]) if (b.name) byKey.set(brandKey(String(b.name)), String(b.brand_id))
+  } catch { /* no names → no exemption */ }
+  brandIdCache = { at: Date.now(), byKey }
+  return byKey
+}
+
 export async function loadMemberReach(admin: any, memberId: string): Promise<MemberReach> {
-  const [{ data: m }, ages, registers] = await Promise.all([
+  const [{ data: m }, ages, registers, brandIds] = await Promise.all([
     admin.from('pilot_member')
-      .select('colours_loved, colours_avoided, shapes_loved, shapes_avoided, types_loved, types_avoided, price_bands, taste_vector')
+      .select('colours_loved, colours_avoided, shapes_loved, shapes_avoided, types_loved, types_avoided, price_bands, taste_vector, brands, brands_input_only, brands_never')
       .eq('member_id', memberId).maybeSingle(),
     loadMemberAgeRanges(admin, [memberId]),
     loadAgeRegisters(admin),
+    loadBrandIdsByKey(admin),
   ])
+  const blocked = new Set([...(m?.brands_input_only ?? []), ...(m?.brands_never ?? [])].map((n: string) => brandKey(n)))
+  const named = (Array.isArray(m?.brands) ? m.brands : []) as any[]
+  const namedBrandIds = new Set<string>()
+  for (const b of named) {
+    const key = brandKey(String(typeof b === 'string' ? b : b?.name ?? ''))
+    const id = key && !blocked.has(key) ? brandIds.get(key) : null
+    if (id) namedBrandIds.add(id)
+  }
   return {
     prefs: readStylePrefs(m),
     bands: m ? readPriceBands(m) : null,
     ageRange: ages.get(memberId) ?? null,
     tasteVector: Array.isArray(m?.taste_vector) && m.taste_vector.length && !isZero(m.taste_vector) ? m.taste_vector.map(Number) : null,
     registerOf: (id) => (id ? registers.get(String(id)) ?? null : null),
+    namedBrandIds,
   }
 }
 
@@ -80,7 +119,7 @@ export function whyNotHers(reach: MemberReach, it: ReachItem, opts: { budget?: b
   if (avoided.length) return `she avoids ${avoided[0].toLowerCase()}`
   if (opts.budget !== false && reach.bands
     && priceVerdict(reach.bands, { item_type: it.item_type, price_gbp: it.price_gbp != null ? Number(it.price_gbp) : null }) === 'over') return 'over her budget'
-  if (!withinMemberAgeReach(reach.ageRange, { customer_age_register: reach.registerOf(it.brand_id) })) return 'a younger label than her'
+  if (!(it.brand_id && reach.namedBrandIds.has(String(it.brand_id))) && !labelReachesHer(reach.ageRange, reach.registerOf(it.brand_id))) return 'a younger label than her'
   return null
 }
 

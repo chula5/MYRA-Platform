@@ -51,15 +51,15 @@ export interface MondayEdit {
 
 export const isEmpty = (e: MondayEdit) => !e.looks.length && !e.newIn.pieces.length && !e.sale.pieces.length
 
-const esc = (s: string) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-const gbp = (n: number | null | undefined) => (n == null || !Number.isFinite(Number(n))) ? '' : `£${Math.round(Number(n)).toLocaleString('en-GB')}`
+export const esc = (s: string) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+export const gbp = (n: number | null | undefined) => (n == null || !Number.isFinite(Number(n))) ? '' : `£${Math.round(Number(n)).toLocaleString('en-GB')}`
 
 /** The picture through the site's own image route, sized for email — a retailer's CDN may refuse a hotlink; ours does not. */
-const pictureFor = (url: string, width = 384) => { const t = thumbUrl(url, width); return t.startsWith('/') ? siteUrl(t) : t }
+export const pictureFor = (url: string, width = 384) => { const t = thumbUrl(url, width); return t.startsWith('/') ? siteUrl(t) : t }
 
 /** A brand's homeware slips into a fashion feed now and then; the email is for what she wears. */
 const HOMEWARE = /\b(quilt|cushion|throw|blanket|duvet|bedding|pillow|candle|diffuser|vase|bowl|plate|mug|cup|teapot|jug|tray|towel|tablecloth|napkin|placemat|ornament|bauble|decoration|wreath|notebook|calendar|wrapping|gift card|voucher)\b/i
-const isHomeware = (name: string | null | undefined) => HOMEWARE.test(String(name ?? ''))
+export const isHomeware = (name: string | null | undefined) => HOMEWARE.test(String(name ?? ''))
 
 /** Round-robin by key, keeping each key's own order: three brands take turns rather than one brand filling the grid. */
 function takeTurns<T>(list: T[], key: (x: T) => string): T[] {
@@ -171,15 +171,15 @@ export function mondaySubject(e: MondayEdit): string {
 // heading over a hairline.
 
 const FONT = 'font-family:Helvetica,Arial,sans-serif;'
-const p = (t: string, extra = '') => `<p style="margin:0 0 14px 0;${FONT}font-size:15px;line-height:1.6;color:#2b2b2b;${extra}">${t}</p>`
-const h = (t: string) => `<p style="margin:30px 0 6px 0;padding:16px 0 0 0;border-top:1px solid #ededeb;${FONT}font-size:11px;letter-spacing:0.14em;line-height:1.4;color:#7c838b;text-transform:uppercase;">${t}</p>`
-const b = (t: string) => `<strong style="color:#0a0a0a;">${t}</strong>`
-const caps = (t: string) => `<p style="margin:0 0 2px 0;${FONT}font-size:11px;letter-spacing:0.12em;color:#7c838b;text-transform:uppercase;">${esc(t)}</p>`
-const link = (href: string, label: string, extra = '') => `<a href="${href}" style="${FONT}font-size:12px;letter-spacing:0.08em;color:#2b2b2b;text-decoration:underline;${extra}">${label}</a>`
-const sectionLink = (href: string, label: string) => `<p style="margin:10px 0 0 0;">${link(href, label)}</p>`
-const pieceLink = (itemId: string | null, base: string) => itemId ? `${base}/me/dressing-room/${encodeURIComponent(itemId)}` : `${base}/me`
+export const p = (t: string, extra = '') => `<p style="margin:0 0 14px 0;${FONT}font-size:15px;line-height:1.6;color:#2b2b2b;${extra}">${t}</p>`
+export const h = (t: string) => `<p style="margin:30px 0 6px 0;padding:16px 0 0 0;border-top:1px solid #ededeb;${FONT}font-size:11px;letter-spacing:0.14em;line-height:1.4;color:#7c838b;text-transform:uppercase;">${t}</p>`
+export const b = (t: string) => `<strong style="color:#0a0a0a;">${t}</strong>`
+export const caps = (t: string) => `<p style="margin:0 0 2px 0;${FONT}font-size:11px;letter-spacing:0.12em;color:#7c838b;text-transform:uppercase;">${esc(t)}</p>`
+export const link = (href: string, label: string, extra = '') => `<a href="${href}" style="${FONT}font-size:12px;letter-spacing:0.08em;color:#2b2b2b;text-decoration:underline;${extra}">${label}</a>`
+export const sectionLink = (href: string, label: string) => `<p style="margin:10px 0 0 0;">${link(href, label)}</p>`
+export const pieceLink = (itemId: string | null, base: string) => itemId ? `${base}/me/dressing-room/${encodeURIComponent(itemId)}` : `${base}/me`
 
-function thumb(src: string | null, href: string, width: number, alt = '', radius = 6): string {
+export function thumb(src: string | null, href: string, width: number, alt = '', radius = 6): string {
   const img = src
     ? `<img src="${pictureFor(src, width * 2)}" width="${width}" style="display:block;width:${width}px;height:auto;border-radius:${radius}px;border:1px solid #e2e0db;background:#f6f5f2;" alt="${esc(alt)}" />`
     : `<div style="width:${width}px;height:${Math.round(width * 1.25)}px;background:#f2f2f2;border-radius:${radius}px;"></div>`
@@ -187,7 +187,7 @@ function thumb(src: string | null, href: string, width: number, alt = '', radius
 }
 
 /** One piece per row: thumbnail at left, brand / name / price / link at right. */
-function pieceRow(c: { href: string; image_url: string | null; brand: string | null; name: string; priceHtml: string; note?: string | null; action: string }): string {
+export function pieceRow(c: { href: string; image_url: string | null; brand: string | null; name: string; priceHtml: string; note?: string | null; action: string }): string {
   return `
     <tr>
       <td style="padding:12px 12px 6px 0;vertical-align:top;width:64px;">${thumb(c.image_url, c.href, 64, c.name)}</td>
@@ -201,11 +201,11 @@ function pieceRow(c: { href: string; image_url: string | null; brand: string | n
     </tr>`
 }
 
-function rows(cells: Parameters<typeof pieceRow>[0][]): string {
+export function rows(cells: Parameters<typeof pieceRow>[0][]): string {
   return `<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;">${cells.map(pieceRow).join('')}</table>`
 }
 
-function lookBlock(l: EditLook, base: string): string {
+export function lookBlock(l: EditLook, base: string): string {
   const href = `${base}/me/looks?look=${encodeURIComponent(l.look_id)}`
   const total = l.pieces.reduce((n, p) => n + (Number(p.price_gbp) || 0), 0)
   const names = l.pieces.map((p) => `<p style="margin:0 0 5px 0;${FONT}font-size:14px;line-height:1.4;color:#2b2b2b;">${p.brand ? `<span style="font-size:11px;letter-spacing:0.12em;color:#7c838b;">${esc(p.brand.toUpperCase())}</span> &nbsp;` : ''}${esc(p.name)}</p>`).join('')
@@ -231,9 +231,9 @@ function lookBlock(l: EditLook, base: string): string {
     </table>`
 }
 
-const price = (n: number) => `<p style="margin:0;${FONT}font-size:14px;color:#2b2b2b;">${gbp(n)}</p>`
+export const price = (n: number) => `<p style="margin:0;${FONT}font-size:14px;color:#2b2b2b;">${gbp(n)}</p>`
 
-function salePriceHtml(sp: SalePiece): string {
+export function salePriceHtml(sp: SalePiece): string {
   return `<p style="margin:0;${FONT}font-size:14px;color:#2b2b2b;">
     <span style="color:#a8a8a4;text-decoration:line-through;">${gbp(sp.was_price_gbp)}</span>
     &nbsp;${b(gbp(sp.price_gbp))}

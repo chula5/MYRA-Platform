@@ -118,6 +118,14 @@
     {
       "path": "/api/cron/monday-edit",
       "schedule": "0 8 * * 1"
+    },
+    {
+      "path": "/api/cron/member-drafts?kind=sale&send=1&by=2026-11-17",
+      "schedule": "0 8 17 11 *"
+    },
+    {
+      "path": "/api/cron/member-drafts?kind=brands&send=1&by=2026-11-21",
+      "schedule": "0 8 21 11 *"
     }
   ]
 }
