@@ -12,7 +12,7 @@ import 'server-only'
 import { salePicksFor, type SalePiece, type SaleBrand } from '@/lib/sales/picks'
 import { memberCardShell, siteUrl } from './email'
 import { greetingName } from './black-friday-email'
-import { esc, p, h, b, sectionLink, pieceLink, rows, salePriceHtml, isHomeware } from './monday-edit'
+import { esc, p, h, sectionLink, pieceLink, rows, salePriceHtml, isHomeware } from './monday-edit'
 
 export const FINDS_BRANDS = 4
 export const FINDS_PER_BRAND = 4
@@ -47,10 +47,11 @@ export function findsHtml(member: FindsMember, f: BlackFridayFinds, site?: strin
   const base = site ?? siteUrl('')
   const first = greetingName(member.name)
   const parts: string[] = []
-  const count = f.total >= 500 ? 'more than 500 pieces' : `${f.total} ${f.total === 1 ? 'piece' : 'pieces'}`
+  // Chloe, 17 Nov: "just say 17 of your brands in the Black Friday sale. Your favourites first — cut the rest", the whole-edit link at the top.
   parts.push(p(f.favourites
-    ? `${first ? `${esc(first)}, ` : ''}${f.onSale === 1 ? 'one of your brands is' : `${f.onSale} of your brands are`} in Black Friday sale now, ${b(count)} of it in your size and under your budget at the sale price. Your favourites first.`
-    : `${first ? `${esc(first)}, ` : ''}your own brands have not started their Black Friday yet, so here is what is on at the brands nearest yours: ${b(count)} in your size and under your budget at the sale price.`))
+    ? `${first ? `${esc(first)}, ` : ''}${f.onSale === 1 ? 'one of your brands is' : `${f.onSale} of your brands are`} in the Black Friday sale. Your favourites first.`
+    : `${first ? `${esc(first)}, ` : ''}your own brands have not started their Black Friday yet, so here is what is on at the brands nearest yours.`))
+  parts.push(sectionLink(`${base}/me?door=sale`, 'SEE YOUR WHOLE BLACK FRIDAY EDIT'))
   for (const fb of f.brands) {
     parts.push(h(`${esc(fb.name.toUpperCase())} &middot; ${esc(fb.line.toUpperCase())}`))
     parts.push(rows(fb.pieces.map((sp) => ({
