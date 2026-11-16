@@ -49,6 +49,8 @@ export type EmailKind =
   | 'black_friday_report'
   // Monday morning: her looks this week, new at her brands, and the sale prices at her brands.
   | 'shopper_monday_edit'
+  | 'shopper_brand_discovery'
+  | 'shopper_party_looks'
 
 /** Shopper-facing kinds go out as MYRA, with replies to Chloe; the studio kinds stay MYRA Studio. */
 const isMemberKind = (kind: EmailKind) => kind.startsWith('shopper_')
