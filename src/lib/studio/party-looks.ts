@@ -13,7 +13,7 @@
 
 import 'server-only'
 import { createDelivery, composeDeliveryLooks } from '@/app/admin/private-stylist/actions'
-import { loadMemberReach, whyNotHers, type MemberReach } from '@/lib/member-style-gate'
+import { loadMemberReach, loadAgeRegisters, labelReachesHer, whyNotHers, type MemberReach } from '@/lib/member-style-gate'
 import { memberCardShell, siteUrl } from './email'
 import { greetingName } from './black-friday-email'
 import { esc, p, h, sectionLink, lookBlock, type EditLook } from './monday-edit'
@@ -35,20 +35,32 @@ async function findDelivery(admin: any, memberId: string): Promise<{ delivery_id
   return d ? { delivery_id: d.delivery_id, status: d.status } : null
 }
 
-/** Her party delivery, composed once per season. compose=false only reads. */
-export async function ensurePartyLooks(admin: any, memberId: string, opts: { compose?: boolean; count?: number } = {}): Promise<{ delivery_id: string | null; created: boolean; composed?: number; dropped?: number; error?: string }> {
+/** The brands the push-surface age gate would refuse for her, kept out of the composer up front. */
+async function youngerLabelsFor(admin: any, memberId: string): Promise<string[]> {
+  const [reach, registers] = await Promise.all([loadMemberReach(admin, memberId), loadAgeRegisters(admin)])
+  return [...registers].filter(([id, reg]) => !reach.namedBrandIds.has(id) && !labelReachesHer(reach.ageRange, reg)).map(([id]) => id)
+}
+
+/** Her party delivery, composed once per season. compose=false only reads; recompose=true throws away unpublished looks and composes again. */
+export async function ensurePartyLooks(admin: any, memberId: string, opts: { compose?: boolean; recompose?: boolean; count?: number } = {}): Promise<{ delivery_id: string | null; created: boolean; composed?: number; dropped?: number; error?: string }> {
+  const compose = async (deliveryId: string, created: boolean) => {
+    const r = await composeDeliveryLooks(deliveryId, { count: opts.count ?? PARTY_LOOKS, ownedMode: 'retail_only', excludeBrandIds: await youngerLabelsFor(admin, memberId) })
+    return { delivery_id: deliveryId, created, composed: r.created ?? 0, dropped: r.droppedByCheck ?? 0, error: r.error }
+  }
   const found = await findDelivery(admin, memberId)
   if (found) {
+    if (opts.recompose && found.status === 'draft') {
+      // Only looks nobody has seen: a draft delivery's looks are never visible to her.
+      await admin.from('pilot_look').delete().eq('delivery_id', found.delivery_id).eq('visible_to_client', false)
+    }
     const { count } = await admin.from('pilot_look').select('look_id', { count: 'exact', head: true }).eq('delivery_id', found.delivery_id)
     if ((count ?? 0) > 0 || found.status !== 'draft' || !opts.compose) return { delivery_id: found.delivery_id, created: false, composed: count ?? 0 }
-    const r = await composeDeliveryLooks(found.delivery_id, { count: opts.count ?? PARTY_LOOKS, ownedMode: 'retail_only' })
-    return { delivery_id: found.delivery_id, created: false, composed: r.created ?? 0, dropped: r.droppedByCheck ?? 0, error: r.error }
+    return compose(found.delivery_id, false)
   }
   if (!opts.compose) return { delivery_id: null, created: false }
   const made = await createDelivery({ member_id: memberId, trigger: 'anticipation', request_text: PARTY_LABEL, occasion: 'event', climate: 'cold' })
   if (!made.delivery_id) return { delivery_id: null, created: false, error: made.error ?? 'could not create the delivery' }
-  const r = await composeDeliveryLooks(made.delivery_id, { count: opts.count ?? PARTY_LOOKS, ownedMode: 'retail_only' })
-  return { delivery_id: made.delivery_id, created: true, composed: r.created ?? 0, dropped: r.droppedByCheck ?? 0, error: r.error }
+  return compose(made.delivery_id, true)
 }
 
 /** The looks of her party delivery, drawn whether or not they are published yet. */
@@ -66,7 +78,11 @@ export async function gatherPartyLooks(admin: any, m: PartyMember, reach?: Membe
     const { data: items } = await admin.from('item').select('item_id, item_type, colour_family, product_name, price_gbp, brand_id, image_url, fit, length, rise, structure, shoulder, neckline, sleeve, waist_definition, leg_opening, pattern').in('item_id', ids)
     for (const it of (items ?? []) as any[]) rows.set(it.item_id, it)
   }
-  const outOfReach = (l: any) => ((l.items ?? []) as any[]).some((i) => { const it = i?.item_id ? rows.get(i.item_id) : null; return it && whyNotHers(r, it, { budget: false }) != null })
+  const outOfReach = (l: any) => {
+    const reasons = ((l.items ?? []) as any[]).map((i) => { const it = i?.item_id ? rows.get(i.item_id) : null; const why = it ? whyNotHers(r, it, { budget: false }) : null; return why ? `${i.brand ?? it?.brand_id} ${i.product_name ?? ''}: ${why}` : null }).filter(Boolean)
+    if (reasons.length) console.warn(`[party-looks] look ${l.look_id} out of reach for ${m.member_id.slice(0, 8)}: ${reasons.join(' · ')}`)
+    return reasons.length > 0
+  }
   const kept = all.filter((l) => l.response !== 'no' && Array.isArray(l.items) && l.items.length >= 2 && !outOfReach(l)).slice(0, PARTY_LOOKS)
   return {
     delivery_id: found.delivery_id, status: found.status, composed: all.length, dropped: all.length - kept.length,

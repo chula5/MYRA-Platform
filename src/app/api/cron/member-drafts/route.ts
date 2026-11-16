@@ -20,6 +20,7 @@ import { createAdminClient } from '@/lib/supabase-server'
 import { sendStudioEmail, type EmailKind } from '@/lib/studio/email'
 import { gatherBrandDiscovery, discoveryHtml, discoverySubject, noDiscovery, type DiscoveryMember } from '@/lib/studio/brand-discovery'
 import { ensurePartyLooks, gatherPartyLooks, partyHtml, partySubject, publishPartyLooks } from '@/lib/studio/party-looks'
+import { gatherBlackFridayFinds, findsHtml, findsSubject, noFinds } from '@/lib/studio/black-friday-finds'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -36,7 +37,11 @@ export async function GET(req: NextRequest) {
   if (!authorised(req)) return new NextResponse('Unauthorized', { status: 401 })
   const q = req.nextUrl.searchParams
   const kind = q.get('kind')
-  if (kind !== 'brands' && kind !== 'party') return NextResponse.json({ error: 'kind=brands or kind=party' }, { status: 400 })
+  if (kind !== 'brands' && kind !== 'party' && kind !== 'sale') return NextResponse.json({ error: 'kind=brands, kind=party or kind=sale' }, { status: 400 })
+  // A dated one-off: the vercel.json cron line carries by=YYYY-MM-DD so the
+  // yearly cron can never fire again next year (the Black Friday precedent).
+  const by = q.get('by')
+  if (by && new Date().toISOString().slice(0, 10) > by) return NextResponse.json({ skipped: `past its date ${by}` })
   const dry = q.get('dry') === '1'
   const preview = q.get('preview') === '1'
   const compose = q.get('compose') === '1'
@@ -45,7 +50,7 @@ export async function GET(req: NextRequest) {
   const toOverride = q.get('to')
   const site = (preview || toOverride) && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(q.get('site') ?? '') ? q.get('site')! : undefined
   const sending = !dry && !preview && (!!toOverride || send)
-  const emailKind: EmailKind = kind === 'brands' ? 'shopper_brand_discovery' : 'shopper_party_looks'
+  const emailKind: EmailKind = kind === 'brands' ? 'shopper_brand_discovery' : kind === 'sale' ? 'shopper_black_friday_finds' : 'shopper_party_looks'
   const admin = createAdminClient() as any
 
   let members = admin.from('pilot_member')
@@ -65,7 +70,13 @@ export async function GET(req: NextRequest) {
       let subject = ''
       let body = ''
       let publish: (() => Promise<number>) | null = null
-      if (kind === 'brands') {
+      if (kind === 'sale') {
+        const f = await gatherBlackFridayFinds(admin, m)
+        entry.brands = f.brands.map((fb) => `${fb.name} (${fb.pieces.length})`)
+        entry.favourites = f.favourites
+        if (noFinds(f)) { entry.sent = false; entry.skipped = 'nothing on sale for her'; continue }
+        subject = findsSubject(f); body = findsHtml(m, f, site)
+      } else if (kind === 'brands') {
         const d = await gatherBrandDiscovery(admin, m)
         entry.brands = d.brands.map((b) => `${b.name} (${b.pieces.length})`)
         entry.considered = d.considered
@@ -73,7 +84,7 @@ export async function GET(req: NextRequest) {
         subject = discoverySubject(d); body = discoveryHtml(m, d, site)
       } else {
         if (compose) {
-          const made = await ensurePartyLooks(admin, m.member_id, { compose: true })
+          const made = await ensurePartyLooks(admin, m.member_id, { compose: true, recompose: q.get('recompose') === '1' })
           entry.composed = made.composed ?? 0; entry.dropped = made.dropped ?? 0
           if (made.error) entry.composeError = made.error
         }

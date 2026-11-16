@@ -16,12 +16,12 @@
 
 import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
-import { loadAffinities, brandKey, withinMemberAgeReach } from '@/lib/brand-affinity'
+import { loadAffinities, brandKey } from '@/lib/brand-affinity'
 import { loadTasteGraph } from '@/lib/taste-graph'
 import { sellable } from '@/lib/stock-sellable'
 import { isOwnedItem } from '@/lib/wardrobe/owned-items'
 import { loadComposableLibrary } from '@/app/admin/private-stylist/actions'
-import { loadMemberReach, forHer, herTaste, type MemberReach } from '@/lib/member-style-gate'
+import { loadMemberReach, forHer, herTaste, labelReachesHer, type MemberReach } from '@/lib/member-style-gate'
 import { lovedScore } from '@/lib/pilot-stylist'
 import { namedBrands, type NewInMember } from '@/lib/new-in'
 import { memberMemory } from '@/lib/member-memory'
@@ -59,7 +59,7 @@ export async function gatherBrandDiscovery(admin: any, m: DiscoveryMember): Prom
   const rowsByAffinity = [...affinities.values()]
     .filter((r) => r.source === 'expanded' && !r.hidden && r.affinity > 0.1 && r.expansion_trace && r.expansion_trace !== 'baseline')
     .filter((r) => !graph.blocked.has(r.brand_id))
-    .filter((r) => withinMemberAgeReach(reach.ageRange, { customer_age_register: reach.registerOf(r.brand_id) }))
+    .filter((r) => labelReachesHer(reach.ageRange, reach.registerOf(r.brand_id)))
     .sort((a, b) => b.affinity - a.affinity)
   if (!rowsByAffinity.length) return { brands: [], considered: 0 }
 

@@ -2111,6 +2111,8 @@ export interface ComposeDeliveryOptions {
   /** share of looks that must contain ≥1 owned piece in style_owned mode (default 0.6) */
   ownedTargetShare?: number
   count?: number
+  /** Brands this delivery must not draw from (a push surface's age gate, say), on top of her own vetoes. */
+  excludeBrandIds?: string[]
 }
 
 /**
@@ -2238,6 +2240,7 @@ async function planDeliveryLooks(
   if (merr || !member) return { error: merr?.message ?? 'Member not found' }
 
   const taste = await loadMemberTaste(admin, member)
+  for (const id of options.excludeBrandIds ?? []) (taste.hiddenBrandIds ??= new Set()).add(id)
   const library = await loadComposableLibrary(member)
   // A pale piece added today is read before the nightly sweep can reach it.
   await correctPaleColour(admin, library as any, 20)

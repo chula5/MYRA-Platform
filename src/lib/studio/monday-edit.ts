@@ -233,7 +233,7 @@ export function lookBlock(l: EditLook, base: string): string {
 
 export const price = (n: number) => `<p style="margin:0;${FONT}font-size:14px;color:#2b2b2b;">${gbp(n)}</p>`
 
-function salePriceHtml(sp: SalePiece): string {
+export function salePriceHtml(sp: SalePiece): string {
   return `<p style="margin:0;${FONT}font-size:14px;color:#2b2b2b;">
     <span style="color:#a8a8a4;text-decoration:line-through;">${gbp(sp.was_price_gbp)}</span>
     &nbsp;${b(gbp(sp.price_gbp))}
