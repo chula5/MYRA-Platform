@@ -566,6 +566,10 @@ export default function OutfitDetailClient({
                       ? () => { void findSomethingSimilar(rescueId); router.push('/me') }
                       : undefined
                   }
+                  onOpen={(host || canSave) ? (id) => {
+                    const oi = ((outfit?.outfit_item ?? []) as any[]).find((x) => x.item?.item_id === id)
+                    setWaysFor({ item_id: id, product_name: oi?.item?.product_name ?? '', brand: oi?.item?.brand?.name ?? null, image_url: oi?.item?.image_url ?? null })
+                  } : undefined}
                 />
               )}
 

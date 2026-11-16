@@ -19,13 +19,15 @@ const chip = (on: boolean) =>
   `rounded-full px-4 py-2 ${T} transition-colors ${on ? 'bg-[#2B2B2B] text-white' : 'bg-white text-[#55534E] shadow-[0_6px_14px_-10px_rgba(43,43,43,0.6)]'}`
 
 export default function BuiltOutfit({
-  items: initial, heroId, why, testMemberId, onChange,
+  items: initial, heroId, why, testMemberId, onChange, onPiece,
 }: {
   items: LookItem[]
   heroId: string
   why: string
   testMemberId?: string
   onChange?: (items: LookItem[]) => void
+  /** Tap a piece (not the hero): open it on its own — its outfits, its shop link. */
+  onPiece?: (item: LookItem) => void
 }) {
   const [items, setItems] = useState<LookItem[]>(initial)
   const [undo, setUndo] = useState<LookItem[][]>([])
@@ -73,15 +75,23 @@ export default function BuiltOutfit({
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-px bg-[#EDEBE7]">
         {items.map((it, i) => {
           const isHero = it.item_id === heroId
+          const canOpen = !!onPiece && !isHero && !!it.item_id && !it.owned
           return (
             <div key={`${it.item_id ?? it.product_name}-${i}`} className={`bg-white flex flex-col ${swapAt === i ? 'ring-2 ring-inset ring-[#2B2B2B]' : ''}`}>
               <div className="relative aspect-[3/4] overflow-hidden">
                 {it.image_url && <FallbackImage src={it.image_url} thumbWidth={400} alt={it.product_name} className="absolute inset-0 w-full h-full object-contain" />}
+                {canOpen && (
+                  <button type="button" onClick={() => onPiece?.(it)} className="absolute inset-0 w-full h-full" aria-label={`Open ${it.brand} ${it.product_name}`} />
+                )}
                 {!it.owned && it.item_id && <SavePieceHeart itemId={it.item_id} className="absolute top-2 right-2" />}
               </div>
               <div className="px-3 py-2.5 space-y-1">
                 <p className={`${T} text-[#6E6B65] leading-tight truncate`}>{it.owned ? 'Yours' : it.brand}</p>
-                <p className={`${T} text-[#2B2B2B] leading-tight line-clamp-2`}>{it.product_name}</p>
+                {canOpen ? (
+                  <button type="button" onClick={() => onPiece?.(it)} className={`${T} text-[#2B2B2B] leading-tight line-clamp-2 text-left`}>{it.product_name}</button>
+                ) : (
+                  <p className={`${T} text-[#2B2B2B] leading-tight line-clamp-2`}>{it.product_name}</p>
+                )}
                 {!isHero && (
                   <button type="button" onClick={() => open(i)} className={`${T} underline underline-offset-4 text-[#2B2B2B]`}>
                     {swapAt === i ? 'Close' : '⇄ Swap'}

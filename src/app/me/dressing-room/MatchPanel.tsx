@@ -7,6 +7,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import FallbackImage from '@/components/FallbackImage'
+import WaysToWear from '@/components/me/WaysToWear'
+import type { MatchedItem } from '@/lib/look-match'
 import { matchMyPicture, matchUploadedPhoto, type MatchView } from './match-actions'
 
 const T = 'text-[clamp(20px,1.1vw,28px)]'
@@ -23,6 +25,8 @@ export default function MatchPanel({
 }) {
   const [view, setView] = useState<MatchView | null>(null)
   const [busy, setBusy] = useState(false)
+  // A shop piece she taps opens in the mirror over this panel; her own pieces are hers already.
+  const [opened, setOpened] = useState<MatchedItem | null>(null)
   const [mounted, setMounted] = useState(false)
   const [picture, setPicture] = useState<string | null>(source.kind === 'upload' ? null : source.imageUrl ?? null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -66,6 +70,16 @@ export default function MatchPanel({
 
   return createPortal(
     <div className="fixed inset-0 z-[90] bg-[rgba(43,43,43,0.4)] backdrop-blur-[3px] overflow-y-auto" data-lenis-prevent>
+      {opened && (
+        <WaysToWear
+          itemId={opened.item_id}
+          piece={{ item_id: opened.item_id, product_name: opened.product_name, brand: opened.brand, image_url: opened.image_url, url: opened.retailer_url, price_gbp: opened.price_gbp }}
+          testMemberId={testMemberId}
+          autoStart={false}
+          startLabel="Build outfits with it"
+          onClose={() => setOpened(null)}
+        />
+      )}
       <div className="min-h-full flex items-start justify-center px-4 py-8" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
         <div role="dialog" aria-modal="true" aria-label="Find pieces like this"
           className="w-full max-w-[clamp(680px,72vw,1600px)] bg-white rounded-[28px] shadow-[0_30px_60px_-30px_rgba(43,43,43,0.55)] px-[clamp(22px,2.2vw,52px)] py-[clamp(22px,2vw,48px)] space-y-7">
@@ -100,8 +114,8 @@ export default function MatchPanel({
               <h3 className={`${T} text-[#1a1a1a]`}>The closest pieces</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4">
                 {view.items.map((it) => (
-                  <a key={it.item_id} href={it.retailer_url ?? undefined} target={it.retailer_url ? '_blank' : undefined} rel="noreferrer"
-                    className="group block">
+                  <button type="button" key={it.item_id} onClick={() => setOpened(it)} aria-label={`Open ${it.product_name}`}
+                    className="group block w-full text-left">
                     <div className="relative aspect-[3/4] rounded-[14px] overflow-hidden bg-[#F3F2F0]">
                       {it.image_url && <FallbackImage src={it.image_url} thumbWidth={500} alt={it.product_name} className="absolute inset-0 w-full h-full object-cover" />}
                       <span className="absolute top-2 left-2 rounded-full bg-[rgba(255,255,255,0.92)] px-3 py-1 text-[16px] text-[#2B2B2B]">{close(it.closeness)}</span>
@@ -109,7 +123,7 @@ export default function MatchPanel({
                     </div>
                     <p className={`${T_SMALL} myra-guide-text text-[#2B2B2B] mt-2 leading-tight line-clamp-2`}>{it.product_name}</p>
                     <p className={`${T_SMALL} text-[#6E6B65]`}>{[it.brand, it.price_gbp ? `£${Math.round(it.price_gbp)}` : null].filter(Boolean).join(' · ')}</p>
-                  </a>
+                  </button>
                 ))}
               </div>
             </section>

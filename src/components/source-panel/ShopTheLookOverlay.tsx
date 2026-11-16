@@ -25,6 +25,7 @@ export default function ShopTheLookOverlay({
   soldItemId,
   onFindSimilar,
   size = 'feed',
+  onOpen,
 }: {
   items: SourceItem[]
   outfitId?: string
@@ -45,6 +46,9 @@ export default function ShopTheLookOverlay({
    *  client area — a wider column and 20px product text, for reading on a
    *  phone. The private member feed never passes it, so the member area remains unchanged. */
   size?: 'feed' | 'large'
+  /** A member's view: the picture and the name open the piece in MYRA (its
+   *  sheet) before the shop; SHOP stays as the last step. */
+  onOpen?: (itemId: string) => void
 }) {
   const large = size === 'large'
   const savedSet = new Set(savedItemIds)
@@ -88,6 +92,7 @@ export default function ShopTheLookOverlay({
             sold={item.item_id === soldItemId || (item as any).status === 'sold'}
             onFindSimilar={onFindSimilar ? () => onFindSimilar(item.item_id) : undefined}
             large={large}
+            onOpen={onOpen && !String(item.item_id).startsWith('unlinked-') ? () => onOpen(item.item_id) : undefined}
           />
         ))}
       </div>
@@ -105,6 +110,7 @@ function ItemCard({
   sold = false,
   onFindSimilar,
   large = false,
+  onOpen,
 }: {
   item: SourceItem
   outfitId?: string
@@ -115,6 +121,7 @@ function ItemCard({
   sold?: boolean
   onFindSimilar?: () => void
   large?: boolean
+  onOpen?: () => void
 }) {
   // Type steps for the two sizes, so each line of the card moves together.
   const t = large
@@ -163,6 +170,16 @@ function ItemCard({
         </div>
       )}
 
+      {/* A member: the photo opens the piece in MYRA. Sits under the badges, the heart and the text. */}
+      {onOpen && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onOpen() }}
+          aria-label={`Open ${item.product_name} in MYRA`}
+          className="absolute inset-0 z-[5] w-full h-full"
+        />
+      )}
+
       {/* Scarcity + size badges — top-left, over the photo */}
       {badge && (
         <span
@@ -192,7 +209,7 @@ function ItemCard({
       {/* Text overlay — brand/name/price bottom-left, SHOP bottom-right */}
       <div className={`absolute inset-x-0 bottom-0 z-10 ${t.pad} bg-gradient-to-t from-black/70 via-black/25 to-transparent`}>
         <div className="flex items-end justify-between gap-1.5">
-          <div className="min-w-0">
+          <div className={`min-w-0 ${onOpen ? 'cursor-pointer' : ''}`} onClick={onOpen ? (e) => { e.stopPropagation(); onOpen() } : undefined}>
             <p className={`text-white/75 ${t.brand} tracking-[0.06em] uppercase truncate`}>{item.brand?.name ?? 'BRAND'}</p>
             <p className={`text-white ${t.name} leading-[1.15] line-clamp-2 mt-0.5 ${sold ? 'line-through opacity-70' : ''}`}>
               {item.product_name}

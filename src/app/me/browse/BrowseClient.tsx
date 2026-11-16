@@ -15,6 +15,7 @@
 
 import { Fragment, useEffect, useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
+import HeartIcon from '@/components/me/HeartIcon'
 import MicButton from '@/components/me/MicButton'
 import WaysToWear from '@/components/me/WaysToWear'
 import { WAYS_READY_EVENT } from '@/components/me/ways-watch'
@@ -24,7 +25,7 @@ import { useScrollTo } from '@/lib/smooth-scroll'
 import {
   STYLING_OPEN_EVENT, clearStylingReady, getStylingProgress, keepWatchingStyling, publishStyling, stopWatchingStyling,
 } from '@/components/me/styling-progress'
-import ShopLink, { type ShopLinkItem } from '@/components/ShopLink'
+import ShopLink from '@/components/ShopLink'
 
 /** The piece being styled, kept so the badge can bring her back to it after a new search. */
 const STYLED_KEY = 'myra:browse-styled'
@@ -80,6 +81,10 @@ export default function BrowseClient() {
   const sizeTouched = useRef(false)
 
   const [picked, setPicked] = useState<string | null>(null)
+  // The piece she tapped: opened in the mirror — its pictures, what the studio
+  // has made with it, MYRA's ways on ask, her avatar, VIEW ON SITE — before
+  // she ever leaves MYRA (Chloe, 2026-11-08 and again 2026-11-11).
+  const [opened, setOpened] = useState<BrowsePiece | null>(null)
   const [styling, setStyling] = useState<'wardrobe' | 'new' | null>(null)
   // Where the styling has got to, for the button and the mark at the top.
   const [phase, setPhase] = useState<'idle' | 'working' | 'ready' | 'failed'>('idle')
@@ -431,7 +436,6 @@ export default function BrowseClient() {
         <Fragment key={p.item_id}>
           <PieceCard
             piece={p}
-            shopItem={shopItem(p)}
             picked={picked === p.item_id}
             styling={picked === p.item_id ? styling : null}
             working={picked === p.item_id && phase === 'working'}
@@ -440,6 +444,7 @@ export default function BrowseClient() {
             ready={ready.has(p.item_id)}
             cardRef={(el) => registerCard(el, p.item_id)}
             onPick={() => pick(p)}
+            onOpen={() => setOpened(p)}
             onStyle={(mode) => void style(p, mode)}
             onSave={() => void save(p)}
             find={finds ? { piece: p as SavedSearchPiece, onAnswer: (v) => void answer(p as SavedSearchPiece, v) } : undefined}
@@ -706,17 +711,28 @@ export default function BrowseClient() {
           (components/me/StylingBadge): it follows her out of this room and
           brings her back to the piece. */}
       {note && !styling && <p className="myra-guide-text normal-case text-[18px] text-[#4A4E57] mt-6">{note}</p>}
+
+      {/* The piece she tapped, in the mirror: its pictures, studio outfits with
+          it, MYRA's own ways when she asks, her avatar, VIEW ON SITE to buy. */}
+      {opened && (
+        <WaysToWear
+          itemId={opened.item_id}
+          piece={{ item_id: opened.item_id, product_name: opened.product_name, brand: opened.brand, image_url: opened.image_url, url: opened.url, price_gbp: opened.price_gbp }}
+          autoStart={false}
+          startLabel="Build outfits with it"
+          onClose={() => setOpened(null)}
+        />
+      )}
     </div>
   )
 }
 
-// ONE PIECE. The picture and the name are a real link to the shop's own page,
-// through the tracked click-out, opened in a new tab — from the iOS app that
-// is Safari. Tapping also chooses the piece here, so the two ways to style it
-// are waiting when she comes back. STYLE chooses without leaving the page.
-function PieceCard({ piece, shopItem, picked, styling, working = false, saved, saving, ready = false, cardRef, onPick, onStyle, onSave, find }: {
+// ONE PIECE. The picture and the name open the piece in the mirror (the sheet:
+// its pictures, the studio's outfits with it, MYRA's ways, her avatar, and
+// VIEW ON SITE as the last step) — never straight out to the shop. STYLE
+// chooses the piece here without leaving the page.
+function PieceCard({ piece, picked, styling, working = false, saved, saving, ready = false, cardRef, onPick, onOpen, onStyle, onSave, find }: {
   piece: BrowsePiece
-  shopItem: ShopLinkItem
   picked: boolean
   /** Which way she is styling this piece, when it is the one she picked. */
   styling: 'wardrobe' | 'new' | null
@@ -727,6 +743,8 @@ function PieceCard({ piece, shopItem, picked, styling, working = false, saved, s
   ready?: boolean
   cardRef?: (el: HTMLDivElement | null) => void
   onPick: () => void
+  /** The card itself: the piece opens in the mirror. */
+  onOpen: () => void
   onStyle: (mode: 'wardrobe' | 'new') => void
   onSave: () => void
   /** A find of a saved search: why it matched, and her YES / NOT THIS. */
@@ -761,13 +779,7 @@ function PieceCard({ piece, shopItem, picked, styling, working = false, saved, s
   )
   return (
     <div ref={cardRef} className={`relative text-left bg-white rounded-[16px] overflow-hidden shadow-[0_1px_8px_rgba(43,43,43,0.06)] transition-shadow ${picked ? 'ring-2 ring-[#2B2B2B]' : ''}`}>
-      {piece.url ? (
-        <ShopLink item={shopItem} onNavigate={onPick} className="block w-full text-left">
-          {body}
-        </ShopLink>
-      ) : (
-        <button type="button" onClick={onPick} className="block w-full text-left">{body}</button>
-      )}
+      <button type="button" onClick={onOpen} className="block w-full text-left" aria-label={`Open ${piece.product_name}`}>{body}</button>
       {find && (
         <div className="flex gap-2 px-4 pb-4 -mt-1">
           <button
@@ -800,9 +812,7 @@ function PieceCard({ piece, shopItem, picked, styling, working = false, saved, s
         aria-label={saved ? 'Saved' : 'Save'}
         className="absolute top-2.5 right-2.5 w-9 h-9 rounded-full bg-white/90 shadow-[0_1px_6px_rgba(43,43,43,0.14)] grid place-items-center text-[#2B2B2B] disabled:opacity-50"
       >
-        <svg viewBox="0 0 24 24" className="w-5 h-5" fill={saved ? 'currentColor' : 'none'} stroke="currentColor" aria-hidden>
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" d="M12 21s-7.5-4.9-10-9.3C.6 8.9 2 5.5 5.2 5.5c2 0 3.3 1.2 3.8 2.3h6c.5-1.1 1.8-2.3 3.8-2.3 3.2 0 4.6 3.4 3.2 6.2C19.5 16.1 12 21 12 21z" />
-        </svg>
+        <HeartIcon filled={saved} />
       </button>
       <button
         type="button"
