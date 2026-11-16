@@ -31,7 +31,7 @@ import { esc, p, h, sectionLink, pieceLink, rows, price, isHomeware } from './mo
 
 export const BRANDS_SHOWN = 3
 export const PIECES_PER_BRAND = 3
-const CANDIDATES = 14
+const CANDIDATES = 30
 
 export interface DiscoveryMember extends NewInMember { name: string | null; auth_user_id: string | null }
 export interface DiscoveryPiece { item_id: string; name: string; image_url: string | null; price_gbp: number | null; item_type: string | null }

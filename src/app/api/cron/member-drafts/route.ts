@@ -84,7 +84,7 @@ export async function GET(req: NextRequest) {
         subject = discoverySubject(d); body = discoveryHtml(m, d, site)
       } else {
         if (compose) {
-          const made = await ensurePartyLooks(admin, m.member_id, { compose: true, recompose: q.get('recompose') === '1' })
+          const made = await ensurePartyLooks(admin, m.member_id, { compose: true, recompose: q.get('recompose') === '1', count: Number(q.get('count')) || undefined })
           entry.composed = made.composed ?? 0; entry.dropped = made.dropped ?? 0
           if (made.error) entry.composeError = made.error
         }
