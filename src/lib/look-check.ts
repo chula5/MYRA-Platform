@@ -109,7 +109,8 @@ export function confidenceFromCheck(verdict: LookVerdict, colourHarmony: number,
 
 /** Lay the pieces' photos side by side on white, in a single image. */
 async function lookSheet(pieces: CheckPiece[]): Promise<{ sheet: Buffer; shown: CheckPiece[] } | null> {
-  const sharp = (await import('sharp')).default
+  const sharpMod: any = await import('sharp')
+  const sharp = sharpMod.default ?? sharpMod
   const TILE_W = 420, TILE_H = 560, GAP = 16
   // Fetch every piece photo at once (order preserved); a missing photo is
   // left out, not fatal.

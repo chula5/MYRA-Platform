@@ -155,7 +155,9 @@ async function writeSnapshot(admin: any, lib: { at: number; items: ItemWithBrand
 async function readFromDatabase(): Promise<{ at: number; items: ItemWithBrand[]; sizeRows: Map<string, SizeRow[]> }> {
   const t0 = Date.now()
   const at = Date.now()
-  const [ready, live] = await Promise.all([getAllItems('ready'), getAllItems('live')])
+  // Either read failing throws: a timed-out 'ready' read used to come back as
+  // [] and the 13 live pieces alone were written as the whole shop (2026-11-16).
+  const [ready, live] = await Promise.all([getAllItems('ready', undefined, { throwOnError: true }), getAllItems('live', undefined, { throwOnError: true })])
   const items = [...ready, ...live]
   const { loadSizeRowsFor } = await import('@/lib/size-availability')
   const sizeRows = await loadSizeRowsFor(items.map((i) => i.item_id))
@@ -170,6 +172,12 @@ function refresh(admin: any): Promise<RetailLibrary | null> {
     try {
       const lib = await readFromDatabase()
       if (!lib.items.length) return null // a failed read is never written over a good snapshot
+      // Nor a read that lost most of the shop: the library never halves in an hour.
+      const before = state.cache?.items.length ?? (await readSnapshot(admin).catch(() => null))?.items.length ?? 0
+      if (before && lib.items.length < before * 0.5) {
+        console.error(`[library] refresh read ${lib.items.length} pieces against ${before} before — not written`)
+        return null
+      }
       const value: RetailLibrary = { ...lib, from: 'db' }
       state.cache = value
       try { await writeSnapshot(admin, lib) } catch (err) { console.error('[library] snapshot write', err) }
@@ -230,7 +238,7 @@ export async function loadRetailLibrary(opts: { admin?: any } = {}): Promise<Ret
  * styled lately (`demand`), inside STALE_OK_MS always — so the first tap of
  * the day is a snapshot read, not a database read.
  */
-export async function refreshLibrarySnapshotIfDue(opts: { demand: boolean; admin?: any } = { demand: false }): Promise<{ refreshed: boolean; ageMs: number | null }> {
+export async function refreshLibrarySnapshotIfDue(opts: { demand: boolean; admin?: any; /** Rebuild now whatever its age (repairs). */ force?: boolean } = { demand: false }): Promise<{ refreshed: boolean; ageMs: number | null }> {
   const admin = opts.admin ?? (createAdminClient() as any)
   let ageMs: number | null = null
   try {
@@ -238,7 +246,7 @@ export async function refreshLibrarySnapshotIfDue(opts: { demand: boolean; admin
     const obj = (data ?? []).find((o: any) => o.name === SNAPSHOT_PATH)
     if (obj?.updated_at) ageMs = Date.now() - Date.parse(obj.updated_at)
   } catch { /* no bucket yet: due */ }
-  const due = ageMs == null || ageMs >= STALE_OK_MS || (opts.demand && ageMs >= FRESH_MS)
+  const due = !!opts.force || ageMs == null || ageMs >= STALE_OK_MS || (opts.demand && ageMs >= FRESH_MS)
   if (!due) return { refreshed: false, ageMs }
   const r = await refresh(admin)
   return { refreshed: !!r, ageMs }

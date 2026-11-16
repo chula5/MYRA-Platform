@@ -420,7 +420,7 @@ export async function getItemsPage(opts: {
 export async function getAllItems(
   status?: string,
   stockFilter?: 'flagged' | 'out_of_stock' | 'low_stock',
-  opts?: { includeOwned?: boolean },
+  opts?: { includeOwned?: boolean; /** Throw instead of answering [] — for callers that must not mistake a failed read for an empty shop. */ throwOnError?: boolean },
 ): Promise<ItemWithBrand[]> {
   const supabase = createAdminClient()
   try {
@@ -473,6 +473,7 @@ export async function getAllItems(
     return opts?.includeOwned ? out : retailOnly(out)
   } catch (err) {
     console.error('[getAllItems]', err)
+    if (opts?.throwOnError) throw err
     return []
   }
 }

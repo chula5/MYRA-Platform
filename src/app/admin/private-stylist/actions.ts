@@ -1961,7 +1961,7 @@ async function approvedOutfitVectors(admin: any): Promise<number[][]> {
     const out: number[][] = []
     for (let from = 0; ; from += 1000) {
       const { data, error } = await admin.from('outfit')
-        .select('taste_vector').in('status', ['ready', 'live']).not('taste_vector', 'is', null).range(from, from + 999)
+        .select('taste_vector').in('status', ['live', 'paused']).not('taste_vector', 'is', null).range(from, from + 999)
       if (error) throw new Error(error.message)
       for (const row of data ?? []) {
         const v = readTasteVector(row.taste_vector)

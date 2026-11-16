@@ -343,7 +343,9 @@ function composeReviewLooksOnce(opts: ReviewComposeOpts): ReviewComposeResult {
       for (const combo of shapeCombos) for (const c of choices) next.push([...combo, c])
       shapeCombos = next
     }
-    combos.push(...shapeCombos)
+    // One at a time: a wide shortlist makes 100k+ combinations, and spreading
+    // that many as arguments overflows the stack (every tap failed, 2026-11-16).
+    for (const c of shapeCombos) combos.push(c)
   }
   if (combos.length === 0) return { picks: [], rejectionHits: [] }
 
