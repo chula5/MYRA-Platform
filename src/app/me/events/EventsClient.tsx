@@ -127,10 +127,22 @@ function BriefLine({ eventId, brief, reading, onSave, busy }: {
   useEffect(() => { setText(brief ?? '') }, [brief])
   if (editing) {
     return (
-      <div className="flex flex-wrap items-center gap-3 w-full">
-        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="A cocktail dress, probably long" className={`${FIELD} sm:max-w-[32em]`} aria-label="What are you looking for?" />
-        <button type="button" disabled={busy} onClick={async () => { await onSave(eventId, text); setEditing(false) }} className={`${SMALL} rounded-full bg-[#2B2B2B] px-4 py-[0.4em] text-white disabled:opacity-40`}>{busy ? 'Saving…' : 'Save'}</button>
-        <button type="button" onClick={() => { setText(brief ?? ''); setEditing(false) }} className={`${SMALL} underline underline-offset-4 text-[#6E6B65]`}>Cancel</button>
+      // A box with room in it: a brief is a few sentences, and the one-line
+      // field used to show a sliver of it (a member changing her wedding brief, 2026-11-17).
+      <div className="flex flex-col gap-3 w-full">
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={4}
+          autoFocus
+          placeholder="A cocktail dress, probably long"
+          aria-label="What are you looking for?"
+          className={`${SMALL} w-full sm:max-w-[32em] min-h-[6em] resize-y bg-white border border-[#C3BFB8] rounded-[18px] px-5 py-[0.6em] text-[#2B2B2B] leading-snug placeholder:text-[#8C8A85] focus:outline-none focus:border-[#2B2B2B]`}
+        />
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" disabled={busy} onClick={async () => { await onSave(eventId, text); setEditing(false) }} className={`${SMALL} rounded-full bg-[#2B2B2B] px-4 py-[0.4em] text-white disabled:opacity-40`}>{busy ? 'Saving…' : 'Save'}</button>
+          <button type="button" onClick={() => { setText(brief ?? ''); setEditing(false) }} className={`${SMALL} underline underline-offset-4 text-[#6E6B65]`}>Cancel</button>
+        </div>
       </div>
     )
   }

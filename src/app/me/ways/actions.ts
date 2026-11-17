@@ -26,6 +26,18 @@ function after(work: Promise<unknown>): void {
   try { waitUntil(p) } catch { /* local dev: the promise simply runs */ }
 }
 
+// In her words. A job that dies inside the composer keeps its real error on
+// the styled_way_job row for Chloe, but a member must never read a browser's
+// message — one saw "Maximum call stack size exceeded" under a sale piece
+// (2026-11-17). Anything that reads as code becomes MYRA's own sentence;
+// Chloe testing as a member still sees the real one.
+const CODE_WORDS = /call stack|undefined|TypeError|RangeError|ReferenceError|SyntaxError|not a function|Cannot read|fetch failed|ECONN|ETIMEDOUT|JSON|Unexpected token|heartbeat|column|relation|syntax error|\b50[0-9]\b/i
+const TRY_AGAIN = 'MYRA could not finish styling this piece just now. Tap again and she will have another go.'
+function inHerWords(msg: string | null | undefined, test = false): string {
+  if (!msg) return TRY_AGAIN
+  return test || !CODE_WORDS.test(msg) ? msg : TRY_AGAIN
+}
+
 /** idle: opened passively — what is kept is shown, nothing has been asked for yet. */
 export type WaysStatus = 'ready' | 'working' | 'none' | 'failed' | 'idle'
 
@@ -75,7 +87,7 @@ export async function pieceGalleryFor(itemId: string, asMemberId?: string): Prom
   }
 }
 
-async function statusFor(admin: any, memberId: string, itemId: string, mode: WayMode, looks: StyledWayLook[]):
+async function statusFor(admin: any, memberId: string, itemId: string, mode: WayMode, looks: StyledWayLook[], test = false):
   Promise<{ status: WaysStatus; error?: string }> {
   const open = await openJobFor(admin, memberId, itemId, mode)
   if (open) {
@@ -92,7 +104,7 @@ async function statusFor(admin: any, memberId: string, itemId: string, mode: Way
   }
   if (looks.length) return { status: 'ready' }
   const last = await lastJobFor(admin, memberId, itemId, mode)
-  if (last?.status === 'failed') return { status: 'failed', error: last.error ?? 'MYRA could not style this piece just now' }
+  if (last?.status === 'failed') return { status: 'failed', error: inHerWords(last.error, test) }
   return { status: 'none' }
 }
 
@@ -133,18 +145,18 @@ export async function openWaysToWear(
     // Passive (a rest, not a tap): show what is kept, and whether MYRA is
     // already on it, without spending the judge on a piece she only passed.
     if (opts.passive) {
-      const s = await statusFor(admin, me.memberId, itemId, mode, looks)
+      const s = await statusFor(admin, me.memberId, itemId, mode, looks, me.test)
       return { looks, piece, studio, test: me.test, ...(s.status === 'working' ? s : { status: 'idle' as const }) }
     }
 
     const r = await requestStyledWays(admin, me.memberId, itemId, {
       mode, reason: opts.more ? 'more' : 'tap', shuffle: opts.more ? looks.length + 1 : 0, priority: 1,
     })
-    if (r.error) return { looks, status: looks.length ? 'ready' : 'failed', piece, studio, error: r.error, test: me.test }
+    if (r.error) return { looks, status: looks.length ? 'ready' : 'failed', piece, studio, error: inHerWords(r.error, me.test), test: me.test }
     kickStyledWaysDrain()
     return { looks, status: 'working', piece, studio, test: me.test }
   } catch (err) {
-    return { looks: [], status: 'failed', piece: null, error: err instanceof Error ? err.message : 'Could not open this piece', test: me.test }
+    return { looks: [], status: 'failed', piece: null, error: inHerWords(err instanceof Error ? err.message : null, me.test), test: me.test }
   }
 }
 
@@ -155,10 +167,10 @@ export async function pollWaysToWear(itemId: string, mode: WayMode = 'blend', as
   const admin = createAdminClient() as any
   try {
     const looks = await getStyledWays(admin, me.memberId, itemId, mode)
-    const s = await statusFor(admin, me.memberId, itemId, mode, looks)
+    const s = await statusFor(admin, me.memberId, itemId, mode, looks, me.test)
     return { looks, piece: null, test: me.test, ...s }
   } catch (err) {
-    return { looks: [], status: 'failed', piece: null, error: err instanceof Error ? err.message : 'Could not read this piece', test: me.test }
+    return { looks: [], status: 'failed', piece: null, error: inHerWords(err instanceof Error ? err.message : null, me.test), test: me.test }
   }
 }
 
@@ -198,10 +210,10 @@ export async function pollWaysMany(itemIds: string[], asMemberId?: string, mode:
   await Promise.all(Array.from(new Set(itemIds)).slice(0, 24).map(async (id) => {
     try {
       const looks = await getStyledWays(admin, me.memberId, id, mode)
-      const s = await statusFor(admin, me.memberId, id, mode, looks)
+      const s = await statusFor(admin, me.memberId, id, mode, looks, me.test)
       out[id] = { looks, ...s }
     } catch (err) {
-      out[id] = { looks: [], status: 'failed', error: err instanceof Error ? err.message : 'Could not read this piece' }
+      out[id] = { looks: [], status: 'failed', error: inHerWords(err instanceof Error ? err.message : null, me.test) }
     }
   }))
   return out

@@ -800,7 +800,10 @@ function LookCard({
   const [peek, setPeek] = useState<number | null>(null)
 
   const [verdict, setVerdict] = useState<'yes' | 'no' | null>(look.response)
-  const [reason, setReason] = useState<string | null>(null)
+  // As many reasons as apply (a member, 2026-11-17: "it would be useful if I
+  // could select more than 1 category"). The look keeps the first as its
+  // reason; the rest travel with her words.
+  const [reasons, setReasons] = useState<string[]>([])
   const [words, setWords] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -813,9 +816,11 @@ function LookCard({
 
   async function send(v: 'yes' | 'no') {
     setVerdict(v)
-    if (v === 'no' && !reason) return
+    if (v === 'no' && !reasons.length) return
     setSaving(true)
-    const r = await reactToLook(look.look_id, v, reason, words)
+    const labels = reasons.map((id) => REASONS.find((r) => r.id === id)?.label ?? id)
+    const note = reasons.length > 1 ? `${labels.join(' · ')}${words.trim() ? ` — ${words.trim()}` : ''}` : words
+    const r = await reactToLook(look.look_id, v, reasons[0] ?? null, note)
     setSaving(false)
     if (!r.error) setSaved(true)
   }
@@ -1000,12 +1005,15 @@ function LookCard({
             </div>
             {verdict === 'no' && (
               <div className="mt-4 space-y-3">
+                <p className="text-[18px] text-[#6E6B65]">Why not? Pick as many as apply.</p>
                 <div className="flex flex-wrap gap-2">
                   {REASONS.map((r) => (
                     <button
                       key={r.id}
-                      onClick={() => setReason(r.id)}
-                      className={`text-[18px] px-3.5 py-2 border transition-colors ${reason === r.id ? 'border-[#2B2B2B] text-[#2B2B2B]' : 'border-[#C3BFB8] text-[#6E6B65]'}`}
+                      type="button"
+                      aria-pressed={reasons.includes(r.id)}
+                      onClick={() => setReasons((rs) => rs.includes(r.id) ? rs.filter((x) => x !== r.id) : [...rs, r.id])}
+                      className={`text-[18px] px-3.5 py-2 border rounded-full transition-colors ${reasons.includes(r.id) ? 'bg-[#2B2B2B] border-[#2B2B2B] text-white' : 'border-[#C3BFB8] text-[#6E6B65]'}`}
                     >
                       {r.label}
                     </button>
@@ -1020,7 +1028,7 @@ function LookCard({
                 />
                 <button
                   onClick={() => send('no')}
-                  disabled={saving || !reason}
+                  disabled={saving || !reasons.length}
                   className="text-[20px] px-5 py-3 bg-[#2B2B2B] text-white disabled:opacity-40 rounded-full"
                 >
                   {saving ? 'Sending…' : 'Send'}

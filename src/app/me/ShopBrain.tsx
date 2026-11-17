@@ -611,12 +611,21 @@ export default function ShopBrain({ testMemberId, initialView, onReady }: {
       {/* The open door: the whole section as a grid, straight under the pills. */}
       {door && (
         <div ref={openRef} className="mt-5 mx-2 sm:mx-4 lg:mx-8 rounded-[24px] bg-white/85 shadow-[0_2px_18px_rgba(43,43,43,0.07)] px-6 md:px-10 py-9 scroll-mt-6">
-          <div className="flex items-start justify-between gap-6 mb-6">
-            <div>
+          {/* The heading wraps and the links on the right wrap too: on a phone
+              the row used to run off the right edge and crop (a member's STYLED
+              screenshot, 2026-11-17). */}
+          <div className="flex items-start justify-between gap-4 sm:gap-6 mb-6">
+            <div className="min-w-0 flex-1">
               <p className={HEAD}>{door === 'sale' ? saleTitle : door === 'similar' ? 'MORE OF THE SAME' : door === 'brands' ? brandsTitle : 'STYLED FOR YOU'}</p>
               <p className={NOTE}>
                 {door === 'sale' ? 'YOUR BRANDS ON SALE, IN YOUR SIZE' : door === 'similar' ? 'CLOSE TO WHAT YOU KEPT' : door === 'brands' ? brandsNote : 'TAP A PIECE TO STYLE IT'}
               </p>
+              {door === 'styled' && !testMemberId && (
+                // On a phone the link sits under the heading, where there is room for it.
+                <Link href="/me/dressing-room?tab=saved" className="sm:hidden inline-block mt-3 text-[17px] tracking-[0.1em] text-[#2B2B2B] underline underline-offset-4">
+                  ALL YOUR SAVED PIECES →
+                </Link>
+              )}
             </div>
             <div className="flex flex-col items-end gap-2 shrink-0">
               <button type="button" onClick={() => setDoor(null)} aria-label="Close" className="text-[21px] xl:text-[24px] tracking-[0.14em] text-[#4A4E57] underline underline-offset-4 whitespace-nowrap">
@@ -624,7 +633,7 @@ export default function ShopBrain({ testMemberId, initialView, onReady }: {
               </button>
               {door === 'styled' && !testMemberId && (
                 // Where the saved pieces live for good: the SAVED shelf of her Dressing Room.
-                <Link href="/me/dressing-room?tab=saved" className="text-[17px] xl:text-[20px] tracking-[0.1em] text-[#2B2B2B] underline underline-offset-4 whitespace-nowrap">
+                <Link href="/me/dressing-room?tab=saved" className="hidden sm:block text-[17px] xl:text-[20px] tracking-[0.1em] text-[#2B2B2B] underline underline-offset-4 whitespace-nowrap">
                   ALL YOUR SAVED PIECES →
                 </Link>
               )}
@@ -658,7 +667,7 @@ export default function ShopBrain({ testMemberId, initialView, onReady }: {
                   it to be there, and big, not gone after the first tap. */}
               <div className="flex justify-center mb-10">
                 <p
-                  className={`${hintGone ? '' : 'animate-bounce'} bg-white rounded-full px-8 xl:px-10 py-4 xl:py-5 text-[21px] xl:text-[26px] tracking-[0.12em] text-[#2B2B2B] shadow-[0_2px_16px_rgba(43,43,43,0.16)]`}
+                  className={`${hintGone ? '' : 'animate-bounce'} max-w-full text-center bg-white rounded-full px-6 sm:px-8 xl:px-10 py-3.5 sm:py-4 xl:py-5 text-[17px] sm:text-[21px] xl:text-[26px] tracking-[0.12em] text-[#2B2B2B] shadow-[0_2px_16px_rgba(43,43,43,0.16)]`}
                   style={{ animationIterationCount: 3 }}
                 >
                   ♥ TAP A PIECE TO STYLE IT ↓
