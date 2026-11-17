@@ -15,12 +15,13 @@ import { createAdminClient } from '@/lib/supabase-server'
 import { liveAvatarFor, type MemberAvatar } from './store'
 import { listWays, wayFamily, type AvatarWay, type LookItem } from './layers'
 import { enqueueAvatarJob, kickAvatarDrain } from './jobs'
+import { defaultWayFor } from './way-default'
 
 const admin = () => createAdminClient() as any
 
 export type TryOnState =
   | 'no_avatar'     // she has not made (or finished) her avatar
-  | 'unwearable'    // nothing here the avatar can put on (a bag, jewellery)
+  | 'unwearable'    // nothing here the avatar can put on (jewellery)
   | 'idle'          // not asked for yet
   | 'making'
   | 'ready'
@@ -44,11 +45,7 @@ async function readyAvatar(memberId: string): Promise<MemberAvatar | null> {
 }
 
 /** The way a piece is worn when nobody has said: the type's default, else its first. */
-function defaultWay(ways: AvatarWay[], itemType: string | null | undefined): AvatarWay | null {
-  if (!itemType) return null
-  const fits = ways.filter((w) => w.item_types.includes(itemType) && !w.needs_way)
-  return fits.find((w) => w.is_default) ?? fits[0] ?? null
-}
+const defaultWay = (ways: AvatarWay[], itemType: string | null | undefined): AvatarWay | null => defaultWayFor(ways, itemType)
 
 interface LayerRow { layer_id: string; item_id: string; way_key: string; status: string; shot_url: string | null; error: string | null }
 

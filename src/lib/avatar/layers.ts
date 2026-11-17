@@ -79,6 +79,7 @@ export async function listWays(): Promise<AvatarWay[]> {
 export const wayFamily = (wayKey: string) => wayKey.split('.')[0]
 export const OUTER_FAMILY = 'outer'
 export const SHOE_FAMILY = 'shoes'
+export const BAG_FAMILY = 'bag'
 
 /** How the piece is named inside a prompt: "the navy floral wide-leg trousers (trousers)". */
 export function pieceDescription(item: { product_name: string | null; item_type: string | null; colour_family?: string | null }): string {
@@ -119,7 +120,9 @@ export async function runLayerStep(layerId: string, heartbeat?: () => void): Pro
   // 1. dress her
   await setLayer(layerId, { status: 'shooting', error: null })
   heartbeat?.()
-  const [base, product, fitNote] = await Promise.all([fetchBytes(avatar.base_url), fetchBytes(item.image_url).then((b) => toJpeg(b, 1024, 90)), fitNoteFor(item)])
+  // a bag has no hem or fit to read: the fit note is for clothes and shoes
+  const isBag = wayFamily(layer.way_key) === BAG_FAMILY
+  const [base, product, fitNote] = await Promise.all([fetchBytes(avatar.base_url), fetchBytes(item.image_url).then((b) => toJpeg(b, 1024, 90)), isBag ? Promise.resolve('') : fitNoteFor(item)])
   const shotCall = await dressCall(dressPrompt((way as AvatarWay).shoot_prompt.replace(/\{piece\}/g, piece), fitNote), [png(base), jpg(product)])
   const shot = shotCall.r
   cost += googleCostGbp(shot, shotCall.model)

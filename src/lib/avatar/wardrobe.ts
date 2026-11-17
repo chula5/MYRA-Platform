@@ -3,6 +3,9 @@
 // Every owned piece whose type has a way gets a layer row per active way; defaults first
 // (priority 2), the other ways after (priority 3). Rows already there are left alone, so this
 // is safe to run on every room load: new pieces simply join the queue.
+//
+// Bags (2026-11-17): owned bags are queued in their default way only; her SAVED bags join
+// the BAGS shelf too but nothing is shot for them until she taps one (each is a paid picture).
 
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase-server'
@@ -11,6 +14,7 @@ import { ownerRefsForMember } from '@/lib/wardrobe/owned-items'
 import { enqueueAvatarJob } from './jobs'
 import { listWays, wayFamily, type AvatarWay, type AvatarLayer } from './layers'
 import { updateAvatar, type MemberAvatar } from './store'
+import { isDefaultFor, ON_ASK_FAMILIES, BAG_TYPES } from './way-default'
 
 const admin = () => createAdminClient() as any
 
@@ -19,8 +23,9 @@ export interface RoomPiece {
   name: string
   brand: string | null
   item_type: string
-  family: string            // which shelf: top, bottom, dress, outer, scarf, belt, shoes
+  family: string            // which shelf: top, bottom, dress, outer, scarf, belt, shoes, bag
   image_url: string | null
+  saved?: boolean           // a saved (not owned) piece: shot only when she taps it
   layers: { way_key: string; status: AvatarLayer['status']; layer_url: string | null; clip_url: string | null; error: string | null }[]
 }
 
@@ -52,6 +57,18 @@ async function wearablePieces(member: { member_id: string; auth_user_id: string 
   return items.filter((it: any) => it.item_type && waysForType(ways, it.item_type).length > 0)
 }
 
+/** Her saved bags (not owned): on the BAGS shelf, shot only when she taps one. */
+async function savedBags(memberId: string, ways: AvatarWay[], ownedIds: Set<string>) {
+  const { data } = await admin().from('member_saved_item')
+    .select('saved_at, item:item_id(*, brand(*))').eq('member_id', memberId).order('saved_at', { ascending: false }).limit(200)
+  const seen = new Set<string>()
+  return ((data ?? []) as any[]).map((r) => r.item).filter((it: any) => {
+    if (!it?.item_id || seen.has(it.item_id) || ownedIds.has(it.item_id)) return false
+    seen.add(it.item_id)
+    return BAG_TYPES.includes(it.item_type) && waysForType(ways, it.item_type).length > 0
+  })
+}
+
 /** Make sure every wearable piece has a layer row per way, and a job for each new row. Returns how many were added. */
 export async function queueWardrobeLayers(avatar: MemberAvatar): Promise<number> {
   const a = admin()
@@ -66,8 +83,10 @@ export async function queueWardrobeLayers(avatar: MemberAvatar): Promise<number>
   for (const p of pieces) {
     for (const w of waysForType(ways, p.item_type)) {
       if (have.has(`${p.item_id}|${w.way_key}`)) continue
+      const isDefault = isDefaultFor(w, p.item_type)
+      if (!isDefault && ON_ASK_FAMILIES.has(wayFamily(w.way_key))) continue   // shot when she asks
       rows.push({ avatar_id: avatar.avatar_id, item_id: p.item_id, way_key: w.way_key })
-      prio[`${p.item_id}|${w.way_key}`] = w.is_default ? 2 : 3
+      prio[`${p.item_id}|${w.way_key}`] = isDefault ? 2 : 3
     }
   }
   if (!rows.length) return 0
@@ -95,11 +114,14 @@ export async function loadRoom(avatar: MemberAvatar): Promise<RoomView> {
   const a = admin()
   const { data: member } = await a.from('pilot_member').select('member_id, auth_user_id').eq('member_id', avatar.member_id).maybeSingle()
   const ways = await listWays()
-  const [items, { data: layers }, { data: looks }] = await Promise.all([
+  const [owned, { data: layers }, { data: looks }] = await Promise.all([
     member ? wearablePieces(member, ways) : Promise.resolve([]),
     a.from('avatar_layer').select('item_id, way_key, status, layer_url, clip_url, error').eq('avatar_id', avatar.avatar_id),
     a.from('avatar_look').select('*').eq('avatar_id', avatar.avatar_id).order('created_at', { ascending: false }).limit(30),
   ])
+  const saved = member ? await savedBags(member.member_id, ways, new Set(owned.map((it: any) => it.item_id))).catch(() => []) : []
+  const savedIds = new Set(saved.map((it: any) => it.item_id))
+  const items = [...owned, ...saved]
   const byItem = new Map<string, RoomPiece['layers']>()
   let ready = 0, failed = 0
   for (const l of layers ?? []) {
@@ -116,6 +138,7 @@ export async function loadRoom(avatar: MemberAvatar): Promise<RoomView> {
     family: wayFamily(waysForType(ways, it.item_type)[0].way_key),
     image_url: it.image_url ?? null,
     layers: byItem.get(it.item_id) ?? [],
+    ...(savedIds.has(it.item_id) ? { saved: true } : {}),
   }))
   return {
     avatar: { avatar_id: avatar.avatar_id, base_url: avatar.base_url!, width: avatar.width, height: avatar.height },
