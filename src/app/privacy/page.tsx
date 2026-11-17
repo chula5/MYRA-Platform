@@ -14,13 +14,13 @@ export default function PrivacyPage() {
         </Link>
 
         <h1 className="text-[clamp(26px,4vw,38px)] tracking-[0.04em] text-[#4A4E57] mt-8 mb-2">PRIVACY POLICY</h1>
-        <p className="text-[11px] tracking-[0.10em] text-[#A8A8A4] mb-10">LAST UPDATED: JUNE 2026</p>
+        <p className="text-[11px] tracking-[0.10em] text-[#A8A8A4] mb-10">LAST UPDATED: NOVEMBER 2026</p>
 
         <div className="space-y-8 text-[12px] sm:text-[13px] tracking-[0.03em] leading-[1.8] text-[#4A4E57] normal-case [text-transform:none]">
           <section>
             <p>
-              MYRA (&ldquo;MYRA&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;) is an outfit-led fashion discovery
-              platform. This policy explains what information we collect, how we use it, and the choices you have.
+              MYRA (&ldquo;MYRA&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;) is a private styling service: complete
+              outfits built around your taste, your size and what you already own. This policy explains what information we collect, how we use it, and the choices you have.
               By using MYRA&rsquo;s website or app you agree to this policy.
             </p>
           </section>
@@ -42,6 +42,21 @@ export default function PrivacyPage() {
               <li><strong>What it sends</strong> — those product details, with your signed MYRA member token, to MYRA (myraassistant.co.uk) so we can order the page to your taste and, if you ask, save a piece or build looks around it. We do not keep a history of the sites you visit.</li>
               <li><strong>What it keeps in your browser</strong> — your MYRA connection (a signed token and your first name) and the list of sites you have switched it off for. Nothing else. Disconnecting from the extension&rsquo;s menu removes the connection.</li>
               <li><strong>What it is for</strong> — showing you the pieces you would wear first, and nothing unrelated. We do not sell or share this data, and we never use it to judge creditworthiness or for lending.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 className="text-[14px] tracking-[0.06em] text-[#4A4E57] mb-3">MYRA AND YOUR GOOGLE ACCOUNT (GMAIL &amp; CALENDAR)</h2>
+            <p className="mb-3">
+              Connecting your Google account is optional. You choose it from your settings, Google asks you to
+              approve each permission, and you can disconnect at any time from your settings or from your Google
+              Account&rsquo;s security page. Both connections are read-only.
+            </p>
+            <ul className="list-disc pl-5 space-y-2">
+              <li><strong>Gmail (read-only)</strong> — MYRA searches your inbox only for order confirmations, receipts, dispatch and delivery emails from fashion brands and retailers, and reads those messages to find the clothes you have bought: the garment name, brand, colour, size, price, product image and link. It uses this to add the piece to your MYRA wardrobe so outfits can be built around what you own. No other mail is opened. The emails themselves are not stored; only the garment details are. MYRA never sends, modifies, labels or deletes mail.</li>
+              <li><strong>Google Calendar (read-only)</strong> — MYRA reads your upcoming events (title, date, time and location) to see what you have to dress for, and shows the ones worth dressing for in your Coming up list with outfit suggestions. Only the events you choose to dress for are kept. MYRA never creates, edits or deletes events, invitations or calendars.</li>
+              <li><strong>What we do with it</strong> — Google data is used solely to style you. It is never used for advertising, never sold, never shared with anyone except the processors that run MYRA (listed below), and never read by a human except with your permission, for support or security, or as the law requires. Disconnecting removes the connection and the Google tokens; you can ask us to delete the garment details and events at any time.</li>
+              <li><strong>Limited Use</strong> — MYRA&rsquo;s use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" className="underline underline-offset-2" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>, including the Limited Use requirements.</li>
             </ul>
           </section>
 

@@ -31,10 +31,10 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: 'MYRA',
-  description: 'MYRA — Outfit-first fashion discovery, personalised to your taste.',
+  description: 'MYRA is a private styling service: complete outfits built around your taste, your size and what you already own, for the occasions coming up.',
   openGraph: {
     title: 'MYRA',
-    description: 'Outfit-first fashion discovery.',
+    description: 'A private styling service: complete outfits built around your taste, your size and what you already own.',
     type: 'website',
   },
   // FlexOffers site-ownership verification.
