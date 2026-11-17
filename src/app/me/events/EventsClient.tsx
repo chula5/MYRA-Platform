@@ -20,6 +20,7 @@ import {
   dismissMyEventPick, loadMyEvents, removeMyStylingTask, scheduleMyStylingTask, setMyEventBrief, setMyStylingTaskStatus, type EventsAreaView,
 } from './actions'
 import WaysToWear from '@/components/me/WaysToWear'
+import GoogleReviewNote from '@/components/me/GoogleReviewNote'
 import FallbackImage from '@/components/FallbackImage'
 
 type Task = EventsAreaView['tasks'][number]
@@ -288,6 +289,7 @@ export default function EventsClient({ testMemberId }: { testMemberId?: string }
                   : null}
               </div>
               {!appleCalendarAvailable() && <p className={`${SMALL} text-[#6E6B65]`}>Apple Calendar connects from the MYRA iPhone app.</p>}
+              {calendar.ready && <GoogleReviewNote />}
             </div>
           )}
         </div>

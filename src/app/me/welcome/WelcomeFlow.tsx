@@ -23,6 +23,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import BrandPicker from '@/components/me/BrandPicker'
+import GoogleReviewNote from '@/components/me/GoogleReviewNote'
 import VirginConnect from '../dressing-room/VirginConnect'
 import InstagramImport from '../dressing-room/InstagramImport'
 import { loadEmailPanel, scanNow, type EmailPanelView } from '../dressing-room/email-actions'
@@ -370,6 +371,8 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
           <button onClick={() => { setVirgin(!virgin); setEmailChoice(false) }} className={PILL}>Virgin Media / Blueyonder</button>
         </div>
       )}
+
+      {(email?.gmailReady || calendar?.ready) && <GoogleReviewNote className="text-center max-w-[44em] mx-auto" />}
 
       {(inboxes.length > 0 || cals.length > 0 || igs.length > 0) && (
         <p className={`${BODY} myra-guide-text text-center text-[#55534E]`}>

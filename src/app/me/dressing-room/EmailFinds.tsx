@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
 import VirginConnect from './VirginConnect'
 import ServiceMark from '@/components/me/ServiceMark'
+import GoogleReviewNote from '@/components/me/GoogleReviewNote'
 import {
   addFoundPiece, disconnectInbox, keepReturned, loadEmailPanel, notMine, removeReturned,
   scanAgain, scanNow,
@@ -183,6 +184,7 @@ export default function EmailFinds({ testMemberId, onAdded, onCount }: { testMem
           <ServiceMark service="email" size="sm" />Virgin Media
         </button>
       </div>
+      {view.gmailReady && <GoogleReviewNote className="mt-3" />}
 
       {virginStep > 0 && (
         <VirginConnect

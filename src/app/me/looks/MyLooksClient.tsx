@@ -32,6 +32,7 @@ import OutfitDetailClient from '@/app/outfit/[id]/OutfitDetailClient'
 import WaysToWear from '@/components/me/WaysToWear'
 import { noticePieces } from '@/app/me/ways/actions'
 import StyleOutfit from '@/components/me/StyleOutfit'
+import GoogleReviewNote from '@/components/me/GoogleReviewNote'
 import ShareWithFriend from '@/components/me/ShareWithFriend'
 import InspirationToOutfit from '@/components/me/InspirationToOutfit'
 import type { OutfitWithItems } from '@/types/database'
@@ -1523,6 +1524,7 @@ function AskPanel({
                       {cal.ready
                         ? <a href={calHref} className={pill(false).replace('bg-[#F4F4F2]', 'bg-white')}>Connect Google Calendar</a>
                         : <span className="text-[clamp(18px,1vw,24px)] text-[#8A8F95]">Calendar connect is not switched on yet.</span>}
+                      {cal.ready && <GoogleReviewNote className="basis-full" />}
                     </div>
                   ) : (
                     <div className="space-y-3">
