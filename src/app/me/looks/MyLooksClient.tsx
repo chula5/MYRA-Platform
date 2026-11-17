@@ -13,7 +13,7 @@
 // it. Explore Styles searches her own looks rather than composing, because a
 // client browsing should not have to wait for a stylist.
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import ClientWardrobe from './ClientWardrobe'
@@ -87,7 +87,7 @@ const SHELVES: Record<ShelfKey, { label: string; note: (n: number) => string }> 
   asked: { label: 'You asked for', note: (n) => `${n} look${n === 1 ? '' : 's'} for your occasions` },
   inspiration: { label: 'From your inspiration', note: (n) => `${n} outfit${n === 1 ? '' : 's'} styled from pictures you dropped in, in your size and price range` },
   new: { label: 'New for inspiration', note: (n) => `${n} look${n === 1 ? '' : 's'}. Thumbs up or down, and MYRA learns` },
-  saved: { label: 'Saved outfits', note: (n) => `${n} outfit${n === 1 ? '' : 's'} you kept · shaping what comes next` },
+  saved: { label: 'Liked by you', note: (n) => `${n} outfit${n === 1 ? '' : 's'} you liked or saved · shaping what comes next` },
 }
 
 /** Where a link put her: one look open, or one shelf (an email's, narrowed to one piece). */
@@ -236,7 +236,23 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
   // Everything she browses excludes what she has already turned down. A look
   // she said no to still counts for the learning; it just stops being offered
   // back to her in a grid, a search or an Explore row.
-  const browsable = useMemo(() => view.looks.filter((l) => l.response !== 'no'), [view.looks])
+  // Her answers this visit, laid over the loaded looks so a look moves the
+  // moment she answers: a yes goes to LIKED BY YOU, a no leaves the page
+  // (Chloe, 2026-11-15). The row stays in the database — MYRA learns from it.
+  const [answers, setAnswers] = useState<Record<string, 'yes' | 'no'>>({})
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const answered = useCallback((lookId: string, v: 'yes' | 'no') => {
+    setAnswers((a) => ({ ...a, [lookId]: v }))
+    setNotice(v === 'yes' ? 'Moved to Liked by you' : 'Removed — MYRA won’t show you that one again')
+    if (noticeTimer.current) clearTimeout(noticeTimer.current)
+    noticeTimer.current = setTimeout(() => setNotice(null), 3500)
+  }, [])
+  const browsable = useMemo(
+    () => view.looks
+      .map((l) => (answers[l.look_id] ? { ...l, response: answers[l.look_id] } : l))
+      .filter((l) => l.response !== 'no'),
+    [view.looks, answers],
+  )
 
   const occasions = useMemo(() => {
     const m = new Map<string, ClientLook[]>()
@@ -266,13 +282,14 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
     return () => { live = false; clearTimeout(t) }
   }, [query])
 
-  const loved = view.looks.filter((l) => l.response === 'yes')
+  const loved = browsable.filter((l) => l.response === 'yes')
   // The shelves. A look sits on the one its source names; SAVED OUTFITS also
   // holds anything she said yes to, wherever it came from.
   const shelfLooks: Record<ShelfKey, ClientLook[]> = useMemo(() => ({
-    emailed: browsable.filter((l) => l.source === 'emailed'),
-    asked: browsable.filter((l) => l.source === 'asked'),
-    inspiration: browsable.filter((l) => l.source === 'inspiration'),
+    // A look she liked lives in LIKED BY YOU only, not twice.
+    emailed: browsable.filter((l) => l.source === 'emailed' && l.response !== 'yes'),
+    asked: browsable.filter((l) => l.source === 'asked' && l.response !== 'yes'),
+    inspiration: browsable.filter((l) => l.source === 'inspiration' && l.response !== 'yes'),
     new: browsable.filter((l) => !l.response && (l.source ?? 'for_you') === 'for_you'),
     saved: browsable.filter((l) => l.source === 'saved' || l.response === 'yes'),
   }), [browsable])
@@ -283,6 +300,8 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
     let looks = shelfLooks[shelf.key]
     let note = SHELVES[shelf.key].note(looks.length)
     if ((shelf.key === 'emailed' || shelf.key === 'inspiration') && (shelf.deliveryId || shelf.piece)) {
+      // One note or one picture: all of its outfits, liked ones included.
+      looks = browsable.filter((l) => l.source === shelf.key)
       const fromEmail = shelf.deliveryId ? looks.filter((l) => l.delivery_id === shelf.deliveryId) : looks
       const pool = fromEmail.length ? fromEmail : looks
       const wearing = shelf.piece ? pool.filter((l) => l.items.some((i) => i.item_id === shelf.piece)) : pool
@@ -293,7 +312,7 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
         : `${looks.length} outfit${looks.length === 1 ? '' : 's'} from ${shelf.key === 'inspiration' ? 'your picture' : 'this note'}`
     }
     return { label: SHELVES[shelf.key].label, note, looks }
-  }, [shelf, shelfLooks])
+  }, [shelf, shelfLooks, browsable])
 
   const relatedResults = useMemo(() => {
     if (!related) return []
@@ -341,6 +360,7 @@ export default function MyLooksClient({ view, readOnly = false, initialQuery = '
     savedItems,
     onToggleItem: toggleItem,
     onOpen: () => noteViewed(l.look_id),
+    onAnswered: (v: 'yes' | 'no') => answered(l.look_id, v),
     onEnter: () => { noteViewed(l.look_id); setOpenItem(null); setOpenLook(l) },
     onEnterPiece: (itemId: string) => { noteViewed(l.look_id); setOpenItem(itemId); setOpenLook(l) },
     onSimilar: () => { noteViewed(l.look_id); showRelated({ anchor: l, mode: 'similar' }) },
@@ -780,10 +800,12 @@ function Results({
 }
 
 function LookCard({
-  look, readOnly, onSimilar, onExplore, onStyleItem, onOpen, onEnter, onEnterPiece, savedItems, onToggleItem,
+  look, readOnly, onSimilar, onExplore, onStyleItem, onOpen, onAnswered, onEnter, onEnterPiece, savedItems, onToggleItem,
 }: {
   look: ClientLook
   readOnly?: boolean
+  /** Her answer is saved: the page moves the look (yes) or takes it away (no). */
+  onAnswered?: (v: 'yes' | 'no') => void
   onSimilar?: () => void
   onExplore?: () => void
   onStyleItem?: (itemId: string) => void
@@ -811,13 +833,25 @@ function LookCard({
   // lays the pieces out together, so it is still the outfit, not one piece.
   const pieces = look.items.filter((i) => i.image_url)
 
+  // One tap saves the answer. A yes moves straight to LIKED BY YOU. A no is
+  // saved at once too (it used to wait for a reason, so a skipped reason left
+  // the look on the page); the why is offered after, and Send or Skip takes
+  // the look away.
   async function send(v: 'yes' | 'no') {
     setVerdict(v)
-    if (v === 'no' && !reason) return
     setSaving(true)
-    const r = await reactToLook(look.look_id, v, reason, words)
+    const r = await reactToLook(look.look_id, v, null, '')
     setSaving(false)
-    if (!r.error) setSaved(true)
+    if (r.error) return
+    if (v === 'yes') onAnswered?.('yes')
+  }
+  async function sendWhy() {
+    if (reason || words.trim()) {
+      setSaving(true)
+      await reactToLook(look.look_id, 'no', reason, words)
+      setSaving(false)
+    }
+    onAnswered?.('no')
   }
 
   const total_gbp = look.items.reduce((n, i) => n + (i.owned ? 0 : (i.price_gbp ?? 0)), 0)
@@ -991,7 +1025,7 @@ function LookCard({
                 I would wear this
               </button>
               <button
-                onClick={() => setVerdict('no')}
+                onClick={() => send('no')}
                 disabled={saving}
                 className={`text-[20px] px-5 py-3 border transition-colors ${verdict === 'no' ? 'bg-[#55534E] text-white border-[#55534E]' : 'border-[#9B978F] text-[#55534E]'}`}
               >
@@ -1000,6 +1034,7 @@ function LookCard({
             </div>
             {verdict === 'no' && (
               <div className="mt-4 space-y-3">
+                <p className="text-[18px] text-[#55534E]">Noted — it won’t come back. Tell MYRA why? (optional)</p>
                 <div className="flex flex-wrap gap-2">
                   {REASONS.map((r) => (
                     <button
@@ -1018,13 +1053,18 @@ function LookCard({
                   placeholder="In your own words — the most useful part"
                   className="w-full text-[20px] bg-transparent border border-[#C3BFB8] px-3 py-2.5 focus:outline-none focus:border-[#2B2B2B] rounded-full"
                 />
-                <button
-                  onClick={() => send('no')}
-                  disabled={saving || !reason}
-                  className="text-[20px] px-5 py-3 bg-[#2B2B2B] text-white disabled:opacity-40 rounded-full"
-                >
-                  {saving ? 'Sending…' : 'Send'}
-                </button>
+                <div className="flex flex-wrap items-center gap-4">
+                  <button
+                    onClick={sendWhy}
+                    disabled={saving || (!reason && !words.trim())}
+                    className="text-[20px] px-5 py-3 bg-[#2B2B2B] text-white disabled:opacity-40 rounded-full"
+                  >
+                    {saving ? 'Sending…' : 'Send'}
+                  </button>
+                  <button onClick={() => onAnswered?.('no')} disabled={saving} className="text-[20px] text-[#55534E] underline underline-offset-4">
+                    Skip
+                  </button>
+                </div>
               </div>
             )}
           </>
