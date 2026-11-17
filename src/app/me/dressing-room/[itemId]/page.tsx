@@ -16,5 +16,8 @@ export default async function PiecePage({ params }: { params: Promise<{ itemId: 
   const { itemId } = await params
   const view = await loadMyPiece(itemId)
   if (!view.memberId) redirect('/me/profile')
+  // Not one of hers (a sale find from an email, an old link): the piece still
+  // opens — in the mirror, where any piece MYRA has can be styled.
+  if (!view.piece) redirect(`/me/ways/${encodeURIComponent(itemId)}`)
   return <PieceClient view={view} />
 }

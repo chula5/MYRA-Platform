@@ -177,7 +177,10 @@ export const b = (t: string) => `<strong style="color:#0a0a0a;">${t}</strong>`
 export const caps = (t: string) => `<p style="margin:0 0 2px 0;${FONT}font-size:11px;letter-spacing:0.12em;color:#7c838b;text-transform:uppercase;">${esc(t)}</p>`
 export const link = (href: string, label: string, extra = '') => `<a href="${href}" style="${FONT}font-size:12px;letter-spacing:0.08em;color:#2b2b2b;text-decoration:underline;${extra}">${label}</a>`
 export const sectionLink = (href: string, label: string) => `<p style="margin:10px 0 0 0;">${link(href, label)}</p>`
-export const pieceLink = (itemId: string | null, base: string) => itemId ? `${base}/me/dressing-room/${encodeURIComponent(itemId)}` : `${base}/me`
+// A piece from an email opens in the mirror (/me/ways/<id>): any piece MYRA
+// has, shop or wardrobe. It used to open her wardrobe page, which turned every
+// sale find away with "That piece is not in your wardrobe" (a member, 2026-11-17).
+export const pieceLink = (itemId: string | null, base: string) => itemId ? `${base}/me/ways/${encodeURIComponent(itemId)}` : `${base}/me`
 
 export function thumb(src: string | null, href: string, width: number, alt = '', radius = 6): string {
   const img = src

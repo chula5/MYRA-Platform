@@ -53,6 +53,17 @@ const BROWSE_WARM_PER_SEARCH = 8
 
 export default function BrowseClient() {
   const [draft, setDraft] = useState('')
+  // A phone's bar is narrow: the placeholder is shorter there, and SAVE THIS
+  // SEARCH sits under the bar instead of over the words she typed, which it
+  // used to crop (a member's SEARCH screenshot, 2026-11-17).
+  const [phone, setPhone] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)')
+    const on = () => setPhone(mq.matches)
+    on()
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
   /** The question MYRA is answering. Set the moment she asks, so the bar lifts. */
   const [asked, setAsked] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -460,7 +471,7 @@ export default function BrowseClient() {
       {/* The bar: middle of the page until she asks, then up out of the way. */}
       <div className={`transition-[padding] duration-500 ease-out ${started ? 'pt-0' : 'pt-[20vh]'}`}>
         <form onSubmit={(e) => { e.preventDefault(); void ask(draft) }} className="relative w-full max-w-[1100px] mx-auto px-1">
-          <button type="submit" aria-label="Search" className="absolute left-6 sm:left-8 top-1/2 -translate-y-1/2 p-1 text-[#55534E] hover:text-[#2B2B2B]">
+          <button type="submit" aria-label="Search" className="absolute left-5 sm:left-8 top-1/2 -translate-y-1/2 p-1 text-[#55534E] hover:text-[#2B2B2B]">
             <svg viewBox="0 0 17 16" fill="none" className="w-6 h-6 sm:w-8 sm:h-8" aria-hidden>
               <path d="M7.667 12.667A5.333 5.333 0 107.667 2a5.333 5.333 0 000 10.667zM14.334 14l-2.9-2.9" stroke="currentColor" strokeWidth="1.333" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
@@ -468,11 +479,11 @@ export default function BrowseClient() {
           <input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder="Search better through MYRA"
+            placeholder={phone ? 'Search MYRA' : 'Search better through MYRA'}
             aria-label="Search through MYRA"
             data-tour="browse-search"
             type="text"
-            className={`w-full rounded-full bg-white border-2 border-transparent shadow-md transition-all duration-300 focus:outline-none focus:border-[#2B2B2B] text-[#2B2B2B] placeholder:text-[#8C8A85] text-[18px] sm:text-[clamp(22px,1.5vw,32px)] pl-16 sm:pl-20 ${canKeep ? 'pr-[200px] sm:pr-[400px]' : 'pr-24 sm:pr-36'} py-4 sm:py-6`}
+            className={`w-full rounded-full bg-white border-2 border-transparent shadow-md transition-all duration-300 focus:outline-none focus:border-[#2B2B2B] text-[#2B2B2B] placeholder:text-[#8C8A85] text-[18px] sm:text-[clamp(22px,1.5vw,32px)] pl-14 sm:pl-20 ${canKeep ? 'pr-24 sm:pr-[400px]' : 'pr-24 sm:pr-36'} py-4 sm:py-6`}
           />
           {/* Keep this search: MYRA keeps looking and the finds wait under YOUR SEARCHES. */}
           {canKeep && (
@@ -480,7 +491,7 @@ export default function BrowseClient() {
               type="button"
               onClick={() => void keepSearch()}
               disabled={!!keptSearch || keeping}
-              className={`absolute top-1/2 -translate-y-1/2 ${draft ? 'right-[100px] sm:right-[144px]' : 'right-[60px] sm:right-[88px]'} rounded-full px-4 sm:px-6 py-2.5 sm:py-3 text-[15px] sm:text-[18px] tracking-[0.1em] whitespace-nowrap ${keptSearch ? 'bg-[#7C838B] text-white' : 'bg-[#2B2B2B] text-white hover:bg-black'}`}
+              className={`hidden sm:block absolute top-1/2 -translate-y-1/2 ${draft ? 'right-[100px] sm:right-[144px]' : 'right-[60px] sm:right-[88px]'} rounded-full px-4 sm:px-6 py-2.5 sm:py-3 text-[15px] sm:text-[18px] tracking-[0.1em] whitespace-nowrap ${keptSearch ? 'bg-[#7C838B] text-white' : 'bg-[#2B2B2B] text-white hover:bg-black'}`}
             >
               {keptSearch ? (<>SAVED ✓<span className="hidden sm:inline"> · MYRA IS LOOKING</span></>) : keeping ? 'SAVING…' : (<>SAVE<span className="hidden sm:inline"> THIS SEARCH</span></>)}
             </button>
@@ -499,6 +510,18 @@ export default function BrowseClient() {
             </button>
           )}
         </form>
+        {canKeep && (
+          <div className="sm:hidden flex justify-center mt-3">
+            <button
+              type="button"
+              onClick={() => void keepSearch()}
+              disabled={!!keptSearch || keeping}
+              className={`rounded-full px-5 py-2.5 text-[16px] tracking-[0.1em] text-white ${keptSearch ? 'bg-[#7C838B]' : 'bg-[#2B2B2B]'}`}
+            >
+              {keptSearch ? 'SAVED ✓ · MYRA IS LOOKING' : keeping ? 'SAVING…' : 'SAVE THIS SEARCH'}
+            </button>
+          </div>
+        )}
 
         {/* Her kept searches: MYRA is still looking for each; N NEW is what it found since she last looked. */}
         {searches.length > 0 && (

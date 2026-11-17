@@ -1,9 +1,15 @@
 'use client'
 
 // THE TAB BAR — on a phone the rooms live at the foot of the screen, where
-// her thumb already is. Icons only, the same line art as the bar up top; the
-// room she is in is ink, the rest are silver. The header scrolls away with
-// the page; this does not.
+// her thumb already is. The same line art as the bar up top, each icon with
+// its word beneath (a member, 2026-11-17: "I would like to see a description
+// of what each are"); the room she is in is ink, the rest are silver. The
+// header scrolls away with the page; this does not.
+//
+// The bar stands exactly 68px tall above the safe area: every full-screen
+// sheet in the member area stops at bottom-[calc(68px+env(safe-area-inset-bottom))],
+// and when the bar was shorter a sliver of the page beneath showed between
+// the two (the same member saw it on "quite a few pages").
 //
 // No data-tour attributes here on purpose: the tour finds its buttons with
 // querySelector, first match wins, and the first match must stay the bar it
@@ -67,12 +73,12 @@ export default function MobileTabBar({ active }: { active: RoomId }) {
               }}
               aria-label={r.label}
               aria-current={on ? 'page' : undefined}
-              className="flex flex-col items-center pt-2 pb-1.5 touch-manipulation select-none"
+              className={`flex h-[68px] flex-col items-center justify-center gap-0.5 touch-manipulation select-none transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#8C8A85]'}`}
             >
-              <span className={`block w-10 h-10 transition-colors ${on ? 'text-[#2B2B2B]' : 'text-[#8C8A85]'}`}>
+              <span className="block w-9 h-9">
                 <RoomIcon id={r.id} />
               </span>
-              <span className={`mt-1 h-px w-6 transition-colors ${on ? 'bg-[#2B2B2B]' : 'bg-transparent'}`} />
+              <span className="text-[15px] leading-none tracking-normal">{r.short}</span>
             </Link>
           )
         })}

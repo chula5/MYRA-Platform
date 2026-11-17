@@ -9,7 +9,8 @@
 // Every piece shows what it costs now and what it cost, and why it is here.
 // Fetched by itself after the page opens, so the sale never holds the curtain.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useScrollTo } from '@/lib/smooth-scroll'
 import FallbackImage from '@/components/FallbackImage'
 import SavePieceHeart from '@/components/me/SavePieceHeart'
 import WaysToWear from '@/components/me/WaysToWear'
@@ -36,6 +37,22 @@ export default function BlackFriday({ testMemberId, standalone = false, initial,
   const [all, setAll] = useState(false)
   // The piece she tapped, open in the mirror — the shop is the last step.
   const [opened, setOpened] = useState<SalePiece | null>(null)
+  // A brand chip narrows the pieces, which sit under the chips — a member tapped
+  // brand after brand without seeing them (2026-11-17), so the grid comes up
+  // into view when it is below the fold, and a line says what is there and
+  // links to the brand's own site.
+  const gridRef = useRef<HTMLDivElement>(null)
+  const scrollTo = useScrollTo()
+  const siteFor = (name: string): string | null => {
+    const p = (view?.pieces ?? []).find((x) => x.brand === name && x.url)
+    try { return p?.url ? new URL(p.url).origin : null } catch { return null }
+  }
+  const pick = (name: string) => {
+    const next = brand === name ? null : name
+    setBrand(next); setAll(false)
+    const el = gridRef.current
+    if (next && el && el.getBoundingClientRect().top > window.innerHeight * 0.55) scrollTo(el, { offset: -120 })
+  }
 
   useEffect(() => {
     if (initial) return
@@ -81,7 +98,7 @@ export default function BlackFriday({ testMemberId, standalone = false, initial,
           <button
             key={b.brand_id}
             type="button"
-            onClick={() => { setBrand(brand === b.name ? null : b.name); setAll(false) }}
+            onClick={() => pick(b.name)}
             className={`text-[16px] sm:text-[18px] tracking-[0.08em] rounded-full px-5 py-2.5 border ${brand === b.name ? 'bg-[#2B2B2B] text-white border-[#2B2B2B]' : 'border-[rgba(43,43,43,0.28)] text-[#2B2B2B] hover:bg-white'}`}
           >
             {b.name.toUpperCase()} <span className="text-[#7C838B]">· {b.line}</span>
@@ -89,7 +106,13 @@ export default function BlackFriday({ testMemberId, standalone = false, initial,
         ))}
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-5 mt-7">
+      {brand && (
+        <p className="mt-5 text-[17px] sm:text-[19px] tracking-[0.1em] text-[#2B2B2B]">
+          {shown.length} {shown.length === 1 ? 'PIECE' : 'PIECES'} AT {brand.toUpperCase()} BELOW ↓
+          {siteFor(brand) && <> · <a href={siteFor(brand) as string} target="_blank" rel="noreferrer" className="underline underline-offset-4">GO TO {brand.toUpperCase()} ↗</a></>}
+        </p>
+      )}
+      <div ref={gridRef} className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-5 mt-7">
         {(all || standalone ? shown : shown.slice(0, FIRST)).map((p) => <SaleCard key={p.item_id} piece={p} onOpen={setOpened} />)}
       </div>
       {!all && !standalone && shown.length > FIRST && (
