@@ -121,7 +121,13 @@
   // the tiles are drawn on the client and the HTML holds only a handful).
   // Reiss files every piece under /style/<code>/<id>; without it the scan
   // fell back to scrolling and saw 10 of 329 new-in pieces (2026-10-24).
-  const PRODUCT_HREF = /\/(products?|p|item|items|shop\/product|dp|style)\/[^?#]+/i
+  // …and the shops that file a piece as a page of its own: Marni's
+  // /en-gb/skirts-GOMA0862A0UTC722EBR40.html, Tory Burch's
+  // /en-gb/clothing/dresses/embellished-silk-dress/185410.html. A .html page
+  // whose own name carries a digit is a product; a category page's does not.
+  // Without it both scans read nothing from the HTML and stopped at what the
+  // first screen happened to show — Marni 45 of 186, Tory Burch 4 (2026-11-08).
+  const PRODUCT_HREF = /\/(products?|p|item|items|shop\/product|dp|style)\/[^?#]+|\/[^/?#]*\d[^/?#]*\.html(?:[?#]|$)/i
   const JUNK_IMG = /logo|sprite|icon|placeholder|spinner|loading|\/assets\/ref_|pixel|blank\.|1x1/i
   const SCAN_FEED_CHUNK = 150
   const toPrice = (s) => { const n = Number(String(s ?? '').replace(/[^\d.,]/g, '').replace(/,(\d{2})$/, '.$1').replace(/,/g, '')); return Number.isFinite(n) && n > 0 ? n : null }
@@ -247,6 +253,15 @@
   // carries name, pictures, price and sizes. A "bundle" is a look of several
   // pieces — the pieces inside it are what Brand Watch wants.
   const INDITEX_HOST = /(^|\.)massimodutti\.com$/i
+  /** The best of an Inditex piece's pictures: the lead shot, then the shoot in order, never a swatch, chip, thumbnail or landscape crop. */
+  function inditexLeadImage(urls) {
+    const shot = (u) => (String(u).match(/-(o\d+|r|c|t\d*|w\d+)\.(?:jpe?g|png|webp)(?:\?|$)/i) || [])[1] || null
+    const shots = urls.filter(Boolean).map((u) => ({ u, s: shot(u) }))
+    const o = shots.filter((x) => x.s && /^o\d+$/i.test(x.s)).sort((a, b) => Number(a.s.slice(1)) - Number(b.s.slice(1)))
+    if (o.length) return o[0].u
+    const plain = shots.find((x) => !x.s)
+    return plain ? plain.u : null
+  }
   async function scanInditex() {
     if (!INDITEX_HOST.test(location.host)) return false
     const html = document.documentElement.innerHTML
@@ -270,8 +285,14 @@
           if (!title || !b.productUrl || !b.productUrlParam) continue
           const url = `${location.origin}/${country}/${b.productUrl}?pelement=${b.productUrlParam}`
           const medias = (b.detail?.xmedia?.[0]?.xmediaItems || []).flatMap((x) => x.medias || [])
-          // "-w" is the piece worn, "-o" the packshot: the page leads with worn.
-          const image = (medias.find((m) => /-w\d\./.test(m.url || '')) || medias[0])?.url || null
+          // The shots a piece carries: "-o1" is the page's own lead picture
+          // (worn, portrait), "-o2".."-o12" the rest of the shoot, "-r" a
+          // 40×40 colour swatch, "-c" a cut-out colour chip, "-t" a thumbnail
+          // and "-w" a landscape editorial crop. The reader used to take "-w"
+          // first and otherwise whatever came first in the list, which on
+          // Massimo Dutti was the swatch: 73 of 151 queued pieces showed a
+          // blurred 40-pixel square or a zoomed-in collar (2026-11-06).
+          const image = inditexLeadImage(medias.map((m) => m.url || ''))
           if (!image) continue
           const sizes = (b.detail?.colors || []).flatMap((c) => c.sizes || [])
           const pence = Number(sizes.find((s) => s.price)?.price)
@@ -351,6 +372,10 @@
       window.scrollTo({ top: scrollY + Math.round(innerHeight * 0.9), behavior: 'instant' })
       await sleep(SCAN_STEP_MS)
       if (!scan) return
+      // Read the tiles the scroll has just drawn, straight from the live page:
+      // a shop that renders its grid as she scrolls (Tory Burch) never serves
+      // them in any fetchable page, and the ranking pass alone was not seeing them.
+      await feedScan(parseHtmlTiles(document, location.href.split('#')[0]))
       // Growth is measured in pieces seen, not tiles on the page: a grid that
       // recycles its tiles as it scrolls (Reformation) never has more than a
       // screenful in the DOM, however far it has gone.
@@ -570,6 +595,161 @@
   // YOU shows in the app). The one she chose is kept for the session. Each
   // tab ends in a way into MYRA itself, straight to that door.
   const MYRA_SITE = 'https://www.myraassistant.co.uk'
+
+  // ── TRY ON THE AVATAR ─────────────────────────────────────────────────────
+  // Her avatar (made in MYRA, /me/avatar) wearing the piece she is looking
+  // at, or a whole look MYRA has just built. The person button is the same
+  // everywhere: on a shop's tiles, on the piece card, on every piece in a
+  // look, and under each look. A click asks MYRA to make the picture (it is a
+  // real shoot, about a minute a piece, so it is never made by a hover); once
+  // it exists, resting the cursor on the button shows it. Everything is kept
+  // by MYRA, so the second look at anything is instant.
+  const PERSON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:block;pointer-events:none"><circle cx="12" cy="5.2" r="2.7"/><path d="M6.5 21v-7.2c0-2.6 2.2-4.6 5.5-4.6s5.5 2 5.5 4.6V21"/></svg>'
+  const TRY_LABEL = 'Try on the avatar'
+  const TRY_POLL_MS = 5000
+  const TRY_WAIT_MS = 8 * 60_000
+  const tryOns = new Map()    // key → { state, image_url, done, total, message }
+  const tryAsks = new Map()   // key → what MYRA is asked: { product } | { item_id } | { items }
+  const tryRunning = new Set()
+  const tryAsked = new Set()  // asked for by her tap in this tab: the picture opens on its own when it lands
+  let tryPop = null, tryHover = null
+
+  /** A short, attribute-safe name for one ask; remembers the ask under it. */
+  function tryKeyFor(ask) {
+    const text = ask.items ? `look:${ask.items.slice().sort().join(',')}` : ask.item_id ? `item:${ask.item_id}` : `url:${String(ask.product?.url || '').split(/[?#]/)[0]}`
+    let h = 5381
+    for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) >>> 0
+    const key = `t${h.toString(36)}${text.length.toString(36)}`
+    tryAsks.set(key, ask)
+    return key
+  }
+
+  async function tryCall(ask, start) {
+    const t = await creds()
+    if (!t?.token) return { state: 'failed', message: `Connect MYRA first · ${RELOAD_NOTE}` }
+    try {
+      const res = await fetch(`${(t.apiBase || API).replace(/\/+$/, '')}/api/mirror/avatar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t.token}` },
+        body: JSON.stringify({ ...ask, start }),
+      })
+      const r = await res.json().catch(() => null)
+      if (r?.state) return r
+      return { state: 'failed', message: res.status === 404 ? 'MYRA is being updated — try again shortly' : (r?.error || `MYRA could not do that (${res.status})`) }
+    } catch (err) { return { state: 'failed', message: String(err?.message || err) } }
+  }
+
+  function tryText(st) {
+    if (!st || st.state === 'idle') return TRY_LABEL
+    if (st.state === 'making') return st.total ? `On your avatar… ${Math.min((st.done || 0) + 1, st.total)} of ${st.total}` : 'On your avatar…'
+    if (st.state === 'ready') return 'See on your avatar'
+    if (st.state === 'no_avatar') return 'Make your avatar in MYRA'
+    return st.message || 'That did not work — try again'
+  }
+
+  const tryPicture = (key) => {
+    const st = tryOns.get(key)
+    return st?.state === 'ready' && st.image_url
+      ? `<div style="position:relative;aspect-ratio:3/4;background:#E4E2DD;overflow:hidden"><img src="${esc(st.image_url)}" alt="On your avatar" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain"></div>`
+      : ''
+  }
+
+  /** Bring every button and picture slot for this ask up to date, wherever it has been drawn. */
+  function paintTryOns(key) {
+    const st = tryOns.get(key)
+    document.querySelectorAll(`[data-myra-try="${key}"]`).forEach((el) => {
+      const kind = el.dataset.myraTryKind
+      if (kind === 'img') { el.innerHTML = tryPicture(key); return }
+      if (kind === 'disc') {
+        el.title = tryText(st)
+        el.setAttribute('aria-label', tryText(st))
+        const on = st?.state === 'ready'
+        el.style.background = on ? '#141414' : 'rgba(255,255,255,.95)'
+        el.style.color = on ? '#F7F6F3' : st?.state === 'failed' ? '#9B3A3A' : '#2B2B2B'
+        el.style.opacity = st?.state === 'making' ? '.55' : '1'
+        return
+      }
+      el.textContent = tryText(st)
+    })
+    if (st?.state !== 'ready') return
+    // Her cursor is still on the button: show it there. She tapped it earlier
+    // and moved on: open it at that button anyway — it took a minute or two,
+    // and a label that only reads "See on your avatar" is easy to miss.
+    const anchor = tryHover?.key === key && tryHover.el.isConnected
+      ? tryHover.el
+      : tryAsked.has(key) ? Array.from(document.querySelectorAll(`[data-myra-try="${key}"]`)).find((el) => el.dataset.myraTryKind !== 'img' && el.isConnected) : null
+    if (anchor) { showTryPop(anchor, st.image_url); tryAsked.delete(key) }
+  }
+
+  async function runTryOn(key, start) {
+    const ask = tryAsks.get(key)
+    if (!ask || tryRunning.has(key)) return
+    tryRunning.add(key)
+    try {
+      let st = await tryCall(ask, start)
+      // A quiet look that finds nothing changes nothing on the page.
+      if (!start && st.state !== 'ready' && st.state !== 'making') return
+      tryOns.set(key, st); paintTryOns(key)
+      const until = Date.now() + TRY_WAIT_MS
+      while (st.state === 'making' && Date.now() < until) {
+        await new Promise((ok) => setTimeout(ok, TRY_POLL_MS))
+        st = await tryCall(ask, false)
+        if (st.state === 'idle') st = { state: 'failed', message: 'That did not work — try again' }
+        tryOns.set(key, st); paintTryOns(key)
+      }
+      if (st.state === 'making') { tryOns.set(key, { state: 'failed', message: 'Still being made — ask again in a minute' }); paintTryOns(key) }
+    } finally { tryRunning.delete(key) }
+  }
+
+  function hideTryPop() { tryPop?.remove(); tryPop = null }
+  function showTryPop(anchor, url) {
+    hideTryPop()
+    if (!url) return
+    const r = anchor.getBoundingClientRect()
+    const W = 264, H = 352 + 30
+    tryPop = document.createElement('div')
+    const left = r.left - W - 12 > 8 ? r.left - W - 12 : Math.min(innerWidth - W - 8, r.right + 12)
+    const top = Math.max(8, Math.min(innerHeight - H - 8, r.top + r.height / 2 - H / 2))
+    tryPop.style.cssText = `position:fixed;left:${Math.round(left)}px;top:${Math.round(top)}px;width:${W}px;z-index:2147483647;pointer-events:none;background:#F7F6F3;border-radius:16px;overflow:hidden;box-shadow:0 14px 44px rgba(20,20,20,.28);font:500 12px/1 ${FONT};color:#2B2B2B`
+    tryPop.innerHTML = `<div style="aspect-ratio:3/4;background:#E4E2DD"><img src="${esc(url)}" alt="On your avatar" style="display:block;width:100%;height:100%;object-fit:contain"></div><div style="padding:9px 12px;letter-spacing:.12em;text-transform:uppercase;opacity:.6">On your avatar</div>`
+    document.documentElement.appendChild(tryPop)
+  }
+
+  const tryButtonAt = (e) => {
+    const b = e.target?.closest?.('[data-myra-try]')
+    return b && b.dataset.myraTryKind !== 'img' ? b : null
+  }
+  document.addEventListener('click', (e) => {
+    const b = tryButtonAt(e)
+    if (!b) { hideTryPop(); return }
+    e.preventDefault(); e.stopPropagation()
+    const key = b.dataset.myraTry
+    const st = tryOns.get(key)
+    if (st?.state === 'no_avatar') { window.open(`${MYRA_SITE}/me/avatar`, '_blank', 'noopener'); return }
+    if (st?.state === 'ready') { showTryPop(b, st.image_url); return }
+    if (st?.state === 'making') return
+    tryHover = { key, el: b }
+    tryAsked.add(key)
+    tryOns.set(key, { state: 'making' }); paintTryOns(key)
+    runTryOn(key, true)
+  }, true)
+  document.addEventListener('mouseover', (e) => {
+    const b = tryButtonAt(e)
+    if (!b || tryHover?.el === b) return
+    const key = b.dataset.myraTry
+    tryHover = { key, el: b }
+    const st = tryOns.get(key)
+    if (st?.state === 'ready') showTryPop(b, st.image_url)
+    // Not asked for in this tab: MYRA may already have it from another day.
+    // Looking costs nothing; making it waits for her click.
+    else if (!st) runTryOn(key, false)
+  }, true)
+  document.addEventListener('mouseout', (e) => {
+    const b = tryButtonAt(e)
+    if (!b || b.contains(e.relatedTarget)) return
+    if (tryHover?.el === b) tryHover = null
+    hideTryPop()
+  }, true)
   const HOME_TAB_KEY = 'myra-mirror-home-tab'
   let homeTab = 'styled'
   try { if (sessionStorage.getItem(HOME_TAB_KEY) === 'similar') homeTab = 'similar' } catch {}
@@ -885,6 +1065,15 @@
   function lookCard(look, i, heroId) {
     const pieces = (look.items || []).slice(0, 9)
     const own = pieces.filter((p) => p.owned).length
+    const tryIds = pieces.map((p) => p.item_id).filter(Boolean)
+    const lookTry = tryIds.length ? tryKeyFor({ items: tryIds }) : null
+    const pieceTry = (p) => (!p.owned && p.item_id ? tryKeyFor({ item_id: p.item_id }) : null)
+    const pieceDisc = (p) => {
+      const key = pieceTry(p)
+      if (!key) return ''
+      const st = tryOns.get(key)
+      return `<button type="button" data-myra-try="${key}" data-myra-try-kind="disc" title="${esc(tryText(st))}" aria-label="${esc(tryText(st))}" style="position:absolute;top:36px;right:5px;width:26px;height:26px;border:0;border-radius:50%;display:flex;align-items:center;justify-content:center;background:${st?.state === 'ready' ? '#141414' : 'rgba(255,255,255,.94)'};color:${st?.state === 'ready' ? '#F7F6F3' : '#2B2B2B'};opacity:${st?.state === 'making' ? '.55' : '1'};padding:0;cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,.14)">${PERSON}</button>`
+    }
     const body = look.image_url
       ? `<div style="position:relative;aspect-ratio:3/4;background:#E4E2DD;overflow:hidden">
            <img src="${esc(look.image_url)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
@@ -896,15 +1085,20 @@
               ${p.owned
                 ? '<span style="position:absolute;top:5px;left:5px;background:#141414;color:#fff;border-radius:999px;padding:2px 8px;font-size:11px;letter-spacing:.02em">Yours</span>'
                 : `<button type="button" data-myra-keep="${i}:${j}" title="Keep this in MYRA" aria-label="Keep this in MYRA" style="position:absolute;top:5px;right:5px;width:26px;height:26px;border:0;border-radius:50%;background:rgba(255,255,255,.94);color:#2B2B2B;font-size:13px;line-height:26px;padding:0;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.16)">♥</button>`}
+              ${pieceDisc(p)}
               <span style="position:absolute;left:0;right:0;bottom:0;padding:5px 6px;font-size:11px;line-height:1.2;color:#2B2B2B;background:linear-gradient(transparent,rgba(255,255,255,.92) 38%);max-height:34px;overflow:hidden">${esc(p.brand || p.product_name || '')}</span>
             </a>`).join('')}
          </div>`
     return `<div style="background:rgba(255,255,255,.85);border-radius:18px;overflow:hidden;margin-bottom:12px;box-shadow:0 2px 14px rgba(43,43,43,.08)">
+      ${lookTry ? `<div data-myra-try="${lookTry}" data-myra-try-kind="img">${tryPicture(lookTry)}</div>` : ''}
       ${body}
       <div style="padding:11px 14px 12px">
         <div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;opacity:.5">${esc(look.occasion_label || `Look ${i + 1}`)}${own ? ` · ${own} of your own` : ''}</div>
         ${look.why ? `<div style="font-size:13.5px;opacity:.72;margin-top:5px;line-height:1.35">${esc(look.why)}</div>` : ''}
-        <button type="button" data-myra-keep-look="${i}" style="${BTN_LIGHT};margin-top:10px;background:#F4F4F2;box-shadow:none">Save this look to MYRA</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+          <button type="button" data-myra-keep-look="${i}" style="${BTN_LIGHT};background:#F4F4F2;box-shadow:none">Save this look to MYRA</button>
+          ${lookTry ? `<button type="button" data-myra-try="${lookTry}" style="${BTN_DARK}">${esc(tryText(tryOns.get(lookTry)))}</button>` : ''}
+        </div>
       </div>
     </div>`
   }
@@ -1438,6 +1632,7 @@
             <button data-myra="save" style="border:0;border-radius:999px;background:#141414;color:#F7F6F3;padding:9px 14px;font:500 12px/1 ${FONT};letter-spacing:.08em;text-transform:uppercase;cursor:pointer">♥ Save to MYRA</button>
             <button data-myra="style" style="border:0;border-radius:999px;background:#fff;color:#2B2B2B;padding:9px 14px;font:500 12px/1 ${FONT};letter-spacing:.08em;text-transform:uppercase;cursor:pointer">What do I wear with this?</button>
             ${product.image ? `<button data-myra="model" style="border:0;border-radius:999px;background:#fff;color:#2B2B2B;padding:9px 14px;font:500 12px/1 ${FONT};letter-spacing:.08em;text-transform:uppercase;cursor:pointer">See on a model</button>` : ''}
+            ${product.image ? ((key) => `<button data-myra-try="${key}" style="border:0;border-radius:999px;background:#fff;color:#2B2B2B;padding:9px 14px;font:500 12px/1 ${FONT};letter-spacing:.08em;text-transform:uppercase;cursor:pointer">${esc(tryText(tryOns.get(key)))}</button>`)(tryKeyFor({ product })) : ''}
           </div>
           <div data-myra="said" style="font-size:12.5px;margin-top:9px;display:none;opacity:.75"></div>
         </div>
@@ -1695,7 +1890,24 @@
       fav.title = 'In your Mirror favourites'
     })
 
-    wrap.append(ask, fav)
+    // The person: try this piece on her avatar. A click makes the picture;
+    // resting on the button afterwards shows it.
+    // (The tile's picture may not have loaded yet: it is read again when she
+    // reaches for the button, under the same key.)
+    const tileAsk = () => tryKeyFor({ product: { ...product, image: product.image || tileImage(tile) } })
+    const tryBtn = document.createElement('button')
+    tryBtn.type = 'button'
+    tryBtn.className = 'myra-mirror-try'
+    tryBtn.dataset.myraTry = tileAsk()
+    tryBtn.dataset.myraTryKind = 'disc'
+    tryBtn.addEventListener('mouseenter', tileAsk)
+    tryBtn.addEventListener('touchstart', tileAsk, { passive: true })
+    tryBtn.title = TRY_LABEL
+    tryBtn.setAttribute('aria-label', TRY_LABEL)
+    tryBtn.innerHTML = PERSON
+    tryBtn.style.cssText = DISC
+    wrap.append(ask, tryBtn, fav)
+    if (tryOns.has(tryBtn.dataset.myraTry)) paintTryOns(tryBtn.dataset.myraTry)
     tile.addEventListener('mouseenter', () => {
       placeActions(tile, wrap)
       wrap.style.opacity = '1'
