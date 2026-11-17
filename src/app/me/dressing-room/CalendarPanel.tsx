@@ -5,6 +5,7 @@
 // should plan an outfit for; everything else is left alone.
 
 import { useEffect, useMemo, useState } from 'react'
+import GoogleReviewNote from '@/components/me/GoogleReviewNote'
 import {
   disconnectMyCalendar, loadCalendarPanel, planMyEvent, setMyEventStatus, syncMyCalendar,
   type CalendarPanelView,
@@ -90,6 +91,7 @@ export default function CalendarPanel({ testMemberId }: { testMemberId?: string 
             ? <a href={connectHref} className="inline-block text-[clamp(22px,1.25vw,38px)] px-[1.3em] py-[0.6em] bg-[#2B2B2B] text-white rounded-full">Connect Google Calendar</a>
             : <span className={`${T} inline-block px-6 py-3 border border-[#C3BFB8] text-[#8C8A85] rounded-full`}>Connect Google Calendar (not set up yet)</span>}
           <p className={`${SMALL} text-[#6E6B65]`}>Read only. MYRA keeps the title, time and place of events worth dressing for, nothing else.</p>
+          {view.ready && <GoogleReviewNote />}
         </div>
       ) : (
         <div className="grid lg:grid-cols-[minmax(280px,26%)_minmax(0,1fr)] gap-8 items-start">
