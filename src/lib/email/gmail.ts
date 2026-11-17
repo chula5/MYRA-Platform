@@ -2,8 +2,11 @@
 // emails. Plain fetch against the Gmail REST API; no SDK. Server only.
 //
 // Setup (Chloe, once): a Google Cloud OAuth client (Web application) with the
-// redirect URI below, the Gmail API enabled, the app in Testing with each
-// client's Gmail added as a test user. Env: GOOGLE_CLIENT_ID,
+// redirect URI below and the Gmail API enabled, in project myra-508821. The app
+// is PUBLISHED (In production since 2026-11-17) so any Google account can
+// connect; until Google's verification of gmail.readonly completes, members see
+// the "Google hasn't verified this app" screen (Advanced → Go to MYRA) and the
+// project is capped at 100 connecting users. Env: GOOGLE_CLIENT_ID,
 // GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI (…/api/email/google/callback).
 
 import 'server-only'
