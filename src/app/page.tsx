@@ -23,6 +23,7 @@ import {
 import { getOurPicks } from '@/lib/our-picks'
 import { resolveClientMember } from '@/lib/client-member'
 import AppDoor from '@/components/AppDoor'
+import WhatMyraIs from '@/components/WhatMyraIs'
 import WebOnly from '@/components/WebOnly'
 import type { OutfitWithItems } from '@/types/database'
 
@@ -80,6 +81,8 @@ export default async function LandingPage({
 
         {/* ── Your Styling Assistant — the three ideas, stacking on scroll ── */}
         <StylingAssistant />
+        {/* Plain words on what the service is and what it does with Google data */}
+        <WhatMyraIs />
       </WebOnly>
 
       {/* The pop-out questionnaire every APPLY NOW opens. */}
