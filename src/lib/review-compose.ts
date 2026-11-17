@@ -288,12 +288,20 @@ function composeReviewLooksOnce(opts: ReviewComposeOpts): ReviewComposeResult {
   // provide it. Measured 2026-10-11 on a 7k library: an Isabel Marant black
   // sweater produced 125 combinations and the rule refused every one.
   const anchorIsStatement = statementKind(toHouseItem(anchor)) != null
-  const pool = (slot: string, size: number) => {
-    const ranked = library
-      .filter((it) => slotForItemType(it.item_type) === slot && !tierBandViolation([anchorTier, it.brand?.price_tier ?? null]))
-      .filter((it) => familyFits(anchor.brand, it.brand, slot))
+  const shortlistFor = (slot: string, strictness: 0 | 1 | 2) => library
+      .filter((it) => slotForItemType(it.item_type) === slot)
+      .filter((it) => strictness > 0 || (!tierBandViolation([anchorTier, it.brand?.price_tier ?? null]) && familyFits(anchor.brand, it.brand, slot)))
       // Her price point (lib/price-point): a £40 jumper never reaches the shortlist beside a £1,695 skirt.
-      .filter((it) => pinnedIds.has(it.item_id) || !pricePointViolation([{ ...(anchor as any), slot: anchorSlot }, { ...(it as any), slot }]))
+      .filter((it) => strictness > 1 || pinnedIds.has(it.item_id) || !pricePointViolation([{ ...(anchor as any), slot: anchorSlot }, { ...(it as any), slot }]))
+  const pool = (slot: string, size: number) => {
+    // A garment slot left empty means no look at all: a £849 Dries skirt had
+    // 16 tops at its price point and the brand-family filter took all 16
+    // (2026-11-16). Loosen family/tier first, then the price point — never
+    // the finish slots, which a look can do without.
+    let candidates = shortlistFor(slot, 0)
+    if (!candidates.length && !FINISH_SLOTS.has(slot)) candidates = shortlistFor(slot, 1)
+    if (!candidates.length && !FINISH_SLOTS.has(slot)) candidates = shortlistFor(slot, 2)
+    const ranked = candidates
       .map((it) => ({ it, rank: pairCompat(anchor, it).total + (shortlistAdjust ? shortlistAdjust(it) : 0) }))
       .sort((a, b) => b.rank - a.rank)
     const top = ranked.slice(0, size).map((x) => x.it)
@@ -343,7 +351,9 @@ function composeReviewLooksOnce(opts: ReviewComposeOpts): ReviewComposeResult {
       for (const combo of shapeCombos) for (const c of choices) next.push([...combo, c])
       shapeCombos = next
     }
-    combos.push(...shapeCombos)
+    // One at a time: a wide shortlist makes 100k+ combinations, and spreading
+    // that many as arguments overflows the stack (every tap failed, 2026-11-16).
+    for (const c of shapeCombos) combos.push(c)
   }
   if (combos.length === 0) return { picks: [], rejectionHits: [] }
 

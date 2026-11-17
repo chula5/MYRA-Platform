@@ -59,6 +59,8 @@ export async function composeStyledWays(
      * the office she goes to every day (events, 2026-10-12).
      */
     occasions?: string[]
+    /** Internal: which round this is (a second round runs when too few passed). */
+    round?: number
   } = {},
 ): Promise<ComposeWaysResult> {
   const t0 = Date.now()
@@ -231,6 +233,30 @@ export async function composeStyledWays(
     if (opts.onLook) await opts.onLook(rows[0])
   })
   stage('check_and_keep')
+
+  // Too few passed the eye: one more round from a fresh shuffle before giving
+  // up. What passed is already kept (so it is not composed again); what failed
+  // is unlikely to come back from a different shuffle. A sequin skirt whose
+  // first five candidates all clashed answered 'nothing passed' (2026-11-16).
+  if (checked && saved.length < want && (opts.round ?? 0) < 1) {
+    const more = await composeStyledWays(memberId, heroId, {
+      ...opts, admin, mode, source, want: want - saved.length, shuffle: (opts.shuffle ?? 0) + 17, round: (opts.round ?? 0) + 1,
+    })
+    for (const k of Object.keys(more.stages)) stages[`round2_${k}`] = more.stages[k]
+    saved.push(...more.saved)
+    passed += more.passed
+    if (firstLookMs == null && more.firstLookMs != null) firstLookMs = Date.now() - t0
+    return {
+      composed: perOccasion.length + more.composed,
+      judged: chosen.length + more.judged,
+      passed,
+      saved,
+      firstLookMs,
+      totalMs: Date.now() - t0,
+      stages,
+      ...(saved.length ? {} : { error: 'Nothing passed the check for this piece right now' }),
+    }
+  }
 
   return {
     composed: perOccasion.length,
