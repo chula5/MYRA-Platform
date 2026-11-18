@@ -1,0 +1,24 @@
+{
+  "name": "Lisa Armstrong",
+  "kind": "influencer",
+  "handle": "@lisaarmstrong.style",
+  "status": "live",
+  "members": ["Ann-Marie"],
+  "brief": {
+    "summary": "Grown-up, warm-toned polish with one clever twist: chocolate, camel and check worn tonal, a crisp white shirt or fine knit with wide pleated trousers or a midi skirt, and a single unexpected detail (lace hem peeking out, a feathered lapel, a contrast cuff, an embellished check). Easy, never stiff; low pointed heels and soft leather bags.",
+    "signatures": [
+      "chocolate knit over an embellished check midi skirt with strappy black sandals",
+      "long chocolate wool coat over a burgundy crew knit and cream trousers",
+      "check bomber with faux-fur collar, matching pleated check midi skirt, belted, brown knee boots",
+      "tweed cropped jacket over a silk tie-neck blouse and wide brown pleated trousers",
+      "crisp white oversized shirt with a pinstripe pencil midi skirt and lace hem",
+      "camel cardigan jacket over a lace-trim top with wide chocolate trousers",
+      "slouchy leather pouch bag in burgundy or black",
+      "chunky hoop and statement earrings, pearls, tortoiseshell sunglasses",
+      "pointed kitten heels and slim brown boots"
+    ],
+    "silhouettes": ["wide pleated trousers", "midi skirts, straight or pleated", "cropped jackets over long lines", "relaxed tailoring"],
+    "palette": ["chocolate brown", "camel", "cream", "white", "burgundy", "navy pinstripe", "brown checks", "a hit of green or blue"],
+    "nevers": ["tight bodycon", "short hemlines", "visible logos", "head-to-toe black", "anything trend-try-hard"]
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "Miu Miu",
+  "kind": "house",
+  "status": "draft",
+  "handle": "@miumiu",
+  "members": ["Carys"],
+  "brief": {
+    "summary": "Clever girl dressing turned up: a pleated mini or low-slung tailored skirt with a preppy knit or shrunken cardigan, a crisp shirt, ballet flats or loafers with socks, a collegiate jacket. Prettiness undercut by something wrong on purpose — a raw hem, a visible waistband, a too-short knit — and finished with a satin bag or a bow.",
+    "signatures": [
+      "pleated or low-rise tailored mini skirt",
+      "shrunken cardigan or cropped preppy knit",
+      "crisp white shirt or polo with the collar out",
+      "satin ballet flat or chunky loafer with socks",
+      "collegiate or bomber jacket",
+      "sheer or lace slip layered over a tee",
+      "matelassé or satin shoulder bag",
+      "a bow, a brooch or a wide belt as the finish"
+    ],
+    "silhouettes": ["mini skirt with a knit and flats", "low waist with a cropped top", "layered sheer over solid", "shrunken over long"],
+    "palette": ["camel and grey school colours", "navy", "pale pink", "chocolate", "cream", "a flash of silver or satin"],
+    "nevers": ["bodycon going-out dressing", "logo-led streetwear", "mumsy proportions", "neon", "head-to-toe black"]
+  }
+}

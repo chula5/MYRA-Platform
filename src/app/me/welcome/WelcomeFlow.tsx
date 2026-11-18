@@ -159,7 +159,7 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
           <BrandPicker bare testMemberId={previewMemberId} onChange={setBrandCount} />
         </div>
 
-        {/* The people whose style she loves — shown once Chloe has made someone live. */}
+        {/* The people and brands whose style she loves — a dropdown of PEOPLE / HOUSE STYLES. */}
         <InfluencePicker testMemberId={previewMemberId} className="rounded-[28px] bg-white/80 shadow-[0_18px_40px_-24px_rgba(43,43,43,0.35)] p-6 sm:p-9" />
 
         <p className="text-center text-[clamp(18px,1.05vw,30px)] text-[#6E6B65]">

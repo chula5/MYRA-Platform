@@ -1,0 +1,23 @@
+{
+  "name": "Marni",
+  "kind": "house",
+  "status": "draft",
+  "handle": "@marni",
+  "members": ["Carys"],
+  "brief": {
+    "summary": "Intellectual, slightly odd colour and print: a painterly or geometric print on an A-line skirt, a chunky colour-blocked knit, a boxy coat in an unexpected shade, worn with a flat sculptural shoe. Proportions are deliberately off — cropped and wide, long and boxy — and the joy is in the clash that works.",
+    "signatures": [
+      "bold geometric or painterly print midi skirt",
+      "colour-blocked chunky knit or striped mohair cardigan",
+      "boxy cocoon coat in a strong colour",
+      "A-line shift dress in print",
+      "cropped wide trouser",
+      "flat sculptural shoe — platform sandal, fussbett, square-toe mary jane",
+      "oversized beaded or resin jewellery",
+      "the Trunk bag or a colour-blocked tote"
+    ],
+    "silhouettes": ["A-line and cocoon", "cropped wide leg", "boxy over long", "shift dress with a flat shoe"],
+    "palette": ["mustard", "tomato red", "forest green", "cobalt", "chocolate", "pink against brown", "black and white graphic"],
+    "nevers": ["bodycon", "safe navy and beige", "high stilettos", "logo-led", "polished corporate tailoring"]
+  }
+}
