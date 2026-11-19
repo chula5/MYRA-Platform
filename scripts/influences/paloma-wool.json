@@ -1,0 +1,22 @@
+{
+  "name": "Paloma Wool",
+  "kind": "house",
+  "status": "draft",
+  "handle": "@palomawool",
+  "members": ["Carys"],
+  "brief": {
+    "summary": "Barcelona art-school dressing: graphic knits and printed jersey, mid-century colour, soft tailoring and bare, sculptural shapes. Pieces are worn as a mix of artworks — a swirl-print tee under a knitted vest, a mesh top under a slip, a wrap skirt with a chunky sandal — on a relaxed, slightly 70s body.",
+    "signatures": [
+      "graphic print t-shirt or long-sleeve mesh top",
+      "knitted vest or cropped patterned cardigan",
+      "high-waisted wide-leg trouser in a solid colour",
+      "wrap or asymmetric midi skirt",
+      "fitted printed jersey dress",
+      "chunky leather sandal or square-toe boot",
+      "small sculptural leather bag"
+    ],
+    "silhouettes": ["high waist with a cropped top", "long and lean knit dress", "wide-leg trouser", "layered mesh and knit"],
+    "palette": ["burnt orange", "olive", "lilac", "chocolate brown", "cream", "cobalt", "graphic black and white"],
+    "nevers": ["logo pieces", "bodycon club dressing", "corporate tailoring", "head-to-toe neutrals", "fussy embellishment"]
+  }
+}
