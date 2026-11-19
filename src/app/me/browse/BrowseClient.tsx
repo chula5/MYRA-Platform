@@ -791,9 +791,9 @@ function PieceCard({ piece, picked, styling, working = false, saved, saving, rea
       <div className="relative aspect-[3/4] bg-[#F3F2F0] overflow-hidden">
         {piece.image_url && <FallbackImage src={piece.image_url} thumbWidth={600} alt={piece.product_name} className="absolute inset-0 w-full h-full object-cover" />}
       </div>
-      <div className="px-4 py-3.5">
-        {piece.brand && <p className="text-[15px] sm:text-[16px] tracking-[0.12em] text-[#6E6B65] truncate">{piece.brand.toUpperCase()}</p>}
-        <p className="text-[17px] sm:text-[19px] text-[#2B2B2B] leading-snug truncate mt-0.5">{piece.product_name}</p>
+      <div className="px-3 sm:px-4 py-3 sm:py-3.5">
+        {piece.brand && <p className="text-[14px] sm:text-[16px] tracking-[0.08em] sm:tracking-[0.12em] text-[#6E6B65] leading-snug line-clamp-2 break-words">{piece.brand.toUpperCase()}</p>}
+        <p className="text-[16px] sm:text-[19px] text-[#2B2B2B] leading-snug line-clamp-3 break-words mt-0.5">{piece.product_name}</p>
         {piece.price_gbp != null && <p className="text-[16px] sm:text-[18px] text-[#6E6B65] mt-1">£{Math.round(piece.price_gbp)}</p>}
         {ready && <p className="text-[14px] sm:text-[15px] tracking-[0.12em] text-[#7C838B] mt-1.5">STYLED · READY</p>}
         {find?.piece.why && <p className="text-[14px] sm:text-[15px] tracking-[0.1em] text-[#7C838B] mt-1.5 leading-snug">{find.piece.why}</p>}
@@ -823,7 +823,7 @@ function PieceCard({ piece, picked, styling, working = false, saved, saving, rea
         </div>
       )}
       {find && !picked && (find.piece.fresh || find.piece.fromShop) && (
-        <span className="absolute top-[64px] left-2.5 flex flex-col items-start gap-1.5 pointer-events-none">
+        <span className="absolute top-[52px] left-2.5 flex flex-col items-start gap-1.5 pointer-events-none">
           {find.piece.fresh && <span className="rounded-full bg-[#7C838B] text-white px-3 py-1 text-[13px] sm:text-[14px] tracking-[0.12em]">NEW</span>}
           {find.piece.fromShop && <span className="rounded-full bg-white/95 text-[#2B2B2B] px-3 py-1 text-[13px] sm:text-[14px] tracking-[0.12em] shadow-sm">FROM THE SHOPS</span>}
         </span>
@@ -841,13 +841,13 @@ function PieceCard({ piece, picked, styling, working = false, saved, saving, rea
         type="button"
         onClick={onPick}
         aria-label={`Style ${piece.product_name}`}
-        className={`absolute top-2.5 left-2.5 text-[16px] xl:text-[18px] tracking-[0.12em] rounded-full px-5 py-3 shadow-[0_2px_10px_rgba(43,43,43,0.18)] ${picked ? 'bg-[#2B2B2B] text-white' : 'bg-white/90 text-[#2B2B2B] hover:bg-white'}`}
+        className={`absolute top-2.5 left-2.5 h-9 text-[13px] sm:text-[14px] xl:text-[15px] tracking-[0.12em] rounded-full px-3.5 shadow-[0_1px_6px_rgba(43,43,43,0.14)] ${picked ? 'bg-[#2B2B2B] text-white' : 'bg-white/90 text-[#2B2B2B] hover:bg-white'}`}
       >
         {picked ? 'CHOSEN ✕' : 'STYLE'}
       </button>
       {/* Tapped: the two ways to style it, right under the button. */}
       {picked && (
-        <div className="absolute top-[64px] left-2.5 flex flex-col gap-2 z-10">
+        <div className="absolute top-[52px] left-2.5 flex flex-col gap-2 z-10">
           {choice('wardrobe', 'WITH MY WARDROBE')}
           {choice('new', 'WITH SOMETHING NEW')}
         </div>
