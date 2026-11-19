@@ -15,6 +15,8 @@ export interface ApplicationReceived {
   priceRange: string | null
   inspiration: string | null
   note: string | null
+  /** AUTO-ACCEPT let her in: she is a member and her invitation has gone. */
+  accepted?: boolean
 }
 
 const row = (label: string, value: string | null) =>
@@ -25,7 +27,7 @@ const row = (label: string, value: string | null) =>
 export function applicationReceivedHtml(a: ApplicationReceived): string {
   const who = esc((a.name ?? '').trim() || a.email)
   const body = `
-  <p style="margin:0 0 14px 0;font-size:15px;line-height:1.6;color:#2b2b2b;">${who} has applied for her private stylist.</p>
+  <p style="margin:0 0 14px 0;font-size:15px;line-height:1.6;color:#2b2b2b;">${who} has applied for her private stylist.${a.accepted ? ' AUTO-ACCEPT is on: she is a member now and her invitation has gone.' : ''}</p>
   <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;margin:0 0 18px 0;">
     ${row('NAME', a.name)}
     ${row('EMAIL', a.email)}
@@ -35,11 +37,11 @@ export function applicationReceivedHtml(a: ApplicationReceived): string {
     ${row('IN HER WORDS', a.note)}
   </table>
   <p style="margin:0 0 10px 0;">${emailButton(siteUrl('/admin/applications'), 'Read the application')}</p>
-  <p style="margin:0;font-size:12px;color:#7c838b;">ACCEPT there makes her a member with her brands in and emails her invitation. DECLINE only records it.</p>`
+  <p style="margin:0;font-size:12px;color:#7c838b;">${a.accepted ? 'Nothing to do — open her from Applications › ACCEPTED if you want to check her brands. ' : ''}ACCEPT there makes her a member with her brands in and emails her invitation. DECLINE only records it.</p>`
   return emailShell('SOMEONE APPLIED', body)
 }
 
 export async function sendApplicationReceivedEmail(a: ApplicationReceived) {
   const who = (a.name ?? '').trim() || a.email
-  return sendStudioEmail({ kind: 'application_received', subject: `New application: ${who}`, html: applicationReceivedHtml(a), meta: { email: a.email, name: a.name } })
+  return sendStudioEmail({ kind: 'application_received', subject: `${a.accepted ? 'New member (auto-accepted)' : 'New application'}: ${who}`, html: applicationReceivedHtml(a), meta: { email: a.email, name: a.name } })
 }

@@ -1,6 +1,8 @@
 import { createAdminClient } from '@/lib/supabase-server'
 import { loadBrandGraph } from '@/lib/brand-affinity'
 import ApplicationsClient, { type ApplicationView } from './ApplicationsClient'
+import AutoAcceptSwitch from './AutoAcceptSwitch'
+import { readSwitch } from '@/lib/site-switch'
 import type { ApplicationRow } from './actions'
 import { splitBrandNames, sortBrandNames } from './brand-names'
 
@@ -41,6 +43,7 @@ export default async function ApplicationsPage() {
     hasLogin: r.member_id ? loggedIn.has(r.member_id) : false,
   }))
   const fresh = views.filter((r) => r.status === 'new').length
+  const autoAccept = await readSwitch(admin, 'auto_accept_applications')
 
   return (
     <div>
@@ -51,6 +54,7 @@ export default async function ApplicationsPage() {
           {fresh} to read · ACCEPT makes her a member with her brands in and emails her invitation · DECLINE only records it ·{' '}
           <a href="/admin/applications/brands" className="underline hover:text-[#4A4E57]">brand applications</a>
         </p>
+        <AutoAcceptSwitch initial={autoAccept} />
       </div>
       {error && (
         <p className="text-[11px] tracking-[0.054em] text-[#B83A3A] mb-6">
