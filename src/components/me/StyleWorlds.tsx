@@ -43,8 +43,8 @@ import BrandPicker from '@/components/me/BrandPicker'
 const fold = (s: string) => s.trim().toLowerCase()
 
 const SILVER = 'bg-[linear-gradient(160deg,#F7F7F9_0%,#E9E9EC_55%,#DEDEE2_100%)]'
-const PILL_DARK = 'rounded-full bg-[#141414] text-[#F7F6F3] px-[1.4em] py-[0.8em] text-[clamp(15px,0.95vw,20px)] tracking-[0.08em] uppercase hover:opacity-85 transition-opacity'
-const PILL_LIGHT = 'rounded-full bg-white text-[#2B2B2B] px-[1.4em] py-[0.8em] text-[clamp(15px,0.95vw,20px)] tracking-[0.08em] uppercase shadow-[0_2px_10px_rgba(43,43,43,0.08)] hover:bg-[#141414] hover:text-[#F7F6F3] transition-colors'
+const PILL_DARK = 'whitespace-nowrap rounded-full bg-[#141414] text-[#F7F6F3] px-[1.2em] py-[0.8em] text-[clamp(14px,0.9vw,19px)] tracking-[0.08em] uppercase hover:opacity-85 transition-opacity'
+const PILL_LIGHT = 'whitespace-nowrap rounded-full bg-white text-[#2B2B2B] px-[1.2em] py-[0.8em] text-[clamp(14px,0.9vw,19px)] tracking-[0.08em] uppercase shadow-[0_2px_10px_rgba(43,43,43,0.08)] hover:bg-[#141414] hover:text-[#F7F6F3] transition-colors'
 
 type World = MyBrandsView['groups'][number]
 
