@@ -67,6 +67,8 @@ export interface PickerBrand {
   stocked: boolean
   mine: boolean
   never: boolean
+  /** The brand's own logo where MYRA holds one (brand.logo_url); else none. */
+  logo?: string | null
 }
 
 export interface MyBrandsView {
@@ -142,7 +144,7 @@ export async function loadMyBrands(asMemberId?: string): Promise<MyBrandsView | 
   }
 
   try {
-    const [graph, affinities, { data: requests }, { data: filedRows }] = await Promise.all([
+    const [graph, affinities, { data: requests }, { data: filedRows }, { data: logoRows }] = await Promise.all([
       loadBrandGraph(admin),
       loadAffinities(admin, me.memberId),
       admin.from('unmatched_brand_log')
@@ -158,6 +160,11 @@ export async function loadMyBrands(asMemberId?: string): Promise<MyBrandsView | 
         .not('picker_group', 'is', null)
         .neq('picker_group', 'none')
         .order('name'),
+      // The style worlds show each brand by its logo where MYRA has one.
+      admin.from('brand')
+        .select('name, aliases, logo_url')
+        .not('logo_url', 'is', null)
+        .limit(3000),
     ])
     // No brand table at all means 0032 has not been run. An empty affinity map
     // is a different thing — a member nobody has seeded yet — and must not be
@@ -189,7 +196,7 @@ export async function loadMyBrands(asMemberId?: string): Promise<MyBrandsView | 
       })),
       suggested,
       requested: dedupeNames(((requests ?? []) as any[]).map((r) => String(r.raw_name))),
-      groups: buildGroups(stocked, mineKeys, neverKeys, (filedRows ?? []) as { name: string; picker_group: string }[]),
+      groups: buildGroups(stocked, mineKeys, neverKeys, (filedRows ?? []) as { name: string; picker_group: string }[], logoMap(logoRows)),
       available: true,
     }
   } catch (err) {
@@ -220,12 +227,14 @@ function buildGroups(
   mine: Set<string>,
   never: Set<string>,
   filed: { name: string; picker_group: string }[] = [],
+  logos: Map<string, string> = new Map(),
 ): MyBrandsView['groups'] {
   const one = (name: string): PickerBrand => ({
     name,
     stocked: stocked.has(brandKey(name)),
     mine: mine.has(brandKey(name)),
     never: never.has(brandKey(name)),
+    logo: logos.get(brandKey(name)) ?? null,
   })
   const named = new Set(BRAND_GROUPS.flatMap((g) => [...g.brands, ...(g.more ?? [])]).map(brandKey))
   return BRAND_GROUPS.map((g) => ({
@@ -238,6 +247,20 @@ function buildGroups(
       ...filed.filter((f) => f.picker_group === g.key && !named.has(brandKey(f.name))).map((f) => f.name),
     ].map(one),
   }))
+}
+
+/** brandKey(name or alias) → an https logo, from the brand rows that have one. */
+function logoMap(rows: any[] | null | undefined): Map<string, string> {
+  const m = new Map<string, string>()
+  for (const r of rows ?? []) {
+    const url = String(r?.logo_url ?? '')
+    if (!/^https:\/\//.test(url)) continue
+    for (const n of [r.name, ...((Array.isArray(r.aliases) ? r.aliases : []) as string[])]) {
+      const k = brandKey(String(n ?? ''))
+      if (k && !m.has(k)) m.set(k, url)
+    }
+  }
+  return m
 }
 
 /** Asking twice is one request, not two. */

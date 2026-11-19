@@ -2,7 +2,9 @@
 
 // HER FIRST TWO MINUTES, in two phases.
 //
-// FIRST, THE BRANDS SHE LOVES. It comes before connecting anything because it
+// FIRST, THE BRANDS SHE LOVES — chosen a style world at a time (StyleWorlds:
+// one tap takes a whole world, VIEW BRANDS unticks the odd one; brand by brand
+// is still there underneath). It comes before connecting anything because it
 // is the only part she can finish on her own, in ten seconds, with no account
 // to authorise — and because it is the single largest thing MYRA can learn
 // about her. Naming three brands seeds her whole taste model; connecting a
@@ -22,7 +24,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import BrandPicker from '@/components/me/BrandPicker'
+import StyleWorlds from '@/components/me/StyleWorlds'
 import GoogleReviewNote from '@/components/me/GoogleReviewNote'
 import VirginConnect from '../dressing-room/VirginConnect'
 import InstagramImport from '../dressing-room/InstagramImport'
@@ -133,7 +135,7 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
   // ── Phase one: the brands she loves ───────────────────────────────────────
   if (phase === 'brands') {
     return (
-      <div className="w-full max-w-[1100px] mx-auto space-y-7 pb-10">
+      <div className="w-full max-w-[1500px] mx-auto space-y-7 pb-10">
         {previewMemberId && (
           <p className="text-center text-[15px] tracking-[0.12em] bg-[#7C838B] text-white py-2.5 rounded-full">
             PREVIEW · STEP 2 OF 4 · THE BRANDS {firstName.toUpperCase() || 'SHE'} NAMES HERSELF · SAVING HERE IS REAL
@@ -142,10 +144,10 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
 
         <header className="text-center space-y-4 pt-2">
           <h1 className="text-[clamp(34px,3.6vw,76px)] leading-[1.08] text-[#2B2B2B]">
-            {firstName ? `${firstName}, which brands do you love?` : 'Which brands do you love?'}
+            {firstName ? `${firstName}, which of these feel like you?` : 'Which of these feel like you?'}
           </h1>
           <p className={`${BODY} myra-guide-text text-[#4A4E57]`}>
-            You don’t have to think of them. Tap the ones you recognise, or take a whole group. MYRA works out the rest.
+            Choose every world you’d shop and all its brands are yours. The more you choose, the more MYRA can find you.
           </p>
           {/* The way past, above the work: nothing here is required, and she
               should never feel stuck on the first screen she is ever shown. */}
@@ -154,9 +156,7 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
           </button>
         </header>
 
-        <div className="rounded-[28px] bg-white/80 shadow-[0_18px_40px_-24px_rgba(43,43,43,0.35)] p-6 sm:p-9">
-          <BrandPicker bare testMemberId={previewMemberId} onChange={setBrandCount} />
-        </div>
+        <StyleWorlds testMemberId={previewMemberId} onChange={setBrandCount} />
 
         <p className="text-center text-[clamp(18px,1.05vw,30px)] text-[#6E6B65]">
           You can change these any time in YOU.
