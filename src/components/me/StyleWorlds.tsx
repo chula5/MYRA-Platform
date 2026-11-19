@@ -80,6 +80,8 @@ export default function StyleWorlds({
   // Worlds opened with VIEW ALL BRANDS.
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [byBrand, setByBrand] = useState(false)
+  // Search box at the top: any brand in any world, by name.
+  const [q, setQ] = useState('')
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<string | null>(null)
   const queue = useRef<Promise<unknown>>(Promise.resolve())
@@ -168,6 +170,24 @@ export default function StyleWorlds({
   const worlds = view.groups
   const chosenCount = worlds.filter(chosen).length
   const flip = (key: string) => setExpanded((s) => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n })
+  const plain = (x: string) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')
+  const needle = plain(q)
+  const hits: { b: PickerBrand; w: World }[] = []
+  if (needle) {
+    const seen = new Set<string>()
+    for (const w of worlds) for (const b of all(w)) {
+      const k = plain(b.name)
+      if (k.includes(needle) && !seen.has(k)) { seen.add(k); hits.push({ b, w }) }
+    }
+    hits.sort((x, y) => Number(!plain(x.b.name).startsWith(needle)) - Number(!plain(y.b.name).startsWith(needle)))
+  }
+  function addTyped() {
+    const name = q.trim()
+    if (!name) return
+    setLoved((s) => new Set(s).add(fold(name)))
+    setQ('')
+    save(() => addMyBrands([name], testMemberId))
+  }
 
   return (
     <div className="space-y-6">
@@ -181,6 +201,58 @@ export default function StyleWorlds({
         </span>
       </div>
       {note && <p className="text-center text-[clamp(16px,1vw,22px)] text-[#9B3A3A]">{note}</p>}
+
+      {/* SEARCH — every brand in every world, shown as its logo. */}
+      <div className="max-w-[720px] mx-auto w-full">
+        <input
+          type="search"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && needle && !hits.length) { e.preventDefault(); addTyped() } }}
+          placeholder="Search for a brand"
+          aria-label="Search for a brand"
+          className={`${SILVER} w-full rounded-full px-6 py-4 text-[clamp(17px,1.05vw,24px)] text-[#2B2B2B] placeholder:text-[#8A8F95] outline-none border-2 border-transparent focus:border-[#141414] shadow-[0_10px_24px_-16px_rgba(43,43,43,0.5)]`}
+        />
+      </div>
+      {needle && (
+        <section className={`${SILVER} rounded-[24px] p-5 sm:p-6 flex flex-col gap-3 shadow-[0_18px_40px_-28px_rgba(43,43,43,0.45)]`}>
+          {hits.length ? (
+            <>
+              <p className="text-[clamp(15px,0.95vw,20px)] text-[#55534E]">Tap a brand to make it yours. Tap again to take it off.</p>
+              <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-1.5">
+                {hits.slice(0, 36).map(({ b, w }) => {
+                  const yes = isLoved(b.name), no = isNever(b.name)
+                  return (
+                    <button
+                      key={b.name}
+                      type="button"
+                      onClick={() => toggleBrand(b.name, chosen(w))}
+                      aria-pressed={yes}
+                      aria-label={`${b.name}, ${w.name}`}
+                      className={`relative h-[72px] rounded-[12px] flex flex-col items-center justify-center gap-1 px-2 text-[12px] text-[#2B2B2B] transition ${
+                        yes ? 'bg-white/90 ring-2 ring-[#141414]' : no ? 'bg-white/50 opacity-40 grayscale line-through' : 'bg-white/85'
+                      }`}
+                    >
+                      <Mark b={b} />
+                      <span className="text-[11px] text-[#8A8F95] no-underline">{w.name}</span>
+                      {yes && (
+                        <span aria-hidden className="absolute -top-1.5 -right-1.5 grid h-[22px] w-[22px] place-items-center rounded-full bg-[#141414] text-[#F7F6F3]">
+                          <svg width="12" height="12" viewBox="0 0 16 16"><path d="M3 8.5l3.2 3.2L13 5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <p className="text-[clamp(16px,1vw,22px)] text-[#55534E]">MYRA doesn’t have “{q.trim()}” yet. Add it and your stylist will look for it.</p>
+              <button type="button" onClick={addTyped} className={PILL_DARK}>Add it</button>
+            </div>
+          )}
+        </section>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
         {worlds.map((w) => {
