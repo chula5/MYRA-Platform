@@ -423,6 +423,13 @@ export async function createMember(input: {
     const inputOnly = input.brands_input_only ?? []
     if (names.length || inputOnly.length) await seedUserAffinities(admin, memberId, names, { inputOnly })
   } catch { /* brand affinity is additive; ignore */ }
+  // She arrives to looks already waiting: approved looks other members were
+  // shown, from the brands she named, in her size and budget. In the background.
+  if (!input.is_synthetic) {
+    void import('@/lib/review-to-members')
+      .then(({ catchUpStudioLooksLater }) => catchUpStudioLooksLater(admin, memberId, 'new member'))
+      .catch((err) => console.error('[new-member looks]', memberId, err))
+  }
   revalidatePath(PATH)
   return { member_id: memberId }
 }

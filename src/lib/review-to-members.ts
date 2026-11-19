@@ -15,6 +15,7 @@
 //   no piece is from a label far younger than her (lib/member-style-gate —
 //     Anne, 60, was sent a Reformation slip dress on 2026-11-11)
 //   nothing is known to be out of her size (unconfirmed sizes are shown honestly)
+//   no piece is someone's own wardrobe, and nothing pre-loved unless she switched it on
 // A member with no taste graph yet gets nothing: "everything is hers" is right
 // for Browse, wrong for putting a look in front of her.
 //
@@ -32,6 +33,9 @@ import { lookVectorFromItems } from '@/lib/taste-vector'
 import { REAL_MEMBER_IDS } from '@/lib/outfit-quality/identities'
 import { withinMemberAgeReach, loadMemberAgeRanges } from '@/lib/brand-affinity'
 import { loadAgeRegisters } from '@/lib/member-style-gate'
+import { isOwnedItem } from '@/lib/wardrobe/owned-items'
+import { isSecondHand } from '@/lib/second-hand'
+import { waitUntil } from '@vercel/functions'
 
 /** Every studio delivery's request_text starts with this — one delivery per member per day. */
 export const STUDIO_PREFIX = 'From the studio'
@@ -53,11 +57,15 @@ export function whyNotForHer(
   anchor: ItemWithBrand,
   rest: { item: ItemWithBrand; slot: Slot }[],
   age?: { range: string | null; registerOf: (brandId: string | null | undefined) => number | null },
+  opts: { acceptsSecondHand?: boolean } = {},
 ): string | null {
   if (!graph.weights.size) return 'no taste graph yet'
   if (!graph.weights.has(String(anchor.brand_id ?? ''))) return `${anchor.brand?.name ?? 'the anchor label'} is not in her graph`
   for (const it of [anchor, ...rest.map((r) => r.item)]) {
     const label = `${it.brand?.name ?? ''} ${it.product_name}`.trim()
+    // A look built around someone's own wardrobe piece is theirs alone: no one else can buy it.
+    if (isOwnedItem(it as any)) return `${it.product_name} is from someone's own wardrobe`
+    if (isSecondHand(it as any) && !opts.acceptsSecondHand) return `${label} is pre-loved and she has not switched that on`
     if (!sellable(it)) return `${label} cannot be bought`
     if (blockedForHer(graph, it)) return `${it.brand?.name} is a label she turned away`
     const avoided = avoidReasons(taste.prefs, it as any)
@@ -166,4 +174,111 @@ async function landLook(admin: any, memberId: string, items: ReturnType<typeof t
     published_at: now,
   })
   if (error) throw new Error(error.message)
+}
+
+/**
+ * A NEW MEMBER ARRIVES TO LOOKS ALREADY WAITING. Chloe, 2026-11-19, after
+ * Sarah Gasparro joined to 4 looks: "she likes quite similar brands to other
+ * people, so there should be outfits waiting for her" — for every new member,
+ * when she likes the brands in the looks.
+ *
+ * The pool is every look MYRA approved and showed another real member in the
+ * last CATCH_UP_DAYS (studio looks, overnight styling, her asks — whoever it
+ * was made for; Chloe's own member and synthetic members left out). A look is
+ * hers when:
+ *   it is led by a label she NAMED (graph weight ≥ NAMED_WEIGHT), and at least
+ *     half its pieces are from labels in her graph — "she likes the brands"
+ *   whyNotForHer passes (buyable, no one's own wardrobe, pre-loved only if she
+ *     opted in, her avoids, budget, age reach, her rules + stylist nevers)
+ *   nothing is known to be out of her size, and she doesn't already have it.
+ * Ranked by how many pieces are from her named labels, then newest; no two
+ * share more than one piece; at most CATCH_UP_MAX land, so a first open is a
+ * shelf, not a flood. Stock and price are read fresh. Safe to run again.
+ */
+export const CATCH_UP_DAYS = 60
+export const CATCH_UP_MAX = 12
+const NAMED_WEIGHT = 0.8
+
+export async function catchUpStudioLooks(
+  admin: any, memberId: string, opts: { days?: number; max?: number; dryRun?: boolean } = {},
+): Promise<{ landed: number; checked: number; suits: number; reason?: string }> {
+  const days = opts.days ?? CATCH_UP_DAYS
+  const max = opts.max ?? CATCH_UP_MAX
+  if (memberId === REAL_MEMBER_IDS.chloe) return { landed: 0, checked: 0, suits: 0, reason: 'Chloe made them' }
+  const { data: m } = await admin
+    .from('pilot_member').select('member_id, is_synthetic, accepts_second_hand').eq('member_id', memberId).maybeSingle()
+  if (!m || m.is_synthetic) return { landed: 0, checked: 0, suits: 0, reason: 'not a real member' }
+  const { loadMemberTasteFor } = await import('@/app/admin/private-stylist/actions')
+  const [taste, graph, ages, registers] = await Promise.all([
+    loadMemberTasteFor(memberId), loadTasteGraph(admin, memberId),
+    loadMemberAgeRanges(admin, [memberId]), loadAgeRegisters(admin),
+  ])
+  if (!taste) return { landed: 0, checked: 0, suits: 0, reason: 'no taste profile' }
+  if (!graph.weights.size) return { landed: 0, checked: 0, suits: 0, reason: 'no taste graph yet' }
+  const age = { range: ages.get(memberId) ?? null, registerOf: (id: string | null | undefined) => (id ? registers.get(String(id)) ?? null : null) }
+  const named = (it: { brand_id?: string | null }) => (graph.weights.get(String(it.brand_id ?? '')) ?? 0) >= NAMED_WEIGHT
+  const inGraph = (it: { brand_id?: string | null }) => graph.weights.has(String(it.brand_id ?? ''))
+
+  const { data: realOthers } = await admin.from('pilot_member').select('member_id')
+    .eq('is_synthetic', false).neq('member_id', memberId).neq('member_id', REAL_MEMBER_IDS.chloe)
+  const otherIds = ((realOthers ?? []) as any[]).map((r) => r.member_id as string)
+  if (!otherIds.length) return { landed: 0, checked: 0, suits: 0 }
+  const since = new Date(Date.now() - days * 864e5).toISOString()
+  const { data: looks } = await admin
+    .from('pilot_look').select('items, created_at, delivery:delivery_id!inner(member_id)')
+    .in('delivery.member_id', otherIds).eq('visible_to_client', true).not('approved_at', 'is', null)
+    .gte('created_at', since).order('created_at', { ascending: false }).limit(3000)
+  const sets = new Map<string, string[]>()
+  for (const l of (looks ?? []) as any[]) {
+    const ids = ((l.items ?? []) as any[]).map((i) => i?.item_id).filter(Boolean) as string[]
+    const key = [...ids].sort().join(',')
+    if (ids.length >= 2 && !sets.has(key)) sets.set(key, ids)
+  }
+
+  // Every piece in one read, then each look judged in memory.
+  const allIds = Array.from(new Set(Array.from(sets.values()).flat()))
+  const byId = new Map<string, ItemWithBrand>()
+  for (let i = 0; i < allIds.length; i += 300) {
+    const { data: rows } = await admin.from('item').select('*, brand(*)').in('item_id', allIds.slice(i, i + 300))
+    for (const r of (rows ?? []) as ItemWithBrand[]) byId.set(r.item_id, r)
+  }
+
+  const suits: { ids: string[]; pieces: ItemWithBrand[]; score: number }[] = []
+  for (const ids of Array.from(sets.values())) {
+    const pieces = ids.map((id) => byId.get(id)).filter(Boolean) as ItemWithBrand[]
+    if (pieces.length !== ids.length) continue
+    const lead = pieces.findIndex(named)
+    if (lead < 0) continue
+    if (pieces.filter(inGraph).length * 2 < pieces.length) continue
+    const anchor = pieces[lead]
+    const rest = pieces.filter((_, i) => i !== lead).map((item) => ({ item, slot: slotForItemType(item.item_type) as Slot }))
+    if (whyNotForHer(taste, graph, anchor, rest, age, { acceptsSecondHand: !!m.accepts_second_hand })) continue
+    suits.push({ ids, pieces: [anchor, ...rest.map((r) => r.item)], score: pieces.filter(named).length })
+  }
+  suits.sort((a, b) => b.score - a.score) // stable: newest first within a score
+
+  let landed = 0
+  const picked: string[][] = []
+  for (const s of suits) {
+    if (landed >= max) break
+    if (picked.some((p) => p.filter((id) => s.ids.includes(id)).length > 1)) continue
+    const lookItems = s.pieces.map(toLookItem)
+    const sizes = await checkSizesForMember(admin, memberId, lookItems, 'unknown')
+    if (lookItems.some((p) => p.item_id && sizes.get(p.item_id)?.verdict === 'not_in_size')) continue
+    if (await alreadyHers(admin, memberId, new Set(s.ids))) continue
+    picked.push(s.ids)
+    if (!opts.dryRun) {
+      await landLook(admin, memberId, lookItems.map((p) => ({ ...p, size: (p.item_id && sizes.get(p.item_id)?.label) || p.size })), lookVectorFromItems(s.pieces as any[]))
+    }
+    landed++
+  }
+  return { landed, checked: sets.size, suits: suits.length }
+}
+
+/** catchUpStudioLooks in the background, so the save that triggered it returns at once. */
+export function catchUpStudioLooksLater(admin: any, memberId: string, why: string): void {
+  const run = catchUpStudioLooks(admin, memberId)
+    .then((r) => console.log(`[new-member looks ${why}]`, memberId, r))
+    .catch((err) => console.error(`[new-member looks ${why}]`, memberId, err))
+  try { waitUntil(run) } catch { /* outside a request: the promise simply runs */ }
 }
