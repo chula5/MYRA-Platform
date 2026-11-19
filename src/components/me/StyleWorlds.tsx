@@ -229,7 +229,7 @@ export default function StyleWorlds({
                   <p className="text-[clamp(15px,0.95vw,20px)] text-[#55534E]">
                     {on ? 'Untick any brand you don’t like and MYRA won’t send it.' : 'Tap the ones you love, or select them all.'}
                   </p>
-                  <div className="flex flex-wrap gap-2" data-lenis-prevent>
+                  <div className="grid grid-cols-3 gap-1.5">
                     {list.map((b) => {
                       const yes = isLoved(b.name), no = isNever(b.name)
                       return (
@@ -238,14 +238,17 @@ export default function StyleWorlds({
                           type="button"
                           onClick={() => toggleBrand(b.name, on)}
                           aria-pressed={yes}
-                          className={`inline-flex items-center gap-2 rounded-full min-h-[44px] px-[15px] py-[8px] text-[clamp(15px,0.95vw,20px)] transition-colors ${
-                            yes ? 'bg-[#141414] text-[#F7F6F3]' : no ? 'bg-white/60 text-[#8A8F95] line-through decoration-1' : 'bg-white text-[#2B2B2B] shadow-[0_2px_10px_rgba(43,43,43,0.08)]'
+                          aria-label={b.name}
+                          className={`relative h-[56px] rounded-[12px] grid place-items-center px-2 text-[12px] text-[#2B2B2B] transition ${
+                            yes ? 'bg-white/90 ring-2 ring-[#141414]' : no ? 'bg-white/50 opacity-40 grayscale line-through' : 'bg-white/85'
                           }`}
                         >
+                          <Mark b={b} />
                           {yes && (
-                            <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden><path d="M3 8.5l3.2 3.2L13 5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                            <span aria-hidden className="absolute -top-1.5 -right-1.5 grid h-[22px] w-[22px] place-items-center rounded-full bg-[#141414] text-[#F7F6F3]">
+                              <svg width="12" height="12" viewBox="0 0 16 16"><path d="M3 8.5l3.2 3.2L13 5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                            </span>
                           )}
-                          <span>{b.name}</span>
                         </button>
                       )
                     })}
