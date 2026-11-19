@@ -24,7 +24,15 @@ export async function markWelcomed(opts?: { app?: boolean }): Promise<{ ok: bool
   const admin = createAdminClient()
   await admin.auth.admin.updateUserById(user.id, { user_metadata: meta })
   // Only the first time each is stamped — the early return above is a repeat.
-  if (meta.welcomed_at !== user.user_metadata?.welcomed_at) await recordSignOn({ step: 'welcomed', authUserId: user.id, email: user.email })
+  if (meta.welcomed_at !== user.user_metadata?.welcomed_at) {
+    await recordSignOn({ step: 'welcomed', authUserId: user.id, email: user.email })
+    // Her first welcome: once more, looks from the brands she has just confirmed.
+    const { data: member } = await (admin as any).from('pilot_member').select('member_id').eq('auth_user_id', user.id).maybeSingle()
+    if (member?.member_id) {
+      const { catchUpStudioLooksLater } = await import('@/lib/review-to-members')
+      catchUpStudioLooksLater(admin, member.member_id, 'first welcome')
+    }
+  }
   if (meta.app_welcomed_at !== user.user_metadata?.app_welcomed_at) await recordSignOn({ step: 'app_first_open', authUserId: user.id, email: user.email })
   return { ok: true }
 }
