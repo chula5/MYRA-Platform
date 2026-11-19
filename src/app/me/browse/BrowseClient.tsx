@@ -795,6 +795,7 @@ function PieceCard({ piece, picked, styling, working = false, saved, saving, rea
         {piece.brand && <p className="text-[15px] sm:text-[16px] tracking-[0.12em] text-[#6E6B65] truncate">{piece.brand.toUpperCase()}</p>}
         <p className="text-[17px] sm:text-[19px] text-[#2B2B2B] leading-snug truncate mt-0.5">{piece.product_name}</p>
         {piece.price_gbp != null && <p className="text-[16px] sm:text-[18px] text-[#6E6B65] mt-1">£{Math.round(piece.price_gbp)}</p>}
+        {piece.like && <p className="text-[15px] sm:text-[16px] text-[#7C838B] mt-1.5 leading-snug truncate">From a brand like {piece.like}</p>}
         {ready && <p className="text-[14px] sm:text-[15px] tracking-[0.12em] text-[#7C838B] mt-1.5">STYLED · READY</p>}
         {find?.piece.why && <p className="text-[14px] sm:text-[15px] tracking-[0.1em] text-[#7C838B] mt-1.5 leading-snug">{find.piece.why}</p>}
       </div>

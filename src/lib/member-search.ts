@@ -18,6 +18,7 @@ import { loadMemberSizeProfile, loadSizeRowsFor, filterItemsForShopper } from '@
 import { CLOTHING_LADDER, SHOE_LADDER, sizeCategoryFor, acceptedValues } from '@/lib/size-canonical'
 import { loadTasteGraph, overHerBudget } from '@/lib/taste-graph'
 import { sellable } from '@/lib/stock-sellable'
+import { loadMaybeBrands, MAYBE_SHOWN } from '@/lib/brand-worlds'
 
 export interface BrowsePiece {
   item_id: string
@@ -26,6 +27,9 @@ export interface BrowsePiece {
   image_url: string | null
   price_gbp: number | null
   url: string | null
+  /** A quiet maybe — a brand from a world she loves, not one she named: the
+   *  loved brand it sits beside, for "From a brand like Rixo". */
+  like?: string
 }
 
 /** The ways she can narrow a search once MYRA has answered it. */
@@ -78,6 +82,9 @@ export interface BrowseView {
   sizes: BrowseSizes
   /** Answers held back by her budget this search — the switch says how many wait above it. */
   overBudget?: number
+  /** Quiet-maybe brands whose pieces this answer showed (lib/brand-worlds), so
+   *  Browse can note she saw them — scrolled past often enough, one drops out. */
+  maybeShown?: string[]
   error?: string
 }
 
@@ -103,6 +110,9 @@ export const pieceOf = (it: any): BrowsePiece => ({
   price_gbp: it.price_gbp != null ? Number(it.price_gbp) : null,
   url: it.retailer_url ?? null,
 })
+
+/** A quiet maybe's card: the piece, and the loved brand whose world it is from. */
+const maybePieceOf = (it: any, like: string | undefined): BrowsePiece => (like ? { ...pieceOf(it), like } : pieceOf(it))
 
 const showable = (it: any) =>
   !!it?.item_id && !!it.image_url && it.available !== false && it.stock_status !== 'out_of_stock' && !isOwnedItem(it)
@@ -323,6 +333,10 @@ export function nameFilters(p: ParsedQuery): string[] {
 export interface SearchOptions {
   /** Only pieces that came into MYRA after this moment (ISO), held to the note bar. */
   since?: string
+  /** Browse only: after her own brands' answers, exact answers from her quiet
+   *  maybes — the other brands in the worlds she loves (lib/brand-worlds). Never
+   *  for a saved-search note, the MCP, or anything that composes a look. */
+  maybe?: boolean
 }
 
 export function blankView(q: string, error?: string): BrowseView {
@@ -476,10 +490,47 @@ export async function searchForMember(
   const exactIds = new Set(ranked.exact.map((s) => s.it.item_id))
   similar = similar.filter((s) => !exactIds.has(s.it.item_id))
 
+  // 3b. Her quiet maybes: the other brands in the worlds she loves. Only when
+  //     she named no label, only exact answers to every word she typed, only
+  //     under her own ceilings (ABOVE MY BUDGET never lifts a maybe), and only
+  //     after her own brands. Never in a note on her phone.
+  let maybeExact: Scored<any>[] = []
+  const maybeLike = new Map<string, string>()
+  if (opts.maybe && !opts.since && !brandIds.length && facets > 0 && graph.weights.size) {
+    try {
+      const maybes = await loadMaybeBrands(admin, me.memberId, graph)
+      const ids = Array.from(maybes.keys())
+      if (ids.length) {
+        const herCeiling = Math.max(0, ...Object.values(graph.bands).map((b) => b?.max ?? 0))
+        const maybeBase = () => {
+          let qb = admin.from('item').select(CARD).in('status', SHOWABLE).not('image_url', 'is', null).in('brand_id', ids)
+          if (herCeiling > 0) qb = qb.or(`price_gbp.is.null,price_gbp.lte.${herCeiling}`)
+          return qb
+        }
+        const maybePools = [withFacets(maybeBase()).limit(STRICT_POOL), ...unread.map((w) => withFacets(maybeBase()).ilike('product_name', `%${w}%`).limit(POOL))]
+        const seen = new Set<string>()
+        const rows: any[] = []
+        for (const r of await Promise.all(maybePools)) {
+          for (const row of ((r?.data ?? []) as any[])) {
+            if (seen.has(row.item_id) || exactIds.has(row.item_id)) continue
+            seen.add(row.item_id)
+            if (showable(row) && !overHerBudget(graph, row) && maybes.has(String(row.brand_id))) rows.push(row)
+          }
+        }
+        // Held to the same words as her own answers: "fur trim dress" is fur-trim dresses.
+        maybeExact = rankPieces(rows, asked, { ...ctx, herBrands: new Map() }).exact
+        for (const k of maybeExact) maybeLike.set(k.it.item_id, maybes.get(String(k.it.brand_id))!.like)
+      }
+    } catch (err) {
+      console.error('[searchForMember] maybes', err)
+      maybeExact = []
+    }
+  }
+
   // 4. Filter options come from everything that genuinely matched, so
   //    narrowing never hides a choice the results contain. When nothing
   //    matched at all they come from the catalogue, so the panel is never bare.
-  let facetSource: any[] = [...ranked.exact.map((s) => s.it), ...similar.map((s) => s.it)]
+  let facetSource: any[] = [...ranked.exact.map((s) => s.it), ...maybeExact.map((s) => s.it), ...similar.map((s) => s.it)]
   if (!facetSource.length) {
     const { data } = await base().limit(240)
     facetSource = ((data ?? []) as any[]).filter((it) => showable(it) && affordable(it))
@@ -523,9 +574,10 @@ export async function searchForMember(
   })
   let exactN = narrow(ranked.exact)
   let similarN = narrow(similar)
+  let maybeN = narrow(maybeExact)
 
-  if (wantsSize && (exactN.length || similarN.length)) {
-    const rows = await loadSizeRowsFor([...exactN, ...similarN].map((k) => k.it.item_id))
+  if (wantsSize && (exactN.length || similarN.length || maybeN.length)) {
+    const rows = await loadSizeRowsFor([...exactN, ...similarN, ...maybeN].map((k) => k.it.item_id))
     const fits = (k: Scored<any>) => {
       const cat = sizeCategoryFor(k.it.item_type)
       if (!cat) return true // bags, jewellery — no size to narrow on
@@ -540,6 +592,7 @@ export async function searchForMember(
     }
     exactN = exactN.filter(fits)
     similarN = similarN.filter(fits)
+    maybeN = maybeN.filter(fits)
   }
 
   // A note on her phone only ever points at what she could buy today in her size.
@@ -549,10 +602,15 @@ export async function searchForMember(
     similarN = similarN.filter((k) => fit.has(k.it.item_id))
   }
 
+  const maybeShown = maybeN.slice(0, MAYBE_SHOWN)
   const close = similarKind !== 'brands' ? closeGroups(similarN.slice(0, MOST), asked, brandName) : null
   return {
     query: q,
-    pieces: exactN.slice(0, MOST).map((k) => pieceOf(k.it)),
+    // Hers first; then at most a few quiet maybes, each saying whose world it is from.
+    pieces: [
+      ...exactN.slice(0, MOST).map((k) => pieceOf(k.it)),
+      ...maybeShown.map((k) => maybePieceOf(k.it, maybeLike.get(k.it.item_id))),
+    ],
     similar: (close ? close.ordered : similarN.slice(0, MOST)).map((k) => pieceOf(k.it)),
     similarKind: similarN.length ? similarKind ?? 'close' : null,
     similarGroups: close?.groups ?? [],
@@ -561,5 +619,6 @@ export async function searchForMember(
     facets: facetsOut,
     sizes,
     overBudget,
+    maybeShown: dedupe(maybeShown.map((k) => k.it.brand?.name).filter(Boolean)),
   }
 }

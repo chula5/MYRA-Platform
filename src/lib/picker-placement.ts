@@ -42,6 +42,7 @@ export function namedInPicker(): Set<string> {
 }
 
 export interface Placement {
+  brand_id: string
   brand: string
   group: string
   note: string
@@ -135,7 +136,7 @@ export async function placeNewBrands(admin: any, opts: { dry?: boolean; limit?: 
   for (const b of todo) {
     const result = await fileBrand(admin, b)
     if (!result) { failed.push(b.name); continue }
-    placed.push({ brand: b.name, ...result })
+    placed.push({ brand_id: String(b.brand_id), brand: b.name, ...result })
     if (opts.dry) continue
     await admin.from('brand')
       .update({ picker_group: result.group, picker_group_note: result.note, picker_group_at: new Date().toISOString() })

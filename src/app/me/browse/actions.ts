@@ -25,6 +25,14 @@ import { styleExternalPiece } from '@/lib/mirror/style'
 import type { MirrorMember } from '@/lib/mirror/auth'
 import type { StyledLook } from '@/app/admin/private-stylist/actions'
 import { newInForMember, NEW_IN_DAYS } from '@/lib/new-in'
+import { applyBrandSignals } from '@/lib/brand-affinity'
+import { waitUntil } from '@vercel/functions'
+
+/** Finish a small write after the answer has gone: learning never slows a search or a save. */
+function after(work: () => Promise<unknown>): void {
+  const p = work().catch((e) => console.error('[browse] background', e))
+  try { waitUntil(p) } catch { /* local dev: the promise simply runs */ }
+}
 import {
   searchForMember, blankView, pieceOf, dedupe, SHOWABLE, EMPTY_FACETS, EMPTY_SIZES,
   type BrowsePiece, type BrowseFilters, type BrowseFacets, type BrowseView,
@@ -40,7 +48,19 @@ export async function browseSearch(
 ): Promise<BrowseView> {
   const me = await resolveClientMember(asMemberId)
   if (!me) return blankView(query, 'Not signed in')
-  return searchForMember(createAdminClient() as any, me.memberId, query, filters)
+  const admin = createAdminClient() as any
+  // Browse is the one place her quiet maybes are offered (lib/brand-worlds).
+  const view = await searchForMember(admin, me.memberId, query, filters, { maybe: true })
+  // Shown and passed: each fresh answer that carried a maybe-brand's pieces
+  // counts once against it (a save lifts it into her graph instead). Narrowing
+  // the same answer with a filter is not another pass, and Chloe looking from
+  // HER VIEW never counts.
+  const narrowed = Object.values(filters).some((v) => (Array.isArray(v) ? v.length > 0 : !!v))
+  if (view.maybeShown?.length && !narrowed && !me.test) {
+    const shown = view.maybeShown
+    after(() => applyBrandSignals(admin, me.memberId, shown, 'browse_passed').catch((err) => console.error('[browseSearch] maybe passed', err)))
+  }
+  return view
 }
 
 /**
@@ -54,7 +74,7 @@ export async function saveBrowsedPiece(itemId: string, asMemberId?: string): Pro
 
   const admin = createAdminClient() as any
   const { data: item } = await admin.from('item')
-    .select('item_id, retailer_url').eq('item_id', itemId).in('status', SHOWABLE).maybeSingle()
+    .select('item_id, retailer_url, brand:brand_id(name)').eq('item_id', itemId).in('status', SHOWABLE).maybeSingle()
   if (!item) return { saved: false, error: 'That piece is no longer here' }
 
   const host = (() => { try { return new URL(item.retailer_url).host.replace(/^www\./, '') } catch { return null } })()
@@ -65,6 +85,11 @@ export async function saveBrowsedPiece(itemId: string, asMemberId?: string): Pro
   if (me.authUserId) {
     try { await admin.from('saved_item').upsert({ user_id: me.authUserId, item_id: itemId }, { onConflict: 'user_id,item_id' }) } catch { /* optional mirror */ }
   }
+
+  // A save is a yes to the label: +0.05 (lib/brand-affinity). For a quiet
+  // maybe that lifts it over the baseline and into her graph — her brand now.
+  const brandName = (item as any).brand?.name
+  if (brandName) after(() => applyBrandSignals(admin, me.memberId, [String(brandName)], 'save').catch((err) => console.error('[saveBrowsedPiece] brand signal', err)))
 
   // Watched in her size from here on: low, sold out, back (lib/stock-alerts).
   try {
