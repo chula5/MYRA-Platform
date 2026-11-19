@@ -78,6 +78,8 @@ const STEPS: Step[] = [
   { path: LOOKS, demo: 'style', title: 'STYLE ITEM', body: 'The see-through circles on the photo. Tap one to style that piece in other outfits.' },
   { path: DRESSING, room: 'dressing_room', target: '[data-tour="room-dressing_room"]', title: 'DRESSING ROOM', body: 'Your own pieces, the ones you saved while shopping, and your latest orders.' },
   { path: DRESSING, tab: 'wardrobe', target: '[data-tour="wardrobe"]', fallback: '[data-tour="tab-wardrobe"]', title: 'YOUR WARDROBE', body: 'Your own pieces. Tap one and MYRA styles it into outfits.' },
+  // Added 2026-11-19 (Chloe): the avatar belongs in the first walk round, beside her wardrobe.
+  { path: DRESSING, tab: 'wardrobe', target: '[data-tour="my-avatar"]', fallback: '[data-tour="room-dressing_room"]', title: 'YOUR AVATAR', body: 'A model of you, made from a few of your photos. Try any piece on it, from your wardrobe or a shop, and see it on you before you buy.', cta: { label: 'Make my avatar', href: '/me/avatar' } },
   { path: DRESSING, tab: 'saved', target: '[data-tour="tab-saved"]', title: 'SAVED PIECES', body: 'Pieces you kept with the MYRA Mirror while shopping, each styled three ways.' },
   { path: DRESSING, tab: 'email', target: '[data-tour="email-sync"]', fallback: '[data-tour="tab-email"]', title: 'BRING IN YOUR PIECES', body: 'Gmail: MYRA brings your latest orders into your wardrobe by itself. Instagram and Photos: MYRA finds the pieces in your photos to add to your wardrobe.' },
   { path: DRESSING, tab: 'email', target: '#email-finds', fallback: '[data-tour="tab-email"]', title: 'EMAIL FINDS', body: 'Pieces from your order emails. Add the ones you kept.' },
