@@ -1,12 +1,13 @@
 'use client'
 
 // MY AVATAR — the room (Chloe's sketch, 2026-11-09): her avatar in the middle, the pieces
-// she has on docked at the edges of the grey stage (tops and jackets left; bottoms, scarves,
+// she has on docked at the edges of the grey stage (tops, jackets and bags left; bottoms, scarves,
 // belts and shoes right), a shelf bar, a swipe rail, ways under it, Undress / Finish.
 // Swaps are instant: every piece was shot once on her avatar and kept as a layer.
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import type { RoomView, RoomPiece } from '@/lib/avatar/wardrobe'
+import { defaultWayFor } from '@/lib/avatar/way-default'
 import { loadMyRoom, nudgeMyWardrobe, finishMyLook, retryMyLayers, deleteMyLook, shootMyWay, reshootMyPiece } from './room-actions'
 
 const STAGE = '#E4E2DD'
@@ -23,6 +24,7 @@ const SHELVES: { family: string; label: string; side: 'left' | 'right' }[] = [
   { family: 'scarf', label: 'Scarves', side: 'right' },
   { family: 'belt', label: 'Belts', side: 'right' },
   { family: 'shoes', label: 'Shoes', side: 'right' },
+  { family: 'bag', label: 'Bags', side: 'left' },
 ]
 const sideOf = (family: string) => SHELVES.find((s) => s.family === family)?.side ?? 'right'
 
@@ -34,9 +36,7 @@ export default function RoomClient({ initial, startItem = null, onDelete }: { in
   const startPiece = startItem ? initial.pieces.find((p) => p.item_id === startItem) ?? null : null
   const [on, setOn] = useState<On>(() => {
     if (!startPiece) return {}
-    const ways = initial.ways.filter((w) => w.item_types.includes(startPiece.item_type))
-    const def = ways.find((w) => w.is_default) ?? ways[0]
-    return { [startPiece.item_id]: def?.way_key ?? '' }
+    return { [startPiece.item_id]: defaultWayFor(initial.ways, startPiece.item_type)?.way_key ?? '' }
   })
   const [chosen, setChosen] = useState<Set<string>>(new Set())   // pieces whose way she picked herself
   const [shelf, setShelf] = useState<string>(() => startPiece?.family ?? SHELVES.find((s) => initial.pieces.some((p) => p.family === s.family))?.family ?? 'top')
@@ -120,23 +120,25 @@ export default function RoomClient({ initial, startItem = null, onDelete }: { in
           ((p.family === 'top' || p.family === 'bottom') && q.family === 'dress')
         if (!clash) n[id] = way
       }
-      const ways = waysFor(p)
-      const def = ways.find((w) => w.is_default) ?? ways[0]
-      n[p.item_id] = def?.way_key ?? ''
+      n[p.item_id] = defaultWayFor(waysFor(p), p.item_type)?.way_key ?? ''
       return n
     })
     setChosen((c) => { const n = new Set(c); n.delete(p.item_id); return n })
+    // a saved bag (or a way never queued) has nothing shot yet: shoot its default way now
+    const def = defaultWayFor(waysFor(p), p.item_type)?.way_key
+    if (!on[p.item_id] && def && !p.layers.some((l) => l.way_key === def)) requestShot(p.item_id, def)
+  }
+  const requestShot = (itemId: string, way: string) => {
+    const key = `${itemId}|${way}`
+    setRequested((r) => new Set(r).add(key))
+    shootMyWay(itemId, way).then((res) => { if (res.error) { setError(res.error); setRequested((r) => { const n = new Set(r); n.delete(key); return n }) } }).catch(() => undefined)
   }
   const takeOff = (id: string) => setOn((cur) => { const n = { ...cur }; delete n[id]; return n })
   const pickWay = (p: RoomPiece, way: string) => {
     setOn((cur) => ({ ...cur, [p.item_id]: way }))
     setChosen((c) => new Set(c).add(p.item_id))
-    if (!readyLayer(p, way)) {
-      // not shot yet: ask for it now; the stage switches to it the moment it lands
-      const key = `${p.item_id}|${way}`
-      setRequested((r) => new Set(r).add(key))
-      shootMyWay(p.item_id, way).then((res) => { if (res.error) { setError(res.error); setRequested((r) => { const n = new Set(r); n.delete(key); return n }) } }).catch(() => undefined)
-    }
+    // not shot yet: ask for it now; the stage switches to it the moment it lands
+    if (!readyLayer(p, way)) requestShot(p.item_id, way)
   }
   // a requested way that has landed is no longer outstanding
   useEffect(() => {
@@ -254,15 +256,16 @@ export default function RoomClient({ initial, startItem = null, onDelete }: { in
           const isOn = !!on[p.item_id]
           const ready = anyReady(p)
           const failed = allFailed(p)
+          const untouched = !p.layers.length && !Array.from(requested).some((k) => k.startsWith(`${p.item_id}|`))
           return (
             <button key={p.item_id} type="button" aria-pressed={isOn} onClick={() => putOn(p)} className={`relative flex-none w-[112px] sm:w-[128px] snap-start rounded-[14px] border p-2 text-left ${isOn ? 'border-[#141414] shadow-[inset_0_0_0_1px_#141414]' : 'border-[#DCDAD4]'}`}>
               <div className="relative h-[120px] sm:h-[140px] overflow-hidden rounded-[9px] bg-white">
                 {p.image_url && <img src={p.image_url} alt="" className={`h-full w-full object-contain ${ready ? '' : 'opacity-50'}`} />}
-                {!ready && <span className="absolute inset-x-0 bottom-0 bg-[#141414]/80 py-1 text-center text-[11px] tracking-[0.12em] uppercase text-white">{failed ? 'Didn’t come out' : 'Shooting'}</span>}
+                {!ready && <span className="absolute inset-x-0 bottom-0 bg-[#141414]/80 py-1 text-center text-[11px] tracking-[0.12em] uppercase text-white">{failed ? 'Didn’t come out' : untouched ? 'Tap to try on' : 'Shooting'}</span>}
                 {isOn && <span className="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded-full bg-[#141414] text-[12px] text-white">✓</span>}
               </div>
               <p className="mt-2 line-clamp-2 text-[13px] leading-[1.25] text-[#141414]">{p.name}</p>
-              {p.brand && <p className="mt-0.5 truncate text-[11px] tracking-[0.1em] uppercase text-[#7C838B]">{p.brand}</p>}
+              {(p.brand || p.saved) && <p className="mt-0.5 truncate text-[11px] tracking-[0.1em] uppercase text-[#7C838B]">{[p.brand, p.saved ? 'Saved' : null].filter(Boolean).join(' · ')}</p>}
             </button>
           )
         })}
