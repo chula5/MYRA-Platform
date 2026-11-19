@@ -18,6 +18,7 @@ import { COLOUR_SHADES, COLOUR_FAMILY_IDS, OCCASION_TYPES, SHAPE_PREFERENCES, PI
 import { SIZE_CATEGORIES, ladderFor, type SizeCategory } from '@/lib/size-canonical'
 import { MirrorLoading } from '@/components/ArchiveCard'
 import BrandPicker from '@/components/me/BrandPicker'
+import { deleteMyAccount } from './delete-account-actions'
 
 const SIZE_LABEL: Record<SizeCategory, string> = { tops: 'Tops & dresses', bottoms: 'Trousers & skirts', outerwear: 'Coats & jackets', shoes: 'Shoes' }
 
@@ -402,6 +403,52 @@ export default function YouSettings({ testMemberId, initial }: { testMemberId?: 
           <button type="submit" className={pill(false)}>Sign out</button>
         </form>
       )}
+      {!view.test && <DeleteAccount />}
     </div>
+  )
+}
+
+/**
+ * DELETE MY ACCOUNT — two taps, the second one says exactly what goes. Apple
+ * requires it in the app for any account made there.
+ */
+function DeleteAccount() {
+  const [asking, setAsking] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const go = async () => {
+    setBusy(true); setError(null)
+    void clearNativeShareToken()
+    try {
+      const r = await deleteMyAccount()
+      if (r?.error) { setError(r.error); setBusy(false) }
+    } catch (e: any) {
+      // redirect() after a successful delete arrives here as a navigation, not a failure.
+      if (String(e?.digest ?? e?.message ?? '').includes('NEXT_REDIRECT')) throw e
+      setError('Something stopped your account being deleted. Please try again.'); setBusy(false)
+    }
+  }
+  return (
+    <section className={`${card} mt-10`}>
+      <h2 className={heading}>Delete your account</h2>
+      {!asking ? (
+        <div className="mt-4 flex items-center justify-between gap-4 flex-wrap">
+          <p className={label}>Remove your login and everything MYRA keeps for you.</p>
+          <button type="button" onClick={() => setAsking(true)} className={pill(false)}>Delete my account</button>
+        </div>
+      ) : (
+        <div className="mt-4">
+          <p className={label}>
+            This deletes your login, your sizes and taste, your looks, saved pieces, wardrobe, chats and connected
+            accounts. It cannot be undone.
+          </p>
+          <div className="mt-6 flex gap-3 flex-wrap justify-end">
+            <button type="button" disabled={busy} onClick={() => setAsking(false)} className={pill(false)}>Keep my account</button>
+            <button type="button" disabled={busy} onClick={go} className={pill(true)}>{busy ? 'Deleting…' : 'Yes, delete everything'}</button>
+          </div>
+        </div>
+      )}
+      {error && <p className={`${label} mt-4 text-[#9B2C2C]`}>{error}</p>}
+    </section>
   )
 }
