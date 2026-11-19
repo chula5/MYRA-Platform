@@ -21,6 +21,8 @@ export interface TasteGraph {
   /** Labels she hid, wears-but-never-wants sent, or refused: never shown, not even as a discovery. */
   blocked: Set<string>
   bands: PriceBands
+  /** Her named labels' brand ids, in her own order (lib/brand-worlds reads her worlds off them). */
+  named?: string[]
 }
 
 let keyCache: { at: number; rows: BrandKeys[] } | null = null
@@ -39,22 +41,36 @@ async function brandKeys(admin: any): Promise<BrandKeys[]> {
 export async function loadTasteGraph(admin: any, memberId: string, known?: BrandKeys[]): Promise<TasteGraph> {
   const [{ data: m }, { data: aff }, labels] = await Promise.all([
     admin.from('pilot_member').select('brands, brands_input_only, brands_never, price_bands').eq('member_id', memberId).maybeSingle(),
-    admin.from('user_brand_affinity').select('brand_id, affinity, hidden').eq('user_id', memberId).gt('affinity', SEED.baseline).limit(1000),
+    // Above the baseline; plus every row she took out (hidden rows sit at the
+    // floor, under the baseline, so they were never read here before) and every
+    // label she has saved or said yes to — a save from a quiet maybe promotes it.
+    admin.from('user_brand_affinity').select('brand_id, affinity, hidden, positive_count').eq('user_id', memberId)
+      .or(`affinity.gt.${SEED.baseline},hidden.eq.true,positive_count.gt.0`).limit(1000),
     known ? Promise.resolve(known) : brandKeys(admin),
   ])
   const idsOf = (name: string) => { const k = brandKey(name); return labels.filter((b) => b.keys.includes(k)).map((b) => b.brand_id) }
   const blocked = new Set([...(m?.brands_input_only ?? []), ...(m?.brands_never ?? [])].flatMap((n: string) => idsOf(String(n))))
+  // Her named labels, in her order. Naming a label is the later, truer word:
+  // a hidden row left over from an earlier removal never blocks one she named.
+  const namedNames = namedBrands({ member_id: memberId, ...(m ?? {}) })
+  const namedIds = new Set(namedNames.flatMap(idsOf))
   const weights = new Map<string, number>()
   for (const r of ((aff ?? []) as any[])) {
-    if (r.hidden) blocked.add(r.brand_id)
+    if (r.hidden && !namedIds.has(r.brand_id)) blocked.add(r.brand_id)
     if (r.hidden || blocked.has(r.brand_id)) continue
-    weights.set(r.brand_id, Math.min(1, Number(r.affinity) || 0))
+    // A label she saved or said yes to is hers, even if it started at the baseline.
+    weights.set(r.brand_id, Math.min(1, Math.max(Number(r.affinity) || 0, Number(r.positive_count) > 0 ? SEED.baseline + 0.05 : 0)))
   }
   // Her named labels lead, in the order she put them.
-  namedBrands({ member_id: memberId, ...(m ?? {}) }).forEach((name, i) => {
-    for (const id of idsOf(name)) if (!blocked.has(id)) weights.set(id, Math.max(0.8, 1 - i * 0.04) + 0.001)
+  const named: string[] = []
+  namedNames.forEach((name, i) => {
+    for (const id of idsOf(name)) {
+      if (blocked.has(id)) continue
+      weights.set(id, Math.max(0.8, 1 - i * 0.04) + 0.001)
+      if (!named.includes(id)) named.push(id)
+    }
   })
-  return { weights, blocked, bands: readPriceBands(m) }
+  return { weights, blocked, bands: readPriceBands(m), named }
 }
 
 /** Over her ceiling for this kind of piece? A piece with no price is not judged. */
