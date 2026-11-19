@@ -11,6 +11,7 @@ import MirrorCurtain from '@/components/me/MirrorCurtain'
 import Mannequin from '@/components/me/Mannequin'
 import ShopBrain from './ShopBrain'
 import SaveScreenshot from '@/components/me/SaveScreenshot'
+import ConnectSafari from '@/components/me/ConnectSafari'
 import type { ForYouView } from './for-you-actions'
 import type { ShopBrainView } from './shop-brain-actions'
 
@@ -69,6 +70,8 @@ export default function ForYouClient({ view, testMemberId, shopBrain }: {
             <h1 className="text-[clamp(20px,2.2vw,32px)] tracking-[0.045em] text-[#4A4E57] leading-[1.05]">
               {view.firstName ? `HELLO ${view.firstName.toUpperCase()}` : 'HELLO'}
             </h1>
+            {/* Until the Mirror has checked in from her browser: how to put MYRA where she shops. */}
+            <ConnectSafari connected={view.mirror.connected} testMemberId={testMemberId ?? (view.test && view.memberId ? view.memberId : undefined)} />
             {/* No Mirror needed: a screenshot of a piece, saved and styled like a heart. */}
             <div className="mt-6">
               <SaveScreenshot testMemberId={testMemberId} />
