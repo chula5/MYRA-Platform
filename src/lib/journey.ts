@@ -321,3 +321,21 @@ export function describeEvent(e: JourneyEvent): string {
       return `${verb} ${e.label ?? ''}`.trim()
   }
 }
+
+/**
+ * What started a click-through. The first three are MYRA reaching out — she
+ * left for a retailer from something MYRA put in front of her unasked, which is
+ * the number the whole service lives or dies by. `asked` is MYRA's pick on her
+ * request: she asked for a look, MYRA chose the piece. The rest she found.
+ */
+export type ClickSource = 'email' | 'event' | 'sent' | 'asked' | 'searched' | 'browsed' | 'own'
+
+export const CLICK_SOURCE: Record<ClickSource, { label: string; group: 'myra' | 'asked' | 'her' }> = {
+  email: { label: 'AN EMAIL FROM MYRA', group: 'myra' },
+  event: { label: 'AN EVENT OR CALENDAR PICK', group: 'myra' },
+  sent: { label: 'A LOOK MYRA SENT UNASKED', group: 'myra' },
+  asked: { label: 'A LOOK OR WAY SHE ASKED MYRA FOR', group: 'asked' },
+  searched: { label: 'HER OWN SEARCH', group: 'her' },
+  browsed: { label: 'BROWSING ON HER OWN', group: 'her' },
+  own: { label: 'HER SAVES, WARDROBE OR ELSEWHERE', group: 'her' },
+}
