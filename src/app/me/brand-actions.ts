@@ -41,6 +41,7 @@ import { revalidatePath } from 'next/cache'
 import { resolveClientMember } from '@/lib/client-member'
 import { createAdminClient } from '@/lib/supabase-server'
 import { BRAND_GROUPS } from '@/app/onboarding/brand-groups'
+import { PICKER_LOGOS } from '@/app/onboarding/brand-logos'
 import { setMemberBrands } from '@/app/admin/private-stylist/actions'
 import { isFastFashion, type RankedBrand } from '@/lib/pilot-stylist'
 import {
@@ -252,6 +253,8 @@ function buildGroups(
 /** brandKey(name or alias) → an https logo, from the brand rows that have one. */
 function logoMap(rows: any[] | null | undefined): Map<string, string> {
   const m = new Map<string, string>()
+  // Brand rows first; the static list only fills brands with no row.
+  const fill = () => { for (const [n, url] of Object.entries(PICKER_LOGOS)) { const k = brandKey(n); if (k && !m.has(k)) m.set(k, url) } }
   for (const r of rows ?? []) {
     const url = String(r?.logo_url ?? '')
     if (!/^https:\/\//.test(url)) continue
@@ -260,6 +263,7 @@ function logoMap(rows: any[] | null | undefined): Map<string, string> {
       if (k && !m.has(k)) m.set(k, url)
     }
   }
+  fill()
   return m
 }
 
