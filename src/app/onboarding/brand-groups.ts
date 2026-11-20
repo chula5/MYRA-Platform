@@ -70,9 +70,10 @@ export const BRAND_GROUPS: BrandGroup[] = [
     more: ['Hermès', 'Gucci', 'Valentino', 'Fendi', 'Givenchy', 'Stella McCartney', 'Missoni', 'Yves Salomon'],
   },
   {
+    // Shown as Maximal since 2026-11-19 (Chloe); the key stays.
     key: 'directional',
-    name: 'The directional',
-    blurb: 'Artful, architectural, a little strange',
+    name: 'Maximal',
+    blurb: 'Bold, artful, more is more',
     brands: ['Dries Van Noten', 'Marni', 'JW Anderson', 'Proenza Schouler', 'Issey Miyake', 'Roksanda', 'Christopher Esber', 'A.W.A.K.E. Mode', 'Comme des Garçons', 'Toga', 'Rachel Comey', 'Jacques Wei'],
     more: ['Bode', 'Nanushka', 'Diotima', 'EENK', 'Shushu/Tong', 'Forte Forte', 'Dunst', 'Darkpark', 'Georgia Hardinge', 'Insomnia Studio', 'No Emotions', 'Nocturne', 'Halfboy', 'Destree', 'Macabla', 'Pointe Milou', 'Rise & Fall'],
   },
