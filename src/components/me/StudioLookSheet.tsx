@@ -31,11 +31,15 @@ export interface SheetLook {
   occasion_label?: string | null
 }
 
-export default function StudioLookSheet({ look, heroId, testMemberId, onClose }: {
+export default function StudioLookSheet({ look, heroId, testMemberId, heading = 'FROM THE STUDIO', save = true, onClose }: {
   look: SheetLook
   /** The piece this outfit was reached from, ringed among the pieces. */
   heroId?: string
   testMemberId?: string
+  /** What the sheet is called: an outfit MYRA made for her is not the studio's. */
+  heading?: string
+  /** False where the card behind already keeps the look (and knows which way it was). */
+  save?: boolean
   onClose: () => void
 }) {
   // The piece she tapped: its own WAYS TO WEAR IT sheet opens over this one.
@@ -48,7 +52,7 @@ export default function StudioLookSheet({ look, heroId, testMemberId, onClose }:
       <div className="w-full px-6 sm:px-10 pt-[calc(40px+env(safe-area-inset-top,0px))] pb-10 max-w-[1700px] mx-auto space-y-8">
         <div className="flex items-start justify-between gap-5">
           <div>
-            <p className={`${T_SMALL} tracking-[0.12em] text-[#6E6B65]`}>FROM THE STUDIO</p>
+            <p className={`${T_SMALL} tracking-[0.12em] text-[#6E6B65]`}>{heading}</p>
             {look.occasion_label && <p className={`${T} text-[#2B2B2B] leading-tight`}>{look.occasion_label}</p>}
           </div>
           <button type="button" onClick={onClose} className={`${T_SMALL} text-[#6E6B65] underline underline-offset-4 flex-none`}>← Back</button>
@@ -90,14 +94,16 @@ export default function StudioLookSheet({ look, heroId, testMemberId, onClose }:
               })}
             </div>
 
-            <SaveOutfit
-              items={look.items}
-              why={look.why ?? 'From the studio'}
-              occasion={look.occasion_id ?? null}
-              testMemberId={testMemberId}
-              label="Save look"
-              pictureUrl={look.image_url ?? null}
-            />
+            {save && (
+              <SaveOutfit
+                items={look.items}
+                why={look.why ?? 'From the studio'}
+                occasion={look.occasion_id ?? null}
+                testMemberId={testMemberId}
+                label="Save look"
+                pictureUrl={look.image_url ?? null}
+              />
+            )}
           </div>
         </div>
       </div>

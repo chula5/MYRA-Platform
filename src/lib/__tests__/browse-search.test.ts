@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { parseQuery, hasMaterial, estimateItemFormality } from '@/lib/search-taxonomy'
-import { rankPieces, facetCount, seasonFits, cutFits } from '@/lib/browse-rank'
+import { rankPieces, facetCount, seasonFits, cutFits, offSeasonNow, outOfSeason } from '@/lib/browse-rank'
 
 const ctx = (brandIds: string[] = [], words: string[] = [], needle = '') => ({ brandIds: new Set(brandIds), words, needle })
 
@@ -234,5 +234,29 @@ describe('rankPieces holds every facet as a requirement', () => {
     expect(parseQuery('a line skirt').cuts).toEqual(['a line'])
     expect(parseQuery('a linen skirt').cuts).toEqual([])
     expect(parseQuery('silk slip skirt').cuts).toEqual([])
+  })
+})
+
+describe('the other end of the year is held back', () => {
+  it('November holds summer back, June holds winter back, March and September hold nothing', () => {
+    expect(offSeasonNow(new Date('2026-11-21T12:00:00Z'))).toBe('summer')
+    expect(offSeasonNow(new Date('2027-01-10T12:00:00Z'))).toBe('summer')
+    expect(offSeasonNow(new Date('2026-06-10T12:00:00Z'))).toBe('winter')
+    expect(offSeasonNow(new Date('2026-03-10T12:00:00Z'))).toBeNull()
+    expect(offSeasonNow(new Date('2026-09-10T12:00:00Z'))).toBeNull()
+  })
+
+  it('shorts, sandals and linen are summer; a plain blouse or a wool skirt is not', () => {
+    expect(outOfSeason({ item_id: '1', product_name: 'Harlan Short', item_type: 'shorts' }, 'summer')).toBe(true)
+    expect(outOfSeason({ item_id: '2', product_name: 'Rue Linen Skirt', item_type: 'skirt' }, 'summer')).toBe(true)
+    expect(outOfSeason({ item_id: '3', product_name: 'Marilyn Blouse', item_type: 'blouse', colour_family: 'black' }, 'summer')).toBe(false)
+    expect(outOfSeason({ item_id: '4', product_name: 'Wool Midi Skirt', item_type: 'skirt', colour_family: 'cream' }, 'summer')).toBe(false)
+    // A piece that says nothing about its season is in season.
+    expect(outOfSeason({ item_id: '5', product_name: 'Salma Skirt', item_type: 'skirt' }, 'summer')).toBe(false)
+  })
+
+  it('a coat is winter, and is not held back as summer', () => {
+    expect(outOfSeason({ item_id: '6', product_name: 'Vendome Coat', item_type: 'coat' }, 'winter')).toBe(true)
+    expect(outOfSeason({ item_id: '6', product_name: 'Vendome Coat', item_type: 'coat' }, 'summer')).toBe(false)
   })
 })

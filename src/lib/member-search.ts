@@ -11,7 +11,7 @@
 
 import 'server-only'
 import { parseQuery, piecesWord, STOPWORDS, MATERIAL_TERMS, TYPE_FORMALITY, COLOUR, TYPE, MATERIAL, CUT_WORDS, isTypoOf, type ParsedQuery } from '@/lib/search-taxonomy'
-import { rankPieces, facetCount, mixByType, cutFits, type RankContext, type Scored } from '@/lib/browse-rank'
+import { rankPieces, facetCount, mixByType, cutFits, offSeasonNow, outOfSeason, type RankContext, type Scored } from '@/lib/browse-rank'
 import { brandKey, loadBrandGraph, computeSimilarBrands, SEED } from '@/lib/brand-affinity'
 import { isOwnedItem } from '@/lib/wardrobe/owned-items'
 import { loadMemberSizeProfile, loadSizeRowsFor, filterItemsForShopper } from '@/lib/size-availability'
@@ -78,6 +78,10 @@ export interface BrowseView {
   sizes: BrowseSizes
   /** Answers held back by her budget this search — the switch says how many wait above it. */
   overBudget?: number
+  /** Answers there are beyond the ones sent — a label's whole range is paged, never cut at the first screen. */
+  more?: number
+  /** Pieces held back because they belong to the other end of the year (summer pieces in November). */
+  offSeason?: { count: number; season: 'summer' | 'winter' }
   error?: string
 }
 
@@ -87,6 +91,16 @@ export const SHOWABLE = ['ready', 'live', 'draft']
 const MOST = 24
 const POOL = 80
 const STRICT_POOL = 160
+// A label she names is answered with its whole range, not the first screen of
+// it: "posse" came back as 24 pieces and "skirts munthe" missed skirts MYRA
+// carries (a member, 2026-11-21). The page still opens on 24; she asks for more.
+const BRAND_MOST = 240
+const BRAND_POOL = 600
+
+/** The shop a piece was found in, as the words between the dots: "www.munthe.co.uk" → www, munthe, co, uk. */
+const hostLabels = (url: unknown): string[] => {
+  try { return new URL(String(url)).hostname.toLowerCase().split('.') } catch { return [] }
+}
 
 const CLOTHING_CATS = new Set(['tops', 'bottoms', 'outerwear'])
 export const EMPTY_FACETS: BrowseFacets = { brands: [], colours: [], types: [] }
@@ -124,7 +138,14 @@ async function loadKnownBrands(admin: any): Promise<KnownBrand[]> {
   const rows: KnownBrand[] = ((data ?? []) as any[]).filter((b) => b?.name).map((b) => ({
     brand_id: b.brand_id,
     name: String(b.name),
-    keys: dedupe([brandKey(String(b.name)), ...((Array.isArray(b.aliases) ? b.aliases : []) as string[]).map((a) => brandKey(String(a)))]).filter(Boolean),
+    keys: dedupe([
+      brandKey(String(b.name)),
+      ...((Array.isArray(b.aliases) ? b.aliases : []) as string[]).map((a) => brandKey(String(a))),
+      // A label kept under its shop's address ("munthe.co.uk") answers to its name too.
+      ...(/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(String(b.name).trim())
+        ? String(b.name).trim().toLowerCase().split('.').filter((l) => l.length >= 4 && !['www', 'shop', 'store', 'intl'].includes(l)).slice(0, 1)
+        : []),
+    ]).filter(Boolean),
   }))
   brandCache = { at: Date.now(), rows }
   return rows
@@ -359,7 +380,10 @@ export async function searchForMember(
   const parsed: ParsedQuery = !heard.itemTypes.length && heard.occasionTypes.length
     ? { ...heard, itemTypes: heard.occasionTypes }
     : heard
-  const brandRows = parsed.brand ? (inQuery.byKey.get(brandKey(parsed.brand)) ?? []) : []
+  // The label's own name leads when a shop-address row answers to it as well.
+  const isAddress = (n: string) => /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(n.trim())
+  const brandRows = (parsed.brand ? (inQuery.byKey.get(brandKey(parsed.brand)) ?? []) : [])
+    .slice().sort((a, b) => Number(isAddress(a.name)) - Number(isAddress(b.name)))
   const brandIds = brandRows.map((b) => b.brand_id)
   const brandName = brandRows[0]?.name ?? null
   const facets = facetCount(parsed)
@@ -379,6 +403,14 @@ export async function searchForMember(
   let overBudget = 0
   const ceiling = lifted ? 0 : Math.max(0, ...Object.values(graph.bands).map((b) => b?.max ?? 0))
   const ctx: RankContext = { brandIds: new Set(brandIds), words, needle, herBrands }
+  // A piece she saved from a label's own site can sit in MYRA with no label on
+  // it (the page did not say whose it was), so "munthe" never found the Munthe
+  // skirt she had saved from munthe.co.uk. A piece with no label, found on the
+  // named label's own shop, is that label's piece.
+  const shopKeys = dedupe(brandRows.flatMap((b) => b.keys.map((k) => k.replace(/\s+/g, '')))).filter((k: string) => k.length >= 4) as string[]
+  const fromHerShop = (row: any) => !row.brand_id && shopKeys.length > 0 && hostLabels(row.retailer_url).some((l) => shopKeys.includes(l))
+  const strictPool = brandIds.length ? BRAND_POOL : STRICT_POOL
+  const most = brandIds.length ? BRAND_MOST : MOST
 
   // 2. Pull candidates. One strict query carries every facet at once (so the
   //    answers are not lost behind a page of near-misses), and looser pools —
@@ -404,7 +436,12 @@ export async function searchForMember(
   const pools: Promise<any>[] = []
   // Which pools answer everything she asked: the budget count reads those alone.
   const strict: number[] = []
-  if (facets > 0) { strict.push(pools.length); pools.push(withFacets(base()).limit(STRICT_POOL)) }
+  if (facets > 0) { strict.push(pools.length); pools.push(withFacets(base()).order('created_at', { ascending: false }).limit(strictPool)) }
+  if (shopKeys.length) {
+    const unlabelled = () => base().is('brand_id', null).or(shopKeys.map((k) => `retailer_url.ilike.%${k}.%`).join(','))
+    strict.push(pools.length); pools.push(withFacets(unlabelled(), true).limit(POOL))
+    if (facets >= 2) pools.push(unlabelled().limit(POOL))
+  }
   // The strict pool is any 160 answers; her named labels' answers are pulled on their own so they are there to lead.
   const named = Array.from(herBrands.entries()).filter(([, w]) => w > SEED.coreFamily).map(([id]) => id)
   if (facets > 0 && named.length) { strict.push(pools.length); pools.push(withFacets(base().in('brand_id', named)).limit(STRICT_POOL)) }
@@ -443,8 +480,9 @@ export async function searchForMember(
   const candidates: any[] = []
   const seenOver = new Set<string>()
   results.forEach((r, i) => {
-    for (const row of ((r?.data ?? []) as any[])) {
-      if (!showable(row)) continue
+    for (const found of ((r?.data ?? []) as any[])) {
+      if (!showable(found)) continue
+      const row = fromHerShop(found) ? { ...found, brand_id: brandIds[0], brand: { ...(found.brand ?? {}), name: brandName } } : found
       if (affordable(row)) candidates.push(row)
       // Held back by her budget — counted only where it would have been a real answer.
       else if ((!strict.length || strict.includes(i)) && !seenOver.has(row.item_id)) { seenOver.add(row.item_id); overBudget++ }
@@ -471,6 +509,23 @@ export async function searchForMember(
       const taken = new Set(fromLikeBrands.map((s) => s.it.item_id))
       similar = [...fromLikeBrands, ...similar.filter((s) => !taken.has(s.it.item_id))]
       similarKind = 'brands'
+    }
+  }
+  // The other end of the year is held back: in November a label's shorts and
+  // sandals are not what she is looking for (a member searching "posse" was
+  // shown its summer, 2026-11-21). Never when she named a season, and never
+  // when it would leave nothing — "linen shorts" in winter is still her ask.
+  let offSeason: BrowseView['offSeason']
+  const away = parsed.seasons.length ? null : offSeasonNow()
+  if (away) {
+    const inSeason = ranked.exact.filter((s) => !outOfSeason(s.it, away))
+    if (inSeason.length && inSeason.length < ranked.exact.length) {
+      offSeason = { count: ranked.exact.length - inSeason.length, season: away }
+      ranked.exact = inSeason
+    }
+    if (inSeason.length || !ranked.exact.length) {
+      const near = similar.filter((s) => !outOfSeason(s.it, away))
+      if (near.length) similar = near
     }
   }
   const exactIds = new Set(ranked.exact.map((s) => s.it.item_id))
@@ -552,7 +607,7 @@ export async function searchForMember(
   const close = similarKind !== 'brands' ? closeGroups(similarN.slice(0, MOST), asked, brandName) : null
   return {
     query: q,
-    pieces: exactN.slice(0, MOST).map((k) => pieceOf(k.it)),
+    pieces: exactN.slice(0, most).map((k) => pieceOf(k.it)),
     similar: (close ? close.ordered : similarN.slice(0, MOST)).map((k) => pieceOf(k.it)),
     similarKind: similarN.length ? similarKind ?? 'close' : null,
     similarGroups: close?.groups ?? [],
@@ -561,5 +616,7 @@ export async function searchForMember(
     facets: facetsOut,
     sizes,
     overBudget,
+    more: Math.max(0, exactN.length - most),
+    offSeason,
   }
 }

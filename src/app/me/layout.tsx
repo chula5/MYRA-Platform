@@ -8,6 +8,7 @@ import { resolveClientMember } from '@/lib/client-member'
 import NativeShareBridge from '@/components/me/NativeShareBridge'
 import PushSetup from '@/components/me/PushSetup'
 import HerViewBar from '@/components/me/HerViewBar'
+import ViewportSettle from '@/components/me/ViewportSettle'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,6 +30,8 @@ export default async function MeLayout({ children }: { children: React.ReactNode
       <div className="myra-safe-top" aria-hidden />
       {asHer?.test && <HerViewBar name={asHer.name} />}
       <MeChrome />
+      {/* On an iPhone, puts the header and tab bar back at the edges after the keyboard leaves. */}
+      <ViewportSettle />
       {/* pb-28 on a phone keeps the last of the page clear of the tab bar. */}
       {/* The rooms run edge to edge with -mx-6 sm:-ml-8 sm:-mr-10: out to the
           rail (250px wide, so 282 - 250 = 32px) and the right edge. Change
