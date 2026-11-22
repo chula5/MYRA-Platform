@@ -4,6 +4,7 @@
 // sizes, the colours she loves and won't wear, and the accounts she has
 // connected (each one can be let go of here). Full width, big type, round pills.
 
+import { inPhoneFrame } from '@/lib/phone-frame'
 import { useEffect, useMemo, useState } from 'react'
 import {
   loadMySettings, myAssistantLink, myAssistantLinkState, revokeMyAssistantLink, saveMySettings,
@@ -116,7 +117,9 @@ export default function YouSettings({ testMemberId, initial }: { testMemberId?: 
   const [native, setNative] = useState(false)
   const [iphone, setIphone] = useState(false)
   const [copiedConnect, setCopiedConnect] = useState(false)
-  useEffect(() => { setNative(inNativeApp()); setIphone(onIphone()) }, [])
+  // HER VIEW's iPhone frame reads as the iPhone (wording only: connect still
+  // asks Capacitor, so the frame never tries to hand off to Safari).
+  useEffect(() => { setNative(inNativeApp()); setIphone(onIphone() || inPhoneFrame()) }, [])
   function connectMirror() {
     if (native) { window.location.href = `x-safari-${SITE}${connectPath}`; return }
     window.open(connectPath, '_blank', 'noopener')

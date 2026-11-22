@@ -13,11 +13,17 @@ import InviteLink from './InviteLink'
 import { useEffect, useRef, useState } from 'react'
 import { setHerView } from './her-view-actions'
 import { MirrorLoading } from '@/components/ArchiveCard'
+import { PHONE_FRAME_NAME } from '@/lib/phone-frame'
 
 type Device = 'iphone' | 'computer'
 
 // iPhone 15/16 in points: the screen the app is drawn on.
 const PHONE = { w: 393, h: 852 }
+// Clock above, home bar below: the strips iOS keeps clear on her screen
+// (the app pads by the safe area there). Without the lower one the frame's
+// rounded corners cut into FOR YOU and EVENTS.
+const STATUS_BAR = 47
+const HOME_BAR = 34
 
 export default function HerViewTab({
   members, memberId, setMemberId,
@@ -94,7 +100,7 @@ export default function HerViewTab({
               as on her screen. Inside is exactly what the app loads. */}
           <div className="rounded-[56px] bg-[#0A0A0A] p-[14px] shadow-[0_30px_80px_rgba(0,0,0,0.25)]">
             <div className="overflow-hidden rounded-[44px] bg-white" style={{ width: PHONE.w }}>
-              <div className="relative flex h-[47px] items-center justify-between px-8 text-[15px] font-semibold text-[#0A0A0A] myra-pearl">
+              <div style={{ height: STATUS_BAR }} className="relative flex items-center justify-between px-8 text-[15px] font-semibold text-[#0A0A0A] myra-pearl">
                 <span>9:41</span>
                 <span className="absolute left-1/2 top-[11px] h-[30px] w-[118px] -translate-x-1/2 rounded-full bg-[#0A0A0A]" aria-hidden />
                 <span className="tracking-[0.1em] text-[12px]">●●● ▮</span>
@@ -102,10 +108,15 @@ export default function HerViewTab({
               <iframe
                 ref={frame}
                 key={`${memberId}-${reload}-phone`}
+                name={PHONE_FRAME_NAME}
                 src={src}
                 title={`${name}'s app`}
-                style={{ width: PHONE.w, height: PHONE.h - 47, border: 0, display: 'block' }}
+                style={{ width: PHONE.w, height: PHONE.h - STATUS_BAR - HOME_BAR, border: 0, display: 'block' }}
               />
+              {/* The home bar, on the tab bar's own grey as on her phone. */}
+              <div style={{ height: HOME_BAR }} className="flex items-center justify-center bg-[#E6E6E9]">
+                <span className="h-[5px] w-[134px] rounded-full bg-[#0A0A0A]" aria-hidden />
+              </div>
             </div>
           </div>
         </div>

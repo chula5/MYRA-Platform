@@ -22,6 +22,7 @@
 // device in her hand (the iPhone app, where the extension came with the app;
 // Safari on an iPhone; Chrome on a laptop), then the tour.
 
+import { inPhoneFrame } from '@/lib/phone-frame'
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import StyleWorlds from '@/components/me/StyleWorlds'
@@ -80,8 +81,9 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
     if (err) setMsg(err)
     const app = inNativeApp()
     // ?app=1 shows Chloe's preview what the iPhone app says (Safari, not Chrome).
-    setNative(app || (!!previewMemberId && q.get('app') === '1'))
-    setIphone(/iPhone|iPad/.test(navigator.userAgent))
+    // HER VIEW's iPhone frame is the same preview, without the query.
+    setNative(app || (!!previewMemberId && (q.get('app') === '1' || inPhoneFrame())))
+    setIphone(/iPhone|iPad/.test(navigator.userAgent) || inPhoneFrame())
     // The app's first open brought her here: noted on her login and in the
     // app, so For You opens as itself from now on. Not for a preview.
     if (app && !previewMemberId) {
