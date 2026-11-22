@@ -57,11 +57,13 @@ export default function RootLayout({
             before its first byte, so this one line marks <html> as the app at
             document start; anything wrapped in <WebOnly> is then invisible from
             the first paint, long before the door hydrates over it. Safari and
-            the desktop never carry the class and render exactly as before. */}
+            the desktop never carry the class and render exactly as before. HER VIEW's
+            iPhone frame (window.name, lib/phone-frame) carries it too, so Chloe
+            sees the app as the app draws it. */}
         <script
           dangerouslySetInnerHTML={{
             __html:
-              "try{var c=window.Capacitor;if(c&&typeof c.isNativePlatform==='function'&&c.isNativePlatform())document.documentElement.classList.add('myra-app')}catch(e){}",
+              "try{var c=window.Capacitor;if((c&&typeof c.isNativePlatform==='function'&&c.isNativePlatform())||window.name==='myra-her-view-iphone')document.documentElement.classList.add('myra-app')}catch(e){}",
           }}
         />
       </head>
