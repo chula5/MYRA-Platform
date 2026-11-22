@@ -47,18 +47,22 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-[14px] tracking-[0.06em] text-[#4A4E57] mb-3">MYRA AND YOUR GOOGLE ACCOUNT (GMAIL &amp; CALENDAR)</h2>
+            <h2 className="text-[14px] tracking-[0.06em] text-[#4A4E57] mb-3">MYRA AND YOUR GOOGLE ACCOUNT (GMAIL)</h2>
             <p className="mb-3">
-              Connecting your Google account is optional. You choose it from your settings, Google asks you to
-              approve each permission, and you can disconnect at any time from your settings or from your Google
-              Account&rsquo;s security page. Both connections are read-only.
+              Connecting your Gmail is optional. You choose it in MYRA, Google asks you to approve the permission,
+              and you can disconnect at any time from MYRA or from your Google Account&rsquo;s security page. The
+              connection is read-only. MYRA asks Google for nothing else.
             </p>
             <ul className="list-disc pl-5 space-y-2">
               <li><strong>Gmail (read-only)</strong> — MYRA searches your inbox only for order confirmations, receipts, dispatch and delivery emails from fashion brands and retailers, and reads those messages to find the clothes you have bought: the garment name, brand, colour, size, price, product image and link. It uses this to add the piece to your MYRA wardrobe so outfits can be built around what you own. No other mail is opened. The emails themselves are not stored; only the garment details are. MYRA never sends, modifies, labels or deletes mail.</li>
-              <li><strong>Google Calendar (read-only)</strong> — MYRA reads your upcoming events (title, date, time and location) to see what you have to dress for, and shows the ones worth dressing for in your Coming up list with outfit suggestions. Only the events you choose to dress for are kept. MYRA never creates, edits or deletes events, invitations or calendars.</li>
-              <li><strong>What we do with it</strong> — Google data is used solely to style you. It is never used for advertising, never sold, never shared with anyone except the processors that run MYRA (listed below), and never read by a human except with your permission, for support or security, or as the law requires. Disconnecting removes the connection and the Google tokens; you can ask us to delete the garment details and events at any time.</li>
+              <li><strong>What we do with it</strong> — Google data is used solely to style you. It is never used for advertising, never sold, never shared with anyone except the processors that run MYRA (listed below), and never read by a human except with your permission, for support or security, or as the law requires. Disconnecting removes the connection and the Google tokens; you can ask us to delete the garment details at any time.</li>
               <li><strong>Limited Use</strong> — MYRA&rsquo;s use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" className="underline underline-offset-2" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>, including the Limited Use requirements.</li>
             </ul>
+            <p className="mt-3">
+              <strong>Your iPhone calendar</strong> is separate and does not go through Google. If you allow it in the
+              MYRA iPhone app, the app reads your upcoming events (title, date, time and location) on your phone and
+              keeps only the ones worth dressing for. Turn it off at any time in Settings → MYRA → Calendars.
+            </p>
           </section>
 
           <section>

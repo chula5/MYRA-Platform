@@ -32,7 +32,7 @@ import OutfitDetailClient from '@/app/outfit/[id]/OutfitDetailClient'
 import WaysToWear from '@/components/me/WaysToWear'
 import { noticePieces } from '@/app/me/ways/actions'
 import StyleOutfit from '@/components/me/StyleOutfit'
-import GoogleReviewNote from '@/components/me/GoogleReviewNote'
+import AppleCalendarConnect from '@/components/me/AppleCalendarConnect'
 import ShareWithFriend from '@/components/me/ShareWithFriend'
 import InspirationToOutfit from '@/components/me/InspirationToOutfit'
 import type { OutfitWithItems } from '@/types/database'
@@ -1416,7 +1416,6 @@ function AskPanel({
     setEventId(ev.event_id)
     setCalOpen(false)
   }
-  const calHref = `/api/calendar/google/start?return=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/me/looks')}${testMemberId ? `&member=${testMemberId}` : ''}`
   const offered = new Set(occasionIds?.length ? occasionIds : CLIENT_OCCASIONS.map((o) => o.id as string))
   const kinds = ASK_KINDS.filter((k) => (k.needs ? offered.has(k.needs) : offered.has(k.occasion)))
   const picked = ASK_KINDS.find((k) => k.id === kind) ?? null
@@ -1520,11 +1519,8 @@ function AskPanel({
                     <p className="text-[clamp(18px,1vw,24px)] text-[#7C838B]">{cal.error}</p>
                   ) : !cal.connections.length ? (
                     <div className="flex flex-wrap items-center gap-4">
-                      <p className="text-[clamp(18px,1vw,24px)] text-[#55534E]">Connect your Google Calendar and MYRA lists what is coming up.</p>
-                      {cal.ready
-                        ? <a href={calHref} className={pill(false).replace('bg-[#F4F4F2]', 'bg-white')}>Connect Google Calendar</a>
-                        : <span className="text-[clamp(18px,1vw,24px)] text-[#8A8F95]">Calendar connect is not switched on yet.</span>}
-                      {cal.ready && <GoogleReviewNote className="basis-full" />}
+                      <p className="text-[clamp(18px,1vw,24px)] text-[#55534E]">Connect your Apple Calendar and MYRA lists what is coming up.</p>
+                      <AppleCalendarConnect testMemberId={testMemberId} textClass="text-[clamp(18px,1vw,24px)]" onDone={async (m) => { if (/^Connected/.test(m)) { setCal(await loadCalendarPanel(testMemberId)) } else { setCal((c) => (c ? { ...c, error: m } : c)) } }} />
                     </div>
                   ) : (
                     <div className="space-y-3">

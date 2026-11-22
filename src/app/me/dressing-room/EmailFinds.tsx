@@ -5,7 +5,6 @@
 
 import { useEffect, useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
-import VirginConnect from './VirginConnect'
 import ServiceMark from '@/components/me/ServiceMark'
 import GoogleReviewNote from '@/components/me/GoogleReviewNote'
 import {
@@ -15,13 +14,19 @@ import {
 } from './email-actions'
 
 
+/** Why a piece did not go into the wardrobe, in her words — never the raw error. */
+function findTrouble(e: string): string {
+  if (/no product photo/i.test(e)) return 'MYRA could not find a photo of this piece. Try again, or put it aside.'
+  if (/usage limit|rate.?limit|overloaded|credit|\b(429|5\d\d)\b|timeout|timed out|fetch failed/i.test(e)) return 'MYRA was too busy to read this photo last time. Try again.'
+  return 'MYRA could not read this photo last time. Try again.'
+}
+
 export default function EmailFinds({ testMemberId, onAdded, onCount }: { testMemberId?: string; onAdded?: () => void; onCount?: (n: number) => void }) {
   const [view, setView] = useState<EmailPanelView | null>(null)
   // Finds whose photo would not load in this browser — hidden, not shown grey.
   const [broken, setBroken] = useState<string[]>([])
   // The room's FOUND IN EMAIL tab shows how many are waiting to be looked through.
   useEffect(() => { if (view) onCount?.(view.finds.filter((f) => !broken.includes(f.find_id)).length + view.returned.length) }, [view, broken, onCount])
-  const [virginStep, setVirginStep] = useState<0 | 1>(0)
   const [picked, setPicked] = useState<string[]>([])
   // One key per button in flight: adding a piece never blocks the next card.
   const [busy, setBusy] = useState<string[]>([])
@@ -118,6 +123,21 @@ export default function EmailFinds({ testMemberId, onAdded, onCount }: { testMem
     onAdded?.()
   }
 
+  /**
+   * A piece whose first add failed (the photo could not be read: MYRA busy,
+   * out of credit, a page that would not load). Stays on its card and is
+   * tried again in place, so she sees it work rather than vanish.
+   */
+  async function retry(f: EmailPanelView['finds'][number]) {
+    const key = `retry-${f.find_id}`
+    setBusy((b) => [...b, key])
+    const r = await addFoundPiece(f.find_id, testMemberId)
+    setBusy((b) => b.filter((k) => k !== key))
+    setMsg(r.error ? `${f.product_name}: ${findTrouble(r.error)}` : `${f.product_name} is in your wardrobe.`)
+    await refresh()
+    if (!r.error) onAdded?.()
+  }
+
   if (!view) return null
   if (!view.memberId) return null
   const plain = (e: string | null | undefined) =>
@@ -151,7 +171,7 @@ export default function EmailFinds({ testMemberId, onAdded, onCount }: { testMem
         <div className="space-y-3">
           {view.connections.map((c) => (
             <div key={c.connection_id} className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-[#C3BFB8] pt-3">
-              <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#2B2B2B]">{c.provider === 'gmail' ? 'Gmail' : 'Virgin Media'} · {c.email}</p>
+              <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#2B2B2B]">{c.provider === 'gmail' ? 'Gmail' : 'Email'} · {c.email}</p>
               <p className="text-[18px] xl:text-[21px] 2xl:text-[25px] text-[#55534E]">
                 {c.status === 'error' ? <span className="text-[#B83A3A]">{plain(c.error)}</span>
                   : c.scan && (c.scan.status === 'queued' || c.scan.status === 'running')
@@ -180,19 +200,9 @@ export default function EmailFinds({ testMemberId, onAdded, onCount }: { testMem
             <ServiceMark service="gmail" size="sm" />Gmail · not set up yet
           </span>
         )}
-        <button onClick={() => setVirginStep(virginStep ? 0 : 1)} className="inline-flex items-center gap-3 text-[22px] xl:text-[25px] 2xl:text-[29px] pl-3 pr-7 py-2.5 border border-[#2B2B2B] text-[#2B2B2B] rounded-full">
-          <ServiceMark service="email" size="sm" />Virgin Media
-        </button>
       </div>
       {view.gmailReady && <GoogleReviewNote className="mt-3" />}
 
-      {virginStep > 0 && (
-        <VirginConnect
-          testMemberId={testMemberId}
-          secretsReady={view.secretsReady}
-          onConnected={async () => { setVirginStep(0); setMsg('Connected — reading the past year of order emails.'); await refresh() }}
-        />
-      )}
 
       {/* Pieces in the dressing room that an email says went back */}
       {view.returned.length > 0 && (
@@ -252,15 +262,25 @@ export default function EmailFinds({ testMemberId, onAdded, onCount }: { testMem
                   {f.error === 'Return started' ? (
                     <p className="text-[18px] xl:text-[21px] 2xl:text-[25px] text-[#7C838B]">You started a return — add it only if you kept it</p>
                   ) : f.error ? (
-                    <p className="text-[18px] xl:text-[21px] 2xl:text-[25px] text-[#B83A3A]">{f.error}</p>
+                    <p className="text-[18px] xl:text-[21px] 2xl:text-[25px] text-[#7C838B]">{working(`retry-${f.find_id}`) ? 'Reading the photo again…' : findTrouble(f.error)}</p>
                   ) : null}
                   <div className="mt-auto pt-2 flex flex-col gap-2">
-                    <button
-                      onClick={() => decide(f, () => addFoundPiece(f.find_id, testMemberId), `Adding ${f.product_name} — keep going.`)}
-                      className="text-[18px] xl:text-[21px] 2xl:text-[25px] py-2.5 bg-[#2B2B2B] text-white"
-                    >
-                      Add to my wardrobe
-                    </button>
+                    {f.error && f.error !== 'Return started' ? (
+                      <button
+                        disabled={working(`retry-${f.find_id}`)}
+                        onClick={() => retry(f)}
+                        className="text-[18px] xl:text-[21px] 2xl:text-[25px] py-2.5 bg-[#2B2B2B] text-white disabled:opacity-40"
+                      >
+                        {working(`retry-${f.find_id}`) ? 'Trying again…' : 'Try again'}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => decide(f, () => addFoundPiece(f.find_id, testMemberId), `Adding ${f.product_name} — keep going.`)}
+                        className="text-[18px] xl:text-[21px] 2xl:text-[25px] py-2.5 bg-[#2B2B2B] text-white"
+                      >
+                        Add to my wardrobe
+                      </button>
+                    )}
                     <button onClick={() => decide(f, () => notMine(f.find_id, testMemberId), `${f.product_name} put aside.`)} className="text-[18px] xl:text-[21px] 2xl:text-[25px] py-2 text-[#55534E] underline underline-offset-4">
                       Not mine
                     </button>

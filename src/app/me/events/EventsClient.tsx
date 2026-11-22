@@ -20,7 +20,6 @@ import {
   dismissMyEventPick, loadMyEvents, removeMyStylingTask, scheduleMyStylingTask, setMyEventBrief, setMyStylingTaskStatus, type EventsAreaView,
 } from './actions'
 import WaysToWear from '@/components/me/WaysToWear'
-import GoogleReviewNote from '@/components/me/GoogleReviewNote'
 import FallbackImage from '@/components/FallbackImage'
 
 type Task = EventsAreaView['tasks'][number]
@@ -254,8 +253,6 @@ export default function EventsClient({ testMemberId }: { testMemberId?: string }
   if (!calendar || !area || !area.memberId) return null
   const connected = calendar.connections.filter((c) => c.status !== 'disconnected')
   const picksByEvent = new Map(area.picks.map((e) => [e.event_id, e]))
-  const returnPath = typeof window !== 'undefined' ? window.location.pathname : '/me/events'
-  const connectHref = `/api/calendar/google/start?return=${encodeURIComponent(returnPath)}${testMemberId ? `&member=${testMemberId}` : ''}`
 
   return (
     <div className="space-y-8">
@@ -284,12 +281,8 @@ export default function EventsClient({ testMemberId }: { testMemberId?: string }
                   <span className="grid h-7 w-7 place-items-center rounded-md bg-white text-[#2B2B2B]"><AppleIcon /></span>
                   {working('apple') ? 'Reading…' : 'Connect Apple Calendar'}
                 </button>
-                {calendar.ready
-                  ? <a href={connectHref} className="inline-flex items-center rounded-full border border-[#2B2B2B] px-5 py-3 text-[20px] text-[#2B2B2B]">Google Calendar</a>
-                  : null}
               </div>
               {!appleCalendarAvailable() && <p className={`${SMALL} text-[#6E6B65]`}>Apple Calendar connects from the MYRA iPhone app.</p>}
-              {calendar.ready && <GoogleReviewNote />}
             </div>
           )}
         </div>

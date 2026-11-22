@@ -13,6 +13,8 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   const returnTo = safeReturnPath(req.nextUrl.searchParams.get('return'))
   const back = (msg: string) => NextResponse.redirect(new URL(`${returnTo}?calendar_error=${encodeURIComponent(msg)}`, req.url))
+  // MYRA asks Google for Gmail only now (2026-11-22); the calendar is the iPhone's own.
+  if (process.env.GOOGLE_CALENDAR_CONNECT !== 'on') return back('Apple Calendar connects from the MYRA iPhone app.')
   if (!calendarConfigured() || !emailSecretsConfigured()) return back('Calendar connect is not set up yet')
 
   const me = await resolveClientMember(req.nextUrl.searchParams.get('member') || undefined)

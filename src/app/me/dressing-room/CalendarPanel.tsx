@@ -5,7 +5,7 @@
 // should plan an outfit for; everything else is left alone.
 
 import { useEffect, useMemo, useState } from 'react'
-import GoogleReviewNote from '@/components/me/GoogleReviewNote'
+import AppleCalendarConnect from '@/components/me/AppleCalendarConnect'
 import {
   disconnectMyCalendar, loadCalendarPanel, planMyEvent, setMyEventStatus, syncMyCalendar,
   type CalendarPanelView,
@@ -57,8 +57,6 @@ export default function CalendarPanel({ testMemberId }: { testMemberId?: string 
   }, [view])
 
   if (!view || !view.memberId) return null
-  const returnPath = typeof window !== 'undefined' ? window.location.pathname : '/me/dressing-room'
-  const connectHref = `/api/calendar/google/start?return=${encodeURIComponent(returnPath)}${testMemberId ? `&member=${testMemberId}` : ''}`
   const connected = view.connections.filter((c) => c.status !== 'disconnected')
 
   // The month grid, Monday first.
@@ -87,11 +85,8 @@ export default function CalendarPanel({ testMemberId }: { testMemberId?: string 
       {!connected.length ? (
         <div className="space-y-4">
           <p className={`${T} text-[#4A4E57]`}>Connect your calendar and MYRA plans outfits for what is coming up.</p>
-          {view.ready
-            ? <a href={connectHref} className="inline-block text-[clamp(22px,1.25vw,38px)] px-[1.3em] py-[0.6em] bg-[#2B2B2B] text-white rounded-full">Connect Google Calendar</a>
-            : <span className={`${T} inline-block px-6 py-3 border border-[#C3BFB8] text-[#8C8A85] rounded-full`}>Connect Google Calendar (not set up yet)</span>}
+          <AppleCalendarConnect testMemberId={testMemberId} textClass={SMALL} onDone={async (m) => { setMsg(m); await refresh() }} />
           <p className={`${SMALL} text-[#6E6B65]`}>Read only. MYRA keeps the title, time and place of events worth dressing for, nothing else.</p>
-          {view.ready && <GoogleReviewNote />}
         </div>
       ) : (
         <div className="grid lg:grid-cols-[minmax(280px,26%)_minmax(0,1fr)] gap-8 items-start">

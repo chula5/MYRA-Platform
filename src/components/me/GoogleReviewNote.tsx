@@ -1,5 +1,5 @@
-// GOOGLE REVIEW NOTE — one line beside every Connect Gmail / Connect Google
-// Calendar button while MYRA's Google verification is pending (Google Cloud
+// GOOGLE REVIEW NOTE — one line beside every Connect Gmail
+// button while MYRA's Google verification is pending (Google Cloud
 // project myra-508821, published 2026-11-17, scopes under review). Google
 // shows "Google hasn't verified this app" and the member has to tap Advanced
 // → Go to MYRA; without warning, that page reads as a reason to stop. Delete
