@@ -188,7 +188,7 @@ export default function YouSettings({ testMemberId, initial }: { testMemberId?: 
 
   const accounts = [
     ...view.inboxes.map((c) => ({ id: c.connection_id, kind: 'inbox' as const, service: c.provider === 'gmail' ? 'gmail' as const : 'email' as const, title: c.provider === 'gmail' ? 'Gmail' : 'Email', who: c.email, when: `read ${when(c.last_scanned_at)}` })),
-    ...view.calendars.map((c) => ({ id: c.connection_id, kind: 'calendar' as const, service: 'calendar' as const, title: c.provider === 'apple' ? 'Apple Calendar' : 'Google Calendar', who: c.provider === 'apple' ? 'On this iPhone' : c.email, when: `checked ${when(c.last_synced_at)}` })),
+    ...view.calendars.map((c) => ({ id: c.connection_id, kind: 'calendar' as const, service: 'calendar' as const, title: c.provider === 'apple' ? 'Apple Calendar' : 'Calendar', who: c.provider === 'apple' ? 'On this iPhone' : c.email, when: `checked ${when(c.last_synced_at)}` })),
     ...view.instagram.map((c) => ({ id: c.connection_id, kind: 'instagram' as const, service: 'instagram' as const, title: 'Instagram', who: c.username ? `@${c.username}` : 'Instagram', when: `synced ${when(c.last_synced_at)}` })),
   ]
 

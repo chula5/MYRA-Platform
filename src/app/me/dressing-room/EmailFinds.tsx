@@ -5,7 +5,6 @@
 
 import { useEffect, useRef, useState } from 'react'
 import FallbackImage from '@/components/FallbackImage'
-import VirginConnect from './VirginConnect'
 import ServiceMark from '@/components/me/ServiceMark'
 import GoogleReviewNote from '@/components/me/GoogleReviewNote'
 import {
@@ -21,7 +20,6 @@ export default function EmailFinds({ testMemberId, onAdded, onCount }: { testMem
   const [broken, setBroken] = useState<string[]>([])
   // The room's FOUND IN EMAIL tab shows how many are waiting to be looked through.
   useEffect(() => { if (view) onCount?.(view.finds.filter((f) => !broken.includes(f.find_id)).length + view.returned.length) }, [view, broken, onCount])
-  const [virginStep, setVirginStep] = useState<0 | 1>(0)
   const [picked, setPicked] = useState<string[]>([])
   // One key per button in flight: adding a piece never blocks the next card.
   const [busy, setBusy] = useState<string[]>([])
@@ -151,7 +149,7 @@ export default function EmailFinds({ testMemberId, onAdded, onCount }: { testMem
         <div className="space-y-3">
           {view.connections.map((c) => (
             <div key={c.connection_id} className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-[#C3BFB8] pt-3">
-              <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#2B2B2B]">{c.provider === 'gmail' ? 'Gmail' : 'Virgin Media'} · {c.email}</p>
+              <p className="text-[20px] xl:text-[23px] 2xl:text-[27px] text-[#2B2B2B]">{c.provider === 'gmail' ? 'Gmail' : 'Email'} · {c.email}</p>
               <p className="text-[18px] xl:text-[21px] 2xl:text-[25px] text-[#55534E]">
                 {c.status === 'error' ? <span className="text-[#B83A3A]">{plain(c.error)}</span>
                   : c.scan && (c.scan.status === 'queued' || c.scan.status === 'running')
@@ -180,19 +178,9 @@ export default function EmailFinds({ testMemberId, onAdded, onCount }: { testMem
             <ServiceMark service="gmail" size="sm" />Gmail · not set up yet
           </span>
         )}
-        <button onClick={() => setVirginStep(virginStep ? 0 : 1)} className="inline-flex items-center gap-3 text-[22px] xl:text-[25px] 2xl:text-[29px] pl-3 pr-7 py-2.5 border border-[#2B2B2B] text-[#2B2B2B] rounded-full">
-          <ServiceMark service="email" size="sm" />Virgin Media
-        </button>
       </div>
       {view.gmailReady && <GoogleReviewNote className="mt-3" />}
 
-      {virginStep > 0 && (
-        <VirginConnect
-          testMemberId={testMemberId}
-          secretsReady={view.secretsReady}
-          onConnected={async () => { setVirginStep(0); setMsg('Connected — reading the past year of order emails.'); await refresh() }}
-        />
-      )}
 
       {/* Pieces in the dressing room that an email says went back */}
       {view.returned.length > 0 && (

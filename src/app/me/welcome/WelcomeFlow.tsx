@@ -27,7 +27,6 @@ import { useRouter } from 'next/navigation'
 import StyleWorlds from '@/components/me/StyleWorlds'
 import GoogleReviewNote from '@/components/me/GoogleReviewNote'
 import { connectAppleCalendar } from '@/components/me/AppleCalendarConnect'
-import VirginConnect from '../dressing-room/VirginConnect'
 import InstagramImport from '../dressing-room/InstagramImport'
 import { loadEmailPanel, scanNow, type EmailPanelView } from '../dressing-room/email-actions'
 import { loadArchivalPanel, syncArchivalInstagram, uploadArchivalPhoto, nudgeArchival, type ArchivalPanelView } from '../dressing-room/archival-actions'
@@ -58,8 +57,6 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
   const [archival, setArchival] = useState<ArchivalPanelView | null>(null)
   const [calendar, setCalendar] = useState<CalendarPanelView | null>(null)
   const [mirrorOpen, setMirrorOpen] = useState(false)
-  const [virgin, setVirgin] = useState(false)
-  const [emailChoice, setEmailChoice] = useState(false)
   const [igImport, setIgImport] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -288,7 +285,7 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
         </li>
 
         <li className="item">
-          <button type="button" data-app="email" data-on={inboxes.length > 0} className="btn" aria-label="Email" onClick={() => setEmailChoice((v) => !v)}>
+          <button type="button" data-app="email" data-on={inboxes.length > 0} className="btn" aria-label="Email" onClick={() => (email?.gmailReady ? window.location.assign(gmailHref) : setMsg('Gmail connect is not switched on yet.'))}>
             <span className="filled" />
             <svg viewBox="0 0 64 64" aria-hidden>
               <rect x="8" y="15" width="48" height="34" rx="5" {...S} strokeWidth={4} />
@@ -296,8 +293,8 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
             </svg>
             {inboxes.length > 0 && <span className="done" aria-label="Connected">✓</span>}
           </button>
-          <span className="tip">Email finds what you have bought. Only order emails are read</span>
-          <span className="label">Email</span>
+          <span className="tip">Gmail finds what you have bought. Only order emails are read</span>
+          <span className="label">Gmail</span>
         </li>
 
         <li className="item">
@@ -363,31 +360,16 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
         </div>
       )}
 
-      {emailChoice && (
-        <div className="flex flex-wrap justify-center gap-4">
-          {email?.gmailReady
-            ? <a href={gmailHref} className={PILL}>{inboxes.length ? 'Another Gmail' : 'Gmail'}</a>
-            : <button onClick={() => setMsg('Gmail connect is not switched on yet.')} className={PILL}>Gmail</button>}
-          <button onClick={() => { setVirgin(!virgin); setEmailChoice(false) }} className={PILL}>Virgin Media / Blueyonder</button>
-        </div>
-      )}
-
       {email?.gmailReady && <GoogleReviewNote className="text-center max-w-[44em] mx-auto" />}
 
       {(inboxes.length > 0 || cals.length > 0 || igs.length > 0) && (
         <p className={`${BODY} myra-guide-text text-center text-[#55534E]`}>
-          ✓ {[...igs.map((c) => (c.username ? `@${c.username}` : 'Instagram')), ...inboxes.map((c) => c.email), ...cals.map((c) => `${c.email} calendar`)].join(' · ')}
+          ✓ {[...igs.map((c) => (c.username ? `@${c.username}` : 'Instagram')), ...inboxes.map((c) => c.email), ...cals.map((c) => (c.provider === 'apple' ? 'Apple Calendar' : `${c.email} calendar`))].join(' · ')}
           {photos > 0 ? ` · ${photos} photo${photos === 1 ? '' : 's'}` : ''}
         </p>
       )}
 
       {igImport && <InstagramImport testMemberId={previewMemberId} onClose={() => setIgImport(false)} onImported={() => { void refresh() }} />}
-
-      {virgin && (
-        <div className="flex justify-center">
-          <VirginConnect testMemberId={previewMemberId} secretsReady={!!email?.secretsReady} onConnected={async () => { setVirgin(false); setMsg('Email connected. MYRA is reading your order emails.'); void scanNow().catch(() => undefined); await refresh() }} />
-        </div>
-      )}
 
       <p className="text-center text-[clamp(18px,1.05vw,30px)] text-[#6E6B65]">You can connect these any time in your Dressing Room.</p>
     </div>
