@@ -1,0 +1,24 @@
+{
+  "name": "Chloé",
+  "kind": "house",
+  "status": "draft",
+  "handle": "@chloe",
+  "members": ["Carys"],
+  "brief": {
+    "summary": "The Chloé girl: 70s bohemian ease with a Parisian cut — a floaty blouse or broderie dress, high-waisted flares, a wide belt, a suede or shearling jacket and a slouchy leather bag. Romantic but never sweet; the fabrics are natural, the colours sun-faded, the shoes a wedge or a boot.",
+    "signatures": [
+      "floaty blouse with ruffle or pin-tuck detail",
+      "broderie anglaise or lace midi dress",
+      "high-waisted flared jeans or trousers",
+      "suede or shearling jacket",
+      "cape or blanket coat",
+      "wide tan leather belt",
+      "slouchy leather or woven bag",
+      "wooden wedge or a chunky leather boot",
+      "scalloped or cut-out detail"
+    ],
+    "silhouettes": ["flared leg with a tucked blouse", "floaty midi dress belted at the waist", "long cape over narrow trousers", "soft, unstructured shoulders"],
+    "palette": ["cream", "tan", "butterscotch", "faded rose", "sage", "chocolate", "denim"],
+    "nevers": ["hard black tailoring", "neon", "bodycon", "logos", "glossy synthetic fabrics"]
+  }
+}

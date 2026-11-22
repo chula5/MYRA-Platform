@@ -1,0 +1,31 @@
+{
+  "name": "Dua Lipa",
+  "kind": "celebrity",
+  "status": "draft",
+  "handle": "@dualipa",
+  "members": ["Bella Gasparro"],
+  "brief": {
+    "summary": "Off-duty glamour built on great jeans. Light-wash straight or baggy denim is the constant, and the drama is all on top: an oversized crisp white shirt, a big black leather trench, a shaggy fur or a fur-trimmed leather maxi coat, a cropped brown leather jacket with shearling cuffs, a snake-print long coat. Proportions are big-on-top / straight-below. Finish with a black ballet flat (tabi or Mary Jane) or a slim pointed boot, a structured black shoulder bag and one statement silver earring or hoop. Evening goes long and lean: a black column midi or a bias satin slip skirt with a mannish coat over it and a strappy heel.",
+    "signatures": [
+      "light-wash straight or relaxed jeans, full length or frayed",
+      "oversized crisp white poplin shirt, sleeves pushed",
+      "long black leather trench, oversized",
+      "shaggy black fur or shearling jacket",
+      "fur-trimmed leather maxi coat in chocolate or burgundy",
+      "cropped brown leather jacket with shearling collar and cuffs",
+      "snake-print long coat over a slogan tee and black jeans",
+      "khaki cotton overshirt with a leather collar",
+      "black sleeveless column midi dress",
+      "bias-cut satin slip skirt with a fitted tank and a man's coat",
+      "black Mary Jane or tabi ballet flat",
+      "slim pointed black ankle boot",
+      "strappy open-toe heel for evening",
+      "structured black leather shoulder bag",
+      "one sculptural silver earring, gold hoops, stacked rings",
+      "baseball cap and dark sunglasses"
+    ],
+    "silhouettes": ["big on top, straight below", "long coat over jeans", "lean column midi", "cropped jacket over a low-rise jean", "slip skirt + fitted tank + oversized coat"],
+    "palette": ["black", "chocolate and burgundy brown", "light-wash denim", "crisp white", "khaki", "camel fur", "satin champagne", "one hit of red or leopard"],
+    "nevers": ["frills and prairie ruffles", "head-to-toe pastel", "chunky dad trainers", "matchy co-ord sets", "skinny jeans", "fussy prints"]
+  }
+}

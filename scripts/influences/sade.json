@@ -1,0 +1,23 @@
+{
+  "name": "Sade",
+  "kind": "muse",
+  "status": "draft",
+  "handle": null,
+  "members": ["Sevinch"],
+  "brief": {
+    "summary": "Timeless, sultry minimalism: a crisp white shirt or a black body with high-waisted jeans or tailored trousers, a long black coat, a slicked low ponytail, big gold hoops and a red lip. Few pieces, clean lines and strong contrast; the effect is ease and confidence, never trend.",
+    "signatures": [
+      "crisp oversized white shirt tucked into high-waisted jeans or trousers",
+      "black fitted bodysuit or fine knit with a wide belt",
+      "high-waisted straight-leg jeans",
+      "long black or camel wool coat worn open",
+      "black column or slip dress for evening",
+      "wide leather belt at the waist",
+      "large gold hoop earrings and a gold cuff",
+      "simple black boots or pumps"
+    ],
+    "silhouettes": ["high-waisted, defined waist", "clean column lines", "long coats", "straight-leg jeans and trousers"],
+    "palette": ["black", "white", "denim blue", "camel", "red accent", "gold jewellery"],
+    "nevers": ["busy prints", "frills", "pastel sweetness", "logos", "anything over-accessorised"]
+  }
+}

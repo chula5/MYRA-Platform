@@ -1,0 +1,24 @@
+{
+  "name": "Matilda Djerf",
+  "kind": "influencer",
+  "status": "draft",
+  "handle": "@matildadjerf",
+  "members": ["Bella"],
+  "brief": {
+    "summary": "Soft Scandinavian ease: clean feminine basics in natural fabrics, mostly neutral with a sky-blue or buttery accent, worn simply so the cut and the hair do the talking. Fitted tees and knits, relaxed trousers and denim, slip and midi skirts, loafers or ballet flats — pretty without being sweet.",
+    "signatures": [
+      "fitted baby or scoop tee",
+      "fine-knit cardigan buttoned as a top",
+      "relaxed straight or wide jeans",
+      "satin or cotton midi skirt",
+      "crisp oversized shirt",
+      "ballet flats or loafers",
+      "trench or soft wool coat",
+      "stripes and gingham in blue",
+      "linen sets for summer"
+    ],
+    "silhouettes": ["fitted top + relaxed bottom", "midi skirt with a short knit", "shirt over a slip", "easy wide trouser"],
+    "palette": ["white and cream", "sky blue", "butter yellow", "camel", "soft grey", "denim"],
+    "nevers": ["loud logos", "neon", "bodycon going-out dresses", "heavy embellishment", "synthetic shine"]
+  }
+}

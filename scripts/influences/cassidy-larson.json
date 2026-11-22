@@ -1,0 +1,24 @@
+{
+  "name": "Cassidy Larson",
+  "kind": "influencer",
+  "status": "draft",
+  "handle": "@cassidylarson",
+  "members": ["Carys"],
+  "brief": {
+    "summary": "Playful, thrifted-feeling eclecticism worn with intent: one loud piece (an embellished or patchwork jacket, a printed skirt, a cowboy boot) against plain, well-cut basics. Gingham, stripes and vintage-looking knits mix freely; proportions are slightly undone — a cropped flare, an oversized shirt, a shrunken cardigan — and the finish is a classic bag or a loafer so it never reads as costume.",
+    "signatures": [
+      "embellished, beaded or patchwork jacket over a plain shirt",
+      "gingham or striped button-down, half-tucked",
+      "black cropped kick-flare trousers",
+      "vintage-look cardigan or fair isle knit",
+      "slip skirt or printed midi with a chunky knit",
+      "cowboy or square-toe ankle boot",
+      "loafers with socks",
+      "one classic structured bag against the mix",
+      "ballet flats and a mini skirt for day"
+    ],
+    "silhouettes": ["cropped flare and straight leg", "oversized shirt over fitted bottom", "shrunken knit over a long skirt", "boxy cropped jacket"],
+    "palette": ["black and cream base", "gingham blue", "mustard and tomato accents", "faded denim", "brown leather"],
+    "nevers": ["head-to-toe matching sets", "fast-fashion going-out dresses", "bodycon", "logo-led pieces", "anything too polished or corporate"]
+  }
+}

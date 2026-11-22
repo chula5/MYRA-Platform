@@ -1,0 +1,24 @@
+{
+  "name": "Rosie Huntington-Whiteley",
+  "kind": "celebrity",
+  "status": "draft",
+  "handle": "@rosiehw",
+  "members": ["Sevinch"],
+  "brief": {
+    "summary": "Polished, sensual minimalism in a warm neutral palette: oversized camel and chocolate tailoring, fine knits and silk slips, tonal head-to-toe dressing in cream, taupe and brown, finished with gold jewellery, sleek hair and a pointed heel. Long lines and a little skin (a slip, an open collar) keep it soft rather than severe; nothing is fussy.",
+    "signatures": [
+      "oversized camel or chocolate wool coat over tonal knit and trousers",
+      "fine-gauge cashmere roll neck or polo with wide tailored trousers",
+      "bias-cut silk slip skirt or dress under a long coat or oversized blazer",
+      "double-breasted oversized blazer with straight jeans or matching trousers",
+      "tonal cream, beige and taupe dressing head to toe",
+      "leather trousers or a leather midi skirt with a soft knit",
+      "pointed slingbacks, knee boots, sleek mules",
+      "structured leather top-handle or shoulder bag, tan or black",
+      "fine gold chains, hoops and small sunglasses"
+    ],
+    "silhouettes": ["long, lean lines", "oversized tailoring", "bias-cut midi slips", "wide or straight-leg trousers"],
+    "palette": ["camel", "chocolate brown", "cream", "taupe/beige", "black", "white"],
+    "nevers": ["loud prints", "visible logos", "neon or fuchsia", "frills and ruffles", "fussy layering"]
+  }
+}

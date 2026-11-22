@@ -1,0 +1,24 @@
+{
+  "name": "Djerf Avenue",
+  "kind": "house",
+  "status": "draft",
+  "handle": "@djerfavenue",
+  "members": ["Bella Gasparro"],
+  "brief": {
+    "summary": "Matilda Djerf's own label: easy Scandinavian femininity in soft, natural-feeling fabrics. Fitted baby tees and scoop tanks, fine-knit cardigans buttoned as tops, relaxed straight jeans and wide trousers, slip and midi skirts, crisp oversized shirts, linen sets in summer. Mostly cream, white and denim with sky blue, butter yellow and soft pink stripes; ballet flats, loafers and a soft shoulder bag. Pretty, clean and wearable, never sweet or fussy.",
+    "signatures": [
+      "fitted baby tee or scoop tank",
+      "fine-knit cardigan buttoned as a top",
+      "oversized striped or white poplin shirt",
+      "relaxed straight or wide jeans",
+      "satin or cotton midi slip skirt",
+      "linen co-ord for summer",
+      "soft trench or wool coat",
+      "ballet flats and loafers",
+      "blue and white stripes, gingham"
+    ],
+    "silhouettes": ["fitted top + relaxed bottom", "midi skirt with a short knit", "shirt over a slip", "easy wide trouser"],
+    "palette": ["cream and white", "sky blue", "butter yellow", "soft pink", "camel", "light denim"],
+    "nevers": ["loud logos", "neon", "bodycon", "heavy embellishment", "synthetic shine"]
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "Ralph Lauren",
+  "kind": "house",
+  "status": "draft",
+  "handle": "@ralphlauren",
+  "members": ["Carys"],
+  "brief": {
+    "summary": "American prep and country: a navy blazer or tweed hacking jacket over a crisp oxford shirt, a cable-knit jumper, cream wide-leg or straight trousers, riding boots or loafers, a silk scarf and a camel coat. Worn by a younger wardrobe as the classic thread that steadies an eclectic mix — the oxford under the embellished jacket, the loafer with the printed skirt.",
+    "signatures": [
+      "navy blazer",
+      "cable-knit jumper or cricket knit",
+      "crisp oxford or striped shirt",
+      "cream or khaki wide-leg trouser",
+      "riding boot or penny loafer",
+      "camel wool coat",
+      "silk scarf tied at the neck",
+      "tweed hacking jacket",
+      "a worn leather belt and a canvas tote"
+    ],
+    "silhouettes": ["tailored jacket over a straight or wide trouser", "tucked shirt with a high waist", "long coat over a fine knit", "collar out over a crew knit"],
+    "palette": ["navy", "cream", "camel", "hunter green", "burgundy", "chambray blue", "tan leather"],
+    "nevers": ["neon", "metallic vinyl or lamé", "bodycon", "micro mini", "logo-heavy streetwear"]
+  }
+}
