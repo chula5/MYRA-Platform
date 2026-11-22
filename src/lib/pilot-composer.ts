@@ -149,8 +149,21 @@ export const NEAREST_LOOK_WEIGHT = 0.35
 export const NEAREST_LOOK_FLOOR = 0.79
 /** At this it belongs in one of her pictures. */
 export const NEAREST_LOOK_FULL = 0.86
+// Remembered per (her looks, piece): one build asks this of the same piece
+// once per occasion and again for every swap, against dozens of looks each
+// time. Both are held as loaded and never edited, so the objects are the key.
+const nearestFitOf = new WeakMap<number[][], WeakMap<object, number>>()
 export function nearestLookFit(looks: number[][] | null | undefined, item: ItemWithBrand): number {
   if (!looks?.length) return 0
+  let known = nearestFitOf.get(looks)
+  if (!known) { known = new WeakMap(); nearestFitOf.set(looks, known) }
+  const hit = known.get(item)
+  if (hit !== undefined) return hit
+  const fit = nearestLookFitFresh(looks, item)
+  known.set(item, fit)
+  return fit
+}
+function nearestLookFitFresh(looks: number[][], item: ItemWithBrand): number {
   const v = pseudoVec(item)
   let best = 0
   for (const look of looks) {
@@ -1242,10 +1255,14 @@ export function rankAlternates(
       return { item: i, score: compat + pull }
     })
     .sort((a, b) => b.score - a.score)
-  const judged = keepItems.length
-    ? ranked.filter((r) =>
-        memberGate(t, keepItems[0], [...keepItems.slice(1), r.item].map((item) => ({ item, slot: slotForItemType(item.item_type) })), true),
-      )
-    : ranked
-  return (judged.length ? judged : ranked).slice(0, limit)
+  if (!keepItems.length) return ranked.slice(0, limit)
+  // Judged best first and stopped at the limit: the same answer as judging the
+  // whole slot and keeping the top few, without putting thousands of pieces
+  // nobody will see through her gates (half of a styling build, 2026-11-11).
+  const judged: typeof ranked = []
+  for (const r of ranked) {
+    if (judged.length >= limit) break
+    if (memberGate(t, keepItems[0], [...keepItems.slice(1), r.item].map((item) => ({ item, slot: slotForItemType(item.item_type) })), true)) judged.push(r)
+  }
+  return judged.length ? judged : ranked.slice(0, limit)
 }
