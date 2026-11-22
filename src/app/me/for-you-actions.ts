@@ -11,6 +11,7 @@ import { readStylePrefs } from '@/lib/pilot-stylist'
 import { whyThisSuitsHer } from '@/lib/look-why'
 import { OCCASION_LABEL } from '@/lib/client-occasions'
 import { reactToLook } from './looks/actions'
+import { mirrorLinkState, NO_MIRROR, type MirrorLinkState } from '@/lib/mirror/presence'
 
 export interface ForYouLook {
   look_id: string
@@ -38,6 +39,8 @@ export interface ForYouView {
   /** Chloe testing as her. */
   test: boolean
   looks: ForYouLook[]
+  /** Whether MYRA Mirror has checked in from her browser: For You asks her to connect it until it has. */
+  mirror: MirrorLinkState
   error?: string
 }
 
@@ -46,8 +49,9 @@ const DIM_COLUMNS = 'item_id, retailer_url, image_url, item_type, colour_family,
 
 export async function loadForYou(asMemberId?: string): Promise<ForYouView> {
   const me = await resolveClientMember(asMemberId)
-  if (!me) return { memberId: null, firstName: '', test: false, looks: [] }
-  const base = { memberId: me.memberId, firstName: firstNameOf(me.name), test: me.test }
+  if (!me) return { memberId: null, firstName: '', test: false, looks: [], mirror: NO_MIRROR }
+  const mirror = await mirrorLinkState(me.memberId).catch(() => NO_MIRROR)
+  const base = { memberId: me.memberId, firstName: firstNameOf(me.name), test: me.test, mirror }
   try {
     const admin = createAdminClient() as any
     const [{ data: member }, { data: dels }] = await Promise.all([
