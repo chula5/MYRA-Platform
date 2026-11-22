@@ -2,7 +2,7 @@
 // structured data use it, so search engines see one domain (www), never two.
 export const SITE_URL = 'https://www.myraassistant.co.uk'
 export const SITE_NAME = 'MYRA'
-export const SITE_TITLE = 'MYRA | Private personal stylist, outfits built around you'
+export const SITE_TITLE = 'MYRA | Your personal styling assistant, outfits built for every occasion'
 export const SITE_DESCRIPTION =
   'MYRA is a private styling service: complete outfits built around your taste, your size and what you already own, for the occasions coming up. Membership is by application.'
 
