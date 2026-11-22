@@ -773,6 +773,8 @@ function PieceCard({ piece, picked, styling, working = false, saved, saving, rea
   /** A find of a saved search: why it matched, and her YES / NOT THIS. */
   find?: { piece: SavedSearchPiece; onAnswer: (v: 'yes' | 'no') => void }
 }) {
+  // A piece whose picture is gone (the shop renamed the file) is not shown at all.
+  const [noPicture, setNoPicture] = useState(!piece.image_url)
   const choice = (mode: 'wardrobe' | 'new', label: string) => {
     const on = styling === mode
     return (
@@ -789,7 +791,7 @@ function PieceCard({ piece, picked, styling, working = false, saved, saving, rea
   const body = (
     <>
       <div className="relative aspect-[3/4] bg-[#F3F2F0] overflow-hidden">
-        {piece.image_url && <FallbackImage src={piece.image_url} thumbWidth={600} alt={piece.product_name} className="absolute inset-0 w-full h-full object-cover" />}
+        {piece.image_url && <FallbackImage src={piece.image_url} thumbWidth={600} alt={piece.product_name} onExhausted={() => setNoPicture(true)} className="absolute inset-0 w-full h-full object-cover" />}
       </div>
       <div className="px-3 sm:px-4 py-3 sm:py-3.5">
         {piece.brand && <p className="text-[14px] sm:text-[16px] tracking-[0.08em] sm:tracking-[0.12em] text-[#6E6B65] leading-snug line-clamp-2 break-words">{piece.brand.toUpperCase()}</p>}
@@ -800,6 +802,7 @@ function PieceCard({ piece, picked, styling, working = false, saved, saving, rea
       </div>
     </>
   )
+  if (noPicture) return null
   return (
     <div ref={cardRef} className={`relative text-left bg-white rounded-[16px] overflow-hidden shadow-[0_1px_8px_rgba(43,43,43,0.06)] transition-shadow ${picked ? 'ring-2 ring-[#2B2B2B]' : ''}`}>
       <button type="button" onClick={onOpen} className="block w-full text-left" aria-label={`Open ${piece.product_name}`}>{body}</button>

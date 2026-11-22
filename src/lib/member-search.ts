@@ -12,7 +12,7 @@
 import 'server-only'
 import { parseQuery, piecesWord, STOPWORDS, MATERIAL_TERMS, TYPE_FORMALITY, COLOUR, TYPE, MATERIAL, CUT_WORDS, isTypoOf, type ParsedQuery } from '@/lib/search-taxonomy'
 import { rankPieces, facetCount, mixByType, cutFits, type RankContext, type Scored } from '@/lib/browse-rank'
-import { brandKey, loadBrandGraph, computeSimilarBrands, SEED } from '@/lib/brand-affinity'
+import { brandKey, SEED } from '@/lib/brand-affinity'
 import { isOwnedItem } from '@/lib/wardrobe/owned-items'
 import { loadMemberSizeProfile, loadSizeRowsFor, filterItemsForShopper } from '@/lib/size-availability'
 import { CLOTHING_LADDER, SHOE_LADDER, sizeCategoryFor, acceptedValues } from '@/lib/size-canonical'
@@ -567,18 +567,19 @@ export async function searchForMember(
     if (cold) pools.push(withFacets(base()).gte('material_weight', 3).limit(POOL))
     else pools.push(withFacets(base()).lte('material_weight', 2).limit(POOL))
   }
-  // Labels that stand next to the one she named: the SEE SIMILAR for a brand
-  // search is other brands like it, still held to every other facet.
-  const likeBrands: Promise<string[]> = brandIds.length
-    ? loadBrandGraph(admin).then((graph) => computeSimilarBrands(brandIds[0], graph, 10).map((s) => s.brand_id)).catch(() => [])
-    : Promise.resolve([])
+  // A label she named is the whole answer (Chloe, 2026-11-22: "Dries Van
+  // Noten trainers" was filled with Bellerose trainers). Nothing from another
+  // label is shown for it — not as an answer, not as SEE SIMILAR, not as a
+  // CLOSE kept by her saved search. When MYRA has none of that label's piece,
+  // she sees none, and her saved search says MYRA has asked for its shop.
+  const ofHerLabel = (row: any) => !brandIds.length || ctx.brandIds.has(String(row?.brand_id ?? ''))
 
-  const [results, similarBrandIds] = await Promise.all([Promise.all(pools), likeBrands])
+  const results = await Promise.all(pools)
   const candidates: any[] = []
   const seenOver = new Set<string>()
   results.forEach((r, i) => {
     for (const row of ((r?.data ?? []) as any[])) {
-      if (!showable(row)) continue
+      if (!showable(row) || !ofHerLabel(row)) continue
       if (affordable(row)) candidates.push(row)
       // Held back by her budget — counted only where it would have been a real answer.
       else if ((!strict.length || strict.includes(i)) && !seenOver.has(row.item_id)) { seenOver.add(row.item_id); overBudget++ }
@@ -595,18 +596,8 @@ export async function searchForMember(
   const ranked = rankPieces(candidates, asked, ctx)
   if (parsed !== heard) ranked.exact = mixByType(ranked.exact)
   let similar: Scored<any>[] = ranked.similar
-  let similarKind: BrowseView['similarKind'] = similar.length ? 'close' : null
+  const similarKind: BrowseView['similarKind'] = similar.length ? 'close' : null
 
-  if (similarBrandIds.length) {
-    const { data } = await withFacets(base().in('brand_id', similarBrandIds), true).limit(POOL)
-    const rows = ((data ?? []) as any[]).filter((it) => showable(it) && affordable(it))
-    const fromLikeBrands = rankPieces(rows, { ...asked, brand: null }, ctx).exact
-    if (fromLikeBrands.length) {
-      const taken = new Set(fromLikeBrands.map((s) => s.it.item_id))
-      similar = [...fromLikeBrands, ...similar.filter((s) => !taken.has(s.it.item_id))]
-      similarKind = 'brands'
-    }
-  }
   const exactIds = new Set(ranked.exact.map((s) => s.it.item_id))
   similar = similar.filter((s) => !exactIds.has(s.it.item_id))
 
@@ -615,7 +606,7 @@ export async function searchForMember(
   //    matched at all they come from the catalogue, so the panel is never bare.
   let facetSource: any[] = [...ranked.exact.map((s) => s.it), ...similar.map((s) => s.it)]
   if (!facetSource.length) {
-    const { data } = await base().limit(240)
+    const { data } = await (brandIds.length ? base().in('brand_id', brandIds) : base()).limit(240)
     facetSource = ((data ?? []) as any[]).filter((it) => showable(it) && affordable(it))
   }
   const brandCount = new Map<string, number>()
@@ -683,7 +674,7 @@ export async function searchForMember(
     similarN = similarN.filter((k) => fit.has(k.it.item_id))
   }
 
-  const close = similarKind !== 'brands' ? closeGroups(similarN.slice(0, MOST), asked, brandName) : null
+  const close = closeGroups(similarN.slice(0, MOST), asked, brandName)
   return {
     query: q,
     pieces: exactN.slice(0, MOST).map((k) => pieceOf(k.it)),

@@ -43,14 +43,17 @@ const CLOSE_BELOW = 3
  * long ask ("sequin embellished midi pencil skirt") has almost none — the
  * nearest kind of near-miss, labelled for what it is: "CLOSE · SEQUIN SKIRTS".
  */
-export function keepFromView(view: { pieces: BrowsePiece[]; similar: BrowsePiece[]; similarKind: string | null; similarGroups?: { title: string; ids: string[] }[]; read: string[] }, sized: boolean): { piece: BrowsePiece; why: string | null }[] {
+export function keepFromView(view: { pieces: BrowsePiece[]; similar: BrowsePiece[]; similarKind: string | null; similarGroups?: { title: string; ids: string[] }[]; read: string[]; brand?: string | null }, sized: boolean): { piece: BrowsePiece; why: string | null }[] {
   const exactWhy = whyLine(view.read, sized)
-  const out = view.pieces.map((piece) => ({ piece, why: exactWhy }))
-  const group = view.similarKind === 'close' ? view.similarGroups?.[0] : undefined
+  // Never a piece without its picture: a tile with no image is not a find.
+  const out = view.pieces.filter((p) => !!p.image_url).map((piece) => ({ piece, why: exactWhy }))
+  // A search that names a label keeps that label's answers only: no CLOSE
+  // ones, which would be another of its pieces or another label's trainers.
+  const group = view.similarKind === 'close' && !view.brand ? view.similarGroups?.[0] : undefined
   if (out.length < CLOSE_BELOW && group) {
     const ids = new Set(group.ids)
     const why = `CLOSE · ${group.title}${sized ? ' · YOUR SIZE' : ''}`
-    for (const piece of view.similar) if (ids.has(piece.item_id)) out.push({ piece, why })
+    for (const piece of view.similar) if (ids.has(piece.item_id) && piece.image_url) out.push({ piece, why })
   }
   return out
 }
@@ -254,7 +257,7 @@ export async function savedSearchesFor(admin: any, memberId: string, perSearch =
     .order('found_at', { ascending: false }).limit(MAX_SEARCHES * 40)
   const by = new Map<string, any[]>()
   for (const h of (hits ?? []) as any[]) {
-    if (!h.item || h.item.stock_status === 'out_of_stock' || h.verdict === 'no') continue
+    if (!h.item || !h.item.image_url || h.item.stock_status === 'out_of_stock' || h.verdict === 'no') continue
     const l = by.get(h.saved_search_id) ?? []
     l.push(h)
     by.set(h.saved_search_id, l)

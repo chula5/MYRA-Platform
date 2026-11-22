@@ -85,25 +85,30 @@ export default function BlackFriday({ testMemberId, standalone = false, initial,
       {!inPanel && <p className={NOTE}>YOUR BRANDS ON SALE, IN YOUR SIZE</p>}
       {gapLine && <p className="mt-3 text-[17px] sm:text-[20px] tracking-[0.1em] text-[#2B2B2B]">{gapLine}</p>}
 
-      {/* Her brands on sale: tap one to see only its pieces. */}
-      <div className="flex flex-wrap gap-2 mt-6">
-        <button
-          type="button"
-          onClick={() => setBrand(null)}
-          className={`text-[16px] sm:text-[18px] tracking-[0.08em] rounded-full px-5 py-2.5 border ${brand == null ? 'bg-[#2B2B2B] text-white border-[#2B2B2B]' : 'border-[rgba(43,43,43,0.28)] text-[#2B2B2B] hover:bg-white'}`}
-        >
-          ALL · {view.pieces.length}
-        </button>
-        {view.brands.map((b) => (
-          <button
-            key={b.brand_id}
-            type="button"
-            onClick={() => pick(b.name)}
-            className={`text-[16px] sm:text-[18px] tracking-[0.08em] rounded-full px-5 py-2.5 border ${brand === b.name ? 'bg-[#2B2B2B] text-white border-[#2B2B2B]' : 'border-[rgba(43,43,43,0.28)] text-[#2B2B2B] hover:bg-white'}`}
+      {/* Her brands on sale, folded into one button (Chloe, 2026-11-22: the
+          row of names was a wall). It opens the phone's own picker; choosing a
+          label shows only its pieces, ALL BRANDS shows everything again. */}
+      <div className="mt-6 flex flex-wrap items-center gap-3">
+        <label className={`relative inline-flex items-center gap-3 rounded-full border px-5 py-2.5 text-[16px] sm:text-[18px] tracking-[0.08em] cursor-pointer ${brand ? 'bg-[#2B2B2B] text-white border-[#2B2B2B]' : 'border-[rgba(43,43,43,0.28)] text-[#2B2B2B] hover:bg-white'}`}>
+          <span>{brand ? brand.toUpperCase() : 'ALL BRANDS'} <span className={brand ? 'text-[#C9CCD1]' : 'text-[#7C838B]'}>· {brand ? shown.length : view.pieces.length}</span></span>
+          <svg aria-hidden viewBox="0 0 12 8" className="w-3 h-2 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M1 1.5 6 6.5l5-5" /></svg>
+          <select
+            aria-label="Filter by brand"
+            value={brand ?? ''}
+            onChange={(e) => (e.target.value ? pick(e.target.value) : setBrand(null))}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer text-[16px]"
           >
-            {b.name.toUpperCase()} <span className="text-[#7C838B]">· {b.line}</span>
+            <option value="">All brands · {view.pieces.length}</option>
+            {view.brands.map((b) => (
+              <option key={b.brand_id} value={b.name}>{b.name} · {b.line}</option>
+            ))}
+          </select>
+        </label>
+        {brand && (
+          <button type="button" onClick={() => setBrand(null)} className="text-[16px] sm:text-[18px] tracking-[0.08em] text-[#6E6B65] underline underline-offset-4">
+            Show all brands
           </button>
-        ))}
+        )}
       </div>
 
       {brand && (
