@@ -166,8 +166,10 @@ export async function enqueueWarmups(
   if (!wanted.length) return { queued: [], ready, capped: false }
 
   const nightly = reason === 'nightly'
-  let used = await warmupsToday(admin, memberId, nightly ? 'nightly' : 'day')
   const cap = opts.cap ?? (nightly ? nightlyCap() : warmupCap())
+  // Warm-ups switched off (the default since 2026-11-22): nothing is styled ahead, only on tap.
+  if (cap <= 0) return { queued: [], ready, capped: true }
+  let used = await warmupsToday(admin, memberId, nightly ? 'nightly' : 'day')
   const queued: string[] = []
   let capped = false
   for (const id of wanted) {
