@@ -134,6 +134,14 @@ export async function GET(req: NextRequest) {
     const entry: Record<string, unknown> = { member: m.name ?? m.member_id }
     report.push(entry)
     try {
+      // 0. A member who has never signed in gets no picks: each one is styled
+      //    and checked, which costs money, and she has never seen any of them
+      //    (Devika: 95 looks since October, none opened; Chloe, 2026-11-22).
+      //    Her other emails still go. Naming her with ?member= still runs it.
+      let authUser: { email?: string | null; last_sign_in_at?: string | null } | null = null
+      try { authUser = (await admin.auth.admin.getUserById(m.auth_user_id)).data?.user ?? null } catch { /* read below */ }
+      if (!q.get('member') && !authUser?.last_sign_in_at) { entry.skipped = 'never signed in'; entry.sent = false; continue }
+
       // 1. The picks. Monday makes the week's; Thursday only fills events that have none.
       if (!dry) {
         let eventIds: string[] | undefined
@@ -164,7 +172,7 @@ export async function GET(req: NextRequest) {
       if (dry) { entry.sent = false; entry.subject = subjectFor(fresh); continue }
 
       let email: string | null = toOverride
-      if (!email) { try { email = (await admin.auth.admin.getUserById(m.auth_user_id)).data?.user?.email ?? null } catch { /* no address, no note */ } }
+      if (!email) email = authUser?.email ?? null
       if (!email) { entry.sent = false; entry.email = 'none'; continue }
       const res = await sendStudioEmail({
         kind: 'shopper_event_picks', subject: subjectFor(fresh), html, to: email,
