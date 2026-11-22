@@ -258,10 +258,7 @@ export default function WaysToWear({
           <div className="flex items-center gap-3 flex-wrap">
             {/* Her avatar wearing it: one tap makes the picture, the next shows it. */}
             {p.item_id && (
-              <span className="inline-flex items-center gap-2">
-                <TryOnAvatarButton itemId={p.item_id} className="relative" />
-                <span className={`${T_SMALL} tracking-[0.1em] text-[#2B2B2B]`}>TRY ON MY AVATAR</span>
-              </span>
+              <TryOnAvatarButton itemId={p.item_id} className="relative" label="Try on my avatar" />
             )}
             {p.url && p.item_id && (
               <ShopLink
