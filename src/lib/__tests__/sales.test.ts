@@ -55,12 +55,18 @@ describe('SAVED SEARCHES, built out', () => {
   })
 
   it('keeps the closest kind, named as close, when a long ask has almost no answers', () => {
-    const p = (id: string) => ({ item_id: id, product_name: id, brand: null, image_url: null, price_gbp: null, url: null })
+    const p = (id: string) => ({ item_id: id, product_name: id, brand: null, image_url: `https://x/${id}.jpg`, price_gbp: null, url: null })
     const kept = keepFromView({ pieces: [], similar: [p('a'), p('b'), p('c')], similarKind: 'close', similarGroups: [{ title: 'SEQUIN SKIRTS', ids: ['a', 'b'] }], read: ['SEQUIN'] }, true)
     expect(kept.map((k) => k.piece.item_id)).toEqual(['a', 'b'])
     expect(kept[0].why).toBe('CLOSE · SEQUIN SKIRTS · YOUR SIZE')
     const plenty = keepFromView({ pieces: [p('x'), p('y'), p('z')], similar: [p('a')], similarKind: 'close', similarGroups: [{ title: 'T', ids: ['a'] }], read: [] }, false)
     expect(plenty.length).toBe(3)
+  })
+
+  it('a search that names a label keeps only that label: no CLOSE from other labels, no imageless tile', () => {
+    const p = (id: string, image: string | null = `https://x/${id}.jpg`) => ({ item_id: id, product_name: id, brand: 'Dries Van Noten', image_url: image, price_gbp: null, url: null })
+    const kept = keepFromView({ pieces: [p('dvn'), p('blank', null)], similar: [p('bellerose')], similarKind: 'close', similarGroups: [{ title: 'SNEAKERS FROM OTHER LABELS', ids: ['bellerose'] }], read: ['DRIES VAN NOTEN', 'SNEAKER'], brand: 'Dries Van Noten' }, true)
+    expect(kept.map((k) => k.piece.item_id)).toEqual(['dvn'])
   })
 
   it('tells a strong find plainly', () => {
