@@ -1,6 +1,9 @@
 import { redirect } from 'next/navigation'
 import { createServerClient } from '@/lib/supabase-server'
 import ScrollToTop from '@/components/admin/ScrollToTop'
+import { NOINDEX } from '@/lib/site'
+
+export const metadata = { ...NOINDEX }
 
 export default async function AdminLayout({
   children,

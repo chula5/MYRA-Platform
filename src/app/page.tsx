@@ -29,6 +29,8 @@ import type { OutfitWithItems } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
 
+export const metadata = { alternates: { canonical: '/' } }
+
 export default async function LandingPage({
   searchParams,
 }: {

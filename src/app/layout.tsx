@@ -5,6 +5,7 @@ import { FeedProvider } from '@/context/FeedContext'
 import SessionTracker from '@/components/analytics/SessionTracker'
 import SmoothScroll from '@/components/SmoothScroll'
 import './globals.css'
+import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL } from '@/lib/site'
 
 // Site typeface — a clean, gently rounded grotesque close to Pragmatica.
 // Served from public/fonts (Manrope variable, 200–800) rather than fetched
@@ -19,28 +20,69 @@ const manrope = localFont({
   display: 'swap',
 })
 
-// Prevent iOS from zooming in when a small-font input is focused (and disable
-// pinch-zoom) for an app-like feel. viewportFit cover handles the notch/safe area.
+// maximumScale 1 stops iPhone zooming in when a small field is focused, and
+// keeps the app's pages still. Pinch-zoom is no longer switched off
+// (userScalable: false was an accessibility fail); Safari on iPhone lets people
+// pinch regardless. viewportFit cover handles the notch/safe area.
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
-  userScalable: false,
   viewportFit: 'cover',
+  themeColor: '#FAFAF8',
 }
 
+// The App Store listing, once MYRA is live there (App Store Connect → App
+// Information → Apple ID). Safari then offers the app in a banner.
+const APP_STORE_ID = process.env.NEXT_PUBLIC_APP_STORE_ID
+
 export const metadata: Metadata = {
-  title: 'MYRA',
-  description: 'MYRA is a private styling service: complete outfits built around your taste, your size and what you already own, for the occasions coming up.',
+  metadataBase: new URL(SITE_URL),
+  title: { default: SITE_TITLE, template: '%s · MYRA' },
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
   openGraph: {
-    title: 'MYRA',
+    title: SITE_TITLE,
     description: 'A private styling service: complete outfits built around your taste, your size and what you already own.',
     type: 'website',
+    siteName: SITE_NAME,
+    locale: 'en_GB',
+    url: SITE_URL,
   },
-  // FlexOffers site-ownership verification.
+  twitter: {
+    card: 'summary_large_image',
+    title: SITE_TITLE,
+    description: 'A private styling service: complete outfits built around your taste, your size and what you already own.',
+  },
   other: {
+    // FlexOffers site-ownership verification.
     'fo-verify': '6fbaefff-4b83-4e34-8e14-2ec6650c31ee',
+    ...(APP_STORE_ID ? { 'apple-itunes-app': `app-id=${APP_STORE_ID}` } : {}),
   },
+}
+
+// Who MYRA is, for search engines: the organisation and the site.
+const STRUCTURED_DATA = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'Organization',
+      '@id': `${SITE_URL}/#organization`,
+      name: SITE_NAME,
+      url: SITE_URL,
+      logo: `${SITE_URL}/icons/myra-512.png`,
+      description: SITE_DESCRIPTION,
+      sameAs: ['https://www.instagram.com/myraassistant/', 'https://www.tiktok.com/@myra.assistant'],
+    },
+    {
+      '@type': 'WebSite',
+      '@id': `${SITE_URL}/#website`,
+      name: SITE_NAME,
+      url: SITE_URL,
+      publisher: { '@id': `${SITE_URL}/#organization` },
+      inLanguage: 'en-GB',
+    },
+  ],
 }
 
 export default function RootLayout({
@@ -51,7 +93,7 @@ export default function RootLayout({
   // suppressHydrationWarning on <html>: the script in <head> adds .myra-app
   // before React hydrates, which is intended, not a mismatch.
   return (
-    <html lang="en" className={manrope.variable} suppressHydrationWarning>
+    <html lang="en-GB" className={manrope.variable} suppressHydrationWarning>
       <head>
         {/* THE APP NEVER SHOWS THE WEBSITE. Capacitor's bridge is in the page
             before its first byte, so this one line marks <html> as the app at
@@ -63,6 +105,10 @@ export default function RootLayout({
             __html:
               "try{var c=window.Capacitor;if(c&&typeof c.isNativePlatform==='function'&&c.isNativePlatform())document.documentElement.classList.add('myra-app')}catch(e){}",
           }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(STRUCTURED_DATA) }}
         />
       </head>
       <body className="bg-background text-primary-text antialiased">

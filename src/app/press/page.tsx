@@ -2,8 +2,9 @@ import Link from 'next/link'
 import { PRESS, formatPressDate } from '@/lib/press'
 
 export const metadata = {
-  title: 'Press · MYRA',
-  description: 'What people are writing about MYRA.',
+  title: 'Press',
+  description: 'What people are writing about MYRA, the private personal styling service.',
+  alternates: { canonical: '/press' },
 }
 
 export default function PressPage() {
@@ -26,7 +27,7 @@ export default function PressPage() {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={a.image}
-                    alt=""
+                    alt={a.title}
                     className="w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-[1.03]"
                   />
                 )}
