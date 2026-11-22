@@ -1,17 +1,19 @@
-import { getAdminStats } from '@/lib/admin-queries'
-import { createServerClient } from '@/lib/supabase-server'
+import { Suspense } from 'react'
 import StockSweepButton from '@/components/admin/StockSweepButton'
-import { getStylistBySlug, loadAutonomy } from '@/lib/stylist-store'
-import { autonomyProgress } from '@/lib/autonomy'
-import { getDashboardMetrics, type MetricKey } from '@/lib/dashboard-metrics'
-import { getNetworkStatuses } from '@/lib/networks/sync'
+import { type MetricKey } from '@/lib/dashboard-metrics'
+import { weekBuckets } from '@/lib/metrics-core'
+import { loadDashboard } from '@/lib/admin-dashboard'
 import MetricTile from '@/components/admin/charts/MetricTile'
 import TrendChart from '@/components/admin/charts/TrendChart'
 import { ShareBar } from '@/components/admin/charts/RankBars'
 import AreaHealthCard from './AreaHealthCard'
+import RefreshDashboard from './RefreshDashboard'
 import { SERIES } from '@/components/admin/charts/palette'
 
 export const dynamic = 'force-dynamic'
+// A cold read on a busy database can take a while; the shell is already on
+// screen by then, and nothing below waits on anything longer than its budget.
+export const maxDuration = 60
 
 // Tiles are ordered by what you'd want to know first thing in the morning:
 // money made, work produced, quality of that work, then demand.
@@ -44,36 +46,17 @@ function formatValue(kind: string, v: number): string {
   return int(v)
 }
 
-export default async function AdminDashboard() {
-  const [stats, perf, networks] = await Promise.all([
-    getAdminStats(),
-    getDashboardMetrics(),
-    getNetworkStatuses(),
-  ])
+/** The week the headline reports: the last COMPLETE one. Pure, no database. */
+function lastCompleteWeekLabel(): string {
+  const labels = weekBuckets(10).map((b) => b.label)
+  return labels[labels.length - 2] ?? labels[labels.length - 1]
+}
 
-  const supabase = await createServerClient()
-  const { count: waitlistCount } = await supabase
-    .from('waitlist')
-    .select('*', { count: 'exact', head: true })
-
-  // Autonomy graduation — the current publishing stage.
-  const chloe = await getStylistBySlug('chloe')
-  const autonomy = chloe ? autonomyProgress(await loadAutonomy(chloe.stylist_id)) : null
-
-  // Outfits kicked back from the mobile review queue ("none of these").
-  const { count: needsDesktopCount } = await supabase
-    .from('outfit')
-    .select('*', { count: 'exact', head: true })
-    .eq('status', 'needs_desktop' as any)
-
-  const { metrics, areas, money, buckets } = perf
-  const weekLabels = buckets.map((b) => b.label)
-  const lastCompleteLabel = weekLabels[weekLabels.length - 2] ?? weekLabels[weekLabels.length - 1]
-
-  const netThisWeek = money.netThisWeek
-  const connectedNetworks = networks.filter((n) => n.network !== 'meta' && n.configured).length
-  const anyCommissionData = money.byNetwork.some((n) => n.value > 0)
-
+// The page itself: header and navigation at once, the numbers streamed in
+// beneath as soon as they are read (from the five-minute memory when it has
+// them, which is nearly always).
+export default function AdminDashboard() {
+  const lastCompleteLabel = lastCompleteWeekLabel()
   return (
     <div>
       {/* Header */}
@@ -103,13 +86,79 @@ export default async function AdminDashboard() {
         </div>
       </div>
 
+      <Suspense fallback={<DashboardSkeleton />}>
+        <DashboardBody lastCompleteLabel={lastCompleteLabel} />
+      </Suspense>
+    </div>
+  )
+}
+
+function DashboardSkeleton() {
+  return (
+    <div aria-busy="true">
+      <p className="text-[9px] tracking-[0.14em] text-[#A8A8A4] mb-5">READING THE STUDIO…</p>
+      <div className="grid grid-cols-12 gap-5 mb-6">
+        <div className="col-span-12 lg:col-span-5 h-[300px] rounded-[16px] bg-[#0A0A0A]/90 animate-pulse" />
+        <div className="col-span-12 lg:col-span-7 h-[300px] rounded-[16px] bg-white border border-[#E2E0DB] animate-pulse" />
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-5 mb-10">
+        {HEADLINE.map(({ key }) => (
+          <div key={key} className="h-[150px] rounded-[12px] bg-white border border-[#E2E0DB] animate-pulse" />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function Busy({ message }: { message: string }) {
+  return (
+    <div className="max-w-xl border border-[#E2E0DB] bg-white rounded-[14px] p-8">
+      <p className="text-[11px] tracking-[0.14em] text-[#7C838B] mb-3">THE STUDIO IS BUSY</p>
+      <p className="text-[13px] tracking-[0.03em] text-[#4A4E57] leading-relaxed">
+        The database did not answer in time — a scan or a styling run is probably using it. The rest of the studio is open above.
+      </p>
+      <p className="mt-3 text-[9px] tracking-[0.09em] text-[#C9C7C2]">{message.toUpperCase().slice(0, 160)}</p>
+      <div className="mt-6">
+        <RefreshDashboard loadedAt={new Date().toISOString()} missing={['EVERYTHING']} />
+      </div>
+    </div>
+  )
+}
+
+async function DashboardBody({ lastCompleteLabel }: { lastCompleteLabel: string }) {
+  let data: Awaited<ReturnType<typeof loadDashboard>>
+  try {
+    data = await loadDashboard()
+  } catch (err) {
+    return <Busy message={err instanceof Error ? err.message : 'could not load'} />
+  }
+  const { stats, perf, networks, waitlistCount, needsDesktopCount, autonomy, loadedAt, missing } = data
+
+  const { metrics, areas, money, buckets } = perf
+  const weekLabels = buckets.map((b) => b.label)
+
+  const netThisWeek = money.netThisWeek
+  const connectedNetworks = networks.filter((n) => n.network !== 'meta' && n.configured).length
+  const anyCommissionData = money.byNetwork.some((n) => n.value > 0)
+
+  return (
+    <div>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <RefreshDashboard loadedAt={loadedAt} missing={missing} />
+        {missing.length > 0 && (
+          <p className="text-[9px] tracking-[0.09em] text-[#8A6D3B]">
+            THE DATABASE WAS BUSY · {missing.join(', ')} DID NOT ANSWER IN TIME AND READ AS ZERO · REFRESH TO TRY AGAIN
+          </p>
+        )}
+      </div>
+
       {/* ── Money ────────────────────────────────────────────────────────────
           Commission and spend are both GBP per week, so they belong on one
           axis in one chart. Anything measured differently gets its own. */}
       <div className="grid grid-cols-12 gap-5 mb-6">
         <div className="col-span-12 lg:col-span-5 bg-[#0A0A0A] text-white rounded-[16px] p-7 flex flex-col justify-between">
           <div>
-            <p className="text-[9px] tracking-[0.2em] text-[#C4A882] mb-5">MONEY · WEEK OF {lastCompleteLabel}</p>
+            <p className="text-[9px] tracking-[0.2em] text-[#7C838B] mb-5">MONEY · WEEK OF {lastCompleteLabel}</p>
 
             <p className="text-[11px] tracking-[0.14em] text-white/50 mb-1">COMMISSION EARNED</p>
             <p className="text-[46px] leading-none tracking-[0.02em]">{gbp0(money.commissionThisWeek)}</p>
@@ -128,7 +177,7 @@ export default async function AdminDashboard() {
                 <p className="text-[9px] tracking-[0.14em] text-white/40 mb-1.5">NET</p>
                 <p
                   className="text-[22px] leading-none tracking-[0.02em]"
-                  style={{ color: netThisWeek >= 0 ? '#C4A882' : '#E8A0A0' }}
+                  style={{ color: netThisWeek >= 0 ? '#FFFFFF' : '#E8A0A0' }}
                 >
                   {netThisWeek >= 0 ? '' : '−'}
                   {gbp0(Math.abs(netThisWeek))}
@@ -209,7 +258,7 @@ export default async function AdminDashboard() {
       {(needsDesktopCount ?? 0) > 0 && (
         <a
           href="/admin/outfit-review"
-          className="block mb-4 p-4 border border-[#E2D6B8] bg-[#FBF6E9] rounded-[12px] hover:border-[#C4A882] transition-colors duration-300"
+          className="block mb-4 p-4 border border-[#E2D6B8] bg-[#FBF6E9] rounded-[12px] hover:border-[#7C838B] transition-colors duration-300"
         >
           <p className="text-[10px] tracking-[0.09em] text-[#8A6D3B]">
             {needsDesktopCount} OUTFIT{(needsDesktopCount ?? 0) === 1 ? '' : 'S'} FLAGGED “NEEDS DESKTOP” FROM MOBILE REVIEW · OPEN →
@@ -271,7 +320,7 @@ export default async function AdminDashboard() {
         <div className="mb-10 border border-[#0A0A0A] bg-white rounded-[14px] p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <p className="text-[9px] tracking-[0.2em] text-[#C4A882] mb-1">AUTONOMY · STAGE {autonomy.stage} OF 3</p>
+              <p className="text-[9px] tracking-[0.2em] text-[#7C838B] mb-1">AUTONOMY · STAGE {autonomy.stage} OF 3</p>
               <p className="text-[20px] tracking-[0.06em] text-[#0A0A0A]">{autonomy.stageLabel}</p>
               <p className="text-[10px] tracking-[0.05em] text-[#6B6B6B] mt-1 max-w-xl leading-relaxed">{autonomy.nextTrigger}</p>
             </div>
@@ -297,7 +346,7 @@ export default async function AdminDashboard() {
           </div>
           <div className="mt-4 h-[5px] bg-[#F2F2F0] rounded-full overflow-hidden">
             <div
-              className="h-full bg-[#C4A882] rounded-full transition-all"
+              className="h-full bg-[#0A0A0A] rounded-full transition-all"
               style={{ width: `${Math.min(100, (autonomy.streak / autonomy.streakTarget) * 100)}%` }}
             />
           </div>

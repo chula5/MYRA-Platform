@@ -2,8 +2,84 @@ import { retailOnly } from '@/lib/wardrobe/owned-items'
 import { createAdminClient } from '@/lib/supabase-server'
 import { COLOUR, MATERIAL, STOPWORDS, TYPE, fuzzyGet, hasMaterial, isTypoOf } from '@/lib/search-taxonomy'
 import type { Brand, Item, AdminProject, Outfit, OutfitWithItems, Lookbook } from '@/types/database'
+import { cache } from 'react'
+
+// React's per-request cache in Next; a plain `react` (scripts, vitest) has none.
+const perRequest: <F extends (...args: never[]) => unknown>(fn: F) => F =
+  typeof cache === 'function' ? cache : (fn) => fn
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
+
+export interface DashboardCounts {
+  items: { total: number; draft: number; ready: number; live: number; out_of_stock: number; low_stock: number }
+  outfits: { total: number; draft: number; live: number; needs_desktop: number; published_today: number }
+  projects: { total: number; draft: number; live: number }
+  waitlist: number
+  composed_pending: number
+  ways_queued: number
+}
+
+const n = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : Number(v) || 0)
+
+/**
+ * Every standing count the dashboard shows, in ONE round trip
+ * (admin_dashboard_counts(), migration 0118). Before it, /admin asked for
+ * twenty-two exact counts one by one and each waited behind the others on
+ * the busy nano instance. Falls back to the separate counts until the
+ * migration is applied. Remembered for the request, so the stats block and
+ * the performance block share one answer.
+ */
+export const loadDashboardCounts = perRequest(async (): Promise<DashboardCounts> => {
+  const supabase = createAdminClient()
+  const { data, error } = await (supabase as any).rpc('admin_dashboard_counts')
+  if (!error && data && typeof data === 'object') {
+    const d = data as any
+    return {
+      items: {
+        total: n(d.items?.total), draft: n(d.items?.draft), ready: n(d.items?.ready), live: n(d.items?.live),
+        out_of_stock: n(d.items?.out_of_stock), low_stock: n(d.items?.low_stock),
+      },
+      outfits: {
+        total: n(d.outfits?.total), draft: n(d.outfits?.draft), live: n(d.outfits?.live),
+        needs_desktop: n(d.outfits?.needs_desktop), published_today: n(d.outfits?.published_today),
+      },
+      projects: { total: n(d.projects?.total), draft: n(d.projects?.draft), live: n(d.projects?.live) },
+      waitlist: n(d.waitlist),
+      composed_pending: n(d.composed_pending),
+      ways_queued: n(d.ways_queued),
+    }
+  }
+  if (error && !/PGRST202|does not exist|could not find/i.test(`${error.code} ${error.message}`)) {
+    console.error('[admin_dashboard_counts]', error.message)
+  }
+  // The function is not there yet: the old way, every count on its own.
+  const count = (table: string, refine?: (q: any) => any) => {
+    let q = (supabase as any).from(table).select('*', { count: 'exact', head: true })
+    if (refine) q = refine(q)
+    return q.then((r: any) => n(r.count))
+  }
+  const today = new Date(new Date().setHours(0, 0, 0, 0)).toISOString()
+  const [
+    total, draft, ready, live, out, low,
+    oTotal, oDraft, oLive, oNeeds, oToday,
+    pTotal, pDraft, pLive,
+    waitlist, pending, queued,
+  ] = await Promise.all([
+    count('item'), count('item', (q) => q.eq('status', 'draft')), count('item', (q) => q.eq('status', 'ready')),
+    count('item', (q) => q.eq('status', 'live')), count('item', (q) => q.eq('stock_status', 'out_of_stock')),
+    count('item', (q) => q.eq('stock_status', 'low_stock')),
+    count('outfit'), count('outfit', (q) => q.eq('status', 'draft')), count('outfit', (q) => q.eq('status', 'live')),
+    count('outfit', (q) => q.eq('status', 'needs_desktop')), count('outfit', (q) => q.gte('published_at', today)),
+    count('admin_project'), count('admin_project', (q) => q.eq('status', 'draft')), count('admin_project', (q) => q.eq('status', 'live')),
+    count('waitlist'), count('composed_outfit', (q) => q.eq('status', 'pending')), count('styled_way_job', (q) => q.eq('status', 'queued')),
+  ])
+  return {
+    items: { total, draft, ready, live, out_of_stock: out, low_stock: low },
+    outfits: { total: oTotal, draft: oDraft, live: oLive, needs_desktop: oNeeds, published_today: oToday },
+    projects: { total: pTotal, draft: pDraft, live: pLive },
+    waitlist, composed_pending: pending, ways_queued: queued,
+  }
+})
 
 export async function getAdminStats(): Promise<{
   totalItems: number
@@ -20,56 +96,22 @@ export async function getAdminStats(): Promise<{
   liveProjects: number
   publishedToday: number
 }> {
-  const supabase = createAdminClient()
-
   try {
-    const [
-      { count: totalItems },
-      { count: draftItems },
-      { count: readyItems },
-      { count: liveItems },
-      { count: outOfStockItems },
-      { count: lowStockItems },
-      { count: totalOutfits },
-      { count: draftOutfits },
-      { count: liveOutfits },
-      { count: totalProjects },
-      { count: draftProjects },
-      { count: liveProjects },
-      { count: publishedToday },
-    ] = await Promise.all([
-      supabase.from('item').select('*', { count: 'exact', head: true }),
-      supabase.from('item').select('*', { count: 'exact', head: true }).eq('status', 'draft'),
-      supabase.from('item').select('*', { count: 'exact', head: true }).eq('status', 'ready'),
-      supabase.from('item').select('*', { count: 'exact', head: true }).eq('status', 'live'),
-      supabase.from('item').select('*', { count: 'exact', head: true }).eq('stock_status', 'out_of_stock'),
-      supabase.from('item').select('*', { count: 'exact', head: true }).eq('stock_status', 'low_stock'),
-      supabase.from('outfit').select('*', { count: 'exact', head: true }),
-      supabase.from('outfit').select('*', { count: 'exact', head: true }).eq('status', 'draft'),
-      supabase.from('outfit').select('*', { count: 'exact', head: true }).eq('status', 'live'),
-      supabase.from('admin_project').select('*', { count: 'exact', head: true }),
-      supabase.from('admin_project').select('*', { count: 'exact', head: true }).eq('status', 'draft'),
-      supabase.from('admin_project').select('*', { count: 'exact', head: true }).eq('status', 'live'),
-      supabase
-        .from('outfit')
-        .select('*', { count: 'exact', head: true })
-        .gte('published_at', new Date(new Date().setHours(0, 0, 0, 0)).toISOString()),
-    ])
-
+    const c = await loadDashboardCounts()
     return {
-      totalItems: totalItems ?? 0,
-      draftItems: draftItems ?? 0,
-      readyItems: readyItems ?? 0,
-      liveItems: liveItems ?? 0,
-      outOfStockItems: outOfStockItems ?? 0,
-      lowStockItems: lowStockItems ?? 0,
-      totalOutfits: totalOutfits ?? 0,
-      draftOutfits: draftOutfits ?? 0,
-      liveOutfits: liveOutfits ?? 0,
-      totalProjects: totalProjects ?? 0,
-      draftProjects: draftProjects ?? 0,
-      liveProjects: liveProjects ?? 0,
-      publishedToday: publishedToday ?? 0,
+      totalItems: c.items.total,
+      draftItems: c.items.draft,
+      readyItems: c.items.ready,
+      liveItems: c.items.live,
+      outOfStockItems: c.items.out_of_stock,
+      lowStockItems: c.items.low_stock,
+      totalOutfits: c.outfits.total,
+      draftOutfits: c.outfits.draft,
+      liveOutfits: c.outfits.live,
+      totalProjects: c.projects.total,
+      draftProjects: c.projects.draft,
+      liveProjects: c.projects.live,
+      publishedToday: c.outfits.published_today,
     }
   } catch (err) {
     console.error('[getAdminStats]', err)

@@ -241,31 +241,31 @@ export default async function AdminLayout({
           </a>
           <a
             href="/admin/merchants"
-            className="text-[11px] tracking-[0.09em] text-[#C4A882] hover:text-white transition-colors duration-300"
+            className="text-[11px] tracking-[0.09em] text-white/50 hover:text-white transition-colors duration-300"
           >
             MERCHANTS
           </a>
           <a
             href="/admin/ledger"
-            className="text-[11px] tracking-[0.09em] text-[#C4A882] hover:text-white transition-colors duration-300"
+            className="text-[11px] tracking-[0.09em] text-white/50 hover:text-white transition-colors duration-300"
           >
             LEDGER
           </a>
           <a
             href="/admin/reconciliation"
-            className="text-[11px] tracking-[0.09em] text-[#C4A882] hover:text-white transition-colors duration-300"
+            className="text-[11px] tracking-[0.09em] text-white/50 hover:text-white transition-colors duration-300"
           >
             RECONCILE
           </a>
           <a
             href="/admin/webhook-log"
-            className="text-[11px] tracking-[0.09em] text-[#C4A882] hover:text-white transition-colors duration-300"
+            className="text-[11px] tracking-[0.09em] text-white/50 hover:text-white transition-colors duration-300"
           >
             WEBHOOK LOG
           </a>
           <a
             href="/admin/applications/brands"
-            className="text-[11px] tracking-[0.09em] text-[#C4A882] hover:text-white transition-colors duration-300"
+            className="text-[11px] tracking-[0.09em] text-white/50 hover:text-white transition-colors duration-300"
           >
             BRAND APPLICATIONS
           </a>
