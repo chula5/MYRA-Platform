@@ -50,6 +50,8 @@ const DWELL_MS = 1_500
 const FLUSH_MS = 800
 /** Cards styled before she asks, per search — a scroll must not spend the judge on everything. */
 const BROWSE_WARM_PER_SEARCH = 8
+/** Answers on the page before she asks for more. */
+const PAGE = 24
 
 export default function BrowseClient() {
   const [draft, setDraft] = useState('')
@@ -88,6 +90,12 @@ export default function BrowseClient() {
   // Browse stays what she would actually spend; on, nothing is held back.
   const [fAbove, setFAbove] = useState(false)
   const [overBudget, setOverBudget] = useState(0)
+  // A label's whole range comes back; the page opens on the first screen of it
+  // and she asks for more, so "posse" is never cut at 24.
+  const [showing, setShowing] = useState(PAGE)
+  const [moreElsewhere, setMoreElsewhere] = useState(0)
+  // Pieces from the other end of the year, held back (summer in November).
+  const [offSeason, setOffSeason] = useState<{ count: number; season: 'summer' | 'winter' } | null>(null)
   // Her own sizes seed the picker once, so a fresh search opens set to her.
   const sizeTouched = useRef(false)
 
@@ -296,6 +304,7 @@ export default function BrowseClient() {
     const r = newIn.current ? await browseNewIn(newIn.current, filters) : await browseSearch(q, filters)
     setBusy(false)
     setPieces(r.pieces); setRead(r.read); setError(r.error ?? null); setOverBudget(r.overBudget ?? 0)
+    setShowing(PAGE); setMoreElsewhere(r.more ?? 0); setOffSeason(r.offSeason ?? null)
     setSimilar(r.similar); setSimilarKind(r.similarKind); setSimilarGroups(r.similarGroups ?? []); setBrandName(r.brand)
     // Nothing exact: what comes close is the answer, so it is shown at once.
     setShowSimilar(r.pieces.length === 0 && r.similar.length > 0)
@@ -441,6 +450,8 @@ export default function BrowseClient() {
     if (r.error) setNote(r.error)
   }
 
+  // The answers under MYRA's own finds for a saved search, which lead.
+  const rest = !pieces ? [] : fresh.length ? pieces.filter((p) => !fresh.some((f) => f.item_id === p.item_id)) : pieces
   const grid = (list: BrowsePiece[], finds = false) => (
     <div className="grid grid-flow-row-dense grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4">
       {list.map((p) => (
@@ -691,7 +702,35 @@ export default function BrowseClient() {
               {grid(fresh, true)}
             </div>
           )}
-          {pieces.length > 0 && grid(fresh.length ? pieces.filter((p) => !fresh.some((f) => f.item_id === p.item_id)) : pieces)}
+          {pieces.length > 0 && grid(rest.slice(0, showing))}
+          {rest.length > showing && (
+            <div className="text-center mt-10">
+              <button
+                type="button"
+                onClick={() => setShowing((n) => n + PAGE * 2)}
+                className="text-[16px] sm:text-[18px] tracking-[0.1em] rounded-full bg-[#2B2B2B] text-white px-8 py-3.5"
+              >
+                SHOW MORE · {rest.length - showing} LEFT
+              </button>
+            </div>
+          )}
+          {rest.length <= showing && moreElsewhere > 0 && (
+            <p className="text-center mt-8 text-[15px] sm:text-[17px] tracking-[0.12em] text-[#7C838B]">
+              {moreElsewhere} MORE — NARROW WITH FILTER, OR ADD A PIECE OR COLOUR TO YOUR SEARCH
+            </p>
+          )}
+          {offSeason && (
+            <p className="text-center mt-8 text-[15px] sm:text-[17px] tracking-[0.12em] text-[#7C838B]">
+              {offSeason.count} {offSeason.season.toUpperCase()} {offSeason.count === 1 ? 'PIECE' : 'PIECES'} HELD BACK FOR NOW ·{' '}
+              <button
+                type="button"
+                onClick={() => { const q = `${asked ?? ''} ${offSeason.season}`.trim(); setDraft(q); void ask(q) }}
+                className="underline underline-offset-4 text-[#2B2B2B] tracking-[0.12em]"
+              >
+                SHOW THEM
+              </button>
+            </p>
+          )}
 
           {/* What answers most of her words, never in front of the real answers. */}
           {similar.length > 0 && pieces.length > 0 && !showSimilar && (

@@ -109,11 +109,16 @@ export default function SavedPieces({ testMemberId, onCount }: { testMemberId?: 
       {open && (() => {
         const p = pieces.find((x) => x.item_id === open)
         return (
+          // The same sheet Browse and the sale open: its pictures, the studio's
+          // outfits with it, MYRA's ways, her avatar, VIEW ON SITE. It used to be
+          // drawn in the page under the whole shelf, so on a phone a tap ringed
+          // the tile and nothing else seemed to happen (a member, 2026-11-21).
           <WaysToWear
-            inline
             itemId={open}
-            piece={p ? { item_id: p.item_id, product_name: p.product_name, brand: p.brand, image_url: p.image_url } : null}
+            piece={p ? { item_id: p.item_id, product_name: p.product_name, brand: p.brand, image_url: p.image_url, url: p.retailer_url ?? null, price_gbp: p.price_gbp ?? null } : null}
             testMemberId={testMemberId}
+            autoStart={false}
+            startLabel="Build outfits with it"
             onClose={() => setOpen(null)}
           />
         )

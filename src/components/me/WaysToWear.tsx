@@ -176,7 +176,10 @@ export default function WaysToWear({
 
   /** Her choice of how to build: kept ways in that mode show at once, new ones are asked for. */
   function choose(next: WayMode) {
-    if (next === modeRef.current && status !== 'idle') return
+    // The same way asked again is only ignored while it is being answered or has
+    // been: after a failure the chip she already pressed must ask again, not sit
+    // dark and dead (a member's Posse skirt, 2026-11-21).
+    if (next === modeRef.current && (status === 'opening' || status === 'working' || status === 'ready')) return
     setLooks([]); setEdited({})
     clearWaysReady(itemId, next)
     void open(false, false, next)
@@ -328,6 +331,12 @@ export default function WaysToWear({
         </div>
       )}
       {error && !busy && <p className={`${T} text-[#4A4E57]`}>{error}</p>}
+      {/* MYRA could not finish: one tap asks again, in the way she had chosen. */}
+      {!busy && status === 'failed' && (
+        <button type="button" onClick={() => void open(false)} className={PILL_DARK}>
+          Try again
+        </button>
+      )}
       {!busy && !error && status === 'none' && !studio.length && (
         <p className={`${T} text-[#4A4E57]`}>{wayMode === 'wardrobe' ? 'Nothing in your wardrobe goes with it yet.' : 'Nothing in your size goes with it yet.'}</p>
       )}

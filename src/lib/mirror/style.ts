@@ -102,8 +102,15 @@ export async function ensureMirrorItem(p: SiteProduct, member: MirrorMember, adm
     if (!scanned.itemType) return { error: "MYRA can't tell what kind of piece this is yet" }
     if (scanned.nonFashion) return { error: 'Not a piece MYRA styles' }
     const graph = await loadBrandGraph(admin)
-    const brand = p.brand ? resolveBrandNames(graph, [p.brand]).matched[0] : undefined
     const host = (() => { try { return new URL(p.url).host } catch { return '' } })()
+    // A label's own shop often does not say whose piece it is — it is all
+    // theirs — so the piece was kept with no label and a search for the label
+    // never found it (a Munthe skirt saved from munthe.co.uk, 2026-11-21).
+    // When the page names no label MYRA knows, the shop's own name is tried:
+    // munthe.co.uk is Munthe.
+    const shopName = host.toLowerCase().split('.').filter((l) => l.length >= 4 && !['www', 'shop', 'store', 'intl'].includes(l))[0]
+    const brand = (p.brand ? resolveBrandNames(graph, [p.brand]).matched[0] : undefined)
+      ?? (shopName ? resolveBrandNames(graph, [shopName]).matched[0] : undefined)
     const ins = await insertItemTolerantly(admin, {
       brand_id: brand?.brand_id ?? null,
       item_type: scanned.itemType,

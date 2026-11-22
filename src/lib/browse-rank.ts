@@ -11,6 +11,7 @@
 // Pure functions, so the rules can be tested without a database.
 
 import { CUT_WORDS, estimateItemFormality, hasMaterial, OCCASION_LEAD_TYPES, type ParsedQuery } from './search-taxonomy'
+import { seasonOf } from './season'
 
 export interface RankablePiece {
   item_id: string
@@ -133,6 +134,32 @@ export function seasonSignal(it: RankablePiece, season: string): number {
  *  piece is winter; a striped linen dress, a white mini, a floral print are not. */
 export function seasonFits(it: RankablePiece, season: string): boolean {
   return seasonSignal(it, season) >= 1
+}
+
+/**
+ * The end of the year that is plainly NOT now: summer from October to
+ * February, winter from May to August. The months between hide nothing — in
+ * March and September she is dressing for both.
+ */
+export function offSeasonNow(now: Date = new Date()): 'summer' | 'winter' | null {
+  const m = now.getUTCMonth() + 1
+  if (m >= 10 || m <= 2) return 'summer'
+  if (m >= 5 && m <= 8) return 'winter'
+  return null
+}
+
+/**
+ * Does the piece plainly belong to that other end of the year? Read the way
+ * the library reads a shop's piece (lib/season: the kind of piece — shorts,
+ * sandals, swimwear; its cloth — linen, raffia; a season in its name), or off
+ * the piece itself when everything about it says so. A piece that says
+ * nothing is in season: better shown than hidden.
+ */
+export function outOfSeason(it: RankablePiece, away: 'summer' | 'winter'): boolean {
+  const read = seasonOf({ title: it.product_name, itemType: it.item_type, materialPrimary: it.material_primary }).season
+  if (read === (away === 'summer' ? 'ss' : 'aw')) return true
+  if (read === 'aw' || read === 'ss') return false
+  return seasonSignal(it, away) >= 4
 }
 
 /**

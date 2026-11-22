@@ -155,42 +155,79 @@ export async function checkLook(
   const built = await lookSheet(pieces)
   if (!built) return null
   const { sheet, shown } = built
+  const content = [
+    { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: sheet.toString('base64') } },
+    { type: 'text', text: prompt(clientDescription, shown) },
+  ]
+  // One busy moment at Anthropic must not read as "MYRA could not check these
+  // looks": every candidate is judged at the same instant, so a rate limit or
+  // an overloaded model used to fail all of them at once and the piece came
+  // back with nothing (a member's Posse skirt, 2026-11-21). A check that fails
+  // for a passing reason waits a moment and asks again, then asks the second
+  // model. Only when all three could not answer is the look left unchecked.
+  const primary = opts.model ?? CHECK_MODEL
+  const attempts = [primary, primary, CHECK_FALLBACK_MODEL]
+  for (let n = 0; n < attempts.length; n++) {
+    if (n > 0) await new Promise((r) => setTimeout(r, 900 * n + Math.random() * 900))
+    const out = await askOnce(apiKey, attempts[n], content, opts.onUsage)
+    if (out.check) return out.check
+    console.error(`[checkLook] attempt ${n + 1}/${attempts.length} on ${attempts[n]}: ${out.reason}`)
+    if (!out.again) return null
+  }
+  return null
+}
+
+const CHECK_MODEL = 'claude-opus-5'
+/** Asked when the first model twice could not answer. */
+const CHECK_FALLBACK_MODEL = 'claude-sonnet-5-5'
+
+/** One ask. `again` says whether the failure is one that passes (busy, rate-limited, a dropped line, an answer cut short). */
+async function askOnce(
+  apiKey: string,
+  model: string,
+  content: unknown[],
+  onUsage?: (usage: Anthropic.Beta.BetaUsage) => void,
+): Promise<{ check: LookCheck | null; again: boolean; reason: string }> {
   try {
-    const client = new Anthropic({ apiKey })
+    const client = new Anthropic({ apiKey, maxRetries: 3 })
     const res = await client.beta.messages.create({
-      model: opts.model ?? 'claude-opus-5',
+      model,
       max_tokens: 16000,
       // A declined request re-runs server-side on Anthropic's recommended fallback.
       betas: ['server-side-fallback-2026-07-01'],
       ...({ fallbacks: 'default' } as Record<string, unknown>),
       output_config: { format: { type: 'json_schema', schema: SCHEMA as any } },
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: sheet.toString('base64') } },
-          { type: 'text', text: prompt(clientDescription, shown) },
-        ],
-      }],
+      messages: [{ role: 'user', content }],
     } as any) as Anthropic.Beta.BetaMessage
-    opts.onUsage?.(res.usage)
-    if (res.stop_reason === 'refusal') return null
+    onUsage?.(res.usage)
+    if (res.stop_reason === 'refusal') return { check: null, again: true, reason: 'declined' }
     const text = res.content.find((b): b is Anthropic.Beta.BetaTextBlock => b.type === 'text')?.text
-    if (!text) return null
-    const raw = JSON.parse(text) as { verdict: LookVerdict; colour_harmony: number; pieces_go_together: number; issues: string[] }
+    if (!text) return { check: null, again: true, reason: `no answer (stop ${res.stop_reason})` }
+    let raw: { verdict: LookVerdict; colour_harmony: number; pieces_go_together: number; issues: string[] }
+    try { raw = JSON.parse(text) } catch { return { check: null, again: true, reason: 'answer was not JSON' } }
     const verdict: LookVerdict = raw.verdict === 'works' || raw.verdict === 'borderline' ? raw.verdict : 'clashes'
     const colourHarmony = clamp15(raw.colour_harmony)
     const piecesGoTogether = clamp15(raw.pieces_go_together)
     return {
-      verdict,
-      colourHarmony,
-      piecesGoTogether,
-      issues: (raw.issues ?? []).map(String).slice(0, 5),
-      confidence: confidenceFromCheck(verdict, colourHarmony, piecesGoTogether),
+      check: {
+        verdict,
+        colourHarmony,
+        piecesGoTogether,
+        issues: (raw.issues ?? []).map(String).slice(0, 5),
+        confidence: confidenceFromCheck(verdict, colourHarmony, piecesGoTogether),
+      },
+      again: false,
+      reason: '',
     }
   } catch (err) {
-    if (err instanceof Anthropic.APIError) console.error('[checkLook]', err.status, err.message)
-    else console.error('[checkLook]', err)
-    return null
+    if (err instanceof Anthropic.APIError) {
+      const status = Number(err.status) || 0
+      // A bad key, no permission or a request Anthropic will not take does not get better by asking again
+      // on the same model — but a model that is not there (404) is worth the second model.
+      const again = !status || status === 404 || status === 408 || status === 409 || status === 429 || status >= 500
+      return { check: null, again, reason: `${status || 'connection'} ${err.message}` }
+    }
+    return { check: null, again: true, reason: err instanceof Error ? err.message : String(err) }
   }
 }
 
