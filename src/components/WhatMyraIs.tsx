@@ -1,6 +1,6 @@
 // WHAT MYRA IS — plain words, server-rendered, for anyone (or any reviewer)
 // arriving cold: what the service does. How MYRA uses a member's Google
-// account (Gmail / Calendar, Limited Use) lives in the privacy policy, linked
+// account (Gmail only, Limited Use) lives in the privacy policy, linked
 // from the footer — Google's reviewers follow that link.
 
 const BODY = 'tracking-[0.02em] leading-[1.5] text-[#4A4E57] normal-case [text-transform:none] text-[clamp(17px,1.5vw,24px)]'

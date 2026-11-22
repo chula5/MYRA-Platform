@@ -26,6 +26,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import StyleWorlds from '@/components/me/StyleWorlds'
 import GoogleReviewNote from '@/components/me/GoogleReviewNote'
+import { connectAppleCalendar } from '@/components/me/AppleCalendarConnect'
 import VirginConnect from '../dressing-room/VirginConnect'
 import InstagramImport from '../dressing-room/InstagramImport'
 import { loadEmailPanel, scanNow, type EmailPanelView } from '../dressing-room/email-actions'
@@ -117,7 +118,6 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
   const member = previewMemberId ? `&member=${previewMemberId}` : ''
   const gmailHref = `/api/email/google/start?return=${encodeURIComponent('/me/welcome')}${member}`
   const igHref = `/api/instagram/start?return=${encodeURIComponent('/me/welcome')}${member}`
-  const calHref = `/api/calendar/google/start?return=${encodeURIComponent('/me/welcome')}${member}`
   const tour = () => { startTour(); router.push('/me') }
   // Connecting the Mirror means opening /mirror/connect IN THE BROWSER THAT
   // HAS THE EXTENSION — inside the app that is Safari, so the app hands the
@@ -302,7 +302,7 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
 
         <li className="item">
           <button type="button" data-app="calendar" data-on={cals.length > 0} className="btn" aria-label="Calendar"
-            onClick={() => (calendar?.ready ? window.location.assign(calHref) : setMsg('Calendar connect is not switched on yet.'))}>
+            onClick={async () => { setMsg('Reading your calendar…'); setMsg(await connectAppleCalendar(previewMemberId)); await refresh() }}>
             <span className="filled" />
             <svg viewBox="0 0 64 64" aria-hidden>
               <rect x="10" y="14" width="44" height="40" rx="6" {...S} strokeWidth={4} />
@@ -372,7 +372,7 @@ export default function WelcomeFlow({ firstName, previewMemberId }: { firstName:
         </div>
       )}
 
-      {(email?.gmailReady || calendar?.ready) && <GoogleReviewNote className="text-center max-w-[44em] mx-auto" />}
+      {email?.gmailReady && <GoogleReviewNote className="text-center max-w-[44em] mx-auto" />}
 
       {(inboxes.length > 0 || cals.length > 0 || igs.length > 0) && (
         <p className={`${BODY} myra-guide-text text-center text-[#55534E]`}>
