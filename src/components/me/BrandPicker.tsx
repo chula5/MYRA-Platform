@@ -64,6 +64,10 @@ export default function BrandPicker({
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<string | null>(null)
   const [open, setOpen] = useState<Set<string>>(new Set())
+  // In YOU the whole picker folds behind SELECT BRANDS, so the rooms under it
+  // (connectors, Mirror, assistant) are not lost below a wall of brand chips
+  // (Chloe, 2026-11-19). Onboarding (bare) is always open.
+  const [unfolded, setUnfolded] = useState(false)
   // Optimistic state: what she has tapped, shown at once, reconciled from the
   // server after every save. Keys are folded names.
   const [loved, setLoved] = useState<Map<string, string>>(new Map())
@@ -207,15 +211,36 @@ export default function BrandPicker({
 
   const lovedList = Array.from(loved.values())
   const neverList = Array.from(never.values())
+  const showAll = bare || unfolded
+  // EVERY BRAND: every brand in every group, one save — the same as LOVE ALL
+  // (or NONE OF THESE) pressed on each group; a second press undoes it.
+  const everyName = Array.from(new Set(groups.flatMap((g) => [...g.brands, ...g.more].map((b) => b.name))))
+  const everyOn = everyName.length > 0 && everyName.every(mode === 'love' ? isLoved : isNever)
 
   const body = (
     <>
       {!bare && (
-        <div className="flex items-baseline justify-between gap-4 flex-wrap">
-          <h2 className={heading}>Your brands</h2>
-          <p className={label}>Saved as you go.</p>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className={heading}>Your brands</h2>
+            <p className={`${label} mt-1`}>
+              {lovedList.length ? `${lovedList.length} loved` : 'None chosen yet'}
+              {neverList.length ? ` · ${neverList.length} not for me` : ''}
+              {busy ? ' · saving…' : ''}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setUnfolded((u) => !u)}
+            aria-expanded={unfolded}
+            className={`${groupBtn} ${unfolded ? 'bg-[#2B2B2B] text-white' : 'bg-white text-[#2B2B2B] shadow-[0_8px_16px_-12px_rgba(120,120,120,0.8)]'}`}
+          >
+            {unfolded ? 'DONE ▴' : 'SELECT BRANDS ▾'}
+          </button>
         </div>
       )}
+
+      {showAll && (<>
 
       {/* ── Mode ─────────────────────────────────────────────────────────── */}
       <div className={`${bare ? '' : 'mt-6'} flex flex-col items-center gap-3`}>
@@ -257,6 +282,15 @@ export default function BrandPicker({
       </div>
 
       {note && <p className={`${label} myra-guide-text mt-4`}>{note}</p>}
+
+      {everyName.length > 0 && (
+        <div className="mt-6 flex justify-center">
+          <button type="button" onClick={() => takeGroup(everyName)}
+            className={`${groupBtn} ${everyOn ? 'bg-[#EFEFF1] text-[#7C838B]' : mode === 'love' ? 'bg-[#2B2B2B] text-white' : 'bg-[#9B3A3A] text-white'}`}>
+            {mode === 'love' ? (everyOn ? '✓ EVERY BRAND LOVED' : 'SELECT ALL BRANDS') : (everyOn ? '✓ NONE OF ANY' : 'NOT FOR ME: ALL BRANDS')}
+          </button>
+        </div>
+      )}
 
       {/* ── Groups ───────────────────────────────────────────────────────── */}
       <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -364,6 +398,7 @@ export default function BrandPicker({
           </div>
         </div>
       )}
+      </>)}
     </>
   )
 
