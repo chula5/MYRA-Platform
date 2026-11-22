@@ -112,6 +112,40 @@ export const dedupe = (xs: any[]): any[] => Array.from(new Set(xs.map((x) => Str
 // ── The labels MYRA knows ─────────────────────────────────────────────────────
 
 interface KnownBrand { brand_id: string; name: string; keys: string[] }
+/** A label's name keyed every way she might type it: "ME+EM" is "me em",
+ *  "me and em" and so "meandem"; "Ba&sh" is "ba and sh" and "ba sh". */
+function keysOf(name: string): string[] {
+  const plain = brandKey(name)
+  const joined = brandKey(name.replace(/[+&]/g, ' & '))
+  const bare = brandKey(name.replace(/[+&]/g, ' '))
+  return [plain, joined, bare]
+}
+
+/** Her words without accents: "agnès b" and "sessùn" read as typed plainly. */
+const unaccent = (q: string) => q.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+
+/** Letters apart, a swapped pair counting once ("isbael" is one from "isabel"). */
+function lettersApart(a: string, b: string, cap = 3): number {
+  if (Math.abs(a.length - b.length) > cap) return cap + 1
+  const d: number[][] = Array.from({ length: a.length + 1 }, (_, i) => Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)))
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1)
+    }
+  }
+  return d[a.length][b.length]
+}
+
+/** How many slips a word may carry and still be the label's word: one for a
+ *  word of six letters or more, two for a word of eight or more ("isabelle"
+ *  is isabel). A word keeps its first letter. */
+function slipsAllowed(t: string, w: string): number {
+  if (t[0] !== w[0]) return 0
+  const n = Math.min(t.length, w.length)
+  return n >= 8 || (n >= 6 && Math.max(t.length, w.length) >= 8) ? 2 : n >= 6 ? 1 : 0
+}
+
 let brandCache: { at: number; rows: KnownBrand[] } | null = null
 const BRAND_TTL = 5 * 60_000
 
@@ -124,7 +158,7 @@ async function loadKnownBrands(admin: any): Promise<KnownBrand[]> {
   const rows: KnownBrand[] = ((data ?? []) as any[]).filter((b) => b?.name).map((b) => ({
     brand_id: b.brand_id,
     name: String(b.name),
-    keys: dedupe([brandKey(String(b.name)), ...((Array.isArray(b.aliases) ? b.aliases : []) as string[]).map((a) => brandKey(String(a)))]).filter(Boolean),
+    keys: dedupe([String(b.name), ...((Array.isArray(b.aliases) ? b.aliases : []) as string[]).map(String)].flatMap(keysOf)).filter(Boolean),
   }))
   brandCache = { at: Date.now(), rows }
   return rows
@@ -159,6 +193,35 @@ function brandsInQuery(q: string, known: KnownBrand[]): { names: string[]; byKey
 }
 
 /**
+ * The label she named, with its own lines: "Max Mara" is also Weekend Max Mara
+ * and 'S Max Mara — a line is filed as its own label, and most of a house's
+ * pieces can sit under the line (Chloe, 2026-11-22: "maxmara" found the two
+ * sold-out pieces filed under Max Mara and none of Weekend's 394). A line is a
+ * label whose name or alias holds the named one as whole words ("weekend max
+ * mara", "ami paris"). Only whole words: run together, "boden" would reach
+ * BODE New York and "carel" Carelli. A long name a letter or two out is the
+ * same house filed twice. The label she named stays first.
+ */
+const NOT_A_HOUSE = new Set(['brand', 'the brand', 'store', 'shop', 'official'])
+function withLines(rows: KnownBrand[], key: string, known: KnownBrand[]): KnownBrand[] {
+  if (!rows.length || key.length < 3 || isPlainWord(key) || NOT_A_HOUSE.has(key)) return rows
+  const out = [...rows]
+  const seen = new Set(rows.map((b) => b.brand_id))
+  for (const b of known) {
+    if (seen.has(b.brand_id)) continue
+    if (b.keys.some((k) => k !== key && ` ${k} `.includes(` ${key} `))) { seen.add(b.brand_id); out.push(b); continue }
+    // The same house filed twice under a slip ("Isbael Marrant" beside Isabel
+    // Marant): a long name a letter or two out is the same label.
+    const ck = key.replace(/\s+/g, '')
+    if (ck.length >= 8 && b.keys.some((k) => {
+      const c = k.replace(/\s+/g, '')
+      return c[0] === ck[0] && c.length >= 8 && lettersApart(c, ck, 2) <= (Math.min(c.length, ck.length) >= 10 ? 2 : 1)
+    })) { seen.add(b.brand_id); out.push(b) }
+  }
+  return out
+}
+
+/**
  * Her words with a misspelled label put right: "isabel marrant", "isabelle
  * marant" and "antick batik" all read as the label. Each word may be one typo
  * out, and at most two words of a label may be. A label spelled right is left
@@ -174,16 +237,27 @@ function fixBrandTypos(q: string, known: KnownBrand[]): string {
       const kt = k.split(' ')
       for (let at = 0; at + kt.length <= toks.length; at++) {
         let slips = 0
+        let exact = 0
+        let shortSlip = false
         let ok = true
         for (let i = 0; i < kt.length && ok; i++) {
           const t = toks[at + i]
-          if (t === kt[i]) continue
+          if (t === kt[i]) { exact += 1; continue }
+          // A short word one letter out ("ula johnson") counts only beside a
+          // word of the label spelled right.
+          if (kt.length > 1 && t.length >= 3 && t.length < 6 && !STOPWORDS.has(t) && !isPlainWord(t) && t[0] === kt[i][0] && lettersApart(t, kt[i], 1) <= 1) {
+            shortSlip = true; slips += 1; continue
+          }
           // A one-word label needs a long word to bend: "sando" (a vest's
           // name) must not turn into Sandro.
-          if (STOPWORDS.has(t) || isPlainWord(t) || (kt.length === 1 && t.length < 6) || !isTypoOf(t, kt[i])) ok = false
-          else slips += 1
+          if (STOPWORDS.has(t) || isPlainWord(t) || (kt.length === 1 && t.length < 6)) { ok = false; continue }
+          // One slip in any word ("marrant"); a long word may carry two
+          // ("isabelle" for isabel), but only in a label of two words or more.
+          const n = isTypoOf(t, kt[i]) ? 1 : kt.length > 1 && slipsAllowed(t, kt[i]) >= 2 && lettersApart(t, kt[i], 2) <= 2 ? 2 : 0
+          if (!n) ok = false
+          else slips += n
         }
-        if (!ok) continue
+        if (!ok || (shortSlip && !exact)) continue
         if (slips === 0) return q // spelled right: nothing to fix
         if (slips <= 2 && (!best || kt.length > best.len || (kt.length === best.len && slips < best.slips))) {
           best = { at, len: kt.length, key: k, slips }
@@ -191,8 +265,68 @@ function fixBrandTypos(q: string, known: KnownBrand[]): string {
       }
     }
   }
-  if (!best) return q
-  return [...toks.slice(0, best.at), best.key, ...toks.slice(best.at + best.len)].join(' ')
+  if (best) return [...toks.slice(0, best.at), best.key, ...toks.slice(best.at + best.len)].join(' ')
+  // A label run together and misspelled ("maxmarra", "isabelmarrant"): one
+  // word against the label's letters with the spaces taken out.
+  for (let at = 0; at < toks.length; at++) {
+    const t = toks[at]
+    if (t.length < 7 || STOPWORDS.has(t) || isPlainWord(t)) continue
+    for (const b of known) {
+      for (const k of b.keys) {
+        if (!k.includes(' ')) continue
+        const c = k.replace(/\s+/g, '')
+        const allowed = slipsAllowed(t, c)
+        if (allowed && c !== t && lettersApart(t, c, allowed) <= allowed) {
+          return [...toks.slice(0, at), k, ...toks.slice(at + 1)].join(' ')
+        }
+      }
+    }
+  }
+  return q
+}
+
+/**
+ * A short label one letter out ("kaite" for Khaite, "ganny" for Ganni). Short
+ * words bend too easily to do this blind — "sando" is a vest, not Sandro — so
+ * the word becomes the label only when no piece MYRA carries is called by it.
+ */
+async function bendShortLabel(admin: any, q: string, known: KnownBrand[]): Promise<string> {
+  const toks = brandKey(q).split(' ').filter(Boolean)
+  for (let at = 0; at < toks.length; at++) {
+    const t = toks[at]
+    if (t.length < 4 || t.length > 6 || STOPWORDS.has(t) || isPlainWord(t)) continue
+    const hit = known.flatMap((b) => b.keys).find((k) => !k.includes(' ') && k.length >= 4 && k !== t && isPlainWord(k) === false
+      && t[0] === k[0] && lettersApart(t, k, 1) <= 1)
+    if (!hit) continue
+    const { data } = await admin.from('item').select('item_id').in('status', SHOWABLE).ilike('product_name', `%${t}%`).limit(1)
+    if (data?.length) continue
+    return [...toks.slice(0, at), hit, ...toks.slice(at + 1)].join(' ')
+  }
+  return q
+}
+
+/** Her words with the label she meant put right, every way it can be typed. */
+async function readLabel(admin: any, raw: string, known: KnownBrand[]): Promise<string> {
+  const q = unaccent(raw)
+  const fixed = fixBrandTypos(q, known)
+  let read = fixed
+  if (!brandsInQuery(read, known).names.length) {
+    // "ba&sh" for Ba-sh: the and dropped ("me and em" for ME+EM is a key already).
+    const bare = fixed.replace(/\s*(?:&|\+|\band\b)\s*/gi, ' ').replace(/\s+/g, ' ').trim()
+    read = bare !== fixed && brandsInQuery(bare, known).names.length ? bare : await bendShortLabel(admin, fixed, known)
+  }
+  // The label written the way the reader finds it: "MAX&CO" and
+  // "self-portrait" carry punctuation the piece words keep ("t-shirt").
+  const name = brandsInQuery(read, known).names[0]
+  return name && !parseQuery(read, [name]).brand ? spellOut(read, name) : read
+}
+
+/** The label in her words replaced by its key, however it was punctuated. */
+function spellOut(q: string, key: string): string {
+  const gap = '[^a-z0-9]*'
+  const pattern = key.split(' ').map((w) => (w === 'and' ? `(?:and|&|\\+)` : w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))).join(gap)
+  const re = new RegExp(`(^|[^a-z0-9])${pattern}(?=$|[^a-z0-9])`, 'i')
+  return q.replace(re, (_m, lead) => `${lead}${key}`)
 }
 
 // ── Reading the question back to her ─────────────────────────────────────────
@@ -299,11 +433,11 @@ export interface ReadQuery {
 export async function readQuery(admin: any, query: string): Promise<ReadQuery> {
   const q = query.trim().slice(0, 120)
   const known = await loadKnownBrands(admin)
-  const fixed = fixBrandTypos(q, known)
+  const fixed = await readLabel(admin, q, known)
   const inQuery = brandsInQuery(fixed, known)
   const heard = parseQuery(fixed, inQuery.names)
   const parsed: ParsedQuery = !heard.itemTypes.length && heard.occasionTypes.length ? { ...heard, itemTypes: heard.occasionTypes } : heard
-  const rows = parsed.brand ? (inQuery.byKey.get(brandKey(parsed.brand)) ?? []) : []
+  const rows = parsed.brand ? withLines(inQuery.byKey.get(brandKey(parsed.brand)) ?? [], brandKey(parsed.brand), known) : []
   return {
     parsed,
     brandIds: rows.map((b) => b.brand_id),
@@ -339,7 +473,7 @@ export async function searchForMember(
   const blank = blankView
   const me = { memberId }
 
-  const q = query.trim().slice(0, 120)
+  const q = unaccent(query.trim()).slice(0, 120)
   if (q.length < 2) return blank(q)
 
   const needle = q.toLowerCase()
@@ -351,7 +485,7 @@ export async function searchForMember(
 
   // 1. Read her words: which label, piece, colour, cloth and occasion she named.
   const known = await loadKnownBrands(admin)
-  const read = fixBrandTypos(q, known)
+  const read = await readLabel(admin, q, known)
   const inQuery = brandsInQuery(read, known)
   const heard = parseQuery(read, inQuery.names)
   // An occasion with no piece named ("something for the office") is held to
@@ -359,7 +493,7 @@ export async function searchForMember(
   const parsed: ParsedQuery = !heard.itemTypes.length && heard.occasionTypes.length
     ? { ...heard, itemTypes: heard.occasionTypes }
     : heard
-  const brandRows = parsed.brand ? (inQuery.byKey.get(brandKey(parsed.brand)) ?? []) : []
+  const brandRows = parsed.brand ? withLines(inQuery.byKey.get(brandKey(parsed.brand)) ?? [], brandKey(parsed.brand), known) : []
   const brandIds = brandRows.map((b) => b.brand_id)
   const brandName = brandRows[0]?.name ?? null
   const facets = facetCount(parsed)
