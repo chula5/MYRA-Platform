@@ -300,6 +300,73 @@ export async function raiseSizeAlerts(opts: {
   return raised
 }
 
+/**
+ * The whole piece came back after being out of stock. Size-level news already
+ * went out from raiseSizeAlerts for anyone whose size the retailer listed; this
+ * tells the rest: watchers with no size on file for the piece, and everyone
+ * when the retailer gave no per-size stock at all. Without it a saved dress at
+ * a shop that never lists sizes could come back and nobody would hear.
+ */
+export async function raiseItemBackAlerts(itemId: string, opts: { hadSizes: boolean }): Promise<number> {
+  const subs = await subscribersFor(itemId)
+  let raised = 0
+  for (const sub of subs) {
+    if (opts.hadSizes && sub.watch_values.length) continue
+    await clearAlerts(sub.user_id, itemId, ['sold_out_in_size', 'low_in_size'])
+    await emitAlert({
+      userId: sub.user_id,
+      itemId,
+      outfitId: sub.outfit_id,
+      kind: 'back_in_size',
+      priority: 'urgent',
+      sizeLabel: null,
+    })
+    raised++
+  }
+  return raised
+}
+
+/**
+ * Every piece a member has saved is on the stock watch, whichever door she
+ * saved it through. Some save paths (screenshot saves, older saves made before
+ * members' sizes were read) never subscribed, so their pieces could sell out
+ * and come back in silence. Runs with the daily delivery; adds only what is
+ * missing, in her sizes.
+ */
+export async function ensureMemberSaveSubscriptions(limit = 400): Promise<number> {
+  try {
+    const admin = createAdminClient() as any
+    const { data: members } = await admin.from('pilot_member').select('member_id, auth_user_id').eq('is_synthetic', false)
+    let added = 0
+    for (const m of (members ?? []) as any[]) {
+      if (added >= limit) break
+      const key = m.auth_user_id ?? m.member_id
+      const { data: saves } = await admin.from('member_saved_item')
+        .select('item_id, item:item_id(item_type, status, oos_since)').eq('member_id', m.member_id)
+      // Archived only for being out of stock a month (oos_since still set):
+      // she is still waiting for it, so it goes back on the out-of-stock watch.
+      const dormant = ((saves ?? []) as any[]).filter((r) => r.item?.status === 'archived' && r.item?.oos_since).map((r) => r.item_id)
+      if (dormant.length) {
+        await admin.from('item').update({ status: 'out_of_stock', next_check_at: null }).in('item_id', dormant).eq('status', 'archived')
+        for (const r of (saves ?? []) as any[]) if (dormant.includes(r.item_id)) r.item.status = 'out_of_stock'
+      }
+      const live = ((saves ?? []) as any[]).filter((r) => r.item && !['sold', 'archived'].includes(r.item.status))
+      if (!live.length) continue
+      const { data: subs } = await admin.from('stock_subscription')
+        .select('item_id').eq('user_id', key).eq('source', 'saved_item')
+      const have = new Set(((subs ?? []) as any[]).map((r) => r.item_id))
+      const missing = live.filter((r) => !have.has(r.item_id)).slice(0, limit - added)
+      if (!missing.length) continue
+      await subscribeToItems(key, missing.map((r) => ({ item_id: r.item_id, item_type: r.item.item_type })), 'saved_item', null, await loadMemberSizeProfile(m.member_id))
+      added += missing.length
+    }
+    return added
+  } catch (err) {
+    console.error('[ensureMemberSaveSubscriptions]', err)
+    return 0
+  }
+}
+
 /** A one-of-one has sold — tell everyone watching it, at once, not tomorrow. */
 export async function raiseUniqueSoldAlerts(itemId: string): Promise<number> {
   const subs = await subscribersFor(itemId)
@@ -514,7 +581,7 @@ async function tellMemberAboutStock(admin: any, memberId: string, rows: PendingR
     const line = ALERT_COPY[r.kind as AlertKind]?.(r.size_label) ?? 'Stock has changed'
     await notifyMember(admin,
       { memberId, kind: 'note', body: `${named(r)}: ${line.charAt(0).toLowerCase()}${line.slice(1)}.` },
-      { title: r.kind === 'low_in_size' ? 'Nearly gone in your size' : r.kind === 'back_in_size' ? 'Back in your size' : 'A saved piece changed', url: `/me/dressing-room?tab=saved&piece=${r.item_id}`, collapseId: `stock-${r.item_id}` })
+      { title: r.kind === 'low_in_size' ? 'Nearly gone in your size' : r.kind === 'back_in_size' ? (r.size_label ? 'Back in your size' : 'Back in stock') : 'A saved piece changed', url: `/me/dressing-room?tab=saved&piece=${r.item_id}`, collapseId: `stock-${r.item_id}` })
   }
   if (sorted.length > 3) {
     await notifyMember(admin,

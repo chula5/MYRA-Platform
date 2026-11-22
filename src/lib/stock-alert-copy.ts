@@ -10,7 +10,7 @@ export type SubscriptionSource = 'saved_item' | 'saved_outfit' | 'notify_me'
 export const ALERT_COPY: Record<AlertKind, (size: string | null) => string> = {
   low_in_size: (s) => (s ? `Only a few left in your size (${s})` : 'Only a few left in your size'),
   sold_out_in_size: (s) => (s ? `Sold out in your size (${s})` : 'Sold out in your size'),
-  back_in_size: (s) => (s ? `Back in your size (${s})` : 'Back in your size'),
+  back_in_size: (s) => (s ? `Back in your size (${s})` : 'Back in stock'),
   unique_sold: () => 'One of one — now sold',
   restyled: () => 'We’ve restyled a look you saved',
 }

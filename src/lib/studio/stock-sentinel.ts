@@ -40,7 +40,7 @@ import {
   type DueItem,
 } from './risk-tier'
 import { upsertSizeAvailability, loadBrandOffsets } from '@/lib/size-availability'
-import { raiseSizeAlerts } from '@/lib/stock-alerts'
+import { raiseSizeAlerts, raiseItemBackAlerts } from '@/lib/stock-alerts'
 import { markUniqueSold } from '@/lib/rescue'
 import { markStyledWaysStale } from '@/lib/styled-ways'
 import { actImmediately, classifySignal } from '@/lib/second-hand'
@@ -195,7 +195,7 @@ export async function runStockSentinel(
     }
 
     if (checked.status === 'in_stock' || checked.status === 'low_stock') {
-      await handleBackUp(item, checked.status, now, report)
+      await handleBackUp(item, checked.status, now, report, checked.sizes.length > 0)
       continue
     }
 
@@ -266,11 +266,26 @@ export async function runStockSentinel(
   // 30 days dead → archived automatically. SOLD items are excluded by the
   // status filter: they were never on the restock watch to begin with.
   const cutoff = new Date(Date.now() - ARCHIVE_AFTER_DAYS * 86_400_000).toISOString()
-  const { data: archivedRows } = await (admin.from('item') as any)
-    .update({ status: 'archived' })
+  // A piece a member has saved is never archived: archiving stops the checks,
+  // and she is waiting to hear it is back. It stays out_of_stock (the composer
+  // already refuses that) and keeps being polled.
+  const { data: staleRows } = await (admin.from('item') as any)
+    .select('item_id')
     .eq('status', 'out_of_stock')
     .lt('oos_since', cutoff)
-    .select('item_id')
+    .limit(500)
+  const staleIds = ((staleRows ?? []) as any[]).map((r) => r.item_id as string)
+  const { data: savedRows } = staleIds.length
+    ? await (admin.from('member_saved_item') as any).select('item_id').in('item_id', staleIds)
+    : { data: [] }
+  const savedIds = new Set(((savedRows ?? []) as any[]).map((r) => r.item_id as string))
+  const archiveIds = staleIds.filter((id) => !savedIds.has(id))
+  const { data: archivedRows } = archiveIds.length
+    ? await (admin.from('item') as any)
+        .update({ status: 'archived' })
+        .in('item_id', archiveIds)
+        .select('item_id')
+    : { data: [] }
   report.archived = ((archivedRows ?? []) as any[]).length
   for (const row of (archivedRows ?? []) as any[]) {
     await writeAudit({
@@ -288,6 +303,7 @@ async function handleBackUp(
   status: 'in_stock' | 'low_stock',
   now: string,
   report: SentinelReport,
+  hadSizes = false,
 ): Promise<void> {
   const admin = createAdminClient()
   const wasOOS = item.status === 'out_of_stock'
@@ -304,6 +320,9 @@ async function handleBackUp(
     .eq('item_id', item.item_id)
 
   if (!wasOOS) return
+
+  // Whoever saved it and was not already told about her size hears it is back.
+  report.sizeAlerts += await raiseItemBackAlerts(item.item_id, { hadSizes })
 
   // Back in stock — offer a one-tap restore of the most recent not-yet-undone
   // swap that replaced this item.
