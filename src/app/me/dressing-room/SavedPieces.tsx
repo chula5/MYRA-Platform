@@ -39,7 +39,6 @@ export default function SavedPieces({ testMemberId, onCount }: { testMemberId?: 
         const wanted = new URLSearchParams(window.location.search).get('piece')
         if (wanted && r.pieces.some((p) => p.item_id === wanted)) {
           setOpen(wanted)
-          setTimeout(() => document.getElementById(`saved-${wanted}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150)
         }
       } catch { /* no window, no deep link */ }
     })
@@ -109,11 +108,14 @@ export default function SavedPieces({ testMemberId, onCount }: { testMemberId?: 
       {open && (() => {
         const p = pieces.find((x) => x.item_id === open)
         return (
+          // The piece opens in the mirror, over the page, like everywhere else:
+          // its pictures, TRY ON MY AVATAR, the studio looks — and outfits only when she asks.
           <WaysToWear
-            inline
             itemId={open}
-            piece={p ? { item_id: p.item_id, product_name: p.product_name, brand: p.brand, image_url: p.image_url } : null}
+            piece={p ? { item_id: p.item_id, product_name: p.product_name, brand: p.brand, image_url: p.image_url, url: p.retailer_url, price_gbp: p.price_gbp } : null}
             testMemberId={testMemberId}
+            autoStart={false}
+            startLabel="Build outfits with it"
             onClose={() => setOpen(null)}
           />
         )

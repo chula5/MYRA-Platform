@@ -23,12 +23,14 @@ function labelFor(st: TryOn | undefined): string {
   return st.message || 'That did not work — try again'
 }
 
-export default function TryOnAvatarButton({ itemId, className = '' }: { itemId: string; className?: string }) {
+export default function TryOnAvatarButton({ itemId, className = '', label: wordsLabel }: { itemId: string; className?: string; /** Words beside the person, in the button: the whole pill is the tap, and it says where it has got to. */ label?: string }) {
   const [st, setSt] = useState<TryOn | undefined>(() => known.get(itemId))
   const [hover, setHover] = useState(false)
   const [open, setOpen] = useState(false)
   const live = useRef(true)
   const running = useRef(false)
+  // She tapped and is waiting: the picture opens on its own when it lands (a phone has no hover to find it).
+  const asked = useRef(false)
   useEffect(() => { live.current = true; return () => { live.current = false } }, [])
 
   const keep = (next: TryOn) => { known.set(itemId, next); if (live.current) setSt(next) }
@@ -48,6 +50,7 @@ export default function TryOnAvatarButton({ itemId, className = '' }: { itemId: 
         if (next.state === 'idle') next = { state: 'failed', message: 'That did not work — try again' }
         keep(next)
       }
+      if (asked.current && next.state === 'ready' && next.image_url && live.current) { asked.current = false; setOpen(true) }
     } finally { running.current = false }
   }
 
@@ -57,6 +60,7 @@ export default function TryOnAvatarButton({ itemId, className = '' }: { itemId: 
     if (st?.state === 'no_avatar') { window.location.href = '/me/avatar'; return }
     if (st?.state === 'ready') { setOpen(true); return }
     if (st?.state === 'making') return
+    asked.current = true
     keep({ state: 'making' })
     void run(true)
   }
@@ -72,12 +76,13 @@ export default function TryOnAvatarButton({ itemId, className = '' }: { itemId: 
         onMouseLeave={() => setHover(false)}
         aria-label={label}
         title={label}
-        className={`w-9 h-9 rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.15)] flex items-center justify-center ${ready ? 'bg-[#141414] text-[#F7F6F3]' : 'bg-white/90 text-[#2B2B2B]'} ${st?.state === 'making' ? 'animate-pulse' : ''} ${st?.state === 'failed' ? 'text-[#9B3A3A]' : ''} ${className}`}
+        className={`${wordsLabel ? 'min-h-9 py-1 pl-1.5 pr-4 gap-2 text-left' : 'w-9 h-9'} rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.15)] flex items-center justify-center ${ready ? 'bg-[#141414] text-[#F7F6F3]' : 'bg-white/90 text-[#2B2B2B]'} ${st?.state === 'making' ? 'animate-pulse' : ''} ${st?.state === 'failed' ? 'text-[#9B3A3A]' : ''} ${className}`}
       >
         <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <circle cx="12" cy="5.2" r="2.7" />
           <path d="M6.5 21v-7.2c0-2.6 2.2-4.6 5.5-4.6s5.5 2 5.5 4.6V21" />
         </svg>
+        {wordsLabel && <span className="text-[15px] sm:text-[17px] tracking-[0.1em] uppercase leading-snug">{!st || st.state === 'idle' ? wordsLabel : label}</span>}
         {ready && hover && !open && (
           <span className="hidden md:block absolute right-full top-1/2 -translate-y-1/2 mr-3 w-[264px] rounded-2xl overflow-hidden bg-[#F7F6F3] shadow-[0_14px_44px_rgba(20,20,20,0.28)] z-50 pointer-events-none">
             {/* eslint-disable-next-line @next/next/no-img-element */}
