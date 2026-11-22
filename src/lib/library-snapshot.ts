@@ -12,20 +12,23 @@
 // So the library is read from the database once and kept as a gzipped,
 // column-oriented snapshot in Supabase Storage (a plain object store, not the
 // database). A function that needs the library downloads the snapshot (one
-// GET, a couple of seconds) instead of 27 paged queries. Freshness, mirroring
-// the five-minute in-memory cache this replaces:
+// GET, a couple of seconds) instead of 27 paged queries. Freshness:
 //
 //   • in memory and under FRESH_MS         → served as is
 //   • snapshot under FRESH_MS              → served as is
 //   • snapshot under STALE_OK_MS           → served now, refreshed behind
 //   • older, or none                       → read from the database, written
 //
-// The styled-ways cron keeps the snapshot inside FRESH_MS while anyone is
-// styling and inside STALE_OK_MS always, so a tap after a quiet night does
-// not pay the database read either. Stock moves inside the window exactly as
-// it did inside the old cache; the composer re-reads the stock of the pieces
-// it actually picked before judging (styled-ways-compose), and a kept way is
-// dropped on read the moment a piece in it dies (lib/styled-ways).
+// TWICE A DAY (Chloe, 2026-11-22): the snapshot is rebuilt at 06:00 and 18:00
+// UTC, and early when new pieces have gone live since it was taken (Brand
+// Watch auto-adds, accepted drafts) — never more than once an hour for that.
+// It used to be every 10 minutes while anyone styled: ~33,000 pieces and
+// ~87,000 size rows re-read from the database each time, one of its heaviest
+// loads, for stock that barely moves. Members lose nothing: the composer
+// re-reads the stock of the pieces it actually picked before judging
+// (styled-ways-compose), and a kept way is dropped on read the moment a piece
+// in it dies (lib/styled-ways). The styled-ways cron (every 5 minutes) asks
+// refreshLibrarySnapshotIfDue, so a boundary is met within five minutes.
 
 import 'server-only'
 import { gzipSync, gunzipSync } from 'node:zlib'
@@ -33,13 +36,15 @@ import { waitUntil } from '@vercel/functions'
 import { createAdminClient } from '@/lib/supabase-server'
 import { getAllItems, type ItemWithBrand } from '@/lib/admin-queries'
 import type { SizeRow } from '@/lib/size-match'
+import { NEW_ARRIVALS_MIN_GAP_MS, snapshotDueReason } from '@/lib/library-snapshot-timing'
+export { REFRESH_HOURS_UTC, NEW_ARRIVALS_MIN_GAP_MS, lastRefreshBoundary, snapshotDueReason } from '@/lib/library-snapshot-timing'
 
 export const LIBRARY_BUCKET = 'library-cache'
 const SNAPSHOT_PATH = 'retail-library.json.gz'
-/** Served as is. */
-export const FRESH_MS = 10 * 60 * 1000
-/** Served while a fresh read runs behind it. */
-export const STALE_OK_MS = 60 * 60 * 1000
+/** Served as is: the cron rebuilds it at the twice-daily boundaries. */
+export const FRESH_MS = 13 * 60 * 60 * 1000
+/** Served while a fresh read runs behind it (only if the cron has missed). */
+export const STALE_OK_MS = 26 * 60 * 60 * 1000
 
 export interface RetailLibrary {
   at: number
@@ -234,20 +239,35 @@ export async function loadRetailLibrary(opts: { admin?: any } = {}): Promise<Ret
 }
 
 /**
- * For the cron: keep the snapshot young. Inside FRESH_MS while anyone has
- * styled lately (`demand`), inside STALE_OK_MS always — so the first tap of
- * the day is a snapshot read, not a database read.
+ * For the cron (every 5 minutes): rebuild the snapshot when it predates the
+ * last 06:00 / 18:00 UTC boundary, or — at most hourly — when pieces have
+ * gone live since it was taken. Otherwise one cheap check and nothing more.
+ * `demand` is kept for callers but no longer shortens the interval.
  */
-export async function refreshLibrarySnapshotIfDue(opts: { demand: boolean; admin?: any; /** Rebuild now whatever its age (repairs). */ force?: boolean } = { demand: false }): Promise<{ refreshed: boolean; ageMs: number | null }> {
+export async function refreshLibrarySnapshotIfDue(opts: { demand?: boolean; admin?: any; /** Rebuild now whatever its age (repairs). */ force?: boolean } = {}): Promise<{ refreshed: boolean; ageMs: number | null; reason?: string }> {
   const admin = opts.admin ?? (createAdminClient() as any)
-  let ageMs: number | null = null
+  const now = Date.now()
+  let takenAt: number | null = null
   try {
     const { data } = await admin.storage.from(LIBRARY_BUCKET).list('', { search: SNAPSHOT_PATH, limit: 1 })
     const obj = (data ?? []).find((o: any) => o.name === SNAPSHOT_PATH)
-    if (obj?.updated_at) ageMs = Date.now() - Date.parse(obj.updated_at)
+    if (obj?.updated_at) takenAt = Date.parse(obj.updated_at)
   } catch { /* no bucket yet: due */ }
-  const due = !!opts.force || ageMs == null || ageMs >= STALE_OK_MS || (opts.demand && ageMs >= FRESH_MS)
-  if (!due) return { refreshed: false, ageMs }
+  const ageMs = takenAt == null ? null : now - takenAt
+  let reason = snapshotDueReason({ force: !!opts.force, takenAt, now })
+  if (!reason && takenAt != null && now - takenAt >= NEW_ARRIVALS_MIN_GAP_MS && (await newPiecesSince(admin, takenAt))) reason = 'new arrivals'
+  if (!reason) return { refreshed: false, ageMs }
   const r = await refresh(admin)
-  return { refreshed: !!r, ageMs }
+  return { refreshed: !!r, ageMs, reason }
+}
+
+
+/** Has a shoppable piece been created since the snapshot? One indexed row read. */
+async function newPiecesSince(admin: any, since: number): Promise<boolean> {
+  try {
+    const { data } = await admin.from('item').select('item_id')
+      .in('status', ['ready', 'live']).eq('ownership', 'retail')
+      .gt('created_at', new Date(since).toISOString()).limit(1)
+    return (data ?? []).length > 0
+  } catch { return false }
 }
