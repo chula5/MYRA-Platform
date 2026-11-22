@@ -4,6 +4,7 @@ import localFont from 'next/font/local'
 import { FeedProvider } from '@/context/FeedContext'
 import SessionTracker from '@/components/analytics/SessionTracker'
 import SmoothScroll from '@/components/SmoothScroll'
+import KeyboardSettle from '@/components/KeyboardSettle'
 import './globals.css'
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL } from '@/lib/site'
 
@@ -120,6 +121,8 @@ export default function RootLayout({
             {children}
           </FeedProvider>
         </SmoothScroll>
+        {/* The page back in bounds once a phone keyboard closes. */}
+        <KeyboardSettle />
         <SessionTracker />
         {/* Awin Publisher MasterTag (pub 2988015) — powers Awin affiliate
             tracking + Convert-a-Link, which auto-converts outbound merchant

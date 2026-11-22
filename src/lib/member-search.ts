@@ -159,6 +159,27 @@ function brandsInQuery(q: string, known: KnownBrand[]): { names: string[]; byKey
 }
 
 /**
+ * The label she named, with its own lines: "Max Mara" is also Weekend Max Mara
+ * and 'S Max Mara — a line is filed as its own label, and most of a house's
+ * pieces can sit under the line (Chloe, 2026-11-22: "maxmara" found the two
+ * sold-out pieces filed under Max Mara and none of Weekend's 394). A line is a
+ * label whose name or alias holds the named one as whole words ("weekend max
+ * mara", "ami paris"). Only whole words: run together, "boden" would reach
+ * BODE New York and "carel" Carelli. The label she named stays first.
+ */
+const NOT_A_HOUSE = new Set(['brand', 'the brand', 'store', 'shop', 'official'])
+function withLines(rows: KnownBrand[], key: string, known: KnownBrand[]): KnownBrand[] {
+  if (!rows.length || key.length < 3 || isPlainWord(key) || NOT_A_HOUSE.has(key)) return rows
+  const out = [...rows]
+  const seen = new Set(rows.map((b) => b.brand_id))
+  for (const b of known) {
+    if (seen.has(b.brand_id)) continue
+    if (b.keys.some((k) => k !== key && ` ${k} `.includes(` ${key} `))) { seen.add(b.brand_id); out.push(b) }
+  }
+  return out
+}
+
+/**
  * Her words with a misspelled label put right: "isabel marrant", "isabelle
  * marant" and "antick batik" all read as the label. Each word may be one typo
  * out, and at most two words of a label may be. A label spelled right is left
@@ -303,7 +324,7 @@ export async function readQuery(admin: any, query: string): Promise<ReadQuery> {
   const inQuery = brandsInQuery(fixed, known)
   const heard = parseQuery(fixed, inQuery.names)
   const parsed: ParsedQuery = !heard.itemTypes.length && heard.occasionTypes.length ? { ...heard, itemTypes: heard.occasionTypes } : heard
-  const rows = parsed.brand ? (inQuery.byKey.get(brandKey(parsed.brand)) ?? []) : []
+  const rows = parsed.brand ? withLines(inQuery.byKey.get(brandKey(parsed.brand)) ?? [], brandKey(parsed.brand), known) : []
   return {
     parsed,
     brandIds: rows.map((b) => b.brand_id),
@@ -359,7 +380,7 @@ export async function searchForMember(
   const parsed: ParsedQuery = !heard.itemTypes.length && heard.occasionTypes.length
     ? { ...heard, itemTypes: heard.occasionTypes }
     : heard
-  const brandRows = parsed.brand ? (inQuery.byKey.get(brandKey(parsed.brand)) ?? []) : []
+  const brandRows = parsed.brand ? withLines(inQuery.byKey.get(brandKey(parsed.brand)) ?? [], brandKey(parsed.brand), known) : []
   const brandIds = brandRows.map((b) => b.brand_id)
   const brandName = brandRows[0]?.name ?? null
   const facets = facetCount(parsed)
