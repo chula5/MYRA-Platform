@@ -18,6 +18,8 @@ type Device = 'iphone' | 'computer'
 
 // iPhone 15/16 in points: the screen the app is drawn on.
 const PHONE = { w: 393, h: 852 }
+// The bottom safe area on those phones: where the home indicator lives.
+const HOME_BAR = 34
 
 export default function HerViewTab({
   members, memberId, setMemberId,
@@ -104,8 +106,19 @@ export default function HerViewTab({
                 key={`${memberId}-${reload}-phone`}
                 src={src}
                 title={`${name}'s app`}
-                style={{ width: PHONE.w, height: PHONE.h - 47, border: 0, display: 'block' }}
+                style={{ width: PHONE.w, height: PHONE.h - 47 - HOME_BAR, border: 0, display: 'block' }}
               />
+              {/* The home-indicator strip. On her phone the tab bar pads itself
+                  by the safe area (34pt) so its labels sit clear of the curved
+                  corners; a frame has no safe area, so the strip is drawn here
+                  in the tab bar's own grey. */}
+              <div
+                className="flex items-end justify-center pb-[8px]"
+                style={{ height: HOME_BAR, background: 'rgba(230,230,233,1)' }}
+                aria-hidden
+              >
+                <span className="h-[5px] w-[134px] rounded-full bg-[#0A0A0A]" />
+              </div>
             </div>
           </div>
         </div>
