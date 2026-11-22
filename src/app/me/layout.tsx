@@ -8,6 +8,9 @@ import { resolveClientMember } from '@/lib/client-member'
 import NativeShareBridge from '@/components/me/NativeShareBridge'
 import PushSetup from '@/components/me/PushSetup'
 import HerViewBar from '@/components/me/HerViewBar'
+import { NOINDEX } from '@/lib/site'
+
+export const metadata = { ...NOINDEX }
 
 export const dynamic = 'force-dynamic'
 

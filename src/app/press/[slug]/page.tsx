@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { PRESS, pressBySlug, formatPressDate, type PressBlock } from '@/lib/press'
+import { SITE_URL } from '@/lib/site'
 
 export function generateStaticParams() {
   return PRESS.map((a) => ({ slug: a.slug }))
@@ -9,9 +10,22 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const a = pressBySlug((await params).slug)
   if (!a) return {}
+  const description = a.subtitle ?? a.summary[0]
+  const images = a.image ? [{ url: a.image, alt: a.title }] : undefined
   return {
-    title: `${a.title} · ${a.publication} · MYRA`,
-    description: a.subtitle ?? a.summary[0],
+    title: `${a.title} · ${a.publication}`,
+    description,
+    alternates: { canonical: `/press/${a.slug}` },
+    openGraph: {
+      type: 'article',
+      title: a.title,
+      description,
+      url: `/press/${a.slug}`,
+      publishedTime: a.date,
+      authors: [a.author],
+      ...(images ? { images } : {}),
+    },
+    twitter: { card: 'summary_large_image', title: a.title, description, ...(images ? { images } : {}) },
   }
 }
 
@@ -96,8 +110,24 @@ export default async function PressArticlePage({ params }: { params: Promise<{ s
     </a>
   )
 
+  // The article, for search engines: who wrote it, where and when.
+  const articleData = {
+    '@context': 'https://schema.org',
+    '@type': 'Article',
+    headline: a.title,
+    description: a.subtitle ?? a.summary[0],
+    datePublished: a.date,
+    author: { '@type': 'Person', name: a.author },
+    publisher: { '@type': 'Organization', name: a.publication },
+    mainEntityOfPage: `${SITE_URL}/press/${a.slug}`,
+    url: a.url,
+    about: { '@id': `${SITE_URL}/#organization` },
+    ...(a.image ? { image: `${SITE_URL}${a.image}` } : {}),
+  }
+
   return (
     <article className="w-full px-6 lg:px-16 pt-8 md:pt-12 pb-16">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleData) }} />
       <Link
         href="/press"
         className="inline-flex items-center gap-3 text-[16px] md:text-[18px] tracking-[0.14em] text-[#4A4E57] hover:opacity-60 transition-opacity duration-300"
@@ -109,7 +139,7 @@ export default async function PressArticlePage({ params }: { params: Promise<{ s
         {a.image && (
           <div className="overflow-hidden bg-[#E2E0DB] lg:sticky lg:top-40">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={a.image} alt="" className="w-full h-auto" />
+            <img src={a.image} alt={a.title} className="w-full h-auto" />
           </div>
         )}
 

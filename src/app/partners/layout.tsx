@@ -1,6 +1,9 @@
 import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
 import { getPartnerContext } from '@/lib/partners/auth'
+import { NOINDEX } from '@/lib/site'
+
+export const metadata = { ...NOINDEX }
 
 export const dynamic = 'force-dynamic'
 

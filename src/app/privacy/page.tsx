@@ -1,8 +1,9 @@
 import Link from 'next/link'
 
 export const metadata = {
-  title: 'Privacy Policy · MYRA',
+  title: 'Privacy Policy',
   description: 'How MYRA collects, uses and protects your information.',
+  alternates: { canonical: '/privacy' },
 }
 
 export default function PrivacyPage() {
