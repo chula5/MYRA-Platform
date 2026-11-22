@@ -27,15 +27,29 @@ type Lookup = { door: Door | null } | { notReady: true }
 
 async function whoIs(email: string): Promise<Lookup> {
   const admin = createAdminClient() as any
-  const { data, error } = await admin.rpc('member_for_sign_in', { p_email: email })
-  if (error) {
-    // The function arrives with 0102; until it is applied the door says so
-    // rather than telling everyone they are not on the list.
-    if (/does not exist|schema cache|not find/i.test(error.message)) return { notReady: true }
-    throw new Error(error.message)
+  // The database sometimes stalls for a few seconds (small instance under
+  // load); one slow moment must not turn a member away at the door. Try up to
+  // three times, a little apart, before saying it could not be checked.
+  let lastError = ''
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt) await new Promise((r) => setTimeout(r, attempt * 700))
+    try {
+      const { data, error } = await admin.rpc('member_for_sign_in', { p_email: email })
+      if (error) {
+        // The function arrives with 0102; until it is applied the door says so
+        // rather than telling everyone they are not on the list.
+        if (/does not exist|schema cache|not find/i.test(error.message)) return { notReady: true }
+        lastError = error.message
+        continue
+      }
+      const row = (Array.isArray(data) ? data[0] : data) as Door | undefined
+      return { door: row ?? null }
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : String(e)
+    }
   }
-  const row = (Array.isArray(data) ? data[0] : data) as Door | undefined
-  return { door: row ?? null }
+  console.error('[sign-in] member_for_sign_in failed three times:', lastError)
+  throw new Error(lastError || 'member lookup failed')
 }
 
 export type CodeRequest = { ok: true; email: string } | { ok: false; message: string }
