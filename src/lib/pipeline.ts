@@ -187,12 +187,21 @@ export function isExcluded(
 const K_SMOOTH = 2
 const pairAffinity = ([a, s]: [number, number]) => (a - s) / (a + s + K_SMOOTH)
 
+// Worked out once per model: the composer asks for this list for every
+// candidate it judges, and walking every learned pair each time was a third
+// of a styling build (2.2s of 5.8s over a 26k-piece library, 2026-11-11). A
+// model is loaded fresh and never edited in place, so the object is the key.
+const skipPairsOf = new WeakMap<StyleModel, Set<string>>()
+
 export function hardSkipPairs(model: StyleModel): Set<string> {
+  const known = skipPairsOf.get(model)
+  if (known) return known
   const out = new Set<string>()
   for (const [k, v] of Object.entries(model.pairs)) {
     if (!/^(colour|type|brand):/.test(k)) continue
     if (v[0] + v[1] >= 2 && pairAffinity(v) < -0.15) out.add(k)
   }
+  skipPairsOf.set(model, out)
   return out
 }
 

@@ -190,7 +190,18 @@ export type MaterialFamily =
   | 'silk' | 'linen' | 'denim' | 'leather' | 'raffia' | 'knit' | 'tailoring'
   | 'cotton' | 'satin' | 'velvet' | 'lace' | 'technical' | 'suede' | 'other'
 
+// Read once per piece: a styling build asks it of the same piece for every
+// pair in every candidate look (a sixth of a build, 2026-11-22). Pieces are
+// loaded and never edited in place, so the object is the key.
+const materialOf = new WeakMap<object, MaterialFamily>()
 export function materialFamily(item: HouseItem): MaterialFamily {
+  const known = materialOf.get(item)
+  if (known) return known
+  const fam = materialFamilyFresh(item)
+  materialOf.set(item, fam)
+  return fam
+}
+function materialFamilyFresh(item: HouseItem): MaterialFamily {
   const t = `${lower(item.material_primary)} ${lower(item.material_category)} ${lower(item.product_name)}`
   if (/raffia|straw|wicker/.test(t)) return 'raffia'
   if (/suede/.test(t)) return 'suede'
