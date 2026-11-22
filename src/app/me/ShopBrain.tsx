@@ -397,7 +397,7 @@ export default function ShopBrain({ testMemberId, initialView, onReady }: {
       for (const id of ids) if ((w.looks[id]?.length ?? 0) >= 3) done.current.add(id)
       let pending = ids.filter((id) => !done.current.has(id))
       for (const id of pending) if (!w.working.includes(id) && !w.looks[id]) {
-        setFailed((f) => ({ ...f, [id]: w.capped ? 'MYRA will style this one a little later.' : 'Tap to see it styled.' }))
+        setFailed((f) => ({ ...f, [id]: 'Tap to see it styled.' }))
         done.current.add(id)
       }
       pending = pending.filter((id) => !done.current.has(id))

@@ -8,10 +8,16 @@ import type { LookItem } from '@/lib/pilot-stylist'
 
 /** How many ways a piece is shown in. */
 export const WAYS = 3
-/** Warm-up jobs a member may queue in a day before MYRA waits for a tap instead. */
-export const WARMUP_CAP_DEFAULT = 80
-/** Pieces the overnight sweep may style per member per run, counted apart from the daytime cap (Chloe: 15, 2026-10-11). */
-export const NIGHTLY_CAP_DEFAULT = 15
+/**
+ * Warm-up jobs a member may queue in a day before MYRA waits for a tap instead.
+ * 0 = OFF (Chloe, 2026-11-22): in November 2,314 looks were styled ahead for
+ * 793 pieces, members opened 22 of them and saved 4, at ~$30 of Opus on a busy
+ * day. Pieces are styled when she taps; what is styled is still kept. Raise
+ * with STYLED_WAYS_WARMUP_CAP when there are members to warm for.
+ */
+export const WARMUP_CAP_DEFAULT = 0
+/** Pieces the overnight sweep may style per member per run. 0 = OFF, and its cron is out of vercel.json (2026-11-22, see above). */
+export const NIGHTLY_CAP_DEFAULT = 0
 /** What one judged look costs (the look check's own estimate: ~2p a look). */
 export const COST_PER_JUDGED_LOOK_GBP = 0.02
 
