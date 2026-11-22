@@ -1,8 +1,7 @@
 // WHAT MYRA IS — plain words, server-rendered, for anyone (or any reviewer)
 // arriving cold: what the service does. How MYRA uses a member's Google
-// account (Gmail / Calendar, Limited Use) lives in the privacy policy, which
-// the last line links to — Google's reviewers follow that link.
-import Link from 'next/link'
+// account (Gmail / Calendar, Limited Use) lives in the privacy policy, linked
+// from the footer — Google's reviewers follow that link.
 
 const BODY = 'tracking-[0.02em] leading-[1.5] text-[#4A4E57] normal-case [text-transform:none] text-[clamp(17px,1.5vw,24px)]'
 
@@ -22,11 +21,6 @@ export default function WhatMyraIs() {
         <p className={BODY}>
           MYRA keeps a wardrobe of what you already own, styles new pieces with it, watches your brands for new
           arrivals and sales, and sends you looks for what is coming up. Membership is by application.
-        </p>
-        <p className={BODY}>
-          How MYRA looks after your information, including your Google account if you choose to connect it, is in
-          our{' '}
-          <Link href="/privacy" className="underline underline-offset-4 hover:opacity-60 transition-opacity">privacy policy</Link>.
         </p>
       </div>
     </section>
